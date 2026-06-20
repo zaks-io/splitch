@@ -23,6 +23,7 @@ design — see the format in `~/.claude/skills/grill-with-docs/ADR-FORMAT.md`. V
 | [0014](./0014-stats-engine-sequential-always-valid-frequentist-by-default.md) | Stats engine default: sequential always-valid, frequentist, asymptotic confidence sequences |
 | [0015](./0015-variance-delta-method-aggregate-to-randomization-unit.md) | Variance: delta method over per-Entity aggregates; no naive ratio-of-means path |
 | [0016](./0016-cuped-and-winsorization-default-on-but-conditional.md) | CUPED and winsorization: default-on, but conditional on the data they require |
+| [0017](./0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md) | Stack: all-Cloudflare Workers for serving + reactive control plane, Tinybird analytics system of record |
 
 0001–0006 come from the Assignment/Exposure seam grills (2026-06-20). They form a chain: 0001 (pure
 assignment) enables 0006 (clean holdover predicate); 0002 (Run freezes *bucketing*) is enforced by 0003
@@ -63,3 +64,15 @@ the Entity, delta method for ratio/clustered data, no naive variance path exists
 winsorization default-on but gated on the data they require. Multiple comparisons use Benjamini-Hochberg FDR
 across the goal-metric × Variant family. Design narrative:
 [metric-analysis-seam.md](../architecture/metric-analysis-seam.md).
+
+0017 is the stack/scaffolding decision (2026-06-20): adopt the agent-paste shell (pnpm + Turborepo monorepo,
+React 19 / TanStack / Tailwind, Hono on Workers, Biome, Vitest/Stryker, Wrangler + GitHub Actions, Sentry +
+Axiom) and keep the platform **all-Cloudflare for serving and control**, with **Tinybird** as the analytics
+system of record. Two stores, not three: Workers + KV/D1 + Durable Objects run both the edge hot path
+(assignment/exposure) and the reactive config-authoring dashboard (a DO SSE/WebSocket fan-out over the same
+KV/D1 the hot path reads — the agent-paste `ArtifactLiveUpdates`/`stream` pattern), so editing and serving
+share one store and there is **no config-publish seam**. Tinybird is the physical substrate for ADR-0010's
+raw append-only log; Cloudflare Analytics Engine is sampled/lossy and demoted to non-critical ops telemetry.
+Convex was considered and rejected for the control plane — non-edge, a cost ceiling, and it would have forced
+a Convex → KV publish seam to get config onto the edge. ADR-0009 (KV read / DO write) is untouched, now also
+backing config.
