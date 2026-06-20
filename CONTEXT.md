@@ -96,15 +96,41 @@ A non-baseline Variant being tested against the Control. A role a Variant plays 
 _Avoid_: B, challenger
 
 **Assignment**:
-The event that an Entity was bucketed into a Variant. Happens automatically at Evaluation. "You are
+The bucketing of an Entity into a Variant — the deterministic result of `assign(Run, Targeting Key)`.
+A pure computation, **not** an event: it is never recorded on its own, only recomputed when needed.
+Determined at Evaluation; the Variant it yields rides on the Exposure event when one fires. "You are
 in arm B." Distinct from Exposure.
-_Avoid_: allocation (Statsig's word — Assignment is canonical), bucketing
+_Avoid_: allocation (Statsig's word — Assignment is canonical), bucketing; assignment-as-an-event (only
+Exposure is an event)
+
+**Run** (Experiment Run):
+A time-boxed, immutable window of an Experiment with a start and an end, inside which the config (salt,
+allocation, Variant set, Targeting) is frozen. The unit of analysis: every Exposure is stamped with its
+`runId`, and SRM, significance, and Conversion Windows are all scoped to a Run. A **material** edit (one that changes
+`assign()` or what the numbers mean — salt, allocation, Variant set, Targeting, Targeting Key, Metric
+definitions, Conversion Window, Guardrail/Activation config) ends the current Run and opens the next, so
+each Run yields a clean, self-consistent dataset; **non-material** edits (description, owner, tags) apply
+in place. Runs are **independent**: the latest is the live result, prior Runs are frozen archives, never
+pooled (a material edit resets the sample). **Assignment is pure over a Run** — because the Run is
+immutable, re-bucketing within a Run is impossible by construction. At a Run boundary a returning Entity
+already **exposed** under a prior Run is a **holdover**: it keeps showing its prior Variant (sticky
+experience) but is *not* re-counted in the new Run. (GrowthBook calls the window a Phase; Statsig
+restarts a version; the holdover-Variant store is their Persistent Assignment / Sticky Bucketing.)
+_Avoid_: phase, version, configVersion (Run is canonical), analysis window
 
 **Exposure**:
 The event that an Entity actually encountered its assigned Variant (the variant-bearing UI rendered or
-the branched code path executed). Defaults to coincide with Assignment; can be deferred (e.g. for
-below-the-fold UI) via the SDK. **Analysis counts Exposures, not Assignments, as the denominator.**
-_Avoid_: impression, view
+the branched code path executed). The **only event recorded on this seam**; it carries the assigned
+Variant and its `runId` (Targeting Key, Experiment, Run, Variant, timestamp). Defaults to coincide with
+Assignment; can be deferred (e.g. for below-the-fold UI) via the SDK. **Analysis counts Exposures, not
+Assignments, as the denominator**, scoped to a Run. Deduped to **unique Entities per Run, first-touch**:
+an Entity's earliest Exposure in a Run is the one that counts, anchoring its Conversion Window;
+repeat reads, sessions, and edge nodes do not add to the count. The SDK keeps a seen-set as a hot-path
+optimization only — the dedup is authoritative in the pipeline (across five edge runtimes, per-node SDK
+sets cannot be the source of truth). Reading a Variant through the SDK accessor fires the Exposure; a
+distinct, loudly-named "peek without exposing" accessor is the explicit deferral path.
+_Avoid_: impression, view; "grain"/session as the denominator unit (the unit is Entity-per-Run; session
+is a Dimension; "grain" is warehouse-internal language, never domain/SDK)
 
 **Metric**:
 A fact (the event/action measured) combined with an aggregation (how it is summarized per Entity).
@@ -176,8 +202,12 @@ expected split — signals broken bucketing/Assignment and invalidates the Exper
   rest are **Treatments**.
 - An **Entity** is identified by the **Targeting Key** and is served a Variant via **Targeting** /
   **Fractional Evaluation**.
-- **Assignment** records which Variant an Entity got; **Exposure** records that the Entity encountered
-  it. An Experiment's results are computed over **Exposures**.
+- **Assignment** is the pure, deterministic result of `assign(Run, Targeting Key)` — it records nothing
+  on its own. **Exposure** is the only event recorded; it carries the assigned Variant and `runId`. An
+  Experiment's results are computed over **Exposures**, scoped to a **Run**.
+- An **Experiment** runs as a sequence of **Runs**; each Run freezes the config and is the unit of
+  analysis. A material config edit ends one Run and opens the next, keeping each Run's dataset clean.
+  Assignment is pure over a Run, so re-bucketing within a Run cannot happen.
 - An **Experiment** measures one or more **Metrics** (Binomial / Count / Revenue / Ratio), may have
   **Guardrail** and **Activation** Metrics, and can be sliced by **Dimensions**.
 - **SRM** is a diagnostic over the Exposure counts per Variant; a mismatch invalidates results.
