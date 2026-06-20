@@ -24,6 +24,7 @@ design — see the format in `~/.claude/skills/grill-with-docs/ADR-FORMAT.md`. V
 | [0015](./0015-variance-delta-method-aggregate-to-randomization-unit.md) | Variance: delta method over per-Entity aggregates; no naive ratio-of-means path |
 | [0016](./0016-cuped-and-winsorization-default-on-but-conditional.md) | CUPED and winsorization: default-on, but conditional on the data they require |
 | [0017](./0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md) | Stack: all-Cloudflare Workers for serving + reactive control plane, Tinybird analytics system of record |
+| [0018](./0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md) | Identity/operational state in D1; session + API-key validation cached in KV; audit log in Tinybird |
 
 0001–0006 come from the Assignment/Exposure seam grills (2026-06-20). They form a chain: 0001 (pure
 assignment) enables 0006 (clean holdover predicate); 0002 (Run freezes *bucketing*) is enforced by 0003
@@ -76,3 +77,11 @@ raw append-only log; Cloudflare Analytics Engine is sampled/lossy and demoted to
 Convex was considered and rejected for the control plane — non-edge, a cost ceiling, and it would have forced
 a Convex → KV publish seam to get config onto the edge. ADR-0009 (KV read / DO write) is untouched, now also
 backing config.
+
+0018 gives the relational layer 0017 left homeless a home (2026-06-20): users, App, membership, API keys, and
+billing live in **Cloudflare D1** (reusing agent-paste's Drizzle tooling, just retargeted from Postgres);
+the per-request-hot reads — session and API-key validation — are served from **KV** write-through caches, so
+D1 is never on the hot path; the unbounded **audit log** goes to **Tinybird**, keeping D1 under its size
+ceiling. Tenant isolation is **application-enforced** (every query scoped by `app_id` in one data-access
+seam), a deliberate downgrade from agent-paste's Postgres RLS — recorded, with that seam built as the
+migration boundary if DB-enforced RLS ever becomes a hard requirement.
