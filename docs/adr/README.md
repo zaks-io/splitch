@@ -18,6 +18,8 @@ design — see the format in `~/.claude/skills/grill-with-docs/ADR-FORMAT.md`. V
 | [0009](./0009-assignment-store-substrate-kv-read-do-write.md) | Assignment Store substrate: KV read, per-key Durable Object write |
 | [0010](./0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md) | The Exposure pipeline is a raw append-only log, deduped at query time (ELT) |
 | [0011](./0011-conflicting-variant-entities-quarantined-to-multiple.md) | A conflicting-Variant Entity is quarantined to `__multiple__`, not silently resolved |
+| [0012](./0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md) | Activation gate: activation follows exposure, re-anchors the window, ships bias guardrails |
+| [0013](./0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md) | Activation is a first-class event; counterfactual triggering is additive, not a rewrite |
 
 0001–0006 come from the Assignment/Exposure seam grills (2026-06-20). They form a chain: 0001 (pure
 assignment) enables 0006 (clean holdover predicate); 0002 (immutable Run) is enforced by 0003 (material
@@ -36,3 +38,12 @@ a re-runnable windowed query at analysis time, at-least-once + idempotent key) p
 and 0011 (a same-Run multi-Variant Entity is quarantined to `__multiple__` and surfaced, not silently
 first-touch-resolved) keeps a delivery/integration defect from becoming invisible arm bias. Design narrative:
 [exposure-pipeline-seam.md](../architecture/exposure-pipeline-seam.md).
+
+0012–0013 come from the Activation gate seam grill (2026-06-20) — a production decision on the final schema,
+not a bootstrap stopgap. 0012 pins the gate semantics (activation must follow Exposure; the Conversion
+Window re-anchors to `activation_ts`; two fail-loud bias guardrails — activated-population SRM + per-arm
+activation rate — because conditioning on a Treatment-affected gate biases results the full-population SRM
+can't catch). 0013 makes the future Kohavi-correct counterfactual gate **additive, not a rewrite**:
+activation is a first-class logged event, so counterfactual triggering is later just a `counterfactual:true`
+marker through the same log/query/anchor/SRM. Design narrative:
+[activation-gate-seam.md](../architecture/activation-gate-seam.md).

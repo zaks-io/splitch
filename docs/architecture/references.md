@@ -142,3 +142,30 @@ at-least-once + idempotent dedup key is the settled delivery model.
   `ROW_NUMBER() OVER (PARTITION BY id) = 1`): https://docs.cloud.google.com/bigquery/docs/streaming-data-into-bigquery
 - **Snowflake — QUALIFY** (`QUALIFY ROW_NUMBER() OVER (PARTITION BY p ORDER BY o) = 1`, canonical first-touch):
   https://docs.snowflake.com/en/sql-reference/constructs/qualify
+
+## Activation gate semantics (Activation gate seam grill, 2026-06-20)
+
+Verified for ADR-0012 (ordering, re-anchor, bias guardrails) and ADR-0013 (first-class event, additive
+counterfactual). The field is split on re-anchoring; the post-treatment selection-bias guidance is strongest
+in the Kohavi/Microsoft OCE literature, not the vendor docs.
+
+- **Statsig — qualifying events** (filter exposures; "must occur after the exposure"; re-anchor toggle
+  replaces exposure ts with qualifying-event ts):
+  https://docs.statsig.com/statsig-warehouse-native/configuration/qualifying-events
+- **Statsig — filtering exposures** (generic post-assignment-bias caution):
+  https://docs.statsig.com/statsig-warehouse-native/features/filtering-exposures
+- **Eppo — entry points** (re-anchors automatically: time-limited metrics "based on the timestamp of the
+  Entry Point, not the assignment"): https://docs.geteppo.com/guides/advanced-experimentation/entry_points/
+- **Eppo — filter assignments by entry point**:
+  https://docs.geteppo.com/experiment-analysis/configuration/filter-assignments-by-entry-point/
+- **GrowthBook — Activation Metric + the bias warning** ("can cause bias that is not picked up by SRM
+  errors… avoid whenever possible"): https://docs.growthbook.io/kb/experiments/troubleshooting-experiments
+  and https://docs.growthbook.io/app/experiment-configuration
+- **GrowthBook — keeps window at first exposure** (does NOT re-anchor; conversion window lower bound = first
+  exposure + delay): https://docs.growthbook.io/app/metrics/legacy
+- **Kohavi/Fabijan et al., KDD 2019 — SRM & post-treatment filtering** ("no post-treatment data… for
+  filtering"): https://exp-platform.com/Documents/2019_KDDFabijanGupchupFuptaOmhoverVermeerDmitriev.pdf
+- **Microsoft — diagnosing SRM** (triggered-analysis SRM with trustworthy untriggered analysis = misconfigured
+  trigger): https://www.microsoft.com/en-us/research/articles/diagnosing-sample-ratio-mismatch-in-a-b-testing/
+- **Kohavi & Longbotham — counterfactual triggering** (include control entities that *would have* triggered):
+  https://exp-platform.com/Documents/2023-03-11EncyclopeiaMLDSABTestingFinal.pdf

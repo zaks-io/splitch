@@ -183,11 +183,23 @@ A Metric computed as one Metric divided by another, numerator and denominator ag
 A Metric watched for unintended harm; warns when its confidence-interval bound breaches a threshold.
 
 **Activation Metric**:
-A gate that filters analysis to Entities who first performed a defined action (e.g. only users who
-reached checkout).
+A gate that filters analysis to Entities who first performed a defined **activation** action (e.g. only
+users who reached checkout) — an Entity is **activated** when it performs that action. The activation must
+occur **after** first Exposure (`activation_ts > first_exposure_ts`); a pre-exposure activation never
+counts (counting it is post-treatment selection bias). When set, it **re-anchors the Conversion Window to
+`activation_ts`** — activation is the true entry moment. **Bias trap**: if the Treatment changes whether an
+Entity activates, conditioning on activation biases results in a way the full-population SRM does *not*
+catch, so splitch ships two guardrails — **SRM on the activated population** (separate from the full-exposed
+SRM) and **per-arm activation rate as a first-class balance metric**; either firing means the gated results
+are untrusted. Activation is a **first-class logged event** (own row on the Exposure log), so future
+**counterfactual triggering** (logging would-have-activated for Control) is an additive marker, not a
+schema change.
+_Avoid_: trigger/entry-point as separate concepts (Activation Metric is canonical); gating on a
+Treatment-affected action without watching the activated-population SRM
 
 **Conversion Window**:
-The time window after an Entity's first Exposure during which events count toward a Metric.
+The time window after an Entity's anchor during which events count toward a Metric. The anchor is
+`first_exposure_ts` normally, and **`activation_ts` when an Activation Metric gates the analysis**.
 
 **Dimension**:
 An attribute used to slice Experiment results (e.g. country, plan, device).

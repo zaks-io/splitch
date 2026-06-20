@@ -101,5 +101,5 @@ this logic smears across every analysis query and every edge runtime.
 
 - The **Conversion Window** mechanics (how post-first-touch events attribute to Metrics) build on the
   `first_exposure_ts` anchor this seam produces — the Metric/analysis seam.
-- The **Activation Metric** gate (ADR-deferred from the original Assignment/Exposure grill) re-anchors
-  first-touch to the activation event; it composes with this dedup query and is its own grill.
+- The **Activation Metric** gate re-anchors first-touch to the activation event; it composes with this
+  dedup query. Designed in the [Activation gate seam](./activation-gate-seam.md) (ADR-0012/0013).
