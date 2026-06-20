@@ -66,26 +66,35 @@ its keep — it *is* the "this dataset is analyzable as a unit" invariant, made 
 
 ## Run lifecycle
 
-Designed in a follow-up grill (2026-06-20). The Run is a stronger invariant than any reference
-platform enforces: **a Run means bucketing AND measurement were frozen for its entire life.**
+Designed in a follow-up grill (2026-06-20), and revised the same day after a best-practices audit. The Run
+freezes **bucketing**: a Run means *assignment* was frozen for its entire life. Measurement is **not** frozen
+into the Run — it recomputes losslessly over the Run's raw log, which is what the reference platforms do
+(ADR-0003). (The earlier version of this doc froze measurement too and claimed that as "stronger than any
+reference platform"; the audit found the field deliberately recomputes measurement, so that claim was
+backwards and is corrected here.)
 
-### Material vs non-material edits
+### Assignment vs measurement vs non-material edits
 
-- **Material → ends the current Run, opens the next** (anything that changes `assign()` *or* what the
-  numbers mean): salt, allocation, Variant set, Targeting/Segment, Targeting Key, **Metric definitions,
-  Conversion Window, Guardrail/Activation config**.
-- **Non-material → mutate in place, same Run**: description, display name, owner, tags, notes,
-  dashboard layout.
+- **Assignment edit → ends the current Run, opens the next** (changes `assign()`, so prior data is no longer
+  comparable): salt, allocation, Variant set, Targeting/Segment, Targeting Key.
+- **Measurement edit → recompute over the existing Run, no reset** (changes what the numbers mean, not who is
+  in which arm): Metric definitions, Conversion Window, Guardrail/Activation config. The raw Exposure/event
+  log is the system of record (ADR-0010), so the dedup/metric query simply re-runs with the new definition —
+  Eppo/Statsig/GrowthBook all do this.
+- **Non-material → mutate in place, same Run**: description, display name, owner, tags, notes, dashboard
+  layout.
 
 ### Runs are independent
 
 Each Run accumulates exposures from zero. The **latest Run is the live result**; prior Runs are
-viewable **frozen archives**, never pooled. A material edit therefore **resets the sample** — the UI
-must warn loudly, because the prior Run's exposures do not count toward the new Run's significance.
-This is the statistically honest default (GrowthBook "be very careful with phases") and is the only
-choice coherent with "material → new Run": pooling across the changes we forced a Run for would hand
-back the integrity the Run exists to protect. Pooling, if ever needed, is a future explicit feature
-with loud guardrails — not the default.
+viewable **frozen archives**, never pooled. An **assignment edit** therefore **resets the sample** — the UI
+must warn loudly, because the prior Run's exposures do not count toward the new Run's significance. (A
+measurement edit does not reset; it recomputes.) This is the statistically honest default (GrowthBook "be
+very careful with phases") and is the only choice coherent with "assignment edit → new Run": pooling across a
+bucketing change would hand back the integrity the Run exists to protect. Pooling, if ever needed, is a
+future explicit feature with loud guardrails — not the default. A future opt-in **locked-analysis /
+pre-registration** mode could additionally freeze measurement per experiment for teams that want that
+discipline; that is additive, not the default (ADR-0003).
 
 ### Boundary behavior: sticky experience, counted in the old Run
 

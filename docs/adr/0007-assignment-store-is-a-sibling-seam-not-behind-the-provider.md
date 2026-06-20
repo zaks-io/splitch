@@ -8,15 +8,19 @@ Variant)`, read on evaluate, written at first Exposure — lives in its own **As
 reads holdover from the Assignment Store, and falls through to `assign()` over the Run config the Provider
 resolved. The Provider stays a stateless read-side flag-config resolver.
 
-This is forced by the OpenFeature contract, not a preference. `resolve` is defined as
-`(flag key, default, evaluation context) -> resolution details`; the only Provider state the spec
-sanctions is an *invalidatable flag-config cache*, never a system of record for per-subject assignments
-(spec §2.2, §2.6). Side-effecting experiment writes have their own path — `track()` on the Client (spec
-§6, Condition 2.7.1) — explicitly off the resolve path. flagd, the reference Provider, gets stickiness
-with **zero per-user storage** (deterministic hash only). Burying a per-Entity write store behind
-`resolve` would break swap-compatibility with any conformant Provider and conflate OpenFeature's
-deliberate evaluate-vs-track boundary. Our holdover write at Exposure is a `track`-side concern, so it
-belongs on a `track`-side seam.
+This follows the grain of the OpenFeature contract. `resolve` is defined as
+`(flag key, default, evaluation context) -> resolution details` (spec §2.2); the Provider state the spec
+*describes* is an invalidatable flag-config cache, and side-effecting experiment writes are given their own
+path — **`track()` on the Client** (spec §6, Requirements 6.1.x), deliberately separate from resolve. The
+spec is **silent** on per-subject assignment storage behind a Provider — it neither sanctions nor forbids it
+— so this is an argument from the *design's grain*, not a literal prohibition: OpenFeature clearly intends
+evaluation (read) and tracking (write) to be separate concerns, and a per-Entity write store buried behind
+`resolve` cuts across that. (Note: §2.7.1 is a *different, optional* provider-side tracking hook — "the
+provider MAY define a function for tracking" — not the Client `track()` that carries experiment data; the
+load-bearing requirement is §6.) flagd, the reference Provider, gets stickiness with **zero per-user
+storage** (deterministic hash only), which is exactly why a holdover write store doesn't belong behind a
+swappable Provider. Our holdover write at Exposure is a `track`-side concern, so it belongs on a `track`-side
+seam.
 
 The deletion test passes for real, not hypothetically: Statsig (`IUserPersistentStorage`) and GrowthBook
 (`StickyBucketService`) both ship this exact port as a swappable dependency the evaluation engine consults
@@ -24,8 +28,8 @@ The deletion test passes for real, not hypothetically: Statsig (`IUserPersistent
 
 ## Considered options
 
-- **Behind the Provider interface** (every adapter implements sticky storage) — rejected: violates the
-  OpenFeature `resolve` contract, forces a non-Flagship Provider (e.g. flagd) to grow per-Entity write
+- **Behind the Provider interface** (every adapter implements sticky storage) — rejected: cuts against the
+  OpenFeature evaluate-vs-track grain, forces a non-Flagship Provider (e.g. flagd) to grow per-Entity write
   state it has no business holding, and couples flag-config distribution to an experiment datastore.
   Statsig packages resolution + persistence together, but it is not OpenFeature-shaped; we are.
 

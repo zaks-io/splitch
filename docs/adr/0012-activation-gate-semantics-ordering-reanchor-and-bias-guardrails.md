@@ -24,8 +24,10 @@ An Activation Metric gates analysis to **activated** Entities. Three semantics a
 If the Treatment changes whether an Entity activates, conditioning on activation biases every downstream
 Metric — and, per GrowthBook's explicit warning, this "can cause bias that is not picked up by SRM
 errors": the full-population assignment SRM can read a clean 50/50 while the *activated* subpopulation is
-skewed. This is the same silent-corruption-behind-a-green-dashboard failure ADR-0011 rejects. No reference
-vendor reports activation rate as a per-arm balance metric, so splitch goes further than all three:
+skewed. This is the same silent-corruption-behind-a-green-dashboard failure ADR-0011 rejects. No reference vendor
+ships a **dedicated, built-in per-arm activation-rate balance diagnostic** with SRM-style alerting (the
+nearest miss is GrowthBook's Health Tab, which *displays* traffic by activation status across variations but
+does not alert on it as a balance metric), so splitch goes further:
 
 - **Activated-population SRM** — chi-square on the activated Entities per arm per Run (p < 0.001),
   *separate* from the full-exposed SRM. An SRM that appears only in the gated scorecard is the canonical

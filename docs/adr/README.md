@@ -9,7 +9,7 @@ design — see the format in `~/.claude/skills/grill-with-docs/ADR-FORMAT.md`. V
 |---|----------|
 | [0001](./0001-assignment-is-pure-not-an-event.md) | Assignment is a pure computation, not an event |
 | [0002](./0002-run-is-the-immutable-unit-of-analysis.md) | The Run is the immutable unit of analysis |
-| [0003](./0003-material-edits-including-measurement-open-a-new-run.md) | Material edits — including measurement — open a new Run |
+| [0003](./0003-material-edits-including-measurement-open-a-new-run.md) | Assignment edits open a new Run; measurement edits recompute over the existing Run |
 | [0004](./0004-exposure-fires-on-read.md) | Exposure fires on read; deferral is an explicit accessor |
 | [0005](./0005-exposure-dedup-first-touch-pipeline-authoritative.md) | Exposure dedup is first-touch per (Entity, Run), pipeline-authoritative |
 | [0006](./0006-run-boundary-sticky-experience-counted-in-old-run.md) | Run boundary: sticky experience, counted in the old Run |
@@ -25,8 +25,12 @@ design — see the format in `~/.claude/skills/grill-with-docs/ADR-FORMAT.md`. V
 | [0016](./0016-cuped-and-winsorization-default-on-but-conditional.md) | CUPED and winsorization: default-on, but conditional on the data they require |
 
 0001–0006 come from the Assignment/Exposure seam grills (2026-06-20). They form a chain: 0001 (pure
-assignment) enables 0006 (clean holdover predicate); 0002 (immutable Run) is enforced by 0003 (material
-edits) and protected by 0006; 0004 (exposure-on-read) forces 0005 (dedup).
+assignment) enables 0006 (clean holdover predicate); 0002 (Run freezes *bucketing*) is enforced by 0003
+(assignment edits open a new Run; measurement edits recompute) and protected by 0006; 0004 (exposure-on-read)
+forces 0005 (dedup). 0003 was revised on 2026-06-20: an earlier version froze measurement into the Run too;
+a best-practices audit found the reference platforms all recompute measurement losslessly and restart only on
+assignment changes, so splitch adopts that pattern (the raw-log ELT design of ADR-0010 makes the recompute
+nearly free).
 
 0007–0009 come from the Assignment Store seam grills (2026-06-20), which give ADR-0006's durable holdover
 state a home and a substrate: 0006 (holdover state exists) needs 0007 (it lives in a sibling Assignment

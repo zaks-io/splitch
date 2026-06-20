@@ -3,8 +3,10 @@
 **Status:** accepted
 
 This ADR records the **non-negotiable** correctness rules of the variance computation. They are not
-preferences — all three reference platforms (Statsig, Eppo, GrowthBook) do exactly this, and the
-methodology literature (Deng/Knoblich/Lu, KDD 2018) is the canonical proof. Each rule guards a *silent*
+preferences — all three reference platforms (Statsig, Eppo, GrowthBook) implement exactly this method
+(aggregate-to-unit + delta method), and the methodology literature (Deng/Knoblich/Lu, KDD 2018) is the
+canonical proof (Eppo cites it directly; Statsig and GrowthBook implement the same method without naming a
+source). Each rule guards a *silent*
 error: the point estimate (lift) looks correct while the variance is wrong in the dangerous direction —
 understated — so CIs are too narrow and the false-positive rate explodes.
 

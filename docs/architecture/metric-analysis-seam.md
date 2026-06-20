@@ -50,8 +50,10 @@ rules, the peeking correction, and the multiple-comparison control smear across 
   matter how often they look. Fixed-horizon is opt-in for a pre-committed sample.
 - **Frequentist** point of view (no prior-manipulation surface in self-serve; converges with Bayesian at
   scale). Bayesian view may be added later, not the default.
-- **Asymptotic confidence sequences (aCS/GAVI)**, not mSPRT — they *are* CIs, so they compose with the
-  delta-method and CUPED machinery as one object.
+- **Asymptotic confidence sequences (aCS)**, not mSPRT — they *are* CIs, so they compose with the
+  delta-method and CUPED machinery as one object. (aCS is Waudby-Smith et al.'s construction, closely related
+  to but not identical to Howard et al.'s GAVI; both carry a tuning knob, so the win is compositionality, not
+  being parameter-free — see ADR-0014.)
 
 ### Variance correctness — non-negotiable (ADR-0015)
 

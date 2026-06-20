@@ -8,12 +8,13 @@ as a **health metric** (GrowthBook's approach; ~1% tolerated, above which it sig
 *not* take the first-touch (`MIN(ts)`) Variant and move on.
 
 The reason is splitch's own invariants. Given pure `assign()` (ADR-0001), an authoritative per-key
-holdover DO (ADR-0009), and material-edit-opens-a-new-Run (ADR-0003), a same-Run Variant conflict can
+holdover DO (ADR-0009), and assignment-edit-opens-a-new-Run (ADR-0003), a same-Run Variant conflict can
 **only** mean one of three defects:
 
 1. a **config-propagation race** (salt/allocation mid-flight across POPs) — a bug in the delivery layer;
 2. an **SDK bug / bad integration** that bypassed the holdover read;
-3. a **salt change without a new Run** — a direct ADR-0003 violation.
+3. a **salt/allocation change without a new Run** — a direct ADR-0003 violation (these are
+   assignment-affecting edits and must open a new Run; a measurement edit cannot cause a Variant conflict).
 
 All three are defects you want to see *loudly*. "First-touch wins" does not erase the conflict; it
 **silently biases whichever arm won the timestamp**, and SRM will not reliably catch it because the

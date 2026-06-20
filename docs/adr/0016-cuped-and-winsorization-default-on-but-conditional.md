@@ -25,10 +25,16 @@ CUPED is a regression adjustment, so it composes into the same CI object before 
 ## Winsorization — default-on for additive Metrics, never binary
 
 Heavy-tailed Count/Revenue Metrics let a few whales dominate variance (a single $5,000 order makes its arm
-"win"). Winsorization caps per-Entity values at a high percentile (Statsig's 99.9% default), replacing — not
-deleting — extreme values. It is **default-on for additive Metrics (sum/count/mean/ratio)** and **never
-applied to Binomial Metrics** (a 0/1 has no tail). The small bias from truncation is the accepted price of a
-large variance reduction.
+"win"). Winsorization caps per-Entity values at a high percentile, replacing — not deleting — extreme values.
+It is **default-on for additive Metrics (sum/count/mean/ratio)** and **never applied to Binomial Metrics** (a
+0/1 has no tail). The small bias from truncation is the accepted price of a large variance reduction.
+
+**This default-on is a deliberate divergence, not a field norm.** Only **Statsig** defaults winsorization on
+(at 99.9%, which we adopt as the default percentile); **Eppo and GrowthBook are opt-in per-Metric**.
+Winsorization introduces bias, so defaulting it on is a real choice — we make it on the same fail-loud /
+safe-default reasoning as the rest of the engine (the untreated failure, a whale silently deciding the
+result, is worse than a small documented truncation bias), but we record it as a choice we own, not a
+consensus we inherited. The percentile is configurable and winsorization can be turned off per Metric.
 
 ## Considered options
 

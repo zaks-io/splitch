@@ -31,8 +31,9 @@ vendors' own words — annotated below.
   its salt.
 - **Persistent Assignment**: https://www.statsig.com/updates/update/persistentassignment
   Keeps a user bucketed even when allocation/targeting changes mid-experiment. We solve the same
-  problem differently — a material edit opens a **new Run** rather than mutating in place. Worth a
-  conscious compare before we build (see "Open question" below).
+  problem differently — an **assignment edit** (allocation/targeting/salt) opens a **new Run** rather than
+  mutating in place; a measurement edit recomputes (ADR-0003). Worth a conscious compare before we build
+  (see "Open question" below).
 - **Server SDK (Go) reference**: https://docs.statsig.com/server/golangSDK/
 - **Open source — server core (readable bucketing/eval code)**:
   https://github.com/statsig-io/statsig-server-core

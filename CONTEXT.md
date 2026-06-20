@@ -107,14 +107,16 @@ _Avoid_: allocation (Statsig's word — Assignment is canonical), bucketing; ass
 Exposure is an event)
 
 **Run** (Experiment Run):
-A time-boxed, immutable window of an Experiment with a start and an end, inside which the config (salt,
-allocation, Variant set, Targeting) is frozen. The unit of analysis: every Exposure is stamped with its
-`runId`, and SRM, significance, and Conversion Windows are all scoped to a Run. A **material** edit (one that changes
-`assign()` or what the numbers mean — salt, allocation, Variant set, Targeting, Targeting Key, Metric
-definitions, Conversion Window, Guardrail/Activation config) ends the current Run and opens the next, so
-each Run yields a clean, self-consistent dataset; **non-material** edits (description, owner, tags) apply
-in place. Runs are **independent**: the latest is the live result, prior Runs are frozen archives, never
-pooled (a material edit resets the sample). **Assignment is pure over a Run** — because the Run is
+A time-boxed, immutable window of an Experiment with a start and an end, inside which the **assignment
+config** (salt, allocation, Variant set, Targeting, Targeting Key) is frozen. The unit of analysis: every
+Exposure is stamped with its `runId`, and SRM, significance, and Conversion Windows are all scoped to a Run.
+An **assignment edit** (one that changes `assign()` — salt, allocation, Variant set, Targeting, Targeting
+Key) ends the current Run and opens the next, so each Run yields a clean, self-consistent dataset. A
+**measurement edit** (Metric definitions, Conversion Window, Guardrail/Activation config) changes what the
+numbers mean but not who is in which arm, so it **recomputes losslessly over the existing Run** — no new Run,
+no sample reset (the raw log is the system of record; the dedup/metric query re-runs). **Non-material** edits
+(description, owner, tags) apply in place. The Run freezes *bucketing*, not *measurement*. Runs are **independent**: the latest is the live result, prior Runs are frozen archives, never
+pooled (an assignment edit resets the sample; a measurement edit recomputes). **Assignment is pure over a Run** — because the Run is
 immutable, re-bucketing within a Run is impossible by construction. At a Run boundary a returning Entity
 already **exposed** under a prior Run is a **holdover**: it keeps showing its prior Variant (sticky
 experience) but is *not* re-counted in the new Run. (GrowthBook calls the window a Phase; Statsig
@@ -268,9 +270,10 @@ everywhere, never a separate raw-count denominator.
 - **Assignment** is the pure, deterministic result of `assign(Run, Targeting Key)` — it records nothing
   on its own. **Exposure** is the only event recorded; it carries the assigned Variant and `runId`. An
   Experiment's results are computed over **Exposures**, scoped to a **Run**.
-- An **Experiment** runs as a sequence of **Runs**; each Run freezes the config and is the unit of
-  analysis. A material config edit ends one Run and opens the next, keeping each Run's dataset clean.
-  Assignment is pure over a Run, so re-bucketing within a Run cannot happen.
+- An **Experiment** runs as a sequence of **Runs**; each Run freezes the *assignment* config and is the
+  unit of analysis. An assignment edit ends one Run and opens the next, keeping each Run's dataset clean; a
+  measurement edit recomputes over the existing Run. Assignment is pure over a Run, so re-bucketing within a
+  Run cannot happen.
 - An **Experiment** measures one or more **Metrics** (Binomial / Count / Revenue / Ratio), may have
   **Guardrail** and **Activation** Metrics, and can be sliced by **Dimensions**.
 - **SRM** is a diagnostic over the Exposure counts per Variant; a mismatch invalidates results.
