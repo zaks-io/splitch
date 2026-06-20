@@ -213,13 +213,32 @@ _Avoid_: audience, cohort
 A formal statement of what an Experiment changes and the effect it is expected to have.
 
 **Statistical Significance**:
-An indicator that the difference between Control and Treatment is unlikely to be due to chance.
+An indicator that the difference between Control and Treatment is unlikely to be due to chance. splitch's
+default engine is **sequential / always-valid** (you may peek continuously without inflating the
+false-positive rate) and **frequentist**; fixed-horizon is an opt-in for a pre-committed sample size.
+Across many Metrics and Variants, false positives are controlled by **Benjamini-Hochberg FDR** over the
+goal-metric × Variant family (Guardrail and secondary Metrics excluded).
+_Avoid_: fixed-horizon as the default (peeking inflates it); "peeking is unsafe" (with always-valid it is safe)
 
 **P-Value**:
-The statistical measure of whether the difference between two Variants is significant.
+The statistical measure of whether the difference between two Variants is significant. In splitch it is an
+**always-valid** p-value (valid under continuous monitoring), not a fixed-horizon one.
 
 **Confidence Interval**:
-The range in which the true effect is estimated to lie at a chosen Confidence Level.
+The range in which the true effect is estimated to lie at a chosen Confidence Level. splitch's CI is an
+**asymptotic confidence sequence** (always-valid), and is the single object the whole engine flows through:
+delta-method variance → winsorization (additive Metrics) → CUPED (gated) → always-valid sequence →
+relative-lift CI → Guardrail bound. **Variance is always computed over per-Entity aggregates** (denominator
+`COUNT DISTINCT Entity`, never events/sessions); **Ratio Metrics and any Metric finer than the Entity use
+the delta method** (the naive ratio-of-means/independent-events variance silently understates variance and
+inflates false positives, so that path does not exist in the engine).
+_Avoid_: naive ratio-of-means variance; events/sessions as the variance denominator (always the Entity)
+
+**CUPED** (variance reduction):
+Controlled-experiment Using Pre-Experiment Data — a regression adjustment using pre-period covariates to cut
+Metric variance (~40–65%), shortening Experiments for the same power. **On by default, gated** on pre-period
+data + coverage; falls back to assignment/attribute covariates for new-Entity Experiments (which have no
+history). Never silently degrades.
 
 **Minimum Detectable Effect** (MDE):
 The smallest effect an Experiment is powered to detect at the chosen significance and power.

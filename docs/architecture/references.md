@@ -169,3 +169,53 @@ in the Kohavi/Microsoft OCE literature, not the vendor docs.
   trigger): https://www.microsoft.com/en-us/research/articles/diagnosing-sample-ratio-mismatch-in-a-b-testing/
 - **Kohavi & Longbotham — counterfactual triggering** (include control entities that *would have* triggered):
   https://exp-platform.com/Documents/2023-03-11EncyclopeiaMLDSABTestingFinal.pdf
+
+## Metric analysis / stats engine (Metric analysis seam grill, 2026-06-20)
+
+Verified for ADR-0014 (sequential always-valid + frequentist + aCS), ADR-0015 (delta method, aggregate to
+randomization unit), ADR-0016 (CUPED + winsorization, conditional). The peeking trap and the clustered-
+variance trap are the two silent, high-bias errors this seam exists to prevent.
+
+### Sequential / always-valid inference
+- **Johari, Pekelis, Walsh — Always Valid Inference** (the foundational paper; "always valid p-values…
+  continuous monitoring"): https://arxiv.org/abs/1512.04922
+- **Optimizely — Stats Engine** (peeking inflates A/A false-declaration to 26–57%; mSPRT + FDR):
+  https://www.optimizely.com/insights/blog/statistics-for-the-internet-age-the-story-behind-optimizelys-new-stats-engine/
+- **Eppo — sequential is the default** (time-uniform confidence sequences; "you can peek… at any time"):
+  https://docs.geteppo.com/statistics/confidence-intervals/analysis-methods/
+- **GrowthBook — Asymptotic Confidence Sequences** (aCS; look as often as you like):
+  https://docs.growthbook.io/statistics/sequential
+- **Statsig — sequential testing** (mSPRT, opt-in):
+  https://docs.statsig.com/experiments/advanced-setup/sequential-testing
+
+### Bayesian vs frequentist
+- **GrowthBook — Bayesian default** (chance-to-win; uninformative prior): https://docs.growthbook.io/statistics/overview
+- **Statsig — frequentist by default** (Bayesian opt-in): https://docs.statsig.com/experiments-plus/bayesian/
+
+### Variance correctness — delta method & clustered data
+- **Deng, Knoblich, Lu — Applying the Delta Method in Metric Analytics** (KDD 2018; naive method
+  under-estimates variance for clustered metrics): https://arxiv.org/abs/1803.06336
+- **Eppo — ratio metrics / delta method** (formula with covariance term):
+  https://docs.geteppo.com/data-management/metrics/ratio-metric/
+- **Eppo — clustered experiments** (treating cluster obs as independent underestimates variance):
+  https://docs.geteppo.com/guides/advanced-experimentation/analyzing-clustered-experiments/
+- **Statsig — delta method** (numerator/denominator correlated; same users):
+  https://docs.statsig.com/experiments/statistical-methods/methodologies/delta-method
+- **GrowthBook — statistics details** (delta method for unit ≠ randomization unit; relative-lift CI is a
+  delta-method ratio): https://docs.growthbook.io/statistics/details
+
+### CUPED & winsorization
+- **Deng, Xu, Kohavi, Walker — CUPED** (WSDM 2013; ~50% variance reduction):
+  https://www.exp-platform.com/Documents/2013-02-CUPED-ImprovingSensitivityOfControlledExperiments.pdf
+- **Statsig — variance reduction (CUPED auto-on) & winsorization (99.9%)**:
+  https://docs.statsig.com/experiments/statistical-methods/variance-reduction ,
+  https://docs.statsig.com/stats-engine/methodologies/winsorization/
+- **Eppo — CUPED++ (conditional; no pre-period for new users)**: https://docs.geteppo.com/statistics/cuped/
+
+### Multiple comparisons & guardrails
+- **Benjamini & Hochberg (1995) FDR** — the standard; Statsig BH:
+  https://docs.statsig.com/experiments/statistical-methods/methodologies/benjamini-hochberg-procedure
+- **GrowthBook — multiple corrections** (Holm-Bonferroni or BH): https://docs.growthbook.io/statistics/multiple-corrections
+- **Eppo — preferential Bonferroni / FWER** (the considered alternative): https://docs.geteppo.com/statistics/multiple-testing/
+- **Eppo — guardrails (CI lower-bound breach)**: https://docs.geteppo.com/data-management/organizing-metrics/guardrails/
+- **Spotify — guardrails as non-inferiority test**: https://confidence.spotify.com/blog/better-decisions-with-guardrails

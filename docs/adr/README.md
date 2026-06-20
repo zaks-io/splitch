@@ -20,6 +20,9 @@ design — see the format in `~/.claude/skills/grill-with-docs/ADR-FORMAT.md`. V
 | [0011](./0011-conflicting-variant-entities-quarantined-to-multiple.md) | A conflicting-Variant Entity is quarantined to `__multiple__`, not silently resolved |
 | [0012](./0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md) | Activation gate: activation follows exposure, re-anchors the window, ships bias guardrails |
 | [0013](./0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md) | Activation is a first-class event; counterfactual triggering is additive, not a rewrite |
+| [0014](./0014-stats-engine-sequential-always-valid-frequentist-by-default.md) | Stats engine default: sequential always-valid, frequentist, asymptotic confidence sequences |
+| [0015](./0015-variance-delta-method-aggregate-to-randomization-unit.md) | Variance: delta method over per-Entity aggregates; no naive ratio-of-means path |
+| [0016](./0016-cuped-and-winsorization-default-on-but-conditional.md) | CUPED and winsorization: default-on, but conditional on the data they require |
 
 0001–0006 come from the Assignment/Exposure seam grills (2026-06-20). They form a chain: 0001 (pure
 assignment) enables 0006 (clean holdover predicate); 0002 (immutable Run) is enforced by 0003 (material
@@ -47,3 +50,12 @@ can't catch). 0013 makes the future Kohavi-correct counterfactual gate **additiv
 activation is a first-class logged event, so counterfactual triggering is later just a `counterfactual:true`
 marker through the same log/query/anchor/SRM. Design narrative:
 [activation-gate-seam.md](../architecture/activation-gate-seam.md).
+
+0014–0016 come from the Metric analysis seam grill (2026-06-20) — the statistics engine, production defaults
+on the final schema. 0014 sets the inference framework (sequential always-valid by default because users
+peek and fixed-horizon then runs a 25–57% false-positive rate; frequentist; asymptotic confidence sequences
+so it's one CI object with the variance stack). 0015 records the non-negotiable variance rules (aggregate to
+the Entity, delta method for ratio/clustered data, no naive variance path exists). 0016 ships CUPED and
+winsorization default-on but gated on the data they require. Multiple comparisons use Benjamini-Hochberg FDR
+across the goal-metric × Variant family. Design narrative:
+[metric-analysis-seam.md](../architecture/metric-analysis-seam.md).
