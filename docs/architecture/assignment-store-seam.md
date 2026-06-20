@@ -63,8 +63,8 @@ colliding across Entity types (a `session` id string that equals a `user` id str
 **Load model — eager pre-load (GrowthBook-style).** One edge-local read pre-loads an Entity's holdovers
 into context before flag resolution, so each per-flag decision is an in-memory lookup. Chosen over Statsig's
 lazy per-call fetch because the hot path across five edge runtimes wants the round-trips front-loaded, not
-one read per Experiment. (The *physical* substrate behind this read — KV vs Durable Object vs edge cache,
-replication, staleness — is the next grill; this seam only fixes that the read is edge-local and eager.)
+one read per Experiment. (The *physical* substrate behind this read — Workers KV, with a per-key Durable
+Object as the serialized writer — is pinned below in [The substrate](#the-substrate-adr-0009-kv-read-per-key-durable-object-write).)
 
 ## The evaluate path (no superposition — every branch visible)
 
@@ -90,8 +90,55 @@ boundaries, exposure-attribution integrity (the `runId` anchor), cross-Entity-ty
 edge-local hot-path read across five runtimes. The complexity is concentrated behind get/put, and the
 storage adapter is independently testable as pure memory — exactly the depth the deletion test rewards.
 
-## Open constraint handed to the next grill
+## The substrate (ADR-0009): KV read, per-key Durable Object write
 
-The Assignment Store needs a **low-latency, edge-local read on the evaluate path** (ADR-0006). The
-storage-substrate grill must satisfy that — and decide the write path from the Exposure pipeline back into
-the store, including how a first-touch write races against concurrent reads at other POPs.
+The port maps onto two Cloudflare primitives, split by its two halves — neither primitive does both jobs,
+so the canonical control-plane/data-plane split applies. Verified against Cloudflare docs (see
+[references.md](./references.md)).
+
+```
+              evaluate (hot path)                 Exposure pipeline (first-touch)
+                     |                                        |
+                getAll(key)                                put(key, ...)
+                     |                                        |
+                     v                                        v
+              +-------------+      write-through      +-----------------------+
+              |  Workers KV | <---------------------- |  Durable Object       |
+              | (read repl) |                         |  id = exp:idType:tk   |
+              +-------------+                         |  get-then-put-if-absent|
+               ~10ms, edge-local                      |  (atomic, one winner) |
+               eventually consistent                  +-----------------------+
+                                                       single-threaded, one location
+```
+
+- **`getAll` → Workers KV only.** Edge-local ~10ms, eventually consistent, the read-replica fan-out. The
+  entire hot path; no DO is touched on evaluate.
+- **`put` → one Durable Object per `(experiment, idType, targetingKey)`.** Single-threaded and globally
+  unique per key, so its `get`-then-`put-if-absent` is atomic — two POPs racing the same Entity's
+  first-touch cannot both win. On commit the DO write-throughs to KV.
+
+**Why fine-grained DOs (one per key), not one per Entity.** Cloudflare supports unlimited DOs ("millions...
+scale horizontally"); idle DOs hibernate free (only bytes at rest cost). The *only* documented anti-pattern
+is the opposite — a single hot DO is a ~1,000 req/s bottleneck whose fix is to shard into more DOs. One DO
+per key has zero cross-key contention and one cheap write before hibernation. A coarser per-Entity DO would
+funnel a busy Entity's many concurrent Experiments through one single-threaded object — the bottleneck shape
+to avoid. The per-key DO can't *enumerate* an Entity's assignments, but it never needs to: enumeration is
+`getAll`, which KV serves.
+
+### The consistency window (accepted, self-healing)
+
+KV-only reads accept a transient window: for up to ~60s after a Run-boundary first-touch, a concurrent
+cross-POP read may miss the holdover and compute a fresh `assign()` instead of replaying. It is **cosmetic
+and self-healing**, bounded to *returning Entity × live Run boundary × cross-POP × within propagation*. For a
+new Entity it cannot happen — `assign()` is deterministic (ADR-0001), so a stale miss computes the identical
+Variant the DO is about to store. The DO still yields exactly one true first-touch winner, so **no Run's
+dataset is ever corrupted**; only one returning user's momentary experience near a boundary, which converges.
+A DO read-fallback on KV miss was rejected: a miss is the normal new-Entity case, so it would pay a hop on
+the common path to fix a rare, self-healing glitch.
+
+### Implementation correctness rule (not re-litigable)
+
+The DO's first-touch must keep `get → decide → put` free of intervening non-storage I/O (e.g. `fetch()`),
+or wrap it in `blockConcurrencyWhile`, so the input gate's atomicity holds. The write path is Exposure
+pipeline → DO → KV write-through; its retry/failure behavior is an implementation concern of the
+Exposure-pipeline seam, not this one.

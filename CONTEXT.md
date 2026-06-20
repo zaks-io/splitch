@@ -145,7 +145,9 @@ see, and under which Run" and nothing more; the evaluate path owns the replay-vs
 the Assignment Store persists per-Entity experiment state (a write at Exposure). The stored `Variant`
 says what to replay; the stored `runId` says which Run owns this Entity's Exposures (so a holdover stays
 counted in its original Run). Read eagerly — one edge-local lookup pre-loads an Entity's holdovers before
-flag resolution.
+flag resolution. Substrate: the read is **Workers KV** (edge-local replica); the first-touch write is
+serialized through a **per-key Durable Object** that write-throughs to KV, so concurrent POPs can't both
+win a first-touch.
 _Avoid_: assignment cache (that is the SDK seen-set, a different thing); putting it behind the Provider
 
 **Metric**:

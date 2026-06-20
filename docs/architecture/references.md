@@ -86,3 +86,30 @@ So the platforms' sticky-bucketing store maps to our **holdover-Variant store**:
 `(Experiment, Targeting Key) -> (runId, Variant)`, written at first Exposure — the one piece of durable
 per-Entity state on the seam. See [assignment-exposure-seam.md](./assignment-exposure-seam.md) §
 "Run lifecycle". Carryover bias is avoided on *both* axes (clean data AND no jarring experience flip).
+
+## Cloudflare storage primitives (Assignment Store substrate grill, 2026-06-20)
+
+Verified for ADR-0009 (KV read + per-key Durable Object write). The substrate split is Cloudflare's own
+documented control-plane/data-plane pattern.
+
+- **Workers KV — how it works** (eventually consistent, edge-cached, ~10ms hot reads, up to ~60s
+  propagation): https://developers.cloudflare.com/kv/concepts/how-kv-works/
+- **KV limits** (1 write/sec/key): https://developers.cloudflare.com/kv/platform/limits/
+- **Durable Objects — concepts** (single-threaded, global uniqueness, "millions of objects"):
+  https://developers.cloudflare.com/durable-objects/concepts/what-are-durable-objects/
+- **Rules of Durable Objects** (one DO per coordination atom; a single hot DO is the bottleneck
+  anti-pattern; shard into more DOs): https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/
+- **DO limits** (unlimited object count; ~1,000 req/s soft per object):
+  https://developers.cloudflare.com/durable-objects/platform/limits/
+- **DO pricing** (idle/hibernating DOs incur no duration cost; only bytes at rest):
+  https://developers.cloudflare.com/durable-objects/platform/pricing/
+- **DO data location** (lives in one location, network hop from far POPs; locationHint best-effort):
+  https://developers.cloudflare.com/durable-objects/reference/data-location/
+- **DO storage API + input gates** (atomic get-then-put via serialization; keep non-storage I/O out of the
+  critical section): https://developers.cloudflare.com/durable-objects/best-practices/access-durable-objects-storage/
+- **Use KV from a Durable Object** (the serialize-writes-to-KV pattern):
+  https://developers.cloudflare.com/durable-objects/examples/use-kv-from-durable-objects/
+- **Control/data-plane reference architecture** (Coordinator DO write-throughs to KV for global reads):
+  https://developers.cloudflare.com/reference-architecture/diagrams/storage/durable-object-control-data-plane-pattern/
+- **D1 read replication** (regional single-primary, async eventually-consistent replicas — why D1 is the
+  wrong hot-path holdover store): https://developers.cloudflare.com/d1/best-practices/read-replication/
