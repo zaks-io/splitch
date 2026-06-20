@@ -66,7 +66,10 @@ _Avoid_: bucketing, hashing (those are implementation; "Fractional Evaluation" i
 
 **Provider**:
 An implementation that resolves flag values from a particular flag management system. For splitch the
-default Provider is Cloudflare Flagship, but the Provider is swappable.
+default Provider is Cloudflare Flagship, but the Provider is swappable. A **stateless read-side resolver**:
+its only state is an invalidatable cache of flag config, never per-Entity assignment memory. Per-Entity
+holdover state lives in the [[Assignment Store]], a sibling seam, not behind the Provider. (This follows
+OpenFeature, which routes side-effecting experiment writes through `track()`, not `resolve`.)
 
 **Evaluation** vs **Resolution**:
 *Evaluation* is the full retrieval of a flag value including hooks and default fallback.
@@ -131,6 +134,19 @@ sets cannot be the source of truth). Reading a Variant through the SDK accessor 
 distinct, loudly-named "peek without exposing" accessor is the explicit deferral path.
 _Avoid_: impression, view; "grain"/session as the denominator unit (the unit is Entity-per-Run; session
 is a Dimension; "grain" is warehouse-internal language, never domain/SDK)
+
+**Assignment Store** (Holdover Store):
+The durable per-Entity memory that makes the holdover sticky-experience possible: a record keyed by
+`(Experiment, idType, Targeting Key)` holding `(runId, Variant)`, written once at an Entity's first
+Exposure and read on the evaluate path. It is the equivalent of Statsig's **Persistent Assignment** and
+GrowthBook's **Sticky Bucketing** store. **Dumb storage, zero policy** — it answers "what did this Entity
+see, and under which Run" and nothing more; the evaluate path owns the replay-vs-`assign()` decision. A
+**sibling seam to the Provider, never behind it**: the Provider resolves flag config (a stateless read);
+the Assignment Store persists per-Entity experiment state (a write at Exposure). The stored `Variant`
+says what to replay; the stored `runId` says which Run owns this Entity's Exposures (so a holdover stays
+counted in its original Run). Read eagerly — one edge-local lookup pre-loads an Entity's holdovers before
+flag resolution.
+_Avoid_: assignment cache (that is the SDK seen-set, a different thing); putting it behind the Provider
 
 **Metric**:
 A fact (the event/action measured) combined with an aggregation (how it is summarized per Entity).
