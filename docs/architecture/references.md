@@ -113,3 +113,32 @@ documented control-plane/data-plane pattern.
   https://developers.cloudflare.com/reference-architecture/diagrams/storage/durable-object-control-data-plane-pattern/
 - **D1 read replication** (regional single-primary, async eventually-consistent replicas — why D1 is the
   wrong hot-path holdover store): https://developers.cloudflare.com/d1/best-practices/read-replication/
+
+## Exposure pipeline architecture (Exposure pipeline seam grill, 2026-06-20)
+
+Verified for ADR-0010 (raw append-only log + query-time dedup, ELT) and ADR-0011 (`__multiple__`
+quarantine). The whole warehouse-native field does raw-log + windowed first-touch dedup at analysis time;
+at-least-once + idempotent dedup key is the settled delivery model.
+
+- **Eppo — Assignment SQL** (compiles a pipeline that deduplicates assignments; "only the first record"
+  per subject-experiment): https://docs.geteppo.com/data-management/definitions/assignment-sql/
+- **GrowthBook — data sources** (return multiple rows per exposure on purpose; dedup at query time):
+  https://docs.growthbook.io/app/datasources
+- **GrowthBook — experiment-units-query.ts** (`GROUP BY user`, `MIN(timestamp)`, `__multiple__` sentinel
+  for conflicting variants): https://github.com/growthbook/growthbook/blob/main/packages/back-end/src/integrations/sql/queries/experiment-units-query.ts
+- **GrowthBook — Multiple Exposures health check** (~1% tolerated):
+  https://docs.growthbook.io/app/experiment-results
+- **Statsig — how we stream 1T events/day** (raw persisted first; best-effort early dedup via Memcache hash
+  is a cost optimization, not the authority): https://www.statsig.com/blog/how-statsig-streams-1-trillion-events-a-day
+- **Statsig Warehouse Native — pipeline** (first-exposure dedup as a pipeline step; daily deduplicated
+  digest): https://docs.statsig.com/statsig-warehouse-native/pipeline-overview/
+- **Snowplow — deduplication** (at-least-once delivery, no exactly-once; dedup on event_id, earliest
+  collector_tstamp wins = first-touch): https://docs.snowplow.io/docs/modeling-your-data/modeling-your-data-with-dbt/package-mechanics/deduplication/
+- **Kafka — delivery semantics** (at-least-once default; exactly-once is the hard problem):
+  https://docs.confluent.io/kafka/design/delivery-semantics.html
+- **Confluent — idempotent reader pattern** (dedup against a seen-id store):
+  https://developer.confluent.io/patterns/event-processing/idempotent-reader/
+- **BigQuery — streaming dedup** (best-effort ingest dedup "should not be relied upon"; dedup downstream with
+  `ROW_NUMBER() OVER (PARTITION BY id) = 1`): https://docs.cloud.google.com/bigquery/docs/streaming-data-into-bigquery
+- **Snowflake — QUALIFY** (`QUALIFY ROW_NUMBER() OVER (PARTITION BY p ORDER BY o) = 1`, canonical first-touch):
+  https://docs.snowflake.com/en/sql-reference/constructs/qualify

@@ -135,6 +135,17 @@ distinct, loudly-named "peek without exposing" accessor is the explicit deferral
 _Avoid_: impression, view; "grain"/session as the denominator unit (the unit is Entity-per-Run; session
 is a Dimension; "grain" is warehouse-internal language, never domain/SDK)
 
+**Exposure Pipeline**:
+The path from a raw Exposure firing at the edge to a trustworthy, deduplicated analysis dataset. **ELT, not
+ETL**: every runtime appends raw Exposures to an **append-only log** (the system of record); first-touch
+dedup is a **windowed query at analysis time** (`first-touch per (Entity, Run)`, earliest timestamp), never
+a collapse at ingest. Delivery is **at-least-once with an idempotent dedup key** — never exactly-once. The
+dedup query is the single place first-touch, the `__multiple__` quarantine, the SRM denominator, and the
+Conversion Window anchor are all defined. An Entity showing more than one Variant in a Run is bucketed to
+**`__multiple__`**, excluded from arms, and watched as a health metric (a conflict can only be a config
+race, SDK bug, or material-edit violation — all defects to surface loudly).
+_Avoid_: ETL / streaming-dedup-at-ingest (the log is raw, dedup is at query time); exactly-once
+
 **Assignment Store** (Holdover Store):
 The durable per-Entity memory that makes the holdover sticky-experience possible: a record keyed by
 `(Experiment, idType, Targeting Key)` holding `(runId, Variant)`, written once at an Entity's first
@@ -203,7 +214,10 @@ The smallest effect an Experiment is powered to detect at the chosen significanc
 
 **Sample Ratio Mismatch** (SRM):
 A diagnostic failure where observed traffic split across Variants deviates significantly from the
-expected split — signals broken bucketing/Assignment and invalidates the Experiment's results.
+expected split — signals broken bucketing/Assignment and invalidates the Experiment's results. Computed by
+chi-square over the **same deduped denominator analysis uses** — first-touch unique Entities per arm per
+Run, `__multiple__` excluded — against the Run's **declared allocation**. One denominator definition
+everywhere, never a separate raw-count denominator.
 
 ## Relationships
 
