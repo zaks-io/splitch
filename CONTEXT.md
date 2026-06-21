@@ -15,11 +15,24 @@ Sources of truth:
 
 ### Ownership & flag terms (adopted from Flagship / OpenFeature — do not redefine)
 
+**Organization**:
+The **account / ownership unit** — who owns and is billed for splitch, and who its members are. An
+Organization owns one or more Apps and has Users as members (with roles). Every account is an
+Organization: self-serve signups get a **personal Organization**; **enterprise** accounts are sibling
+Organizations of the same shape that additionally carry SSO/SCIM. The term is adopted verbatim from
+**WorkOS**, where the Organization physically lives on the identity side. Distinct from App: an
+Organization is an *organizational/ownership* unit, **not** a product. (See ADR-0021.)
+_Avoid_: using "App" for this (App is a product, not an owner); Tenant, Workspace, Account (Organization
+is canonical, matching WorkOS)
+
 **App**:
-The top-level organizational unit; groups related flags. Maps to one product/service surface. In
+A **product / service surface**; groups related flags. Maps to one product/service surface. In
 splitch, the **five runtimes of one product share a single App** (define a flag once, consume it
-everywhere). Owns Flags; hosts Experiments.
-_Avoid_: Site, Project, Tenant, Workspace (Site was the user's first word — App is canonical)
+everywhere). Owns Flags; hosts Experiments. **Belongs to exactly one Organization** — an App is *not*
+an ownership unit; the Organization is. The `app_id` boundary remains splitch's data-isolation seam
+(ADR-0018).
+_Avoid_: Site, Project, Tenant, Workspace (Site was the user's first word — App is canonical); treating
+an App as an org/account/tenant (that is the Organization)
 
 **Flag** (Feature Flag):
 A named feature toggle with a key, a set of Variations, Targeting Rules, and an enabled/disabled
@@ -254,6 +267,9 @@ everywhere, never a separate raw-count denominator.
 
 ## Relationships
 
+- An **Organization** owns one or more **Apps** and has **Users** as members. Every account is an
+  Organization (personal for self-serve, enterprise as siblings); an App belongs to exactly one
+  Organization. Organization is the ownership/account unit; App is the product unit.
 - An **App** owns many **Flags** and hosts many **Experiments**. The five runtimes of one product
   share a single App.
 - A **Flag** has one or more **Variants**; one is the **Default Variant**.
