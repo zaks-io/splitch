@@ -13,7 +13,7 @@ codes. The spine: one Zod schema per glossary noun, everything else derived from
 | [leaf-schemas-experiment.md](./leaf-schemas-experiment.md)                                               | Canonical field lists for the experimentation leaves: Experiment, Run, Metric (allocation, MetricKind)                           |
 | [leaf-schemas-runtime.md](./leaf-schemas-runtime.md)                                                     | Canonical field lists for runtime/identity leaves: EvaluationContext, Exposure event, Organization, App, User, ClientKey, APIKey |
 | [error-responses.md](./error-responses.md)                                                               | ErrorResponse shape, ErrorCode enum, per-code detail shapes, HTTP status map, and per-endpoint error contracts                   |
-| [request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md)                 | Shared envelope conventions (pagination, create/patch asymmetry) plus test-evaluate and data-plane evaluate contracts            |
+| [request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md)                 | Shared envelope conventions (pagination, create/patch asymmetry) plus test-evaluation and data-plane evaluate contracts          |
 | [request-response-envelopes-flag-variant.md](./request-response-envelopes-flag-variant.md)               | Wire shapes for Flag and Variant endpoints: create/patch asymmetry, Variant Run-frozen guard                                     |
 | [request-response-envelopes-experiment-run.md](./request-response-envelopes-experiment-run.md)           | Wire shapes for Experiment and Experiment Run endpoints: edit taxonomy, Start, Run immutability guards                           |
 | [request-response-envelopes-org-app-credentials.md](./request-response-envelopes-org-app-credentials.md) | Wire shapes for Metric, App/Org, and SDK Credential endpoints; once-only credential surfacing                                    |
@@ -44,6 +44,24 @@ codes. The spine: one Zod schema per glossary noun, everything else derived from
 No second authored representation of any shape exists anywhere. Adding a field in the leaf-schemas
 files (`leaf-schemas-flag.md`, `leaf-schemas-experiment.md`, `leaf-schemas-runtime.md`) propagates to
 validation, types, OpenAPI, and MCP tools from one edit.
+
+---
+
+## Naming Practice
+
+- **Domain terms:** use the glossary terms exactly: App, Environment, Flag, Variant, Targeting Key,
+  Evaluation Context, Experiment, Experiment Run, Exposure, Metric, Client Key, API Key.
+- **Zod request/response fields:** camelCase, matching TypeScript: `appId`, `environmentId`,
+  `variantName`, `liveRunId`.
+- **HTTP route params in contracts:** camelCase: `/apps/:appId/envs/:environmentId`.
+- **MCP tool names and route `operationId`:** lower snake_case `resource_operation`, e.g.
+  `flags_create`, `flags_test_eval`, `experiments_start`, `runs_end`.
+- **CLI commands and flags:** kebab-case for human input, e.g. `splitch flags test-eval --targeting-key`.
+- **Physical storage columns and Tinybird fields:** snake_case where the substrate owns the shape:
+  `app_id`, `environment_id`, `targeting_key_hash`.
+
+The Worker owns mapping between wire fields and storage columns. Do not leak storage column names
+into request/response envelopes unless the endpoint is explicitly returning physical diagnostics.
 
 ---
 

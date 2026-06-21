@@ -4,17 +4,33 @@ Every MCP tool's `inputSchema` and `outputSchema` is derived from the Zod schema
 `@splitch/contracts`. No tool schema is hand-written. A new endpoint becomes a new tool
 mechanically. (ADR-0025, ADR-0023.)
 
-## Derivation rule
+## Naming rule
 
 For each `@hono/zod-openapi` route registered in the control-plane contract:
 
 ```
-tool name   = snake_case(HTTP method + path segments)
-              e.g. POST /api/flags → create_flag; PATCH /api/flags/:id → patch_flag
-inputSchema  = route.request.body Zod schema (or query + path params for GET)
+tool name   = route.operationId
+operationId = resource_operation, lower snake_case
+inputSchema = route.request.body Zod schema (or query + path params for GET)
 outputSchema = route.responses[200] Zod schema
-errorSchema  = shared ErrorResponse discriminated union (same for all tools)
+errorSchema = shared ErrorResponse discriminated union (same for all tools)
 ```
+
+`operationId` is explicit route metadata in `@splitch/contracts`, not inferred from the HTTP path.
+That keeps tool names stable if a path changes and prevents nested routes from generating noisy
+names. Adding a route without an `operationId`, or with a duplicate `operationId`, is a contract
+error.
+
+Resource naming:
+
+- Use the glossary noun or endpoint group first: `flags`, `experiments`, `runs`, `client_key`.
+- Use plural resources when callers browse collections: `flags_list`, `api_keys_create`.
+- Use a singular compound resource when there is exactly one current resource per scope:
+  `client_key_get`, `flag_config_update`.
+- For nested resources, include enough parent context to disambiguate:
+  `flag_variants_create`, `flag_targeting_rules_replace`.
+- Avoid transport words in names. Use `update`, not `patch`; use domain verbs like `start`,
+  `end`, `promote`, `revoke`, and `test_eval`.
 
 Derivation runs at MCP server startup, not build time. No committed tool-definitions file.
 
@@ -24,107 +40,145 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 
 ### Organizations
 
-| Tool                  | Method | Path                     |
-| --------------------- | ------ | ------------------------ |
-| `create_organization` | POST   | `/api/organizations`     |
-| `get_organization`    | GET    | `/api/organizations/:id` |
-| `patch_organization`  | PATCH  | `/api/organizations/:id` |
+| Tool                          | Method | Path                           |
+| ----------------------------- | ------ | ------------------------------ |
+| `organizations_get`           | GET    | `/orgs/:orgId`                 |
+| `organizations_update`        | PATCH  | `/orgs/:orgId`                 |
+| `organizations_delete`        | DELETE | `/orgs/:orgId`                 |
+| `organization_members_list`   | GET    | `/orgs/:orgId/members`         |
+| `organization_members_add`    | POST   | `/orgs/:orgId/members`         |
+| `organization_members_update` | PATCH  | `/orgs/:orgId/members/:userId` |
+| `organization_members_remove` | DELETE | `/orgs/:orgId/members/:userId` |
 
 ### Apps
 
-| Tool         | Method | Path            |
-| ------------ | ------ | --------------- |
-| `create_app` | POST   | `/api/apps`     |
-| `list_apps`  | GET    | `/api/apps`     |
-| `get_app`    | GET    | `/api/apps/:id` |
-| `patch_app`  | PATCH  | `/api/apps/:id` |
-| `delete_app` | DELETE | `/api/apps/:id` |
+| Tool          | Method | Path                |
+| ------------- | ------ | ------------------- |
+| `apps_list`   | GET    | `/orgs/:orgId/apps` |
+| `apps_create` | POST   | `/orgs/:orgId/apps` |
+| `apps_get`    | GET    | `/apps/:appId`      |
+| `apps_update` | PATCH  | `/apps/:appId`      |
+| `apps_delete` | DELETE | `/apps/:appId`      |
+
+### Environments
+
+| Tool                  | Method | Path                               |
+| --------------------- | ------ | ---------------------------------- |
+| `environments_list`   | GET    | `/apps/:appId/envs`                |
+| `environments_create` | POST   | `/apps/:appId/envs`                |
+| `environments_get`    | GET    | `/apps/:appId/envs/:environmentId` |
+| `environments_update` | PATCH  | `/apps/:appId/envs/:environmentId` |
+| `environments_delete` | DELETE | `/apps/:appId/envs/:environmentId` |
 
 ### Flags
 
-| Tool          | Method | Path             |
-| ------------- | ------ | ---------------- |
-| `create_flag` | POST   | `/api/flags`     |
-| `list_flags`  | GET    | `/api/flags`     |
-| `get_flag`    | GET    | `/api/flags/:id` |
-| `patch_flag`  | PATCH  | `/api/flags/:id` |
-| `delete_flag` | DELETE | `/api/flags/:id` |
+| Tool           | Method | Path                         |
+| -------------- | ------ | ---------------------------- |
+| `flags_list`   | GET    | `/apps/:appId/flags`         |
+| `flags_create` | POST   | `/apps/:appId/flags`         |
+| `flags_get`    | GET    | `/apps/:appId/flags/:flagId` |
+| `flags_update` | PATCH  | `/apps/:appId/flags/:flagId` |
+| `flags_delete` | DELETE | `/apps/:appId/flags/:flagId` |
 
 ### Variants (Flag sub-resource)
 
-| Tool             | Method | Path                              |
-| ---------------- | ------ | --------------------------------- |
-| `create_variant` | POST   | `/api/flags/:flagId/variants`     |
-| `patch_variant`  | PATCH  | `/api/flags/:flagId/variants/:id` |
-| `delete_variant` | DELETE | `/api/flags/:flagId/variants/:id` |
+| Tool                   | Method | Path                                               |
+| ---------------------- | ------ | -------------------------------------------------- |
+| `flag_variants_create` | POST   | `/apps/:appId/flags/:flagId/variants`              |
+| `flag_variants_update` | PATCH  | `/apps/:appId/flags/:flagId/variants/:variantName` |
+| `flag_variants_delete` | DELETE | `/apps/:appId/flags/:flagId/variants/:variantName` |
+
+### Flag Configuration (per-Environment)
+
+| Tool                           | Method | Path                                                             |
+| ------------------------------ | ------ | ---------------------------------------------------------------- |
+| `flag_config_get`              | GET    | `/apps/:appId/envs/:environmentId/flags/:flagId/config`          |
+| `flag_config_update`           | PATCH  | `/apps/:appId/envs/:environmentId/flags/:flagId/config`          |
+| `flag_targeting_rules_replace` | PUT    | `/apps/:appId/envs/:environmentId/flags/:flagId/targeting-rules` |
+| `flags_promote`                | POST   | `/apps/:appId/envs/:targetEnvironmentId/flags/:flagId/promote`   |
 
 ### Targeting Rules (Flag sub-resource)
 
-| Tool                    | Method | Path                                     |
-| ----------------------- | ------ | ---------------------------------------- |
-| `create_targeting_rule` | POST   | `/api/flags/:flagId/targeting-rules`     |
-| `patch_targeting_rule`  | PATCH  | `/api/flags/:flagId/targeting-rules/:id` |
-| `delete_targeting_rule` | DELETE | `/api/flags/:flagId/targeting-rules/:id` |
+Targeting Rules are full-replaced through `flag_targeting_rules_replace`. Individual
+Targeting Rule CRUD is intentionally not exposed until there is a separate endpoint contract.
 
 ### Segments
 
-| Tool             | Method | Path                |
-| ---------------- | ------ | ------------------- |
-| `create_segment` | POST   | `/api/segments`     |
-| `list_segments`  | GET    | `/api/segments`     |
-| `get_segment`    | GET    | `/api/segments/:id` |
-| `patch_segment`  | PATCH  | `/api/segments/:id` |
-| `delete_segment` | DELETE | `/api/segments/:id` |
+| Tool              | Method | Path                               |
+| ----------------- | ------ | ---------------------------------- |
+| `segments_list`   | GET    | `/apps/:appId/segments`            |
+| `segments_create` | POST   | `/apps/:appId/segments`            |
+| `segments_get`    | GET    | `/apps/:appId/segments/:segmentId` |
+| `segments_update` | PATCH  | `/apps/:appId/segments/:segmentId` |
+| `segments_delete` | DELETE | `/apps/:appId/segments/:segmentId` |
 
 ### Experiments (per-Environment, ADR-0027)
 
-| Tool                | Method | Path                                                   |
-| ------------------- | ------ | ------------------------------------------------------ |
-| `create_experiment` | POST   | `/api/apps/:appId/envs/:environmentId/experiments`     |
-| `list_experiments`  | GET    | `/api/apps/:appId/envs/:environmentId/experiments`     |
-| `get_experiment`    | GET    | `/api/apps/:appId/envs/:environmentId/experiments/:id` |
-| `patch_experiment`  | PATCH  | `/api/apps/:appId/envs/:environmentId/experiments/:id` |
+| Tool                 | Method | Path                                                               |
+| -------------------- | ------ | ------------------------------------------------------------------ |
+| `experiments_list`   | GET    | `/apps/:appId/envs/:environmentId/experiments`                     |
+| `experiments_create` | POST   | `/apps/:appId/envs/:environmentId/experiments`                     |
+| `experiments_get`    | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId`       |
+| `experiments_update` | PATCH  | `/apps/:appId/envs/:environmentId/experiments/:experimentId`       |
+| `experiments_start`  | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/start` |
+| `experiments_delete` | DELETE | `/apps/:appId/envs/:environmentId/experiments/:experimentId`       |
 
 ### Experiment Runs (Experiment sub-resource, per-Environment)
 
-| Tool               | Method | Path                                                                   | Note                                                |
-| ------------------ | ------ | ---------------------------------------------------------------------- | --------------------------------------------------- |
-| `start_experiment` | POST   | `/api/apps/:appId/envs/:environmentId/experiments/:id/start`           | Ends running Experiment Run, opens new one          |
-| `list_runs`        | GET    | `/api/apps/:appId/envs/:environmentId/experiments/:id/runs`            | —                                                   |
-| `get_run`          | GET    | `/api/apps/:appId/envs/:environmentId/experiments/:id/runs/:runId`     | —                                                   |
-| `patch_run`        | PATCH  | `/api/apps/:appId/envs/:environmentId/experiments/:id/runs/:runId`     | Non-material only; assignment fields → `RUN_FROZEN` |
-| `end_run`          | POST   | `/api/apps/:appId/envs/:environmentId/experiments/:id/runs/:runId/end` | Transitions Experiment Run to `ended`               |
+| Tool        | Method | Path                                                                     | Note                                  |
+| ----------- | ------ | ------------------------------------------------------------------------ | ------------------------------------- |
+| `runs_list` | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs`        | —                                     |
+| `runs_get`  | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/runs/:runId` | —                                     |
+| `runs_end`  | POST   | `/apps/:appId/envs/:environmentId/runs/:runId/end`                       | Transitions Experiment Run to `ended` |
 
 ### Metrics
 
-| Tool            | Method | Path               |
-| --------------- | ------ | ------------------ |
-| `create_metric` | POST   | `/api/metrics`     |
-| `list_metrics`  | GET    | `/api/metrics`     |
-| `get_metric`    | GET    | `/api/metrics/:id` |
-| `patch_metric`  | PATCH  | `/api/metrics/:id` |
-| `delete_metric` | DELETE | `/api/metrics/:id` |
+| Tool             | Method | Path                             |
+| ---------------- | ------ | -------------------------------- |
+| `metrics_list`   | GET    | `/apps/:appId/metrics`           |
+| `metrics_create` | POST   | `/apps/:appId/metrics`           |
+| `metrics_get`    | GET    | `/apps/:appId/metrics/:metricId` |
+| `metrics_update` | PATCH  | `/apps/:appId/metrics/:metricId` |
+| `metrics_delete` | DELETE | `/apps/:appId/metrics/:metricId` |
 
 ### SDK credentials (per-Environment, ADR-0027)
 
-| Tool                | Method | Path                                                              | Note                                  |
-| ------------------- | ------ | ----------------------------------------------------------------- | ------------------------------------- |
-| `create_api_key`    | POST   | `/api/apps/:appId/envs/:environmentId/api-keys`                   | Value surfaced once in response       |
-| `list_api_keys`     | GET    | `/api/apps/:appId/envs/:environmentId/api-keys`                   | No value field                        |
-| `revoke_api_key`    | POST   | `/api/apps/:appId/envs/:environmentId/api-keys/:credId/revoke`    | —                                     |
-| `create_client_key` | POST   | `/api/apps/:appId/envs/:environmentId/client-keys`                | Value surfaced once; freely shareable |
-| `list_client_keys`  | GET    | `/api/apps/:appId/envs/:environmentId/client-keys`                | —                                     |
-| `revoke_client_key` | POST   | `/api/apps/:appId/envs/:environmentId/client-keys/:credId/revoke` | —                                     |
+| Tool                | Method | Path                                                      | Note                                 |
+| ------------------- | ------ | --------------------------------------------------------- | ------------------------------------ |
+| `client_key_get`    | GET    | `/apps/:appId/envs/:environmentId/client-key`             | Public value returned                |
+| `client_key_update` | PATCH  | `/apps/:appId/envs/:environmentId/client-key`             | Origin/rate-limit metadata           |
+| `client_key_rotate` | POST   | `/apps/:appId/envs/:environmentId/client-key/revoke`      | Revokes current key and creates next |
+| `api_keys_list`     | GET    | `/apps/:appId/envs/:environmentId/api-keys`               | No secret value                      |
+| `api_keys_create`   | POST   | `/apps/:appId/envs/:environmentId/api-keys`               | Secret value surfaced once           |
+| `api_keys_revoke`   | POST   | `/apps/:appId/envs/:environmentId/api-keys/:keyId/revoke` | —                                    |
 
 ### Test-evaluation (dry-run)
 
-| Tool            | Method | Path                                |
-| --------------- | ------ | ----------------------------------- |
-| `test_evaluate` | GET    | `/api/flags/:flagKey/test-evaluate` |
+| Tool              | Method | Path                                                       |
+| ----------------- | ------ | ---------------------------------------------------------- |
+| `flags_test_eval` | POST   | `/apps/:appId/envs/:environmentId/flags/:flagId/test-eval` |
 
-Input: `{ flagKey, targetingKey, idType, attributes? }` (query params). Output:
-`TestEvaluationResponse { variant, reason }`. Auth: control-plane
-token (not Client Key). Writes nothing; zero Exposures. (ADR-0026.)
+Input: `TestEvaluationRequest` body. Output: `TestEvaluationResponse`.
+Auth: control-plane token (not Client Key). Writes nothing; zero Exposures. (ADR-0026.)
+
+### Analytics
+
+| Tool                     | Method | Path                                                                 |
+| ------------------------ | ------ | -------------------------------------------------------------------- |
+| `experiment_results_get` | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results` |
+| `audit_log_list`         | GET    | `/apps/:appId/audit-log`                                             |
+
+### Privacy data
+
+| Tool                          | Method | Path                                   |
+| ----------------------------- | ------ | -------------------------------------- |
+| `current_user_privacy_export` | POST   | `/users/me/privacy/export`             |
+| `current_user_delete`         | DELETE | `/users/me`                            |
+| `organization_privacy_export` | POST   | `/orgs/:orgId/privacy/export`          |
+| `app_privacy_export`          | POST   | `/apps/:appId/privacy/export`          |
+| `entity_privacy_export`       | POST   | `/apps/:appId/privacy/entities/export` |
+| `entity_privacy_delete`       | POST   | `/apps/:appId/privacy/entities/delete` |
+| `privacy_requests_get`        | GET    | `/privacy/requests/:requestId`         |
 
 ## Error handling in MCP tools
 

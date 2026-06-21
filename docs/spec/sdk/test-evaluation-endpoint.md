@@ -6,17 +6,18 @@ evaluate endpoint (ADR-0026).
 
 ## Categorical distinction from `POST /evaluate`
 
-| Property                   | `POST /evaluate` (data plane) | `POST /test-evaluation` (control plane)      |
+| Property                   | `POST /evaluate` (data plane) | `POST /test-eval` (control plane)            |
 | -------------------------- | ----------------------------- | -------------------------------------------- |
 | Credential                 | Client Key (public)           | Control-plane token (ADR-0022)               |
 | Fires Exposure             | Yes (structural)              | Never (structural)                           |
 | Returns reason             | No (ADR-0018)                 | Yes                                          |
+| Reads holdover             | Yes                           | Yes, read-only diagnostic                    |
 | Writes to Assignment Store | Via pipeline                  | Never                                        |
 | Counts in Run denominator  | Yes                           | Never                                        |
 | Use case                   | Production SDK calls          | Debugging, CLI verify step, agent pre-deploy |
 
 Exposure-free is **structural** at the endpoint level — the Worker code path from
-`/test-evaluation` is wired to no write path (no Exposure log append, no DO call).
+`/test-eval` is wired to no write path (no Exposure log append, no DO call).
 There is no "suppress Exposure" flag a caller could accidentally omit (ADR-0026).
 
 ## Endpoint
@@ -34,29 +35,35 @@ Environment's live config, mirroring how the data-plane resolves the Environment
 
 ```
 TestEvaluationRequest {
-  flagKey:           string     -- required
-  targetingKey:      string     -- required
-  idType:            string     -- required; must match Experiment's pinned idType
   evaluationContext: {
-    targetingKey: string        -- must equal top-level targetingKey
-    [key: string]: unknown      -- arbitrary attributes for Targeting Rule matching
+    targetingKey: string
+    idType: string
+    attributes: Record<string, boolean | string | number | unknown[]>
   }
 }
 ```
+
+The Flag is identified by `flagId` in the path.
 
 ## Response shape
 
 ```
 TestEvaluationResponse {
-  variant: VariantValue     -- resolved Variant value (same type as evaluate endpoint)
-  reason:  EvaluationReason
+  variantName: string       -- resolved Variant name
+  value: VariantValue       -- resolved Variant value, same type as evaluate endpoint
+  reason: EvaluationReason
+  liveRunId: string | null  -- live Run observed from KV; null when no Run is live
 }
 
 EvaluationReason =
   | {
+      type: 'holdover_replay'
+      priorRunId: string
+    }
+  | {
       type: 'rule_matched'
       ruleId: string
-      ruleName: string
+      ruleName: string | null
       priority: number
       selection: 'direct' | 'percentage_rollout'
       rollout?: { variantWeights: { variantName: string; weight: number }[] }
@@ -65,22 +72,23 @@ EvaluationReason =
   | { type: 'no_match_default' }    -- No Targeting Rule matched; Default Variant returned
 ```
 
-`reason` is a Zod discriminated union. The three cases are exhaustive —
+`reason` is a Zod discriminated union. The cases are exhaustive —
 every evaluation produces exactly one. Rule details (`ruleId`, `ruleName`, `priority`,
 `selection`) identify which Targeting Rule matched without exposing hash bucket or salt.
+`holdover_replay` tells the agent that prior Run sticky experience determined the Variant.
 
 ## What it NEVER does
 
 - Fires an Exposure to the raw log
 - Writes to the Assignment Store (DO or KV)
-- Reads or replays holdovers from the Assignment Store
 - Counts the Entity in any Run's analysis denominator
 - Returns the full Targeting Rule conditions or Percentage Rollout configuration
 - Returns hash bucket or salt
 
-The endpoint reads the same live edge config the data-plane `evaluate` endpoint uses, so
-the result reflects the current deployed state (ADR-0026). A 60s KV
-propagation window applies equally here — the resolve uses the same KV-cached config.
+The endpoint reads the same live edge config the data-plane `evaluate` endpoint uses, so the result
+reflects the current deployed state (ADR-0026). A 60s KV propagation window applies equally here —
+the resolve uses the same KV-cached config. The endpoint may read `AssignmentStore.getAll()` to return
+`holdover_replay`, but it never calls `put()`.
 
 ## Live config consistency
 
@@ -109,8 +117,8 @@ Same `ErrorResponse` shape as all endpoints (ADR-0025):
 
 This endpoint is exposed as:
 
-- One MCP tool: `splitch_test_evaluation` with schema derived from the Zod request shape
-- One CLI command: `splitch verify flag <flagKey> --context <json>`
+- One MCP tool: `flags_test_eval` with schema derived from the Zod request shape
+- One CLI command: `splitch flags test-eval --app <app_id> --env <environment_id> <flag_id> --targeting-key <key> [--context-json <json>]`
 
 Both are thin skins over the same endpoint (ADR-0023). The agent's verify step calls this
 endpoint immediately after configuring or promoting a Flag, or after starting an Experiment Run, to confirm the rule set
@@ -118,9 +126,9 @@ resolves as expected.
 
 ## Seam boundary
 
-- **Port:** `testEvaluate(appId, environmentId, controlPlaneToken, flagKey, targetingKey, idType, evaluationContext) -> { variant, reason }`
+- **Port:** `testEvaluate(appId, environmentId, controlPlaneToken, flagId, evaluationContext) -> { variantName, value, reason, liveRunId }`
 - **Left side:** CLI / MCP / agent calling the verify step; control-plane token required
-- **Right side:** Worker that reads live config from the same KV-backed Provider path the data-plane `evaluate` endpoint uses (not D1 directly), computes Assignment, returns reason; wired to NO write path
+- **Right side:** Worker that reads live config from the same KV-backed Provider path the data-plane `evaluate` endpoint uses (not D1 directly), may read holdover, computes Assignment or reports holdover replay, returns reason; wired to NO write path
 - **Failure contract:** no writes on error; 404 → flag not found; 401/403 → auth failure
 - **Deletion test:** passes — test-evaluation and data-plane evaluate are two real adapters
   on the "resolve a Variant" port, differing in auth, exposure side effect, and reason return

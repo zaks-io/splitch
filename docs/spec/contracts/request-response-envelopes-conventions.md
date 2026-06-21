@@ -1,6 +1,6 @@
 # Request/response envelopes: conventions and evaluate endpoints
 
-Shared envelope conventions (create/patch asymmetry, pagination) plus the dry-run test-evaluate and
+Shared envelope conventions (create/patch asymmetry, pagination) plus the dry-run test-evaluation and
 public data-plane evaluate contracts.
 
 Envelopes compose leaf schemas from the leaf-schemas files. They are **distinct** — never fused —
@@ -35,34 +35,42 @@ PaginatedResponse<T> = {
 
 See also [mcp-tool-derivation.md](./mcp-tool-derivation.md) for the tool contract.
 
+Route: `POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval`
+MCP tool: `flags_test_eval`
+
 ### TestEvaluationRequest
 
-| Field          | Required | Notes                                                                                                       |
-| -------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `flagKey`      | yes      | Identifies the Flag                                                                                         |
-| `targetingKey` | yes      | The Entity identifier; separate from `attributes` (spec contract)                                           |
-| `idType`       | yes      | Entity type; must match Experiment's `targetingKey` entity type                                             |
-| `attributes`   | no       | `Record<string, boolean \| string \| number \| unknown[]>`; Condition-matching attributes; defaults to `{}` |
+| Field               | Required | Notes                                                                |
+| ------------------- | -------- | -------------------------------------------------------------------- |
+| `evaluationContext` | yes      | `EvaluationContext` leaf: `targetingKey`, `idType`, and `attributes` |
 
-Internally the Worker adds `targetingKey` to context under a reserved key before Condition evaluation.
+The Flag is identified by `flagId` in the path. `EvaluationContext.targetingKey` is the Entity
+identifier; `EvaluationContext.idType` must match the Experiment's configured Entity type.
 
 ### TestEvaluationResponse
 
 ```
 {
-  variant: VariantValue
-  reason:  TestEvaluationReason
+  variantName: string
+  value:       VariantValue
+  reason:      TestEvaluationReason
+  liveRunId:   string | null
 }
 ```
 
 `VariantValue = boolean | string | number | JsonObject`.
-Test-evaluation returns the resolved Variant value plus reason metadata. It does not return the
-full Targeting Rule set.
+Test-evaluation returns both the Variant name and the resolved Variant value. Agents compare the
+Variant name against Rules, Runs, Exposures, and analysis; clients receive the value on the public
+SDK path. It does not return the full Targeting Rule set.
 
 `TestEvaluationReason` is a Zod discriminated union:
 
 ```
 TestEvaluationReason =
+  | {
+      type: 'holdover_replay'
+      priorRunId: string
+    }
   | {
       type: 'rule_matched'
       ruleId: string
@@ -76,7 +84,8 @@ TestEvaluationReason =
 ```
 
 No rollout bucket or salt details. `selection` says whether the matched rule selected directly or
-through Percentage Rollout.
+through Percentage Rollout. `liveRunId` reflects the live Run observed from KV when the dry-run
+resolved; it can be `null` when no Run is live.
 No Exposure-related fields. Writes nothing.
 
 ---

@@ -94,8 +94,9 @@ Returns: `{ environment_id, app_id, slug, name, policy, created_at }`.
 ### `PATCH /apps/{app_id}/envs/{environment_id}`
 
 Body: `{ name?: string, policy?: EnvironmentPolicy }`.
-`EnvironmentPolicy` maps each change type to a level: `{ variant_availability, targeting_rollout_value,
-enabled_state, start_experiment_run: "allow" | "confirm" }` (`approve` reserved, future). Changing the
+`EnvironmentPolicy` maps each change type to a level:
+`{ variantAvailability, targetingRolloutValue, enabledState, startExperimentRun: "allow" | "confirm" }`
+(`approve` reserved, future). Changing the
 kill-switch-off behavior is not configurable (always allowed). See ADR-0029.
 Returns: updated Environment.
 Auth: App `owner` or `admin`.

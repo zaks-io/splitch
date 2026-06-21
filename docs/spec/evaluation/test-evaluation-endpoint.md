@@ -2,6 +2,7 @@
 
 Resolves a Flag against live config and returns the Variant plus the reason. Writes nothing.
 No Exposure fires. No Assignment Store write. Exposure-free is structural, not a parameter.
+The Assignment Store may be read to report `holdover_replay`.
 
 ## Purpose
 
@@ -22,11 +23,10 @@ auth surface.
 POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval
 
 {
-  "flagKey":        string,    // required; Flag to evaluate (resolved against this Environment, ADR-0027)
-  "targetingKey":   string,    // required; Entity identifier to evaluate for
-  "idType":         string,    // required; Entity type (matches Assignment Store key)
-  "evaluationContext": {       // optional; additional attributes for Condition matching
-    [attribute: string]: string | number | boolean
+  "evaluationContext": {
+    "targetingKey": string,
+    "idType": string,
+    "attributes": Record<string, boolean | string | number | unknown[]>
   }
 }
 ```
@@ -38,9 +38,10 @@ No `runId` parameter. Always evaluates against the current live Run **of the pat
 
 ```
 {
-  "variant": string,           // resolved Variant name
-  "reason":  ReasonDetail,     // why this Variant was chosen (discriminated union)
-  "liveRunId": string | null   // the Run evaluated against; null if no live Run
+  "variantName": string,       // resolved Variant name
+  "value": VariantValue,       // resolved Variant value, same value the SDK would receive
+  "reason": ReasonDetail,      // why this Variant was chosen (discriminated union)
+  "liveRunId": string | null   // live Run observed from KV; null if no Run is live
 }
 ```
 
@@ -49,9 +50,13 @@ No `runId` parameter. Always evaluates against the current live Run **of the pat
 ```
 type ReasonDetail =
   | {
+      type: 'holdover_replay'
+      priorRunId: string // Run that owns this Entity's sticky experience
+    }
+  | {
       type: 'rule_matched'
       ruleId:   string    // stable rule identity
-      ruleName: string    // human-readable label
+      ruleName: string | null // human-readable label
       priority: number    // lower = higher priority; the priority of the matched rule
       selection: 'direct' | 'percentage_rollout'
       rollout?: {         // present if the rule used Fractional Evaluation
@@ -73,6 +78,8 @@ render from the same contract type. The reason cases are exhaustive.
 
 The response never exposes hash bucket, salt, or condition internals. `selection` tells the
 debugger whether the matched rule selected a direct Variant or used Percentage Rollout.
+`holdover_replay` tells the agent that the returned Variant came from prior Run sticky experience,
+not from current Targeting Rule evaluation.
 
 ## Exposure-free contract (structural)
 
@@ -102,17 +109,17 @@ actually evaluated.
 
 ## Error contract
 
-| Condition                                | HTTP status | Detail                                                                                  |
-| ---------------------------------------- | ----------- | --------------------------------------------------------------------------------------- |
-| Flag not found for appId                 | 404         | `{ error: 'FLAG_NOT_FOUND' }`                                                           |
-| No live Run (Experiment is draft)        | 200         | `variant = defaultVariant`, `reason = { type: 'default_disabled' }`, `liveRunId = null` |
-| Invalid flagKey / missing required field | 400         | Zod validation error shape                                                              |
-| Auth failure                             | 401/403     | Control-plane token invalid or insufficient scope                                       |
+| Condition                               | HTTP status | Detail                                                                                           |
+| --------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------ |
+| Flag not found for appId                | 404         | `{ error: 'FLAG_NOT_FOUND' }`                                                                    |
+| No live Run (Experiment is draft)       | 200         | `variantName = defaultVariant.name`, `reason = { type: 'default_disabled' }`, `liveRunId = null` |
+| Invalid flagId / missing required field | 400         | Zod validation error shape                                                                       |
+| Auth failure                            | 401/403     | Control-plane token invalid or insufficient scope                                                |
 
 ## Seam boundary
 
 **What's on this side (test-evaluation endpoint):** evaluate for debug/verify purposes;
-return `(variant, reason, liveRunId)`; write nothing.
+return `(variantName, value, reason, liveRunId)`; write nothing.
 
 **What's NOT here:** Exposure firing, Assignment Store writes, data returned to the
 production SDK.
@@ -121,7 +128,7 @@ production SDK.
 the test-evaluation endpoint is the one control-plane endpoint for dry-run evaluation.
 The exposure-free guarantee is its entire reason for existence.
 
-**No superposition:** the caller always gets `(variant, reason)`. There is no state where
+**No superposition:** the caller always gets `(variantName, value, reason)`. There is no state where
 "maybe an Exposure fired." The endpoint does not take a mode parameter.
 
 ## Sources

@@ -86,7 +86,10 @@ Some topics are touched by more than one area, each from its own angle. The cano
 - **Exposure event row** → [`pipeline/exposure-event-contract.md`](./pipeline/exposure-event-contract.md) (the one canonical row schema; do not redefine it elsewhere).
 - **Two keys (first-touch identity vs wire `dedup_key`)** → defined once in
   [`pipeline/exposure-event-contract.md`](./pipeline/exposure-event-contract.md).
-- **Test-evaluation (dry-run)** → control-plane operation: [`evaluation/test-evaluation-endpoint.md`](./evaluation/test-evaluation-endpoint.md) + [`sdk/test-evaluation-endpoint.md`](./sdk/test-evaluation-endpoint.md) (verify step). Reads the same KV-backed config the data plane reads.
+- **Test-evaluation (dry-run)** → canonical envelope:
+  [`contracts/request-response-envelopes-conventions.md`](./contracts/request-response-envelopes-conventions.md);
+  behavior: [`evaluation/test-evaluation-endpoint.md`](./evaluation/test-evaluation-endpoint.md) +
+  SDK distinction: [`sdk/test-evaluation-endpoint.md`](./sdk/test-evaluation-endpoint.md). Reads the same KV-backed config the data plane reads.
 - **Privacy lifecycle / deletion / export** → [`platform/privacy-data-lifecycle.md`](./platform/privacy-data-lifecycle.md)
   is the source of truth. Narrow storage and endpoint specs link there instead of redefining lifecycle rules.
 

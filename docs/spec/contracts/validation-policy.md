@@ -94,11 +94,12 @@ All domain invariants live in the Worker — both skins (MCP, CLI) inherit corre
 
 ## Test-evaluation endpoint: structurally write-free
 
-The test-evaluate endpoint (`GET /api/flags/:flagKey/test-evaluate`) runs the full Provider
-resolution + rule-matching but is wired to **no write path**. There is no code path from it to:
+The test-evaluation endpoint (`POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval`) runs the full Provider
+resolution + rule-matching, may read Assignment Store holdover state, but is wired to **no write
+path**. There is no code path from it to:
 
 - The Exposure log (Tinybird append)
-- The Assignment Store (KV / DO write)
+- The Assignment Store `put()` path (KV / DO write)
 
 This is a structural property of the endpoint, not a runtime flag. (ADR-0026.)
 

@@ -19,19 +19,19 @@ Environment's Flag Configuration; results read _that_ Environment's Exposures.
 ### `POST /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/test-eval`
 
 Resolves the Flag **in this Environment** for a given Evaluation Context without firing an Exposure or
-touching the Assignment Store. Lives behind the control-plane token (never Client/API Key). Returns the
-resolution reason (which Targeting Rule matched), which the public evaluate endpoint must never reveal.
+writing the Assignment Store. It may read holdover state to report `holdover_replay`. Lives behind the
+control-plane token (never Client/API Key). Returns the resolution reason, which the public evaluate
+endpoint must never reveal.
 
 **Request body:**
 
 ```
 {
-  targeting_key: string,
-  evaluation_context: {
-    targeting_key: string,       // same as above; field name matches OpenFeature shape
-    [attribute: string]: unknown // arbitrary attributes for Targeting Rule matching
-  },
-  id_type?: string               // optional; defaults to experiment's configured id_type
+  evaluationContext: {
+    targetingKey: string,
+    idType: string,
+    attributes: Record<string, boolean | string | number | unknown[]>
+  }
 }
 ```
 
@@ -39,27 +39,36 @@ resolution reason (which Targeting Rule matched), which the public evaluate endp
 
 ```
 {
-  variant_name: string,
+  variantName: string,
+  value: VariantValue,
+  liveRunId: string | null,
   reason:
     | {
+        type: "holdover_replay",
+        priorRunId: string
+      }
+    | {
         type: "rule_matched",
-        rule_id: string,
-        rule_name: string,
+        ruleId: string,
+        ruleName: string | null,
         priority: number,
         selection: "direct" | "percentage_rollout",
-        rollout?: { variant_weights: { variant_name: string, weight: number }[] }
+        rollout?: { variantWeights: { variantName: string, weight: number }[] }
       }
     | { type: "default_disabled" }
     | { type: "no_match_default" }
 }
 ```
 
-Reason shape is a Zod discriminated union on `type`. `rule_matched` carries enough info for a
-human or agent to identify which Targeting Rule fired. Percentage Rollout outcome is implied by the
-`selection` field; the bucket and salt are not exposed in the response.
+The canonical request and response envelopes live in
+[../contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md).
+Reason shape is a Zod discriminated union on `type`. `rule_matched` carries enough info for a human
+or agent to identify which Targeting Rule fired. Percentage Rollout outcome is implied by the
+`selection` field; the bucket and salt are not exposed in the response. `holdover_replay` names the
+prior Run that owns the sticky experience.
 
-**Invariant:** wired to no write path — no Exposure log row, no Assignment Store write, by construction
-(ADR-0026).
+**Invariant:** wired to no write path — no Exposure log row, no Assignment Store `put()`, by
+construction (ADR-0026).
 
 ## Analytics proxy endpoints
 

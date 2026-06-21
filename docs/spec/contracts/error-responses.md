@@ -145,7 +145,7 @@ frozenFields = [
 - `FLAG_NOT_FOUND` / `VARIANT_NOT_FOUND`
 - `VALIDATION_ERROR`
 
-**GET /api/flags/:flagId/test-evaluate** (dry-run, control-plane token)
+**POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval** (dry-run, control-plane token)
 
 - `FLAG_NOT_FOUND`
 - `VALIDATION_ERROR`

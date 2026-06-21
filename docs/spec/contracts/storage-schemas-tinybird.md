@@ -45,17 +45,17 @@ no schema change. (ADR-0013.)
 
 ### `audit_log` (Tinybird, unbounded append)
 
-| Column          | Type                   | Notes                                                                |
-| --------------- | ---------------------- | -------------------------------------------------------------------- |
-| `audit_id`      | String                 | UUID                                                                 |
-| `app_id`        | String                 | Isolation; always first in WHERE                                     |
-| `user_id`       | String                 | Actor                                                                |
-| `auth_method`   | LowCardinality(String) | `'id_jag' \| 'device_flow' \| 'anonymous'` — "which door" (ADR-0022) |
-| `action`        | String                 | e.g. `'create_flag'`, `'patch_run'`, `'revoke_credential'`           |
-| `resource_type` | LowCardinality(String) | `'flag' \| 'run' \| 'experiment' \| 'metric' \| 'credential' \| ...` |
-| `resource_id`   | String                 | —                                                                    |
-| `changes`       | String                 | JSON; before/after snapshot or description                           |
-| `timestamp`     | DateTime               | Event time                                                           |
+| Column          | Type                   | Notes                                                                         |
+| --------------- | ---------------------- | ----------------------------------------------------------------------------- |
+| `audit_id`      | String                 | UUID                                                                          |
+| `app_id`        | String                 | Isolation; always first in WHERE                                              |
+| `user_id`       | String                 | Actor                                                                         |
+| `auth_method`   | LowCardinality(String) | `'id_jag' \| 'device_flow' \| 'anonymous'` — "which door" (ADR-0022)          |
+| `action`        | String                 | e.g. route `operationId`: `'flags_create'`, `'runs_end'`, `'api_keys_revoke'` |
+| `resource_type` | LowCardinality(String) | `'flag' \| 'run' \| 'experiment' \| 'metric' \| 'credential' \| ...`          |
+| `resource_id`   | String                 | —                                                                             |
+| `changes`       | String                 | JSON; before/after snapshot or description                                    |
+| `timestamp`     | DateTime               | Event time                                                                    |
 
 Not in D1 — unbounded, append-only workload fits Tinybird (ADR-0018). Audit reads must apply the
 deleted-user tombstone rules in [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md).

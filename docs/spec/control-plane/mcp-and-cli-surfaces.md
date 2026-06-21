@@ -137,21 +137,15 @@ because the schemas are byte-for-byte identical.
 
 ### Tool naming convention
 
-`{resource}_{operation}` mapping to HTTP endpoints:
+The MCP tool name is the route `operationId` from `@splitch/contracts`. It uses
+`resource_operation` lower snake_case, e.g. `flags_list`, `flags_update`, `flags_promote`,
+`experiments_start`, `runs_end`, `flags_test_eval`, `client_key_get`, and `api_keys_revoke`.
 
-- `environments_list`, `environments_create`, `environments_get`
-- `flags_list`, `flags_create`, `flags_get`, `flags_update` (App-level definition)
-- `flags_promote` (move Flag Configuration into an Environment, ADR-0028)
-- `env_policy_get`, `env_policy_set` (per-change-type confirm gates, ADR-0029)
-- `experiments_create`, `experiments_start`, `experiments_get`
-- `runs_end`, `runs_get`, `runs_list`
-- `flags_test_eval`
-- `client_key_get`, `api_keys_create`, `api_keys_revoke`
-
-Experiment, Run, credential, and test-eval tools take `app_id` + `environment_id` inputs (per-Env,
-ADR-0027); the schemas are derived from the per-Env route definitions, so parity with the CLI holds
-by construction. The three new operations are Start (Experiment Run), Promote (Flag Configuration
-across Environments), and Confirm (the Environment Policy gate).
+The canonical naming rule and complete tool list live in
+[../contracts/mcp-tool-derivation.md](../contracts/mcp-tool-derivation.md). This file must not carry
+a second tool-name table. Experiment, Run, credential, and test-eval tools take `app_id` +
+`environment_id` inputs (per-Env, ADR-0027); the schemas are derived from the per-Env route
+definitions, so parity with the CLI holds by construction.
 
 ### Parity guarantee
 

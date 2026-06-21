@@ -10,7 +10,7 @@ how types, clients, and MCP schemas derive from one source. Avoids any second au
   Authored here:
     - Leaf Zod schemas (Environment, Flag, FlagConfig, Variant, TargetingRule, Experiment, Run, Segment, Metric, ...)
     - Request/response Zod schemas (distinct from leaf; no fusion with storage shapes)
-    - @hono/zod-openapi route definitions
+    - @hono/zod-openapi route definitions with explicit `operationId`
   Derived here (compile-time):
     - TypeScript types via z.infer (never hand-written)
     - OpenAPI document (generated; never committed to repo)
@@ -41,28 +41,28 @@ Zod schema (authored, @splitch/contracts)
 
 **Leaf schemas** are reusable across request, response, and storage shapes:
 
-- `VariantSchema` — `{ name: string, value: z.union([z.boolean(), z.string(), z.number(), z.object({...})]), is_default: z.boolean() }`
-- `TargetingRuleSchema` — `{ rule_id: string, name: string, priority: number, conditions: Condition[], allocation?: AllocationMap }`
+- `VariantSchema` — `{ name: string, value: z.union([z.boolean(), z.string(), z.number(), z.object({...})]), isDefault: z.boolean() }`
+- `TargetingRuleSchema` — `{ ruleId: string, name: string, priority: number, conditions: Condition[], allocation?: AllocationMap }`
 - `ConditionSchema` — `{ attribute: string, operator: z.enum(['eq','neq','gt','lt','in','not_in','contains']), value: unknown }`
-- `AllocationMapSchema` — `z.record(z.string(), z.number())` (variant_name → percentage; enforced sum=100 in Worker)
-- `MetricRefSchema` — `{ metric_id: string, is_goal: boolean, is_guardrail: boolean }`
+- `AllocationMapSchema` — `z.record(z.string(), z.number())` (Variant name -> percentage; enforced sum=100 in Worker)
+- `MetricRefSchema` — `{ metricId: string, isGoal: boolean, isGuardrail: boolean }`
 
 **Request schemas** compose leaves; never expose storage internals:
 
-- `CreateFlagRequestSchema` — has `variants: VariantSchema[]` (not `flag_id`, not `created_at`)
+- `CreateFlagRequestSchema` — has `variants: VariantSchema[]` (not `flagId`, not `createdAt`)
 - `CreateRunRequestSchema` does not exist separately — Runs are created implicitly by Start
-- Per-Environment request/response schemas (Experiment, Run, credential) carry `environment_id`
-  co-scoped with `app_id`, matching the `/apps/{app_id}/envs/{environment_id}/…` routes (ADR-0027)
+- Per-Environment request/response schemas (Experiment, Run, credential) carry `environmentId`
+  co-scoped with `appId`, matching the `/apps/{appId}/envs/{environmentId}/…` routes (ADR-0027)
 
 **Response schemas** include computed/server-set fields:
 
-- `FlagResponseSchema` — has `flag_id`, `created_at`, `updated_at` + all request fields
+- `FlagResponseSchema` — has `flagId`, `createdAt`, `updatedAt` + all request fields
 
 **Storage shapes are NOT exported** from `@splitch/contracts`. They live in the Worker/repository
-package. The seam: request shapes → Worker → storage shape (the Worker adds `flag_id`, `created_at`, etc).
+package. The seam: request shapes -> Worker -> storage shape (the Worker adds `flagId`, `createdAt`, etc).
 
 **PATCH schemas** use Zod `.partial()` on mutable fields only. For Run: `.omit({ salt, allocation,
-variant_set, targeting_key_field, targeting_rules, segment_ids, activation_metric_id })` makes the
+variantSet, targetingKeyField, targetingRules, segmentIds, activationMetricId })` makes the
 frozen assignment config un-expressible at parse time (ADR-0002/0003 invariant enforced structurally).
 
 ## Error shape
