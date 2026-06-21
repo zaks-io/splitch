@@ -111,16 +111,16 @@ a D1 storage table.
 Client Keys are public publishable values. The control plane may retrieve and return
 `keyMaterial` because it is safe to embed in client code.
 
-| Field             | Type                        | Required | Meaning                                                      |
-| ----------------- | --------------------------- | -------- | ------------------------------------------------------------ |
-| `keyId`           | `string`                    | yes      | Stable ID (`ck_<ulid>`)                                      |
-| `appId`           | `string`                    | yes      | Scoped to one App                                            |
-| `environmentId`   | `string`                    | yes      | Scoped to one Environment; co-scoped with `appId` (ADR-0027) |
-| `keyMaterial`     | `string`                    | yes      | Public value shipped to client code                          |
-| `originAllowlist` | `string[] \| null`          | no       | Null = allow all                                             |
-| `rateLimitRps`    | `number \| null`            | no       | Per-key override                                             |
-| `revokedAt`       | `string \| null` (ISO 8601) | no       | —                                                            |
-| `createdAt`       | `string` (ISO 8601)         | yes      | —                                                            |
+| Field             | Type                        | Required | Meaning                                                                                                        |
+| ----------------- | --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `keyId`           | `string`                    | yes      | Stable ID (`ck_<ulid>`)                                                                                        |
+| `appId`           | `string`                    | yes      | Scoped to one App                                                                                              |
+| `environmentId`   | `string`                    | yes      | Scoped to one Environment; co-scoped with `appId` (ADR-0027)                                                   |
+| `keyMaterial`     | `string`                    | yes      | Public value shipped to client code                                                                            |
+| `originAllowlist` | `string[] \| null`          | no       | Null = open to all origins; origin-closed by default at creation, null only by explicit loud opt-in (ADR-0034) |
+| `rateLimitRps`    | `number \| null`            | no       | Per-key override                                                                                               |
+| `revokedAt`       | `string \| null` (ISO 8601) | no       | —                                                                                                              |
+| `createdAt`       | `string` (ISO 8601)         | yes      | —                                                                                                              |
 
 ### APIKey
 

@@ -51,7 +51,14 @@ control-plane access token. No refresh token on ID-JAG path.
 
 **Flow:**
 
-1. Rate-limit per source IP (Cloudflare WAF; default: 10 provisional creates per IP per hour)
+0. **Turnstile challenge before any row is created (ADR-0034).** This is a public, unauthenticated
+   **write** surface that mints WorkOS users and D1 rows; per-IP rate limiting alone is defeated by IP
+   rotation. Verify the Cloudflare Turnstile token server-side (siteverify; single-use; 300s expiry)
+   before step 2. Reject on failure — no rows created.
+1. Rate-limit per source IP **and a global ceiling** (Cloudflare WAF; default: 10 provisional creates
+   per IP per hour, plus a global cap — placeholder **10,000 provisional creates/hour across all IPs** —
+   so IP rotation cannot make creation unbounded. The number is set deliberately high for launch and
+   tuned down against real traffic; the point is that the ceiling exists, not its exact value.)
 2. Create WorkOS user (unverified email placeholder)
 3. Create provisional Org: `is_provisional = 1`, `demo_expires_at = now + 24h`
 4. Create provisional App under the Org (with a default Environment; Environment is per-App, ADR-0027)
@@ -116,3 +123,4 @@ as thin proxies to WorkOS. The CLI stores the resulting **refresh token** in key
 - [../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md](../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../../adr/0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md](../../adr/0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md)

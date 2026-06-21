@@ -101,3 +101,19 @@ Two consequences this ADR now pins:
   the secret once at creation, the way every provider does, then directs the developer to where it lives
   (consistent with ADR-0022's secret discipline). KV validation is identical for both kinds; what differs is
   secrecy, capability, edge binding, and agent-reachability.
+
+## Amendment (ADR-0034): the Client Key abuse bound is tightened
+
+This ADR named origin/referrer allow-list + per-key rate limiting as the Client Key abuse bound, with
+origin allow-list optional. **ADR-0034 hardens that posture** and is the current contract for these edges:
+
+- New Client Keys are **origin-closed by default** — allow-all is an explicit, loud choice, not the silent
+  default.
+- **Peek is not a Client Key capability.** A silent, SRM-invisible read under a public key is an allocation
+  oracle, so `peekVariant` moves behind the secret **API Key**. The public Client Key keeps exactly one
+  capability: Exposure-bearing `evaluate`.
+- **Revocation fails loud and fast** — the revoke KV write-through is surfaced/retried on failure (not the
+  "revoked keys may pass for up to ~5 min, accepted" of the original KV-cache wording) and the revoked key
+  id is negative-cached.
+- Anonymous registration (ADR-0022) and the public evaluate surface add **Cloudflare Turnstile + global WAF
+  rate limiting** to the per-IP limit. All controls stay Cloudflare-native (ADR-0017).

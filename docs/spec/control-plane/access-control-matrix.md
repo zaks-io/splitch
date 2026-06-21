@@ -94,7 +94,7 @@ only (seeded at deploy; not user-facing).
 
 **Evaluation Worker** owns resolution:
 
-- Public SDK evaluate/peek endpoints using Client Key or API Key
+- Public SDK evaluate endpoint (Client Key or API Key); peek endpoint (API Key only, ADR-0034)
 - Control-plane dry-run test-evaluation using the control-plane bearer token
 - Provider and Assignment Store read orchestration
 - No config writes, no analytics reads, and no direct result calculation

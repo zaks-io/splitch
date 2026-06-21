@@ -36,8 +36,14 @@ This accessor returns the resolved Variant **without firing an Exposure**. It is
 distinctly named — `peekVariant` is not a variant of `evaluate` with a suppression flag
 (ADR-0004: a suppressible side effect is the footgun these replace).
 
-Peek is still a public Client Key path, so it returns only the Variant value. Resolution
-reasons live on the control-plane test-evaluation endpoint, not the public SDK.
+**Peek is a server-side (API Key) path, not a public Client Key path (ADR-0034).** A read
+that resolves a Variant while firing no Exposure leaves no SRM trace, which under a public
+Client Key is a silent allocation oracle: sweep Targeting Keys, read each variant, and
+reconstruct the rollout without polluting analysis or tripping SRM. So `peekVariant` requires
+an **API Key** (trusted server runtime). The public Client Key keeps exactly one capability —
+Exposure-bearing `evaluate`. Client-side below-the-fold deferral is served by firing
+`evaluate` when the element scrolls into view, not by a silent client peek. Peek still returns
+only the Variant value; resolution reasons live on the control-plane test-evaluation endpoint.
 
 **Peek does NOT:**
 
@@ -60,8 +66,11 @@ in the SDK instance state.
 
 ```
 POST /apps/:appId/peek-evaluate
-Authorization: Bearer <clientKey>
+Authorization: Bearer <apiKey>      -- API Key (server-side), NOT a Client Key (ADR-0034)
 ```
+
+A Client Key presented to this endpoint is rejected `401 INVALID_CREDENTIAL`. The Worker gates
+peek on an API Key's `data-plane:evaluate` scope, the same credential the server-side SDK holds.
 
 Request: same as `EvaluateRequest` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
 
@@ -130,3 +139,4 @@ at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/
 - [ADR-0005](../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md)
 - [ADR-0018](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [ADR-0034](../../adr/0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md) — peek behind the API Key

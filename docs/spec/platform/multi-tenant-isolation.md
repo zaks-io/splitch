@@ -43,7 +43,10 @@ KV keys are namespaced by `app_id` at the key-construction level:
 - Flag config: `config:app:{appId}:{environmentId}:flag:{flagKey}` (Flag Configuration is
   per-Environment, ADR-0027)
 - Assignment Store: `assignment:{appId}:{idType}:{targetingKeyHash}` (per-Entity read key; `appId`
-  first for tenant isolation; one read returns all of the Entity's holdovers. The hash is defined in
+  first for tenant isolation; one read returns all of the Entity's holdovers. `targetingKeyHash` is
+  **HMAC-SHA256 under a per-App, versioned, secret salt** (`app_privacy_salt[key_version]`, stored
+  outside Tinybird), version-prefixed — so a leaked salt is contained to one App and rotation is lazy
+  (new rows use the latest version, old rows keep theirs). The hash is defined in
   [privacy-data-lifecycle.md](./privacy-data-lifecycle.md); see
   [assignment-store-substrate.md](./assignment-store-substrate.md))
 - Session cache: `session:{sessionToken}` (global; carries `{ userId, appMemberships }`)

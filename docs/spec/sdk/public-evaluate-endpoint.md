@@ -34,6 +34,14 @@ The **Environment is resolved from the Client Key**, not a request field: a Clie
 `(app_id, environment_id)` (ADR-0027), and the edge reads `environment_id` from the key's validation
 cache value to select which Environment's Flag Configuration and live Experiment Runs to serve.
 
+**`app_id` authority — credential wins, path is validated-and-discarded.** The `:appId` in the path is
+**never** used as a data scope. The only `app_id` that reaches Provider reads, Assignment Store keys, or
+the Exposure row is the one bound to the validated credential (ADR-0018). The path `:appId` is compared
+against the credential's `app_id`: on mismatch the request is rejected `403 APP_MISMATCH`; on match it is
+discarded. It is never a fallback or a default when the credential scope is absent — there is no code path
+where a client-supplied `app_id` selects tenant data. This closes the tenant-crossing footgun where the
+path param could be read as authoritative.
+
 ## Response shape
 
 ```
@@ -73,9 +81,10 @@ Calling this endpoint (via the `evaluate` SDK accessor) fires an Exposure as a s
 The Exposure is appended to the raw log by the Worker, never by the client.
 See [exposure-accessor.md](./exposure-accessor.md) for the full accessor contract.
 
-The `peekVariant` accessor calls a **peek variant** of this same endpoint that does NOT fire
-the Exposure. The endpoint distinguishes them by the SDK call path, not a caller-supplied flag.
-Peek uses a separate endpoint — see [exposure-accessor.md](./exposure-accessor.md).
+The `peekVariant` accessor calls a **separate** peek endpoint that does NOT fire the Exposure.
+Peek is a **server-side (API Key) path, not this public Client Key path** (ADR-0034): a silent,
+SRM-invisible read under a public key is an allocation oracle. This public endpoint is
+`evaluate`-only and always Exposure-bearing — see [exposure-accessor.md](./exposure-accessor.md).
 
 ## Init and lazy-fetch
 
@@ -89,10 +98,13 @@ Peek uses a separate endpoint — see [exposure-accessor.md](./exposure-accessor
 
 ## Edge binding
 
-Client Key requests pass through Cloudflare WAF before reaching the Worker (ADR-0018):
+Client Key requests pass through Cloudflare WAF before reaching the Worker (ADR-0018, ADR-0034):
 
-- Origin/referrer allow-list enforcement (per-key, WAF-level)
-- Per-key rate limiting (WAF-level)
+- Origin/referrer allow-list enforcement (per-key, WAF-level). New Client Keys are **origin-closed
+  by default** — allow-all is an explicit, loud choice, never the silent default
+  (see [credentials-and-keys.md](../control-plane/credentials-and-keys.md)).
+- Per-key rate limiting (WAF-level), counter keyed on the Client Key value
+- Progressive rules (challenge before block) layered over the per-key counter
 
 WAF rejection returns a 403/429 before the Worker is invoked. The SDK client must handle
 these as non-retryable (403) or back-off (429) errors.

@@ -91,17 +91,17 @@ UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 Client Keys are public publishable values. The control plane can retrieve and display
 `key_material`; the edge validates requests by hashing the presented material and checking KV.
 
-| Column             | Type        | Constraints                                                     |
-| ------------------ | ----------- | --------------------------------------------------------------- |
-| `key_id`           | text        | PK                                                              |
-| `app_id`           | text        | FK → apps, not null                                             |
-| `environment_id`   | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027) |
-| `key_material`     | text        | not null; public value shipped to client code                   |
-| `origin_allowlist` | text        | nullable JSON array; null = allow all                           |
-| `rate_limit_rps`   | integer     | nullable; per-key override                                      |
-| `revoked_at`       | timestamptz | nullable                                                        |
-| `created_at`       | timestamptz | not null                                                        |
-| `created_by`       | text        | WorkOS user ID or deleted-user tombstone                        |
+| Column             | Type        | Constraints                                                                                                                                                               |
+| ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `key_id`           | text        | PK                                                                                                                                                                        |
+| `app_id`           | text        | FK → apps, not null                                                                                                                                                       |
+| `environment_id`   | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027)                                                                                                           |
+| `key_material`     | text        | not null; public value shipped to client code                                                                                                                             |
+| `origin_allowlist` | text        | nullable JSON array; null = open to all origins. Origin-closed by default at creation — null is reached only by explicit, loud acknowledgement, never silently (ADR-0034) |
+| `rate_limit_rps`   | integer     | nullable; per-key override                                                                                                                                                |
+| `revoked_at`       | timestamptz | nullable                                                                                                                                                                  |
+| `created_at`       | timestamptz | not null                                                                                                                                                                  |
+| `created_by`       | text        | WorkOS user ID or deleted-user tombstone                                                                                                                                  |
 
 ### `api_keys`
 

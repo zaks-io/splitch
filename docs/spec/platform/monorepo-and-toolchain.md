@@ -101,14 +101,14 @@ Use the Turborepo convention directly:
 These Workers are separate deploy units because they are separate capability and trust seams. Do
 not collapse them into generic `api` or `edge` Workers during slicing.
 
-| Worker                   | Boundary                     | Owns                                                                                                                       | Does not own                                                     |
-| ------------------------ | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Control Plane API Worker | Authenticated management API | Org, App, Environment, Flag, Flag Configuration, Promotion, Experiment, Run, Metric, Segment, and SDK credential mutations | MCP transport, SDK evaluate, event ingest, Tinybird result reads |
-| MCP Worker               | Agent protocol adapter       | Remote MCP auth handshake, tool registry, calls through `@splitch/control-plane-sdk`                                       | D1/KV/Tinybird bindings, domain invariants                       |
-| Evaluation Worker        | SDK/data-plane resolution    | Client Key/API Key evaluation, peek, control-plane dry-run test-eval, Provider + Assignment Store reads                    | Config writes, analysis queries, direct Metric computation       |
-| Event Ingest Worker      | Append-only event intake     | Assignment/Exposure/Metric event validation, queueing, sharded DO dedup, Tinybird delivery                                 | Variant resolution, result calculation, control-plane CRUD       |
-| Analysis Worker          | Result read model            | Tinybird proxy endpoints, SRM/Metric/statistical result reads, `app_id`/`environment_id` injection from auth/path context  | SDK evaluate, event ingest, config mutation                      |
-| Auth API Worker          | Identity/token surface       | AuthKit/auth.md/OAuth endpoints, token/revocation flows, provisional create handoff                                        | Post-create Org/App management, SDK credentials, analytics       |
+| Worker                   | Boundary                     | Owns                                                                                                                          | Does not own                                                     |
+| ------------------------ | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Control Plane API Worker | Authenticated management API | Org, App, Environment, Flag, Flag Configuration, Promotion, Experiment, Run, Metric, Segment, and SDK credential mutations    | MCP transport, SDK evaluate, event ingest, Tinybird result reads |
+| MCP Worker               | Agent protocol adapter       | Remote MCP auth handshake, tool registry, calls through `@splitch/control-plane-sdk`                                          | D1/KV/Tinybird bindings, domain invariants                       |
+| Evaluation Worker        | SDK/data-plane resolution    | Client Key/API Key evaluate, API-Key-only peek (ADR-0034), control-plane dry-run test-eval, Provider + Assignment Store reads | Config writes, analysis queries, direct Metric computation       |
+| Event Ingest Worker      | Append-only event intake     | Assignment/Exposure/Metric event validation, queueing, sharded DO dedup, Tinybird delivery                                    | Variant resolution, result calculation, control-plane CRUD       |
+| Analysis Worker          | Result read model            | Tinybird proxy endpoints, SRM/Metric/statistical result reads, `app_id`/`environment_id` injection from auth/path context     | SDK evaluate, event ingest, config mutation                      |
+| Auth API Worker          | Identity/token surface       | AuthKit/auth.md/OAuth endpoints, token/revocation flows, provisional create handoff                                           | Post-create Org/App management, SDK credentials, analytics       |
 
 Worker bindings and capability-specific orchestration stay local to the owning Worker. Shared library
 code belongs in `packages/` when it is imported through a stable package API or published as a customer

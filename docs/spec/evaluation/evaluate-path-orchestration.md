@@ -7,21 +7,30 @@ branch is visible, every ADR maps to one pointable line.
 ## Pseudocode (canonical)
 
 ```
-function evaluate(appId, environmentId, experimentId, flagKey, evalContext):
+function evaluate(appId, environmentId, flagKey, evalContext):
   // evalContext: { targetingKey, idType, ...attributes }
   // environmentId is resolved from the SDK key before the evaluate path runs (ADR-0027).
+  // The request carries flagKey, NOT experimentId — flag -> experiment is resolved below from the
+  // flag config the Provider already reads (no separate lookup).
 
   // 1. Eager pre-load: one edge-local KV read, all Experiments for this Entity.
   held = AssignmentStore.getAll(appId, evalContext.idType, evalContext.targetingKey)
   //    held: Map<experimentId, { runId, variant }>
 
-  // 2. Provider resolves live flag config (stateless, cached, includes liveRun hydrated).
+  // 2. Provider resolves live flag config (stateless, cached). flagConfig.experimentId is the
+  //    controlling Experiment (nullable) — denormalized onto the flag config, read in this same call.
   flagConfig = Provider.getFlag(appId, environmentId, flagKey)
-  experiment = Provider.getExperiment(appId, environmentId, experimentId)
+  experimentId = flagConfig.experimentId               // string | null; null = no Experiment controls this Flag
 
   // 3. Flag disabled → Default Variant, no Exposure.
   if not flagConfig.enabled:
     return { variant: flagConfig.defaultVariant, reason: { type: 'default_disabled' } }
+
+  // 3b. No Experiment controls this Flag → plain flag resolution, no Run, no Exposure.
+  if experimentId is null:
+    return { variant: flagConfig.defaultVariant, reason: { type: 'default_disabled' } }
+
+  experiment = Provider.getExperiment(appId, environmentId, experimentId)
 
   // 4. Holdover check: has this Entity been exposed under any prior Run of this Experiment?
   if held.has(experimentId):                          // ADR-0006: sticky experience
@@ -73,10 +82,22 @@ This eliminates the superposition identified in the seam findings.
 ## Role boundaries
 
 **Provider** (stateless): resolves `FlagConfig` and `ExperimentConfig` (with `liveRun`
-hydrated). Returns the full rule set. Does not iterate rules, does not match conditions.
+hydrated). `FlagConfig.experimentId` (nullable) carries the controlling Experiment, so
+flag → experiment resolution is part of the single `getFlag` read — the evaluate path never
+issues a second lookup to discover which Experiment controls a Flag, and the two can never be
+read out of sync. Returns the full rule set. Does not iterate rules, does not match conditions.
 
 **Assignment Store** (dumb storage): `getAll()` returns the pre-loaded holdover map.
 Returns facts only; never branches, never calls `assign()`.
+
+**Cross-experiment read discard (isolation invariant).** `getAll()` returns _every_ Experiment's
+holdover for this Entity (one per-Entity KV read by design, ADR-0009). The evaluate path uses
+only `held.get(experimentId)` for the Flag being evaluated; holdovers for other Experiments are
+read into memory, used for nothing on this request, and **never serialized into any response or
+Exposure row**. The response is variant-only (the public endpoint forbids more, ADR-0018), so an
+Entity's assignments across unrelated Experiments cannot leak through a single evaluate call even
+though they transit Worker memory. This keeps the read-amplification a latency optimization, not an
+information-disclosure surface.
 
 **evaluate path** (policy): owns rule iteration (first-match), condition matching,
 Fractional Evaluation, holdover predicate, replay decision. One code location for all

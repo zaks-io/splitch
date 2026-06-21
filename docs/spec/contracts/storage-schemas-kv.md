@@ -30,6 +30,11 @@ Per-Environment resolved Flag CONFIGURATION (ADR-0027): the App-level Variant ca
   id:                    string
   key:                   string
   environmentId:         string
+  experimentId:          string | null   // the Experiment controlling this Flag in this Environment,
+                                          // or null when no Experiment controls it. Denormalized here so
+                                          // the evaluate path resolves flag -> experiment in the ONE
+                                          // getFlag read it already makes — never a second KV lookup
+                                          // that could disagree with the flag read (ADR-0034 seam note).
   enabled:               boolean
   defaultVariantId:      string
   variants:              Variant[]
@@ -38,6 +43,12 @@ Per-Environment resolved Flag CONFIGURATION (ADR-0027): the App-level Variant ca
   updatedAt:             string  // ISO 8601; cache-bust signal
 }
 ```
+
+`experimentId` is written by the control plane whenever an Experiment begins or stops controlling this
+Flag in this Environment (the same write that invalidates this key). It is read atomically with the rest
+of `FlagConfigKV`, so the flag and its controlling-Experiment pointer can never be read out of sync. A
+null `experimentId` flows straight to the evaluate path's "no live Run" branch — no separate lookup, no
+new entity, just a nullable field on config the path already reads.
 
 ### RunConfigKV
 

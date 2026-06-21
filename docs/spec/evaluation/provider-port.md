@@ -43,15 +43,16 @@ It returns the rule set; the evaluate path iterates and matches.
 
 ## FlagConfig shape
 
-| Field            | Type                                                               | Required | Meaning                                                                  |
-| ---------------- | ------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------ |
-| `flagKey`        | string                                                             | yes      | Unique within App                                                        |
-| `appId`          | string                                                             | yes      | Isolation scope                                                          |
-| `environmentId`  | string                                                             | yes      | Co-scoped with `appId`; Flag Configuration is per-Environment (ADR-0027) |
-| `enabled`        | boolean                                                            | yes      | If false: return Default Variant on all requests                         |
-| `defaultVariant` | string                                                             | yes      | Variant name returned when disabled or no rule matches                   |
-| `variants`       | `{ name: string; value: boolean \| string \| number \| object }[]` | yes      | All possible Variants; value type is JSON                                |
-| `targetingRules` | `TargetingRule[]`                                                  | yes      | Priority-ordered; evaluate path iterates, first match wins               |
+| Field            | Type                                                               | Required | Meaning                                                                                                                                        |
+| ---------------- | ------------------------------------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `flagKey`        | string                                                             | yes      | Unique within App                                                                                                                              |
+| `appId`          | string                                                             | yes      | Isolation scope                                                                                                                                |
+| `environmentId`  | string                                                             | yes      | Co-scoped with `appId`; Flag Configuration is per-Environment (ADR-0027)                                                                       |
+| `experimentId`   | string \| null                                                     | yes      | Controlling Experiment in this Environment, or null if none. Read in this same `getFlag` call so flag → experiment never needs a second lookup |
+| `enabled`        | boolean                                                            | yes      | If false: return Default Variant on all requests                                                                                               |
+| `defaultVariant` | string                                                             | yes      | Variant name returned when disabled or no rule matches                                                                                         |
+| `variants`       | `{ name: string; value: boolean \| string \| number \| object }[]` | yes      | All possible Variants; value type is JSON                                                                                                      |
+| `targetingRules` | `TargetingRule[]`                                                  | yes      | Priority-ordered; evaluate path iterates, first match wins                                                                                     |
 
 ## TargetingRule shape
 

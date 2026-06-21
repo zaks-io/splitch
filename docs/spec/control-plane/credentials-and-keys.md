@@ -20,20 +20,29 @@ prod config only.
 
 ## D1: `client_keys` table
 
-| column             | type    | required | meaning                                                                           |
-| ------------------ | ------- | -------- | --------------------------------------------------------------------------------- |
-| `key_id`           | TEXT PK | yes      | Splitch-generated (`ck_<ulid>`)                                                   |
-| `app_id`           | TEXT FK | yes      | Owning App                                                                        |
-| `environment_id`   | TEXT FK | yes      | Owning Environment — the key reaches only this Environment (ADR-0027)             |
-| `key_material`     | TEXT    | yes      | The public key value shipped to the client (not a hash; this is the public value) |
-| `origin_allowlist` | TEXT    | no       | JSON array of allowed origins/referrers; null = allow all (default at creation)   |
-| `rate_limit_rps`   | INTEGER | no       | Per-key rate limit override; null = global default (100 rps)                      |
-| `revoked_at`       | TEXT    | no       | ISO 8601; null = active                                                           |
-| `created_at`       | TEXT    | yes      | ISO 8601                                                                          |
+| column             | type    | required | meaning                                                                                                                                          |
+| ------------------ | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `key_id`           | TEXT PK | yes      | Splitch-generated (`ck_<ulid>`)                                                                                                                  |
+| `app_id`           | TEXT FK | yes      | Owning App                                                                                                                                       |
+| `environment_id`   | TEXT FK | yes      | Owning Environment — the key reaches only this Environment (ADR-0027)                                                                            |
+| `key_material`     | TEXT    | yes      | The public key value shipped to the client (not a hash; this is the public value)                                                                |
+| `origin_allowlist` | TEXT    | no       | JSON array of allowed origins/referrers; null = **open to all origins** (see default note below — null is no longer the silent creation default) |
+| `rate_limit_rps`   | INTEGER | no       | Per-key rate limit override; null = global default (100 rps)                                                                                     |
+| `revoked_at`       | TEXT    | no       | ISO 8601; null = active                                                                                                                          |
+| `created_at`       | TEXT    | yes      | ISO 8601                                                                                                                                         |
 
-**Note on `origin_allowlist = null`:** Null means no origin restriction at creation. The key is immediately
-usable. Origins are optional — the edge rate-limit provides the abuse bound when no origin is configured.
-This answers the open question: Client Key is immediately usable on creation; no separate activation step.
+**Origin-closed by default (ADR-0034).** A new Client Key is **not** silently created open to all origins.
+Creation requires one of:
+
+- one or more origins in `origin_allowlist` (the recommended path), or
+- an explicit "open to all origins" acknowledgement, which the control panel and CLI/MCP surface **loudly**
+  (the key works everywhere; the UI/CLI flags it as open, it is never the quiet default).
+
+`origin_allowlist = null` at rest still means "open to all origins" — but a key only reaches that state
+through the explicit acknowledgement above, never by omission. The key is immediately usable once created
+(no separate activation step); origin/referrer is a first-class Cloudflare match characteristic, so leaving
+it unset is leaving the strongest edge control unused. The per-key rate limit is the volume backstop, not
+the only layer.
 
 ## D1: `api_keys` table
 
@@ -84,22 +93,48 @@ Environment's Flag Configuration — the key carries its Environment, so the cal
 **Write-through contract:**
 
 - On D1 create: write KV entry immediately with `valid_until = now + 1h` (default TTL)
-- On D1 revoke: write KV entry with `revoked: true`, TTL = 5 min (fast propagation on revoke)
-- KV miss on hot path: fall back to D1 lookup, then write KV entry
+- On D1 revoke: write a **revoked tombstone** KV entry (`revoked: true`) with a short TTL, and
+  **fail loud** if the write-through errors (see revoke contract below) — revoke is never best-effort
+- KV miss on hot path: fall back to D1 lookup. If D1 marks the key revoked, **re-assert the revoked
+  tombstone** in KV rather than treating the miss as "unknown / re-validate as valid", then reject
 
-**Failure contract:** If KV write-through fails on create/revoke, the D1 row is the system of record.
+**Failure contract (create):** If KV write-through fails on create, the D1 row is the system of record.
 The next request sees a KV miss, falls back to D1, and re-populates KV. No distributed transaction.
-Revoked keys may pass for up to 5 min (the TTL) if KV write fails; this is accepted (rate-limit window).
 
-## Edge abuse controls (Client Key)
+**Revoke contract (fail-loud, ADR-0034):** Revocation is the one credential operation that is **not**
+fire-and-forget — a leaked secret API Key is exactly the incident the threat model exists for.
 
-- Per-Client-Key rate limit: 100 rps default, configurable via `client_keys.rate_limit_rps`
-- Origin/referrer check: if `origin_allowlist` is non-null, requests must match
-- Per-IP rate limit on anon registration endpoint (separate, see [auth-doors.md](auth-doors.md))
-- Mechanism: Cloudflare WAF / rate-limiting rules
+- The revoke KV write-through is **surfaced and retried on failure**, never silently accepted. A failed
+  revoke propagation is an operational alarm, not an accepted window.
+- The revoked key id is **negative-cached** (an explicit revoked tombstone), so a KV miss for a key D1
+  marks revoked re-asserts the tombstone instead of falling back to a stale "valid" read. This bounds the
+  post-revoke access window to "until the next read re-asserts," and it never silently exceeds the TTL.
+- The kill-switch / incident posture wins (CONTEXT.md): revoke must propagate as fast as the edge allows
+  and must report when it does not.
+
+## Edge abuse controls (Client Key) — Cloudflare-enforced (ADR-0034)
+
+All controls below are Cloudflare-native (WAF rate limiting, origin/referrer match, Turnstile). They are
+layered, not either/or: rate limiting bounds volume, origin/referrer bounds reach, Turnstile bounds bots.
+
+- **Per-Client-Key rate limit:** 100 rps default, configurable via `client_keys.rate_limit_rps`. The
+  counter is keyed on the Client Key value (a per-credential header counter), so one key's abuse cannot
+  spend another's budget.
+- **Origin/referrer check:** if `origin_allowlist` is non-null, requests must match. New keys are
+  origin-closed by default (see the origin-closed note above) — allow-all is an explicit, loud choice.
+- **Public evaluate surface:** progressive WAF rate-limit rules (challenge before block) layered over the
+  per-key counter.
+- **Anonymous registration endpoint:** Cloudflare **Turnstile** (challenge before any row is created,
+  verified server-side via siteverify, single-use, 300s token) **plus** a **global** WAF rate limit, in
+  addition to the per-IP limit — per-IP alone is defeated by IP rotation (see [auth-doors.md](auth-doors.md)).
+- **Peek is not a Client Key surface (ADR-0034):** `peekVariant` requires an API Key, not a Client Key —
+  see [../sdk/exposure-accessor.md](../sdk/exposure-accessor.md). The public Client Key's only capability
+  is Exposure-bearing `evaluate`.
+- Mechanism throughout: Cloudflare WAF / rate-limiting rules / Turnstile (ADR-0017, all-Cloudflare).
 
 ## Sources
 
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md)
+- [../../adr/0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md](../../adr/0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md)
