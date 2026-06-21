@@ -75,7 +75,7 @@ See [exposure-accessor.md](./exposure-accessor.md) for the full accessor contrac
 
 The `peekVariant` accessor calls a **peek variant** of this same endpoint that does NOT fire
 the Exposure. The endpoint distinguishes them by the SDK call path, not a caller-supplied flag.
-(Peek uses a separate endpoint or request field — see [exposure-accessor.md](./exposure-accessor.md).)
+Peek uses a separate endpoint — see [exposure-accessor.md](./exposure-accessor.md).
 
 ## Init and lazy-fetch
 

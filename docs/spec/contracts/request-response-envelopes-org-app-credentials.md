@@ -1,7 +1,7 @@
 # Request/response envelopes: Metric, App, Org, and Credential endpoints
 
-Wire shapes for Metric, App/Org, and SDK Credential control-plane endpoints, including the once-only
-credential surfacing contract.
+Wire shapes for Metric, App/Org, and SDK credential control-plane endpoints, including API Key
+once-only surfacing and public Client Key retrieval.
 
 Envelopes compose leaf schemas from [leaf-schemas-runtime.md](./leaf-schemas-runtime.md) and
 [leaf-schemas-experiment.md](./leaf-schemas-experiment.md). They are **distinct** — never fused. Shared
@@ -55,7 +55,7 @@ the existing Run (ADR-0003). Never returns `RUN_FROZEN`.
 
 ### CreateAppResponse
 
-Surfaces both credential values **once only**. After this response they are never readable again.
+Surfaces the API Key raw value **once only**. The Client Key value is public and remains retrievable.
 A new App is seeded with a default Environment; the returned credentials belong to that Environment
 (ADR-0027). Per-Environment credentials are minted via the
 `/apps/{app_id}/envs/{environment_id}/client-key | api-keys` endpoints.
@@ -73,14 +73,15 @@ A new App is seeded with a default Environment; the returned credentials belong 
 
 ```
 {
-  credential: SDKCredential  // leaf (no raw value)
-  value:      string         // raw value, returned once only
+  credential: APIKey | ClientKey
+  value:      string         // API Key: once only; Client Key: same as keyMaterial
 }
 ```
 
 ### ListCredentialsResponse
 
-Returns `SDKCredential[]` (no `value` field; never readable after creation).
+Returns `(APIKey | ClientKey)[]`. API Key responses never include a raw secret value. Client Key
+responses include `keyMaterial`.
 
 ## Sources
 

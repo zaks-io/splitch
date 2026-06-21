@@ -50,12 +50,14 @@ Internally the Worker adds `targetingKey` to context under a reserved key before
 
 ```
 {
-  variantName: string
-  variantId:   string
-  reason:      TestEvaluationReason
-  allRules:    TargetingRule[]  // ordered by priority; for UI rule-step debugging
+  variant: VariantValue
+  reason:  TestEvaluationReason
 }
 ```
+
+`VariantValue = boolean | string | number | JsonObject`.
+Test-evaluation returns the resolved Variant value plus reason metadata. It does not return the
+full Targeting Rule set.
 
 `TestEvaluationReason` is a Zod discriminated union:
 
@@ -94,8 +96,7 @@ No Exposure-related fields. Writes nothing.
 
 ```
 {
-  variantName: string | null  // null if Flag not found or disabled and no Default Variant
-  variantId:   string | null
+  variant: VariantValue | null  // null if Flag not found or disabled and no Default Variant
 }
 ```
 

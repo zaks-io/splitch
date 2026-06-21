@@ -154,7 +154,7 @@ frozenFields = [
 **POST /api/sdk/evaluate** (data-plane, Client Key)
 
 - `APP_NOT_FOUND` / `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED`
-  — Note: no `RUN_FROZEN`, no `INSUFFICIENT_SCOPES` (Client Key holds only `evaluate`, enforced structurally); response is bare `{ variantName, variantId }`, never reason or rule set.
+  — Note: no `RUN_FROZEN`, no `INSUFFICIENT_SCOPES` (Client Key holds only `evaluate`, enforced structurally); response is bare `{ variant: VariantValue }`, never reason or rule set.
 
 ---
 

@@ -13,7 +13,7 @@ free of transport code. (ADR-0025 "two packages".)
 **What it exports:**
 
 - All Zod leaf schemas (every glossary noun: `Flag`, `Variant`, `Run`, `Experiment`, `Environment`,
-  `Metric`, `Exposure`, `EvaluationContext`, `Segment`, `SDKCredential`, etc.)
+  `Metric`, `Exposure`, `EvaluationContext`, `Segment`, `ClientKey`, `APIKey`, etc.)
 - `z.infer<>` types derived from those schemas (never hand-written types)
 - `@hono/zod-openapi` route definitions for every control-plane endpoint
 - `ErrorResponse` discriminated union + `ErrorCode` enum

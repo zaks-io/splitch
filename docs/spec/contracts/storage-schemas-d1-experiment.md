@@ -86,26 +86,38 @@ UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 | `created_at`            | timestamptz | not null                                 |
 | `created_by`            | text        | WorkOS user ID or deleted-user tombstone |
 
-### `sdk_credentials`
+### `client_keys`
+
+Client Keys are public publishable values. The control plane can retrieve and display
+`key_material`; the edge validates requests by hashing the presented material and checking KV.
 
 | Column             | Type        | Constraints                                                     |
 | ------------------ | ----------- | --------------------------------------------------------------- |
-| `id`               | text        | PK                                                              |
+| `key_id`           | text        | PK                                                              |
 | `app_id`           | text        | FK → apps, not null                                             |
 | `environment_id`   | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027) |
-| `kind`             | text        | not null (`'api_key'` or `'client_key'`)                        |
-| `name`             | text        | not null                                                        |
-| `description`      | text        | nullable                                                        |
-| `hash`             | text        | not null, indexed                                               |
-| `scopes`           | text        | not null (JSON array)                                           |
-| `revoked`          | boolean     | not null, default false                                         |
-| `origin_allowlist` | text        | nullable (JSON array; Client Key only)                          |
+| `key_material`     | text        | not null; public value shipped to client code                   |
+| `origin_allowlist` | text        | nullable JSON array; null = allow all                           |
+| `rate_limit_rps`   | integer     | nullable; per-key override                                      |
+| `revoked_at`       | timestamptz | nullable                                                        |
 | `created_at`       | timestamptz | not null                                                        |
 | `created_by`       | text        | WorkOS user ID or deleted-user tombstone                        |
-| `revoked_at`       | timestamptz | nullable                                                        |
-| `revoked_by`       | text        | nullable; WorkOS user ID or deleted-user tombstone              |
 
-**No raw secret value is ever stored.** Only the hash.
+### `api_keys`
+
+API Keys are secret. The raw value is surfaced once at creation and is never stored.
+
+| Column            | Type        | Constraints                                                     |
+| ----------------- | ----------- | --------------------------------------------------------------- |
+| `key_id`          | text        | PK                                                              |
+| `app_id`          | text        | FK → apps, not null                                             |
+| `environment_id`  | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027) |
+| `key_hash`        | text        | not null, indexed; hash of the secret value                     |
+| `scopes`          | text        | not null JSON array                                             |
+| `revoked_at`      | timestamptz | nullable                                                        |
+| `last_rotated_at` | timestamptz | nullable                                                        |
+| `created_at`      | timestamptz | not null                                                        |
+| `created_by`      | text        | WorkOS user ID or deleted-user tombstone                        |
 
 ## Sources
 

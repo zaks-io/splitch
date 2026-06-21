@@ -39,12 +39,14 @@ the Evaluation Worker knew about. This is accepted and self-healing.
 
 ## `id_type` sourcing
 
-`id_type` is read from the **Run config** in KV, not from the client. The Evaluation Worker injects
-it. This ensures the Assignment Store DO key `(experiment_id, id_type, targeting_key_hash)` is always
-consistent with the Experiment's declared Entity type. If an SDK sends a Targeting Key value of the
-wrong type (e.g., workspace ID when the Run declares `id_type = 'user'`), it is a client integration
-error; the Evaluation Worker still stamps the configured `id_type` and derives `targeting_key_hash`
-server-side.
+`id_type` is read from the request's required `idType` field, then validated against the live Run
+config in KV before Assignment Store lookup, Exposure logging, or DO writes. The Run config is the
+authority; the request is the candidate value. A mismatch returns `422 VALIDATION_ERROR`.
+
+After validation, the Evaluation Worker stamps the validated `id_type` and derives
+`targeting_key_hash` server-side. This keeps the Assignment Store DO key
+`(experiment_id, id_type, targeting_key_hash)` consistent with the Experiment's declared Entity type
+while still making cross-Entity-type collisions fail loud at the SDK boundary.
 
 ## `app_id` injection
 

@@ -88,7 +88,7 @@ This table is a cross-reference only; do not duplicate the authoritative definit
 | `experiment_id`      | string                     | resolved from Flag's controlling Experiment                        |
 | `run_id`             | string                     | live Run at evaluation time (stamped at server-received time)      |
 | `targeting_key_hash` | string                     | derived server-side from request Targeting Key                     |
-| `id_type`            | string                     | from request                                                       |
+| `id_type`            | string                     | validated request `idType`; must match the Run config              |
 | `variant`            | string                     | Variant name (not value) — immutable experimental arm label        |
 | `source_id`          | string                     | edge POP identifier                                                |
 | `server_ts`          | timestamp                  | server-received-at (canonical for MIN(ts) first-touch)             |

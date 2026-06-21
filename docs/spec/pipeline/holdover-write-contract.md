@@ -17,7 +17,7 @@ The two can momentarily disagree (the DO write guesses first-touch; the batch de
 key = (experiment_id, id_type, targeting_key_hash)
 ```
 
-- `id_type` is sourced from the Run config in KV (not from the client) — see [edge-ingest-contract.md](./edge-ingest-contract.md).
+- `id_type` is the request `idType` after validation against the Run config in KV — see [edge-ingest-contract.md](./edge-ingest-contract.md).
 - The key uniquely identifies one Entity's slot for one Experiment across all Runs.
 - One DO instance exists per unique key (fine-grained DOs, ADR-0009).
 

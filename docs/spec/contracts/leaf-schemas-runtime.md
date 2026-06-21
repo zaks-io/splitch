@@ -1,7 +1,7 @@
 # Leaf schemas: EvaluationContext, Exposure, and identity/credential leaves
 
 Canonical field lists for the runtime/identity glossary nouns: EvaluationContext, Exposure event, and
-the Organization/App/User/SDKCredential block. Every noun is ONE Zod schema in `@splitch/contracts`;
+the Organization/App/User/credential block. Every noun is ONE Zod schema in `@splitch/contracts`;
 request, response, and storage shapes compose these leaves and never redefine them.
 
 Any field addition here propagates to every envelope automatically.
@@ -106,25 +106,35 @@ a D1 storage table.
 
 `UserRole` enum: `'owner' | 'admin' | 'member'`
 
-### SDKCredential (abstract leaf)
+### ClientKey
+
+Client Keys are public publishable values. The control plane may retrieve and return
+`keyMaterial` because it is safe to embed in client code.
+
+| Field             | Type                        | Required | Meaning                                                      |
+| ----------------- | --------------------------- | -------- | ------------------------------------------------------------ |
+| `keyId`           | `string`                    | yes      | Stable ID (`ck_<ulid>`)                                      |
+| `appId`           | `string`                    | yes      | Scoped to one App                                            |
+| `environmentId`   | `string`                    | yes      | Scoped to one Environment; co-scoped with `appId` (ADR-0027) |
+| `keyMaterial`     | `string`                    | yes      | Public value shipped to client code                          |
+| `originAllowlist` | `string[] \| null`          | no       | Null = allow all                                             |
+| `rateLimitRps`    | `number \| null`            | no       | Per-key override                                             |
+| `revokedAt`       | `string \| null` (ISO 8601) | no       | —                                                            |
+| `createdAt`       | `string` (ISO 8601)         | yes      | —                                                            |
+
+### APIKey
+
+API Keys are secret server-side credentials. The raw value is surfaced once at creation and
+is never stored or returned later.
 
 | Field           | Type                        | Required | Meaning                                                      |
 | --------------- | --------------------------- | -------- | ------------------------------------------------------------ |
-| `id`            | `string`                    | yes      | Stable UUID                                                  |
+| `keyId`         | `string`                    | yes      | Stable ID (`ak_<ulid>`)                                      |
 | `appId`         | `string`                    | yes      | Scoped to one App                                            |
 | `environmentId` | `string`                    | yes      | Scoped to one Environment; co-scoped with `appId` (ADR-0027) |
-| `kind`          | `'api_key' \| 'client_key'` | yes      | Discriminator                                                |
-| `name`          | `string`                    | yes      | Human label                                                  |
-| `description`   | `string`                    | no       | —                                                            |
-| `hash`          | `string`                    | yes      | SHA-256 of raw value; never the raw value                    |
 | `scopes`        | `string[]`                  | yes      | Capability set                                               |
-| `revoked`       | `boolean`                   | yes      | —                                                            |
-| `createdAt`     | `string` (ISO 8601)         | yes      | —                                                            |
 | `revokedAt`     | `string \| null` (ISO 8601) | no       | —                                                            |
-
-**APIKey** extends SDKCredential: `kind = 'api_key'`, `scopes = ['read:config', 'write:config', 'expose', 'assign']`. Long-lived (no forced expiry). Surfaced once at creation; never readable after. Agent provisions; never reads existing value.
-
-**ClientKey** extends SDKCredential: `kind = 'client_key'`, `scopes = ['evaluate']`, plus `originAllowlist: string[]` (CORS-style). Freely retrieved by the agent; safe to embed in client code. Created immediately usable; origins default to `[]` (allow-all). Tighten with origin allowlist before production.
+| `createdAt`     | `string` (ISO 8601)         | yes      | —                                                            |
 
 ## Sources
 

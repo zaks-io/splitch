@@ -123,7 +123,7 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 | `test_evaluate` | GET    | `/api/flags/:flagKey/test-evaluate` |
 
 Input: `{ flagKey, targetingKey, idType, attributes? }` (query params). Output:
-`TestEvaluationResponse { variantName, variantId, reason, allRules }`. Auth: control-plane
+`TestEvaluationResponse { variant, reason }`. Auth: control-plane
 token (not Client Key). Writes nothing; zero Exposures. (ADR-0026.)
 
 ## Error handling in MCP tools
