@@ -25,6 +25,8 @@ design — see the format in `~/.claude/skills/grill-with-docs/ADR-FORMAT.md`. V
 | [0016](./0016-cuped-and-winsorization-default-on-but-conditional.md) | CUPED and winsorization: default-on, but conditional on the data they require |
 | [0017](./0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md) | Stack: all-Cloudflare Workers for serving + reactive control plane, Tinybird analytics system of record |
 | [0018](./0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md) | Identity/operational state in D1; session + API-key validation cached in KV; audit log in Tinybird |
+| [0019](./0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md) | Control-plane live updates over a hibernating WebSocket; delta-nudge, TanStack Query as the sole synced store |
+| [0020](./0020-tanstack-start-for-both-control-panel-and-marketing-shared-component-layer.md) | TanStack Start for both the control panel and marketing site; one shared, interchangeable component layer |
 
 0001–0006 come from the Assignment/Exposure seam grills (2026-06-20). They form a chain: 0001 (pure
 assignment) enables 0006 (clean holdover predicate); 0002 (Run freezes *bucketing*) is enforced by 0003
@@ -85,3 +87,23 @@ D1 is never on the hot path; the unbounded **audit log** goes to **Tinybird**, k
 ceiling. Tenant isolation is **application-enforced** (every query scoped by `app_id` in one data-access
 seam), a deliberate downgrade from agent-paste's Postgres RLS — recorded, with that seam built as the
 migration boundary if DB-enforced RLS ever becomes a hard requirement.
+
+0019 resolves ADR-0017's `SSE/WebSocket` slash for the live control plane (2026-06-20): the transport is
+a **hibernating WebSocket** served by one fan-out DO per App; config writes go through that DO
+(persisted-before-announced); the broadcast is a small **delta-shaped invalidation nudge**, not the config
+body; and the client applies nothing — it invalidates a **TanStack Query** key and refetches truth from the
+read API, keeping Query as the *sole* synced server-state store (no Redux/Zustand) and reconnect recovery
+free. Hibernation is the billing argument: only WebSocket stops accruing DO Duration while idle, so the
+"avoid long-lived connections" intuition is reversed.
+
+0020 commits the frontend rendering model 0017 left open and 0019 referenced conditionally (2026-06-20):
+**both the control panel and the marketing site are TanStack Start apps**, both using **TanStack Query** as
+the server-state store, sharing **one interchangeable component layer** (a `ui` package on Tailwind 4
+tokens) so a component built for one renders unchanged in the other. Rendering is per-route, not a framework
+fork: marketing routes **prerender** to static HTML (SEO/perf) while panel routes **SSR** with
+loader-seeded Query caches before ADR-0019's socket attaches. SSG-for-marketing + SPA-for-panel was rejected
+as the two-toolchain wall this ADR exists to refuse; Next.js was rejected as re-litigating 0017's
+router/data model rather than extending it. The two surfaces ship as **two separate Workers** (different
+security postures, traffic shapes, and release cadences), isolated at the deploy boundary while still
+sharing the `ui` package at build time. Start on the Cloudflare adapter is already proven in agent-paste,
+so this adopts a working pattern rather than betting on an unverified one.
