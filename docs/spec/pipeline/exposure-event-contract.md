@@ -15,7 +15,7 @@ One Tinybird datasource (`raw_events`) holds all event types. The `type` discrim
 | `experiment_id` | `string` | yes | Stable identifier of the Experiment |
 | `run_id` | `string` | yes | Stamped at SDK fire-time from the live Run config in KV; the live `liveRunId` the Evaluation Worker read when it evaluated |
 | `id_type` | `string` | yes | Entity type declared on the Run (e.g. `'user'`, `'workspace'`); sourced from the Run config, not the client (guards holdover DO key) |
-| `targeting_key` | `string` | yes | The Targeting Key that was evaluated; identifies the Entity |
+| `targeting_key_hash` | `string` | yes | HMAC-derived Entity identifier; computed from the Targeting Key, never client-supplied |
 | `variant` | `string` | yes | The Variant name (string, never the value/metadata) assigned to this Entity |
 | `event_id` | `string` | yes | Retry-stable physical event id generated once when the Worker creates this raw row |
 | `server_ts` | `DateTime64(3)` | yes | Server-received-at timestamp (millisecond precision, UTC); canonical for `MIN(ts)` first-touch ordering — monotonic, no clock skew |
@@ -29,7 +29,7 @@ One Tinybird datasource (`raw_events`) holds all event types. The `type` discrim
 ### Dedup key definition
 
 ```
-dedup_key = sha256(type + ':' + app_id + ':' + experiment_id + ':' + run_id + ':' + id_type + ':' + targeting_key + ':' + source_id + ':' + event_id)
+dedup_key = sha256(type + ':' + app_id + ':' + experiment_id + ':' + run_id + ':' + id_type + ':' + targeting_key_hash + ':' + source_id + ':' + event_id)
 ```
 
 - `type` is part of the key so an Exposure and Activation for the same Entity in the same millisecond cannot collide in the unified log.
@@ -41,7 +41,7 @@ dedup_key = sha256(type + ':' + app_id + ':' + experiment_id + ':' + run_id + ':
 
 ### Idempotency invariant
 
-The dedup key is for wire-level ingest deduplication only. The first-touch dedup (query-time `GROUP BY entity, run` + `MIN(server_ts)`) is the **authoritative** first-touch definition and supersedes it. Two rows with different `dedup_key` values for the same `(targeting_key, run_id)` are expected — the query picks `MIN(server_ts)` among them.
+The dedup key is for wire-level ingest deduplication only. The first-touch dedup (query-time `GROUP BY entity, run` + `MIN(server_ts)`) is the **authoritative** first-touch definition and supersedes it. Two rows with different `dedup_key` values for the same `(targeting_key_hash, run_id)` are expected — the query picks `MIN(server_ts)` among them.
 
 ## Activation row (`type = 'activation'`)
 
@@ -52,7 +52,7 @@ The dedup key is for wire-level ingest deduplication only. The first-touch dedup
 | `experiment_id` | `string` | yes | Experiment this activation belongs to |
 | `run_id` | `string` | yes | Run under which the activation occurred |
 | `id_type` | `string` | yes | Must match the Run's declared `id_type` |
-| `targeting_key` | `string` | yes | Entity that activated |
+| `targeting_key_hash` | `string` | yes | HMAC-derived Entity identifier |
 | `event_id` | `string` | yes | Retry-stable physical event id generated once when the Worker creates this raw row |
 | `server_ts` | `DateTime64(3)` | yes | Server-received-at timestamp; equals `activation_ts` for v1 server-received activations |
 | `ingest_ts` | `DateTime64(3)` | yes | Raw-log append timestamp; used only for snapshot/tail watermarks, never for analysis ordering |
@@ -78,3 +78,4 @@ The peek and test-evaluation paths are structurally separate from the ingest end
 - [ADR-0013](../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md) — activation as first-class row type, `counterfactual` marker
 - [ADR-0024](../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md) — Tinybird physical ingest
 - [ADR-0026](../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md) — test-evaluation non-exposing
+- [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

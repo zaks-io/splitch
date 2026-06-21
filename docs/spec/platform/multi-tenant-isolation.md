@@ -25,8 +25,8 @@ security.
 - Per-Environment tables (`experiments`, `runs`, `flag_configs`, `api_keys`, `client_keys`) also carry
   `environment_id` co-scoped with `app_id` (ADR-0027); `app_id` remains the isolation boundary.
 
-**Global tables** (no per-tenant scoping; queried by identity directly):
-- `organizations`, `users`, `memberships`
+**Global / Org-scoped tables** (not App-scoped; queried by Org or identity directly):
+- `organizations`, `org_memberships`, `privacy_requests`
 
 The repository is the designated migration boundary: if DB-enforced RLS becomes a hard requirement
 (compliance, or app-level scoping judged insufficient), replacing the repository's D1 calls with
@@ -37,8 +37,9 @@ Postgres+RLS calls is a mechanical seam swap, not a cross-system refactor.
 KV keys are namespaced by `app_id` at the key-construction level:
 - Flag config: `config:app:{appId}:{environmentId}:flag:{flagKey}` (Flag Configuration is
   per-Environment, ADR-0027)
-- Assignment Store: `assignment:{appId}:{idType}:{targetingKey}` (per-Entity read key; `appId`
-  first for tenant isolation; one read returns all of the Entity's holdovers — see
+- Assignment Store: `assignment:{appId}:{idType}:{targetingKeyHash}` (per-Entity read key; `appId`
+  first for tenant isolation; one read returns all of the Entity's holdovers. The hash is defined in
+  [privacy-data-lifecycle.md](./privacy-data-lifecycle.md); see
   [assignment-store-substrate.md](./assignment-store-substrate.md))
 - Session cache: `session:{sessionToken}` (global; carries `{ userId, appMemberships }`)
 - API Key cache: `apikey:{keyHash}` (global; carries `{ appId, environmentId, scopes, revoked }`;
@@ -115,3 +116,4 @@ The Drizzle repository seam is the one-seam migration boundary for this change.
 
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [privacy-data-lifecycle.md](./privacy-data-lifecycle.md)

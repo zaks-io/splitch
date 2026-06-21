@@ -14,7 +14,7 @@ The two can momentarily disagree (the DO write guesses first-touch; the batch de
 ## DO key structure
 
 ```
-key = (experiment_id, id_type, targeting_key)
+key = (experiment_id, id_type, targeting_key_hash)
 ```
 
 - `id_type` is sourced from the Run config in KV (not from the client) — see [edge-ingest-contract.md](./edge-ingest-contract.md).
@@ -81,7 +81,7 @@ necessarily the same POP).
 
 ## Holdover retention policy
 
-The DO stores one `(run_id, variant)` per `(experiment_id, id_type, targeting_key)` key — always the most recent Run's assignment. Prior Run assignments are overwritten when the Entity first-touches a new Run.
+The DO stores one `(run_id, variant)` per `(experiment_id, id_type, targeting_key_hash)` key — always the most recent Run's assignment. Prior Run assignments are overwritten when the Entity first-touches a new Run.
 
 The KV entry follows the same overwrite semantics (the DO's write-through always writes the current `(run_id, variant)`).
 

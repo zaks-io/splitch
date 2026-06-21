@@ -8,7 +8,7 @@ The gate is a **binary property on a Run**. When `run.activationMetric` is set, 
 
 ## Inputs
 
-- `exposed`: deduped first-touch output per `(targeting_key, run_id)` with `__multiple__` already excluded (produced by [dedup-query-contract.md](./dedup-query-contract.md))
+- `exposed`: deduped first-touch output per `(targeting_key_hash, run_id)` with `__multiple__` already excluded (produced by [dedup-query-contract.md](./dedup-query-contract.md))
 - `raw_events` rows with `type = 'activation'` (first-class event rows, ADR-0013)
 
 ## Activation JOIN query
@@ -16,27 +16,27 @@ The gate is a **binary property on a Run**. When `run.activationMetric` is set, 
 ```sql
 WITH exposed AS (
   -- deduped first-touch output, __multiple__ excluded
-  SELECT app_id, experiment_id, run_id, id_type, targeting_key, variant, first_exposure_ts
+  SELECT app_id, experiment_id, run_id, id_type, targeting_key_hash, variant, first_exposure_ts
   FROM deduped_exposures          -- or the real-time equivalent; see physical-dedup-pipes.md
   WHERE variant != '__multiple__'
     AND app_id = {app_id: String}
 ),
 activations AS (
   SELECT
-    app_id, experiment_id, run_id, targeting_key,
+    app_id, experiment_id, run_id, targeting_key_hash,
     MIN(activation_ts)          AS activation_ts        -- earliest activation per Entity per Run
   FROM raw_events
   WHERE type = 'activation'
     AND (counterfactual = false OR {include_counterfactual: Bool} = true)
     AND app_id = {app_id: String}
-  GROUP BY app_id, experiment_id, run_id, targeting_key
+  GROUP BY app_id, experiment_id, run_id, targeting_key_hash
 )
 SELECT
   e.app_id,
   e.experiment_id,
   e.run_id,
   e.id_type,
-  e.targeting_key,
+  e.targeting_key_hash,
   e.variant,
   e.first_exposure_ts,
   a.activation_ts,
@@ -46,7 +46,7 @@ INNER JOIN activations a
   ON  a.app_id        = e.app_id
   AND a.experiment_id = e.experiment_id
   AND a.run_id        = e.run_id
-  AND a.targeting_key = e.targeting_key
+  AND a.targeting_key_hash = e.targeting_key_hash
   AND a.activation_ts > e.first_exposure_ts             -- ordering invariant: activation follows exposure
 -- INNER JOIN drops un-activated Entities from the gated population
 ```
@@ -75,7 +75,7 @@ Both guardrails are computed from the exposed + activated populations together:
 SELECT
   run_id,
   variant,
-  COUNT(DISTINCT targeting_key)   AS activated_count
+  COUNT(DISTINCT targeting_key_hash)   AS activated_count
 FROM <gate_output>               -- the INNER JOIN result above
 GROUP BY run_id, variant
 ```
@@ -90,12 +90,12 @@ Compare `activated_count` per Variant against the Run's `declared_allocation` us
 SELECT
   run_id,
   e.variant,
-  COUNT(DISTINCT a.targeting_key)              AS activated,
-  COUNT(DISTINCT e.targeting_key)              AS exposed,
+  COUNT(DISTINCT a.targeting_key_hash)              AS activated,
+  COUNT(DISTINCT e.targeting_key_hash)              AS exposed,
   activated / exposed                          AS activation_rate
 FROM exposed e
 LEFT JOIN activations a
-  ON  a.targeting_key = e.targeting_key
+  ON  a.targeting_key_hash = e.targeting_key_hash
   AND a.run_id        = e.run_id
   AND a.activation_ts > e.first_exposure_ts
 GROUP BY run_id, e.variant
@@ -125,7 +125,7 @@ In v1, `counterfactual = false` on all activation rows. When the SDK-side counte
 ## Output shape (per-Entity gated population)
 
 ```
-{ app_id, experiment_id, run_id, id_type, targeting_key, variant, first_exposure_ts, activation_ts, window_anchor }
+{ app_id, experiment_id, run_id, id_type, targeting_key_hash, variant, first_exposure_ts, activation_ts, window_anchor }
 ```
 
 This is handed to the stats engine for Metric aggregation. The stats engine uses `window_anchor` as the Conversion Window start.

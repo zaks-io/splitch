@@ -64,7 +64,7 @@ scale to millions of events. Two planes:
 |------|-------------|-------------------|
 | [domain-model/](./domain-model/) | the entity model, the Assignment/Exposure/Run spine, the edit taxonomy, holdover semantics | the **conceptual** model + entity field tables |
 | [contracts/](./contracts/) | Zod-first contract spine, leaf schemas, request/response envelopes, storage schemas, error model, validation policy | the **canonical shapes** every other area links to |
-| [platform/](./platform/) | storage map, config store, multi-tenant isolation, the DO substrates, live-update DO, monorepo/toolchain, cron | **where data lives** + the physical substrates |
+| [platform/](./platform/) | storage map, config store, privacy lifecycle, multi-tenant isolation, the DO substrates, live-update DO, monorepo/toolchain, cron | **where data lives** + the physical substrates |
 | [evaluation/](./evaluation/) | `assign()`, Provider port, Assignment Store port, evaluate-path orchestration, holdover/replay, exposure firing, dry-run | the **hot path** behavior + its ports |
 | [pipeline/](./pipeline/) | edge ingest, exposure/activation event schema, first-touch dedup query, activation gate query, holdover write, physical Tinybird layer | the **Exposure pipeline** + event row schemas |
 | [stats/](./stats/) | the one CI object, variance + delta method, sequential aCS, CUPED/winsorization, SRM, FDR, dimension slicing, result shapes | the **statistics engine** |
@@ -86,6 +86,8 @@ Some topics are touched by more than one area, each from its own angle. The cano
 - **Two keys (first-touch identity vs wire `dedup_key`)** → defined once in
   [`pipeline/exposure-event-contract.md`](./pipeline/exposure-event-contract.md).
 - **Test-evaluation (dry-run)** → control-plane operation: [`evaluation/test-evaluation-endpoint.md`](./evaluation/test-evaluation-endpoint.md) + [`sdk/test-evaluation-endpoint.md`](./sdk/test-evaluation-endpoint.md) (verify step). Reads the same KV-backed config the data plane reads.
+- **Privacy lifecycle / deletion / export** → [`platform/privacy-data-lifecycle.md`](./platform/privacy-data-lifecycle.md)
+  is the source of truth. Narrow storage and endpoint specs link there instead of redefining lifecycle rules.
 
 ## Next phase
 

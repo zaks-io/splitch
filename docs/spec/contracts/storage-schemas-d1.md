@@ -1,7 +1,8 @@
 # Storage schemas: D1 identity and flag tables
 
-D1 column shapes for the identity and flag-side tables (Drizzle-migrated; structurally trusted, not
-Zod-re-parsed). Experiment-side tables are in [storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md).
+D1 column shapes for identity references and flag-side tables (Drizzle-migrated; structurally trusted,
+not Zod-re-parsed). Experiment-side tables are in
+[storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md).
 
 Storage shapes carry internals (timestamps, audit, immutability markers) that wire shapes must not
 expose. D1 columns are trusted without re-parsing. (ADR-0025 "reuse at the leaf, not the envelope".)
@@ -10,9 +11,10 @@ expose. D1 columns are trusted without re-parsing. (ADR-0025 "reuse at the leaf,
 
 ## D1 tables (Drizzle-migrated; structurally trusted, not Zod-re-parsed)
 
-All tables include `created_at` and `updated_at` (timestamp with time zone).
-All tables use `app_id` as a mandatory, first-filtered column in every data-access query.
-No table has RLS — app_id scoping is enforced by the Worker data-access layer (ADR-0018).
+All mutable tables include `created_at` and `updated_at` where applicable (timestamp with time zone).
+Tenant-scoped tables use `app_id` as a mandatory, first-filtered column in every data-access query.
+Org-scoped tables use `org_id`. No table has RLS; scoping is enforced by the Worker data-access layer
+(ADR-0018).
 
 ### `organizations`
 
@@ -24,15 +26,35 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 | `created_at` | timestamptz | not null |
 | `updated_at` | timestamptz | not null |
 
-### `users`
+### No `users` profile table
+
+WorkOS owns User profile data, including email and display name. D1 stores WorkOS user IDs in
+membership, privacy, and audit references only. Do not add a D1 table that duplicates email/profile
+PII unless a new ADR replaces this lifecycle contract.
+
+### `org_memberships`
 
 | Column | Type | Constraints |
 |---|---|---|
-| `id` | text | PK (WorkOS user ID) |
-| `email` | text | not null, unique |
-| `organization_id` | text | FK → organizations |
+| `org_id` | text | FK → organizations, not null |
+| `user_id` | text | WorkOS user ID, not null |
 | `role` | text | not null |
 | `created_at` | timestamptz | not null |
+
+Composite PK: `(org_id, user_id)`.
+
+### `app_memberships`
+
+| Column | Type | Constraints |
+|---|---|---|
+| `app_id` | text | FK → apps, not null |
+| `user_id` | text | WorkOS user ID, not null |
+| `role` | text | not null |
+| `created_at` | timestamptz | not null |
+
+Composite PK: `(app_id, user_id)`.
+
+Privacy request tables live in [storage-schemas-d1-privacy.md](./storage-schemas-d1-privacy.md).
 
 ### `apps`
 
@@ -45,7 +67,7 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 | `description` | text | nullable |
 | `created_at` | timestamptz | not null |
 | `updated_at` | timestamptz | not null |
-| `created_by` | text | FK → users |
+| `created_by` | text | WorkOS user ID or deleted-user tombstone |
 
 ### `environments`
 
@@ -60,7 +82,7 @@ and Flag CONFIGURATION are scoped to one Environment.
 | `name` | text | not null |
 | `created_at` | timestamptz | not null |
 | `updated_at` | timestamptz | not null |
-| `created_by` | text | FK → users |
+| `created_by` | text | WorkOS user ID or deleted-user tombstone |
 
 ### `flags` (DEFINITION — App-level)
 
@@ -78,8 +100,8 @@ CONFIGURATION (enabled state, available Variant subset, targeting, rollout) live
 | `default_variant_id` | text | FK → variants |
 | `created_at` | timestamptz | not null |
 | `updated_at` | timestamptz | not null |
-| `created_by` | text | FK → users |
-| `updated_by` | text | FK → users |
+| `created_by` | text | WorkOS user ID or deleted-user tombstone |
+| `updated_by` | text | WorkOS user ID or deleted-user tombstone |
 | `version` | integer | not null, default 1; optimistic-lock counter |
 
 ### `flag_configs` (CONFIGURATION — per-Environment)
@@ -146,3 +168,4 @@ per-Environment `targeting_rules` rows (`environment_id` co-scoped).
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

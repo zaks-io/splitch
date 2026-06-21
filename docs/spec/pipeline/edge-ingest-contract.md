@@ -40,10 +40,11 @@ the Evaluation Worker knew about. This is accepted and self-healing.
 ## `id_type` sourcing
 
 `id_type` is read from the **Run config** in KV, not from the client. The Evaluation Worker injects
-it. This ensures the Assignment Store DO key `(experiment_id, id_type, targeting_key)` is always
-consistent with the Experiment's declared Entity type. If an SDK sends a `targeting_key` of the
-wrong type (e.g., workspace ID when the Run declares `id_type = 'user'`), it is a client
-integration error; the Evaluation Worker stamps the correct `id_type` from config regardless.
+it. This ensures the Assignment Store DO key `(experiment_id, id_type, targeting_key_hash)` is always
+consistent with the Experiment's declared Entity type. If an SDK sends a Targeting Key value of the
+wrong type (e.g., workspace ID when the Run declares `id_type = 'user'`), it is a client integration
+error; the Evaluation Worker still stamps the configured `id_type` and derives `targeting_key_hash`
+server-side.
 
 ## `app_id` injection
 
@@ -55,12 +56,12 @@ or API Key binding). Never sourced from the client payload. This is the data-iso
 
 Multiple POPs may fire an Exposure for the same Entity in the same Run within a short window (e.g., CDN routing change). This produces multiple `raw_events` rows with different `source_id` values and potentially slightly different `server_ts` values. The dedup query picks `MIN(server_ts)` — the earliest server-received-at row wins as first-touch. The DO's `putIfAbsent` is called by whichever POP fires the Exposure, and the first DO writer wins (ADR-0009).
 
-**Note on experience/analysis divergence:** The DO first-touch winner (experience) and the dedup query first-touch winner (analysis) may not be the same POP if their `server_ts` values differ by milliseconds. This is accepted — the divergence is cosmetic and self-healing, bounded to the ~60s KV propagation window. Variant assignment is deterministic, so any two POPs assign the same Variant to the same `(run_id, targeting_key)` pair (ADR-0001).
+**Note on experience/analysis divergence:** The DO first-touch winner (experience) and the dedup query first-touch winner (analysis) may not be the same POP if their `server_ts` values differ by milliseconds. This is accepted — the divergence is cosmetic and self-healing, bounded to the ~60s KV propagation window. Variant assignment is deterministic, so any two POPs assign the same Variant to the same `(run_id, Targeting Key)` pair (ADR-0001).
 
 ## Holdover write trigger
 
 On apparent first-touch (the Evaluation Worker has no KV entry for this
-`(experiment_id, id_type, targeting_key)`), the Evaluation Worker MUST call `DO.putIfAbsent` for the
+`(experiment_id, id_type, targeting_key_hash)`), the Evaluation Worker MUST call `DO.putIfAbsent` for the
 Assignment Store (ADR-0009). The sequencing:
 
 1. Evaluate the flag → produce `(run_id, variant)` from `assign()` or KV replay.

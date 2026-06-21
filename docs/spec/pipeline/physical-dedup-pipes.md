@@ -11,7 +11,7 @@ COPY_SCHEDULE: @hourly              -- freshness/cost dial; not a correctness di
 
 SOURCE QUERY (the canonical dedup definition):
   SELECT
-    app_id, experiment_id, run_id, id_type, targeting_key,
+    app_id, experiment_id, run_id, id_type, targeting_key_hash,
     MIN(server_ts)                                        AS first_exposure_ts,
     CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
          ELSE MAX(variant) END                           AS variant,
@@ -20,7 +20,7 @@ SOURCE QUERY (the canonical dedup definition):
   FROM raw_events
   WHERE type = 'exposure'
     AND ingest_ts <= {copy_watermark_ts: DateTime64(3)}
-  GROUP BY app_id, experiment_id, run_id, id_type, targeting_key
+  GROUP BY app_id, experiment_id, run_id, id_type, targeting_key_hash
 
 TARGET: deduped_exposures
 ```
@@ -40,25 +40,25 @@ old `server_ts` from falling between the snapshot and the tail.
 pipe: serve_deduped_exposures
 
 NODE snapshot_layer:
-  SELECT app_id, experiment_id, run_id, id_type, targeting_key, variant, first_exposure_ts
+  SELECT app_id, experiment_id, run_id, id_type, targeting_key_hash, variant, first_exposure_ts
   FROM deduped_exposures
 
 NODE tail_layer:
   -- dedup query applied only to raw rows since the last snapshot
   SELECT
-    app_id, experiment_id, run_id, id_type, targeting_key,
+    app_id, experiment_id, run_id, id_type, targeting_key_hash,
     MIN(server_ts)                                        AS first_exposure_ts,
     CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
          ELSE MAX(variant) END                           AS variant
   FROM raw_events
   WHERE type = 'exposure'
     AND ingest_ts > (SELECT MAX(watermark_ts) FROM deduped_exposures)
-  GROUP BY app_id, experiment_id, run_id, id_type, targeting_key
+  GROUP BY app_id, experiment_id, run_id, id_type, targeting_key_hash
 
 NODE union_and_final_dedup:
   -- UNION ALL, then re-dedup to handle rows straddling the snapshot boundary
   SELECT
-    app_id, experiment_id, run_id, id_type, targeting_key,
+    app_id, experiment_id, run_id, id_type, targeting_key_hash,
     MIN(first_exposure_ts)                                AS first_exposure_ts,
     CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
          ELSE MAX(variant) END                           AS variant
@@ -67,7 +67,7 @@ NODE union_and_final_dedup:
     UNION ALL
     SELECT * FROM tail_layer
   )
-  GROUP BY app_id, experiment_id, run_id, id_type, targeting_key
+  GROUP BY app_id, experiment_id, run_id, id_type, targeting_key_hash
 ```
 
 The tail uses `ingest_ts`, not `server_ts`, so events that arrive after the snapshot ran but

@@ -25,7 +25,9 @@ interface HoldoverRecord {
 
 ## Key shape
 
-`(appId, experimentId, idType, targetingKey)` — four components, all required.
+Logical key: `(appId, experimentId, idType, targetingKey)` — four components, all required.
+Physical key: `(appId, experimentId, idType, targetingKeyHash)`, derived inside the substrate before
+touching KV or Durable Objects. Callers never pass the hash.
 
 | Component | Type | Why load-bearing |
 |---|---|---|
@@ -64,7 +66,7 @@ Object is touched on the read path.
 fires Exposure; the pipeline calls `put()` at first-touch. On the evaluate path, `put()`
 is never called directly.
 
-Substrate: one Durable Object per `(appId, experimentId, idType, targetingKey)`. The DO's
+Substrate: one Durable Object per `(appId, experimentId, idType, targetingKeyHash)`. The DO's
 `get-then-put-if-absent` is atomic (single-threaded, globally unique per key), so two
 concurrent POPs cannot both win first-touch. On commit, the DO write-throughs to KV.
 
@@ -92,7 +94,7 @@ These are evaluate-path concerns (see [evaluate-path-orchestration.md](./evaluat
 
 ## Seam boundary
 
-**What's on this side (Assignment Store):** durable `(appId, idType, targetingKey)` → `(runId, variant)` memory. Get/put.
+**What's on this side (Assignment Store):** logical `(appId, idType, targetingKey)` → `(runId, variant)` memory, stored physically by `targetingKeyHash`. Get/put.
 
 **What's on the other side (evaluate path):** holdover predicate, replay decision, Exposure firing, first-touch write timing.
 
@@ -105,4 +107,5 @@ never baked into the resolver. Seam is real.
 - [../../adr/0007-assignment-store-is-a-sibling-seam-not-behind-the-provider.md](../../adr/0007-assignment-store-is-a-sibling-seam-not-behind-the-provider.md)
 - [../../adr/0008-assignment-store-is-dumb-storage-policy-on-the-evaluate-path.md](../../adr/0008-assignment-store-is-dumb-storage-policy-on-the-evaluate-path.md)
 - [../../adr/0009-assignment-store-substrate-kv-read-do-write.md](../../adr/0009-assignment-store-substrate-kv-read-do-write.md)
+- [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)
 - [../../architecture/assignment-store-seam.md](../../architecture/assignment-store-seam.md) (interface, load model)

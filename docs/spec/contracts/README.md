@@ -18,7 +18,8 @@ codes. The spine: one Zod schema per glossary noun, everything else derived from
 | [request-response-envelopes-experiment-run.md](./request-response-envelopes-experiment-run.md) | Wire shapes for Experiment and Experiment Run endpoints: edit taxonomy, Start, Run immutability guards |
 | [request-response-envelopes-org-app-credentials.md](./request-response-envelopes-org-app-credentials.md) | Wire shapes for Metric, App/Org, and SDK Credential endpoints; once-only credential surfacing |
 | [storage-schemas-kv.md](./storage-schemas-kv.md) | KV namespace key patterns + value schemas (Zod-parsed) and the per-Entity Assignment Store KV read model |
-| [storage-schemas-d1.md](./storage-schemas-d1.md) | D1 identity and flag-side table columns: organizations, users, apps, flags, variants, targeting_rules, segments |
+| [storage-schemas-d1.md](./storage-schemas-d1.md) | D1 identity and flag-side table columns: organizations, memberships, apps, flags, variants, targeting_rules, segments |
+| [storage-schemas-d1-privacy.md](./storage-schemas-d1-privacy.md) | D1 privacy request and Entity deletion tombstone tables |
 | [storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md) | D1 experiment-side table columns: experiments, runs, metrics, sdk_credentials |
 | [storage-schemas-tinybird.md](./storage-schemas-tinybird.md) | Tinybird datasource schemas: exposures (raw log) and audit_log |
 | [validation-policy.md](./validation-policy.md) | Which layer validates (Worker always, KV always, D1 trusts), invariants enforced in the Worker, Start atomicity contract |

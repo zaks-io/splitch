@@ -70,6 +70,10 @@ A pattern of these (elevated rate in Axiom) signals a degraded read API; individ
 The **Targeting Key** and **Evaluation Context** attributes carry customer end-user PII (user IDs,
 email, custom attributes). These MUST be scrubbed from Sentry payloads before transmission.
 
+This rule applies to every surface that can emit Sentry/Axiom data: frontend boundaries, Control Plane
+API Worker, Evaluation Worker, Event Ingest Worker, Analysis Worker, MCP Worker, CLI, SDK test
+harnesses, and background jobs. Frontend-only scrubbing is a spec bug.
+
 ### Fields to scrub (exact paths in Sentry event payload)
 
 Any Sentry event `extra`, `context`, or stringified data matching these patterns must be redacted:
@@ -111,13 +115,15 @@ can break schema validation in Sentry ingest). The function must recurse through
 
 Axiom receives structured log events (request traces, query patterns, error counts). Rules:
 
-- No raw Targeting Key or Evaluation Context attribute values in log fields
+- No raw Targeting Key, `targeting_key_hash`, or Evaluation Context attribute values in log fields
 - `app_id` is always included for filtering; it is not PII
 - Query patterns logged by Tinybird-proxy endpoints include `app_id` and query duration; no raw
   SQL or result data
 
 ## Sources
 
+- [ADR-0032](../../adr/0032-privacy-data-lifecycle-is-an-enforced-product-contract.md)
 - [ADR-0018](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [ADR-0020](../../adr/0020-tanstack-start-for-both-control-panel-and-marketing-shared-component-layer.md)
 - [frontend-architecture.md](../../architecture/frontend-architecture.md)
+- [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

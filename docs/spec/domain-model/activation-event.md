@@ -18,7 +18,7 @@ Activation is its own row type on the same append-only Exposure log (ADR-0010, A
 | `environment_id` | `string` | ✓ | Environment scope; Exposures/activations are per-Environment (ADR-0027) |
 | `experiment_id` | `string` | ✓ | Owning Experiment |
 | `run_id` | `string` | ✓ | Experiment Run at activation time |
-| `targeting_key` | `string` | ✓ | The Entity identifier |
+| `targeting_key_hash` | `string` | ✓ | HMAC-derived Entity identifier |
 | `id_type` | `string` | ✓ | Entity type; always explicit |
 | `server_ts` | `timestamp` | ✓ | Server-received-at |
 | `type` | `"activation"` | ✓ | Discriminator |
@@ -51,18 +51,18 @@ The anchor for **CUPED pre-period** stays fixed at `first_exposure_ts` even when
 
 ```
 activated_entities = (
-  SELECT e.targeting_key, e.id_type, e.run_id,
+  SELECT e.targeting_key_hash, e.id_type, e.run_id,
          MIN(e.server_ts) AS first_exposure_ts,
          MIN(a.server_ts) AS activation_ts
   FROM   deduped_exposures e
   JOIN   raw_exposures a
     ON   a.experiment_id = e.experiment_id
     AND  a.run_id = e.run_id
-    AND  a.targeting_key = e.targeting_key
+    AND  a.targeting_key_hash = e.targeting_key_hash
     AND  a.id_type = e.id_type
     AND  a.type = 'activation'
     AND  a.server_ts > e.first_exposure_ts  -- ordering constraint
-  GROUP BY e.targeting_key, e.id_type, e.run_id
+  GROUP BY e.targeting_key_hash, e.id_type, e.run_id
 )
 ```
 

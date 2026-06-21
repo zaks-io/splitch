@@ -14,6 +14,8 @@ D1 holds bounded mutable relational state. Not on the per-request hot path — h
 | `apps`               | App records                                                              |
 | `org_memberships`    | Org-level user roles                                                     |
 | `app_memberships`    | App-level user roles                                                     |
+| `privacy_requests`   | Bounded privacy request ledger (IDs/hashes only; no raw Targeting Keys)  |
+| `entity_deletions`   | Entity deletion tombstones for immediate analysis exclusion              |
 | `trusted_idps`       | Trusted IdP allow-list for ID-JAG validation                             |
 | `client_keys`        | Client Key records (public key material + revocation; per `(app_id, environment_id)`) |
 | `api_keys`           | API Key records (hash only; secret never stored; per `(app_id, environment_id)`) |
@@ -89,6 +91,11 @@ Audit events for the control plane are append-only and unbounded → Tinybird, n
 
 **What is audited:** who / what / when / which door, for every control-plane mutation.
 
+Audit is a legal/security record, not product analytics. User deletion does not remove the fact that
+a control-plane mutation happened; read surfaces show a deleted-user tombstone where required. The
+privacy request ledger is retained for at least 24 months or the contracted audit period, whichever
+is longer. See [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md).
+
 **Audit event shape (row):**
 ```
 {
@@ -119,3 +126,4 @@ The Analysis Worker is the single enforcement point for Tinybird read isolation.
 - [../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md](../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md](../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md)
+- [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

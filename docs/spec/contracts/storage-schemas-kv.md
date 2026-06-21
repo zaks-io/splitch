@@ -88,8 +88,9 @@ control plane. Edge evaluate path reads it from `ExperimentConfigKV` (see below)
 
 Not a D1 table. The per-key Durable Object is the serialized writer; KV is the read replica.
 
-KV key pattern: `assignment:{appId}:{idType}:{targetingKey}` — per-Entity, NO `experimentId`. One read
-returns all experiments' holdovers for the Entity.
+KV key pattern: `assignment:{appId}:{idType}:{targetingKeyHash}` — per-Entity, NO `experimentId`.
+One read returns all experiments' holdovers for the Entity. `targetingKeyHash` is derived by the
+Assignment Store substrate from the raw Targeting Key; the raw value is never placed in KV.
 
 KV value (Zod-parsed on every read):
 
@@ -100,9 +101,9 @@ AssignmentStoreValue = Map<experimentId, {
 }>
 ```
 
-The per-key Durable Object writer is keyed per `(appId, experimentId, idType, targetingKey)` and merges
-its record into the Entity-keyed KV map under its `experimentId`. Read granularity (per-Entity) and write
-granularity (per-Experiment) differ by design (ADR-0008/0009).
+The per-key Durable Object writer is keyed per `(appId, experimentId, idType, targetingKeyHash)` and
+merges its record into the Entity-keyed KV map under its `experimentId`. Read granularity
+(per-Entity) and write granularity (per-Experiment) differ by design (ADR-0008/0009).
 
 Written at first-touch Exposure (NOT at assignment time). `runId` is stamped from the live Run at
 fire-time, so holdovers keep their original Run attribution across Run boundaries.
@@ -116,3 +117,4 @@ and recomputes the same Variant.
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0009-assignment-store-substrate-kv-read-do-write.md](../../adr/0009-assignment-store-substrate-kv-read-do-write.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

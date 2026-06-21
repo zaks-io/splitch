@@ -26,7 +26,10 @@ that equals a `user` id). Mirrors Statsig's `<userId>:<idType>` keying.
 
 ### `getAll` → Workers KV only
 
-- KV key: `assignment:{appId}:{idType}:{targetingKey}` — the per-Entity read key (no
+The substrate derives `targetingKeyHash` using the privacy lifecycle HMAC before constructing any
+physical key. The raw Targeting Key never appears in KV key names or DO names.
+
+- KV key: `assignment:{appId}:{idType}:{targetingKeyHash}` — the per-Entity read key (no
   `experimentId`), so one `getAll` returns every Experiment's holdover for this Entity in a
   single round-trip
 - Value: `Map<experimentId, { runId, variant, schemaVersion }>` (Zod-validated on read; see
@@ -37,7 +40,7 @@ that equals a `user` id). Mirrors Statsig's `<userId>:<idType>` keying.
 
 ### `put` → per-key Durable Object
 
-- DO name: `{experimentId}:{idType}:{targetingKey}` (via `idFromName`)
+- DO name: `{experimentId}:{idType}:{targetingKeyHash}` (via `idFromName`)
 - One DO per key: single-threaded, globally-unique instance; eliminates write-race
 - Atomic `get → check absent → put`: the DO's input gate ensures no intervening non-storage I/O
   between get and put (use `blockConcurrencyWhile` or keep the storage access synchronous)
@@ -97,6 +100,8 @@ an edge case (ADR-0009).
 
 Holdovers for ended Runs are retained in the DO and KV until the Experiment is archived or deleted.
 A hard delete of the Experiment triggers a cleanup of all DO state and KV keys for that Experiment.
+An Entity deletion request deletes the matching Entity read key and writer row immediately after the
+`entity_deletions` tombstone is committed.
 
 ## Sources
 
@@ -104,3 +109,4 @@ A hard delete of the Experiment triggers a cleanup of all DO state and KV keys f
 - [../../adr/0001-assignment-is-pure-not-an-event.md](../../adr/0001-assignment-is-pure-not-an-event.md)
 - [../../adr/0006-run-boundary-sticky-experience-counted-in-old-run.md](../../adr/0006-run-boundary-sticky-experience-counted-in-old-run.md)
 - [../../architecture/assignment-store-seam.md](../../architecture/assignment-store-seam.md)
+- [privacy-data-lifecycle.md](./privacy-data-lifecycle.md)

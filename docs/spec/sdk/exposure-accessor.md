@@ -83,7 +83,7 @@ This table is a cross-reference only; do not duplicate the authoritative definit
 | `environment_id` | string | from the SDK key's Environment (co-scoped with `app_id`, ADR-0027) |
 | `experiment_id` | string | resolved from Flag's controlling Experiment |
 | `run_id` | string | live Run at evaluation time (stamped at server-received time) |
-| `targeting_key` | string | from request |
+| `targeting_key_hash` | string | derived server-side from request Targeting Key |
 | `id_type` | string | from request |
 | `variant` | string | Variant name (not value) — immutable experimental arm label |
 | `source_id` | string | edge POP identifier |
@@ -98,7 +98,7 @@ the Variant value is not logged (it is flag config, not event data).
 
 ## First-touch identity
 
-The pipeline's first-touch identity is the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`
+The pipeline's first-touch identity is the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`
 (`environment_id` co-scoped with `app_id`; Exposures are per-Environment, ADR-0027),
 resolved by `MIN(server_ts)` at query time. Multiple raw Exposures for the same Entity/Run share this
 identity; the earliest `server_ts` is the authoritative first-touch row. The tuple deliberately excludes

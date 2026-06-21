@@ -48,7 +48,7 @@ at most a duplicate raw Exposure (the pipeline dedup collapses it).
 Each POP maintains its own per-instance seen-set (see [seen-set.md](./seen-set.md)). The
 same Entity evaluated at two POPs in the same request window will fire two raw Exposures
 (the respective seen-sets have no shared state). The pipeline dedup (`MIN(server_ts)` per
-`(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`) collapses them to first-touch.
+`(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`) collapses them to first-touch.
 This is the documented design (ADR-0005): cross-POP seen-sets cannot be the authority.
 
 ### No global ordering required

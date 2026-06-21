@@ -25,7 +25,7 @@ The **only event recorded on this seam.**
 | `environment_id` | `string` | ✓ | Environment scope; Exposures are per-Environment (injected at ingest, not from SDK) (ADR-0027) |
 | `experiment_id` | `string` | ✓ | Experiment identifier |
 | `run_id` | `string` | ✓ | Experiment Run that owns this Exposure; stamped at SDK fire-time from the live Run config the SDK holds |
-| `targeting_key` | `string` | ✓ | The Entity identifier |
+| `targeting_key_hash` | `string` | ✓ | HMAC-derived Entity identifier |
 | `id_type` | `string` | ✓ | Entity type (e.g. `"user"`, `"workspace"`); always explicit, never derived |
 | `variant` | `string` | ✓ | Variant **name** assigned; never the value |
 | `server_ts` | `timestamp` | ✓ | Server-received-at; canonical for `MIN(ts)` first-touch ordering (no client clock skew) |
@@ -39,7 +39,7 @@ The **only event recorded on this seam.**
 
 ### First-touch identity
 
-`(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`
+`(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`
 
 This is the first-touch identity, resolved by `MIN(server_ts)` at query time. (`environment_id` co-scopes alongside `app_id` since Exposures are per-Environment, ADR-0027.) Many raw Exposures for the same Entity/Run share it; the earliest `server_ts` wins. Variant is **excluded** so that different-Variant Exposures for the same Entity/Run are not suppressed; they arrive at the `__multiple__` quarantine query downstream (see [exposure-dedup.md](./exposure-dedup.md)). This is distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key for at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
 

@@ -11,7 +11,7 @@ audit_log datasources are unbounded append-only workloads. (ADR-0025 "reuse at t
 
 ### `raw_events` (raw log)
 
-Primary engine sorting key: `(app_id, environment_id, experiment_id, run_id, server_received_at, targeting_key)` —
+Primary engine sorting key: `(app_id, environment_id, experiment_id, run_id, server_received_at, targeting_key_hash)` —
 `app_id` first for multi-tenant isolation; `environment_id` co-scoped (ADR-0027); `run_id` for first-touch grouping within a Run.
 
 | Column | Type | Notes |
@@ -22,7 +22,7 @@ Primary engine sorting key: `(app_id, environment_id, experiment_id, run_id, ser
 | `experiment_id` | String | — |
 | `run_id` | String | Stamped at SDK fire-time from the resolved live Run |
 | `id_type` | String | Entity type; part of Assignment Store key |
-| `targeting_key` | String | Entity identifier |
+| `targeting_key_hash` | String | HMAC-derived Entity identifier; raw Targeting Key is not persisted |
 | `variant` | Nullable(String) | Variant name (not id) on Exposure rows; NULL on Activation rows |
 | `type` | LowCardinality(String) | `'exposure'` or `'activation'` |
 | `event_id` | String | Retry-stable physical raw-row id |
@@ -34,7 +34,7 @@ Primary engine sorting key: `(app_id, environment_id, experiment_id, run_id, ser
 | `activation_ts` | Nullable(DateTime) | Activation timestamp; equals `server_received_at` in v1 |
 | `is_holdover` | UInt8 | Exposure rows only; 0 on Activation rows |
 
-First-touch identity (query-time): the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`
+First-touch identity (query-time): the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`
 resolved by `MIN(server_received_at)` — the earliest determines the first-touch winner. This is
 distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key). Wire
 `dedup_key` construction lives in [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
@@ -57,10 +57,12 @@ no schema change. (ADR-0013.)
 | `changes` | String | JSON; before/after snapshot or description |
 | `timestamp` | DateTime | Event time |
 
-Not in D1 — unbounded, append-only workload fits Tinybird (ADR-0018).
+Not in D1 — unbounded, append-only workload fits Tinybird (ADR-0018). Audit reads must apply the
+deleted-user tombstone rules in [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md).
 
 ## Sources
 
+- [../../adr/0032-privacy-data-lifecycle-is-an-enforced-product-contract.md](../../adr/0032-privacy-data-lifecycle-is-an-enforced-product-contract.md)
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md](../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md)
@@ -69,3 +71,4 @@ Not in D1 — unbounded, append-only workload fits Tinybird (ADR-0018).
 - [../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md)
 - [../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md](../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

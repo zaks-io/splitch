@@ -20,6 +20,7 @@ Auth: Org `owner`.
 ### `GET /orgs/{org_id}/members`
 Returns: `{ items: [{ user_id, email, role, created_at }], total, limit, offset }`
 Auth: Org `owner` or `admin`.
+`email` is resolved from WorkOS at read time or from the session identity cache; it is not stored in D1.
 
 ### `POST /orgs/{org_id}/members`
 Body: `{ user_id: string, role: "owner" | "admin" | "member" }`
@@ -56,6 +57,8 @@ Auth: App `owner` or `admin`.
 ### `DELETE /apps/{app_id}`
 Blocked if any Experiment has `status = running` in any Environment. Returns `EXPERIMENT_RUNNING`.
 Auth: App `owner`.
+Account-closure privacy deletion is the only exception; see
+[endpoints-privacy-data.md](endpoints-privacy-data.md).
 
 ## Environment endpoints (App-level resource; ADR-0027)
 
@@ -93,3 +96,4 @@ Auth: App `owner`.
 - [../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md)
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
+- [endpoints-privacy-data.md](endpoints-privacy-data.md)

@@ -48,18 +48,22 @@ ErrorCode =
   | 'USER_NOT_FOUND'
   | 'CREDENTIAL_NOT_FOUND'
   | 'SEGMENT_NOT_FOUND'
+  | 'PRIVACY_JOB_NOT_FOUND'
 
   // Auth / authz
   | 'UNAUTHORIZED'                // no valid credential
   | 'CREDENTIAL_REVOKED'          // presented credential is revoked
   | 'INSUFFICIENT_SCOPES'         // credential valid but lacks required scopes
   | 'FORBIDDEN'                   // authenticated but not authorized for the resource
+  | 'LAST_OWNER_REQUIRED'         // deletion would leave a shared Org without an owner
+  | 'PRIVACY_CONFIRMATION_REQUIRED' // destructive privacy job lacks confirmation
 
   // Analysis-state signals
   | 'MULTIPLE_VARIANT_CONFLICT'   // Entity bucketed to __multiple__; results untrusted
 
   // System
   | 'RATE_LIMITED'
+  | 'PRIVACY_JOB_FAILED'
   | 'INTERNAL_SERVER_ERROR'       // includes corrupted KV blob (fail-loud per ADR-0025)
 ```
 
@@ -78,7 +82,10 @@ ErrorCode =
 | `DECISION_LOCKED` | `{ lockedFields: string[], currentRunId: string, attemptedChange: string }` |
 | `TARGETING_KEY_MISMATCH` | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string }` |
 | `INSUFFICIENT_SCOPES` | `{ requiredScopes: string[], heldScopes: string[] }` |
-| `MULTIPLE_VARIANT_CONFLICT` | `{ experimentId: string, runId: string, idType: string, targetingKey: string }` |
+| `LAST_OWNER_REQUIRED` | `{ orgId: string }` |
+| `PRIVACY_CONFIRMATION_REQUIRED` | `{ confirmationRequired: true, confirmationExpiresAt: string }` |
+| `PRIVACY_JOB_FAILED` | `{ requestId: string, failedStores: string[] }` |
+| `MULTIPLE_VARIANT_CONFLICT` | `{ experimentId: string, runId: string, idType: string, targetingKeyHash: string }` |
 | `RATE_LIMITED` | `{ retryAfterMs: number }` |
 | All `*_NOT_FOUND` codes | `{}` |
 | `UNAUTHORIZED` | `{}` |
@@ -152,9 +159,9 @@ frozenFields = [
 | `UNAUTHORIZED` | 401 |
 | `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES` | 403 |
 | `*_NOT_FOUND` | 404 |
-| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `MULTIPLE_VARIANT_CONFLICT` | 409 |
+| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED` | 409 |
 | `RATE_LIMITED` | 429 |
-| `INTERNAL_SERVER_ERROR` | 500 |
+| `PRIVACY_JOB_FAILED`, `INTERNAL_SERVER_ERROR` | 500 |
 
 ## Sources
 
@@ -165,3 +172,4 @@ frozenFields = [
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md](../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

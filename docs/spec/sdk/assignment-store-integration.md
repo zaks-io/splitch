@@ -16,13 +16,14 @@ interface AssignmentStore:
 The SDK only calls `getAll`. The `put` is called by the **Exposure pipeline Worker** after
 confirming first-touch via the per-key Durable Object (ADR-0009). The SDK never writes.
 
-`getAll` is a **per-Entity batch read**: its key is `(appId, idType, targetingKey)` — note it
+`getAll` is a **per-Entity batch read**: its logical key is `(appId, idType, targetingKey)` — note it
 does **not** take `experimentId`. One round-trip returns every Experiment's holdover for this
 Entity as `Map<experimentId, {runId, variantName}>`, so the evaluate path reads holdovers once
 per request, not once per flag. The Map key is an `experimentId` string; the evaluate path
 accesses `held[experimentId]`. (The per-key Durable Object that serializes `put` is keyed by
-the full `(appId, experimentId, idType, targetingKey)` — write granularity differs from read
-granularity, by design: ADR-0008/0009.)
+the full logical `(appId, experimentId, idType, targetingKey)` — write granularity differs from
+read granularity, by design: ADR-0008/0009.) The Assignment Store substrate derives
+`targetingKeyHash` before touching KV or Durable Objects; the SDK never sends the hash.
 
 ## Evaluate-path ordering (no superposition)
 

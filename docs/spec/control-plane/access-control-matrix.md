@@ -79,6 +79,7 @@ only (seeded at deploy; not user-facing in v1).
 - Experiment, Run CRUD and lifecycle operations (Start/end; per-Environment)
 - Segment, Metric CRUD
 - SDK credential (Client Key, API Key) management (per-Environment)
+- Privacy request intake, export jobs, deletion jobs, and Entity tombstones
 - `GET /.well-known/openapi.json` (generated OpenAPI, unauthenticated)
 
 **MCP Worker** owns the remote MCP protocol surface:
@@ -117,3 +118,4 @@ only (seeded at deploy; not user-facing in v1).
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md](../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md)
 - [../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md)
+- [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

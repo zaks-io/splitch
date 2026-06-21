@@ -10,6 +10,7 @@ must not move data between stores without a new ADR.
 | Users, Organizations, Apps, membership, roles | D1 | Relational, bounded, low-write OLTP |
 | SDK credentials (API Key hash/scopes/revoked; Client Key record) | D1 | Relational, per-`(app_id, environment_id)` record (ADR-0027) |
 | Billing (plan, Stripe subscription linkage) | D1 | Relational, bounded |
+| Privacy request ledger and Entity deletion tombstones | D1 | Bounded control-plane workflow state; immediate analysis exclusion |
 | Flag definition (App-level) + Flag Configuration + live Experiment config per Environment (including `liveRunId`) | D1 (authoritative) + KV (read cache) | D1 = truth, KV = edge-local ~10ms reads |
 | Session validity cache | KV | Hot-path per-request, write-through from D1 on revoke |
 | API Key validation cache (hash → `{app_id, environment_id}`/scopes/validity) | KV | Hot-path per-SDK-call; `environment_id` resolves which Env's config to serve (ADR-0027); write-through from D1 on revoke |
@@ -30,6 +31,8 @@ must not move data between stores without a new ADR.
   and silently inflate SRM denominators and metric counts. Rollups build on the deduped snapshot only.
 - **Tinybird is never queried directly by clients or agents.** All analytics reads proxy through a
   control-plane endpoint that injects `app_id` from auth context. See [multi-tenant-isolation.md](./multi-tenant-isolation.md).
+- **Raw Targeting Keys never live in durable Entity stores.** KV keys, DO names, Tinybird rows, and
+  logs use `targeting_key_hash` as defined in [privacy-data-lifecycle.md](./privacy-data-lifecycle.md).
 
 ## No separate config-copy seam
 
@@ -55,3 +58,4 @@ Engine. Written to D1 only as periodic rollups. This is a billing-build detail, 
 - [../../adr/0009-assignment-store-substrate-kv-read-do-write.md](../../adr/0009-assignment-store-substrate-kv-read-do-write.md)
 - [../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md](../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [privacy-data-lifecycle.md](./privacy-data-lifecycle.md)

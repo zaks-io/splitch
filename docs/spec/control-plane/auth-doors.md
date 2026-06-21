@@ -37,7 +37,7 @@ Door C: Device flow┘
 5. Assert `exp` not passed; assert `auth_time` freshness (default: within 5 min)
 6. Assert `email_verified = true` (or `phone_verified = true`)
 7. Check `jti` replay cache (KV key `jti:{jti}`, TTL = exp - now); reject if seen
-8. Resolve WorkOS user by `email`; create if first-seen (persist to D1)
+8. Resolve WorkOS user by `email`; create in WorkOS if first-seen. D1 stores membership references only.
 9. Return: `{ identity_assertion: string, user_id: string }`
 
 **Follow-up exchange at `/oauth2/token`:** presents `identity_assertion`, receives short-lived

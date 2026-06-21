@@ -15,7 +15,7 @@ AssignmentStore.getAll(
   app_id:         string,
   environment_id: string,
   id_type:        string,
-  targeting_key:  string
+  targetingKey:   string
 ) -> Map<experiment_id, { run_id: string; variant: string }>
 ```
 
@@ -25,7 +25,7 @@ Returns all holdovers for this Entity across all Experiments in the Environment 
 AssignmentStore.put(
   experiment_id: string,
   id_type:       string,
-  targeting_key: string,
+  targetingKey:  string,
   run_id:        string,
   variant:       string
 ) -> void
@@ -37,7 +37,11 @@ First-touch write. Called by the Exposure pipeline after the first raw Exposure 
 
 ## Key structure
 
-Key: `(experiment_id, id_type, targeting_key)` — concatenated for storage, e.g. `{experiment_id}:{id_type}:{targeting_key}`. `environment_id` is not part of the key because an Experiment belongs to exactly one Environment (ADR-0027); `experiment_id` already implies it. `getAll` filters to the request's Environment via that binding.
+Logical key: `(experiment_id, id_type, Targeting Key)`.
+Physical key: `(experiment_id, id_type, targeting_key_hash)`, where the hash is derived by the
+Assignment Store substrate before constructing KV keys or DO names. `environment_id` is not part of
+the key because an Experiment belongs to exactly one Environment (ADR-0027); `experiment_id` already
+implies it. `getAll` filters to the request's Environment via that binding.
 
 **Why `id_type` is in the key:** guards against Targeting Key value collision across Entity types. If two Experiments use different `id_type`s, their Targeting Key namespaces may overlap (a userId `"abc"` and a workspaceId `"abc"` are different Entities). `id_type` is always required, never defaulted from Experiment config, even when the Experiment pins one Entity type.
 
@@ -56,7 +60,7 @@ Both fields are load-bearing:
 | `getAll` (hot-path read) | Workers KV | Edge-local (~10ms hot reads), read-heavy; no DO hop on evaluate |
 | `put` (first-touch write) | Durable Object per key, then KV write-through | Single-threaded, globally-unique; atomic get-then-put-if-absent; two POPs cannot both win first-touch |
 
-DO grain: one DO per `(experiment_id, id_type, targeting_key)`. Fine-grained is correct — coarser DOs create a bottleneck; per-key DOs have zero cross-key contention, idle cheaply, and are the Cloudflare-documented pattern. (ADR-0009)
+DO grain: one DO per `(experiment_id, id_type, targeting_key_hash)`. Fine-grained is correct — coarser DOs create a bottleneck; per-key DOs have zero cross-key contention, idle cheaply, and are the Cloudflare-documented pattern. (ADR-0009)
 
 ## DO atomicity rule
 

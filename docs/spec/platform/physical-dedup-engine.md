@@ -28,11 +28,11 @@ is deduped inline).
 
 ```sql
 -- snapshot (Copy Pipe):
-QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, targeting_key, experiment_id, run_id ORDER BY server_ts) = 1
+QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, targeting_key_hash, experiment_id, run_id ORDER BY server_ts) = 1
 
 -- real-time tail (inline dedup on fresh rows):
 WHERE ingest_ts > {last_snapshot_watermark_ts}
-QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, targeting_key, experiment_id, run_id ORDER BY server_ts) = 1
+QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, targeting_key_hash, experiment_id, run_id ORDER BY server_ts) = 1
 ```
 
 Both use `ROW_NUMBER()` equivalent to `MIN(server_ts)` for first-touch. The tail boundary uses
@@ -48,7 +48,7 @@ ExposureSnapshot {
   environment_id:   string    // required — SORTING_KEY position 2; co-scoped, per-Environment (ADR-0027)
   experiment_id:    string    // required — SORTING_KEY position 3
   run_id:           string    // required
-  targeting_key:    string    // required
+  targeting_key_hash:    string    // required, HMAC-derived Entity identity
   id_type:          string    // required
   variant:          string    // required — '__multiple__' if conflict
   first_exposure_ts: datetime  // required — MIN(server_ts) from raw log
@@ -56,7 +56,7 @@ ExposureSnapshot {
 }
 ```
 
-`ENGINE_SORTING_KEY`: `(app_id, environment_id, experiment_id, run_id, targeting_key)` — `app_id`
+`ENGINE_SORTING_KEY`: `(app_id, environment_id, experiment_id, run_id, targeting_key_hash)` — `app_id`
 first for tenant isolation and low-cardinality range efficiency; `environment_id` co-scoped (ADR-0027).
 
 ## Rollup materialized views must build off the snapshot
@@ -82,7 +82,7 @@ queries:
 -- v0 query (full history, no snapshot):
 SELECT ... FROM raw_exposures
 WHERE app_id = {{String(app_id)}}
-GROUP BY targeting_key, environment_id, experiment_id, run_id
+GROUP BY targeting_key_hash, environment_id, experiment_id, run_id
 -- MIN(server_ts), __multiple__ quarantine, etc.
 
 -- production query (snapshot + tail):

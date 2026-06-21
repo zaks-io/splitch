@@ -39,6 +39,7 @@ IDs). Environment-level writes are subject to the Environment Policy (ADR-0029).
 | [endpoints-metric.md](endpoints-metric.md) | Metric CRUD (binomial, count, revenue, ratio, guardrail) |
 | [endpoints-credentials.md](endpoints-credentials.md) | Client Key + API Key management (per-Env) |
 | [endpoints-test-eval-analytics.md](endpoints-test-eval-analytics.md) | Dry-run test-evaluation (Evaluation Worker), analytics proxy reads (Analysis Worker), OpenAPI schema discovery (per-Env) |
+| [endpoints-privacy-data.md](endpoints-privacy-data.md) | Privacy requests, export jobs, delete jobs, and Entity data subject requests |
 
 ## Sources
 

@@ -11,7 +11,7 @@ expose. D1 columns are trusted without re-parsing. (ADR-0025 "reuse at the leaf,
 ## D1 tables (Drizzle-migrated; structurally trusted, not Zod-re-parsed)
 
 All tables include `created_at` (and `updated_at` where applicable, timestamp with time zone).
-All tables use `app_id` as a mandatory, first-filtered column in every data-access query.
+All tables in this file use `app_id` as a mandatory, first-filtered column in every data-access query.
 No table has RLS — app_id scoping is enforced by the Worker data-access layer (ADR-0018).
 
 ### `experiments`
@@ -27,7 +27,7 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 | `description` | text | nullable |
 | `hypothesis` | text | nullable |
 | `status` | text | not null, default `'draft'` |
-| `targeting_key` | text | not null |
+| `targeting_key_field` | text | not null; Evaluation Context field used as the Targeting Key |
 | `confidence_level` | real | not null, default 0.95 |
 | `default_variant_id` | text | FK → variants |
 | `metrics` | text | not null (JSON array of MetricRef) |
@@ -38,8 +38,8 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 | `live_run_id` | text | nullable, FK → runs |
 | `created_at` | timestamptz | not null |
 | `updated_at` | timestamptz | not null |
-| `created_by` | text | FK → users |
-| `updated_by` | text | FK → users |
+| `created_by` | text | WorkOS user ID or deleted-user tombstone |
+| `updated_by` | text | WorkOS user ID or deleted-user tombstone |
 
 ### `runs`
 
@@ -66,7 +66,7 @@ Immutable assignment config columns are marked; Drizzle migrations must not add 
 | `started_at` | timestamptz | not null |
 | `ended_at` | timestamptz | nullable |
 | `created_at` | timestamptz | not null |
-| `created_by` | text | FK → users |
+| `created_by` | text | WorkOS user ID or deleted-user tombstone |
 
 UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 
@@ -84,7 +84,7 @@ UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 | `event_value_field` | text | nullable |
 | `denominator_metric_id` | text | nullable, FK → metrics (same app) |
 | `created_at` | timestamptz | not null |
-| `created_by` | text | FK → users |
+| `created_by` | text | WorkOS user ID or deleted-user tombstone |
 
 ### `sdk_credentials`
 
@@ -101,9 +101,9 @@ UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 | `revoked` | boolean | not null, default false |
 | `origin_allowlist` | text | nullable (JSON array; Client Key only) |
 | `created_at` | timestamptz | not null |
-| `created_by` | text | FK → users |
+| `created_by` | text | WorkOS user ID or deleted-user tombstone |
 | `revoked_at` | timestamptz | nullable |
-| `revoked_by` | text | nullable, FK → users |
+| `revoked_by` | text | nullable; WorkOS user ID or deleted-user tombstone |
 
 **No raw secret value is ever stored.** Only the hash.
 
@@ -112,3 +112,4 @@ UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

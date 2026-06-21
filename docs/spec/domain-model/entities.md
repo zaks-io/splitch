@@ -107,7 +107,7 @@ Test comparing Variants of a Flag to measure their effect on Metrics for a popul
 
 The randomization unit — what the Targeting Key identifies. Not a persisted entity; it is what the Targeting Key represents at runtime (user, session, workspace, etc.).
 
-The term "Entity" names the **concept**: an App may experiment on multiple Entity types (identified by `targeting_key_type` on Experiment). There is no separate `Entity` table — Entities appear as `targeting_key` values in Exposure and Assignment Store records.
+The term "Entity" names the **concept**: an App may experiment on multiple Entity types (identified by `targeting_key_type` on Experiment). There is no separate `Entity` table — Entities appear as `targeting_key_hash` values in Exposure and Assignment Store records.
 
 ## Targeting Key
 

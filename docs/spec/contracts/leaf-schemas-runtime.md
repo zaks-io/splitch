@@ -35,7 +35,7 @@ the wire `dedup_key` is always satisfiable.
 | `experimentId` | `string` | yes | — |
 | `runId` | `string` | yes | Stamped at SDK fire-time from the live Run the SDK resolved; not ingest-time |
 | `idType` | `string` | yes | Entity type; part of Assignment Store key |
-| `targetingKey` | `string` | yes | Entity identifier |
+| `targetingKeyHash` | `string` | yes | HMAC-derived Entity identifier for storage; raw Targeting Key is never persisted |
 | `variantName` | `string` | yes | The Variant name served (string; Exposure logs name not id) |
 | `type` | `'exposure' \| 'activation'` | yes | Discriminator; activations share this schema |
 | `sourceId` | `string` | yes | Edge POP identifier; component of `dedupKey` |
@@ -44,7 +44,7 @@ the wire `dedup_key` is always satisfiable.
 | `serverReceivedAt` | `string` (ISO 8601) | yes | Server-received event timestamp; used for `MIN(ts)` first-touch ordering |
 | `ingestTs` | `string` (ISO 8601) | yes | Raw-log append watermark; used by snapshot/tail only |
 
-First-touch identity: the tuple `(appId, environmentId, experimentId, runId, idType, targetingKey)`
+First-touch identity: the tuple `(appId, environmentId, experimentId, runId, idType, targetingKeyHash)`
 resolved by `MIN(serverReceivedAt)` — the earliest wins. Distinct from the wire `dedup_key` above.
 
 ---
@@ -89,6 +89,10 @@ Flag CONFIGURATION are scoped to one Environment.
 | `updatedAt` | `string` (ISO 8601) | yes | — |
 
 ### User
+
+The User leaf is a wire response assembled from WorkOS profile data plus D1 membership rows. It is not
+a D1 storage table.
+
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `id` | `string` | yes | WorkOS User ID |
@@ -123,3 +127,4 @@ Flag CONFIGURATION are scoped to one Environment.
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

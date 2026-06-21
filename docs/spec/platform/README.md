@@ -10,6 +10,7 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 | File | One-line purpose |
 |---|---|
 | [storage-map.md](./storage-map.md) | Canonical table: what data lives in KV, D1, DO, Tinybird, Analytics Engine, and why |
+| [privacy-data-lifecycle.md](./privacy-data-lifecycle.md) | Privacy roles, export/delete lifecycle, Entity tombstones, retention, redaction |
 | [config-store.md](./config-store.md) | Draft/live config, `liveRunId`, no separate-copy property, config write failure contract |
 | [assignment-store-substrate.md](./assignment-store-substrate.md) | KV-read / DO-write split for holdover sticky experience; consistency window and failure semantics |
 | [exposure-pipeline.md](./exposure-pipeline.md) | Raw append-only log as system of record; dedup at query time; Exposure row schema; SRM denominator |
@@ -34,6 +35,8 @@ Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcemen
    generated is committed.
 7. **DO writes are persisted-before-announced** (both the per-App fan-out DO and the Assignment
    Store DO). Broadcasts only describe durable state.
+8. **Privacy tombstones win immediately.** Delete requests stop future use before every physical
+   purge finishes.
 
 ## Cross-links
 
@@ -41,3 +44,4 @@ Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcemen
 - Exposure event contract (field-level schema): [exposure-pipeline.md](./exposure-pipeline.md)
 - Auth issuer surface: [../control-plane/](../control-plane/)
 - Stats engine input contract (per-Entity Metric rows): [../stats/](../stats/)
+- Privacy lifecycle and deletion/export: [privacy-data-lifecycle.md](./privacy-data-lifecycle.md)

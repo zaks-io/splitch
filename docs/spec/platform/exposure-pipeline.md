@@ -9,7 +9,7 @@ at analysis time — never a collapse at ingest.
   ordering and at-least-once delivery — "append raw, dedup in query" is the correct fit. Wire-level
   idempotency uses a retry-stable `event_id` plus the sha256 `dedup_key` defined in
   [pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
-- **First-touch identity** = the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`,
+- **First-touch identity** = the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`,
   resolved by `MIN(server_ts)` at query time. Many raw Exposure rows for the same Entity/Run share
   this identity; the query picks the earliest `server_ts` as the first-touch winner. The tuple is
   schema-stable — new fields do not change it. This is distinct from the wire-level `dedup_key`
@@ -31,7 +31,7 @@ ExposureRow {
   experiment_id:    string    // required
   run_id:           string    // required — stamped at SDK fire-time from liveRunId in config
   id_type:          string    // required — Entity type (e.g. "user", "workspace")
-  targeting_key:    string    // required — the bucketing identity
+  targeting_key_hash:    string    // required, HMAC-derived Entity identity
 
   // Event fields
   event_id:        string    // required — retry-stable physical raw-row id
@@ -57,7 +57,7 @@ config the SDK actually evaluated against, not a server-side lookup at log time.
 ```sql
 -- First-touch per (entity, run). One row per Entity per Run.
 SELECT
-  targeting_key,
+  targeting_key_hash,
   environment_id,
   experiment_id,
   run_id,
@@ -67,7 +67,7 @@ SELECT
        ELSE MAX(variant) END AS variant
 FROM raw_exposures
 WHERE app_id = {{String(app_id)}}
-GROUP BY targeting_key, environment_id, experiment_id, run_id
+GROUP BY targeting_key_hash, environment_id, experiment_id, run_id
 ```
 
 This query is the single place where first-touch, the `__multiple__` quarantine, the SRM

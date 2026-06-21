@@ -11,14 +11,14 @@ The canonical first-touch dedup query is the **single place** where first-touch,
 ## Canonical first-touch query
 
 ```sql
--- Produces one row per (targeting_key, run_id).
+-- Produces one row per (targeting_key_hash, run_id).
 -- This is the analysis unit: the deduped denominator.
 SELECT
   app_id,
   experiment_id,
   run_id,
   id_type,
-  targeting_key,
+  targeting_key_hash,
   MIN(server_ts)                                        AS first_exposure_ts,
   CASE
     WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
@@ -27,14 +27,14 @@ SELECT
 FROM raw_events
 WHERE type = 'exposure'
   AND app_id = {app_id: String}              -- mandatory
-GROUP BY app_id, experiment_id, run_id, id_type, targeting_key
+GROUP BY app_id, experiment_id, run_id, id_type, targeting_key_hash
 ```
 
 ### Invariants
 
 1. `server_ts` is the canonical timestamp for ordering (monotonic, no client clock skew). `client_ts` is never used in the dedup.
-2. `MIN(server_ts)` per `(targeting_key, run_id)` determines first-touch. Late-arriving events with earlier `server_ts` are incorporated on the next query run — this is correct per ADR-0010 (replayability).
-3. `COUNT(DISTINCT variant) > 1` within one `(targeting_key, run_id)` produces `variant = '__multiple__'`. Given pure `assign()` + authoritative holdover DO + material-edit-opens-new-Run, a variant conflict within one Run is always a defect (config race, SDK bug, or ADR-0003 violation) and must be surfaced loudly, not silently resolved.
+2. `MIN(server_ts)` per `(targeting_key_hash, run_id)` determines first-touch. Late-arriving events with earlier `server_ts` are incorporated on the next query run — this is correct per ADR-0010 (replayability).
+3. `COUNT(DISTINCT variant) > 1` within one `(targeting_key_hash, run_id)` produces `variant = '__multiple__'`. Given pure `assign()` + authoritative holdover DO + material-edit-opens-new-Run, a variant conflict within one Run is always a defect (config race, SDK bug, or ADR-0003 violation) and must be surfaced loudly, not silently resolved.
 4. The query is fully replayable over the complete raw log. Changing the dedup rule (e.g., adding a filter) means rerunning the query — no migration of raw data.
 
 ## `__multiple__` handling
@@ -53,7 +53,7 @@ GROUP BY app_id, experiment_id, run_id, id_type, targeting_key
 SELECT
   run_id,
   variant,
-  COUNT(DISTINCT targeting_key)   AS observed_count
+  COUNT(DISTINCT targeting_key_hash)   AS observed_count
 FROM <dedup_output>
 WHERE variant != '__multiple__'
 GROUP BY run_id, variant
@@ -79,10 +79,10 @@ The dedup output (`first_exposure_ts`, `variant`) is the direct input to the act
 The dedup output feeds the stats engine as per-Entity rows:
 
 ```
-{ targeting_key, run_id, variant, first_exposure_ts }
+{ targeting_key_hash, run_id, variant, first_exposure_ts }
 ```
 
-For Ratio Metrics the stats engine also needs the per-Entity numerator/denominator pair. Delta-method covariance is not recoverable after aggregation. That pair is delivered by metric-specific queries that GROUP BY `targeting_key`, not pre-aggregated here.
+For Ratio Metrics the stats engine also needs the per-Entity numerator/denominator pair. Delta-method covariance is not recoverable after aggregation. That pair is delivered by metric-specific queries that GROUP BY `targeting_key_hash`, not pre-aggregated here.
 
 ## Sources
 

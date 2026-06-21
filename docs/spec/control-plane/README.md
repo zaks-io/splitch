@@ -21,6 +21,7 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
 | [endpoints-credentials.md](endpoints-credentials.md) | Client Key + API Key management (per-Env) — request/response shapes |
 | [endpoints-test-eval-analytics.md](endpoints-test-eval-analytics.md) | Dry-run test-evaluation, analytics proxy reads, OpenAPI schema discovery — request/response shapes |
 | [mcp-and-cli-surfaces.md](mcp-and-cli-surfaces.md) | CLI credential storage format (keychain + 0600 JSON), CLI command structure, MCP OAuth PRM + auth.md discovery chain, MCP tool naming, parity guarantee |
+| [endpoints-privacy-data.md](endpoints-privacy-data.md) | Privacy request, export, deletion, and Entity data subject request endpoints |
 | [d1-and-tinybird-data-access.md](d1-and-tinybird-data-access.md) | D1 as OLTP system of record, app-enforced tenancy seam contract, KV hot-validation scope, Tinybird audit log shape and isolation |
 | [zod-contract-architecture.md](zod-contract-architecture.md) | Package split (`@splitch/contracts` vs `@splitch/client`), derivation chain (Zod → types → OpenAPI → MCP schemas → hc client), error shape, PATCH-Run omit pattern |
 
@@ -41,6 +42,8 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
 - Client Key immediately usable at creation; `origin_allowlist = null` means no origin restriction
 - Tinybird never queried directly; Analysis Worker injects `app_id` and `environment_id` from
   control-plane auth/path context.
+- Privacy requests are first-class Control Plane API operations. Delete jobs commit tombstones before
+  async physical purge.
 
 ## Sources
 

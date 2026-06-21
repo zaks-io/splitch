@@ -25,7 +25,7 @@ All three are defects. None are expected concurrency or normal operation. `__mul
 
 ## Quarantine action
 
-When `COUNT(DISTINCT variant) > 1` for `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`:
+When `COUNT(DISTINCT variant) > 1` for `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`:
 
 1. The Entity's `assigned_variant` is set to `__multiple__` (sentinel string, not a real Variant name)
 2. Excluded from all real arms
