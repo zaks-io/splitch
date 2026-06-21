@@ -1,0 +1,244 @@
+name: security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # Daily off-peak UTC scan. Catches newly-disclosed CVEs in already-merged
+    # code. NOTE: GitHub auto-disables scheduled workflows after 60 days with no
+    # repo activity; an active repo keeps this alive.
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Dependency vulnerabilities (OSV.dev, pnpm-lock-aware) + native pnpm audit.
+  # On PR/push: fails the job so branch protection blocks the merge.
+  # On schedule: uploads SARIF and lets the alert job open an issue.
+  # ---------------------------------------------------------------------------
+  deps:
+    name: Dependency scan
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: OSV scan (SARIF)
+        uses: google/osv-scanner-action@e69cc6c86b31f1e7e23935bbe7031b50e51082de # v2.0.2
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --output=osv.sarif
+            --format=sarif
+            --recursive
+            ./
+
+      - name: Upload OSV SARIF
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: osv.sarif
+          category: osv-scanner
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Gate merges: on PR/push a high/critical advisory fails the job. On the
+      # scheduled run we don't gate (nothing to merge); the SARIF + alert job
+      # carry the signal instead.
+      - name: pnpm audit (gate on PR/push)
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        run: pnpm audit --audit-level=high
+
+  # ---------------------------------------------------------------------------
+  # SAST: Semgrep with OSS rulesets + repo-local rules under .semgrep/.
+  # ---------------------------------------------------------------------------
+  sast:
+    name: Semgrep SAST
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep@sha256:c180f0c93a17b420c0af5006214a29d3c747c5459c732b740191adf657dd0068 # latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Semgrep scan (SARIF)
+        run: |
+          semgrep scan \
+            --config p/default \
+            --config .semgrep/ \
+            --sarif --output semgrep.sarif \
+            --error
+        continue-on-error: ${{ github.event_name == 'schedule' }}
+
+      - name: Upload Semgrep SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  # ---------------------------------------------------------------------------
+  # Filesystem CVE scan. trivy-action pinned to the pre-compromise safe SHA
+  # (advisory GHSA-69fq-xp46-6x23; tags 0.36.x were force-pushed to malware).
+  # ---------------------------------------------------------------------------
+  trivy:
+    name: Trivy filesystem
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Trivy fs scan (SARIF)
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+  # ---------------------------------------------------------------------------
+  # OpenSSF Scorecard: supply-chain posture. Scheduled + push to main only.
+  # ---------------------------------------------------------------------------
+  scorecard:
+    name: OpenSSF Scorecard
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        with:
+          results_file: scorecard.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload Scorecard SARIF
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          sarif_file: scorecard.sarif
+          category: scorecard
+
+  # ---------------------------------------------------------------------------
+  # Scheduled-only: if any scan job failed/flagged, open or update a single
+  # deduped GitHub issue. The GitHub<->Linear sync mirrors it into the Splitch
+  # team automatically. Body comes from a repo-controlled file, never from
+  # untrusted github.event.* input -> no workflow-injection surface.
+  # ---------------------------------------------------------------------------
+  alert:
+    name: Open security alert issue
+    if: always() && github.event_name == 'schedule'
+    needs: [deps, sast, trivy, scorecard]
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Build issue body
+        if: needs.deps.result == 'failure' || needs.sast.result == 'failure' || needs.trivy.result == 'failure' || needs.scorecard.result == 'failure'
+        env:
+          DEPS_RESULT: ${{ needs.deps.result }}
+          SAST_RESULT: ${{ needs.sast.result }}
+          TRIVY_RESULT: ${{ needs.trivy.result }}
+          SCORECARD_RESULT: ${{ needs.scorecard.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "The daily security scan flagged one or more findings."
+            echo ""
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| Dependency scan | ${DEPS_RESULT} |"
+            echo "| Semgrep SAST | ${SAST_RESULT} |"
+            echo "| Trivy filesystem | ${TRIVY_RESULT} |"
+            echo "| OpenSSF Scorecard | ${SCORECARD_RESULT} |"
+            echo ""
+            echo "Review details in the [Security tab](../../security/code-scanning) and the [workflow run](${RUN_URL})."
+          } > security-alert.md
+
+      - name: Open or update issue
+        if: needs.deps.result == 'failure' || needs.sast.result == 'failure' || needs.trivy.result == 'failure' || needs.scorecard.result == 'failure'
+        uses: peter-evans/create-issue-from-file@fca9117c27cdc29c6c4db3b86c48e4115a786710 # v6.0.0
+        with:
+          title: "Daily security scan: findings detected"
+          content-filepath: security-alert.md
+          labels: security, automated

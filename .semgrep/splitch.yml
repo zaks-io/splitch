@@ -1,0 +1,63 @@
+# Repo-local Semgrep rules enforcing splitch's own security invariants.
+# These complement the stock p/default ruleset; they encode contracts that
+# generic SAST cannot know about. See docs/spec/platform/security-model.md and
+# CONTEXT.md for the terms (App, API Key, Client Key, app_id scoping).
+#
+# Forward-looking: the apps are scaffolds today, so these guard PRs as real
+# code lands rather than fixing existing violations.
+rules:
+  - id: splitch-no-secret-in-logs
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      Potential secret logged. Never log API Keys, tokens, passwords, or raw
+      credentials. Redact before logging. See the never-leak-secrets rule in
+      CLAUDE.md and docs/spec/control-plane/credentials-and-keys.md.
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern: "$LOG(..., $OBJ.$FIELD, ...)"
+              - metavariable-regex:
+                  metavariable: $FIELD
+                  regex: "^(apiKey|api_key|secret|clientSecret|client_secret|password|passwd|token|accessToken|access_token|refreshToken|refresh_token|credential)$"
+          - patterns:
+              - pattern: "$LOG(..., $VAR, ...)"
+              - metavariable-regex:
+                  metavariable: $VAR
+                  regex: "^(apiKey|api_key|secret|clientSecret|client_secret|password|passwd|token|accessToken|access_token|refreshToken|refresh_token|credential)$"
+      - metavariable-regex:
+          metavariable: $LOG
+          regex: "^(console\\.(log|error|warn|info|debug)|.*[Ll]ogger\\.(log|error|warn|info|debug|trace))$"
+
+  - id: splitch-api-key-never-returned
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      The secret server-side API Key must never be returned to a client after
+      creation (CONTEXT.md - never read back an existing value after creation).
+      Return only a one-time creation payload or a redacted reference.
+    patterns:
+      - pattern-either:
+          - pattern: "return { ..., apiKey: $V, ... }"
+          - pattern: "return { ..., api_key: $V, ... }"
+          - pattern: "c.json({ ..., apiKey: $V, ... })"
+          - pattern: "c.json({ ..., api_key: $V, ... })"
+      - pattern-not: "return { ..., apiKey: null, ... }"
+      - pattern-not: "return { ..., apiKey: undefined, ... }"
+
+  - id: splitch-tenant-scoping-required
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >
+      D1 has no row-level security; app_id scoping in the data-access seam IS
+      the tenant isolation boundary (ADR-0018). A query that filters by id but
+      not by app_id may cross tenants. Confirm this read/write is app-scoped or
+      explicitly justified.
+    patterns:
+      - pattern-either:
+          - pattern: "$DB.prepare($SQL)"
+          - pattern: "$DB.exec($SQL)"
+      - metavariable-regex:
+          metavariable: $SQL
+          regex: "\"?(?i)(select|update|delete).*where"
+      - pattern-not-regex: "(?i)app_id"

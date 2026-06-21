@@ -17,8 +17,12 @@
     "knip": "knip --treat-config-hints-as-errors",
     "lint": "turbo run lint",
     "prepare": "lefthook install",
+    "audit": "pnpm audit --audit-level=high",
+    "pins:check": "node scripts/security-check.mjs pinact run -check",
+    "sast": "node scripts/security-check.mjs semgrep scan --config .semgrep/ --error apps packages scripts",
     "secrets:git": "gitleaks git --redact --no-banner .",
     "secrets:worktree": "gitleaks dir --redact --no-banner .",
+    "security": "pnpm sast && pnpm pins:check && pnpm audit",
     "smoke:ci": "node scripts/optional-check.mjs smoke:ci \"Hosted smoke checks run after preview or production targets exist.\"",
     "smoke:local": "node scripts/smoke-workers-local.mjs",
     "smoke:local:api": "node scripts/smoke-workers-local.mjs api",
@@ -26,8 +30,8 @@
     "tinybird:local": "node scripts/check-tinybird-local.mjs",
     "typecheck": "turbo run typecheck",
     "verify:ci": "pnpm verify:push && pnpm smoke:ci",
-    "verify:commit": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:worktree",
-    "verify:push": "pnpm verify:commit && pnpm test && pnpm build && pnpm smoke:local:api && pnpm depcruise && pnpm duplicates && pnpm secrets:git && pnpm d1:migrate:local && pnpm tinybird:local"
+    "verify:commit": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:worktree && pnpm sast",
+    "verify:push": "pnpm verify:commit && pnpm test && pnpm build && pnpm smoke:local:api && pnpm depcruise && pnpm duplicates && pnpm secrets:git && pnpm pins:check && pnpm audit && pnpm d1:migrate:local && pnpm tinybird:local"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

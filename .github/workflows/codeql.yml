@@ -1,0 +1,48 @@
+name: codeql
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # Weekly re-scan so newly published CodeQL queries run against main.
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (javascript-typescript)
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          category: "/language:javascript-typescript"

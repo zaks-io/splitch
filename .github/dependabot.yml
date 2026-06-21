@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # pnpm workspace dependencies. Dependabot reads pnpm-lock.yaml and respects
+  # the pnpm-workspace.yaml catalog. Security updates are always raised; routine
+  # version bumps are grouped to keep PR noise down.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      production-minor-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+
+  # GitHub Actions. Dependabot understands the `# vX.Y.Z` comment on a SHA pin
+  # and bumps the SHA + comment together, so pinning to SHA does not cost us
+  # update automation.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions

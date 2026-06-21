@@ -17,6 +17,7 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 | [physical-dedup-engine.md](./physical-dedup-engine.md)           | Lambda architecture: Copy Pipe snapshot + real-time tail UNION; rollup MV correctness constraint                        |
 | [live-updates-do.md](./live-updates-do.md)                       | Per-App fan-out DO: hibernating WebSocket, write-through, delta-nudge, persisted-before-announced                       |
 | [multi-tenant-isolation.md](./multi-tenant-isolation.md)         | App-enforced `app_id` isolation in D1 (Drizzle seam) and Tinybird (two-seam enforcement)                                |
+| [security-model.md](./security-model.md)                         | Trust boundaries, threat model, and the enforced security contracts (ties together ADR-0018/0022/0032/0034)             |
 | [contracts-and-validation.md](./contracts-and-validation.md)     | Zod-first authoring; package split; KV schema-version envelope; one canonical ErrorResponse                             |
 | [worker-runtime.md](./worker-runtime.md)                         | Shared contract-mounted request guard for auth, scopes, rate limits, idempotency, and error envelopes                   |
 | [monorepo-and-toolchain.md](./monorepo-and-toolchain.md)         | pnpm + Turborepo layout; capability Workers; shared `ui` seam; TanStack Query; cron Workers; StrykerJS policy           |

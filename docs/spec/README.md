@@ -61,17 +61,17 @@ scale to millions of events. Two planes:
 
 ## Areas
 
-| Area                               | Read it for                                                                                                                            | Canonical home of                                  |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| [domain-model/](./domain-model/)   | the entity model, the Assignment/Exposure/Run spine, the edit taxonomy, holdover semantics                                             | the **conceptual** model + entity field tables     |
-| [contracts/](./contracts/)         | Zod-first contract spine, leaf schemas, request/response envelopes, storage schemas, error model, validation policy                    | the **canonical shapes** every other area links to |
-| [platform/](./platform/)           | storage map, config store, privacy lifecycle, multi-tenant isolation, the DO substrates, live-update DO, monorepo/toolchain, cron      | **where data lives** + the physical substrates     |
-| [evaluation/](./evaluation/)       | `assign()`, Provider port, Assignment Store port, evaluate-path orchestration, holdover/replay, exposure firing, dry-run               | the **hot path** behavior + its ports              |
-| [pipeline/](./pipeline/)           | edge ingest, exposure/activation event schema, first-touch dedup query, activation gate query, holdover write, physical Tinybird layer | the **Exposure pipeline** + event row schemas      |
-| [stats/](./stats/)                 | the one CI object, variance + delta method, sequential aCS, CUPED/winsorization, SRM, FDR, dimension slicing, result shapes            | the **statistics engine**                          |
-| [control-plane/](./control-plane/) | Organization tier, auth (doors + access matrix), Run state machine, the full endpoint inventory, MCP/CLI, credentials                  | the **control-plane API** + auth                   |
-| [sdk/](./sdk/)                     | the public data-plane SDK surface, evaluate/peek accessors, Client-Key-safe endpoint, seen-set, five runtimes                          | the **public SDK contract**                        |
-| [frontend/](./frontend/)           | appId-is-the-spine, session/loader isolation, query-key factory, WebSocket lifecycle, mutations, error tiers, observability            | the **panel + marketing** frontend                 |
+| Area                               | Read it for                                                                                                                                           | Canonical home of                                  |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| [domain-model/](./domain-model/)   | the entity model, the Assignment/Exposure/Run spine, the edit taxonomy, holdover semantics                                                            | the **conceptual** model + entity field tables     |
+| [contracts/](./contracts/)         | Zod-first contract spine, leaf schemas, request/response envelopes, storage schemas, error model, validation policy                                   | the **canonical shapes** every other area links to |
+| [platform/](./platform/)           | storage map, config store, privacy lifecycle, multi-tenant isolation, the security model, the DO substrates, live-update DO, monorepo/toolchain, cron | **where data lives** + the physical substrates     |
+| [evaluation/](./evaluation/)       | `assign()`, Provider port, Assignment Store port, evaluate-path orchestration, holdover/replay, exposure firing, dry-run                              | the **hot path** behavior + its ports              |
+| [pipeline/](./pipeline/)           | edge ingest, exposure/activation event schema, first-touch dedup query, activation gate query, holdover write, physical Tinybird layer                | the **Exposure pipeline** + event row schemas      |
+| [stats/](./stats/)                 | the one CI object, variance + delta method, sequential aCS, CUPED/winsorization, SRM, FDR, dimension slicing, result shapes                           | the **statistics engine**                          |
+| [control-plane/](./control-plane/) | Organization tier, auth (doors + access matrix), Run state machine, the full endpoint inventory, MCP/CLI, credentials                                 | the **control-plane API** + auth                   |
+| [sdk/](./sdk/)                     | the public data-plane SDK surface, evaluate/peek accessors, Client-Key-safe endpoint, seen-set, five runtimes                                         | the **public SDK contract**                        |
+| [frontend/](./frontend/)           | appId-is-the-spine, session/loader isolation, query-key factory, WebSocket lifecycle, mutations, error tiers, observability                           | the **panel + marketing** frontend                 |
 
 ### Where overlapping concerns live (canonical home)
 
