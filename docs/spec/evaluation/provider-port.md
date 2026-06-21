@@ -9,17 +9,21 @@ Store for holdover state. Neither is behind the other. (ADR-0007.)
 
 ```
 interface Provider {
-  // Resolve live Run config for one Experiment.
+  // Resolve live Run config for one Experiment in one Environment.
   // Experiment carries liveRunId hydrated (one query, not two).
-  getExperiment(appId: string, experimentId: string): ExperimentConfig
+  getExperiment(appId: string, environmentId: string, experimentId: string): ExperimentConfig
 
-  // Resolve Flag definition + Targeting rules for the evaluate path.
-  getFlag(appId: string, flagKey: string): FlagConfig
+  // Resolve Flag Configuration + Targeting rules for the evaluate path, in one Environment.
+  getFlag(appId: string, environmentId: string, flagKey: string): FlagConfig
 
-  // Bulk fetch all Flags for an App (used at request start to pre-load hot-path context).
-  getFlags(appId: string): FlagConfig[]
+  // Bulk fetch all Flag Configurations for an Environment (used at request start to pre-load context).
+  getFlags(appId: string, environmentId: string): FlagConfig[]
 }
 ```
+
+`environmentId` is co-scoped with `appId` because Flag Configuration, Experiments, and Experiment
+Runs are per-Environment (ADR-0027). The edge resolves `environmentId` from the presented SDK key
+before consulting the Provider.
 
 The Provider **does not** run rule matching, segment evaluation, or Fractional Evaluation.
 It returns the rule set; the evaluate path iterates and matches.
@@ -30,6 +34,7 @@ It returns the rule set; the evaluate path iterates and matches.
 |---|---|---|---|
 | `experimentId` | string | yes | Stable Experiment identity |
 | `appId` | string | yes | Isolation scope |
+| `environmentId` | string | yes | Co-scoped with `appId`; Experiment/Run are per-Environment (ADR-0027) |
 | `liveRunId` | string \| null | yes | Hydrated: the current live Run; null if no Run is live yet |
 | `liveRun` | `RunConfig \| null` | yes | Full frozen RunConfig for the live Run (hydrated inline) |
 | `status` | `'draft' \| 'running' \| 'ended'` | yes | Current lifecycle state |
@@ -42,6 +47,7 @@ It returns the rule set; the evaluate path iterates and matches.
 |---|---|---|---|
 | `flagKey` | string | yes | Unique within App |
 | `appId` | string | yes | Isolation scope |
+| `environmentId` | string | yes | Co-scoped with `appId`; Flag Configuration is per-Environment (ADR-0027) |
 | `enabled` | boolean | yes | If false: return Default Variant on all requests |
 | `defaultVariant` | string | yes | Variant name returned when disabled or no rule matches |
 | `variants` | `{ name: string; value: boolean \| string \| number \| object }[]` | yes | All possible Variants; value type is JSON |
@@ -86,7 +92,7 @@ explicit on every evaluate request.
 
 Provider caches flag config invalidatably. When a WebSocket nudge is received (ADR-0019),
 the Provider invalidates its cache and re-fetches the affected App's config. Drafts never
-appear in the cache; only published (`running`) config is distributed.
+appear in the cache; only live (`running`) config is distributed.
 
 ## Seam boundary
 
@@ -109,4 +115,6 @@ error. The error is logged (fail-loud principle).
 - [../../adr/0007-assignment-store-is-a-sibling-seam-not-behind-the-provider.md](../../adr/0007-assignment-store-is-a-sibling-seam-not-behind-the-provider.md)
 - [../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md](../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md)
 - [../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md](../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md](../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md)
 - [../../architecture/assignment-store-seam.md](../../architecture/assignment-store-seam.md)

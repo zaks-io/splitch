@@ -28,24 +28,28 @@ the wire `dedup_key` is always satisfiable.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
-| `dedupKey` | `string` (sha256) | yes | Wire-level idempotency key; unique per raw Exposure fire; construction in [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md) |
+| `dedupKey` | `string` (sha256) | yes | Wire-level idempotency key; hashes `type`, identity fields, `sourceId`, and `eventId`; construction in [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md) |
+| `eventId` | `string` | yes | Retry-stable physical raw-row id generated once before any retry |
 | `appId` | `string` | yes | Isolation field; first in Tinybird sort key |
+| `environmentId` | `string` | yes | Co-scoped with `appId`; Exposures are per-Environment (ADR-0027) |
 | `experimentId` | `string` | yes | — |
 | `runId` | `string` | yes | Stamped at SDK fire-time from the live Run the SDK resolved; not ingest-time |
 | `idType` | `string` | yes | Entity type; part of Assignment Store key |
 | `targetingKey` | `string` | yes | Entity identifier |
 | `variantName` | `string` | yes | The Variant name served (string; Exposure logs name not id) |
 | `type` | `'exposure' \| 'activation'` | yes | Discriminator; activations share this schema |
+| `sourceId` | `string` | yes | Edge POP identifier; component of `dedupKey` |
 | `counterfactual` | `boolean` | yes | `false` for real Exposures; reserved for future counterfactual triggering |
 | `clientTimestamp` | `string` (ISO 8601) | yes | When the SDK fired the event (diagnostic only; subject to clock skew) |
-| `serverReceivedAt` | `string` (ISO 8601) | yes | Canonical ingest time; used for `MIN(ts)` first-touch ordering |
+| `serverReceivedAt` | `string` (ISO 8601) | yes | Server-received event timestamp; used for `MIN(ts)` first-touch ordering |
+| `ingestTs` | `string` (ISO 8601) | yes | Raw-log append watermark; used by snapshot/tail only |
 
-First-touch identity: the tuple `(appId, experimentId, runId, idType, targetingKey)` resolved by
-`MIN(serverReceivedAt)` — the earliest wins. Distinct from the wire `dedup_key` above.
+First-touch identity: the tuple `(appId, environmentId, experimentId, runId, idType, targetingKey)`
+resolved by `MIN(serverReceivedAt)` — the earliest wins. Distinct from the wire `dedup_key` above.
 
 ---
 
-## Organization, App, User, SDK credentials
+## Organization, App, Environment, User, SDK credentials
 
 See [two-packages-topology.md](./two-packages-topology.md) for credential consumer policy.
 
@@ -71,6 +75,19 @@ See [two-packages-topology.md](./two-packages-topology.md) for credential consum
 | `createdAt` | `string` (ISO 8601) | yes | — |
 | `updatedAt` | `string` (ISO 8601) | yes | — |
 
+### Environment
+A first-class axis under App (ADR-0027). Experiments, Experiment Runs, Exposures, SDK credentials, and
+Flag CONFIGURATION are scoped to one Environment.
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `id` | `string` | yes | Stable UUID |
+| `appId` | `string` | yes | Owning App |
+| `key` | `string` | yes | Unique per App (e.g. `'production'`, `'staging'`) |
+| `name` | `string` | yes | Display label |
+| `createdAt` | `string` (ISO 8601) | yes | — |
+| `updatedAt` | `string` (ISO 8601) | yes | — |
+
 ### User
 | Field | Type | Required | Meaning |
 |---|---|---|---|
@@ -87,6 +104,7 @@ See [two-packages-topology.md](./two-packages-topology.md) for credential consum
 |---|---|---|---|
 | `id` | `string` | yes | Stable UUID |
 | `appId` | `string` | yes | Scoped to one App |
+| `environmentId` | `string` | yes | Scoped to one Environment; co-scoped with `appId` (ADR-0027) |
 | `kind` | `'api_key' \| 'client_key'` | yes | Discriminator |
 | `name` | `string` | yes | Human label |
 | `description` | `string` | no | — |
@@ -104,3 +122,4 @@ See [two-packages-topology.md](./two-packages-topology.md) for credential consum
 
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

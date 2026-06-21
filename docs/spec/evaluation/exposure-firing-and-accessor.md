@@ -34,14 +34,19 @@ The side effect **must be documented prominently** in the SDK reference.
 
 | Field | Type | Required | Meaning |
 |---|---|---|---|
+| `eventId` | string | yes | Retry-stable physical raw-row id generated once before any retry |
+| `dedupKey` | string | yes | Wire-level idempotency key; hashes row type, identity fields, source id, and `eventId` |
 | `appId` | string | yes | Isolation scope |
+| `environmentId` | string | yes | Co-scoped with `appId`; Exposures are per-Environment (ADR-0027) |
 | `experimentId` | string | yes | The Experiment being evaluated |
 | `runId` | string | yes | The Run that produced this Exposure (stamped at fire time from `EvaluateResult.liveRunId`) |
 | `flagKey` | string | yes | The Flag evaluated |
 | `targetingKey` | string | yes | The Entity identifier |
 | `idType` | string | yes | Entity type; matches Assignment Store key (guards cross-type collisions) |
 | `variant` | string | yes | The resolved Variant name |
+| `sourceId` | string | yes | Edge POP identifier |
 | `serverReceivedAt` | ISO 8601 | yes | Canonical first-touch ordering; monotonic; no client clock skew |
+| `ingestTs` | ISO 8601 | yes | Raw-log append watermark; never used for first-touch |
 | `clientFiredAt` | ISO 8601 | yes | Wall-clock at fire time; diagnostics only |
 
 `runId` is stamped from `EvaluateResult.liveRunId` at fire time — set by the evaluate path,
@@ -52,7 +57,7 @@ canonical first-touch anchor.
 
 ## First-touch identity
 
-`(appId, experimentId, runId, idType, targetingKey)` — five components, no Variant. Resolved by
+`(appId, environmentId, experimentId, runId, idType, targetingKey)` — six components, no Variant. Resolved by
 `MIN(server_ts)` at query time: many raw Exposures for the same Entity/Run share this identity and
 the earliest `server_ts` is the first-touch winner. Variant is excluded so that two Exposures with
 **different** Variants for the same Entity/Run are a conflict caught by the `__multiple__`
@@ -117,4 +122,5 @@ fires. There is no third state. A caller cannot accidentally skip Exposure on th
 
 - [../../adr/0004-exposure-fires-on-read.md](../../adr/0004-exposure-fires-on-read.md)
 - [../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md](../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [../../architecture/assignment-exposure-seam.md](../../architecture/assignment-exposure-seam.md) (decision 3, Exposure definition)

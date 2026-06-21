@@ -10,7 +10,8 @@ allocation, Variant set, Targeting rules, Targeting Key) is frozen for its entir
 | `runId` | string | yes | Unique per Experiment; immutable once created |
 | `experimentId` | string | yes | Parent Experiment |
 | `appId` | string | yes | Isolation boundary; always scoped |
-| `startedAt` | ISO 8601 | yes | When the Run went live (explicit Publish action) |
+| `environmentId` | string | yes | Co-scoped with `appId`; Experiment Runs are per-Environment (ADR-0027) |
+| `startedAt` | ISO 8601 | yes | When the Run went live (explicit Start action) |
 | `endedAt` | ISO 8601 | optional | Set when the Run closes; absent means live |
 
 ## State machine
@@ -24,11 +25,11 @@ allocation, Variant set, Targeting rules, Targeting Key) is frozen for its entir
                   Entities see
                   Default Variant)
                          |
-                  [Publish / Start]
+                  [Start]
                          v
                        running  <------- assignment edit accumulates on next draft
                          |
-                  [assignment edit published]
+                  [assignment edit started]
                          v
                        ended
                   (frozen archive)
@@ -37,14 +38,14 @@ allocation, Variant set, Targeting rules, Targeting Key) is frozen for its entir
 States: `draft → running → ended`
 
 - **draft**: The staging area for the *next* Run. A newly created Experiment has one draft
-  and no live Run. Entities receive the Flag's Default Variant until Publish.
-- **running**: Published at least once; one Run is live. `running` is the only state in
+  and no live Run. Entities receive the Flag's Default Variant until Start.
+- **running**: Started at least once; one Run is live. `running` is the only state in
   which Exposures stamp with this Run's `runId`.
-- **ended**: Closed by a subsequent Publish. Permanently frozen; `endedAt` is set; prior
+- **ended**: Closed by a subsequent Start. Permanently frozen; `endedAt` is set; prior
   Exposures remain attributed here.
 
 The draft is not a Run state; it is the staging area that accumulates edits before the
-next Publish. One explicit Publish ends the live Run and opens exactly one new Run carrying
+next Start. One explicit Start ends the live Run and opens exactly one new Run carrying
 all batched changes: N edits = one sample reset, not N.
 
 ## Frozen config (assignment edits — opens new Run)
@@ -88,7 +89,7 @@ re-run of the dedup/metric query with the new definition. No new `runId`, no sam
 ## No-superposition guarantee
 
 The three edit types map to distinct, observable outcomes:
-- Assignment edit → new `runId` in KV, new Run in D1 after Publish.
+- Assignment edit → new `runId` in KV, new Run in D1 after Start.
 - Measurement edit → same `runId`, analysis query re-runs.
 - Non-material edit → same `runId`, no query impact.
 
@@ -96,7 +97,7 @@ A caller can always determine which case occurred by inspecting whether `runId` 
 
 ## Live Run is explicit persisted config
 
-The published config the edge reads (KV) carries `liveRunId`. Publishing writes the new
+The live config the edge reads (KV) carries `liveRunId`. Start writes the new
 `liveRunId`. Drafts never reach the edge. ~60s KV propagation window applies (self-healing,
 per ADR-0009).
 
@@ -105,4 +106,5 @@ per ADR-0009).
 - [../../adr/0002-run-is-the-immutable-unit-of-analysis.md](../../adr/0002-run-is-the-immutable-unit-of-analysis.md)
 - [../../adr/0003-material-edits-including-measurement-open-a-new-run.md](../../adr/0003-material-edits-including-measurement-open-a-new-run.md)
 - [../../adr/0006-run-boundary-sticky-experience-counted-in-old-run.md](../../adr/0006-run-boundary-sticky-experience-counted-in-old-run.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [../../architecture/assignment-exposure-seam.md](../../architecture/assignment-exposure-seam.md) (Run lifecycle section)

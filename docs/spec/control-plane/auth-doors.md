@@ -3,8 +3,8 @@
 How a principal authenticates: the three authentication doors (ID-JAG, anonymous/pre-claim, device
 flow), the claim ceremony, the `interaction_required` error shape, and the provisional demo lifecycle.
 
-For the scopes enumeration, control-plane token shape, trusted-IdP table, and the auth-issuer vs
-control-plane Worker split, see [access-control-matrix.md](access-control-matrix.md).
+For the scopes enumeration, control-plane token shape, trusted-IdP table, and the Worker
+responsibility split, see [access-control-matrix.md](access-control-matrix.md).
 
 ## One principal, three doors
 
@@ -51,7 +51,7 @@ control-plane access token. No refresh token on ID-JAG path.
 1. Rate-limit per source IP (Cloudflare WAF; default: 10 provisional creates per IP per hour)
 2. Create WorkOS user (unverified email placeholder)
 3. Create provisional Org: `is_provisional = 1`, `demo_expires_at = now + 24h`
-4. Create provisional App under the Org
+4. Create provisional App under the Org (with a default Environment; Environment is per-App, ADR-0027)
 5. Issue `identity_assertion` scoped to `pre_claim_scopes = ["app:{app_id}:member"]`
 6. Return: `{ identity_assertion, user_id, org_id, app_id, demo_expires_at }`
 
@@ -97,8 +97,8 @@ link, and splitch merges the identities. The agent then retries the claim.
 Cron Trigger Worker runs daily. Query:
 `SELECT org_id FROM organizations WHERE is_provisional = 1 AND demo_expires_at < now()`
 
-For each row: delete Apps under the Org, delete Org memberships, delete the Org — all through the D1
-data-access seam (app_id scoping enforced, never bypassed).
+For each row: delete Apps under the Org (and their Environments), delete Org memberships, delete the
+Org — all through the D1 data-access seam (app_id scoping enforced, never bypassed).
 
 ## Door C: Device flow (human at terminal / agent no-IdP fallback)
 
@@ -110,3 +110,4 @@ as thin proxies to WorkOS. The CLI stores the resulting **refresh token** in key
 - [../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md)
 - [../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md](../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

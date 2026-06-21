@@ -15,7 +15,8 @@ One Experiment = one Flag in v1. `targetingKey` lives here, not on each Run. Mul
 |---|---|---|---|
 | `id` | `string` | yes | Stable UUID |
 | `appId` | `string` | yes | Owning App |
-| `key` | `string` | yes | Unique per App |
+| `environmentId` | `string` | yes | Owning Environment; co-scoped with `appId` (ADR-0027) |
+| `key` | `string` | yes | Unique per `(App, Environment)` |
 | `flagId` | `string` | yes | The one Flag this Experiment controls in v1 |
 | `name` | `string` | yes | — |
 | `description` | `string` | no | — |
@@ -23,19 +24,19 @@ One Experiment = one Flag in v1. `targetingKey` lives here, not on each Run. Mul
 | `status` | `ExperimentStatus` | yes | See state machine below |
 | `targetingKey` | `string` | yes | Inherited by every Run; changing this requires a new Run |
 | `confidenceLevel` | `number` | yes | Default `0.95`; per-Experiment |
-| `defaultVariantId` | `string` | yes | Served before first Publish |
+| `defaultVariantId` | `string` | yes | Served before first Start |
 | `metrics` | `MetricRef[]` | yes | Goal Metrics |
 | `guardrailMetrics` | `MetricRef[]` | yes | Metrics watched for harm |
 | `activationMetricId` | `string \| null` | no | Gate metric; setting/changing is an assignment edit |
 | `conversionWindowMs` | `number` | yes | Duration in ms; 0 = unbounded |
 | `dimensions` | `string[]` | yes | Attribute keys for result slicing |
-| `liveRunId` | `string \| null` | yes | `null` before first Publish |
+| `liveRunId` | `string \| null` | yes | `null` before first Start |
 | `createdAt` | `string` (ISO 8601) | yes | — |
 | `updatedAt` | `string` (ISO 8601) | yes | — |
 
 `ExperimentStatus` enum: `'draft' | 'running' | 'ended'`
 - `draft` — no live Run; new Entities see Default Variant.
-- `running` — at least one Publish has occurred; `liveRunId` is non-null.
+- `running` — at least one Start has occurred; `liveRunId` is non-null.
 - `ended` — no further Runs; all Runs are frozen archives.
 Pause lives on Experiment.
 
@@ -51,13 +52,14 @@ Assignment config is frozen for the Run's life (ADR-0002, ADR-0003). Runs are in
 |---|---|---|---|
 | `id` | `string` | yes | Stable UUID |
 | `experimentId` | `string` | yes | Owning Experiment |
+| `environmentId` | `string` | yes | Owning Environment; co-scoped with the Experiment (ADR-0027) |
 | `status` | `RunStatus` | yes | See below |
 | `salt` | `string` | yes | Per-Run unique; drives Fractional Evaluation; **immutable** |
 | `allocation` | `Record<variantId, number>` | yes | Percentages must sum to 100; **immutable** |
 | `variantSet` | `Variant[]` | yes | Snapshot of Flag Variants at Run creation; **immutable** |
 | `targetingSegmentId` | `string \| null` | no | Optional Segment gate; **immutable** |
 | `configHash` | `string` | yes | SHA-256 of `{salt, allocation, variantSet, targetingSegmentId}`; computed by Worker; integrity anchor |
-| `startedAt` | `string` (ISO 8601) | yes | When Publish set this Run live |
+| `startedAt` | `string` (ISO 8601) | yes | When Start set this Run live |
 | `endedAt` | `string \| null` (ISO 8601) | no | Set when Run transitions to `ended` |
 | `createdAt` | `string` (ISO 8601) | yes | — |
 
@@ -86,7 +88,7 @@ Note: `activationMetricId` is on `Experiment` and is frozen per Run — changing
 `MetricKind` enum: `'binomial' | 'count' | 'revenue' | 'ratio'`
 - `binomial` — 1/0 per Entity; aggregation = proportion.
 - `count` — sum of `eventValueField` per Entity.
-- `revenue` — mean of `eventValueField` per Entity.
+- `revenue` — sum of `eventValueField` per Entity; reported as the mean across Entities.
 - `ratio` — `numerator Metric / denominator Metric` per Entity (delta-method variance).
 
 ## Sources
@@ -94,3 +96,4 @@ Note: `activationMetricId` is on `Experiment` and is frozen per Run — changing
 - [../../adr/0002-run-is-the-immutable-unit-of-analysis.md](../../adr/0002-run-is-the-immutable-unit-of-analysis.md)
 - [../../adr/0003-material-edits-including-measurement-open-a-new-run.md](../../adr/0003-material-edits-including-measurement-open-a-new-run.md)
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

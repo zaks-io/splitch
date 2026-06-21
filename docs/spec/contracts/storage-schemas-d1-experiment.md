@@ -20,7 +20,8 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 |---|---|---|
 | `id` | text | PK |
 | `app_id` | text | FK → apps, not null |
-| `key` | text | not null, unique per `(app_id)` |
+| `environment_id` | text | FK → environments, not null (co-scoped with `app_id`, ADR-0027) |
+| `key` | text | not null, unique per `(app_id, environment_id)` |
 | `flag_id` | text | FK → flags, not null |
 | `name` | text | not null |
 | `description` | text | nullable |
@@ -47,12 +48,20 @@ Immutable assignment config columns are marked; Drizzle migrations must not add 
 | Column | Type | Constraints |
 |---|---|---|
 | `id` | text | PK |
+| `app_id` | text | FK → apps, not null |
+| `environment_id` | text | FK → environments, not null (co-scoped with `app_id`, ADR-0027) |
 | `experiment_id` | text | FK → experiments, not null |
 | `status` | text | not null, default `'running'` |
 | `salt` | text | not null; **immutable** |
 | `allocation` | text | not null (JSON); **immutable** |
 | `variant_set` | text | not null (JSON); **immutable** |
 | `targeting_segment_id` | text | nullable; **immutable** |
+| `confidence_level` | real | not null; locked at Run Start |
+| `horizon` | text | not null, default `'sequential'`; locked at Run Start |
+| `target_n` | integer | nullable; sequential tuning |
+| `sample_size_locked` | integer | nullable; required for fixed horizon |
+| `decision_family` | text | not null (JSON); locked goal Metric × Variant × Primary Dimension members |
+| `guardrail_decisions` | text | not null (JSON); locked thresholds/directions |
 | `config_hash` | text | not null; computed SHA-256; **immutable** |
 | `started_at` | timestamptz | not null |
 | `ended_at` | timestamptz | nullable |
@@ -83,6 +92,7 @@ UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 |---|---|---|
 | `id` | text | PK |
 | `app_id` | text | FK → apps, not null |
+| `environment_id` | text | FK → environments, not null (co-scoped with `app_id`, ADR-0027) |
 | `kind` | text | not null (`'api_key'` or `'client_key'`) |
 | `name` | text | not null |
 | `description` | text | nullable |
@@ -101,3 +111,4 @@ UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

@@ -14,7 +14,7 @@ Even a flag toggle that feels instant must wait for the DO 200 before the cache 
 ```
 1. User submits form
 2. Mutation POSTs to control-plane read/write API
-3. Worker routes request through per-App DO (idFromName(appId))
+3. Worker routes request through per-(App, Environment) DO (idFromName(`${appId}:${environmentId}`))
 4. DO validates → commits D1/KV → broadcasts nudge to all connected clients
 5a. On 200: mutation caller triggers immediate refetch of the affected entity
 5b. On 4xx: mutation caller surfaces structured error to the form; no cache change
@@ -30,7 +30,7 @@ and refetches after receiving a 200, using the version from the 200 response:
 ```
 onSuccess: (data) => {
   // data.version is the new version from the DO
-  queryClient.invalidateQueries({ queryKey: keys[entity].prefix(appId) })
+  queryClient.invalidateQueries({ queryKey: keys[entity].prefix(appId, environmentId) })
   // The refetch result will carry data.version, so the echoed nudge is version-gated to a no-op
 }
 ```
@@ -95,11 +95,12 @@ When the user abandons an edit (navigates away):
 ## Draft Run edits
 
 Assignment-affecting edits accumulate on a draft. The mutation API for these
-edits writes to the draft state, not the live Run. The form must clearly show "Draft — publish to
+edits writes to the draft state, not the live Run. The form must clearly show "Draft — Start to
 apply" when editing a running Experiment's assignment config. The draft state lives in D1 and is
 returned as part of the Experiment detail shape; the Query cache carries it.
 
 ## Sources
 
 - [ADR-0019](../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [frontend-architecture.md](../../architecture/frontend-architecture.md)

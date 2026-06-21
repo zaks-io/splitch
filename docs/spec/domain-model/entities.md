@@ -1,4 +1,4 @@
-# Canonical entity field list: Organization, App, Flag, Variant, Experiment, Entity
+# Canonical entity field list: Organization, App, Environment, Flag, Variant, Experiment, Entity
 
 ## Organization
 
@@ -26,10 +26,24 @@ Product / service surface. Groups Flags and hosts Experiments. The `app_id` is s
 | `org_id` | `string` (ULID) | ✓ | Owning Organization |
 | `name` | `string` | ✓ | Display name |
 | `slug` | `string` | ✓ | URL-safe; unique within an Org |
-| `client_key` | `string` | ✓ | Public, non-secret SDK key; safe to ship in browser/mobile code |
 | `created_at` | `timestamp` | ✓ | ISO 8601 UTC |
 
+SDK credentials (the public `client_key`) are per-Environment, not App-level; see the Environment entity (ADR-0027).
+
 The five runtimes of one product share a single App. An App is not an ownership unit (that is the Organization).
+
+## Environment
+
+First-class axis under App (ADR-0027). Experiments, Experiment Runs, Exposures, and SDK credentials are per-Environment. Flag DEFINITION (key, schema, Variant catalog) is App-level; Flag CONFIGURATION (available variants, targeting, rollout, enabled state) is per-Environment.
+
+| Field | Type | Req | Meaning |
+|-------|------|-----|---------|
+| `environment_id` | `string` (ULID) | ✓ | Co-scoping key alongside `app_id` for experiments, runs, exposures, and SDK credentials |
+| `app_id` | `string` (ULID) | ✓ | Owning App |
+| `name` | `string` | ✓ | Display name (e.g. `"production"`, `"staging"`) |
+| `slug` | `string` | ✓ | URL-safe; unique within an App |
+| `client_key` | `string` | ✓ | Public, non-secret SDK key; per-Environment |
+| `created_at` | `timestamp` | ✓ | ISO 8601 UTC |
 
 ## Flag
 
@@ -48,6 +62,8 @@ Named feature toggle with a key, Variants, Targeting Rules, and enabled/disabled
 | `targeting_rules` | `TargetingRule[]` | ✓ | Priority-ordered; first-match-wins; may be empty |
 | `created_at` | `timestamp` | ✓ | ISO 8601 UTC |
 | `updated_at` | `timestamp` | ✓ | Last non-material or structural edit |
+
+**Definition vs configuration (ADR-0027).** Flag DEFINITION — `key`, value schema, and the Variant catalog — is App-level and shared across Environments. Flag CONFIGURATION — `enabled` state, `default_variant`, the subset of available variants, `targeting_rules`, and rollout — is per-Environment. The configuration fields above are resolved against a specific `environment_id`.
 
 ## Variant
 
@@ -69,13 +85,14 @@ Test comparing Variants of a Flag to measure their effect on Metrics for a popul
 |-------|------|-----|---------|
 | `experiment_id` | `string` (ULID) | ✓ | Internal identifier |
 | `app_id` | `string` (ULID) | ✓ | Owning App |
+| `environment_id` | `string` (ULID) | ✓ | Owning Environment; Experiments are per-Environment (ADR-0027) |
 | `flag_id` | `string` (ULID) | ✓ | The single controlled Flag in v1 (v1 Flag/Experiment scope) |
 | `name` | `string` | ✓ | Display name |
 | `description` | `string` | ✗ | Non-material |
 | `hypothesis` | `string` | ✗ | Formal expected-effect statement |
 | `targeting_key_type` | `string` | ✓ | Entity type name the Targeting Key identifies (e.g. `"user"`, `"workspace"`) |
 | `status` | `ExperimentStatus` | ✓ | See Run lifecycle spec |
-| `live_run_id` | `string \| null` | ✓ | The Run currently serving Entities; null when no Publish has occurred |
+| `live_run_id` | `string \| null` | ✓ | The Experiment Run currently serving Entities; null when no Start has occurred |
 | `confidence_level` | `number` | ✓ | Default `0.95`; per-Experiment |
 | `metrics` | `ExperimentMetric[]` | ✓ | Goal, guardrail, and secondary Metrics |
 | `activation_metric` | `ActivationMetricConfig \| null` | ✗ | Gate config; when set, freezes per Run |
@@ -108,6 +125,7 @@ EvaluationContext = {
 ## Sources
 
 - [ADR-0021](../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [ADR-0001](../../adr/0001-assignment-is-pure-not-an-event.md)
 - [ADR-0002](../../adr/0002-run-is-the-immutable-unit-of-analysis.md)
 - [CONTEXT.md](../../../CONTEXT.md)

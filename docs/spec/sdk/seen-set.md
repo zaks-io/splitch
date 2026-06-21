@@ -26,7 +26,7 @@ SeenKey = (flagKey, runId, targetingKey)
 incorrectly suppressed:
 
 - Entity is exposed under Run N → seen-set entry created for `(flagKey, runN, targetingKey)`.
-- Experiment publishes (assignment edit → new Run N+1 opens).
+- Experiment starts (assignment edit → new Run N+1 opens).
 - Entity evaluates again → seen-set key `(flagKey, runN+1, targetingKey)` is absent.
 - Fresh Exposure fires under Run N+1. Correct.
 

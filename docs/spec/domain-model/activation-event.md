@@ -15,8 +15,9 @@ Activation is its own row type on the same append-only Exposure log (ADR-0010, A
 | Field | Type | Req | Meaning |
 |-------|------|-----|---------|
 | `app_id` | `string` | ✓ | Data-isolation key |
+| `environment_id` | `string` | ✓ | Environment scope; Exposures/activations are per-Environment (ADR-0027) |
 | `experiment_id` | `string` | ✓ | Owning Experiment |
-| `run_id` | `string` | ✓ | Run at activation time |
+| `run_id` | `string` | ✓ | Experiment Run at activation time |
 | `targeting_key` | `string` | ✓ | The Entity identifier |
 | `id_type` | `string` | ✓ | Entity type; always explicit |
 | `server_ts` | `timestamp` | ✓ | Server-received-at |
@@ -29,7 +30,7 @@ Counterfactual triggering is additive: the future Kohavi-correct gate is impleme
 
 `ActivationMetricConfig = { event_name: string; conditions?: Condition[] }`
 
-The Activation Metric config is **frozen at Run creation** — it is an assignment-affecting edit. Setting or changing it opens a new Run on Publish.
+The Activation Metric config is **frozen at Run creation** — it is an assignment-affecting edit. Setting or changing it opens a new Run on Start.
 
 If the gate is set but no activation events are logged at analysis time, the activated population is empty (0 Entities); both guardrails fire. Analysis runs on an empty set — this is the correct, permissive behavior. No upfront requirement to wire the event before setting the gate.
 
@@ -82,7 +83,9 @@ Chi-square on the activated Entities per arm per Run (p < 0.001), separate from 
 
 `activation_rate = COUNT(activated) / COUNT(exposed)` per arm.
 
-Divergence across arms is a loud alert and explains why the activated-population SRM fired. This Metric is always computed alongside goal Metrics when a gate is set.
+Divergence across arms is tested with a chi-square test over activated / not-activated by arm,
+threshold `p < 0.001`. The result also reports the largest absolute activation-rate gap. This
+Metric is always computed alongside goal Metrics when a gate is set.
 
 **Either guardrail firing means the gated results are untrusted.** The system surfaces this prominently; the gated scorecard is visually flagged "UNTRUSTED" when either fires.
 
@@ -92,4 +95,6 @@ No reference vendor ships this exact built-in per-arm activation-rate balance di
 
 - [ADR-0012](../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md)
 - [ADR-0013](../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [activation-gate-seam.md](../../architecture/activation-gate-seam.md)
+- [Deng and Hu, Diluted Treatment Effect Estimation for Trigger Analysis](https://exp-platform.com/Documents/wsdm2015-dilution.pdf)

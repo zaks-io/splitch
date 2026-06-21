@@ -11,13 +11,15 @@ One Tinybird datasource (`raw_events`) holds all event types. The `type` discrim
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `type` | `'exposure'` | yes | Row discriminator |
-| `app_id` | `string` | yes | Data-isolation key; injected by the edge Worker, never from the client |
+| `app_id` | `string` | yes | Data-isolation key; injected by the Evaluation Worker, never from the client |
 | `experiment_id` | `string` | yes | Stable identifier of the Experiment |
-| `run_id` | `string` | yes | Stamped at SDK fire-time from the live Run config in KV; the live `liveRunId` the edge read when it evaluated |
+| `run_id` | `string` | yes | Stamped at SDK fire-time from the live Run config in KV; the live `liveRunId` the Evaluation Worker read when it evaluated |
 | `id_type` | `string` | yes | Entity type declared on the Run (e.g. `'user'`, `'workspace'`); sourced from the Run config, not the client (guards holdover DO key) |
 | `targeting_key` | `string` | yes | The Targeting Key that was evaluated; identifies the Entity |
 | `variant` | `string` | yes | The Variant name (string, never the value/metadata) assigned to this Entity |
+| `event_id` | `string` | yes | Retry-stable physical event id generated once when the Worker creates this raw row |
 | `server_ts` | `DateTime64(3)` | yes | Server-received-at timestamp (millisecond precision, UTC); canonical for `MIN(ts)` first-touch ordering — monotonic, no clock skew |
+| `ingest_ts` | `DateTime64(3)` | yes | Raw-log append timestamp; used only for snapshot/tail watermarks, never for analysis ordering |
 | `client_ts` | `DateTime64(3)` | no | Client-fired timestamp; carried for diagnostics only, never used for ordering |
 | `dedup_key` | `string` | yes | Idempotent at-least-once key; see Dedup Key section below |
 | `source_id` | `string` | yes | Edge POP identifier (e.g. `'sea01'`); included in `dedup_key` |
@@ -27,11 +29,13 @@ One Tinybird datasource (`raw_events`) holds all event types. The `type` discrim
 ### Dedup key definition
 
 ```
-dedup_key = sha256(app_id + ':' + experiment_id + ':' + run_id + ':' + id_type + ':' + targeting_key + ':' + source_id + ':' + server_ts_ms)
+dedup_key = sha256(type + ':' + app_id + ':' + experiment_id + ':' + run_id + ':' + id_type + ':' + targeting_key + ':' + source_id + ':' + event_id)
 ```
 
-- `server_ts` at millisecond precision avoids collisions within one POP at the same ms.
+- `type` is part of the key so an Exposure and Activation for the same Entity in the same millisecond cannot collide in the unified log.
+- `event_id` is generated once when the raw row is created and reused on retry, so at-least-once delivery is idempotent even if a retry happens later.
 - `source_id` (POP hostname) makes same-Entity, same-ms events from different POPs distinct.
+- `server_ts` is not part of the key; it is for first-touch ordering, not wire-level idempotency.
 - New fields do NOT change this key — schema-stable by construction.
 - Tinybird datasource configures this column as its `dedup_key` to handle at-least-once ingest.
 
@@ -49,8 +53,12 @@ The dedup key is for wire-level ingest deduplication only. The first-touch dedup
 | `run_id` | `string` | yes | Run under which the activation occurred |
 | `id_type` | `string` | yes | Must match the Run's declared `id_type` |
 | `targeting_key` | `string` | yes | Entity that activated |
+| `event_id` | `string` | yes | Retry-stable physical event id generated once when the Worker creates this raw row |
+| `server_ts` | `DateTime64(3)` | yes | Server-received-at timestamp; equals `activation_ts` for v1 server-received activations |
+| `ingest_ts` | `DateTime64(3)` | yes | Raw-log append timestamp; used only for snapshot/tail watermarks, never for analysis ordering |
 | `activation_ts` | `DateTime64(3)` | yes | When the activation event occurred (server-received-at) |
 | `dedup_key` | `string` | yes | Same construction as Exposure dedup key |
+| `source_id` | `string` | yes | Edge POP identifier; included in `dedup_key` |
 | `counterfactual` | `boolean` | yes | `false` in v1; `true` when emitted by the SDK counterfactual evaluation path (additive, ADR-0013) |
 
 ## Non-exposing paths

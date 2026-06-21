@@ -8,11 +8,21 @@ A config edit is sorted by **what it invalidates**, and the two cases get differ
   `assign()`, so Exposures collected before and after are bucketed differently and are **not comparable**.
   These **end the current Run and open the next** (sample resets to zero). This is the ADR-0002 invariant:
   a Run is a window over which *bucketing* was frozen.
-- **Measurement edits** — Metric definitions, Conversion Window, Guardrail/Activation config — change *what
+- **Measurement edits** — Secondary Metric definitions, Conversion Window, and exploratory Guardrail config — change *what
   the numbers mean*, but not *who is in which arm*. The raw Exposure/event log is untouched and still
   comparable. These **recompute losslessly over the existing Run**: re-run the analysis query with the new
   definition over the same raw log. **No new Run, no sample reset.**
+- **Activation Metric config** is assignment-affecting for splitch because it redefines the analysis entry
+  population and `window_anchor`; setting or changing it opens a new Run.
 - **Non-material edits** (description, owner, tags, dashboard layout) apply in place.
+
+There is one statistical discipline layer inside measurement edits: the **decision spec** is locked
+at Run Start. Decision spec means confidence level / alpha, horizon mode, goal Metric family,
+Guardrail thresholds, and Primary Dimensions. Editing those after seeing data can recompute an
+exploratory view, but it cannot change what splitch calls decision-valid significance or a
+decision-valid Guardrail breach for the current Run. Post-start additions are Secondary /
+exploratory unless the operator opens a new Run or a future locked-analysis mode explicitly creates
+a new pre-registered analysis version.
 
 This is what the reference platforms do, and we follow it deliberately. All three decouple metric
 definitions from collected data and recompute: **Eppo** backfills a changed/added metric "from the start of
@@ -45,5 +55,17 @@ A Metric or Conversion-Window tweak mid-experiment **keeps the accumulated sampl
 matching Eppo/Statsig/GrowthBook. An assignment edit still costs the sample (correctly: the data is no longer
 comparable), and the UI must warn loudly before one. The Run's guarantee narrows honestly to **"bucketing was
 frozen for this Run's life"** (ADR-0002) — measurement is reproducible over the frozen bucketing, which is all
-analyzability requires. A future **pre-registration / locked-analysis** mode can re-freeze measurement per
-experiment for teams that want it; that is an additive opt-in, not a change to this default.
+analyzability requires. The decision spec lock prevents alpha shopping, metric shopping, and post-hoc
+Dimension fishing from mutating the decision-valid result after data is visible.
+
+## Sources
+
+- Benjamini and Hochberg (1995), false discovery rate: family size and alpha must be defined for the
+  tested family, not moved after observing p-values:
+  https://rss.onlinelibrary.wiley.com/doi/10.1111/j.2517-6161.1995.tb02031.x
+- Bakshy, Eckles, and Bernstein, PlanOut / online field experiments: separates experiment design from
+  application code and encourages sound practice for iterative and parallel experiments:
+  https://arxiv.org/abs/1409.3174
+- Johari, Koomen, Pekelis, and Walsh, always-valid inference: always-valid p-values compose with
+  multiple testing control in a sequential context:
+  https://pubsonline.informs.org/doi/10.1287/opre.2021.2135

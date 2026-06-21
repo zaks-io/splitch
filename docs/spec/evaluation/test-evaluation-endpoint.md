@@ -19,10 +19,10 @@ auth surface.
 ## Request shape
 
 ```
-POST /api/v1/apps/:appId/test-evaluation
+POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval
 
 {
-  "flagKey":        string,    // required; Flag to evaluate
+  "flagKey":        string,    // required; Flag to evaluate (resolved against this Environment, ADR-0027)
   "targetingKey":   string,    // required; Entity identifier to evaluate for
   "idType":         string,    // required; Entity type (matches Assignment Store key)
   "evaluationContext": {       // optional; additional attributes for Condition matching
@@ -31,8 +31,8 @@ POST /api/v1/apps/:appId/test-evaluation
 }
 ```
 
-No `runId` parameter. Always evaluates against the current live Run. If no Run is live,
-behaves as if Flag is disabled.
+No `runId` parameter. Always evaluates against the current live Run **of the path's Environment**
+(`environment_id`, ADR-0027). If no Run is live, behaves as if Flag is disabled.
 
 ## Response shape
 
@@ -94,7 +94,7 @@ The endpoint reads from the same KV-backed Provider cache the data-plane SDK rea
 not read from D1 directly (that would diverge from the live edge truth). The live Run is
 whatever the edge would evaluate if the SDK made a real call at this moment.
 
-~60s KV propagation window applies: immediately after a Publish, the endpoint may briefly
+~60s KV propagation window applies: immediately after Start, the endpoint may briefly
 resolve against the old config. This is acknowledged and consistent with data-plane behavior
 (ADR-0009). The endpoint documents this in its response: `liveRunId` reflects what was
 actually evaluated.
@@ -129,3 +129,4 @@ The exposure-free guarantee is its entire reason for existence.
 - [../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md)
 - [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

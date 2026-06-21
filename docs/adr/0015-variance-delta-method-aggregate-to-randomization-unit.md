@@ -30,10 +30,15 @@ understated — so CIs are too narrow and the false-positive rate explodes.
    is the simpler sum-of-variances). Guardrail Metrics fire on a **CI lower-bound breach** of a downside /
    non-inferiority threshold (CONTEXT.md; Eppo/Spotify), reading the same CI object.
 
+5. **Zero-denominator Entities stay in the randomized population.** A Ratio Metric is a ratio of
+   per-Entity aggregate means, so `denom_i = 0` is data, not a row-level exclusion rule. Dropping those
+   Entities changes the estimand and can create post-treatment selection bias. The ratio is unestimable
+   only when the arm-level denominator mean is zero.
+
 ## Per-type variance estimators
 
 - **Binomial** — Bernoulli `p(1−p)` over per-Entity 0/1.
-- **Count / Revenue (Mean)** — sample variance of per-Entity sums/means.
+- **Count / Revenue (Mean)** — sample variance of per-Entity sums.
 - **Ratio** — delta method with the covariance term (rule 2).
 - All feed the same always-valid CI (ADR-0014) after CUPED adjustment (ADR-0016).
 
@@ -49,3 +54,8 @@ Every Metric computation aggregates to the Entity first, then applies the type-a
 the delta method wherever the unit differs from the denominator. This is more machinery than a naive engine,
 but it is the machinery that makes the numbers trustworthy — the whole point of the seam. Winsorization of
 heavy-tailed additive Metrics composes here (ADR-0016).
+
+## Sources
+
+- Deng, Knoblich, and Lu, Applying the Delta Method in Metric Analytics:
+  https://arxiv.org/abs/1803.06336

@@ -8,7 +8,7 @@ how types, clients, and MCP schemas derive from one source. Avoids any second au
 ```
 @splitch/contracts
   Authored here:
-    - Leaf Zod schemas (Flag, Variant, TargetingRule, Experiment, Run, Segment, Metric, ...)
+    - Leaf Zod schemas (Environment, Flag, FlagConfig, Variant, TargetingRule, Experiment, Run, Segment, Metric, ...)
     - Request/response Zod schemas (distinct from leaf; no fusion with storage shapes)
     - @hono/zod-openapi route definitions
   Derived here (compile-time):
@@ -48,7 +48,9 @@ Zod schema (authored, @splitch/contracts)
 
 **Request schemas** compose leaves; never expose storage internals:
 - `CreateFlagRequestSchema` — has `variants: VariantSchema[]` (not `flag_id`, not `created_at`)
-- `CreateRunRequestSchema` does not exist separately — Runs are created implicitly by Publish
+- `CreateRunRequestSchema` does not exist separately — Runs are created implicitly by Start
+- Per-Environment request/response schemas (Experiment, Run, credential) carry `environment_id`
+  co-scoped with `app_id`, matching the `/apps/{app_id}/envs/{environment_id}/…` routes (ADR-0027)
 
 **Response schemas** include computed/server-set fields:
 - `FlagResponseSchema` — has `flag_id`, `created_at`, `updated_at` + all request fields
@@ -108,3 +110,4 @@ Zod parse failures and domain-invariant failures return the same shape. No paral
 
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

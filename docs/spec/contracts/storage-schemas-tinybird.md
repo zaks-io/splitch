@@ -9,27 +9,32 @@ audit_log datasources are unbounded append-only workloads. (ADR-0025 "reuse at t
 
 ## Tinybird datasources (append-only; raw rows never mutated)
 
-### `exposures` (raw log)
+### `raw_events` (raw log)
 
-Primary engine sorting key: `(app_id, run_id, id_type, server_received_at)` — `app_id` first for
-multi-tenant isolation; `run_id` for first-touch grouping within a Run.
+Primary engine sorting key: `(app_id, environment_id, experiment_id, run_id, server_received_at, targeting_key)` —
+`app_id` first for multi-tenant isolation; `environment_id` co-scoped (ADR-0027); `run_id` for first-touch grouping within a Run.
 
 | Column | Type | Notes |
 |---|---|---|
-| `dedup_key` | String | Wire-level sha256 idempotency key for at-least-once ingest; construction in [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md) |
+| `dedup_key` | String | Wire-level sha256 idempotency key for at-least-once ingest; hashes `type`, identity fields, `source_id`, and `event_id`; construction in [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md) |
 | `app_id` | String | Isolation; always first in WHERE |
+| `environment_id` | String | Co-scoped with `app_id`; Exposures are per-Environment (ADR-0027) |
 | `experiment_id` | String | — |
 | `run_id` | String | Stamped at SDK fire-time from the resolved live Run |
 | `id_type` | String | Entity type; part of Assignment Store key |
 | `targeting_key` | String | Entity identifier |
-| `variant_name` | String | Variant name (not id) |
+| `variant` | Nullable(String) | Variant name (not id) on Exposure rows; NULL on Activation rows |
 | `type` | LowCardinality(String) | `'exposure'` or `'activation'` |
+| `event_id` | String | Retry-stable physical raw-row id |
 | `counterfactual` | UInt8 | 0/1; reserved for future counterfactual triggering |
 | `source_id` | String | Edge POP identifier; component of the wire `dedup_key` |
 | `client_timestamp` | DateTime | SDK fire time; diagnostic only |
-| `server_received_at` | DateTime | Canonical ingest time; used for `MIN` first-touch |
+| `server_received_at` | DateTime | Server-received event timestamp; used for `MIN` first-touch |
+| `ingest_ts` | DateTime | Raw-log append watermark; used by snapshot/tail only |
+| `activation_ts` | Nullable(DateTime) | Activation timestamp; equals `server_received_at` in v1 |
+| `is_holdover` | UInt8 | Exposure rows only; 0 on Activation rows |
 
-First-touch identity (query-time): the tuple `(app_id, experiment_id, run_id, id_type, targeting_key)`
+First-touch identity (query-time): the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`
 resolved by `MIN(server_received_at)` — the earliest determines the first-touch winner. This is
 distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key). Wire
 `dedup_key` construction lives in [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
@@ -63,3 +68,4 @@ Not in D1 — unbounded, append-only workload fits Tinybird (ADR-0018).
 - [../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md](../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md)
 - [../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md)
 - [../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md](../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

@@ -15,22 +15,27 @@ Every KV value is a JSON blob Zod-parsed on read. A malformed blob fails loud wi
 
 | Namespace key pattern | Value schema | TTL | Notes |
 |---|---|---|---|
-| `app:{appId}:flag:{flagKey}` | `FlagConfigKV` | none (invalidated on change) | Hot-path flag config read |
-| `app:{appId}:run:{runId}` | `RunConfigKV` | none | Hot-path live Run read |
+| `app:{appId}:{environmentId}:flag:{flagKey}` | `FlagConfigKV` | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027) |
+| `app:{appId}:{environmentId}:run:{runId}` | `RunConfigKV` | none | Hot-path live Experiment Run read; per-Environment (ADR-0027) |
 | `cred:{hash}` | `CredentialCacheKV` | 60s | Credential validation cache; evicted on revoke |
-| `app:{appId}:liveRun` | `{ runId: string }` | none | Written on Publish; edge reads this to know the live Run |
+| `app:{appId}:{environmentId}:liveRun` | `{ runId: string }` | none | Written on Start; edge reads this to know the live Experiment Run (ADR-0027) |
 
 ### FlagConfigKV
 
+Per-Environment resolved Flag CONFIGURATION (ADR-0027): the App-level Variant catalog narrowed by
+`availableVariantNames` plus the Environment's enabled state, default, and targeting.
+
 ```
 {
-  id:               string
-  key:              string
-  enabled:          boolean
-  defaultVariantId: string
-  variants:         Variant[]
-  targetingRules:   TargetingRule[]
-  updatedAt:        string  // ISO 8601; cache-bust signal
+  id:                    string
+  key:                   string
+  environmentId:         string
+  enabled:               boolean
+  defaultVariantId:      string
+  variants:              Variant[]
+  availableVariantNames: string[]
+  targetingRules:        TargetingRule[]
+  updatedAt:             string  // ISO 8601; cache-bust signal
 }
 ```
 
@@ -56,10 +61,11 @@ control plane. Edge evaluate path reads it from `ExperimentConfigKV` (see below)
 
 ```
 {
-  id:           string
-  flagId:       string
-  targetingKey: string
-  liveRunId:    string | null
+  id:            string
+  environmentId: string
+  flagId:        string
+  targetingKey:  string
+  liveRunId:     string | null
 }
 ```
 
@@ -67,11 +73,12 @@ control plane. Edge evaluate path reads it from `ExperimentConfigKV` (see below)
 
 ```
 {
-  appId:    string
-  kind:     'api_key' | 'client_key'
-  scopes:   string[]
-  revoked:  boolean
-  cachedAt: string  // ISO 8601
+  appId:         string
+  environmentId: string  // credentials are per-Environment (ADR-0027)
+  kind:          'api_key' | 'client_key'
+  scopes:        string[]
+  revoked:       boolean
+  cachedAt:      string  // ISO 8601
 }
 ```
 
@@ -108,3 +115,4 @@ and recomputes the same Variant.
 
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0009-assignment-store-substrate-kv-read-do-write.md](../../adr/0009-assignment-store-substrate-kv-read-do-write.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

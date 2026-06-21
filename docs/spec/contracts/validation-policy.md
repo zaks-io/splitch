@@ -78,12 +78,13 @@ All domain invariants live in the Worker — both skins (MCP, CLI) inherit corre
 |---|---|---|
 | **Run frozen fields** | Reject `PatchRunRequest` with any of `{salt, allocation, variantSet, targetingSegmentId}` | `RUN_FROZEN` |
 | **Variant frozen per Run** | Reject `PatchVariantRequest.value` if any running Run's `variantSet` includes this variant | `RUN_FROZEN` |
-| **Allocation sums to 100** | Sum check on `PublishRunRequest.allocation` | `ALLOCATION_INVALID` |
+| **Allocation sums to 100** | Sum check on `StartRunRequest.allocation` | `ALLOCATION_INVALID` |
 | **Activation ordering** | `activation_ts > first_exposure_ts`; enforced at ingest time in the Exposure pipeline | `ACTIVATION_TIMESTAMP_INVALID` |
-| **app_id scoping** | Every D1/Tinybird query filtered by `app_id` in the data-access layer | `FORBIDDEN` (wrong app) |
+| **app_id scoping** | Every D1/Tinybird query filtered by `app_id` (and `environment_id` co-scoped for experiments/runs/exposures/credentials, ADR-0027) in the data-access layer | `FORBIDDEN` (wrong app) |
 | **Credential scopes** | KV cache lookup on every request; checked before the handler runs | `INSUFFICIENT_SCOPES` / `CREDENTIAL_REVOKED` |
 | **targetingKey assignment edit** | Reject `PatchExperimentRequest.targetingKey` when Experiment.status = `'running'` | `RUN_FROZEN` |
 | **Activation Metric assignment edit** | Reject `PatchExperimentRequest.activationMetricId` when Experiment.status = `'running'` | `RUN_FROZEN` |
+| **Decision family lock** | Reject changing `confidenceLevel`, horizon/tuning fields, goal Metric roles, Guardrail thresholds/directions, or Primary Dimensions for a running Run's decision-valid result | `DECISION_LOCKED` |
 | **Metric denominator same App** | Check `denominator.metricId` belongs to same `appId` on create | `VALIDATION_ERROR` |
 
 ---
@@ -103,12 +104,12 @@ not a partial resolution.
 
 ---
 
-## Publish action: atomicity contract
+## Start action: atomicity contract
 
-When `POST /api/experiments/:id/publish` fires:
+When `POST /apps/{app_id}/envs/{environment_id}/experiments/:id/start` fires:
 1. Worker validates the request (Zod).
 2. D1 transaction: end running Run (set `ended_at`, `status = 'ended'`), insert new Run, update `experiments.live_run_id`.
-3. KV write: update `app:{appId}:liveRun` and `app:{appId}:run:{newRunId}`.
+3. KV write: update `app:{appId}:{environmentId}:liveRun` and `app:{appId}:{environmentId}:run:{newRunId}`.
 4. Broadcast WebSocket nudge (ADR-0019) after D1 + KV succeed.
 
 If D1 succeeds but KV write fails: D1 is truth; next edge request sees stale KV for up to ~60s
@@ -124,3 +125,4 @@ If D1 succeeds but KV write fails: D1 is truth; next edge request sees stale KV 
 - [../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md](../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md)
 - [../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md](../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md)
 - [../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md](../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

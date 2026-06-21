@@ -101,7 +101,10 @@ LEFT JOIN activations a
 GROUP BY run_id, e.variant
 ```
 
-Significant divergence of `activation_rate` across arms triggers an alert. This explains WHY the activated-population SRM fired.
+Activation-rate balance is tested with a chi-square test over the 2 × Variant table
+`activated` / `not_activated` by arm, threshold `p < 0.001`. The output also reports the largest
+absolute activation-rate gap across arms. The p-value is the alert; the rate gap explains WHY the
+activated-population SRM fired.
 
 **Either guardrail firing → gated results are untrusted.** Both guardrails always compute when a gate is set; they are not opt-in.
 
@@ -132,3 +135,5 @@ This is handed to the stats engine for Metric aggregation. The stats engine uses
 - [ADR-0012](../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md) — gate semantics, re-anchor, two guardrails
 - [ADR-0013](../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md) — activation as first-class event, counterfactual additive
 - [activation-gate-seam.md](../../architecture/activation-gate-seam.md) — query composition
+- [Fabijan et al., Diagnosing Sample Ratio Mismatch in Online Controlled Experiments](https://dl.acm.org/doi/10.1145/3292500.3330722)
+- [Deng and Hu, Diluted Treatment Effect Estimation for Trigger Analysis](https://exp-platform.com/Documents/wsdm2015-dilution.pdf)

@@ -1,7 +1,8 @@
 # Frontend spec index
 
-**Spine idea:** `appId` in the URL drives four otherwise-independent mechanisms — isolation check,
-query-cache root, live-update DO, and socket lifecycle — ensuring they can never disagree. The panel
+**Spine idea:** `(appId, environmentId)` resolved from the URL (`/{orgSlug}/{appSlug}/{env}/...`, ADR-0027)
+drives four otherwise-independent mechanisms — isolation check, query-cache root, live-update DO, and
+socket lifecycle — ensuring they can never disagree. The panel
 is TanStack Start on a Cloudflare Worker; the marketing site is a second TanStack Start Worker;
 both share one `ui` package and the `contracts` package.
 
@@ -24,10 +25,11 @@ both share one `ui` package and the `contracts` package.
 - [ADR-0018](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md) — D1/KV identity, app_id isolation
 - [ADR-0019](../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md) — WebSocket, nudge, Query store
 - [ADR-0020](../../adr/0020-tanstack-start-for-both-control-panel-and-marketing-shared-component-layer.md) — TanStack Start, two Workers, shared `ui`
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md) — Environment is a first-class axis under App; three-segment URL spine
 
 ## Key Invariants
 
 - **WorkOS session issuer** — WorkOS is the session issuer (AuthKit + SSO/SCIM); the cookie seam is issuer-agnostic
 - **No optimistic writes** — cache updates happen only via refetch after server 200
-- **appId from URL only** — no "current app" in session or React context
+- **(appId, environmentId) from URL only** — resolved from `/{orgSlug}/{appSlug}/{env}`; no "current app/environment" in session or React context
 - **Branding guide location** — `docs/branding/design-tokens.md` (to be created by design; token names pinned in `packages/ui/src/theme.css`, values deferred)

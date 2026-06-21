@@ -11,7 +11,7 @@ Assignment is pure. Exposure is the only event. The Run freezes bucketing (not m
 | File | Purpose |
 |---|---|
 | [entities.md](./entities.md) | Canonical field lists for Organization, App, Flag, Variant, Experiment, Entity, and Evaluation Context |
-| [run-lifecycle.md](./run-lifecycle.md) | Run state machine (draft → running → ended), edit taxonomy (assignment / measurement / non-material), draft/publish model, Run entity fields |
+| [run-lifecycle.md](./run-lifecycle.md) | Experiment Run state machine (draft → running → ended), edit taxonomy (assignment / measurement / non-material), draft/start model, Experiment Run entity fields |
 | [assignment-exposure-run.md](./assignment-exposure-run.md) | The Assignment/Exposure/Run spine: Assignment as pure function, Exposure canonical row shape, holdover pseudocode, first-touch identity + wire dedup_key |
 | [assignment-store.md](./assignment-store.md) | Assignment Store interface (`getAll` / `put`), key structure, substrate (KV read / DO write), failure contract, retention |
 | [exposure-dedup.md](./exposure-dedup.md) | First-touch dedup rule, two-layer dedup (SDK seen-set vs pipeline authority), `__multiple__` quarantine logic, SRM denominator, peek accessor |
@@ -22,9 +22,9 @@ Assignment is pure. Exposure is the only event. The Run freezes bucketing (not m
 ## Key Invariants
 
 - One Flag per Experiment in v1; `experiment.flag_id` is a scalar.
-- Draft → publish model; N assignment edits become one sample reset.
+- Draft → start model; N assignment edits become one sample reset.
 - Activation Metric is an assignment-affecting edit and is frozen per Run.
-- First Publish opens the first Run; `"draft"` Experiment has no live Run.
+- First Start opens the first Experiment Run; `"draft"` Experiment has no live Run.
 - `live_run_id` is an explicit persisted field, not derived.
 - DO is truth; KV miss is self-healing; no distributed transaction on the hot path.
 
@@ -33,4 +33,4 @@ Assignment is pure. Exposure is the only event. The Run freezes bucketing (not m
 - Evaluation path (evaluate seam, Provider, `assign()` implementation): see `evaluation/` area.
 - Exposure pipeline (raw log, Tinybird schema, Copy Pipe): see `pipeline/` area.
 - Stats engine (sequential testing, CUPED, delta-method): see `stats/` area.
-- Control-plane API (Run CRUD, Publish endpoint, measurement-edit endpoint): see `control-plane/` area.
+- Control-plane API (Run CRUD, Start endpoint, measurement-edit endpoint): see `control-plane/` area.

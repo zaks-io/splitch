@@ -18,43 +18,46 @@ raw Exposure log (.datasource, append-only)
                                           ► deduped first-touch rows (served to analysis)
 ```
 
-Serving queries: `snapshot UNION ALL fresh_tail_since_last_snapshot`.
+Serving queries: `snapshot UNION ALL fresh_tail_since_last_ingest_watermark`.
 
-The snapshot covers the bulk; the real-time tail covers the gap since the last snapshot. No row is
-missed; no row is double-counted (the snapshot already deduplicated its window, the tail is deduped
-inline).
+The snapshot covers the bulk; the real-time tail covers rows ingested after the snapshot watermark.
+No row is missed; no row is double-counted (the snapshot already deduplicated its window, the tail
+is deduped inline).
 
 ## First-touch definition (identical in both layers)
 
 ```sql
 -- snapshot (Copy Pipe):
-QUALIFY ROW_NUMBER() OVER (PARTITION BY targeting_key, experiment_id, run_id ORDER BY server_ts) = 1
+QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, targeting_key, experiment_id, run_id ORDER BY server_ts) = 1
 
 -- real-time tail (inline dedup on fresh rows):
-WHERE server_ts > {last_snapshot_ts}
-QUALIFY ROW_NUMBER() OVER (PARTITION BY targeting_key, experiment_id, run_id ORDER BY server_ts) = 1
+WHERE ingest_ts > {last_snapshot_watermark_ts}
+QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, targeting_key, experiment_id, run_id ORDER BY server_ts) = 1
 ```
 
-Both use `ROW_NUMBER()` equivalent to `MIN(server_ts)`. Both are generated from one shared
-definition, never hand-copied (ADR-0005 "one dedup, centralized" at the physical layer).
+Both use `ROW_NUMBER()` equivalent to `MIN(server_ts)` for first-touch. The tail boundary uses
+`ingest_ts`, not `server_ts`, because late-arriving rows can have an event timestamp older than
+the snapshot. Both are generated from one shared definition, never hand-copied (ADR-0005 "one
+dedup, centralized" at the physical layer).
 
 ## Snapshot datasource shape
 
 ```
 ExposureSnapshot {
   app_id:           string    // required — SORTING_KEY position 1 (isolation + cardinality)
-  experiment_id:    string    // required — SORTING_KEY position 2
+  environment_id:   string    // required — SORTING_KEY position 2; co-scoped, per-Environment (ADR-0027)
+  experiment_id:    string    // required — SORTING_KEY position 3
   run_id:           string    // required
   targeting_key:    string    // required
   id_type:          string    // required
   variant:          string    // required — '__multiple__' if conflict
   first_exposure_ts: datetime  // required — MIN(server_ts) from raw log
-  event_type:       string    // 'exposure' | 'activation'
+  watermark_ts:     datetime  // required — max raw ingest_ts included in snapshot
 }
 ```
 
-`ENGINE_SORTING_KEY`: `(app_id, experiment_id, run_id, targeting_key)` — `app_id` first for
-tenant isolation and low-cardinality range efficiency.
+`ENGINE_SORTING_KEY`: `(app_id, environment_id, experiment_id, run_id, targeting_key)` — `app_id`
+first for tenant isolation and low-cardinality range efficiency; `environment_id` co-scoped (ADR-0027).
 
 ## Rollup materialized views must build off the snapshot
 
@@ -79,14 +82,14 @@ queries:
 -- v0 query (full history, no snapshot):
 SELECT ... FROM raw_exposures
 WHERE app_id = {{String(app_id)}}
-GROUP BY targeting_key, experiment_id, run_id
+GROUP BY targeting_key, environment_id, experiment_id, run_id
 -- MIN(server_ts), __multiple__ quarantine, etc.
 
 -- production query (snapshot + tail):
 SELECT * FROM first_touch_snapshot WHERE app_id = {{String(app_id)}}
 UNION ALL
 SELECT ... FROM raw_exposures
-WHERE app_id = {{String(app_id)}} AND server_ts > {{DateTime(last_snapshot_ts)}}
+WHERE app_id = {{String(app_id)}} AND ingest_ts > {{DateTime(last_snapshot_watermark_ts)}}
 GROUP BY ...
 ```
 
@@ -104,3 +107,4 @@ TTL window.
 - [../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md](../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md)
 - [../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md](../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md)
 - [../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md](../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

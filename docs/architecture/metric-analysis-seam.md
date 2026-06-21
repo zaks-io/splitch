@@ -72,10 +72,11 @@ rules, the peeking correction, and the multiple-comparison control smear across 
 ### Multiple comparisons — Benjamini-Hochberg FDR
 
 Many Metrics × many Variants inflates false positives (5 Metrics × 2 Variants ≈ 40% FWER). splitch controls
-the **false discovery rate via Benjamini-Hochberg** across the goal-metric × Variant family — more powerful
-than Bonferroni, widely adopted (Statsig, GrowthBook), Kohavi-endorsed. Guardrail and secondary Metrics are
-excluded from the family; a "none" option is exposed. (Eppo's preferential-Bonferroni/FWER was the
-considered alternative — stricter, primary-metric-weighted; we chose FDR for power and adoption.)
+the **false discovery rate via Benjamini-Hochberg** across the goal-metric × Variant family locked at Run
+Start — more powerful than Bonferroni, widely adopted (Statsig, GrowthBook), Kohavi-endorsed. Guardrail
+and secondary Metrics are excluded from the family; post-start additions are exploratory for the current
+Run. (Eppo's preferential-Bonferroni/FWER was the considered alternative — stricter,
+primary-metric-weighted; we chose FDR for power and adoption.)
 
 ## Why this is a deep seam
 
@@ -91,3 +92,11 @@ Every default is the safe / fail-loud one, consistent with the rest of the archi
 - **Dimension slicing** (per-Dimension results) multiplies the comparison family — must compose with the FDR
   control here.
 - A **Bayesian results view** (chance-to-win, credible intervals) as an opt-in alternative surface.
+
+## Sources
+
+- [Benjamini and Hochberg (1995), controlling the false discovery rate](https://rss.onlinelibrary.wiley.com/doi/10.1111/j.2517-6161.1995.tb02031.x)
+- [Johari et al. (2022), Always Valid Inference](https://pubsonline.informs.org/doi/10.1287/opre.2021.2135)
+- [Deng, Knoblich, and Lu (2018), Applying the Delta Method in Metric Analytics](https://arxiv.org/abs/1803.06336)
+- [Deng et al. (2013), CUPED](https://robotics.stanford.edu/~ronnyk/2013-02CUPEDImprovingSensitivityOfControlledExperiments.pdf)
+- [Waudby-Smith and Ramdas (2024), confidence sequences for bounded means](https://academic.oup.com/jrsssb/article-abstract/86/1/1/7043257)

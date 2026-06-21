@@ -76,18 +76,26 @@ splitch logout                       # revokes token; removes credential file en
 splitch orgs get <org_id>
 splitch apps list --org <org_id>
 splitch apps create --org <org_id> --name <name>
+splitch envs list --app <app_id>
+splitch envs create --app <app_id> --name <name>
 splitch flags list --app <app_id>
-splitch flags create --app <app_id> --key <key> ...
-splitch experiments create --app <app_id> ...
-splitch experiments publish --app <app_id> <experiment_id>
-splitch runs end <run_id>
-splitch flags test-eval --app <app_id> <flag_id> --targeting-key <key> [--context-json <json>]
-splitch client-key get --app <app_id>
-splitch api-keys create --app <app_id>
-splitch api-keys revoke --app <app_id> <key_id>
+splitch flags create --app <app_id> --key <key> ...                       # App-level definition
+splitch flags promote --app <app_id> --env <environment_id> <flag_id>     # move Flag Configuration into an Env (ADR-0028)
+splitch env-policy get --app <app_id> --env <environment_id>
+splitch env-policy set --app <app_id> --env <environment_id> ...          # per-change-type confirm gates (ADR-0029)
+splitch experiments create --app <app_id> --env <environment_id> ...
+splitch experiments start --app <app_id> --env <environment_id> <experiment_id>
+splitch runs end --app <app_id> --env <environment_id> <run_id>
+splitch flags test-eval --app <app_id> --env <environment_id> <flag_id> --targeting-key <key> [--context-json <json>]
+splitch client-key get --app <app_id> --env <environment_id>
+splitch api-keys create --app <app_id> --env <environment_id>
+splitch api-keys revoke --app <app_id> --env <environment_id> <key_id>
 ```
 
 One command per endpoint. No composite multi-step commands in v1 unless agent ergonomics demand them.
+Experiments, Experiment Runs, and SDK credentials are per-Environment (ADR-0027), so their commands
+carry `--env`; Flag definition, Environment CRUD, and policy reads are App/Env scoped accordingly.
+Environment-level writes that the Environment Policy gates may require a `--confirm` flag (ADR-0029).
 
 ## MCP server
 
@@ -125,11 +133,19 @@ because the schemas are byte-for-byte identical.
 ### Tool naming convention
 
 `{resource}_{operation}` mapping to HTTP endpoints:
-- `flags_list`, `flags_create`, `flags_get`, `flags_update`
-- `experiments_create`, `experiments_publish`, `experiments_get`
+- `environments_list`, `environments_create`, `environments_get`
+- `flags_list`, `flags_create`, `flags_get`, `flags_update` (App-level definition)
+- `flags_promote` (move Flag Configuration into an Environment, ADR-0028)
+- `env_policy_get`, `env_policy_set` (per-change-type confirm gates, ADR-0029)
+- `experiments_create`, `experiments_start`, `experiments_get`
 - `runs_end`, `runs_get`, `runs_list`
 - `flags_test_eval`
 - `client_key_get`, `api_keys_create`, `api_keys_revoke`
+
+Experiment, Run, credential, and test-eval tools take `app_id` + `environment_id` inputs (per-Env,
+ADR-0027); the schemas are derived from the per-Env route definitions, so parity with the CLI holds
+by construction. The three new operations are Start (Experiment Run), Promote (Flag Configuration
+across Environments), and Confirm (the Environment Policy gate).
 
 ### Parity guarantee
 
@@ -149,3 +165,6 @@ failed Zod parse). Both surfaces inherit correctness from one guardian. (ADR-002
 - [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)
 - [../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md)
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md](../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md)
+- [../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md)

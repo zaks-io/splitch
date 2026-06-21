@@ -7,9 +7,9 @@ at analysis time — never a collapse at ingest.
 
 - **At-least-once, idempotent ingest.** Never exactly-once. Five edge runtimes give no global
   ordering and at-least-once delivery — "append raw, dedup in query" is the correct fit. Wire-level
-  idempotency uses the sha256 `dedup_key` defined in
+  idempotency uses a retry-stable `event_id` plus the sha256 `dedup_key` defined in
   [pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
-- **First-touch identity** = the tuple `(app_id, experiment_id, run_id, id_type, targeting_key)`,
+- **First-touch identity** = the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`,
   resolved by `MIN(server_ts)` at query time. Many raw Exposure rows for the same Entity/Run share
   this identity; the query picks the earliest `server_ts` as the first-touch winner. The tuple is
   schema-stable — new fields do not change it. This is distinct from the wire-level `dedup_key`
@@ -17,6 +17,8 @@ at analysis time — never a collapse at ingest.
 - **Two timestamps per Exposure row:**
   - `server_ts` (canonical): server-received-at. Monotonic, no client clock skew. Used for
     `MIN(ts)` first-touch ordering and Conversion Window anchor.
+  - `ingest_ts` (watermark only): raw-log append time. Used for snapshot/tail freshness boundaries,
+    never for first-touch or Metric windows.
   - `client_ts` (diagnostics only): client-fired time. Never used for analysis ordering.
 
 ## Raw Exposure row schema
@@ -25,16 +27,21 @@ at analysis time — never a collapse at ingest.
 ExposureRow {
   // First-touch identity components (resolved by MIN(server_ts) at query time)
   app_id:           string    // required — tenant scope
+  environment_id:   string    // required — co-scoped with app_id; Exposures are per-Environment (ADR-0027)
   experiment_id:    string    // required
   run_id:           string    // required — stamped at SDK fire-time from liveRunId in config
   id_type:          string    // required — Entity type (e.g. "user", "workspace")
   targeting_key:    string    // required — the bucketing identity
 
   // Event fields
+  event_id:        string    // required — retry-stable physical raw-row id
+  dedup_key:       string    // required — hashes type + identity + source_id + event_id
+  source_id:       string    // required — POP identifier
   variant:          string    // required — Variant name assigned
   server_ts:        datetime  // required — server-received-at (canonical)
+  ingest_ts:        datetime  // required — raw-log append watermark, not analysis time
   client_ts:        datetime  // optional — client-fired-at (diagnostics)
-  event_type:       'exposure' | 'activation'  // required — discriminator
+  type:             'exposure' | 'activation'  // required — discriminator
 
   // Activation-only fields (null for exposure rows)
   counterfactual:   boolean | null  // additive marker for counterfactual triggering (ADR-0013)
@@ -51,6 +58,7 @@ config the SDK actually evaluated against, not a server-side lookup at log time.
 -- First-touch per (entity, run). One row per Entity per Run.
 SELECT
   targeting_key,
+  environment_id,
   experiment_id,
   run_id,
   MIN(server_ts) AS first_exposure_ts,
@@ -59,7 +67,7 @@ SELECT
        ELSE MAX(variant) END AS variant
 FROM raw_exposures
 WHERE app_id = {{String(app_id)}}
-GROUP BY targeting_key, experiment_id, run_id
+GROUP BY targeting_key, environment_id, experiment_id, run_id
 ```
 
 This query is the single place where first-touch, the `__multiple__` quarantine, the SRM
@@ -113,8 +121,8 @@ Entity's experience-vs-counted-variant may momentarily disagree. Accepted over t
 
 ## Activation events
 
-Activation events are rows on the same log with `event_type = 'activation'`. They share the same
-first-touch identity tuple and carry their own wire `dedup_key` (same sha256 construction as
+Activation events are rows on the same log with `type = 'activation'`. They share the same
+first-touch identity tuple and carry their own `event_id` and wire `dedup_key` (same sha256 construction as
 Exposure rows; see [pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md)).
 Counterfactual triggering adds `counterfactual = true` — an additive column, not a
 schema change (ADR-0013). The activation gate seam joins activation rows to the deduped Exposure
@@ -127,4 +135,5 @@ output at analysis time.
 - [../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md](../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md)
 - [../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md](../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md)
 - [../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md](../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [../../architecture/exposure-pipeline-seam.md](../../architecture/exposure-pipeline-seam.md)

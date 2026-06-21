@@ -9,7 +9,7 @@ variance computation ([inference-engine.md](inference-engine.md)).
 |------------|---------------------|------------------------------|-----------------------------|
 | `binomial` | Binomial Metric     | `0` or `1` (did/didn't)      | `p(1-p)`                    |
 | `count`    | Count Metric        | sum of event values          | sample variance of sums     |
-| `revenue`  | Revenue Metric      | mean of event values         | sample variance of means    |
+| `revenue`  | Revenue Metric      | sum of event values          | sample variance of sums     |
 | `ratio`    | Ratio Metric        | `(num_sum, denom_sum)` pair  | delta method with covariance |
 
 A "Conversion" is informal language for a Binomial Metric event. It is not a first-class type.
@@ -41,12 +41,15 @@ y_i = SUM(event_value) for entity_i in Conversion Window
 ### Revenue (Mean) Metric
 
 ```
-y_i = MEAN(event_value) for entity_i in Conversion Window
+y_i = SUM(event_value) for entity_i in Conversion Window
 ```
 
-- Aggregation: per-Entity mean of values in window.
+- Aggregation: per-Entity sum of monetary or duration values in window; result reports the mean
+  of those sums across Entities.
 - Denominator: unique Entities.
 - Winsorization: **applied by default** at 99.9th percentile before variance (ADR-0016).
+- Average order value, revenue per session, and similar denominator-normalized Metrics are Ratio
+  Metrics, not Revenue Metrics.
 
 ### Ratio Metric
 
@@ -59,6 +62,9 @@ ratio   = SUM(num_i) / SUM(denom_i)   (population-level)
 - Both numerator and denominator are aggregated **independently** to Entity level.
 - They are delivered as a `(num_value, denom_value)` pair per Entity row (see
   [data-contracts.md](data-contracts.md)) — the covariance term requires the pair.
+- Entities with `denom_i = 0` stay in the pair with a zero denominator; they are not dropped from
+  the randomized population. Only an arm-level denominator mean of zero makes the ratio
+  unestimable.
 - Winsorization: applied per-metric to `num_i` and `denom_i` independently, if configured.
 - **No naive ratio-of-means path exists.** Delta method is the only variance path.
 
@@ -132,3 +138,4 @@ opens a new Run. The Activation Metric is frozen per Run.
 - [../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md](../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md)
 - [../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md](../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md)
 - CONTEXT.md §Metric definitions
+- [Deng, Knoblich, and Lu, Applying the Delta Method in Metric Analytics](https://arxiv.org/abs/1803.06336)

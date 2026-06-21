@@ -17,8 +17,8 @@ Per-Dimension results are separate CI computations scoped to `Dimension = dimens
 | Secondary   | At Experiment design time | No        | Exploratory; discovery, not guardians |
 
 The class is set once, at Experiment creation or during the draft phase, and is frozen per Run.
-**Adding a Secondary Dimension mid-Run does not change the BH family size `m`.** Secondary
-Dimensions are analyzed and surfaced but are never significance-guarded.
+Post-start Dimensions are allowed only as Secondary / exploratory outputs for the current Run.
+They do not change the BH family size `m` and cannot produce decision-valid significance.
 
 ## Family expansion for Primary Dimensions
 
@@ -29,7 +29,7 @@ m = (n_goal_metrics × n_treatment_variants)          # base family
   + (n_primary_dimensions × D × n_treatment_variants) # per declared dim + values
 ```
 
-`m` is computed at design time and locked when the Experiment is published. `D` is the number
+`m` is computed at design time and locked when the Run starts. `D` is the number
 of declared dimension values (or the top-N by traffic if data-driven and declared upfront).
 
 **No retroactive FDR recomputation.** Dimension values discovered at analysis time that were
@@ -72,12 +72,15 @@ interface DimensionResult {
   arm_results:     ArmResult[];   // same shape as top-level arm results
   sample_size_n:   integer;       // Entities in this dimension slice × arm
   in_bh_family:    boolean;
+  exploratory:     boolean;
+  decision_valid:  boolean;
 }
 ```
 
 `DimensionResult.arm_results[].is_significant` reflects BH correction over the unified family
 (top-level goal Metrics + Primary Dimension slices). Secondary Dimension `is_significant` is
-reported as a raw `p_value < alpha` — no BH — with a flag `exploratory: true`.
+reported as a raw `p_value < alpha` — no BH — with `exploratory: true` and
+`decision_valid: false`.
 
 ## Interaction with fixed-horizon mode
 
@@ -98,3 +101,5 @@ No caller needs to guess. The output shape carries all three facts explicitly.
 
 - [../../architecture/metric-analysis-seam.md](../../architecture/metric-analysis-seam.md) §Threads handed forward (Dimension slicing)
 - CONTEXT.md §Dimension
+- [Benjamini and Hochberg (1995), controlling the false discovery rate](https://rss.onlinelibrary.wiley.com/doi/10.1111/j.2517-6161.1995.tb02031.x)
+- [Bakshy, Eckles, and Bernstein, Designing and Deploying Online Field Experiments](https://arxiv.org/abs/1409.3174)

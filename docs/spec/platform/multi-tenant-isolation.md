@@ -21,7 +21,9 @@ security.
 - Dynamic WHERE clause construction that makes `app_id` scoping conditional
 
 **Tenant-scoped tables** (every query must carry `app_id`):
-- `apps`, `flags`, `experiments`, `runs`, `api_keys`, `client_keys`, `segments`, `metrics`
+- `apps`, `environments`, `flags`, `flag_configs`, `experiments`, `runs`, `api_keys`, `client_keys`, `segments`, `metrics`
+- Per-Environment tables (`experiments`, `runs`, `flag_configs`, `api_keys`, `client_keys`) also carry
+  `environment_id` co-scoped with `app_id` (ADR-0027); `app_id` remains the isolation boundary.
 
 **Global tables** (no per-tenant scoping; queried by identity directly):
 - `organizations`, `users`, `memberships`
@@ -33,12 +35,14 @@ Postgres+RLS calls is a mechanical seam swap, not a cross-system refactor.
 ## KV isolation
 
 KV keys are namespaced by `app_id` at the key-construction level:
-- Flag config: `config:app:{appId}:flag:{flagKey}`
+- Flag config: `config:app:{appId}:{environmentId}:flag:{flagKey}` (Flag Configuration is
+  per-Environment, ADR-0027)
 - Assignment Store: `assignment:{appId}:{idType}:{targetingKey}` (per-Entity read key; `appId`
   first for tenant isolation; one read returns all of the Entity's holdovers — see
   [assignment-store-substrate.md](./assignment-store-substrate.md))
 - Session cache: `session:{sessionToken}` (global; carries `{ userId, appMemberships }`)
-- API Key cache: `apikey:{keyHash}` (global; carries `{ appId, scopes, revoked }`)
+- API Key cache: `apikey:{keyHash}` (global; carries `{ appId, environmentId, scopes, revoked }`;
+  `environmentId` resolves which Environment's config the key serves, ADR-0027)
 
 ## Tinybird isolation: two-seam enforcement
 
@@ -51,14 +55,16 @@ Every tenant-scoped Tinybird pipe accepts `app_id` as a mandatory parameter with
 Template syntax: `{{String(app_id)}}`. A missing `app_id` must fail the pipe query, never fall
 back to all tenants or a default App.
 
-The control-plane Worker injects `app_id` from the auth context (the validated session carries
-`appId`). A client or agent cannot supply an `app_id` that differs from their session scope — the
+The Analysis Worker injects `app_id` from the control-plane auth context (the validated token
+carries App scope). A client or agent cannot supply an `app_id` that differs from their scope; the
 Worker validates membership before forwarding to Tinybird.
 
 **Seam 2 — `app_id` first in `ENGINE_SORTING_KEY`:**
 Every tenant-scoped Tinybird datasource has `app_id` as the first column in its
 `ENGINE_SORTING_KEY`. Low-cardinality-first ordering makes per-tenant range scans physically
-efficient and ensures the index structure isolates data by tenant at the storage layer.
+efficient and ensures the index structure isolates data by tenant at the storage layer. For
+per-Environment datasources (Exposures), `environment_id` is co-scoped immediately after `app_id`
+in the sorting key (ADR-0027).
 
 Never use `timestamp` as the first sorting key in a multi-tenant datasource — it interleaves
 tenants and makes per-tenant scans full-table scans.
@@ -72,8 +78,8 @@ tenants and makes per-tenant scans full-table scans.
 
 ## Tinybird is never queried directly by clients or agents
 
-All Tinybird reads proxy through a control-plane Worker endpoint. The Worker injects `app_id` from
-the authenticated session. This means:
+All Tinybird reads proxy through an Analysis Worker endpoint. The Worker injects `app_id` from the
+authenticated control-plane token. This means:
 - No Tinybird token is exposed to the browser, SDK, or agent
 - The app_id parameter is always server-injected, never client-supplied
 - The Tinybird `app_id` scope matches the control-plane auth scope by construction
@@ -83,17 +89,18 @@ the authenticated session. This means:
 ADR-0022 tokens carry scopes like
 `app:{appId}:admin`, and ADR-0018 says Tinybird isolation is parameter-enforced, not token-enforced.
 
-The Worker applies both constraints:
+The Analysis Worker applies both constraints:
 
-1. The control-plane Worker validates the auth token and extracts `appId` from the session.
+1. The Analysis Worker validates the auth token and extracts `appId` from the token scope.
 2. The Worker constructs the Tinybird query, explicitly binding `app_id = sessionAppId` as a
    mandatory parameter.
 3. The Tinybird pipe enforces the parameter independently (Seam 1 above).
 
 The auth token proves the caller has access to App X. The Worker uses that proven `appId` as the
-parameter value. **Tinybird isolation is never derived from the token directly** — it is always the
-Worker that bridges the two, so the isolation model is consistent: the parameter is the enforcement
-point, not the auth scope. The Worker is the coordination point between the two seams.
+parameter value. **Tinybird isolation is never derived from the token directly**; it is always the
+Analysis Worker that bridges the two, so the isolation model is consistent: the parameter is the
+enforcement point, not the auth scope. The Analysis Worker is the coordination point between the two
+seams.
 
 ## Revisit condition
 
@@ -107,3 +114,4 @@ The Drizzle repository seam is the one-seam migration boundary for this change.
 ## Sources
 
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

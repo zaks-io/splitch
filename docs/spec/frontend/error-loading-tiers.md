@@ -16,11 +16,11 @@ per-route — it is a convention enforced by the panel app's routing config.
 
 ### Tier 2 — Segment error boundaries (layout + major sections)
 
-- **Location:** `/app/:appId` layout route AND each major section (Flags, Experiments, Settings)
+- **Location:** `/{orgSlug}/{appSlug}/{env}` layout route AND each major section (Flags, Experiments, Settings)
 - **Catches:** designed domain failures — 403 (no App access), 404 (resource not found),
   session expiry (redirect to login), App not found
 - **Examples:**
-  - User navigates to `/app/oldAppId/...` where they lost membership → 403
+  - User navigates to `/{org}/{oldApp}/{env}/...` where they lost membership → 403
   - Experiment ID in URL no longer exists → 404
 - **UI:** purpose-built empty states ("you don't have access to this App", "experiment not found")
   with a back-link; no stack trace, no Sentry error
@@ -73,4 +73,5 @@ app places them behind the appropriate boundary at the right tier. The `ui` pack
 ## Sources
 
 - [ADR-0020](../../adr/0020-tanstack-start-for-both-control-panel-and-marketing-shared-component-layer.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [frontend-architecture.md](../../architecture/frontend-architecture.md)

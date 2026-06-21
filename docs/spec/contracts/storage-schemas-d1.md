@@ -47,7 +47,26 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 | `updated_at` | timestamptz | not null |
 | `created_by` | text | FK → users |
 
-### `flags`
+### `environments`
+
+A first-class axis under App (ADR-0027). Experiments, Experiment Runs, Exposures, SDK credentials,
+and Flag CONFIGURATION are scoped to one Environment.
+
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | text | PK |
+| `app_id` | text | FK → apps, not null |
+| `key` | text | not null, unique per `(app_id)` (e.g. `'production'`, `'staging'`) |
+| `name` | text | not null |
+| `created_at` | timestamptz | not null |
+| `updated_at` | timestamptz | not null |
+| `created_by` | text | FK → users |
+
+### `flags` (DEFINITION — App-level)
+
+Flag DEFINITION is App-level: `key`, value schema, and the Variant catalog. Per-Environment
+CONFIGURATION (enabled state, available Variant subset, targeting, rollout) lives in `flag_configs`
+(ADR-0027).
 
 | Column | Type | Constraints |
 |---|---|---|
@@ -56,13 +75,33 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 | `key` | text | not null, unique per `(app_id)` |
 | `name` | text | not null |
 | `description` | text | nullable |
-| `enabled` | boolean | not null, default false |
 | `default_variant_id` | text | FK → variants |
 | `created_at` | timestamptz | not null |
 | `updated_at` | timestamptz | not null |
 | `created_by` | text | FK → users |
 | `updated_by` | text | FK → users |
 | `version` | integer | not null, default 1; optimistic-lock counter |
+
+### `flag_configs` (CONFIGURATION — per-Environment)
+
+Per-Environment Flag CONFIGURATION (ADR-0027): the `available_variant_names` subset of the App-level
+Variant catalog, targeting, rollout, and enabled state. One row per `(flag_id, environment_id)`.
+
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | text | PK |
+| `app_id` | text | FK → apps, not null |
+| `environment_id` | text | FK → environments, not null (co-scoped with `app_id`) |
+| `flag_id` | text | FK → flags, not null |
+| `enabled` | boolean | not null, default false |
+| `available_variant_names` | text | not null (JSON string array; subset of the Flag's Variant catalog) |
+| `default_variant_id` | text | FK → variants |
+| `created_at` | timestamptz | not null |
+| `updated_at` | timestamptz | not null |
+| `version` | integer | not null, default 1; optimistic-lock counter |
+
+UNIQUE constraint: `(flag_id, environment_id)`. Targeting rules and rollout for the config live in the
+per-Environment `targeting_rules` rows (`environment_id` co-scoped).
 
 ### `variants`
 
@@ -75,11 +114,13 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 | `description` | text | nullable |
 | `created_at` | timestamptz | not null |
 
-### `targeting_rules`
+### `targeting_rules` (per-Environment Flag CONFIGURATION)
 
 | Column | Type | Constraints |
 |---|---|---|
 | `id` | text | PK |
+| `app_id` | text | FK → apps, not null |
+| `environment_id` | text | FK → environments, not null (co-scoped with `app_id`, ADR-0027) |
 | `flag_id` | text | FK → flags, not null |
 | `priority` | integer | not null |
 | `conditions` | text | not null (JSON array of Condition) |
@@ -104,3 +145,4 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

@@ -12,13 +12,14 @@ The Assignment Store persists `(Experiment, idType, Targeting Key) -> (runId, Va
 
 ```
 AssignmentStore.getAll(
-  app_id:        string,
-  id_type:       string,
-  targeting_key: string
+  app_id:         string,
+  environment_id: string,
+  id_type:        string,
+  targeting_key:  string
 ) -> Map<experiment_id, { run_id: string; variant: string }>
 ```
 
-Returns all holdovers for this Entity across all Experiments in one edge-local read. The evaluate path calls this once per request, before iterating flags.
+Returns all holdovers for this Entity across all Experiments in the Environment in one edge-local read. `environment_id` co-scopes alongside `app_id` since Experiments and their Runs are per-Environment (ADR-0027). The evaluate path calls this once per request, before iterating flags.
 
 ```
 AssignmentStore.put(
@@ -36,7 +37,7 @@ First-touch write. Called by the Exposure pipeline after the first raw Exposure 
 
 ## Key structure
 
-Key: `(experiment_id, id_type, targeting_key)` — concatenated for storage, e.g. `{experiment_id}:{id_type}:{targeting_key}`.
+Key: `(experiment_id, id_type, targeting_key)` — concatenated for storage, e.g. `{experiment_id}:{id_type}:{targeting_key}`. `environment_id` is not part of the key because an Experiment belongs to exactly one Environment (ADR-0027); `experiment_id` already implies it. `getAll` filters to the request's Environment via that binding.
 
 **Why `id_type` is in the key:** guards against Targeting Key value collision across Entity types. If two Experiments use different `id_type`s, their Targeting Key namespaces may overlap (a userId `"abc"` and a workspaceId `"abc"` are different Entities). `id_type` is always required, never defaulted from Experiment config, even when the Experiment pins one Entity type.
 
@@ -95,4 +96,5 @@ Holdover records for ended Runs are retained until the Experiment is archived or
 - [ADR-0007](../../adr/0007-assignment-store-is-a-sibling-seam-not-behind-the-provider.md)
 - [ADR-0008](../../adr/0008-assignment-store-is-dumb-storage-policy-on-the-evaluate-path.md)
 - [ADR-0009](../../adr/0009-assignment-store-substrate-kv-read-do-write.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [assignment-store-seam.md](../../architecture/assignment-store-seam.md)

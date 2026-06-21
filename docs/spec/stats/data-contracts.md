@@ -43,7 +43,8 @@ event-level rows** — that loses the covariance term for Ratio delta-method var
 
 The `num_value` / `denom_value` pair for Ratio Metrics is the **hard input-contract rule**: it must
 arrive as a per-Entity pair so the delta-method covariance term is computable — unrecoverable after
-independent aggregation.
+independent aggregation. Rows with `denom_value = 0` are retained; dropping them would change the
+randomized population and can bias denominator-sensitive Metrics.
 
 ### Pre-period covariate row (CUPED input)
 
@@ -54,6 +55,7 @@ Supplied only when CUPED applies (pre-period data present, coverage above thresh
 | `entity_id`       | `string`  | yes      | Same Entity                                                   |
 | `metric_id`       | `string`  | yes      | Same Metric                                                   |
 | `pre_period_value`| `number`  | yes      | Metric value in `[first_exposure_ts - lookback, first_exposure_ts)` |
+| `covariate_source`| `enum`    | yes      | `pre_period \| declared_attribute \| historical_attribute`    |
 
 Pre-period is **always anchored at `first_exposure_ts`**, even when the Conversion Window re-anchors
 to `activation_ts`. Immutable: it captures what the Entity did before
@@ -84,12 +86,20 @@ interface StatsInput {
   run_id: string;
   confidence_level: number;              // default 0.95
   horizon: 'sequential' | 'fixed';      // default 'sequential'
+  target_n?: integer;                    // sequential tuning, locked at Run Start when set
   sample_size_locked?: integer;          // required when horizon='fixed'
-  bh_family: MetricId[];                 // goal-metrics locked at design time
+  decision_family: DecisionFamilyMember[]; // locked goal Metric × Variant × Primary Dimension family
   exposures: DedupeExposureRow[];
   metric_values: PerEntityMetricRow[];
   pre_period_covariates?: PrePeriodRow[];
   activation_rows?: ActivationRow[];
+}
+
+interface DecisionFamilyMember {
+  metric_id: string;
+  variant: string;                       // non-Control Variant
+  dimension_id?: string | null;
+  dimension_value?: string | null;
 }
 
 interface StatsOutput {
@@ -114,3 +124,4 @@ Tinybird (raw log + deduped snapshots), not the engine.
 - [../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md](../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md)
 - [../../architecture/metric-analysis-seam.md](../../architecture/metric-analysis-seam.md)
 - [../../architecture/activation-gate-seam.md](../../architecture/activation-gate-seam.md)
+- [Deng, Knoblich, and Lu, Applying the Delta Method in Metric Analytics](https://arxiv.org/abs/1803.06336)

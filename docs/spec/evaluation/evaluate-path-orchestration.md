@@ -7,16 +7,17 @@ branch is visible, every ADR maps to one pointable line.
 ## Pseudocode (canonical)
 
 ```
-function evaluate(appId, experimentId, flagKey, evalContext):
+function evaluate(appId, environmentId, experimentId, flagKey, evalContext):
   // evalContext: { targetingKey, idType, ...attributes }
+  // environmentId is resolved from the SDK key before the evaluate path runs (ADR-0027).
 
   // 1. Eager pre-load: one edge-local KV read, all Experiments for this Entity.
   held = AssignmentStore.getAll(appId, evalContext.idType, evalContext.targetingKey)
   //    held: Map<experimentId, { runId, variant }>
 
   // 2. Provider resolves live flag config (stateless, cached, includes liveRun hydrated).
-  flagConfig = Provider.getFlag(appId, flagKey)
-  experiment = Provider.getExperiment(appId, experimentId)
+  flagConfig = Provider.getFlag(appId, environmentId, flagKey)
+  experiment = Provider.getExperiment(appId, environmentId, experimentId)
 
   // 3. Flag disabled → Default Variant, no Exposure.
   if not flagConfig.enabled:
@@ -137,3 +138,4 @@ return shapes. No caller needs to guess which path was taken.
 - [../../adr/0008-assignment-store-is-dumb-storage-policy-on-the-evaluate-path.md](../../adr/0008-assignment-store-is-dumb-storage-policy-on-the-evaluate-path.md)
 - [../../architecture/assignment-store-seam.md](../../architecture/assignment-store-seam.md) (evaluate path section)
 - [../../architecture/assignment-exposure-seam.md](../../architecture/assignment-exposure-seam.md) (spine)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

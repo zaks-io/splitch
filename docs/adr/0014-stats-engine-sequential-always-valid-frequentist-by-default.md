@@ -55,3 +55,14 @@ Always-valid CIs are **wider** than fixed-horizon CIs at the same N — less pow
 price of safe peeking. The engine exposes one CI object end to end: delta-method variance (ADR-0015) →
 CUPED adjustment (ADR-0016) → always-valid sequence → relative-lift CI → Guardrail bound. Fixed-horizon is a
 deliberate opt-in tied to a declared sample size, never the path of least resistance.
+
+The confidence level / alpha is locked at Run Start for decision-valid results. Changing alpha after
+observing results is an exploratory display edit, not a decision-valid significance edit for the current
+Run. This lock is paired with ADR-0003's decision-spec lock and the BH family lock in the stats specs.
+
+## Sources
+
+- Johari, Koomen, Pekelis, and Walsh, always-valid inference:
+  https://pubsonline.informs.org/doi/10.1287/opre.2021.2135
+- Waudby-Smith and Ramdas, time-uniform confidence sequences for bounded means:
+  https://academic.oup.com/jrsssb/article-abstract/86/1/1/7043257

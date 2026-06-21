@@ -23,7 +23,7 @@ server Workers), and the same flag config. Flags are defined once and consumed e
 
 ### Flag config propagation: ~60s window (ADR-0009)
 
-Flag config is cached in Workers KV with up to ~60s propagation delay. A Publish that
+Flag config is cached in Workers KV with up to ~60s propagation delay. A Start that
 changes assignment config (opens a new Run) may not be visible at all POPs simultaneously.
 During this window:
 - Some Workers evaluate with Run N config, others with Run N+1 config.
@@ -48,7 +48,7 @@ at most a duplicate raw Exposure (the pipeline dedup collapses it).
 Each POP maintains its own per-instance seen-set (see [seen-set.md](./seen-set.md)). The
 same Entity evaluated at two POPs in the same request window will fire two raw Exposures
 (the respective seen-sets have no shared state). The pipeline dedup (`MIN(server_ts)` per
-`(app_id, experiment_id, run_id, id_type, targeting_key)`) collapses them to first-touch.
+`(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`) collapses them to first-touch.
 This is the documented design (ADR-0005): cross-POP seen-sets cannot be the authority.
 
 ### No global ordering required
@@ -86,3 +86,4 @@ instance, or clock. This is a correctness requirement for the five-runtime model
 - [ADR-0010](../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md)
 - [ADR-0001](../../adr/0001-assignment-is-pure-not-an-event.md)
 - [ADR-0005](../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

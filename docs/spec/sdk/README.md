@@ -15,7 +15,7 @@ surface is deferred.
 | [seen-set.md](./seen-set.md) | SDK-local per-instance exposure dedup cache (hot-path optimization only) |
 | [assignment-store-integration.md](./assignment-store-integration.md) | How the SDK consumes the Assignment Store (holdover pre-load, evaluate-path ordering) |
 | [five-runtimes.md](./five-runtimes.md) | SDK invariants across five Cloudflare edge runtimes |
-| [test-evaluation-endpoint.md](./test-evaluation-endpoint.md) | Control-plane dry-run: `POST /test-evaluation` — resolves without Exposure |
+| [test-evaluation-endpoint.md](./test-evaluation-endpoint.md) | Control-plane dry-run: `POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval` — resolves without Exposure (per-Env, ADR-0027) |
 | [openfeature-deferred.md](./openfeature-deferred.md) | Explicitly-deferred full OpenFeature provider surface (v1 out of scope) |
 
 ## Sources

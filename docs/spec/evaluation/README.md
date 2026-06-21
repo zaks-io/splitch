@@ -30,9 +30,9 @@ zero superposition — every branch is visible, every decision maps to one point
 
 ## Key Evaluation Constraints
 
-- Draft → Publish model; N assignment edits become one sample reset.
+- Draft → Start model; N assignment edits become one sample reset.
 - Activation Metric is an assignment-affecting edit.
-- First Publish opens the first Run; `draft` state has no live Run.
+- First Start opens the first Run; `draft` state has no live Run.
 - Live Run is explicit persisted config in KV carrying `liveRunId`.
 - Holdover write failure: DO is truth, KV miss self-heals, log is at-least-once.
 - Variant is a string name; Provider is a pure config resolver; Segments are Conditions.

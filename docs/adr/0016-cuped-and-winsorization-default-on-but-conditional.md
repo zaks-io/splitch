@@ -18,6 +18,8 @@ new-Entity slice (first-touch Entities, onboarding flows). So:
   capturing what variance reduction is available without a pre-period.
 - **Never silently degrade**: the absence of pre-period data switches the method, it does not quietly weaken
   a CUPED that assumed history it didn't have.
+- **Never select fallback covariates from post-treatment outcomes**: attribute covariates must be declared
+  before Run start or selected from pre-period / historical data without using post-exposure outcomes.
 
 CUPED is a regression adjustment, so it composes into the same CI object before the always-valid sequence
 (ADR-0014): delta-method variance (ADR-0015) → CUPED adjustment → always-valid CI.
@@ -28,6 +30,8 @@ Heavy-tailed Count/Revenue Metrics let a few whales dominate variance (a single 
 "win"). Winsorization caps per-Entity values at a high percentile, replacing — not deleting — extreme values.
 It is **default-on for additive Metrics (sum/count/mean/ratio)** and **never applied to Binomial Metrics** (a
 0/1 has no tail). The small bias from truncation is the accepted price of a large variance reduction.
+The cap is computed over the pooled analysis population, never separately per arm, and the cap rule is
+locked at Run Start for decision-valid results.
 
 **This default-on is a deliberate divergence, not a field norm.** Only **Statsig** defaults winsorization on
 (at 99.9%, which we adopt as the default percentile); **Eppo and GrowthBook are opt-in per-Metric**.
@@ -42,6 +46,8 @@ consensus we inherited. The percentile is configurable and winsorization can be 
   variance-reduction win on the table; the attribute-covariate fallback is worth the modest extra machinery.
 - **CUPED unconditionally on** — rejected: silently degrades / mis-estimates on new-Entity experiments.
 - **Winsorization on binary Metrics** — rejected: meaningless and slightly biasing; additive-only.
+- **Per-arm winsorization caps** — rejected: different caps by arm can change each arm's estimand
+  differently and mask tail effects.
 
 ## Consequences
 
@@ -51,3 +57,8 @@ are gated so they cannot corrupt results when their precondition is absent. The 
 completes the one CI object: delta-method variance → winsorization (additive) → CUPED (gated) → always-valid
 sequence → relative-lift CI → Guardrail bound → Benjamini-Hochberg FDR across the goal-metric × variant
 family (guardrails excluded).
+
+## Sources
+
+- Deng, Xu, Kohavi, and Walker, CUPED:
+  https://robotics.stanford.edu/~ronnyk/2013-02CUPEDImprovingSensitivityOfControlledExperiments.pdf

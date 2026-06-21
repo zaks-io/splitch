@@ -89,13 +89,20 @@ App membership controls who can read/write Flag, Experiment, and Run config for 
 
 **Role matrix (App scope):**
 
-| operation                        | owner | admin | member |
-|----------------------------------|-------|-------|--------|
-| Publish/end Runs                 | yes   | yes   | no     |
-| Edit Flags/Experiments (draft)   | yes   | yes   | yes    |
-| Manage SDK credentials           | yes   | yes   | no     |
-| View config/results              | yes   | yes   | yes    |
-| Delete Flags/Experiments         | yes   | no    | no     |
+| operation                          | owner | admin | member |
+|------------------------------------|-------|-------|--------|
+| Start/end Experiment Runs          | yes   | yes   | no     |
+| Edit Flags/Experiments (draft)     | yes   | yes   | yes    |
+| Promote Flag Config across Envs    | yes   | yes   | no     |
+| Edit Environment Policy            | yes   | yes   | no     |
+| Manage SDK credentials             | yes   | yes   | no     |
+| View config/results                | yes   | yes   | yes    |
+| Delete Flags/Experiments           | yes   | no    | no     |
+
+Roles are still App/Org level (not per-Environment). Promotion (moving Flag Configuration between
+Environments, ADR-0028) and Environment Policy edits are additionally gated by the per-change-type
+confirmation gates of the target Environment's Policy (ADR-0029): a permitted role may still have to
+satisfy a confirm gate before an Environment-level write commits.
 
 ## User entity
 
@@ -114,3 +121,6 @@ bypassing it. `app_id` is the required scope param on every non-Org query. See
 
 - [../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md](../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md](../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md)
+- [../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md)

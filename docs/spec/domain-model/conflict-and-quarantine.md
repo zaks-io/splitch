@@ -25,7 +25,7 @@ All three are defects. None are expected concurrency or normal operation. `__mul
 
 ## Quarantine action
 
-When `COUNT(DISTINCT variant) > 1` for `(app_id, experiment_id, run_id, id_type, targeting_key)`:
+When `COUNT(DISTINCT variant) > 1` for `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`:
 
 1. The Entity's `assigned_variant` is set to `__multiple__` (sentinel string, not a real Variant name)
 2. Excluded from all real arms
@@ -65,3 +65,4 @@ The `__multiple__` rate is the only thing computed *on* the quarantined Entities
 - [ADR-0001](../../adr/0001-assignment-is-pure-not-an-event.md)
 - [ADR-0003](../../adr/0003-material-edits-including-measurement-open-a-new-run.md)
 - [ADR-0009](../../adr/0009-assignment-store-substrate-kv-read-do-write.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

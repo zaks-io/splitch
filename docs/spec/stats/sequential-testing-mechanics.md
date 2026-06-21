@@ -12,57 +12,59 @@ simultaneously across all possible inspection times N_1, N_2, ..., N_k.
 This is the key property: peek at N=100 and at N=10,000 and both checks are valid. A fixed-horizon
 CI is only valid at the pre-declared N.
 
-## aCS construction (Waudby-Smith et al.)
+## aCS construction
 
 ### Inputs
 
-| Variable      | Source                            | Description                         |
-|---------------|-----------------------------------|-------------------------------------|
-| `y_bar_t`     | treatment per-Entity mean         | Running mean at N_t                 |
-| `y_bar_c`     | control per-Entity mean           | Running mean at N_c                 |
-| `var_t`       | variance (post-winsorize, CUPED)  | Per-Entity variance in treatment    |
-| `var_c`       | variance                          | Per-Entity variance in control      |
-| `lambda`      | Experiment config                 | Tuning parameter (default 0.5)      |
-| `alpha`       | `1 - confidence_level`            | Significance level (default 0.05)   |
+| Variable      | Source                            | Description                                      |
+|---------------|-----------------------------------|--------------------------------------------------|
+| `estimate`    | treatment minus Control estimator | Absolute-lift estimate at the current look       |
+| `sampling_var`| variance layer                    | Sampling variance of `estimate`; already includes `1/n` terms |
+| `n_t`         | deduped Exposures                 | Treatment unique Entity count                    |
+| `n_c`         | deduped Exposures                 | Control unique Entity count                      |
+| `alpha`       | locked Run decision spec          | `1 - confidence_level`                           |
+| `target_n`    | Run config                        | Optional tuning target for where the sequence is tightest |
 
-### CI width formula
+`sampling_var` is the variance of the estimator, not the raw per-Entity variance. For a simple
+difference in means this is `s2_t / n_t + s2_c / n_c`; for Ratio and relative-lift estimators it
+is the delta-method sampling variance from [inference-engine.md](inference-engine.md). The
+sequential adapter must not divide by `N` again.
 
-The aCS at time N has half-width:
+### Algorithm contract
 
-```
-rho = sqrt(alpha / (N * lambda * (1 - lambda)))
+The implementation must use a named confidence-sequence algorithm with source-level tests, not a
+hand-copied width sketch in this document. v1 uses an asymptotic confidence sequence adapter over
+the asymptotically normal estimator produced by the variance layer. The adapter owns:
 
-half_width = sqrt( var_pooled / N ) * sqrt( 2 * log(2 / alpha) + log(1 + N * lambda / (1 - lambda)) )
-```
+1. The time-uniform boundary / wealth process.
+2. The tuning schedule, such as a target sample size for tightest intervals.
+3. Inversion from boundary to p-value.
+4. Numerical stability and monotonicity checks.
 
-Where `var_pooled = var_t/n_t + var_c/n_c` (independent arms).
+For bounded Binomial and winsorized additive Metrics, Waudby-Smith and Ramdas style empirical-
+Bernstein / betting CSs are the reference family. For delta-method estimators (Ratio and
+relative lift), the adapter uses the same always-valid interface over the asymptotic normal
+estimator and is validated by simulation under null and alternative data-generating processes.
 
-The full expression simplifies to: for each arm, the margin is proportional to
-`sqrt(var / N) * sqrt(log(1/alpha) + log(1 + N/N_ref))` where `N_ref = 1 / (lambda * (1-lambda))`.
+### Tuning
 
-### Tuning parameter λ
-
-| λ value | Effect                                           |
-|---------|--------------------------------------------------|
-| `0.5`   | Symmetric — tightest at midpoint of expected N   |
-| `< 0.5` | Tighter early, wider at large N (aggressive peek)|
-| `> 0.5` | Wider early, tighter at large N (patient)        |
-
-Default λ = 0.5 is appropriate when the expected run length is roughly symmetric. Users may
-adjust per-Experiment; the value is stored in the Experiment config and used for all CI
-calculations in the Run.
+The tuning parameter is stored as `target_n` or an equivalent adapter-specific schedule in the Run
+decision spec. It is locked at Run Start. A later tuning change is exploratory only; it cannot
+alter decision-valid significance for the current Run.
 
 ### Output at each analysis time N
 
 ```
-ci_lower = (y_bar_t - y_bar_c) - half_width
-ci_upper = (y_bar_t - y_bar_c) + half_width
-p_value  = 1 - alpha  if CI contains 0
-         = alpha_at_current_N  (derived from smallest alpha such that CI excludes 0)
+ci_lower = estimate - boundary(alpha, n_t, n_c, sampling_var, tuning)
+ci_upper = estimate + boundary(alpha, n_t, n_c, sampling_var, tuning)
+p_value  = inf alpha in (0, 1] such that 0 is outside CI_alpha
 ```
 
-The CI is for **absolute lift** `(treatment - control)`. Relative-lift CI is then computed via
-delta method (see [inference-engine.md](inference-engine.md) §Relative-lift CI).
+If `0` is inside the 95% CI, the p-value is not set to `0.95`; it is computed by boundary
+inversion. This matters because BH FDR ranks all p-values, including non-significant ones.
+
+The base CI is for **absolute lift** `(treatment - control)`. Relative-lift CI is then computed
+via delta method (see [inference-engine.md](inference-engine.md) §Relative-lift CI).
 
 ## Stopping rules
 
@@ -95,26 +97,27 @@ at N = S. The trade-off is explicit at Experiment creation.
 ## Always-valid property
 
 The false-positive rate under the aCS is bounded at `alpha` for any stopping rule, including
-data-dependent stops (stop when you see the result you want). This holds because:
+data-dependent stops (stop when you see the result you want). This is the always-valid guarantee:
 
-- The aCS is a test martingale: `E[1/CI_width_N] ≤ 1/alpha` at all N.
-- The valid p-value at any N satisfies `P(p_N ≤ alpha for any N) ≤ alpha`.
+- The underlying test martingale / supermartingale controls crossing probability at all times.
+- The valid p-value at any N satisfies `P(inf_N p_N <= alpha) <= alpha` under the null.
 
 This is the mathematical guarantee that makes continuous monitoring safe.
 
 ## No mid-experiment mode switching
 
-The CI mode (`sequential` or `fixed`) is **locked at Run creation** (part of the assignment
-config). Switching modes mid-Run is an assignment edit (opens a new Run). There is no
-`horizon_type` edit that doesn't open a new Run. No sequential patching or mixed-mode runs.
+The CI mode (`sequential` or `fixed`) is **locked at Run Start** as part of the decision spec.
+Switching modes mid-Run can be drafted for the next Run or shown as exploratory, but it cannot
+alter decision-valid significance for the current Run. No sequential patching or mixed-mode
+decision results.
 
 ## Failure contracts
 
 | Condition                          | Behavior                                           |
 |------------------------------------|----------------------------------------------------|
-| `var_pooled = 0` (zero variance)   | CI = `[-∞, +∞]` for the Metric; warn in output    |
+| `sampling_var = 0` (zero variance) | CI = `[-∞, +∞]` for the Metric; warn in output    |
 | `N = 0` in any arm                 | CI = `[-∞, +∞]`; status = `running`               |
-| `lambda` not in `(0, 1)`           | Reject at config validation; do not use            |
+| Invalid tuning schedule            | Reject at config validation; do not use            |
 | Numerical overflow in log term     | Return error status; do not return corrupt CI      |
 
 ## Seam: sequential vs. fixed-horizon
@@ -131,12 +134,12 @@ interface CIAdapter {
 }
 
 interface CIParams {
-  mean_t: number; mean_c: number;
-  var_t: number;  var_c: number;
-  n_t: number;    n_c: number;
+  estimate: number;
+  sampling_var: number;
+  n_t: number; n_c: number;
   alpha: number;
   // sequential only:
-  lambda?: number;
+  target_n?: number;
   // fixed only:
   sample_size_locked?: number;
 }
@@ -156,3 +159,5 @@ and they are tested by substituting a fake adapter with known CI widths.
 
 - [../../adr/0014-stats-engine-sequential-always-valid-frequentist-by-default.md](../../adr/0014-stats-engine-sequential-always-valid-frequentist-by-default.md)
 - [../../architecture/metric-analysis-seam.md](../../architecture/metric-analysis-seam.md)
+- [Johari, Koomen, Pekelis, and Walsh, Always Valid Inference](https://pubsonline.informs.org/doi/10.1287/opre.2021.2135)
+- [Waudby-Smith and Ramdas, Estimating means of bounded random variables by betting](https://academic.oup.com/jrsssb/article-abstract/86/1/1/7043257)

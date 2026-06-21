@@ -32,8 +32,8 @@ does not alert on it as a balance metric), so splitch goes further:
 - **Activated-population SRM** — chi-square on the activated Entities per arm per Run (p < 0.001),
   *separate* from the full-exposed SRM. An SRM that appears only in the gated scorecard is the canonical
   fingerprint of a Treatment-affected gate (Microsoft OCE diagnosis).
-- **Per-arm activation rate as a first-class Metric** — divergence across arms is a loud alert and explains
-  *why* the gated SRM fired.
+- **Per-arm activation rate as a first-class Metric** — a chi-square test over activated /
+  not-activated by arm (p < 0.001) is a loud alert and the rate gap explains *why* the gated SRM fired.
 
 Either guardrail firing means the gated results are **untrusted**. v1 also prefers/assumes
 activation conditions determinable independent of variant; the guardrails catch violations loudly.
@@ -52,3 +52,10 @@ pipeline: dedup to first Exposure, join activation events with `activation_ts > 
 the window on `activation_ts`, exclude un-activated Entities, and compute the activated-population SRM. The
 `__multiple__` quarantine (ADR-0011) still applies upstream. Counterfactual triggering (Kohavi's full
 unbiased gate) is deferred but made additive by ADR-0013, not by hand-waving.
+
+## Sources
+
+- Fabijan et al., Diagnosing Sample Ratio Mismatch in Online Controlled Experiments:
+  https://dl.acm.org/doi/10.1145/3292500.3330722
+- Deng and Hu, Diluted Treatment Effect Estimation for Trigger Analysis:
+  https://exp-platform.com/Documents/wsdm2015-dilution.pdf

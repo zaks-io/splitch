@@ -14,8 +14,13 @@ Benjamini-Hochberg FDR controls false discovery rate across the **goal-metric ×
 - Secondary Metrics (exploratory): excluded.
 - Primary Dimensions (if declared at design time): each `(goal_metric, variant, dimension_value)`
   tuple is a family member. Secondary Dimensions are excluded.
-- Family size `m` is locked when the Experiment is published. Adding a secondary Dimension mid-
-  Experiment does not change `m`.
+- Family size `m`, confidence level / alpha, and member list are locked when the Experiment Run is Started.
+  Adding a Metric or Dimension mid-Run does not change `m` for decision-valid results.
+
+Post-start additions can still be analyzed, but they are explicitly `exploratory: true`,
+`in_bh_family: false`, and never produce a decision-valid `is_significant = true` for the current
+Run. To make them decision-valid, Start a new Experiment Run or a future locked-analysis version before
+looking at results.
 
 ## BH algorithm
 
@@ -30,8 +35,9 @@ Benjamini-Hochberg FDR controls false discovery rate across the **goal-metric ×
 
 ## "None" option
 
-When `bh_family = []`, no FDR correction is applied (exploratory mode, user explicitly declared
-no goal Metrics). `is_significant` then equals `p_value < alpha`.
+When `decision_family = []`, no FDR correction is applied because the user explicitly declared no goal
+Metrics. The output is exploratory: `is_significant` may reflect raw `p_value < alpha`, but
+`decision_valid = false`.
 
 No post-hoc FDR and no sequential patching: the family is a design-time declaration, immutable
 per Run.
@@ -51,3 +57,5 @@ exclusion and [dimension-slicing.md](dimension-slicing.md) for Dimension family 
 
 - [../../adr/0014-stats-engine-sequential-always-valid-frequentist-by-default.md](../../adr/0014-stats-engine-sequential-always-valid-frequentist-by-default.md)
 - [../../architecture/metric-analysis-seam.md](../../architecture/metric-analysis-seam.md)
+- [Benjamini and Hochberg (1995), controlling the false discovery rate](https://rss.onlinelibrary.wiley.com/doi/10.1111/j.2517-6161.1995.tb02031.x)
+- [Johari, Koomen, Pekelis, and Walsh, always-valid inference](https://pubsonline.informs.org/doi/10.1287/opre.2021.2135)

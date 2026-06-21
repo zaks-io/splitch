@@ -13,10 +13,11 @@ diagnostics. The spine is one CI object flowing through six deterministic stages
 | [metric-types.md](metric-types.md)                   | Metric taxonomy (Binomial / Count / Revenue / Ratio / Guardrail), per-Entity aggregation shapes, Conversion Window anchoring |
 | [variance-reduction.md](variance-reduction.md)       | CUPED gating and pre-period anchor; attribute-covariate fallback; winsorization defaults and application order |
 | [srm-and-health.md](srm-and-health.md)               | Full-exposed SRM + activated-population SRM; `__multiple__` quarantine; health metrics object |
-| [sequential-testing-mechanics.md](sequential-testing-mechanics.md) | aCS construction, λ tuning, stopping rules; fixed-horizon opt-in; SequentialCI / FixedHorizonCI adapter interface |
+| [sequential-testing-mechanics.md](sequential-testing-mechanics.md) | aCS construction, boundary/tuning parameters, stopping rules; fixed-horizon opt-in; SequentialCI / FixedHorizonCI adapter interface |
 | [dimension-slicing.md](dimension-slicing.md)         | Primary vs. secondary Dimensions; BH family expansion; composition with Activation gate |
 | [data-contracts.md](data-contracts.md)               | Input rows from Exposure pipeline (deduped Exposure, per-Entity Metric values, pre-period covariates, activation rows); StatsEngine seam interface |
 | [result-contracts.md](result-contracts.md)           | Output shapes the engine writes: per-arm result, VarianceTechniques, SRM, Guardrail, and health objects |
+| [statistical-rigor-verification.md](statistical-rigor-verification.md) | Required unit, golden, property, simulation, and spec-lint gates for decision-valid stats |
 
 ## Spine idea
 
@@ -46,9 +47,10 @@ coverage threshold (with documented fallback). Nothing degrades silently.
 
 ## Locked defaults
 
-- Confidence Level: **95% per-Experiment**, set at design time.
+- Confidence Level: **95% per-Experiment**, locked at Run Start for decision-valid results.
 - CUPED pre-period: **always anchored at `first_exposure_ts`**, even under Activation gate.
-- CUPED fallback: **automatic**, ranked by variance-reduction; chosen method reported in output.
-- Winsorization: **99.9th percentile, default-on** for Count/Revenue; never for Binomial.
-- BH FDR family: **goal-metric × Variant, locked at Experiment publish**; Guardrails and secondary Dimensions excluded.
+- CUPED fallback: **automatic within the locked eligible covariate set**, ranked by pre-period or historical variance-reduction; chosen method reported in output.
+- Winsorization: **99.9th percentile, default-on** for Count/Revenue; pooled cap, never per-arm, never for Binomial.
+- BH FDR family: **goal-metric × Variant, locked at Run Start**; Primary Dimensions included only if declared before Start; Guardrails and secondary Dimensions excluded.
 - Ratio Metric covariance: **per-Entity `(num_value, denom_value)` pair** delivered by pipeline — non-negotiable, unrecoverable after aggregation.
+- Statistical rigor gates: decision-valid stats require the verification ladder in [statistical-rigor-verification.md](statistical-rigor-verification.md).

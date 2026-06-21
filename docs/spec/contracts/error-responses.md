@@ -34,6 +34,7 @@ ErrorCode =
 
   // Run / Experiment invariants
   | 'RUN_FROZEN'                  // attempted assignment edit on a running Run
+  | 'DECISION_LOCKED'             // attempted decision-family / alpha edit on a running Run
   | 'TARGETING_KEY_MISMATCH'      // targetingKey changed; a new Run is required
 
   // Not found
@@ -74,6 +75,7 @@ ErrorCode =
 | `INVALID_PAGINATION` | `{ field: 'cursor' \| 'limit', reason: string }` |
 | `INVALID_SORT` | `{ field: string, allowedFields: string[] }` |
 | `RUN_FROZEN` | `{ frozenFields: string[], currentRunId: string, attemptedChange: string }` |
+| `DECISION_LOCKED` | `{ lockedFields: string[], currentRunId: string, attemptedChange: string }` |
 | `TARGETING_KEY_MISMATCH` | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string }` |
 | `INSUFFICIENT_SCOPES` | `{ requiredScopes: string[], heldScopes: string[] }` |
 | `MULTIPLE_VARIANT_CONFLICT` | `{ experimentId: string, runId: string, idType: string, targetingKey: string }` |
@@ -103,20 +105,21 @@ frozenFields = [
 
 ## Per-endpoint error contracts (representative)
 
-**POST /api/runs** (create Run)
+**POST /api/apps/:appId/envs/:environmentId/experiments/:id/start** (open a new Experiment Run)
 - `ALLOCATION_INVALID` — percentages don't sum to 100
 - `VALIDATION_ERROR` — malformed request body
-- `EXPERIMENT_NOT_FOUND` — `experimentId` not found in App
-- `RUN_FROZEN` — Experiment already has a running Run (must end it before opening a new one via Publish)
+- `EXPERIMENT_NOT_FOUND` — `experimentId` not found in App/Environment
+- `RUN_FROZEN` — Experiment already has a running Run (must end it before opening a new one via Start)
 
-**PATCH /api/runs/:runId** (non-material patch only)
+**PATCH /api/apps/:appId/envs/:environmentId/experiments/:id/runs/:runId** (non-material patch only)
 - `RUN_FROZEN` — if request body includes any frozen field (`salt`, `allocation`, `variantSet`, `targetingSegmentId`)
 - `RUN_NOT_FOUND`
 - `VALIDATION_ERROR`
 
-**PATCH /api/experiments/:experimentId** (pause / resume / measurement edits)
+**PATCH /api/apps/:appId/envs/:environmentId/experiments/:experimentId** (pause / resume / measurement edits)
 - `EXPERIMENT_NOT_FOUND`
 - `RUN_FROZEN` — if patch includes `targetingKey` and there is a running Run
+- `DECISION_LOCKED` — if patch changes confidence level, horizon/tuning fields, goal Metric membership, Guardrail thresholds, or Primary Dimensions for a running Run's decision-valid result
 - `ACTIVATION_TIMESTAMP_INVALID` — if `activationMetricId` changed and there are prior Exposures with invalid ordering
 - `VALIDATION_ERROR`
 
@@ -149,7 +152,7 @@ frozenFields = [
 | `UNAUTHORIZED` | 401 |
 | `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES` | 403 |
 | `*_NOT_FOUND` | 404 |
-| `RUN_FROZEN`, `TARGETING_KEY_MISMATCH`, `MULTIPLE_VARIANT_CONFLICT` | 409 |
+| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `MULTIPLE_VARIANT_CONFLICT` | 409 |
 | `RATE_LIMITED` | 429 |
 | `INTERNAL_SERVER_ERROR` | 500 |
 
@@ -161,3 +164,4 @@ frozenFields = [
 - [../../adr/0003-material-edits-including-measurement-open-a-new-run.md](../../adr/0003-material-edits-including-measurement-open-a-new-run.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md](../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

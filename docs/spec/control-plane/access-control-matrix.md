@@ -1,7 +1,7 @@
 # Access control matrix: scopes, control-plane token, trusted IdPs, Worker split
 
 The control-plane access token shape and claims, the `app:{app_id}:{role}` scope format, the
-trusted-IdP allow-list table, the auth-issuer vs control-plane Worker responsibility split, and revocation.
+trusted-IdP allow-list table, the Worker responsibility split, and revocation.
 
 For how a principal authenticates (the three doors and claim ceremony), see [auth-doors.md](auth-doors.md).
 
@@ -14,7 +14,7 @@ Short-lived bearer token (JWT, default TTL 1h) issued by `/oauth2/token`.
 {
   sub: string,             // WorkOS user_id
   iss: string,             // auth-issuer origin
-  aud: string,             // control-plane Worker origin
+  aud: string,             // control-plane protected-resource origin
   exp: number,             // unix timestamp
   iat: number,
   scopes: string[],        // e.g. ["app:app_abc123:admin"]
@@ -26,9 +26,9 @@ Short-lived bearer token (JWT, default TTL 1h) issued by `/oauth2/token`.
 A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-level operations require
 `org:{org_id}:owner` or `org:{org_id}:admin`.
 
-**Token validation on the control-plane Worker:**
+**Token validation on any control-plane-authorized Worker:**
 1. Verify JWT signature (JWKS from auth-issuer `/.well-known/oauth-authorization-server`)
-2. Assert `aud` matches control-plane Worker origin
+2. Assert `aud` matches the control-plane protected resource
 3. Assert `exp` not passed
 4. Extract `scopes`; match against required scope for the requested operation
 5. Extract `sub` as `user_id` for audit logging
@@ -54,9 +54,9 @@ only (seeded at deploy; not user-facing in v1).
 
 **Failure contract:** Unknown `iss` → 401 `unknown_issuer`. Never silently trusted. Never falls through.
 
-## Auth-issuer Worker vs control-plane Worker split
+## Worker responsibility split
 
-(resolves fused-responsibility seam finding)
+(resolves fused-responsibility seam findings)
 
 **Auth-issuer Worker** owns (minimal surface, stable `aud`, isolated for security review):
 - `/.well-known/oauth-protected-resource`
@@ -69,17 +69,39 @@ only (seeded at deploy; not user-facing in v1).
 - `POST /agent/event/notify` (SET receiver)
 - Anon provisional Org+App create (initial create only, through D1 seam)
 
-**Control-plane Worker** owns all other mutations and reads:
+**Control Plane API Worker** owns authenticated management mutations and D1/KV-backed reads:
 - Org CRUD (rename, billing, member management, SSO config) — auth-issuer creates on anon register;
   control-plane manages everything after
-- App CRUD
-- Flag, Variant, Targeting Rule CRUD
-- Experiment, Run CRUD and lifecycle operations
+- App CRUD; Environment CRUD (per App, ADR-0027)
+- Flag **definition** CRUD (App-level), Flag **Configuration** + Promotion across Environments (per-Env, ADR-0028)
+- Environment Policy edits (per-change-type confirm gates, ADR-0029)
+- Variant, Targeting Rule CRUD
+- Experiment, Run CRUD and lifecycle operations (Start/end; per-Environment)
 - Segment, Metric CRUD
-- SDK credential (Client Key, API Key) management
-- Analytics proxy endpoints (injects app_id from auth context into Tinybird queries)
-- Test-evaluation endpoint
+- SDK credential (Client Key, API Key) management (per-Environment)
 - `GET /.well-known/openapi.json` (generated OpenAPI, unauthenticated)
+
+**MCP Worker** owns the remote MCP protocol surface:
+- MCP OAuth PRM/auth.md handshake
+- Tool registry and schema derivation
+- Calls the shared typed client; no direct D1/KV/Tinybird bindings and no domain invariants
+
+**Evaluation Worker** owns resolution:
+- Public SDK evaluate/peek endpoints using Client Key or API Key
+- Control-plane dry-run test-evaluation using the control-plane bearer token
+- Provider and Assignment Store read orchestration
+- No config writes, no analytics reads, and no direct result calculation
+
+**Event Ingest Worker** owns append-only intake:
+- Assignment, Exposure, and Metric event validation
+- Queueing, sharded Durable Object dedup, and Tinybird delivery
+- No Variant resolution, no Experiment result calculation, and no control-plane CRUD
+
+**Analysis Worker** owns result reads:
+- Analytics proxy endpoints
+- Tinybird-backed SRM, Metric, and statistical result reads
+- `app_id` and `environment_id` injection from auth/path context
+- No SDK evaluate, no event ingest, and no config mutation
 
 ## Revocation
 
@@ -92,3 +114,6 @@ only (seeded at deploy; not user-facing in v1).
 - [../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md)
 - [../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md](../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md](../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md)
+- [../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md)

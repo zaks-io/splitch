@@ -39,8 +39,8 @@ split can read a clean 50/50 while the activated subpopulation is skewed. splitc
 - **Activated-population SRM** — chi-square on activated Entities per arm per Run (p < 0.001), *separate*
   from the full-exposed SRM. A gated-scorecard SRM with a clean full-exposed SRM is the canonical
   fingerprint of a Treatment-affected gate.
-- **Per-arm activation rate as a first-class Metric** — divergence across arms is a loud alert that
-  explains *why* the gated SRM fired.
+- **Per-arm activation rate as a first-class Metric** — chi-square over activated / not-activated by
+  arm (p < 0.001) is a loud alert and the rate gap explains *why* the gated SRM fired.
 
 Either firing → gated results untrusted. Same fail-loud ethos as the `__multiple__` quarantine (ADR-0011).
 

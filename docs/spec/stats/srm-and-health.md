@@ -74,9 +74,10 @@ A first-class balance Metric alongside gated results. Computed as:
 activation_rate[arm] = activated_n[arm] / exposed_n[arm]
 ```
 
-When rates diverge significantly across arms (no formal threshold; surfaced as a numeric
-comparison + percentage), it explains *why* the activated-population SRM fired. The divergence
-is the signal; the size is the diagnosis.
+The balance test is a chi-square test over the 2 × Variant table
+`activated` / `not_activated` by arm, with threshold `p < 0.001`. The output also reports the
+largest absolute activation-rate gap across arms. The p-value is the alert; the rate gap is the
+effect-size diagnosis.
 
 ## `__multiple__` quarantine
 
@@ -99,6 +100,8 @@ arm and SRM would not catch it (ADR-0011).
 | `multiple_rate`      | `number`                   | `__multiple__` Entities / total Exposed Entities in Run      |
 | `multiple_count`     | `integer`                  | Raw count of `__multiple__` Entities                         |
 | `activation_rates`   | `Record<variant, number> \| null` | Per-arm activation rate; null if no gate              |
+| `activation_balance_p_value` | `number \| null` | Chi-square p-value for activated / not-activated by arm |
+| `activation_balance_mismatch` | `boolean \| null` | `true` if `activation_balance_p_value < 0.001` |
 | `exposure_counts`    | `Record<variant, integer>` | Raw (pre-dedup) Exposure event counts per arm                |
 | `deduped_counts`     | `Record<variant, integer>` | First-touch deduped Entity counts per arm (the SRM input)    |
 | `low_n_warning`      | `boolean`                  | `true` if any arm has deduped n < 100                        |
@@ -142,3 +145,5 @@ the stats engine core.
 - [../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md](../../adr/0012-activation-gate-semantics-ordering-reanchor-and-bias-guardrails.md)
 - [../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md](../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md)
 - CONTEXT.md §SRM, §Activation Metric, §Exposure Pipeline
+- [Fabijan et al., Diagnosing Sample Ratio Mismatch in Online Controlled Experiments](https://dl.acm.org/doi/10.1145/3292500.3330722)
+- [Deng and Hu, Diluted Treatment Effect Estimation for Trigger Analysis](https://exp-platform.com/Documents/wsdm2015-dilution.pdf)

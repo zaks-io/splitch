@@ -36,8 +36,10 @@ often a user looks.
 | `confidence_level`| `number` (0–1)              | `0.95`         |
 | `sample_size_locked` | `integer \| null`        | `null`         |
 
-`confidence_level` is **per-Experiment**, set at design time, applied to all Metrics in the
-Experiment.
+`confidence_level` is **per-Experiment**, locked at Run Start for decision-valid results, and
+applied to all Metrics in the locked decision family. Post-start exploratory views may compute
+raw intervals at the configured display level, but they cannot change decision-valid significance
+for the current Run.
 
 ### aCS (asymptotic confidence sequence) vs. mSPRT
 
@@ -45,9 +47,10 @@ aCS (Waudby-Smith et al.) is **chosen because it is a CI**, not a separate likel
 object: it composes directly with the delta method and CUPED as one CI object. mSPRT is
 mathematically equivalent but harder to compose into this stack (ADR-0014).
 
-The aCS tuning parameter λ (default 0.5, configurable per Experiment) controls when the sequence
-is tightest, and CI width scales as `sqrt(log(2 / alpha_star) / N)` — wider than fixed-horizon at
-the same N, the accepted price of safe peeking. Full λ-tuning and width construction live in
+The aCS adapter owns the time-uniform boundary and tuning schedule. The Run may carry a
+`target_n` tuning value for where the sequence should be tightest. Sequential intervals are wider
+than fixed-horizon intervals at the same N, the accepted price of safe peeking. Full tuning,
+p-value inversion, and adapter requirements live in
 [sequential-testing-mechanics.md](sequential-testing-mechanics.md).
 
 ### Fixed-horizon opt-in
@@ -77,24 +80,28 @@ ratio-of-means or events-as-independent variance.
 
 ### Binomial Metric
 
-Per-Entity value: `y_i ∈ {0, 1}` (did the Entity do the thing). `SE = sqrt(var_i)`. No
+Per-Entity value: `y_i ∈ {0, 1}` (did the Entity do the thing). No
 winsorization (binary has no tail).
 
 ```
-p_hat  = mean(y_i) over arm
-var_i  = p_hat * (1 - p_hat) / n
+p_hat        = mean(y_i) over arm
+s2_arm       = p_hat * (1 - p_hat)          # per-Entity variance estimate
+sampling_var = s2_arm / n                   # variance of p_hat
 ```
 
 ### Count / Revenue (Mean) Metric
 
-Per-Entity value: `y_i` = sum (Count) or mean (Revenue) over events in Conversion Window.
+Per-Entity value: `y_i` = sum of event values in the Conversion Window. Revenue reports the mean
+of those per-Entity sums across Entities, e.g. revenue per Entity. Average order value or
+revenue per session is a Ratio Metric, not a Revenue Metric.
 
 ```
-y_bar  = mean(y_i) over arm
-var_i  = sample_variance(y_i) / n
+y_bar        = mean(y_i) over arm
+s2_arm       = sample_variance(y_i)         # per-Entity variance estimate
+sampling_var = s2_arm / n                   # variance of y_bar
 ```
 
-Winsorization applies to `y_i` before `y_bar` / `var_i` (see
+Winsorization applies to `y_i` before `y_bar` / `sampling_var` (see
 [variance-reduction.md](variance-reduction.md)).
 
 ### Ratio Metric
@@ -106,25 +113,26 @@ A = mean(num_i)         # numerator mean
 B = mean(denom_i)       # denominator mean
 R = A / B               # ratio
 
-# Delta-method variance (with covariance term — this is the non-negotiable rule):
-var_ratio = (1/n) * [ var(num_i)/B^2
-                    - 2*(A/B^2)*cov(num_i, denom_i)
-                    + (A^2/B^4)*var(denom_i) ]
+# Delta-method sampling variance (with covariance term — this is the non-negotiable rule):
+sampling_var_ratio = (1/n) * [ var(num_i)/B^2
+                             - 2*(A/B^2)*cov(num_i, denom_i)
+                             + (A^2/B^4)*var(denom_i) ]
 ```
 
 `cov(num_i, denom_i)` is computed from the per-Entity pair — unrecoverable after independent
 aggregation. See [data-contracts.md](data-contracts.md) §Input for why the pipeline must deliver
-the pair.
+the pair. Entities with `denom_i = 0` remain in the per-Entity pair with `denom_i = 0`; the arm
+fails only if the arm-level denominator mean `B = 0`.
 
 ### Relative-lift CI
 
-Relative lift `(R_t - R_c) / R_c` is itself a ratio; its variance is delta-method.
+Relative lift `R_t / R_c - 1` is itself a ratio; its variance is delta-method. If the
+Control estimate is zero, relative lift is not defined.
 
 ```
-delta  = R_t - R_c
-var_delta = var_t / n_t + var_c / n_c   # independent arms
-relative_lift = delta / R_c
-var_relative  = (1/R_c^2) * var_delta + (delta^2 / R_c^4) * var_c_mean
+relative_lift = R_t / R_c - 1
+sampling_var_relative =
+  (1 / R_c^2) * sampling_var_t + (R_t^2 / R_c^4) * sampling_var_c
 ```
 
 ## Guardrail Metric behavior
@@ -148,7 +156,8 @@ rules (Guardrails, Secondary Metrics/Dimensions) live in
 | N = 0 in an arm               | Return CI = `[-∞, +∞]`, p_value = 1.0, status = `running` |
 | N < 100                       | Report result with `health.low_n_warning = true`; do not suppress |
 | CUPED pre-period missing       | Fall back per [variance-reduction.md](variance-reduction.md); log method in `variance_techniques` |
-| Ratio `denom_value = 0`        | Exclude that Entity from the arm; log exclusion count      |
+| Ratio arm-level denominator mean `B = 0` | Return CI = `[-∞, +∞]`, p_value = 1.0, status = `insufficient_denominator`; log zero-denominator Entity count |
+| Relative lift Control estimate `R_c = 0` | Return relative lift and CI as `null`, p_value = 1.0, status = `insufficient_denominator`; keep absolute-lift result |
 | aCS divergence (NaN/inf)      | Return error status; do not return a corrupt CI            |
 
 ## Sources
@@ -157,3 +166,4 @@ rules (Guardrails, Secondary Metrics/Dimensions) live in
 - [../../adr/0015-variance-delta-method-aggregate-to-randomization-unit.md](../../adr/0015-variance-delta-method-aggregate-to-randomization-unit.md)
 - [../../adr/0016-cuped-and-winsorization-default-on-but-conditional.md](../../adr/0016-cuped-and-winsorization-default-on-but-conditional.md)
 - [../../architecture/metric-analysis-seam.md](../../architecture/metric-analysis-seam.md)
+- [Deng, Knoblich, and Lu, Applying the Delta Method in Metric Analytics](https://arxiv.org/abs/1803.06336)

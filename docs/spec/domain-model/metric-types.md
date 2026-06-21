@@ -35,7 +35,7 @@ Sum of event values per Entity.
 
 `MetricType = "count"`
 
-Aggregation: `SUM(event_count)` per Entity. Example: pages viewed per visit.
+Aggregation: `SUM(event_count)` per Entity. Example: pages viewed per Entity.
 
 ### Revenue Metric (Mean Metric)
 
@@ -43,7 +43,8 @@ Monetary value or duration per Entity.
 
 `MetricType = "revenue"`
 
-Aggregation: `SUM(amount)` per Entity; the Metric reports mean across Entities. Example: revenue per user.
+Aggregation: `SUM(amount)` per Entity; the Metric reports mean across Entities. Example:
+revenue per user. Average order value or revenue per session is a Ratio Metric.
 
 ### Ratio Metric (Quotient Metric)
 
@@ -81,10 +82,15 @@ Variance is **always** computed over per-Entity aggregates. The denominator is a
 
 ## BH FDR family
 
-The Benjamini-Hochberg FDR family = goal-metric × Variant, locked at Experiment design time. Guardrail and secondary Metrics are excluded from the family. Dimensions multiply the comparison family when slicing, and the family size is fixed at design time — adding Dimensions mid-experiment expands the family retroactively and the FDR correction re-runs over the expanded family.
+The Benjamini-Hochberg FDR family = goal-metric × Variant, locked at Experiment design time.
+Guardrail and secondary Metrics are excluded from the family. Primary Dimensions multiply the
+comparison family only when their values are declared before Run Start. Adding Dimensions
+mid-Run never expands the decision family retroactively; those outputs are Secondary /
+exploratory for the current Run.
 
 ## Sources
 
 - [CONTEXT.md](../../../CONTEXT.md) — Metric type definitions
 - [ADR-0015](../../adr/0015-variance-delta-method-aggregate-to-randomization-unit.md)
 - [metric-analysis-seam.md](../../architecture/metric-analysis-seam.md)
+- [Benjamini and Hochberg (1995), controlling the false discovery rate](https://rss.onlinelibrary.wiley.com/doi/10.1111/j.2517-6161.1995.tb02031.x)

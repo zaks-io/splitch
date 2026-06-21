@@ -51,7 +51,7 @@ separate problem with a separate mechanism and is out of scope here.
   state to reconcile is exactly the weight being avoided); `useState`/local holds only ephemeral UI
   state. **The socket is never the source of truth — it is a "something changed, go look" nudge**, and
   the panel reads config the same way whether nudged or freshly loaded, honoring ADR-0017's "same
-  store, no publish seam." Under **TanStack Start**, the route's server loader seeds the Query cache
+  store, no config-copy seam." Under **TanStack Start**, the route's server loader seeds the Query cache
   for a correct first paint; the WebSocket attaches only after hydration (it is client-only) and from
   then on drives invalidations. **Reconnect recovery is free**: on reconnect the client invalidates and
   refetches — the same path the loader already runs — so a missed broadcast during a reconnect window
@@ -87,5 +87,5 @@ separate problem with a separate mechanism and is out of scope here.
   pinned to a concrete shape (per-App, write-through, delta-broadcast) that mirrors ADR-0009.
 - **No client state-management platform is added.** TanStack Query (already in the stack) is the store;
   the WebSocket replaces a polling timer, nothing more.
-- **No config-publish seam is introduced** (ADR-0017 consequence preserved): the panel always reads
+- **No config-copy seam is introduced** (ADR-0017 consequence preserved): the panel always reads
   config from the same store the hot path reads; the socket only changes *when* it refetches.

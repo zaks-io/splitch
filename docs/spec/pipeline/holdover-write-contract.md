@@ -73,7 +73,11 @@ No distributed transaction. The failure modes are accepted as self-healing withi
 
 ## Connection between ingest and DO write
 
-Both the Tinybird append and the DO write originate from the **same edge Worker** that processed the evaluate request. No separate service hop. The DO is accessed via its binding (`env.ASSIGNMENT_STORE`), which is local to the Worker runtime (one network hop to the DO instance in the nearest location per Cloudflare's DO placement, not necessarily the same POP).
+Both the raw Exposure handoff and the DO write originate from the **same Evaluation Worker** that
+processed the evaluate request. The Event Ingest Worker owns Tinybird delivery after that handoff.
+The DO is accessed via its binding (`env.ASSIGNMENT_STORE`), which is local to the Worker runtime
+(one network hop to the DO instance in the nearest location per Cloudflare's DO placement, not
+necessarily the same POP).
 
 ## Holdover retention policy
 
@@ -85,10 +89,10 @@ There is no multi-Run holdover history in the DO. The pipeline's `raw_events` lo
 
 ## Port contract summary (seam interface)
 
-**Boundary:** edge Worker ↔ Assignment Store DO
+**Boundary:** Evaluation Worker ↔ Assignment Store DO
 
 **What each side owns:**
-- Edge Worker: decides when to call `putIfAbsent` (on KV miss); supplies `(key, run_id, variant)`.
+- Evaluation Worker: decides when to call `putIfAbsent` (on KV miss); supplies `(key, run_id, variant)`.
 - DO: serializes concurrent writes; guarantees one true first-touch winner; write-throughs to KV.
 
 **Failure contract:** DO timeout is non-blocking; retry is async; result is cosmetic miss within KV propagation window. Not a distributed transaction.

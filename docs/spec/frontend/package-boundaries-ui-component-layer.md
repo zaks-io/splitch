@@ -70,7 +70,7 @@ type definitions without pulling in React or Tailwind.
 - Owns all domain-aware components: `RunStatusBadge`, `SRMIndicator`, `AllocationSlider`,
   `ExperimentCard`, `MetricResultRow`, `VariantPill`, etc.
 - Owns the query-key factory (`lib/query-keys.ts`)
-- Owns the WebSocket lifecycle (the `/app/:appId` layout route)
+- Owns the WebSocket lifecycle (the `/{orgSlug}/{appSlug}/{env}` layout route)
 - Owns all route loaders and server-side logic
 - Imports from `packages/ui` and `packages/contracts`; never the reverse
 
@@ -99,4 +99,5 @@ would fail the deletion test (one consumer = speculative indirection).
 ## Sources
 
 - [ADR-0020](../../adr/0020-tanstack-start-for-both-control-panel-and-marketing-shared-component-layer.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [frontend-architecture.md](../../architecture/frontend-architecture.md)

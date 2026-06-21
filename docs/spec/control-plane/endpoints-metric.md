@@ -2,7 +2,7 @@
 
 Request/response shapes for the Metric resource group (binomial, count, revenue, ratio, guardrail).
 
-All endpoints live on the **control-plane Worker** and require a control-plane bearer token. All
+All endpoints live on the **Control Plane API Worker** and require a control-plane bearer token. All
 requests/responses are `Content-Type: application/json`. Error shape, pagination, and the shared
 conventions are described in [control-plane-endpoint-inventory.md](control-plane-endpoint-inventory.md).
 
@@ -33,6 +33,9 @@ Returns: `{ metric_id, app_id, type, name, created_at }`
 ### `GET /apps/{app_id}/metrics/{metric_id}`
 ### `PATCH /apps/{app_id}/metrics/{metric_id}`
 Body: all fields except `type` (type is immutable once set).
+If the Metric is in a running Run's locked decision family, changes recompute only exploratory
+views for that Run; the Worker returns `DECISION_LOCKED` for attempts to mutate the decision-valid
+Metric definition in place.
 ### `DELETE /apps/{app_id}/metrics/{metric_id}`
 Blocked if referenced by a running Experiment.
 

@@ -1,12 +1,17 @@
-# Edge ingest contract — five runtimes appending to the raw log
+# Event ingest contract: Evaluation Worker to raw log
 
-All five edge runtimes (Workers) produce Exposure events and append them to `raw_events` in Tinybird. This contract governs the delivery guarantees, idempotency, timestamp handling, and the interaction with the Assignment Store write on apparent first-touch.
+Evaluation Worker instances produce Exposure events and hand them to the Event Ingest Worker for
+append-only delivery to `raw_events` in Tinybird. This contract governs the delivery guarantees,
+idempotency, timestamp handling, and the interaction with the Assignment Store write on apparent
+first-touch.
 
 ## Delivery guarantee
 
 **At-least-once, never exactly-once.** The same physical Exposure (one Entity, one Variant, one moment) may produce multiple rows in `raw_events` — this is intentional (ADR-0004, ADR-0010). The dedup query is authoritative; the raw log is the system of record.
 
-Each POP appends independently. There is no global ordering requirement and no global edge dedup store. Late-arriving events with an earlier `server_ts` than previously seen rows are handled correctly on the next dedup query run (replayability, ADR-0010).
+Each POP emits independently. There is no global ordering requirement and no global edge dedup
+store. Late-arriving events with an earlier `server_ts` than previously seen rows are handled
+correctly on the next dedup query run (replayability, ADR-0010).
 
 ## SDK seen-set is not authoritative
 
@@ -16,22 +21,35 @@ The SDK maintains a per-`(experiment_id, run_id)` seen-set as a **hot-path optim
 
 | Field | Source | Use |
 |---|---|---|
-| `server_ts` | Edge Worker's `Date.now()` at request ingest time | Canonical for `MIN(ts)` first-touch ordering in the dedup query |
+| `server_ts` | Evaluation Worker's `Date.now()` when the Exposure fires | Canonical for `MIN(ts)` first-touch ordering in the dedup query |
+| `ingest_ts` | Raw-log append / collector receive time | Snapshot/tail watermark only; never used for analysis ordering |
 | `client_ts` | SDK payload from the client runtime | Diagnostics only; never used for ordering |
 
-`server_ts` is always populated. `client_ts` is optional — if absent, diagnostics degrade gracefully. Never use `client_ts` for first-touch ordering (clock skew vulnerability).
+`server_ts` and `ingest_ts` are always populated. `client_ts` is optional — if absent,
+diagnostics degrade gracefully. Never use `client_ts` for first-touch ordering (clock skew
+vulnerability). Never use `ingest_ts` for first-touch ordering either; it exists only so the
+physical snapshot/tail layer can safely catch late-arriving rows.
 
 ## `run_id` stamping
 
-`run_id` is stamped at **SDK fire-time** from the live Run config the edge read from KV. The edge does not fetch `run_id` from a separate source at ingest time. If the KV config is stale by up to ~60s (ADR-0009 propagation window), the Exposure is stamped with the Run the edge knew about. This is accepted and self-healing.
+`run_id` is stamped at **SDK fire-time** from the live Run config the Evaluation Worker read from
+KV. The Evaluation Worker does not fetch `run_id` from a separate source at ingest time. If the KV
+config is stale by up to ~60s (ADR-0009 propagation window), the Exposure is stamped with the Run
+the Evaluation Worker knew about. This is accepted and self-healing.
 
 ## `id_type` sourcing
 
-`id_type` is read from the **Run config** in KV, not from the client. The edge Worker injects it. This ensures the Assignment Store DO key `(experiment_id, id_type, targeting_key)` is always consistent with the Experiment's declared Entity type. If an SDK sends a `targeting_key` of the wrong type (e.g., workspace ID when the Run declares `id_type = 'user'`), it is a client integration error — the edge stamps the correct `id_type` from config regardless.
+`id_type` is read from the **Run config** in KV, not from the client. The Evaluation Worker injects
+it. This ensures the Assignment Store DO key `(experiment_id, id_type, targeting_key)` is always
+consistent with the Experiment's declared Entity type. If an SDK sends a `targeting_key` of the
+wrong type (e.g., workspace ID when the Run declares `id_type = 'user'`), it is a client
+integration error; the Evaluation Worker stamps the correct `id_type` from config regardless.
 
 ## `app_id` injection
 
-`app_id` is injected by the edge Worker from the authenticated credential context (Client Key or API Key binding). Never sourced from the client payload. This is the data-isolation guarantee (ADR-0018).
+`app_id` is injected by the Evaluation Worker from the authenticated credential context (Client Key
+or API Key binding). Never sourced from the client payload. This is the data-isolation guarantee
+(ADR-0018).
 
 ## Cross-POP duplication
 
@@ -41,7 +59,9 @@ Multiple POPs may fire an Exposure for the same Entity in the same Run within a 
 
 ## Holdover write trigger
 
-On apparent first-touch (the edge has no KV entry for this `(experiment_id, id_type, targeting_key)`), the edge Worker MUST call `DO.putIfAbsent` for the Assignment Store (ADR-0009). The sequencing:
+On apparent first-touch (the Evaluation Worker has no KV entry for this
+`(experiment_id, id_type, targeting_key)`), the Evaluation Worker MUST call `DO.putIfAbsent` for the
+Assignment Store (ADR-0009). The sequencing:
 
 1. Evaluate the flag → produce `(run_id, variant)` from `assign()` or KV replay.
 2. Append the raw Exposure row to Tinybird (`raw_events`).
@@ -61,7 +81,8 @@ There is no distributed transaction across Tinybird + DO + KV. The failure modes
 
 ## Physical ingest endpoint
 
-The edge Worker calls the Tinybird Events API (`/v0/events?name=raw_events`) via a `fetch()` call in a non-blocking context (`ctx.waitUntil`). The request carries:
+The Event Ingest Worker calls the Tinybird Events API (`/v0/events?name=raw_events`) via a `fetch()`
+call in a non-blocking context (`ctx.waitUntil`). The request carries:
 
 - JSON body: one Exposure row per request (or batched as newline-delimited JSON)
 - Authorization: Tinybird ingest token (secret, bound to the Worker via secret binding, never client-visible)

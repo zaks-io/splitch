@@ -10,18 +10,18 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 | File | One-line purpose |
 |---|---|
 | [storage-map.md](./storage-map.md) | Canonical table: what data lives in KV, D1, DO, Tinybird, Analytics Engine, and why |
-| [config-store.md](./config-store.md) | Draft/published config, `liveRunId`, no-publish-seam property, config write failure contract |
+| [config-store.md](./config-store.md) | Draft/live config, `liveRunId`, no separate-copy property, config write failure contract |
 | [assignment-store-substrate.md](./assignment-store-substrate.md) | KV-read / DO-write split for holdover sticky experience; consistency window and failure semantics |
 | [exposure-pipeline.md](./exposure-pipeline.md) | Raw append-only log as system of record; dedup at query time; Exposure row schema; SRM denominator |
 | [physical-dedup-engine.md](./physical-dedup-engine.md) | Lambda architecture: Copy Pipe snapshot + real-time tail UNION; rollup MV correctness constraint |
 | [live-updates-do.md](./live-updates-do.md) | Per-App fan-out DO: hibernating WebSocket, write-through, delta-nudge, persisted-before-announced |
 | [multi-tenant-isolation.md](./multi-tenant-isolation.md) | App-enforced `app_id` isolation in D1 (Drizzle seam) and Tinybird (two-seam enforcement) |
 | [contracts-and-validation.md](./contracts-and-validation.md) | Zod-first authoring; package split; KV schema-version envelope; one canonical ErrorResponse |
-| [monorepo-and-toolchain.md](./monorepo-and-toolchain.md) | pnpm + Turborepo layout; two Workers; shared `ui` seam; TanStack Query; cron Workers |
+| [monorepo-and-toolchain.md](./monorepo-and-toolchain.md) | pnpm + Turborepo layout; capability Workers; shared `ui` seam; TanStack Query; cron Workers |
 
 ## Key invariants
 
-1. **No config-publish seam.** Editing and serving share KV/D1 directly. No cross-system copy.
+1. **No separate config-copy seam.** Editing and serving share KV/D1 directly. No cross-system copy.
 2. **KV is a cache, D1 is truth.** KV miss always has a D1 fallback path; never bypass D1 as truth.
 3. **ELT, not ETL.** Raw Exposure log is the system of record; dedup is at query time, re-runnable.
 4. **Rollup MVs build on the deduped snapshot, never the raw log.** Correctness constraint.

@@ -28,7 +28,7 @@ control-plane HTTP API (Worker)  +  auth.md / auth-issuer (ADR-0022)   <- single
 
 **Thin 1:1 tools/commands; all domain invariants enforced in the Worker.** MCP tools and CLI commands map
 one-to-one onto control-plane endpoints. A 1:1 interface is only as safe as the API it mirrors, so the
-**control-plane Worker is the sole guardian of every invariant** — it must refuse to represent an invalid
+**Control Plane API Worker is the sole guardian of every management invariant** — it must refuse to represent an invalid
 state (e.g. an edit that would mutate a frozen Run's assignment config fails at the Worker with a clear,
 agent-actionable error; ADR-0002/0003). Invariant logic lives in **one place** and both surfaces inherit
 correctness for free; no invariant lives in a tool or a command.
@@ -64,7 +64,7 @@ server holds its token in the transport session and never touches disk.
 
 - **One shared typed client** (from the ADR-0017 contract) is the load-bearing shared artifact; the CLI and
   MCP server are thin wrappers. Adding an endpoint propagates to both surfaces mechanically.
-- **The control-plane Worker carries all invariant enforcement** — the API must be designed to refuse invalid
+- **The Control Plane API Worker carries management invariant enforcement** — the API must be designed to refuse invalid
   states, returning clear errors both a human and an agent can act on. This is not new work caused by this
   ADR; it is where ADR-0002/0003 invariants must live regardless, now made the *sole* guardian.
 - **The remote MCP server composes with ADR-0022** — it is an auth-issuer-gated Worker; connecting *is*

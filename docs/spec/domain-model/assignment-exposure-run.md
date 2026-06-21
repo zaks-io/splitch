@@ -22,8 +22,9 @@ The **only event recorded on this seam.**
 | Field | Type | Req | Meaning |
 |-------|------|-----|---------|
 | `app_id` | `string` | ✓ | Data-isolation key (injected at ingest, not from SDK) |
+| `environment_id` | `string` | ✓ | Environment scope; Exposures are per-Environment (injected at ingest, not from SDK) (ADR-0027) |
 | `experiment_id` | `string` | ✓ | Experiment identifier |
-| `run_id` | `string` | ✓ | Run that owns this Exposure; stamped at SDK fire-time from the live Run config the SDK holds |
+| `run_id` | `string` | ✓ | Experiment Run that owns this Exposure; stamped at SDK fire-time from the live Run config the SDK holds |
 | `targeting_key` | `string` | ✓ | The Entity identifier |
 | `id_type` | `string` | ✓ | Entity type (e.g. `"user"`, `"workspace"`); always explicit, never derived |
 | `variant` | `string` | ✓ | Variant **name** assigned; never the value |
@@ -38,9 +39,9 @@ The **only event recorded on this seam.**
 
 ### First-touch identity
 
-`(app_id, experiment_id, run_id, id_type, targeting_key)`
+`(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`
 
-This is the first-touch identity, resolved by `MIN(server_ts)` at query time. Many raw Exposures for the same Entity/Run share it; the earliest `server_ts` wins. Variant is **excluded** so that different-Variant Exposures for the same Entity/Run are not suppressed; they arrive at the `__multiple__` quarantine query downstream (see [exposure-dedup.md](./exposure-dedup.md)). This is distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key for at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
+This is the first-touch identity, resolved by `MIN(server_ts)` at query time. (`environment_id` co-scopes alongside `app_id` since Exposures are per-Environment, ADR-0027.) Many raw Exposures for the same Entity/Run share it; the earliest `server_ts` wins. Variant is **excluded** so that different-Variant Exposures for the same Entity/Run are not suppressed; they arrive at the `__multiple__` quarantine query downstream (see [exposure-dedup.md](./exposure-dedup.md)). This is distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key for at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
 
 ### Exposure fires on read
 
@@ -64,7 +65,7 @@ When Run N ends and Run N+1 opens, a returning Entity already **exposed** under 
 
 ```
 on evaluate(flag, targetingKey, idType):
-  held = AssignmentStore.getAll(appId, idType, targetingKey)
+  held = AssignmentStore.getAll(appId, environmentId, idType, targetingKey)
   if held[experiment] present:           # holdover: exposed under a prior Run
       show held[experiment].variant      # sticky experience — no jarring flip
       do NOT fire a new Exposure         # already counted, attached to the old Run
@@ -93,4 +94,5 @@ This is a **single-implementation boundary** for the Assignment function (it is 
 - [ADR-0004](../../adr/0004-exposure-fires-on-read.md)
 - [ADR-0005](../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md)
 - [ADR-0006](../../adr/0006-run-boundary-sticky-experience-counted-in-old-run.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [assignment-exposure-seam.md](../../architecture/assignment-exposure-seam.md)

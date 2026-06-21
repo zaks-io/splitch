@@ -16,9 +16,9 @@ Each area is a directory with a thin `README.md` index and small, single-concern
 Unified feature flags + A/B experimentation on Cloudflare's edge, built to be agent-first and to
 scale to millions of events. Two planes:
 
-- **Data plane (hot path):** the public SDK calls an edge Worker that resolves a Variant
+- **Data plane (hot path):** the public SDK calls the Evaluation Worker, which resolves a Variant
   (`assign()` + holdover replay) and fires an Exposure. KV serves reads; per-key Durable Objects
-  serialize first-touch writes; Workers append raw events to Tinybird.
+  serialize first-touch writes; the Event Ingest Worker appends raw events to Tinybird.
 - **Control plane:** authoring (Org/App/Flag/Experiment/Run/Metric/Segment), auth (WorkOS +
   OAuth PRM + auth.md), and the MCP/CLI surfaces — all thin skins over one Zod-first typed contract. The
   analytics/stats engine reads the raw Tinybird log.
@@ -29,27 +29,27 @@ scale to millions of events. Two planes:
 2. **Exposure** is the only recorded event; deduped first-touch per `(Entity, Run)`; it is the
    analysis denominator.
 3. **Run** is the immutable unit of analysis; its assignment config is frozen for its life.
-   Assignment edits stage on a **draft** and one **Publish** opens the next Run; measurement edits
+   Assignment edits stage on a **draft** and one **Start** opens the next Run; measurement edits
    recompute in place.
 
 ## System map (seams)
 
 ```
-  Public SDK ──evaluate()/peek()──▶  Edge Worker (evaluate path) ───────────────┐
+  Public SDK ──evaluate()/peek()──▶  Evaluation Worker ────────────────────────┐
    (Client Key)                        │  reads Provider config (KV)            │
                                        │  reads AssignmentStore.getAll (KV)     │ fires
                                        │  assign() on miss / replay on holdover │ Exposure
                                        ▼                                        ▼
-                              Provider (config)              Exposure pipeline (raw log, Tinybird)
-                              AssignmentStore                  │ first-touch dedup (query-time)
-                               getAll: KV  / put: per-key DO   │ __multiple__ quarantine
-                                       ▲ write-through          │ activation gate (re-anchor)
-                                       └── put (first-touch) ◀──┘
+                              Provider (config)              Event Ingest Worker
+                              AssignmentStore                 (raw log, Tinybird)
+                               getAll: KV  / put: per-key DO   │ first-touch dedup (query-time)
+                                       ▲ write-through          │ __multiple__ quarantine
+                                       └── put (first-touch) ◀──┘ activation gate (re-anchor)
                                                                 ▼
-                                                         Stats engine (one CI object)
-                                                          variance → CUPED → aCS → FDR
+                                                         Analysis Worker
+                                                          Stats engine: variance → CUPED → aCS → FDR
 
-  Humans / Agents ──▶ Control plane Worker  ◀── thin skins: CLI, remote MCP
+  Humans / Agents ──▶ Control Plane API Worker ◀── CLI + remote MCP Worker
   (WorkOS / OAuth PRM) │ Zod-first contract (@splitch/contracts → hc client)
                         │ writes config via per-App DO → KV + D1, broadcasts nudge
                         ▼

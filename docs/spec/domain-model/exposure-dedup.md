@@ -13,7 +13,7 @@ An Entity's earliest Exposure in a Run is the one that counts and anchors its Co
 | Layer | Role | Authority |
 |---|---|---|
 | SDK seen-set | Hot-path wire optimization; suppresses re-fire within one SDK instance per `(experiment_id, run_id)` | Optimization only; not authoritative |
-| Pipeline dedup | `GROUP BY (app_id, experiment_id, run_id, id_type, targeting_key)` + `MIN(server_ts)` | Correctness authority |
+| Pipeline dedup | `GROUP BY (app_id, environment_id, experiment_id, run_id, id_type, targeting_key)` + `MIN(server_ts)` | Correctness authority |
 
 The SDK seen-set is **per-`(experiment_id, run_id)`** so a Run boundary correctly lets a fresh Exposure fire under the new Run. The seen-set is per-instance only; across five edge runtimes, per-node sets cannot be the source of truth. The pipeline dedup is the only authoritative deduplication.
 
@@ -25,7 +25,7 @@ When an Entity's raw Exposures show **more than one distinct Variant within a si
 
 ```sql
 SELECT
-  app_id, experiment_id, run_id, id_type, targeting_key,
+  app_id, environment_id, experiment_id, run_id, id_type, targeting_key,
   MIN(server_ts) AS first_ts,
   CASE
     WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
@@ -33,7 +33,7 @@ SELECT
   END AS assigned_variant
 FROM raw_exposures
 WHERE type = 'exposure'
-GROUP BY app_id, experiment_id, run_id, id_type, targeting_key
+GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key
 ```
 
 The `__multiple__` sentinel is not a real Variant. It is excluded from:
@@ -82,4 +82,5 @@ This is the correct deferral path (e.g. below-the-fold UI that may never render)
 - [ADR-0005](../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md)
 - [ADR-0010](../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md)
 - [ADR-0011](../../adr/0011-conflicting-variant-entities-quarantined-to-multiple.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [exposure-pipeline-seam.md](../../architecture/exposure-pipeline-seam.md)

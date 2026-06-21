@@ -6,8 +6,8 @@ ADR-0010 decided the Exposure pipeline *logically* — ELT, raw append-only log 
 record, first-touch dedup as a re-runnable windowed query at analysis time. It deliberately left the
 *physical* engine open. This ADR pins it: on Tinybird (ADR-0017), first-touch is served by a **lambda
 architecture** — a scheduled **Copy Pipe** snapshots the deduped first-touch table, and serving
-queries **`UNION ALL` the snapshot with the fresh raw rows since the last snapshot**, deduping only
-that small tail at query time. The raw log stays the source of truth and the snapshot is always
+queries **`UNION ALL` the snapshot with raw rows ingested after the snapshot watermark**, deduping
+only that small tail at query time. The raw log stays the source of truth and the snapshot is always
 rebuildable from it, so ADR-0010's replayability is preserved; what changes is that the expensive
 windowed dedup runs on a schedule over the bulk, not on every analysis query over the full history.
 
@@ -16,6 +16,12 @@ The first-touch definition is unchanged from ADR-0010 — `MIN(ts)` per `(entity
 must stay identical: the Copy Pipe that builds the snapshot, and the real-time tail query. Both are
 generated from one shared definition, never hand-copied (this is ADR-0005's "one dedup, centralized"
 at the physical layer).
+
+The physical boundary is deliberately **not** `server_ts > last_snapshot_ts`. `server_ts` is the
+analysis clock used for first-touch and Conversion Window anchoring; late-arriving rows can have an
+older `server_ts` than the snapshot. The Copy Pipe records an ingest-time `watermark_ts`, and the
+tail reads `raw_events.ingest_ts > watermark_ts`. The final UNION re-dedups by `MIN(server_ts)`, so
+late arrivals still become first-touch when their event time is earliest.
 
 ## Considered options
 
@@ -45,9 +51,9 @@ at the physical layer).
   volume). Serving pipes read snapshot ∪ tail. More moving parts than a single query, accepted as the
   cost of bounded query latency over unbounded data.
 - **Snapshot cadence is a freshness/cost dial, not a correctness one.** The real-time tail always
-  covers the gap since the last snapshot, so a slower schedule never makes results wrong, only the
-  batch layer staler — and the tail absorbs late-arriving earlier-`ts` events on the next read,
-  exactly as ADR-0010 requires.
+  covers rows after the snapshot ingest watermark, so a slower schedule never makes results wrong,
+  only the batch layer staler — and the tail absorbs late-arriving earlier-`server_ts` events on the
+  next read, exactly as ADR-0010 requires.
 - **Rollups hang off the snapshot.** Any AggregatingMergeTree rollup MV builds on the deduped
   snapshot datasource, never the raw log — this is the single rule that keeps redundant edge events
   from double-counting. Recorded here and cross-referenced from ADR-0017.
@@ -57,3 +63,13 @@ at the physical layer).
 - **Deferred, not pre-built.** v0 ships pure query-time dedup (ADR-0010 as written); this lambda
   structure is introduced when raw-log scan cost shows up in `pipe_stats_rt`. The design is recorded
   now so the v0 query is written as a drop-in tail of the eventual UNION, not a throwaway.
+
+## Sources
+
+- Snowplow deduplication: at-least-once delivery and downstream earliest-timestamp dedup:
+  https://docs.snowplow.io/docs/modeling-your-data/modeling-your-data-with-dbt/package-mechanics/deduplication/
+- BigQuery streaming inserts: best-effort insert dedup should not be relied on as the analysis
+  dedup authority:
+  https://docs.cloud.google.com/bigquery/docs/streaming-data-into-bigquery
+- Snowflake QUALIFY: canonical `ROW_NUMBER() ... QUALIFY = 1` first-touch shape:
+  https://docs.snowflake.com/en/sql-reference/constructs/qualify

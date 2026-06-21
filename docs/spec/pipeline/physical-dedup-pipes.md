@@ -15,15 +15,22 @@ SOURCE QUERY (the canonical dedup definition):
     MIN(server_ts)                                        AS first_exposure_ts,
     CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
          ELSE MAX(variant) END                           AS variant,
-    now64(3)                                              AS snapshot_ts
+    now64(3)                                              AS snapshot_ts,
+    {copy_watermark_ts: DateTime64(3)}                    AS watermark_ts
   FROM raw_events
   WHERE type = 'exposure'
+    AND ingest_ts <= {copy_watermark_ts: DateTime64(3)}
   GROUP BY app_id, experiment_id, run_id, id_type, targeting_key
 
 TARGET: deduped_exposures
 ```
 
 The schedule is hourly by default. The real-time tail covers the window since the last snapshot, so a slower schedule never produces incorrect results, only a larger tail at query time.
+
+`copy_watermark_ts` is captured at the start of the Copy Pipe run. It is an ingest-time watermark,
+not an event-time watermark. `server_ts` remains the analysis clock; `ingest_ts` only answers
+"was this raw row already included in the snapshot?" This prevents a late-arriving row with an
+old `server_ts` from falling between the snapshot and the tail.
 
 **COPY_MODE `replace` vs incremental:** start with `replace` (simpler, always correct). Switch to incremental (append only rows since `MAX(snapshot_ts)`) when full-rebuild scan time grows measurable. The `snapshot_ts` column enables this transition.
 
@@ -45,7 +52,7 @@ NODE tail_layer:
          ELSE MAX(variant) END                           AS variant
   FROM raw_events
   WHERE type = 'exposure'
-    AND server_ts > (SELECT MAX(snapshot_ts) FROM deduped_exposures)
+    AND ingest_ts > (SELECT MAX(watermark_ts) FROM deduped_exposures)
   GROUP BY app_id, experiment_id, run_id, id_type, targeting_key
 
 NODE union_and_final_dedup:
@@ -63,7 +70,9 @@ NODE union_and_final_dedup:
   GROUP BY app_id, experiment_id, run_id, id_type, targeting_key
 ```
 
-The tail re-dedup handles events that arrived after the snapshot ran but have a `server_ts` earlier than the snapshot boundary (late-arriving from remote POPs). This is the correct behavior per ADR-0010.
+The tail uses `ingest_ts`, not `server_ts`, so events that arrive after the snapshot ran but
+carry an earlier `server_ts` still appear in the tail. The final union re-dedup then lets
+`MIN(server_ts)` choose the first-touch row. This is the correct behavior per ADR-0010.
 
 **Shared definition rule (ADR-0024, seam finding):** The dedup logic in the Copy Pipe and the tail node is identical. Both are generated from one shared Jinja template at build time — never hand-copied. Drift between the two is a correctness failure.
 
@@ -120,3 +129,6 @@ Enables fast per-arm activation rate reads for the bias guardrail dashboard.
 - [ADR-0010](../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md) — raw log, system of record, replayability
 - [ADR-0017](../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md) — Tinybird as analytics system; MVs off snapshot
 - [ADR-0024](../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md) — lambda architecture; shared dedup definition; rollups off snapshot
+- [Snowplow deduplication](https://docs.snowplow.io/docs/modeling-your-data/modeling-your-data-with-dbt/package-mechanics/deduplication/) — at-least-once delivery and downstream earliest-timestamp dedup
+- [BigQuery streaming inserts](https://docs.cloud.google.com/bigquery/docs/streaming-data-into-bigquery) — best-effort ingest dedup is not the analysis authority
+- [Snowflake QUALIFY](https://docs.snowflake.com/en/sql-reference/constructs/qualify) — first-row window filtering pattern

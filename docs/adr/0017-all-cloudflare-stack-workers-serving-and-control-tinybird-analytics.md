@@ -16,7 +16,7 @@ on the serving side:
   primitive**: config lives in KV/D1, and a **Durable Object fans out live updates (SSE/WebSocket)**
   to subscribed dashboards — the agent-paste `ArtifactLiveUpdates` / `stream` pattern, applied to
   config. Editing surface and serving surface are the **same store**, so there is **no cross-system
-  publish step**: an edit writes config to KV/D1, and the hot path reads it directly.
+  config-copy step**: an edit writes config to KV/D1, and the hot path reads it directly.
 - **Tinybird (managed ClickHouse) — the analytics system of record.** The raw append-only
   Exposure/event log (ADR-0010) and its materialized metric rollups live in Tinybird. Columnar,
   unsampled, real windowed-query SQL — a genuine fit for ELT-with-query-time-dedup, the exact
@@ -33,7 +33,7 @@ edge) → Tinybird (huge, append-only, analytical)** — each store sized for it
   editors — the easy case for a hand-rolled DO + SSE fan-out, which agent-paste already ships a
   reference for. Against that one advantage: Convex is a **third datastore**, **not edge-resident**
   (a cross-region hop the all-edge product can't take on the hot path), carries a **cost ceiling**
-  that scales badly with volume, and — decisively — **forces a Convex → KV config-publish seam**
+  that scales badly with volume, and — decisively — **forces a Convex → KV config-copy seam**
   (Convex can't bind to KV; it would need a binding-holding Worker it pushes to). So Convex doesn't
   remove Cloudflare from the control plane, it adds itself *on top* of it and bolts a sync seam back
   on. Staying all-Cloudflare deletes that seam instead of building it. (Reconsider only if the
@@ -60,8 +60,8 @@ edge) → Tinybird (huge, append-only, analytical)** — each store sized for it
   new platform — it is a Durable Object SSE/WebSocket fan-out over the same KV/D1 the hot path
   reads, copied from agent-paste's streaming pattern. The DO fan-out is the only net-new piece to
   build.
-- **No config-publish seam.** Because editing and serving share KV/D1, there is no cross-system copy
-  to keep atomic — the class of bug a Convex → KV publish would have introduced does not exist.
+- **No config-copy seam.** Because editing and serving share KV/D1, there is no cross-system copy
+  to keep atomic — the class of bug a Convex → KV copy would have introduced does not exist.
   Validation and any versioned/atomic-swap discipline live in the Worker that writes config, in one
   place. ADR-0009 (KV read / DO write) is untouched; this is the same substrate, now also backing
   config.

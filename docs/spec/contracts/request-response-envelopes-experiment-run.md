@@ -1,7 +1,11 @@
-# Request/response envelopes: Experiment and Run endpoints
+# Request/response envelopes: Experiment and Experiment Run endpoints
 
-Wire shapes for Experiment and Run control-plane endpoints: the edit taxonomy (assignment vs
-measurement vs non-material) and Run immutability guards.
+Wire shapes for Experiment and Experiment Run control-plane endpoints: the edit taxonomy (assignment vs
+measurement vs non-material) and Experiment Run immutability guards.
+
+All Experiment and Experiment Run endpoints are per-Environment (ADR-0027): control-plane paths are
+`/apps/{app_id}/envs/{environment_id}/experiments/...`. Experiments, Experiment Runs, and Exposures are
+scoped by `(app_id, environment_id)`.
 
 Envelopes compose leaf schemas from [leaf-schemas-experiment.md](./leaf-schemas-experiment.md). They are
 **distinct** — never fused — because create and patch have different required fields. Shared conventions
@@ -17,8 +21,9 @@ live in [request-response-envelopes-conventions.md](./request-response-envelopes
 | Field | Required | Notes |
 |---|---|---|
 | `appId` | yes | — |
+| `environmentId` | yes | Co-scoped with `appId`; Experiment is per-Environment (ADR-0027) |
 | `name` | yes | — |
-| `key` | yes | Unique per App |
+| `key` | yes | Unique per `(App, Environment)` |
 | `flagId` | yes | One Flag per Experiment in v1 (v1 Flag/Experiment scope) |
 | `targetingKey` | yes | Inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN` |
 | `description` | no | — |
@@ -42,11 +47,17 @@ Sorted by edit type. The Worker enforces the edit taxonomy (ADR-0003):
 - `flagId` — changing the controlled Flag
 
 **Measurement edits** — applied to existing Run, triggers recompute, no sample reset:
-- `metrics`
-- `guardrailMetrics`
+- `metrics` — Secondary / exploratory Metrics recompute; goal Metric membership and locked goal Metric definitions are decision-locked
+- `guardrailMetrics` — exploratory Guardrails recompute; locked Guardrail thresholds/directions are decision-locked
 - `conversionWindowMs`
-- `dimensions`
+- `dimensions` — new post-start Dimensions are Secondary / exploratory; Primary Dimensions are locked at Run Start
+
+**Decision-locked fields** — rejected for decision use when Experiment.status = `'running'`:
 - `confidenceLevel`
+- `horizon`, `targetN`, `sampleSizeLocked`
+- goal Metric membership / roles
+- Guardrail thresholds and directions
+- Primary Dimension membership / declared values
 
 **Non-material edits** — applied in place:
 - `name`
@@ -69,22 +80,23 @@ Sorted by edit type. The Worker enforces the edit taxonomy (ADR-0003):
 | `guardrailMetrics` | no | measurement |
 | `conversionWindowMs` | no | measurement |
 | `dimensions` | no | measurement |
-| `confidenceLevel` | no | measurement |
+| `confidenceLevel` | no | decision-locked |
 | `status` | no | non-material (only `'ended'` accepted via PATCH) |
 
 ---
 
-## Run endpoints
+## Experiment Run endpoints
 
-### PublishRunRequest (opens a new Run)
+### StartRunRequest (opens a new Experiment Run)
 
-The Publish action ends the current running Run (if any) and opens a new Run. This is the only path
-to open a Run (first-Publish Run rule "first Run opens on first Publish"). All assignment config is supplied here.
+The Start action ends the current running Experiment Run (if any) and opens a new Experiment Run. This
+is the only path to open an Experiment Run (first-Start Run rule "first Experiment Run opens on first
+Start"). All assignment config is supplied here.
 
 | Field | Required | Notes |
 |---|---|---|
 | `experimentId` | yes | — |
-| `variantSet` | yes | `Variant[]`; snapshot of the Flag's current Variants at publish time |
+| `variantSet` | yes | `Variant[]`; snapshot of the Flag's current Variants at Start time |
 | `allocation` | yes | `Record<variantId, number>`; must sum to 100 |
 | `salt` | no | Auto-generated UUID4 if omitted; guaranteed unique per Experiment |
 | `targetingSegmentId` | no | Optional Segment gate |
@@ -118,3 +130,4 @@ are included (immutable snapshots). `endedAt` is `null` on running Runs.
 - [../../adr/0002-run-is-the-immutable-unit-of-analysis.md](../../adr/0002-run-is-the-immutable-unit-of-analysis.md)
 - [../../adr/0003-material-edits-including-measurement-open-a-new-run.md](../../adr/0003-material-edits-including-measurement-open-a-new-run.md)
 - [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

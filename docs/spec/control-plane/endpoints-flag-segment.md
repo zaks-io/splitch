@@ -1,15 +1,22 @@
-# Control-plane endpoints: Flag, Variant, Targeting Rule, Segment
+# Control-plane endpoints: Flag definition, Flag Configuration, Promotion, Segment
 
-Request/response shapes for the Flag (with Variants and Targeting Rules) and Segment resource groups.
+Request/response shapes for the Flag (definition + per-Environment Configuration), Promotion, and
+Segment resource groups.
 
-All endpoints live on the **control-plane Worker** and require a control-plane bearer token. All
+**App-level vs Environment-level (ADR-0027/0028).** A Flag's *definition* — key, schema, the full
+**Variant catalog**, Default Variant — is **App-level** (defined once): `/apps/{app_id}/flags/…`. Its
+**Flag Configuration** — which catalog Variants are available, targeting rules, rollout, enabled state
+— is **per-Environment**: `/apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`. **Promotion**
+copies a Flag Configuration (or one Variant's availability) between Environments.
+
+All endpoints live on the **Control Plane API Worker** and require a control-plane bearer token. All
 requests/responses are `Content-Type: application/json`. Error shape, pagination, and the shared
 conventions are described in [control-plane-endpoint-inventory.md](control-plane-endpoint-inventory.md).
 
-## Flag endpoints
+## Flag definition endpoints (App-level — the catalog, defined once)
 
 ### `GET /apps/{app_id}/flags`
-Returns: list of Flags.
+Returns: list of Flag definitions.
 
 ### `POST /apps/{app_id}/flags`
 Body:
@@ -18,35 +25,73 @@ Body:
   flag_key: string,          // unique within App; snake_case recommended
   name: string,
   description?: string,
-  enabled: boolean,          // defaults true
-  variants: [
+  schema?: JSONSchema,       // user-defined schema the Variant values must satisfy
+  variants: [                // the App-level Variant catalog
     { name: string, value: boolean|string|number|object, is_default: boolean }
   ]
 }
 ```
-Returns: `{ flag_id, app_id, flag_key, name, enabled, variants, created_at }`
-Invariant: exactly one Variant has `is_default: true`.
+Returns: `{ flag_id, app_id, flag_key, name, schema, variants, created_at }`
+Invariant: exactly one Variant has `is_default: true`; every Variant `value` satisfies `schema`.
+**No `enabled` here** — enabled state is per-Environment (it lives on the Flag Configuration).
 
 ### `GET /apps/{app_id}/flags/{flag_id}`
-Returns: full Flag including Variants and Targeting Rules.
+Returns: full Flag definition (catalog Variants + schema). No per-Environment config.
 
 ### `PATCH /apps/{app_id}/flags/{flag_id}`
-Body: `{ name?, description?, enabled? }`. Does NOT accept `variants` (separate endpoint).
-Returns: updated Flag.
+Body: `{ name?, description?, schema? }`. Does NOT accept `variants` or `enabled`.
+Returns: updated Flag definition.
 
 ### `POST /apps/{app_id}/flags/{flag_id}/variants`
-Body: `{ name: string, value: boolean|string|number|object, is_default?: boolean }`
-Returns: updated Flag with new Variant.
+Adds a Variant to the **catalog** (App-level). Body: `{ name, value, is_default? }`; `value` must
+satisfy the Flag's `schema`. A new catalog Variant is **not** available in any Environment until
+**promoted** (ADR-0028).
+Returns: updated Flag definition.
 
 ### `DELETE /apps/{app_id}/flags/{flag_id}/variants/{variant_name}`
-Blocked if Variant is referenced in a running Experiment.
-
-### `PUT /apps/{app_id}/flags/{flag_id}/targeting-rules`
-Full replace of the Targeting Rule list (ordered; first match wins). Body: `TargetingRule[]`.
-Returns: updated Flag.
+Removes a Variant from the catalog. Blocked if the Variant is available in any Environment or
+referenced in a running Experiment.
 
 ### `DELETE /apps/{app_id}/flags/{flag_id}`
-Blocked if referenced by a running Experiment.
+Blocked if referenced by a running Experiment in any Environment.
+
+## Flag Configuration endpoints (per-Environment)
+
+### `GET /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
+Returns: the Flag's Configuration in this Environment:
+`{ flag_id, environment_id, enabled, available_variant_names: string[], targeting_rules: TargetingRule[] }`.
+
+### `PATCH /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
+Body: `{ enabled?: boolean, available_variant_names?: string[] }`.
+`available_variant_names` must be a subset of the Flag's catalog (ADR-0028). Subject to this
+Environment's Policy (ADR-0029): the "Variant availability" and "enabled state" change types may
+require a Confirmation. **Turning `enabled` off is never gated** (kill-switch exemption).
+Returns: updated Flag Configuration.
+
+### `PUT /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/targeting-rules`
+Full replace of this Environment's Targeting Rule list (ordered; first match wins). Body:
+`TargetingRule[]`. Rules may only reference Variants in this Environment's available set. Subject to
+the Environment's "targeting/rollout/value" Policy.
+Returns: updated Flag Configuration.
+
+## Promotion endpoints
+
+### `POST /apps/{app_id}/envs/{target_environment_id}/flags/{flag_id}/promote`
+Promotes Flag Configuration from a source Environment into this (target) Environment.
+Body:
+```
+{
+  from_environment_id: string,
+  scope: "config" | "variant",         // whole config, or one Variant's availability
+  variant_name?: string,               // required when scope = "variant"
+  confirm?: boolean                    // required when the target Policy gates this at confirm
+}
+```
+Returns: the updated target Flag Configuration + a diff summary `{ before, after }`.
+Subject to the target Environment's Policy (ADR-0029): a gated Promotion requires `confirm: true`.
+`scope: "variant"` adds `variant_name` to the target's available set (availability only); `scope:
+"config"` copies the source's available set + targeting + enabled state. See
+[../frontend/environments-and-promotion.md](../frontend/environments-and-promotion.md) for the diff UX.
 
 ## Segment endpoints
 
@@ -64,4 +109,7 @@ Blocked if referenced by a running Experiment.
 ## Sources
 
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md](../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md)
+- [../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)

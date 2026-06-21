@@ -1,4 +1,4 @@
-# Test-evaluation endpoint: `POST /test-evaluation` (control-plane dry-run)
+# Test-evaluation endpoint: `POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval` (control-plane dry-run)
 
 Resolves a Variant and its reason without firing an Exposure. Used by CLI/MCP/agent for
 pre-deploy verification and by humans for debugging. Categorically NOT the data-plane
@@ -22,10 +22,13 @@ There is no "suppress Exposure" flag a caller could accidentally omit (ADR-0026)
 ## Endpoint
 
 ```
-POST /apps/:appId/test-evaluation
+POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval
 Authorization: Bearer <controlPlaneToken>   -- ADR-0022, NOT a Client/API Key
 Content-Type: application/json
 ```
+
+The Environment is in the path (`environmentId`, ADR-0027): the dry-run resolves against that
+Environment's live config, mirroring how the data-plane resolves the Environment from the Client Key.
 
 ## Request shape
 
@@ -84,12 +87,12 @@ propagation window applies equally here — the resolve uses the same KV-cached 
 Test-evaluation resolves against the **same KV-backed Provider config path the data-plane
 `evaluate` endpoint reads** — not D1 directly. This is deliberate: ADR-0026's purpose is to
 "verify the deployed truth," and the deployed truth is what the edge serves. Reading D1 (which
-updates synchronously on Publish) would let the dry-run report a Variant the data plane cannot
+updates synchronously on Start) would let the dry-run report a Variant the data plane cannot
 yet serve, misleading the agent's verify step.
 
-Consequence: after a Publish, both test-evaluation and the data-plane endpoint observe the new
+Consequence: after Start, both test-evaluation and the data-plane endpoint observe the new
 config within the same ~60s KV propagation window (ADR-0009). The verify step is honest about
-propagation — if it shows the old Variant for a few seconds after Publish, so does production.
+propagation — if it shows the old Variant for a few seconds after Start, so does production.
 
 ## Error responses
 
@@ -109,12 +112,12 @@ This endpoint is exposed as:
 - One CLI command: `splitch verify flag <flagKey> --context <json>`
 
 Both are thin skins over the same endpoint (ADR-0023). The agent's verify step calls this
-endpoint immediately after configuring or publishing a Flag to confirm the rule set
+endpoint immediately after configuring or promoting a Flag, or after starting an Experiment Run, to confirm the rule set
 resolves as expected.
 
 ## Seam boundary
 
-- **Port:** `testEvaluate(appId, controlPlaneToken, flagKey, targetingKey, idType, evaluationContext) -> { variant, reason }`
+- **Port:** `testEvaluate(appId, environmentId, controlPlaneToken, flagKey, targetingKey, idType, evaluationContext) -> { variant, reason }`
 - **Left side:** CLI / MCP / agent calling the verify step; control-plane token required
 - **Right side:** Worker that reads live config from the same KV-backed Provider path the data-plane `evaluate` endpoint uses (not D1 directly), computes Assignment, returns reason; wired to NO write path
 - **Failure contract:** no writes on error; 404 → flag not found; 401/403 → auth failure
@@ -127,3 +130,4 @@ resolves as expected.
 - [ADR-0004](../../adr/0004-exposure-fires-on-read.md)
 - [ADR-0018](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [ADR-0025](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

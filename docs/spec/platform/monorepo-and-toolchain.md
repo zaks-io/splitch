@@ -1,7 +1,7 @@
-# Monorepo and toolchain: pnpm + Turborepo, two Workers, one ui package
+# Monorepo and toolchain: pnpm + Turborepo, capability Workers, one ui package
 
-Defines the physical package structure, the two Worker deploy units, the shared ui package
-contract, and the toolchain/quality-gate stack.
+Defines the physical package structure, the capability-specific Worker deploy units, the shared
+ui package contract, and the toolchain/quality-gate stack.
 
 ## Toolchain
 
@@ -29,17 +29,39 @@ apps/
   marketing/    Marketing site Worker (TanStack Start, prerendered, unauthenticated)
 
 workers/
-  api/          Control-plane API Worker (Hono, @hono/zod-openapi)
-  edge/         Data-plane / serving Worker (evaluation, Exposure firing)
-  auth/         Auth-issuer Worker (minimal surface — see auth spec)
+  control-plane-api/  Control Plane API Worker (Hono, @hono/zod-openapi, admin CRUD)
+  mcp/                MCP Worker (remote MCP protocol adapter, calls @splitch/client)
+  evaluation/         Evaluation Worker (SDK evaluate/peek, dry-run test-eval)
+  event-ingest/       Event Ingest Worker (append-only event validation, queues, delivery)
+  analysis/           Analysis Worker (Tinybird proxy reads, stats/result contracts)
+  auth-issuer/        Auth Issuer Worker (minimal auth surface; see auth spec)
 ```
+
+## Worker topology contract
+
+These Workers are separate deploy units because they are separate capability and trust seams. Do
+not collapse them into generic `api` or `edge` Workers during slicing.
+
+| Worker | Boundary | Owns | Does not own |
+|---|---|---|---|
+| Control Plane API Worker | Authenticated management API | Org, App, Environment, Flag, Flag Configuration, Promotion, Experiment, Run, Metric, Segment, and SDK credential mutations | MCP transport, SDK evaluate, event ingest, Tinybird result reads |
+| MCP Worker | Agent protocol adapter | Remote MCP auth handshake, tool registry, calls through `@splitch/client` | D1/KV/Tinybird bindings, domain invariants |
+| Evaluation Worker | SDK/data-plane resolution | Client Key/API Key evaluation, peek, control-plane dry-run test-eval, Provider + Assignment Store reads | Config writes, analysis queries, direct Metric computation |
+| Event Ingest Worker | Append-only event intake | Assignment/Exposure/Metric event validation, queueing, sharded DO dedup, Tinybird delivery | Variant resolution, result calculation, control-plane CRUD |
+| Analysis Worker | Result read model | Tinybird proxy endpoints, SRM/Metric/statistical result reads, `app_id`/`environment_id` injection from auth/path context | SDK evaluate, event ingest, config mutation |
+| Auth Issuer Worker | Identity/token surface | AuthKit/auth.md/OAuth endpoints, token/revocation flows, provisional create handoff | Post-create Org/App management, SDK credentials, analytics |
+
+Shared code belongs in `packages/` only when the deletion test passes. Worker bindings and
+capability-specific orchestration stay local to the owning Worker. The public seam should stay
+shallow; the module behind it can be deep.
 
 ## Two frontend Workers (separate deploy units)
 
 **Panel Worker** (`apps/panel`):
 - TanStack Start, SSR with loader-seeded TanStack Query caches
-- Authenticated; all routes check session membership against `:appId`
-- Hibernating WebSocket attaches post-hydration per `/app/:appId` layout route
+- Authenticated; all routes resolve `orgSlug`/`appSlug` to IDs and check session membership
+- Hibernating WebSocket attaches post-hydration per `/{orgSlug}/{appSlug}/{env}` layout route, keyed
+  by `(appId, environmentId)` (ADR-0027)
 - Blast radius: authenticated control-plane sessions only
 
 **Marketing Worker** (`apps/marketing`):
@@ -48,8 +70,8 @@ workers/
 - TanStack Query for live-data touchpoints (pricing, status) only
 - Blast radius: public marketing surface; no auth, no App data
 
-The two Workers are cleanly isolated at the deploy boundary. Component sharing happens at build
-time through `@splitch/ui`, so isolation costs nothing.
+The two frontend Workers are cleanly isolated at the deploy boundary. Component sharing happens at
+build time through `@splitch/ui`, so isolation costs nothing.
 
 ## `@splitch/ui` seam contract
 
@@ -68,8 +90,8 @@ rebuild at the same `ui` version. Breaking API changes in `ui` require a depreca
 
 ## TanStack Query as sole state store
 
-Both Workers use TanStack Query. No Redux, Zustand, or second synced server-state store exists.
-`useState` / local component state holds ephemeral UI state only (form input, open/closed).
+Both frontend Workers use TanStack Query. No Redux, Zustand, or second synced server-state store
+exists. `useState` / local component state holds ephemeral UI state only (form input, open/closed).
 
 **Query key factory** (panel app, not in `ui`):
 - All keys are entity-rooted and hierarchical under `['app', appId, ...]`
@@ -85,9 +107,9 @@ skip refetch (the writer already has the new state from its 200 response).
 ## Auth and session boundary (panel)
 
 - Session is an HTTP cookie, validated server-side in the TanStack Start server handler
-- Validated result `{ userId, appMemberships, role }` enters loader context
-- Active App is the URL (`/app/:appId/...`); loader validates session has membership for `:appId`
-  or returns 403
+- Validated result `{ userId, orgs }` (memberships across all the user's Orgs) enters loader context
+- Active Org/App/Environment are URL segments (`/{orgSlug}/{appSlug}/{env}/...`); loader resolves
+  slugs to IDs and validates membership (403 on no access; 404 when the app is not under that org)
 - Session issuer: WorkOS AuthKit (WorkOS session issuer rule) behind the `cookie → server validation → loader
   context` seam (seam is issuer-agnostic)
 
@@ -98,7 +120,7 @@ Three tiers at fixed route-tree levels:
 | Tier | Location | Catches |
 |---|---|---|
 | Root | App shell | Catastrophic/unexpected; renders full "something broke" page |
-| Segment | `/app/:appId` layout + major sections | Expected domain failures: 403 (no access), 404 (not found); designed states, not stack traces |
+| Segment | `/{orgSlug}/{appSlug}/{env}` layout + major sections | Expected domain failures: 403 (no access), 404 (not found); designed states, not stack traces |
 | Background refetch | Nudge refetch path | Non-fatal stale-with-toast; never unmounts good data |
 
 Expected domain failures (403/404) are **not** Sentry errors — they are normal control flow.

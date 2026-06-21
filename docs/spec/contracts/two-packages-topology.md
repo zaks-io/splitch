@@ -11,8 +11,8 @@ free of transport code. (ADR-0025 "two packages".)
 ### `@splitch/contracts`
 
 **What it exports:**
-- All Zod leaf schemas (every glossary noun: `Flag`, `Variant`, `Run`, `Experiment`, `Metric`,
-  `Exposure`, `EvaluationContext`, `Segment`, `SDKCredential`, etc.)
+- All Zod leaf schemas (every glossary noun: `Flag`, `Variant`, `Run`, `Experiment`, `Environment`,
+  `Metric`, `Exposure`, `EvaluationContext`, `Segment`, `SDKCredential`, etc.)
 - `z.infer<>` types derived from those schemas (never hand-written types)
 - `@hono/zod-openapi` route definitions for every control-plane endpoint
 - `ErrorResponse` discriminated union + `ErrorCode` enum
@@ -23,7 +23,7 @@ free of transport code. (ADR-0025 "two packages".)
 **Build step:** None. Zod schemas + types are source. Consumed directly as TypeScript.
 
 **Deletion test (4+ real consumers):**
-1. Control-plane Worker — imports route definitions to mount handlers; uses Zod schemas for
+1. Control Plane API Worker — imports route definitions to mount handlers; uses Zod schemas for
    request validation at the HTTP edge.
 2. MCP server — imports Zod schemas to derive `inputSchema`/`outputSchema` for every tool.
 3. CLI — imports types for type-safe argument construction; imports error schema for error parsing.
@@ -32,7 +32,7 @@ free of transport code. (ADR-0025 "two packages".)
 ### `@splitch/client`
 
 **What it exports:**
-- Hono `hc<AppType>()` typed client inferred from the control-plane Worker's exported app type
+- Hono `hc<AppType>()` typed client inferred from the Control Plane API Worker's exported app type
 - Thin wrappers: auth header injection, credential management, error parsing (unwraps `ErrorResponse`)
 - Re-exports `@splitch/contracts` types for convenience
 
@@ -53,7 +53,7 @@ for non-browser environments. No other transport frameworks.
 
 | Consumer | Imports from contracts | Imports from client | Imports Worker directly |
 |---|---|---|---|
-| Control-plane Worker | yes (route defs + Zod schemas) | no (or rarely, self-call) | — |
+| Control Plane API Worker | yes (route defs + Zod schemas) | no (or rarely, self-call) | — |
 | MCP server | yes (Zod schemas for tool derivation) | yes (API calls) | no |
 | CLI | yes (types + error schema) | yes (API calls) | no |
 | Control panel | yes (types for forms/display) | yes (data fetching) | no |
@@ -64,7 +64,7 @@ for non-browser environments. No other transport frameworks.
 ## `hc` client: type-inferred, zero codegen
 
 `@splitch/client` wraps `hc<AppType>()` where `AppType` is the exported type of the Hono app from
-the control-plane Worker. A Worker change that adds, removes, or renames a route fails `tsc`
+the Control Plane API Worker. A Worker change that adds, removes, or renames a route fails `tsc`
 immediately in every consumer — the client cannot drift from the Worker by construction.
 
 No codegen step. No OpenAPI-to-client generation. `hc` + `z.infer` cover every internal consumer.
@@ -110,3 +110,4 @@ Both seams pass the deletion test. Neither is speculative indirection.
 
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

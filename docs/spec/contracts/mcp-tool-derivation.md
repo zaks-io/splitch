@@ -7,7 +7,7 @@ mechanically. (ADR-0025, ADR-0023.)
 
 ## Derivation rule
 
-For each `@hono/zod-openapi` route registered in the control-plane Worker:
+For each `@hono/zod-openapi` route registered in the control-plane contract:
 
 ```
 tool name   = snake_case(HTTP method + path segments)
@@ -72,22 +72,22 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 | `patch_segment` | PATCH | `/api/segments/:id` |
 | `delete_segment` | DELETE | `/api/segments/:id` |
 
-### Experiments
+### Experiments (per-Environment, ADR-0027)
 | Tool | Method | Path |
 |---|---|---|
-| `create_experiment` | POST | `/api/experiments` |
-| `list_experiments` | GET | `/api/experiments` |
-| `get_experiment` | GET | `/api/experiments/:id` |
-| `patch_experiment` | PATCH | `/api/experiments/:id` |
+| `create_experiment` | POST | `/api/apps/:appId/envs/:environmentId/experiments` |
+| `list_experiments` | GET | `/api/apps/:appId/envs/:environmentId/experiments` |
+| `get_experiment` | GET | `/api/apps/:appId/envs/:environmentId/experiments/:id` |
+| `patch_experiment` | PATCH | `/api/apps/:appId/envs/:environmentId/experiments/:id` |
 
-### Runs (Experiment sub-resource)
+### Experiment Runs (Experiment sub-resource, per-Environment)
 | Tool | Method | Path | Note |
 |---|---|---|---|
-| `publish_experiment` | POST | `/api/experiments/:id/publish` | Ends running Run, opens new one |
-| `list_runs` | GET | `/api/experiments/:id/runs` | — |
-| `get_run` | GET | `/api/experiments/:id/runs/:runId` | — |
-| `patch_run` | PATCH | `/api/experiments/:id/runs/:runId` | Non-material only; assignment fields → `RUN_FROZEN` |
-| `end_run` | POST | `/api/experiments/:id/runs/:runId/end` | Transitions Run to `ended` |
+| `start_experiment` | POST | `/api/apps/:appId/envs/:environmentId/experiments/:id/start` | Ends running Experiment Run, opens new one |
+| `list_runs` | GET | `/api/apps/:appId/envs/:environmentId/experiments/:id/runs` | — |
+| `get_run` | GET | `/api/apps/:appId/envs/:environmentId/experiments/:id/runs/:runId` | — |
+| `patch_run` | PATCH | `/api/apps/:appId/envs/:environmentId/experiments/:id/runs/:runId` | Non-material only; assignment fields → `RUN_FROZEN` |
+| `end_run` | POST | `/api/apps/:appId/envs/:environmentId/experiments/:id/runs/:runId/end` | Transitions Experiment Run to `ended` |
 
 ### Metrics
 | Tool | Method | Path |
@@ -98,15 +98,15 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 | `patch_metric` | PATCH | `/api/metrics/:id` |
 | `delete_metric` | DELETE | `/api/metrics/:id` |
 
-### SDK credentials
+### SDK credentials (per-Environment, ADR-0027)
 | Tool | Method | Path | Note |
 |---|---|---|---|
-| `create_api_key` | POST | `/api/apps/:id/api-keys` | Value surfaced once in response |
-| `list_api_keys` | GET | `/api/apps/:id/api-keys` | No value field |
-| `revoke_api_key` | POST | `/api/apps/:id/api-keys/:credId/revoke` | — |
-| `create_client_key` | POST | `/api/apps/:id/client-keys` | Value surfaced once; freely shareable |
-| `list_client_keys` | GET | `/api/apps/:id/client-keys` | — |
-| `revoke_client_key` | POST | `/api/apps/:id/client-keys/:credId/revoke` | — |
+| `create_api_key` | POST | `/api/apps/:appId/envs/:environmentId/api-keys` | Value surfaced once in response |
+| `list_api_keys` | GET | `/api/apps/:appId/envs/:environmentId/api-keys` | No value field |
+| `revoke_api_key` | POST | `/api/apps/:appId/envs/:environmentId/api-keys/:credId/revoke` | — |
+| `create_client_key` | POST | `/api/apps/:appId/envs/:environmentId/client-keys` | Value surfaced once; freely shareable |
+| `list_client_keys` | GET | `/api/apps/:appId/envs/:environmentId/client-keys` | — |
+| `revoke_client_key` | POST | `/api/apps/:appId/envs/:environmentId/client-keys/:credId/revoke` | — |
 
 ### Test-evaluation (dry-run)
 | Tool | Method | Path |
@@ -124,7 +124,7 @@ All tools share the same error shape — the `ErrorResponse` discriminated union
 `@splitch/contracts`. An agent narrows on `error.code` to act; each code carries typed
 `details`:
 
-- `RUN_FROZEN` → `details.frozenFields`, `details.currentRunId` (agent publishes a new Run, not patch)
+- `RUN_FROZEN` → `details.frozenFields`, `details.currentRunId` (agent starts a new Experiment Run, not patch)
 - `ALLOCATION_INVALID` → `details.got` (the actual sum; fix allocation to sum to 100)
 - `INSUFFICIENT_SCOPES` → `details.requiredScopes` (re-authenticate with broader scopes)
 
@@ -161,3 +161,4 @@ contract package. Single-implementation boundary does not apply.
 - [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)
 - [../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md)
 - [../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md](../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

@@ -6,14 +6,15 @@
 while the socket is idle; the edge holds the socket open. Billing stops accruing during idle periods,
 which is the decisive reason WebSocket beats SSE on this stack.
 
-## Ownership: `/app/:appId` layout route
+## Ownership: `/{orgSlug}/{appSlug}/{env}` layout route
 
-One socket per browser tab per App. The socket is **owned by the `/app/:appId` layout route** —
-the outermost layout that wraps all panel views for a given App. It is the right owner because:
+One socket per browser tab per (App, Environment). The socket is **owned by the
+`/{orgSlug}/{appSlug}/{env}` layout route** — the outermost layout that wraps all panel views for a
+given App + Environment. It is the right owner because:
 
-- It mounts once per App session and persists across child navigations (flags → experiments → runs)
-- It tears down only when `appId` changes or the tab closes
-- Its lifetime matches exactly the "one per App" fan-out DO grain
+- It mounts once per (App, Environment) session and persists across child navigations (flags → experiments → runs)
+- It tears down only when `(appId, environmentId)` changes (App switch or Environment switch) or the tab closes
+- Its lifetime matches exactly the "one per (App, Environment)" fan-out DO grain
 
 The socket is **never** owned by a child route, a Suspense boundary, or a context provider that
 might re-mount. Ownership belongs to the layout root.
@@ -25,27 +26,29 @@ attaches in a `useEffect` (or TanStack Start's client-side lifecycle hook) at **
 client**, after hydration is complete.
 
 ```
-// pseudo-code — inside /app/:appId layout, client-only
+// pseudo-code — inside /{orgSlug}/{appSlug}/{env} layout, client-only
 useEffect(() => {
-  const ws = connectToApp(appId)          // idFromName(appId) on the DO
-  ws.onopen  = () => invalidateAndRefetch(appId, queryClient)
+  const ws = connectToEnv(appId, environmentId)   // idFromName(`${appId}:${environmentId}`) on the DO
+  ws.onopen  = () => invalidateAndRefetch(appId, environmentId, queryClient)
   ws.onclose = () => scheduleReconnect()
-  ws.onmessage = (e) => handleNudge(JSON.parse(e.data), appId, queryClient)
+  ws.onmessage = (e) => handleNudge(JSON.parse(e.data), appId, environmentId, queryClient)
   return () => ws.close()
-}, [appId])
+}, [appId, environmentId])
 ```
 
 ## DO identity
 
-The WebSocket connects to the fan-out DO whose name is the `appId`:
+The WebSocket connects to the fan-out DO whose name is the `(appId, environmentId)` pair. Nudges are
+Environment-specific — a prod change must not invalidate a dev view — so the DO is keyed by the pair,
+not by `appId` alone:
 
 ```
-DO identity: idFromName(appId)
-URL pattern: wss://<panel-worker>/app/:appId/live
+DO identity: idFromName(`${appId}:${environmentId}`)
+URL pattern: wss://<panel-worker>/{orgSlug}/{appSlug}/{env}/live
 ```
 
-The `appId` in the URL must match the `appId` in the authenticated session membership
-(the Worker enforces this before upgrading the connection). A socket cannot attach to a
+The `(appId, environmentId)` resolved from the URL must match the App + Environment in the authenticated
+session membership (the Worker enforces this before upgrading the connection). A socket cannot attach to a
 DO it has no membership for.
 
 ## Connect and reconnect: full invalidate-and-refetch
@@ -53,20 +56,21 @@ DO it has no membership for.
 On every `onopen` (initial connect **and** reconnect), the client:
 
 ```
-queryClient.invalidateQueries({ queryKey: ['app', appId] })
+queryClient.invalidateQueries({ queryKey: ['app', appId, 'env', environmentId] })
 ```
 
 This closes the sub-second gap between the loader-seeded first paint and the socket connecting.
 Any nudge missed in that window self-heals immediately on connect. There is no delta-replay log,
 no last-seen-version bookkeeping, no `getSince(v)` API.
 
-## appId change: tear down and reconnect
+## (appId, environmentId) change: tear down and reconnect
 
-When the user navigates from `/app/A/...` to `/app/B/...`:
-1. The layout effect cleanup closes the socket connected to `DO(A)`
-2. The old `appId`'s cache is invalidated: `invalidateQueries({ queryKey: ['app', 'A'] })`
-3. The effect re-runs with `appId = B`, opening a new socket to `DO(B)`
-4. The connect handler triggers `invalidateQueries({ queryKey: ['app', 'B'] })` → full refetch
+When the resolved `(appId, environmentId)` changes — an App switch or an Environment switch, e.g.
+navigating from `/{org}/A/dev/...` to `/{org}/B/dev/...` or `/{org}/A/dev/...` to `/{org}/A/prod/...`:
+1. The layout effect cleanup closes the socket connected to `DO(prev)`
+2. The old scope's cache is invalidated: `invalidateQueries({ queryKey: ['app', prevAppId, 'env', prevEnvId] })`
+3. The effect re-runs with the new `(appId, environmentId)`, opening a new socket to `DO(next)`
+4. The connect handler triggers `invalidateQueries({ queryKey: ['app', appId, 'env', environmentId] })` → full refetch
 
 ## Nudge payload shape
 
@@ -86,10 +90,10 @@ The DO never sends the config body. It sends only "something changed, go look."
 ## Nudge handler
 
 ```
-function handleNudge(nudge: NudgePayload, appId: string, qc: QueryClient) {
-  const detail = qc.getQueryData(keys[nudge.entity].detail(appId, nudge.id))
+function handleNudge(nudge: NudgePayload, appId: string, environmentId: string, qc: QueryClient) {
+  const detail = qc.getQueryData(keys[nudge.entity].detail(appId, environmentId, nudge.id))
   if (detail?.version >= nudge.version) return           // version gate: no-op for editor
-  qc.invalidateQueries({ queryKey: keys[nudge.entity].prefix(appId) })
+  qc.invalidateQueries({ queryKey: keys[nudge.entity].prefix(appId, environmentId) })
 }
 ```
 
@@ -114,13 +118,15 @@ cache refetch from the read API is the only mechanism that changes panel state.
 
 ## Marketing live-data routes
 
-Marketing uses the same per-App DO (`idFromName(appId)`) if it fetches live config data (e.g. live
-pricing from the App's configuration). If a marketing route is fully prerendered (static HTML at
-build time), it has no socket and needs none. Live-data marketing routes follow the same nudge model;
+Marketing uses the same per-(App, Environment) DO (`idFromName(`${appId}:${environmentId}`)`) if it
+fetches live config data (e.g. live pricing from a specific Environment's configuration). If a marketing
+route is fully prerendered (static HTML at build time), it has no socket and needs none. Live-data
+marketing routes follow the same nudge model;
 the DO fans out to all connected clients across both Workers.
 
 ## Sources
 
 - [ADR-0019](../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md)
 - [ADR-0020](../../adr/0020-tanstack-start-for-both-control-panel-and-marketing-shared-component-layer.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [frontend-architecture.md](../../architecture/frontend-architecture.md)

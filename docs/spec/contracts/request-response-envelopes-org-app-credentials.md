@@ -56,12 +56,16 @@ the existing Run (ADR-0003). Never returns `RUN_FROZEN`.
 ### CreateAppResponse
 
 Surfaces both credential values **once only**. After this response they are never readable again.
+A new App is seeded with a default Environment; the returned credentials belong to that Environment
+(ADR-0027). Per-Environment credentials are minted via the
+`/apps/{app_id}/envs/{environment_id}/client-key | api-keys` endpoints.
 
 ```
 {
-  app:       App                  // full App leaf
-  apiKey:    { id, value: string } // raw value; store it now
-  clientKey: { id, value: string } // raw value; safe to embed client-side
+  app:           App                  // full App leaf
+  environmentId: string               // the seeded default Environment the keys belong to
+  apiKey:        { id, value: string } // raw value; store it now
+  clientKey:     { id, value: string } // raw value; safe to embed client-side
 }
 ```
 
@@ -84,3 +88,4 @@ Returns `SDKCredential[]` (no `value` field; never readable after creation).
 - [../../adr/0003-material-edits-including-measurement-open-a-new-run.md](../../adr/0003-material-edits-including-measurement-open-a-new-run.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

@@ -77,26 +77,32 @@ This table is a cross-reference only; do not duplicate the authoritative definit
 
 | Field | Type | Source |
 |-------|------|--------|
+| `event_id` | string | generated once by the Worker when it creates the raw row |
+| `dedup_key` | string | sha256 over row type, identity fields, source id, and event id |
 | `app_id` | string | from auth context (not from client) |
+| `environment_id` | string | from the SDK key's Environment (co-scoped with `app_id`, ADR-0027) |
 | `experiment_id` | string | resolved from Flag's controlling Experiment |
 | `run_id` | string | live Run at evaluation time (stamped at server-received time) |
 | `targeting_key` | string | from request |
 | `id_type` | string | from request |
-| `variant_name` | string | Variant name (not value) — immutable experimental arm label |
+| `variant` | string | Variant name (not value) — immutable experimental arm label |
+| `source_id` | string | edge POP identifier |
 | `server_ts` | timestamp | server-received-at (canonical for MIN(ts) first-touch) |
+| `ingest_ts` | timestamp | raw-log append watermark; never used for first-touch |
 | `client_ts` | timestamp | client-fired time (diagnostics only; may have clock skew) |
 | `type` | 'exposure' \| 'activation' | always 'exposure' here |
 
 `run_id` is stamped **server-side at request time** (not at dedup time) to avoid race
-conditions with Run closure. `variant_name` is the Variant name;
+conditions with Run closure. `variant` is the Variant name;
 the Variant value is not logged (it is flag config, not event data).
 
 ## First-touch identity
 
-The pipeline's first-touch identity is the tuple `(app_id, experiment_id, run_id, id_type, targeting_key)`,
+The pipeline's first-touch identity is the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key)`
+(`environment_id` co-scoped with `app_id`; Exposures are per-Environment, ADR-0027),
 resolved by `MIN(server_ts)` at query time. Multiple raw Exposures for the same Entity/Run share this
 identity; the earliest `server_ts` is the authoritative first-touch row. The tuple deliberately excludes
-`variant_name` — variant conflicts are caught by the `__multiple__` quarantine path (ADR-0011).
+`variant` — variant conflicts are caught by the `__multiple__` quarantine path (ADR-0011).
 
 This is distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key for
 at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
@@ -119,3 +125,4 @@ at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/
 - [ADR-0004](../../adr/0004-exposure-fires-on-read.md)
 - [ADR-0005](../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md)
 - [ADR-0018](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

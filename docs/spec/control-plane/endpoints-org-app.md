@@ -1,8 +1,8 @@
 # Control-plane endpoints: Organization and App
 
-Request/response shapes for the Organization and App resource groups on the control-plane Worker.
+Request/response shapes for the Organization and App resource groups on the Control Plane API Worker.
 
-All endpoints live on the **control-plane Worker** and require a control-plane bearer token unless
+All endpoints live on the **Control Plane API Worker** and require a control-plane bearer token unless
 noted. All requests/responses are `Content-Type: application/json`. Error shape, pagination, and the
 shared conventions are described in [control-plane-endpoint-inventory.md](control-plane-endpoint-inventory.md).
 
@@ -40,24 +40,56 @@ Returns: list of Apps for the Org.
 Auth: Org member (any role).
 
 ### `POST /orgs/{org_id}/apps`
-Body: `{ name: string }`
-Returns: `{ app_id, org_id, name, created_at }`
+Body: `{ name: string, slug?: string }` (slug auto-derived from name if omitted; unique within Org)
+Returns: `{ app_id, org_id, name, slug, created_at }`
 Auth: Org `owner` or `admin`.
+On create, a `prod` Environment is provisioned by default; more can be added (see Environment endpoints).
 
 ### `GET /apps/{app_id}`
-Returns: `{ app_id, org_id, name, created_at, updated_at }`
+Returns: `{ app_id, org_id, name, slug, created_at, updated_at }`
 Auth: App member.
 
 ### `PATCH /apps/{app_id}`
-Body: `{ name?: string }`
+Body: `{ name?: string, slug?: string }`
 Auth: App `owner` or `admin`.
 
 ### `DELETE /apps/{app_id}`
-Blocked if any Experiment has `status = running`. Returns `EXPERIMENT_RUNNING` error code.
+Blocked if any Experiment has `status = running` in any Environment. Returns `EXPERIMENT_RUNNING`.
+Auth: App `owner`.
+
+## Environment endpoints (App-level resource; ADR-0027)
+
+Environments are children of an App. Each has a slug (URL segment), its own credentials, Flag
+Configurations, experiment data, and **Environment Policy**.
+
+### `GET /apps/{app_id}/envs`
+Returns: list of Environments `{ environment_id, app_id, slug, name, created_at }`.
+Auth: App member.
+
+### `POST /apps/{app_id}/envs`
+Body: `{ slug: string, name?: string, policy?: EnvironmentPolicy }` (slug unique within App)
+Returns: the new Environment, with its default Policy if none supplied (dev-style all-`allow`).
+Auth: App `owner` or `admin`.
+
+### `GET /apps/{app_id}/envs/{environment_id}`
+Returns: `{ environment_id, app_id, slug, name, policy, created_at }`.
+
+### `PATCH /apps/{app_id}/envs/{environment_id}`
+Body: `{ name?: string, policy?: EnvironmentPolicy }`.
+`EnvironmentPolicy` maps each change type to a level: `{ variant_availability, targeting_rollout_value,
+enabled_state, start_experiment_run: "allow" | "confirm" }` (`approve` reserved, future). Changing the
+kill-switch-off behavior is not configurable (always allowed). See ADR-0029.
+Returns: updated Environment.
+Auth: App `owner` or `admin`.
+
+### `DELETE /apps/{app_id}/envs/{environment_id}`
+Blocked if any Experiment is `running` in this Environment, or if it is the last Environment.
 Auth: App `owner`.
 
 ## Sources
 
 - [../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md](../../adr/0021-organization-is-the-account-tier-above-app-personal-orgs-enterprise-as-siblings.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md)
 - [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)

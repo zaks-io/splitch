@@ -1,37 +1,39 @@
-# Config store: draft/published config, liveRunId, and write failure contract
+# Config store: draft/live config, liveRunId, and write failure contract
 
 The edge-serving config that Workers read and the authoring config editors write are the **same
-KV/D1 store** — no publish seam (ADR-0017). This file pins what "published config" means, how
+KV/D1 store** — no separate config-copy seam (ADR-0017). This file pins what "live config" means, how
 `liveRunId` is managed, and the failure contract for config writes.
 
-## Published config shape (what the edge reads from KV)
+## Live config shape (what the edge reads from KV)
 
-KV key: `config:app:{appId}:flag:{flagKey}`
+KV key: `config:app:{appId}:{environmentId}:flag:{flagKey}` — Flag Configuration is per-Environment
+(ADR-0027); the same Flag Key resolves to a distinct config per Environment.
 
 ```
 AppFlagConfig {
   flagKey:       string          // required — Flag Key, unique within App
+  environmentId: string          // required — owning Environment; config is per-Environment (ADR-0027)
   enabled:       boolean         // required — false → Default Variant for all Entities
   variants:      Variant[]       // required — full set; one is defaultVariant
   defaultVariant: string         // required — Variant name to return when no rule matches or disabled
   targetingRules: TargetingRule[] // ordered priority list; first match wins
-  liveRunId:     string | null   // null if no published Experiment Run is controlling this Flag
+  liveRunId:     string | null   // null if no started Experiment Run is controlling this Flag
   salt:          string          // required — stable hash salt for Fractional Evaluation
   schemaVersion: number          // required — KV envelope version; see [contracts-and-validation.md](./contracts-and-validation.md)
 }
 ```
 
 `liveRunId` is the explicit, persisted field the edge stamps on Exposures. It is
-written when Publishing creates a new Run. "Latest in D1" is never used to infer the live Run —
+written when Start creates a new Run. "Latest in D1" is never used to infer the live Run —
 `liveRunId` is the only source of truth.
 
-## Draft vs published config
+## Draft vs live config
 
 A newly created Experiment is a draft with no live Run. The draft holds all pending
 assignment-affecting edits (salt, allocation, Variant set, Targeting/Segment, Targeting Key,
-Activation Metric). The live Run's config remains unchanged at the edge until Publish.
+Activation Metric). The live Run's config remains unchanged at the edge until Start.
 
-**Publish** is the one action that:
+**Start** is the one action that:
 1. Ends the current live Run (sets `ended_at`).
 2. Creates Run N+1 carrying all batched draft changes.
 3. Writes the new `liveRunId` into `AppFlagConfig` in both D1 and KV.
@@ -43,7 +45,7 @@ N draft edits = **one** sample reset (one new Run), never N.
 
 | Edit type | Drafts? | Opens new Run? | KV update? |
 |---|---|---|---|
-| Assignment-affecting (salt, allocation, Variant set, Targeting, Targeting Key, Activation Metric) | Yes — accumulates on draft | On Publish only | On Publish |
+| Assignment-affecting (salt, allocation, Variant set, Targeting, Targeting Key, Activation Metric) | Yes — accumulates on draft | On Start only | On Start |
 | Measurement edit (Metric defs, Conversion Window, Guardrail config) | No — applies in place | No — recomputes over live Run | Yes, immediately |
 | Non-material edit (description, owner, tags) | No — applies in place | No | Yes, immediately |
 
@@ -51,7 +53,7 @@ The Activation Metric is an assignment-affecting edit because it re-anchors the
 Conversion Window retroactively, redefining the analysis population's entry timestamp. It is frozen
 per Run.
 
-## Config write path (the no-publish-seam invariant)
+## Config write path (the no separate-copy invariant)
 
 ```
 Worker validates input
@@ -86,7 +88,7 @@ the KV schema-version envelope and fallback rules.
 
 ## ~60s KV propagation window (accepted)
 
-After a Publish, edge Workers serving old config for up to ~60s is accepted and self-healing
+After Start, Evaluation Worker instances serving old config for up to ~60s are accepted and self-healing
 (ADR-0009). New Entities hash deterministically to the same Variant under either config version.
 No Run dataset is corrupted; only a narrow window of returning-Entity experience near a Run
 boundary may temporarily serve the prior Variant, which converges as KV propagates.
@@ -96,3 +98,4 @@ boundary may temporarily serve the prior Variant, which converges as KV propagat
 - [../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md](../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md)
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md](../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md)
+- [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

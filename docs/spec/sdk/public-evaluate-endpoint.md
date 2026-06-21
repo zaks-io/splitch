@@ -30,6 +30,10 @@ EvaluateRequest {
 `idType` is a first-class required field (not derived from context) so the Assignment Store
 key `(experiment, idType, targetingKey)` is unambiguous (ADR-0007).
 
+The **Environment is resolved from the Client Key**, not a request field: a Client Key is per
+`(app_id, environment_id)` (ADR-0027), and the edge reads `environment_id` from the key's validation
+cache value to select which Environment's Flag Configuration and live Experiment Runs to serve.
+
 ## Response shape
 
 ```
@@ -131,3 +135,4 @@ returns Default Variant and does NOT fire an Exposure (the Flag may not exist ye
 - [ADR-0004](../../adr/0004-exposure-fires-on-read.md)
 - [ADR-0018](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [ADR-0025](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)

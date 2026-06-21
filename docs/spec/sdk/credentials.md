@@ -4,8 +4,9 @@ Which credential the SDK uses, what each can do, how each is stored and validate
 
 ## Two-credential model
 
-An App issues exactly two kinds of SDK credential. The choice is determined by the
-runtime context — trusted server vs untrusted client.
+An App issues exactly two kinds of SDK credential, **per Environment** (ADR-0027): a prod key reaches
+prod config only, a dev key reaches dev config only; keys never span Environments. The choice between
+the two kinds is determined by the runtime context — trusted server vs untrusted client.
 
 | Property | API Key (Secret) | Client Key (Public) |
 |----------|-----------------|---------------------|
@@ -26,6 +27,7 @@ Both credential types follow the same D1/KV pattern (ADR-0018):
 CredentialRecord {
   id:         string        -- UUID, primary key
   app_id:     string        -- owning App (required, every query scoped here)
+  environment_id: string    -- owning Environment (required; the key reaches only this Environment, ADR-0027)
   type:       'api_key' | 'client_key'
   key_hash:   string        -- SHA-256 of the raw credential value; raw value never stored
   scopes:     string[]      -- for API Key: e.g. ['evaluate', 'track']; Client Key: ['evaluate']
@@ -38,12 +40,13 @@ CredentialRecord {
 **KV hot-validation cache** (per-request hot path):
 ```
 KV key:   sha256(rawCredentialValue)
-KV value: { app_id, type, scopes, revoked }   -- Zod-parsed on every read (ADR-0025)
+KV value: { app_id, environment_id, type, scopes, revoked }   -- Zod-parsed on every read (ADR-0025)
 TTL:      synced from D1 on write/revoke; no fixed TTL
 ```
-Every SDK call validates the presented credential against KV before proceeding. A revoked
-key propagates to KV immediately on revoke (write-through), so revocation is effective at
-the next request.
+Every SDK call validates the presented credential against KV before proceeding. The
+`environment_id` in the cache value is how the edge resolves which Environment's config to serve
+from the key (ADR-0027). A revoked key propagates to KV immediately on revoke (write-through), so
+revocation is effective at the next request.
 
 ## Lifecycle
 
@@ -74,7 +77,7 @@ permissive). Abuse surface is bounded by rate limiting regardless.
 
 ## Seam boundary
 
-- **Port:** `validateCredential(rawValue) -> { app_id, type, scopes } | Error`
+- **Port:** `validateCredential(rawValue) -> { app_id, environment_id, type, scopes } | Error`
 - **Left side (caller):** the evaluate Worker, which presents the credential from the
   request header (`Authorization: Bearer <value>`)
 - **Right side (adapter):** KV lookup + Zod parse; falls through to D1 only on KV miss
@@ -88,4 +91,5 @@ permissive). Abuse surface is bounded by rate limiting regardless.
 - [ADR-0018](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [ADR-0025](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [ADR-0022](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md)
+- [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [CONTEXT.md — Credential terms](../../../CONTEXT.md)
