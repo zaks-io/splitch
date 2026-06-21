@@ -1,0 +1,320 @@
+/*
+ * splitch design tokens — Tailwind 4 @theme block.
+ *
+ * Token NAMES are the contract (pinned in the frontend spec); VALUES are
+ * authored in docs/branding/design-tokens.md. Change both together.
+ *
+ * Both apps (control-panel, marketing) compose from this set. Neither forks
+ * the palette. See docs/spec/frontend/package-boundaries-ui-component-layer.md.
+ */
+
+@import "tailwindcss";
+
+@theme {
+  /* ── Color: split duotone ─────────────────────────────────────────────
+     brand-control = Cobalt (Control / reference / live)
+     brand-treatment = Chartreuse (Treatment / challenger / proposed)
+     The assignment is load-bearing: CI plots, diffs, allocation, hero all
+     read Control→Treatment because these are consistent. Do not swap. */
+  --color-brand-control-50: #eef3fd;
+  --color-brand-control-100: #d6e2fa;
+  --color-brand-control-300: #7da0ee;
+  --color-brand-control-400: #4f86e8; /* cobalt — text/icon-safe on dark surfaces */
+  --color-brand-control-500: #2563d9;
+  --color-brand-control-600: #1e4fb8;
+  --color-brand-control-700: #193f94;
+  --color-brand-control-900: #11265a;
+
+  --color-brand-treatment-50: #f6fcdf;
+  --color-brand-treatment-100: #ecf9b5;
+  --color-brand-treatment-300: #ceef4f;
+  --color-brand-treatment-400: #c6f53b; /* chartreuse — high-glow rung for dark */
+  --color-brand-treatment-500: #b4f000;
+  --color-brand-treatment-600: #94c500;
+  --color-brand-treatment-700: #6e9300; /* chartreuse text-on-light, AA */
+  --color-brand-treatment-900: #374a00;
+
+  /* Generic brand aliases resolve to Cobalt (the primary brand color).
+     Chartreuse is its deliberate counterpart, not a co-equal default. */
+  --color-brand-50: var(--color-brand-control-50);
+  --color-brand-100: var(--color-brand-control-100);
+  --color-brand-300: var(--color-brand-control-300);
+  --color-brand-500: var(--color-brand-control-500);
+  --color-brand-600: var(--color-brand-control-600);
+  --color-brand-700: var(--color-brand-control-700);
+  --color-brand-900: var(--color-brand-control-900);
+
+  /* ── Color: neutrals (Resend-clean, cool-gray, near-black ink) ──────── */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f8f9fb;
+  --color-neutral-100: #eef0f4;
+  --color-neutral-200: #e1e4ea; /* default border / hairline */
+  --color-neutral-300: #cbd0d9;
+  --color-neutral-400: #9ba3b0;
+  --color-neutral-500: #6b7280;
+  --color-neutral-600: #4b5563;
+  --color-neutral-700: #374151;
+  --color-neutral-900: #111419; /* primary ink */
+  --color-neutral-950: #0a0c10; /* dark-surface base background */
+
+  /* Dark-surface raised rungs (depth on near-black; not pure black). */
+  --color-dark-raised: #13161c; /* card / panel above the base */
+  --color-dark-raised-2: #1b1f27; /* popover, raised-on-raised */
+  --color-dark-hover: #20242d; /* row hover, ghost-button hover */
+  --color-dark-border: #272b34; /* hairline on dark */
+  --color-dark-border-strong: #353b46; /* strong border on dark */
+
+  /* ── Color: semantic (status, never decoration) ─────────────────────── */
+  --color-success-50: #ecfdf3;
+  --color-success-500: #16a34a;
+  --color-success-700: #15803d;
+  --color-success-400: #34d77f; /* success text/icon-safe on dark */
+
+  --color-warning-50: #fffbeb;
+  --color-warning-500: #d97706;
+  --color-warning-700: #b45309;
+  --color-warning-400: #f7a83c; /* warning text/icon-safe on dark */
+
+  --color-destructive-50: #fef2f2;
+  --color-destructive-500: #dc2626;
+  --color-destructive-700: #b91c1c;
+  --color-destructive-400: #f6685e; /* destructive text/icon-safe on dark */
+
+  --color-info-500: var(--color-brand-control-500);
+
+  /* ── Typography ─────────────────────────────────────────────────────── */
+  --font-family-display: "Söhne", "Inter Display", "Inter", system-ui, sans-serif;
+  --font-family-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-family-mono: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+
+  --font-size-2xs: 0.6875rem; /* 11px */
+  --font-size-xs: 0.75rem; /* 12px */
+  --font-size-sm: 0.8125rem; /* 13px */
+  --font-size-base: 0.9375rem; /* 15px */
+  --font-size-lg: 1.125rem; /* 18px */
+  --font-size-xl: 1.375rem; /* 22px */
+  --font-size-2xl: 1.75rem; /* 28px */
+  --font-size-3xl: 2.25rem; /* 36px */
+  --font-size-4xl: 3.25rem; /* 52px */
+  --font-size-5xl: 4.75rem; /* 76px */
+
+  --line-height-tight: 1.1;
+  --line-height-snug: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.6;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-snug: -0.01em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.04em;
+
+  /* ── Spacing (4px grid) ─────────────────────────────────────────────── */
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-10: 2.5rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+  --spacing-20: 5rem;
+  --spacing-24: 6rem;
+
+  /* ── Radius (restrained, technical) ─────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-full: 9999px;
+
+  /* ── Shadow (hairlines first, cool-gray, never pure black) ──────────── */
+  --shadow-sm: 0 1px 2px 0 rgb(16 19 25 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(16 19 25 / 0.08);
+  --shadow-lg: 0 12px 32px -4px rgb(16 19 25 / 0.12);
+  --shadow-focus: 0 0 0 3px rgb(37 99 217 / 0.35);
+
+  /* ── Motion (deliberate; reduced-motion respected in components) ────── */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.3, 0, 0, 1);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * Semantic role layer — the ONLY tokens components reference.
+ *
+ * The @theme block above is the raw, mode-agnostic palette. The roles below
+ * map palette → meaning, and flip between light and dark. A component that
+ * reads --color-surface / --color-text / --color-border / --color-brand
+ * themes for free and can never fork the palette.
+ *
+ * Selection (system default + manual override):
+ *   :root                       → light defaults
+ *   @media dark :root:not([data-theme]) → dark, when the OS asks and no explicit choice
+ *   [data-theme="dark"]         → dark, explicit user choice (wins over OS)
+ *   [data-theme="light"]        → light: no rule needed — the :not() guard above
+ *                                 means the light :root defaults already survive
+ * Set data-theme on <html>; absent = follow the OS.
+ * Mirror these role names in docs/branding/design-tokens.md.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+
+  /* surfaces */
+  --color-surface: var(--color-neutral-0); /* page background */
+  --color-surface-raised: var(--color-neutral-0); /* card on subtle page */
+  --color-surface-sunken: var(--color-neutral-50); /* inset, zebra, code well */
+  --color-surface-hover: var(--color-neutral-100);
+  --color-overlay: rgb(16 19 25 / 0.45); /* modal scrim */
+
+  /* text */
+  --color-text: var(--color-neutral-900); /* primary ink */
+  --color-text-secondary: var(--color-neutral-600);
+  --color-text-muted: var(--color-neutral-500);
+  --color-text-disabled: var(--color-neutral-400);
+  --color-text-on-brand: var(--color-neutral-0); /* text on cobalt fill */
+
+  /* borders */
+  --color-border: var(--color-neutral-200); /* default hairline */
+  --color-border-strong: var(--color-neutral-300);
+
+  /* brand (primary = cobalt) */
+  --color-brand: var(--color-brand-control-500);
+  --color-brand-hover: var(--color-brand-control-600);
+  --color-brand-text: var(--color-brand-control-700); /* cobalt as text on surface */
+  --color-brand-subtle: var(--color-brand-control-50); /* cobalt wash */
+
+  /* the split arms — load-bearing, consistent in both modes */
+  --color-arm-control: var(--color-brand-control-500);
+  --color-arm-treatment: var(--color-brand-treatment-500);
+  --color-arm-treatment-text: var(--color-brand-treatment-700); /* chartreuse readable as text */
+
+  /* status */
+  --color-success: var(--color-success-500);
+  --color-success-text: var(--color-success-700);
+  --color-success-subtle: var(--color-success-50);
+  --color-warning: var(--color-warning-500);
+  --color-warning-text: var(--color-warning-700);
+  --color-warning-subtle: var(--color-warning-50);
+  --color-danger: var(--color-destructive-500);
+  --color-danger-text: var(--color-destructive-700);
+  --color-danger-subtle: var(--color-destructive-50);
+
+  /* focus ring */
+  --color-focus-ring: var(--color-brand-control-500);
+}
+
+/* Dark when the OS asks AND no explicit choice is set. The :not([data-theme])
+ * guard is what lets data-theme="light" survive on a dark OS: with an explicit
+ * theme present this rule no longer matches :root, so the light defaults stand.
+ * data-theme="dark" then re-applies dark below. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --color-surface: var(--color-neutral-950);
+    --color-surface-raised: var(--color-dark-raised);
+    --color-surface-sunken: #0d1015; /* below base, for code wells */
+    --color-surface-hover: var(--color-dark-hover);
+    --color-overlay: rgb(0 0 0 / 0.6);
+
+    --color-text: var(--color-neutral-50);
+    --color-text-secondary: #a7adb8;
+    --color-text-muted: #7c8492;
+    --color-text-disabled: #565d69;
+    --color-text-on-brand: var(--color-neutral-0); /* white still wins on cobalt-500 */
+
+    --color-border: var(--color-dark-border);
+    --color-border-strong: var(--color-dark-border-strong);
+
+    --color-brand: var(--color-brand-control-500); /* fills stay saturated */
+    --color-brand-hover: var(--color-brand-control-400);
+    --color-brand-text: var(
+      --color-brand-control-400
+    ); /* cobalt-500 is muddy as text on black; step up */
+    --color-brand-subtle: rgb(37 99 217 / 0.16); /* low-alpha cobalt wash, not a light tint */
+
+    --color-arm-control: var(--color-brand-control-400); /* arm fills/lines pop on dark */
+    --color-arm-treatment: var(
+      --color-brand-treatment-500
+    ); /* chartreuse glows; this is the signature loud */
+    --color-arm-treatment-text: var(--color-brand-treatment-400); /* text-safe on dark */
+
+    --color-success: var(--color-success-400);
+    --color-success-text: var(--color-success-400);
+    --color-success-subtle: rgb(22 163 74 / 0.16);
+    --color-warning: var(--color-warning-400);
+    --color-warning-text: var(--color-warning-400);
+    --color-warning-subtle: rgb(217 119 6 / 0.18);
+    --color-danger: var(--color-destructive-400);
+    --color-danger-text: var(--color-destructive-400);
+    --color-danger-subtle: rgb(220 38 38 / 0.18);
+
+    --color-focus-ring: var(--color-brand-control-400);
+  }
+}
+
+/* Explicit user choice wins over the OS (duplicated outside the media query). */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-surface: var(--color-neutral-950);
+  --color-surface-raised: var(--color-dark-raised);
+  --color-surface-sunken: #0d1015;
+  --color-surface-hover: var(--color-dark-hover);
+  --color-overlay: rgb(0 0 0 / 0.6);
+
+  --color-text: var(--color-neutral-50);
+  --color-text-secondary: #a7adb8;
+  --color-text-muted: #7c8492;
+  --color-text-disabled: #565d69;
+  --color-text-on-brand: var(--color-neutral-0);
+
+  --color-border: var(--color-dark-border);
+  --color-border-strong: var(--color-dark-border-strong);
+
+  --color-brand: var(--color-brand-control-500);
+  --color-brand-hover: var(--color-brand-control-400);
+  --color-brand-text: var(--color-brand-control-400);
+  --color-brand-subtle: rgb(37 99 217 / 0.16);
+
+  --color-arm-control: var(--color-brand-control-400);
+  --color-arm-treatment: var(--color-brand-treatment-500);
+  --color-arm-treatment-text: var(--color-brand-treatment-400);
+
+  --color-success: var(--color-success-400);
+  --color-success-text: var(--color-success-400);
+  --color-success-subtle: rgb(22 163 74 / 0.16);
+  --color-warning: var(--color-warning-400);
+  --color-warning-text: var(--color-warning-400);
+  --color-warning-subtle: rgb(217 119 6 / 0.18);
+  --color-danger: var(--color-destructive-400);
+  --color-danger-text: var(--color-destructive-400);
+  --color-danger-subtle: rgb(220 38 38 / 0.18);
+
+  --color-focus-ring: var(--color-brand-control-400);
+}
+
+/* Shadows read as borders on dark, not soft black glows. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --shadow-sm: 0 0 0 1px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 14px -2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(0 0 0 / 0.4);
+    --shadow-lg: 0 16px 40px -6px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(0 0 0 / 0.4);
+    --shadow-focus: 0 0 0 3px rgb(79 134 232 / 0.45);
+  }
+}
+[data-theme="dark"] {
+  --shadow-sm: 0 0 0 1px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 14px -2px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 16px 40px -6px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(0 0 0 / 0.4);
+  --shadow-focus: 0 0 0 3px rgb(79 134 232 / 0.45);
+}

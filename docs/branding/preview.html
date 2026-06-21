@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>splitch — brand sheet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* ── raw palette (mode-agnostic) ── */
+  :root {
+    --control-50:#eef3fd; --control-300:#7da0ee; --control-400:#4f86e8; --control-500:#2563d9; --control-600:#1e4fb8; --control-700:#193f94; --control-900:#11265a;
+    --treat-50:#f6fcdf; --treat-300:#ceef4f; --treat-400:#c6f53b; --treat-500:#b4f000; --treat-600:#94c500; --treat-700:#6e9300; --treat-900:#374a00;
+    --n0:#fff; --n50:#f8f9fb; --n100:#eef0f4; --n200:#e1e4ea; --n300:#cbd0d9; --n400:#9ba3b0; --n500:#6b7280; --n600:#4b5563; --n700:#374151; --n900:#111419; --n950:#0a0c10;
+    --d-raised:#13161c; --d-raised-2:#1b1f27; --d-hover:#20242d; --d-border:#272b34; --d-border-strong:#353b46;
+    --success-400:#34d77f; --success-500:#16a34a; --success-700:#15803d;
+    --warning-400:#f7a83c; --warning-500:#d97706; --warning-700:#b45309;
+    --danger-400:#f6685e; --danger-500:#dc2626; --danger-700:#b91c1c;
+    --display:"Inter",system-ui,sans-serif; --sans:"Inter",system-ui,sans-serif; --mono:"IBM Plex Mono",monospace;
+    --r-sm:4px; --r-md:6px; --r-lg:10px;
+  }
+
+  /* ── semantic role layer: light (the default; survives an explicit light choice) ── */
+  :root {
+    color-scheme: light;
+    --surface:var(--n0); --surface-raised:var(--n0); --surface-sunken:var(--n50); --surface-hover:var(--n100);
+    --text:var(--n900); --text-secondary:var(--n600); --text-muted:var(--n500);
+    --border:var(--n200); --border-strong:var(--n300);
+    --brand:var(--control-500); --brand-hover:var(--control-600); --brand-text:var(--control-700); --brand-subtle:var(--control-50); --on-brand:var(--n0);
+    --arm-control:var(--control-500); --arm-treatment:var(--treat-500); --arm-treatment-text:var(--treat-700);
+    --success:var(--success-500); --success-text:var(--success-700); --success-subtle:#ecfdf3;
+    --warning:var(--warning-500); --warning-text:var(--warning-700); --warning-subtle:#fffbeb;
+    --danger:var(--danger-500); --danger-text:var(--danger-700); --danger-subtle:#fef2f2;
+    --focus:0 0 0 3px rgb(37 99 217/.35);
+    --sh-sm:0 1px 2px 0 rgb(16 19 25/.05); --sh-md:0 4px 12px -2px rgb(16 19 25/.08);
+  }
+
+  /* ── semantic role layer: dark — OS default, only when no explicit choice is set ── */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) { color-scheme:dark;
+      --surface:var(--n950); --surface-raised:var(--d-raised); --surface-sunken:#0d1015; --surface-hover:var(--d-hover);
+      --text:var(--n50); --text-secondary:#a7adb8; --text-muted:#7c8492;
+      --border:var(--d-border); --border-strong:var(--d-border-strong);
+      --brand:var(--control-500); --brand-hover:var(--control-400); --brand-text:var(--control-400); --brand-subtle:rgb(37 99 217/.16); --on-brand:var(--n0);
+      --arm-control:var(--control-400); --arm-treatment:var(--treat-500); --arm-treatment-text:var(--treat-400);
+      --success:var(--success-400); --success-text:var(--success-400); --success-subtle:rgb(22 163 74/.16);
+      --warning:var(--warning-400); --warning-text:var(--warning-400); --warning-subtle:rgb(217 119 6/.18);
+      --danger:var(--danger-400); --danger-text:var(--danger-400); --danger-subtle:rgb(220 38 38/.18);
+      --focus:0 0 0 3px rgb(79 134 232/.45);
+      --sh-sm:0 0 0 1px rgb(0 0 0/.4); --sh-md:0 4px 14px -2px rgb(0 0 0/.5),0 0 0 1px rgb(0 0 0/.4);
+    }
+  }
+  /* ── explicit dark choice wins over a light OS ── */
+  [data-theme="dark"] { color-scheme:dark;
+    --surface:var(--n950); --surface-raised:var(--d-raised); --surface-sunken:#0d1015; --surface-hover:var(--d-hover);
+    --text:var(--n50); --text-secondary:#a7adb8; --text-muted:#7c8492;
+    --border:var(--d-border); --border-strong:var(--d-border-strong);
+    --brand:var(--control-500); --brand-hover:var(--control-400); --brand-text:var(--control-400); --brand-subtle:rgb(37 99 217/.16); --on-brand:var(--n0);
+    --arm-control:var(--control-400); --arm-treatment:var(--treat-500); --arm-treatment-text:var(--treat-400);
+    --success:var(--success-400); --success-text:var(--success-400); --success-subtle:rgb(22 163 74/.16);
+    --warning:var(--warning-400); --warning-text:var(--warning-400); --warning-subtle:rgb(217 119 6/.18);
+    --danger:var(--danger-400); --danger-text:var(--danger-400); --danger-subtle:rgb(220 38 38/.18);
+    --focus:0 0 0 3px rgb(79 134 232/.45);
+    --sh-sm:0 0 0 1px rgb(0 0 0/.4); --sh-md:0 4px 14px -2px rgb(0 0 0/.5),0 0 0 1px rgb(0 0 0/.4);
+  }
+
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--sans); font-size:15px; line-height:1.6; color:var(--text); background:var(--surface); -webkit-font-smoothing:antialiased; transition:background .2s,color .2s; }
+  .wrap { max-width:1100px; margin:0 auto; padding:0 24px; }
+  .mono { font-family:var(--mono); }
+  .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:12px; }
+  h1,h2,h3 { font-family:var(--display); letter-spacing:-0.02em; font-weight:700; line-height:1.1; }
+  section { padding:64px 0; border-top:1px solid var(--border); }
+  .sec-title { font-size:22px; letter-spacing:-0.01em; font-weight:600; margin-bottom:4px; color:var(--text); }
+  .sec-sub { color:var(--text-muted); font-size:13px; margin-bottom:32px; }
+
+  /* mode toggle (fixed) */
+  .toggle { position:fixed; top:16px; right:16px; z-index:10; display:flex; gap:2px; background:var(--surface-raised); border:1px solid var(--border); border-radius:9999px; padding:3px; box-shadow:var(--sh-md); }
+  .toggle button { font-family:var(--mono); font-size:11px; letter-spacing:.03em; text-transform:uppercase; padding:6px 12px; border:0; border-radius:9999px; background:transparent; color:var(--text-muted); cursor:pointer; }
+  .toggle button[aria-pressed="true"] { background:var(--brand); color:var(--on-brand); }
+  .toggle button:focus-visible { outline:none; box-shadow:var(--focus); }
+
+  /* HERO — intentionally dark in BOTH modes (marketing hero) */
+  .hero { background:var(--n950); color:var(--n50); padding:96px 0 88px; border:0; }
+  .hero .eyebrow { color:var(--n400); }
+  .hero h1 { font-size:76px; line-height:1.0; letter-spacing:-0.02em; color:#fff; }
+  .hero .pipe { display:inline-block; width:6px; height:0.78em; margin:0 1px; transform:translateY(0.06em); background:linear-gradient(180deg,var(--control-500) 0 50%, var(--treat-500) 50% 100%); border-radius:2px; }
+  .hero p.lede { font-size:18px; color:var(--n400); max-width:54ch; margin:24px 0 40px; line-height:1.5; }
+  .split-bar { height:18px; border-radius:9999px; overflow:hidden; display:flex; max-width:520px; box-shadow:inset 0 0 0 1px rgb(255 255 255/.08); }
+  .split-bar .c { background:var(--control-500); animation:grow-c 1.2s cubic-bezier(.3,0,0,1) .2s both; }
+  .split-bar .t { background:var(--treat-500); animation:grow-t 1.2s cubic-bezier(.3,0,0,1) .2s both; }
+  @keyframes grow-c { from{flex-basis:100%} to{flex-basis:50%} }
+  @keyframes grow-t { from{flex-basis:0%} to{flex-basis:50%} }
+  .split-legend { display:flex; gap:28px; margin-top:16px; font-family:var(--mono); font-size:12px; color:var(--n400); }
+  .split-legend b { color:var(--n50); font-weight:500; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:7px; transform:translateY(1px); }
+  .hero-cta { display:inline-flex; gap:12px; margin-top:40px; }
+  .btn { font-family:var(--sans); font-size:14px; font-weight:500; padding:10px 18px; border-radius:var(--r-md); border:1px solid transparent; cursor:pointer; }
+  .btn-primary { background:var(--control-500); color:#fff; }
+  .btn-ghost { background:transparent; color:var(--n50); border-color:rgb(255 255 255/.18); }
+  .btn-primary:focus-visible,.btn-ghost:focus-visible { outline:none; box-shadow:var(--focus); }
+
+  /* color swatches — raw ramps (the color section's job is to show raw palette) */
+  .ramp { display:flex; border-radius:var(--r-md); overflow:hidden; box-shadow:var(--sh-sm); margin-bottom:10px; }
+  .ramp .sw { flex:1; height:64px; display:flex; align-items:flex-end; padding:6px; font-family:var(--mono); font-size:9px; }
+  .ramp-label { font-size:13px; font-weight:500; margin-bottom:8px; display:flex; justify-content:space-between; color:var(--text); }
+  .ramp-label .meta { color:var(--text-muted); font-weight:400; font-family:var(--mono); font-size:11px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:32px; }
+  .sem-row { display:flex; gap:10px; flex-wrap:wrap; }
+  .chip { font-family:var(--mono); font-size:11px; padding:6px 10px; border-radius:var(--r-sm); display:inline-flex; align-items:center; gap:7px; }
+
+  /* type scale */
+  .type-row { display:flex; align-items:baseline; gap:24px; padding:14px 0; border-bottom:1px solid var(--border); }
+  .type-row .tag { font-family:var(--mono); font-size:11px; color:var(--text-muted); width:160px; flex:none; }
+  .type-row .demo { color:var(--text); }
+  .type-spec { font-family:var(--mono); font-size:11px; color:var(--text-muted); margin-left:auto; flex:none; }
+
+  /* component specimens — semantic tokens, theme for free */
+  .card { background:var(--surface-raised); border:1px solid var(--border); border-radius:var(--r-lg); box-shadow:var(--sh-sm); padding:20px; }
+  .card-eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:14px; }
+  .card-title { font-family:var(--display); font-weight:700; font-size:18px; color:var(--text); }
+  .badge { font-family:var(--mono); font-size:11px; font-weight:500; padding:3px 8px; border-radius:var(--r-sm); display:inline-flex; align-items:center; gap:5px; }
+  .b-env { background:var(--surface-hover); color:var(--text-secondary); }
+  .b-ok { background:var(--success-subtle); color:var(--success-text); }
+  .b-bad { background:var(--danger-subtle); color:var(--danger-text); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; font-weight:500; color:var(--text-muted); font-size:11px; text-transform:uppercase; letter-spacing:.03em; padding:8px 12px; border-bottom:1px solid var(--border); }
+  td { padding:10px 12px; border-bottom:1px solid var(--border); color:var(--text-secondary); }
+  td.k { font-family:var(--mono); color:var(--text); }
+  tr:last-child td { border-bottom:0; }
+  .led { width:7px;height:7px;border-radius:9999px;display:inline-block;margin-right:8px;transform:translateY(-1px); }
+
+  /* CI plot */
+  .ci { position:relative; height:120px; border-left:1px solid var(--border); border-bottom:1px solid var(--border); margin:8px 0 4px; }
+  .ci .zero { position:absolute; left:50%; top:0; bottom:0; border-left:1px dashed var(--border-strong); }
+  .ci .row { position:absolute; height:14px; border-radius:9999px; }
+  .ci .pt { position:absolute; width:11px; height:11px; border-radius:9999px; border:2px solid var(--surface-raised); }
+  .axis { display:flex; justify-content:space-between; font-family:var(--mono); font-size:10px; color:var(--text-muted); }
+
+  /* diff */
+  .diff { font-family:var(--mono); font-size:12px; border:1px solid var(--border); border-radius:var(--r-md); overflow:hidden; }
+  .diff div { padding:6px 12px; }
+  .diff .add { background:var(--success-subtle); color:var(--success-text); }
+  .diff .rem { background:var(--danger-subtle); color:var(--danger-text); }
+  .diff .ctx { color:var(--text-muted); }
+
+  /* allocation = the signature */
+  .alloc { max-width:480px; }
+  .alloc-track { height:40px; border-radius:9999px; display:flex; overflow:hidden; box-shadow:var(--sh-sm); position:relative; font-family:var(--mono); font-size:12px; }
+  .alloc-track .c { background:var(--arm-control); color:#fff; display:flex; align-items:center; padding-left:16px; flex-basis:62%; }
+  .alloc-track .t { background:var(--arm-treatment); color:var(--treat-900); display:flex; align-items:center; justify-content:flex-end; padding-right:16px; flex-basis:38%; font-weight:600; }
+  .alloc-track .handle { position:absolute; left:62%; top:0; bottom:0; width:2px; background:var(--surface); box-shadow:0 0 0 1px rgb(16 19 25/.1); }
+  .alloc-track .handle::after { content:""; position:absolute; left:-6px; top:50%; transform:translateY(-50%); width:14px;height:14px;border-radius:9999px;background:var(--surface);box-shadow:var(--sh-md);}
+
+  footer { padding:40px 0 80px; color:var(--text-muted); font-size:12px; font-family:var(--mono); border-top:1px solid var(--border); }
+  @media (prefers-reduced-motion: reduce){ .split-bar .c,.split-bar .t{animation:none} .split-bar .c{flex-basis:50%}.split-bar .t{flex-basis:50%} }
+  @media (max-width:720px){ .grid2{grid-template-columns:1fr} .hero h1{font-size:46px} .type-row .tag{width:auto} }
+</style>
+</head>
+<body>
+
+<div class="toggle" role="group" aria-label="Color mode">
+  <button id="m-light" aria-pressed="false" onclick="setMode('light')">Light</button>
+  <button id="m-dark" aria-pressed="false" onclick="setMode('dark')">Dark</button>
+  <button id="m-system" aria-pressed="true" onclick="setMode('system')">System</button>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">feature flags &amp; a/b experimentation · at the edge</div>
+    <h1>split<span class="pipe"></span>ch</h1>
+    <p class="lede">The moment one path becomes two, made legible, measured, and safe to ship.</p>
+    <div class="split-bar"><span class="c"></span><span class="t"></span></div>
+    <div class="split-legend">
+      <span><span class="dot" style="background:var(--control-500)"></span><b>control</b> &nbsp;cobalt</span>
+      <span><span class="dot" style="background:var(--treat-500)"></span><b>treatment</b> &nbsp;chartreuse</span>
+    </div>
+    <div class="hero-cta">
+      <button class="btn btn-primary">Start free</button>
+      <button class="btn btn-ghost mono">npm i @splitch/sdk</button>
+    </div>
+  </div>
+</header>
+
+<section><div class="wrap">
+  <div class="eyebrow">01 — color</div>
+  <div class="sec-title">The split duotone</div>
+  <div class="sec-sub">Two brand hues that encode the product. Cobalt = Control. Chartreuse = Treatment. The assignment is consistent everywhere. (Ramps show the raw palette, mode-agnostic.)</div>
+  <div class="grid2">
+    <div>
+      <div class="ramp-label">brand-control <span class="meta">cobalt</span></div>
+      <div class="ramp">
+        <div class="sw" style="background:var(--control-50);color:#193f94">50</div>
+        <div class="sw" style="background:var(--control-300)">300</div>
+        <div class="sw" style="background:var(--control-400);color:#fff">400</div>
+        <div class="sw" style="background:var(--control-500);color:#fff">500</div>
+        <div class="sw" style="background:var(--control-700);color:#fff">700</div>
+        <div class="sw" style="background:var(--control-900);color:#fff">900</div>
+      </div>
+    </div>
+    <div>
+      <div class="ramp-label">brand-treatment <span class="meta">chartreuse</span></div>
+      <div class="ramp">
+        <div class="sw" style="background:var(--treat-50);color:#374a00">50</div>
+        <div class="sw" style="background:var(--treat-300);color:#374a00">300</div>
+        <div class="sw" style="background:var(--treat-500);color:#374a00">500</div>
+        <div class="sw" style="background:var(--treat-600);color:#fff">600</div>
+        <div class="sw" style="background:var(--treat-700);color:#fff">700</div>
+        <div class="sw" style="background:var(--treat-900);color:#fff">900</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:32px"></div>
+  <div class="ramp-label">neutral <span class="meta">cool-gray · near-black ink</span></div>
+  <div class="ramp">
+    <div class="sw" style="background:var(--n0);color:#111;box-shadow:inset 0 0 0 1px #e1e4ea">0</div>
+    <div class="sw" style="background:var(--n50);color:#111">50</div>
+    <div class="sw" style="background:var(--n100);color:#111">100</div>
+    <div class="sw" style="background:var(--n200);color:#111">200</div>
+    <div class="sw" style="background:var(--n300)">300</div>
+    <div class="sw" style="background:var(--n400)">400</div>
+    <div class="sw" style="background:var(--n500);color:#fff">500</div>
+    <div class="sw" style="background:var(--n700);color:#fff">700</div>
+    <div class="sw" style="background:var(--n900);color:#fff">900</div>
+    <div class="sw" style="background:var(--n950);color:#fff">950</div>
+  </div>
+
+  <div style="height:32px"></div>
+  <div class="ramp-label">semantic <span class="meta">status, never decoration · success ≠ chartreuse on purpose · subtle fills theme per mode</span></div>
+  <div class="sem-row">
+    <span class="chip" style="background:var(--success-subtle);color:var(--success-text)"><span class="led" style="background:var(--success)"></span>success · resolves</span>
+    <span class="chip" style="background:var(--warning-subtle);color:var(--warning-text)"><span class="led" style="background:var(--warning)"></span>warning · SRM caution</span>
+    <span class="chip" style="background:var(--danger-subtle);color:var(--danger-text)"><span class="led" style="background:var(--danger)"></span>destructive · SRM firing</span>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">02 — type</div>
+  <div class="sec-title">Editorial grotesk · mono as signal</div>
+  <div class="sec-sub">Display + body in a tightened grotesk; IBM Plex Mono for anything a machine generated or a human typed into a config.</div>
+  <div class="type-row"><span class="tag">5xl · hero · 700</span><span class="demo" style="font-family:var(--display);font-size:48px;font-weight:700;letter-spacing:-.02em">Ship the split</span><span class="type-spec">76/1.0 · -0.02em</span></div>
+  <div class="type-row"><span class="tag">2xl · screen title</span><span class="demo" style="font-family:var(--display);font-size:28px;font-weight:700;letter-spacing:-.02em">Checkout model</span><span class="type-spec">28/1.25 · -0.02em</span></div>
+  <div class="type-row"><span class="tag">xl · section</span><span class="demo" style="font-family:var(--display);font-size:22px;font-weight:600;letter-spacing:-.01em">Experiments needing a decision</span><span class="type-spec">22/1.35 · -0.01em</span></div>
+  <div class="type-row"><span class="tag">base · body · 400</span><span class="demo" style="font-size:15px">A Flag is a named toggle with Variants. Promote moves its configuration between Environments.</span><span class="type-spec">15/1.6</span></div>
+  <div class="type-row"><span class="tag">mono · key/data</span><span class="demo mono" style="font-size:13px">ck_live_a8f2c9 &nbsp; flag.checkout-model &nbsp; +4.2% [1.1, 7.3] &nbsp; p=0.003</span><span class="type-spec">Plex Mono 13</span></div>
+  <div class="type-row"><span class="tag">2xs · eyebrow</span><span class="demo mono" style="font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted)">environment · prod</span><span class="type-spec">11 · 0.04em · upper</span></div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">03 — signature</div>
+  <div class="sec-title">The Split</div>
+  <div class="sec-sub">The allocation control <em>is</em> the signature. The same object that brands the product sets the experiment. Dragging the divider sets Control / Treatment.</div>
+  <div class="alloc">
+    <div class="mono" style="font-size:11px;color:var(--text-muted);margin-bottom:8px;display:flex;justify-content:space-between"><span>CONTROL</span><span>TREATMENT</span></div>
+    <div class="alloc-track">
+      <span class="c">control · 62%</span>
+      <span class="t">38%</span>
+      <span class="handle"></span>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="eyebrow">04 — in product</div>
+  <div class="sec-title">Tokens, applied</div>
+  <div class="sec-sub">Real splitch surfaces composed from the semantic role layer — flip the toggle and every component themes for free.</div>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-eyebrow">results · run 2</div>
+      <div class="card-title" style="margin-bottom:4px">Confidence interval</div>
+      <div style="color:var(--text-muted);font-size:12px;margin-bottom:16px;font-family:var(--mono)">always-valid · peek anytime</div>
+      <div class="ci">
+        <div class="zero"></div>
+        <div class="row" style="left:18%; width:30%; top:34px; background:var(--arm-control); opacity:.5"></div>
+        <div class="pt" style="left:32%; top:32px; background:var(--arm-control)"></div>
+        <div class="row" style="left:54%; width:34%; top:74px; background:var(--arm-treatment); opacity:.55"></div>
+        <div class="pt" style="left:69%; top:72px; background:var(--arm-treatment)"></div>
+      </div>
+      <div class="axis"><span>-5%</span><span>0</span><span>+10%</span></div>
+      <div style="margin-top:14px;display:flex;gap:18px;font-family:var(--mono);font-size:12px;color:var(--text-secondary)">
+        <span><span class="dot" style="background:var(--arm-control)"></span>control</span>
+        <span><span class="dot" style="background:var(--arm-treatment)"></span>treatment <b style="color:var(--success-text)">+4.2% [1.1, 7.3]</b></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-eyebrow">promote · dev → prod</div>
+      <div class="card-title" style="margin-bottom:16px">Approval request</div>
+      <div class="diff">
+        <div class="ctx">flag.checkout-model</div>
+        <div class="rem">- rollout: 25%</div>
+        <div class="add">+ rollout: 100%</div>
+        <div class="ctx">  targeting: country in [US, CA]</div>
+        <div class="add">+ variant "express" available in prod</div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:10px">
+        <button class="btn btn-primary" style="font-size:13px;padding:8px 14px;background:var(--brand);color:var(--on-brand)">Promote to prod</button>
+        <button class="btn" style="font-size:13px;padding:8px 14px;border-color:var(--border-strong);color:var(--text-secondary);background:var(--surface-raised)">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:24px"></div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table>
+      <thead><tr><th>Flag</th><th>Environment</th><th>State</th><th>Rollout</th><th>Health</th></tr></thead>
+      <tbody>
+        <tr><td class="k">checkout-model</td><td><span class="badge b-env">prod</span></td><td><span class="led" style="background:var(--success)"></span>enabled</td><td class="k">100%</td><td><span class="badge b-ok">healthy</span></td></tr>
+        <tr><td class="k">new-search</td><td><span class="badge b-env">dev</span></td><td><span class="led" style="background:var(--text-disabled,var(--text-muted))"></span>disabled</td><td class="k">0%</td><td><span style="color:var(--text-muted);font-size:12px">—</span></td></tr>
+        <tr><td class="k">pricing-v3</td><td><span class="badge b-env">prod</span></td><td><span class="led" style="background:var(--success)"></span>enabled</td><td class="k">25%</td><td><span class="badge b-bad">SRM firing</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div></section>
+
+<footer><div class="wrap">splitch design tokens · docs/branding/design-tokens.md · values pinned in packages/ui/src/theme.css · toggle sets data-theme on &lt;html&gt;, System follows the OS</div></footer>
+
+<script>
+  function setMode(mode){
+    var el=document.documentElement;
+    if(mode==='system'){ el.removeAttribute('data-theme'); }
+    else { el.setAttribute('data-theme', mode); }
+    ['light','dark','system'].forEach(function(m){
+      document.getElementById('m-'+m).setAttribute('aria-pressed', String(m===mode));
+    });
+  }
+</script>
+
+</body>
+</html>
