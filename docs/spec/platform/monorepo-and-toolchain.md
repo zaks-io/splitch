@@ -12,7 +12,7 @@ ui package contract, and the toolchain/quality-gate stack.
 | Language | TypeScript strict |
 | Lint / format | Biome (single tool, no ESLint/Prettier split) |
 | Unit tests | Vitest |
-| Mutation testing | Stryker (on critical domains: evaluation, stats, dedup) |
+| Mutation testing | StrykerJS (advisory first; scoped to critical domains) |
 | Deploy | Wrangler + GitHub Actions |
 | Observability | Sentry (errors, distributed traces) + Axiom (structured logs, dashboards) |
 
@@ -148,5 +148,6 @@ Both Workers are separate Cloudflare Cron Triggers, not inline with the API Work
 - [../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md](../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md)
 - [../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md](../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md)
 - [../../adr/0020-tanstack-start-for-both-control-panel-and-marketing-shared-component-layer.md](../../adr/0020-tanstack-start-for-both-control-panel-and-marketing-shared-component-layer.md)
+- [../../adr/0031-mutation-testing-is-advisory-before-it-is-a-gate.md](../../adr/0031-mutation-testing-is-advisory-before-it-is-a-gate.md)
 - [../../architecture/frontend-architecture.md](../../architecture/frontend-architecture.md)
 - WorkOS session issuer rule (WorkOS as session issuer)

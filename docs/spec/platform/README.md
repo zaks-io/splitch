@@ -17,7 +17,7 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 | [live-updates-do.md](./live-updates-do.md) | Per-App fan-out DO: hibernating WebSocket, write-through, delta-nudge, persisted-before-announced |
 | [multi-tenant-isolation.md](./multi-tenant-isolation.md) | App-enforced `app_id` isolation in D1 (Drizzle seam) and Tinybird (two-seam enforcement) |
 | [contracts-and-validation.md](./contracts-and-validation.md) | Zod-first authoring; package split; KV schema-version envelope; one canonical ErrorResponse |
-| [monorepo-and-toolchain.md](./monorepo-and-toolchain.md) | pnpm + Turborepo layout; capability Workers; shared `ui` seam; TanStack Query; cron Workers |
+| [monorepo-and-toolchain.md](./monorepo-and-toolchain.md) | pnpm + Turborepo layout; capability Workers; shared `ui` seam; TanStack Query; cron Workers; StrykerJS policy |
 
 Architecture map: [system-architecture.md](../../architecture/system-architecture.md) lays out the
 Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcement.
