@@ -197,6 +197,14 @@ a second tool-name table. Experiment, Run, credential, and test-eval tools take 
 `environment_id` inputs (per-Env, ADR-0027); the schemas are derived from the per-Env route
 definitions, so parity with the CLI holds by construction.
 
+### Discovery layer (prompts + resources)
+
+The derived tools are the capability surface; they do not tell an agent where to start or what the
+nouns mean. MCP **prompts** (guided workflows like `onboard_new_app`) and **resources** (the
+glossary, auth model, the agent's active context and scopes) sit over the tools and make splitch
+self-onboarding without the docs site. Like `context_use`, these are MCP-protocol capabilities, not
+endpoint skins. The full design is in [mcp-discovery.md](./mcp-discovery.md).
+
 ### Parity guarantee
 
 A capability available through the CLI must be available through an MCP tool and vice versa.

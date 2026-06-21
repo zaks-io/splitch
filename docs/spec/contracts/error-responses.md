@@ -79,34 +79,72 @@ ErrorCode =
 
 ## Per-code detail shapes
 
-| code                            | details shape                                                                                               |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `VALIDATION_ERROR`              | `{ issues: Array<{ path: string[], message: string }> }` — Zod `.format()` output                           |
-| `ALLOCATION_INVALID`            | `{ expected: 100, got: number, variantAllocations: Record<string, number> }`                                |
-| `ACTIVATION_TIMESTAMP_INVALID`  | `{ activationTs: string, firstExposureTs: string, message: 'activation must occur after first exposure' }`  |
-| `INVALID_PAGINATION`            | `{ field: 'cursor' \| 'limit', reason: string }`                                                            |
-| `INVALID_SORT`                  | `{ field: string, allowedFields: string[] }`                                                                |
-| `RUN_FROZEN`                    | `{ frozenFields: string[], currentRunId: string, attemptedChange: string }`                                 |
-| `DECISION_LOCKED`               | `{ lockedFields: string[], currentRunId: string, attemptedChange: string }`                                 |
-| `TARGETING_KEY_MISMATCH`        | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string }`                      |
-| `RUN_NOT_RUNNING`               | `{ runId: string, currentState: 'draft' \| 'ended', attemptedOp: string }`                                  |
-| `EXPERIMENT_RUNNING`            | `{ experimentId: string, runningRunId: string, attemptedOp: string }`                                       |
-| `EXPERIMENT_NO_DRAFT`           | `{ experimentId: string, currentRunId: string \| null }`                                                    |
-| `VARIANT_NOT_AVAILABLE`         | `{ flagId: string, environmentId: string, missingVariants: string[] }`                                      |
-| `INSUFFICIENT_SCOPES`           | `{ requiredScopes: string[], heldScopes: string[] }`                                                        |
-| `LAST_OWNER_REQUIRED`           | `{ orgId: string }`                                                                                         |
-| `PRIVACY_CONFIRMATION_REQUIRED` | `{ confirmationRequired: true, confirmationExpiresAt: string }`                                             |
-| `PRIVACY_JOB_FAILED`            | `{ requestId: string, failedStores: string[] }`                                                             |
-| `MULTIPLE_VARIANT_CONFLICT`     | `{ experimentId: string, runId: string, idType: string, targetingKeyHash: string }`                         |
-| `RATE_LIMITED`                  | `{ retryAfterMs: number }`                                                                                  |
-| `SERVICE_UNAVAILABLE`           | `{ retryAfterMs: number }` — Provider unresolvable; mirrors the `Retry-After` response header               |
-| `ORIGIN_NOT_ALLOWED`            | `{ origin: string, hint: string }` — names the offending origin + how to fix (add to allow-list / open key) |
-| `APP_MISMATCH`                  | `{}`                                                                                                        |
-| All `*_NOT_FOUND` codes         | `{}`                                                                                                        |
-| `UNAUTHORIZED`                  | `{}`                                                                                                        |
-| `CREDENTIAL_REVOKED`            | `{}`                                                                                                        |
-| `FORBIDDEN`                     | `{}`                                                                                                        |
-| `INTERNAL_SERVER_ERROR`         | `{}`                                                                                                        |
+| code                            | details shape                                                                                                                |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_ERROR`              | `{ issues: Array<{ path: string[], message: string }> }` — Zod `.format()` output                                            |
+| `ALLOCATION_INVALID`            | `{ expected: 100, got: number, variantAllocations: Record<string, number> }`                                                 |
+| `ACTIVATION_TIMESTAMP_INVALID`  | `{ activationTs: string, firstExposureTs: string, message: 'activation must occur after first exposure' }`                   |
+| `INVALID_PAGINATION`            | `{ field: 'cursor' \| 'limit', reason: string }`                                                                             |
+| `INVALID_SORT`                  | `{ field: string, allowedFields: string[] }`                                                                                 |
+| `RUN_FROZEN`                    | `{ frozenFields: string[], currentRunId: string, attemptedChange: string, recommendedAction: RecommendedAction }`            |
+| `DECISION_LOCKED`               | `{ lockedFields: string[], currentRunId: string, attemptedChange: string, recommendedAction: RecommendedAction }`            |
+| `TARGETING_KEY_MISMATCH`        | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string, recommendedAction: RecommendedAction }` |
+| `RUN_NOT_RUNNING`               | `{ runId: string, currentState: 'draft' \| 'ended', attemptedOp: string, recommendedAction: RecommendedAction }`             |
+| `EXPERIMENT_RUNNING`            | `{ experimentId: string, runningRunId: string, attemptedOp: string, recommendedAction: RecommendedAction }`                  |
+| `EXPERIMENT_NO_DRAFT`           | `{ experimentId: string, currentRunId: string \| null, recommendedAction: RecommendedAction }`                               |
+| `VARIANT_NOT_AVAILABLE`         | `{ flagId: string, environmentId: string, missingVariants: string[], recommendedAction: RecommendedAction }`                 |
+| `INSUFFICIENT_SCOPES`           | `{ requiredScopes: string[], heldScopes: string[] }`                                                                         |
+| `LAST_OWNER_REQUIRED`           | `{ orgId: string }`                                                                                                          |
+| `PRIVACY_CONFIRMATION_REQUIRED` | `{ confirmationRequired: true, confirmationExpiresAt: string }`                                                              |
+| `PRIVACY_JOB_FAILED`            | `{ requestId: string, failedStores: string[] }`                                                                              |
+| `MULTIPLE_VARIANT_CONFLICT`     | `{ experimentId: string, runId: string, idType: string, targetingKeyHash: string }`                                          |
+| `RATE_LIMITED`                  | `{ retryAfterMs: number }`                                                                                                   |
+| `SERVICE_UNAVAILABLE`           | `{ retryAfterMs: number }` — Provider unresolvable; mirrors the `Retry-After` response header                                |
+| `ORIGIN_NOT_ALLOWED`            | `{ origin: string, hint: string }` — names the offending origin + how to fix (add to allow-list / open key)                  |
+| `APP_MISMATCH`                  | `{}`                                                                                                                         |
+| All `*_NOT_FOUND` codes         | `{}`                                                                                                                         |
+| `UNAUTHORIZED`                  | `{}`                                                                                                                         |
+| `CREDENTIAL_REVOKED`            | `{}`                                                                                                                         |
+| `FORBIDDEN`                     | `{}`                                                                                                                         |
+| `INTERNAL_SERVER_ERROR`         | `{}`                                                                                                                         |
+
+---
+
+## RecommendedAction: machine-stable recovery guidance
+
+Operational `409` errors carry a `recommendedAction` — a stable enum token naming the **next
+step** that resolves the conflict. An agent branches on the token (never on prose); the
+human-readable `message` still carries the same remedy for a person reading a CLI error. The
+token is part of the contract: it is stable across `message` wording changes and localization.
+
+```
+RecommendedAction =
+  | 'CREATE_NEW_RUN'         // the change is frozen on the running Run; clone into a new draft Run and apply it there
+  | 'END_RUNNING_RUN_FIRST'  // a running Run blocks this op; End it, then retry
+  | 'START_A_RUN'            // the op needs a running Run; Start one first
+  | 'EDIT_DRAFT_THEN_START'  // make a change to the draft, then Start (the draft currently matches the live Run)
+  | 'ADD_VARIANT_TO_ENV'     // a referenced Variant is not promoted to this Environment; promote it (ADR-0028), then retry
+  | 'RETRY_AFTER'            // transient; retry after the window in retryAfterMs / Retry-After
+```
+
+Per-code mapping (the action is deterministic per code, but lives in `details` so the agent reads
+one field rather than maintaining a code→action table of its own):
+
+| code                     | `recommendedAction`     | what the agent does                                                                 |
+| ------------------------ | ----------------------- | ----------------------------------------------------------------------------------- |
+| `RUN_FROZEN`             | `CREATE_NEW_RUN`        | the edit touches a frozen field; open a new draft Run and apply it there (ADR-0003) |
+| `DECISION_LOCKED`        | `CREATE_NEW_RUN`        | the decision-family / alpha edit is locked on the running Run; new Run required     |
+| `TARGETING_KEY_MISMATCH` | `CREATE_NEW_RUN`        | the targetingKey changed; a new Run is required to rebucket                         |
+| `RUN_NOT_RUNNING`        | `START_A_RUN`           | End (or other running-only op) hit a non-running Run; Start a Run first             |
+| `EXPERIMENT_RUNNING`     | `END_RUNNING_RUN_FIRST` | the op (e.g. delete) is blocked while a Run is live; End it, then retry             |
+| `EXPERIMENT_NO_DRAFT`    | `EDIT_DRAFT_THEN_START` | Start found no draft changes vs the current Run; edit the draft, then Start         |
+| `VARIANT_NOT_AVAILABLE`  | `ADD_VARIANT_TO_ENV`    | a referenced Variant is not in this Environment's available set; promote it         |
+
+`recommendedAction` is **advisory recovery, not authorization**: following it does not bypass any
+gate. A `CREATE_NEW_RUN` action still goes through the normal create-Run path with its own
+validation and Environment Policy confirmation (ADR-0029). The field exists so an agent's
+error-recovery branch is a stable token lookup, not prose parsing — the same fail-loud-then-guide
+principle the error contract is built on (ADR-0036).
 
 ---
 

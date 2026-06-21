@@ -138,13 +138,17 @@ These are the canonical `ErrorCode` values relevant to Run lifecycle. Codes, det
 HTTP status live once in [../contracts/error-responses.md](../contracts/error-responses.md); this
 table is the Run-scoped subset for quick reference (it names codes, not statuses, to avoid drift).
 
-| code                    | when                                                                                    |
-| ----------------------- | --------------------------------------------------------------------------------------- |
-| `RUN_FROZEN`            | Attempt to mutate a frozen assignment field on a running Run                            |
-| `RUN_NOT_RUNNING`       | Attempt to end (or otherwise run-only-op) a Run that is not `running`                   |
-| `ALLOCATION_INVALID`    | Allocation percentages do not sum to 100, or unknown variant name                       |
-| `EXPERIMENT_NO_DRAFT`   | Start attempted when draft has no changes from current Run                              |
-| `VARIANT_NOT_AVAILABLE` | A referenced Variant is not in the Flag's available set for this Environment (ADR-0028) |
+Operational codes carry a machine-stable `recommendedAction` in `details` (canonical mapping in
+[../contracts/error-responses.md](../contracts/error-responses.md#recommendedaction-machine-stable-recovery-guidance));
+the `recovery` column below mirrors it for quick reference.
+
+| code                    | when                                                                                    | `recommendedAction`     |
+| ----------------------- | --------------------------------------------------------------------------------------- | ----------------------- |
+| `RUN_FROZEN`            | Attempt to mutate a frozen assignment field on a running Run                            | `CREATE_NEW_RUN`        |
+| `RUN_NOT_RUNNING`       | Attempt to end (or otherwise run-only-op) a Run that is not `running`                   | `START_A_RUN`           |
+| `ALLOCATION_INVALID`    | Allocation percentages do not sum to 100, or unknown variant name                       | — (fix the request)     |
+| `EXPERIMENT_NO_DRAFT`   | Start attempted when draft has no changes from current Run                              | `EDIT_DRAFT_THEN_START` |
+| `VARIANT_NOT_AVAILABLE` | A referenced Variant is not in the Flag's available set for this Environment (ADR-0028) | `ADD_VARIANT_TO_ENV`    |
 
 ## Sources
 

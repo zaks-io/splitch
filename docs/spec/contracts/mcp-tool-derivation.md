@@ -190,9 +190,14 @@ developers testing with the credential their code holds.
 
 All tools share the same error shape — the `ErrorResponse` discriminated union from
 `@splitch/contracts`. An agent narrows on `error.code` to act; each code carries typed
-`details`:
+`details`. Operational `409`s additionally carry a machine-stable `details.recommendedAction`
+naming the next step, so the agent's recovery branch is a token lookup, not prose parsing
+(canonical mapping in [error-responses.md](./error-responses.md#recommendedaction-machine-stable-recovery-guidance)):
 
-- `RUN_FROZEN` → `details.frozenFields`, `details.currentRunId` (agent starts a new Experiment Run, not patch)
+- `RUN_FROZEN` → `details.frozenFields`, `details.currentRunId`, `details.recommendedAction: 'CREATE_NEW_RUN'` (agent opens a new Run, not patch)
+- `EXPERIMENT_RUNNING` → `details.runningRunId`, `details.recommendedAction: 'END_RUNNING_RUN_FIRST'`
+- `RUN_NOT_RUNNING` → `details.currentState`, `details.recommendedAction: 'START_A_RUN'`
+- `VARIANT_NOT_AVAILABLE` → `details.missingVariants`, `details.recommendedAction: 'ADD_VARIANT_TO_ENV'`
 - `ALLOCATION_INVALID` → `details.got` (the actual sum; fix allocation to sum to 100)
 - `INSUFFICIENT_SCOPES` → `details.requiredScopes` (re-authenticate with broader scopes)
 

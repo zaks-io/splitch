@@ -40,7 +40,7 @@ branch on `reason` / `errorCode` (e.g. surface a banner on `STALE`, throw in you
 1. Validates context (targetingKey required; idType defaulted to 'user' if omitted).
 2. Checks SDK seen-set for `(flagKey, runId, targetingKey)`. If present, returns cached
    Variant without an HTTP call and without a second Exposure (`reason: CACHED`).
-3. On seen-set miss: calls `POST /apps/:appId/evaluate` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
+3. On seen-set miss: calls `POST /api/sdk/evaluate` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
 4. Worker fires Exposure to raw log (server-side; client does not send a separate track call).
 5. SDK updates seen-set with `(flagKey, runId, targetingKey) -> VariantValue`.
 6. Returns resolved Variant (or full details).
@@ -92,7 +92,7 @@ in the SDK instance state.
 ## Peek endpoint shape
 
 ```
-POST /apps/:appId/peek-evaluate
+POST /api/sdk/peek
 Authorization: Bearer <apiKey>      -- API Key (server-side), NOT a Client Key (ADR-0034)
 ```
 

@@ -47,7 +47,7 @@ and whether the exposure-on-read model conflicts with OpenFeature's hook orderin
 
 **4. Batch flag evaluation (`evaluateAll`)**
 `evaluateAll([flagKeys])` is a natural optimization (one HTTP call for multiple flags in one
-render). The endpoint contract (`POST /evaluate-batch`) is not defined. This is a pure
+render). The endpoint contract (`POST /api/sdk/evaluate-batch`) is not defined. This is a pure
 ergonomic extension — the data-plane safety model is unchanged.
 
 **5. Server-side flag config streaming / SSE**

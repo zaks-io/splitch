@@ -11,15 +11,15 @@ specifies the richest tier (`test-eval`, control-plane); the lower tiers (`verif
 below and detailed in [exposure-accessor.md](./exposure-accessor.md) and
 [credentials-and-keys.md](../control-plane/credentials-and-keys.md).
 
-| Property                   | `POST /evaluate` (data plane) | `POST /verify` (data plane, ADR-0037)              | `POST /test-eval` (control plane)            |
-| -------------------------- | ----------------------------- | -------------------------------------------------- | -------------------------------------------- |
-| Credential                 | Client Key (public)           | Client Key **or** API Key                          | Control-plane token (ADR-0022)               |
-| Fires Exposure             | Yes (structural)              | Never (structural)                                 | Never (structural)                           |
-| Returns reason             | Non-revealing set (ADR-0036)  | Non-revealing under Client Key; full under API Key | Full reason incl. rule identity              |
-| Reads holdover             | Yes                           | Yes, read-only                                     | Yes, read-only diagnostic                    |
-| Writes to Assignment Store | Via pipeline                  | Never                                              | Never                                        |
-| Counts in Run denominator  | Yes                           | Never                                              | Never                                        |
-| Use case                   | Production SDK calls          | In-app / SDK-credential setup confirmation         | Debugging, CLI verify step, agent pre-deploy |
+| Property                   | `POST /api/sdk/evaluate` (data plane) | `POST /api/sdk/verify` (data plane, ADR-0037)      | `POST /test-eval` (control plane)            |
+| -------------------------- | ------------------------------------- | -------------------------------------------------- | -------------------------------------------- |
+| Credential                 | Client Key (public)                   | Client Key **or** API Key                          | Control-plane token (ADR-0022)               |
+| Fires Exposure             | Yes (structural)                      | Never (structural)                                 | Never (structural)                           |
+| Returns reason             | Non-revealing set (ADR-0036)          | Non-revealing under Client Key; full under API Key | Full reason incl. rule identity              |
+| Reads holdover             | Yes                                   | Yes, read-only                                     | Yes, read-only diagnostic                    |
+| Writes to Assignment Store | Via pipeline                          | Never                                              | Never                                        |
+| Counts in Run denominator  | Yes                                   | Never                                              | Never                                        |
+| Use case                   | Production SDK calls                  | In-app / SDK-credential setup confirmation         | Debugging, CLI verify step, agent pre-deploy |
 
 `verify` exists so a developer or agent can confirm setup **with the credential their code holds**,
 from where their code runs — without a control-plane token and without polluting analysis. The

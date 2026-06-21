@@ -20,7 +20,7 @@ now what?" gap.
 
 | Tier             | Credential          | Endpoint                   | Reveals                                                                                                          | Exposure |
 | ---------------- | ------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------- |
-| Client (public)  | Client Key          | `POST /apps/:appId/verify` | Reachable, credential valid, Flag exists & configured, resolves OK; `reason` from the **non-revealing** set only | none     |
+| Client (public)  | Client Key          | `POST /api/sdk/verify`     | Reachable, credential valid, Flag exists & configured, resolves OK; `reason` from the **non-revealing** set only | none     |
 | Server (trusted) | API Key             | peek / `verify` w/ API Key | Full `ResolutionDetails` incl. `TARGETING_MATCH` + which rule matched                                            | none     |
 | Control plane    | control-plane token | test-eval (ADR-0026)       | Everything: rule match, allocation reasoning, `liveRunId`                                                        | none     |
 

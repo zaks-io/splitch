@@ -1,4 +1,4 @@
-# Public evaluate endpoint: `POST /evaluate`
+# Public evaluate endpoint: `POST /api/sdk/evaluate`
 
 The single data-plane endpoint the client-side SDK calls. Safe under a public Client Key:
 returns the resolved Variant and a **non-revealing** `reason` (OpenFeature `ResolutionDetails`,
@@ -7,7 +7,7 @@ ADR-0036) — never config, rules, allocation, salt, or which rule matched (ADR-
 ## Endpoint
 
 ```
-POST /apps/:appId/evaluate
+POST /api/sdk/evaluate
 Authorization: Bearer <clientKey>
 Content-Type: application/json
 ```
@@ -41,13 +41,15 @@ The **Environment is resolved from the Client Key**, not a request field: a Clie
 `(app_id, environment_id)` (ADR-0027), and the edge reads `environment_id` from the key's validation
 cache value to select which Environment's Flag Configuration and live Experiment Runs to serve.
 
-**`app_id` authority — credential wins, path is validated-and-discarded.** The `:appId` in the path is
-**never** used as a data scope. The only `app_id` that reaches Provider reads, Assignment Store keys, or
-the Exposure row is the one bound to the validated credential (ADR-0018). The path `:appId` is compared
-against the credential's `app_id`: on mismatch the request is rejected `403 APP_MISMATCH`; on match it is
-discarded. It is never a fallback or a default when the credential scope is absent — there is no code path
-where a client-supplied `app_id` selects tenant data. This closes the tenant-crossing footgun where the
-path param could be read as authoritative.
+**`app_id` authority — credential is the sole source.** The route carries no `:appId` path
+parameter (`/api/sdk/evaluate`, not `/apps/:appId/evaluate`): the only `app_id` that reaches
+Provider reads, Assignment Store keys, or the Exposure row is the one bound to the validated
+credential (ADR-0018). A client may include an optional `appId` in the request body as an
+**assertion**; if present it is compared against the credential's `app_id` and the request is
+rejected `403 APP_MISMATCH` on mismatch, then discarded on match — it is never a data scope, a
+fallback, or a default. There is no code path where a client-supplied `app_id` selects tenant
+data. Keeping `app_id` out of the path removes the tenant-crossing footgun at the route level
+rather than relying on a guard to neutralize a path param.
 
 ## Response shape
 
