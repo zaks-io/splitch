@@ -52,6 +52,15 @@ requirements harden (see below).
 - **The data-access layer is load-bearing for security.** With no RLS, tenant isolation lives in
   one repository seam that every query routes through — reviewable, and the designated migration
   boundary if Postgres+RLS is ever needed.
+- **Tinybird is a second isolation seam the repository does not cover.** Tinybird endpoints are
+  queried over their own token/parameter path, not through the Drizzle repository, so the "one seam"
+  guarantee above does not reach the audit log or any per-tenant analytics read. Isolation there is
+  enforced in the pipe itself: every tenant-scoped endpoint takes `app_id` as a **mandatory,
+  non-defaulted** parameter (`{{String(app_id)}}` with no default — a missing tenant must fail, not
+  fall back to a default tenant or all tenants), and `app_id` is the **first column in
+  `ENGINE_SORTING_KEY`** of every tenant-scoped datasource (low-cardinality-first, and never
+  timestamp-first in this multi-tenant store). Two seams enforce tenancy, not one — the D1 repository
+  and the Tinybird pipe layer — and both are in scope for any isolation review.
 - **D1's size ceiling is a non-issue** by construction: the only unbounded table (audit) is in
   Tinybird; the D1 set is bounded mutable records.
 - **Usage counters that tick frequently** are not D1 rows — high-frequency metering belongs in a

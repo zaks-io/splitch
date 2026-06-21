@@ -66,7 +66,14 @@ edge) → Tinybird (huge, append-only, analytical)** — each store sized for it
   place. ADR-0009 (KV read / DO write) is untouched; this is the same substrate, now also backing
   config.
 - **Tinybird is ADR-0010's physical substrate.** The "raw append-only log, deduped at query time"
-  decision lands on Tinybird's columnar SQL + materialized views.
+  decision lands on Tinybird's columnar SQL + materialized views; the physical dedup engine
+  (lambda — snapshot + real-time UNION) is pinned in ADR-0024.
+- **Metric rollup MVs feed the deduped snapshot, never the raw log.** A materialized view fires per
+  inserted block and never sees merged or cross-block state, so an AggregatingMergeTree rollup built
+  straight off the raw Exposure log cannot dedup the redundant-by-design edge events (ADR-0004) — they
+  leak in and silently inflate the SRM denominator and every metric count, the exact correctness
+  ADR-0010 exists to protect. Rollups therefore build on the deduped snapshot datasource (ADR-0024),
+  not the raw log. This is a constraint, not an option.
 - The shared shell (monorepo layout, contracts-first OpenAPI/Zod, Biome/Vitest/Stryker quality
   gates, Wrangler deploy, Sentry/Axiom observability) is copied from agent-paste wholesale; only the
   analytics layer (Tinybird in place of Postgres/Analytics Engine) diverges. Scaffolding detail is
