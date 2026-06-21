@@ -1,0 +1,139 @@
+# Contracts and validation: Zod-first, derived everywhere, schema-versioned KV
+
+Zod is the single authored source of truth for all contract shapes. Nothing else is hand-authored.
+This file pins the authoring discipline, package split, KV schema-version envelope, and error shape.
+
+## Authoring rule: Zod is the one source
+
+```
+Authored (in tree):       Zod schemas + @hono/zod-openapi route definitions
+                          → z.infer<...>        (TypeScript types, compile-time)
+                          → hc<AppType>()       (typed HTTP client, compile-time)
+                          → OpenAPI document    (generated at build/runtime, never committed)
+                          → MCP tool schemas    (derived at build/startup, never committed)
+```
+
+No generated artifact is committed to the repo. Only Zod schemas live in the tree. Agents that
+hand-edit a generated artifact or "fix a drift" by editing the generated output are inverting the
+source-of-truth discipline — the Zod source is the fix target.
+
+## Package split
+
+**`@splitch/contracts`**
+- Zod leaf schemas (glossary nouns: `VariantSchema`, `TargetingRuleSchema`, `RunSchema`, ...)
+- `@hono/zod-openapi` route definitions (input + output composed from leaf schemas)
+- `z.infer` types re-exported for consumers
+- Dependencies: `zod`, `@hono/zod-openapi` only
+- Consumers: Worker (validation), `@splitch/client`, CLI/MCP, control panel, marketing site
+
+**`@splitch/client`**
+- Hono `hc<AppType>()` HTTP client (type-inferred, zero codegen)
+- Depends on `@splitch/contracts`
+- Consumers: control panel, CLI, MCP server
+
+The split keeps schema-only consumers (marketing site, MCP) free of transport code.
+
+The deletion test passes for both: `contracts` has 4+ real consumers; `client` has 3+ real
+consumers. Neither is speculative indirection.
+
+## Schema shapes: leaf reuse, distinct envelopes
+
+The shared, reused-everywhere unit is the leaf schema (glossary noun). Request, response, and
+storage shapes are distinct compositions of leaves.
+
+```
+// leaf (shared, reused)
+VariantSchema = z.object({ name: z.string(), value: JsonValueSchema, isDefault: z.boolean() })
+
+// request envelope (distinct — only mutable fields)
+CreateFlagRequest = z.object({ key: z.string(), variants: z.array(VariantSchema), ... })
+
+// response envelope (distinct — includes server-assigned fields)
+FlagResponse = z.object({ id: z.string(), key: z.string(), ..., createdAt: z.date() })
+
+// storage shape (distinct — includes internal fields not on wire)
+FlagRecord = z.object({ id: z.string(), app_id: z.string(), schemaVersion: z.number(), ... })
+```
+
+Run immutability (ADR-0002/0003) forces this split: a create-Run input and a patch-Run input are
+different shapes (patch must reject assignment-config fields on a live Run).
+
+## Validation discipline
+
+| Boundary | Rule |
+|---|---|
+| HTTP edge (Worker input) | Zod-parse all untrusted input — non-negotiable; ADR-0023's invariant home |
+| KV reads (hot path + cold) | Zod-parse all, including Assignment Store and flag config on evaluate path |
+| D1 reads | Trusted — column schema + migrations enforce structure; no re-parse |
+| Tinybird query results | Parse at the control-plane endpoint before returning to callers |
+
+**KV hot-path validation trade-off:** latency is accepted in exchange for loudness. A malformed
+KV blob fails loud (returns error, falls back to D1) rather than flowing a half-valid object into
+evaluation. Optimize only when measured (p99 latency data shows material impact).
+
+## KV schema-version envelope
+
+All KV blobs carry a `schemaVersion` field:
+
+```
+KVEnvelope<T> {
+  schemaVersion: number   // monotonic integer; bumped on breaking schema change
+  data:          T        // the payload; Zod-validated against the versioned schema
+}
+```
+
+**On KV read:**
+1. Parse the raw blob as `KVEnvelope` (schemaVersion + data).
+2. If `schemaVersion` matches current → validate `data` against current Zod schema.
+3. If `schemaVersion` is unknown (old format or future format) → **fall back to D1** (one extra
+   hop; rebuilds KV from the authoritative source). Log the schema mismatch.
+4. If Zod parse fails (corruption) → fall back to D1. Log the error.
+
+Fallback to D1 is not silent — it is logged as a warning so operators can detect schema drift
+in production and schedule a KV backfill.
+
+**On KV write:** always write with the current `schemaVersion`.
+
+This policy enables rolling upgrades: the writer can bump `schemaVersion` and old readers fall
+back to D1 gracefully, without a synchronized cutover.
+
+## Error shape
+
+One canonical `ErrorResponse`, extensible by `code`:
+
+```
+ErrorResponse {
+  code:     string   // shared enum; e.g. 'RUN_FROZEN', 'NOT_FOUND', 'INVALID_INPUT'
+  message:  string   // human-readable
+  details?: unknown  // typed per-code extension (see below)
+}
+```
+
+Specific errors extend the base shape. Example:
+
+```
+RunFrozenError = ErrorResponse & {
+  code: 'RUN_FROZEN'
+  details: {
+    frozenFields: string[]   // field names that cannot be edited on a live Run
+    currentRunId: string
+  }
+}
+```
+
+Zod parse failures and domain-invariant failures (frozen Run, invalid Targeting Rule) return the
+same shape. No parallel, unrelated error shape exists. Every consumer (`hc` client, CLI, MCP) has
+one guaranteed error-parsing path.
+
+## MCP tool schema derivation
+
+Each `@hono/zod-openapi` route's Zod input schema becomes the MCP tool's `inputSchema`; the output
+schema becomes `outputSchema`. The schema an agent reads to call a tool is byte-for-byte the schema
+the Worker enforces. Adding an endpoint creates a new MCP tool mechanically — no hand-written MCP
+schemas (ADR-0023).
+
+## Sources
+
+- [../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
+- [../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md](../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md)
+- [../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md](../../adr/0023-remote-mcp-and-cli-as-parity-skins-over-a-shared-typed-client.md)

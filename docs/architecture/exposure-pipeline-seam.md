@@ -35,8 +35,8 @@ for an edge origin.
 - **System of record** = the raw append-only log. Each POP just appends; no global ordering needed.
 - **Dedup** = a re-runnable windowed query at analysis time, not a collapse at ingest. First-touch
   (`MIN(ts)`) per `(entity, run)`.
-- **Delivery** = at-least-once + idempotent dedup key. Never exactly-once. (Industry-settled: Kafka,
-  Snowplow, Segment, BigQuery all dedup downstream by key, earliest wins.)
+- **Delivery** = at-least-once + idempotent dedup key. Never exactly-once. Downstream dedup by
+  key and earliest timestamp owns first-touch.
 
 Why this fits the edge specifically: five POPs give no global ordering and at-least-once delivery — exactly
 where "collapse early" is hardest (needs a global edge dedup store) and "append raw, dedup in query" is

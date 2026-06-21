@@ -33,13 +33,11 @@ and Conversion Window anchoring. The complexity is concentrated, not smeared acr
 every analysis query (which versions are comparable? where did re-bucketing happen?). The Run earns
 its keep — it *is* the "this dataset is analyzable as a unit" invariant, made explicit.
 
-## Decisions locked (with the reasoning)
+## Core Invariants
 
 1. **Assignment is a pure function, not an event.** Determinism means you never persist it — you
-   recompute it. This is universal best practice (Statsig/Eppo/GrowthBook all recompute, none log
-   assignment as a primary fact). Advanced diagnostics (deterministic replay to separate a bucketing
-   bug from an exposure bug) are therefore available *on demand later*, without recording anything
-   extra now.
+   recompute it. Advanced diagnostics (deterministic replay to separate a bucketing bug from an
+   exposure bug) are therefore available *on demand later*, without recording anything extra now.
 
 2. **The Run is the unit of analysis; Exposure is stamped with `runId`.** Replaces an ad-hoc
    `configVersion`. The immutability invariant is what SRM, significance, and Conversion Windows all
@@ -66,12 +64,8 @@ its keep — it *is* the "this dataset is analyzable as a unit" invariant, made 
 
 ## Run lifecycle
 
-Designed in a follow-up grill (2026-06-20), and revised the same day after a best-practices audit. The Run
-freezes **bucketing**: a Run means *assignment* was frozen for its entire life. Measurement is **not** frozen
-into the Run — it recomputes losslessly over the Run's raw log, which is what the reference platforms do
-(ADR-0003). (The earlier version of this doc froze measurement too and claimed that as "stronger than any
-reference platform"; the audit found the field deliberately recomputes measurement, so that claim was
-backwards and is corrected here.)
+The Run freezes **bucketing**: a Run means *assignment* was frozen for its entire life. Measurement is
+**not** frozen into the Run; it recomputes losslessly over the Run's raw log (ADR-0003).
 
 ### Assignment vs measurement vs non-material edits
 

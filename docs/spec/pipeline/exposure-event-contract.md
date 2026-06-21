@@ -1,0 +1,72 @@
+# Exposure event contract — raw row shape on the append-only log
+
+Every Exposure and Activation event appended to the unified raw log must conform to this contract. The raw log is the system of record (ADR-0010); shape changes here cascade to every downstream consumer.
+
+## Unified event log
+
+One Tinybird datasource (`raw_events`) holds all event types. The `type` discriminator distinguishes row types. A peek or test-evaluation (dry-run) MUST NOT write any row — those paths never touch the ingest endpoint.
+
+## Exposure row (`type = 'exposure'`)
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `type` | `'exposure'` | yes | Row discriminator |
+| `app_id` | `string` | yes | Data-isolation key; injected by the edge Worker, never from the client |
+| `experiment_id` | `string` | yes | Stable identifier of the Experiment |
+| `run_id` | `string` | yes | Stamped at SDK fire-time from the live Run config in KV; the live `liveRunId` the edge read when it evaluated |
+| `id_type` | `string` | yes | Entity type declared on the Run (e.g. `'user'`, `'workspace'`); sourced from the Run config, not the client (guards holdover DO key) |
+| `targeting_key` | `string` | yes | The Targeting Key that was evaluated; identifies the Entity |
+| `variant` | `string` | yes | The Variant name (string, never the value/metadata) assigned to this Entity |
+| `server_ts` | `DateTime64(3)` | yes | Server-received-at timestamp (millisecond precision, UTC); canonical for `MIN(ts)` first-touch ordering — monotonic, no clock skew |
+| `client_ts` | `DateTime64(3)` | no | Client-fired timestamp; carried for diagnostics only, never used for ordering |
+| `dedup_key` | `string` | yes | Idempotent at-least-once key; see Dedup Key section below |
+| `source_id` | `string` | yes | Edge POP identifier (e.g. `'sea01'`); included in `dedup_key` |
+| `sdk_version` | `string` | no | SDK version string; diagnostics |
+| `is_holdover` | `boolean` | yes | `true` when the edge replayed the stored Variant (not a fresh `assign()`); `false` for first-touch and new Entities. Enables pipeline to verify SDK honored the holdover contract |
+
+### Dedup key definition
+
+```
+dedup_key = sha256(app_id + ':' + experiment_id + ':' + run_id + ':' + id_type + ':' + targeting_key + ':' + source_id + ':' + server_ts_ms)
+```
+
+- `server_ts` at millisecond precision avoids collisions within one POP at the same ms.
+- `source_id` (POP hostname) makes same-Entity, same-ms events from different POPs distinct.
+- New fields do NOT change this key — schema-stable by construction.
+- Tinybird datasource configures this column as its `dedup_key` to handle at-least-once ingest.
+
+### Idempotency invariant
+
+The dedup key is for wire-level ingest deduplication only. The first-touch dedup (query-time `GROUP BY entity, run` + `MIN(server_ts)`) is the **authoritative** first-touch definition and supersedes it. Two rows with different `dedup_key` values for the same `(targeting_key, run_id)` are expected — the query picks `MIN(server_ts)` among them.
+
+## Activation row (`type = 'activation'`)
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `type` | `'activation'` | yes | Row discriminator |
+| `app_id` | `string` | yes | Data-isolation key |
+| `experiment_id` | `string` | yes | Experiment this activation belongs to |
+| `run_id` | `string` | yes | Run under which the activation occurred |
+| `id_type` | `string` | yes | Must match the Run's declared `id_type` |
+| `targeting_key` | `string` | yes | Entity that activated |
+| `activation_ts` | `DateTime64(3)` | yes | When the activation event occurred (server-received-at) |
+| `dedup_key` | `string` | yes | Same construction as Exposure dedup key |
+| `counterfactual` | `boolean` | yes | `false` in v1; `true` when emitted by the SDK counterfactual evaluation path (additive, ADR-0013) |
+
+## Non-exposing paths
+
+| Path | Fires Exposure row? |
+|---|---|
+| `sdk.getVariant(...)` (standard evaluate) | YES |
+| `sdk.peekVariant(...)` (distinct peek accessor) | NO — never touches ingest |
+| Control-plane test-evaluation endpoint | NO — never touches ingest (ADR-0026) |
+
+The peek and test-evaluation paths are structurally separate from the ingest endpoint. There is no flag or parameter that suppresses logging on a shared path — the non-exposing paths simply do not call the ingest endpoint.
+
+## Sources
+
+- [ADR-0004](../../adr/0004-exposure-fires-on-read.md) — fire-on-read, peek as distinct accessor
+- [ADR-0010](../../adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md) — append-only log, at-least-once, idempotent dedup key
+- [ADR-0013](../../adr/0013-activation-is-a-first-class-event-counterfactual-triggering-is-additive.md) — activation as first-class row type, `counterfactual` marker
+- [ADR-0024](../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md) — Tinybird physical ingest
+- [ADR-0026](../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md) — test-evaluation non-exposing
