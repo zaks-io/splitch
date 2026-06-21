@@ -1,4 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreBinaries": ["gitleaks"]
+  "ignoreBinaries": ["gitleaks"],
+  "stryker": {
+    "config": ["stryker.base.json", "packages/*/stryker.config.json"]
+  }
 }

@@ -27,6 +27,7 @@
     "smoke:local": "node scripts/smoke-workers-local.mjs",
     "smoke:local:api": "node scripts/smoke-workers-local.mjs api",
     "test": "turbo run test",
+    "test:mutation": "turbo run test:mutation",
     "tinybird:local": "node scripts/check-tinybird-local.mjs",
     "typecheck": "turbo run typecheck",
     "verify:ci": "pnpm verify:push && pnpm smoke:ci",
@@ -36,6 +37,9 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
     "@cloudflare/workers-types": "^4.20260617.1",
+    "@stryker-mutator/core": "9.6.1",
+    "@stryker-mutator/typescript-checker": "9.6.1",
+    "@stryker-mutator/vitest-runner": "9.6.1",
     "@types/node": "^24.13.2",
     "dependency-cruiser": "^17.4.3",
     "jscpd": "^5.0.10",

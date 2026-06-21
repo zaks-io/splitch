@@ -23,6 +23,11 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "test:mutation": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "outputs": ["reports/mutation/**"]
+    },
     "typecheck": {
       "dependsOn": ["^build"],
       "outputs": []

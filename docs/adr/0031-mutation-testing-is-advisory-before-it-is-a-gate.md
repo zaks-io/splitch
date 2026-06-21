@@ -30,21 +30,33 @@ dead complexity. Triage it explicitly instead of chasing a raw percentage.
 
 ## Tooling
 
-When the package scaffold lands, add root StrykerJS config using the current StrykerJS packages:
+StrykerJS is wired using the current packages, pinned at the root:
 
 - `@stryker-mutator/core`
 - `@stryker-mutator/vitest-runner`
 - `@stryker-mutator/typescript-checker`
 
-The repo script should be named `test:mutation`. Generated reports are CI artifacts, not committed
-files.
+Shared policy lives in `stryker.base.json` at the repo root. Each opted-in package has a
+`stryker.config.json` that `extends` the base and sets its own `mutate` scope, plus a
+`test:mutation` package script (`stryker run`). Run everything with `pnpm test:mutation` (Turbo
+fans out to opted-in packages) or one package with
+`pnpm --filter @splitch/<pkg> test:mutation`. Agents use the per-package form to pressure-test
+their own assertions before relying on them.
+
+Initial opted-in scope: `@splitch/sdk` and `@splitch/contracts` (the critical domain logic that
+exists today). Add a package by giving it a `stryker.config.json` + `test:mutation` script and a
+`vitest.config.ts`; do not mutate route shells, generated output, or barrels.
+
+Generated reports (`reports/mutation/`) and the incremental cache
+(`reports/mutation/stryker-incremental.json`) are gitignored CI artifacts, not committed files.
 
 ## Gate policy
 
 Mutation testing starts as advisory:
 
 1. Local and normal PR gates keep running deterministic tests first.
-2. Mutation testing runs on demand and in a scheduled CI job.
+2. Mutation testing runs on demand and in a scheduled CI job (`.github/workflows/mutation.yml`:
+   `workflow_dispatch` + weekly cron), separate from the per-PR `ci` gate. `break` stays `null`.
 3. The first stable runs establish per-package baselines for mutation score, runtime, and noisy
    equivalent mutants.
 4. A hard PR gate may be enabled only for a scoped package after that package has a stable baseline
@@ -62,14 +74,20 @@ assertions fail when behavior changes.
 
 ## Done
 
-The mutation-testing suite is considered adopted when:
+Wired (advisory phase):
 
-- `pnpm test:mutation` runs StrykerJS against the scoped critical domains.
-- CI publishes mutation reports as artifacts from an on-demand or scheduled job.
-- Each included package has documented baseline score, runtime, and exclusions.
-- Any hard gate names the package scope and threshold it enforces.
-- Survived mutants in critical domain logic are either tested, simplified away, or marked equivalent
-  with a reason.
+- [x] `pnpm test:mutation` runs StrykerJS against the scoped critical domains (sdk, contracts).
+- [x] CI publishes mutation reports as artifacts from an on-demand / scheduled job
+      (`.github/workflows/mutation.yml`), outside the per-PR `ci` gate.
+
+Still open before any hard gate:
+
+- [ ] Each included package has a documented baseline score, runtime, and exclusions (needs a real
+      test suite first; the suite is empty today).
+- [ ] Any hard gate names the package scope and threshold it enforces (`break` flips from `null` to
+      a number for that one package).
+- [ ] Survived mutants in critical domain logic are either tested, simplified away, or marked
+      equivalent with a reason.
 
 ## Consequences
 

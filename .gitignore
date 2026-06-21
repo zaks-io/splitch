@@ -8,3 +8,5 @@ dist/
 .turbo/
 .wrangler/
 .tinyb
+reports/mutation/
+.stryker-tmp/

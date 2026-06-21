@@ -18,6 +18,7 @@
     "clean": "rm -rf dist coverage",
     "lint": "biome lint src",
     "test": "vitest run --passWithNoTests",
+    "test:mutation": "stryker run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
