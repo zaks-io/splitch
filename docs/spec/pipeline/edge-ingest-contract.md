@@ -41,7 +41,7 @@ the Evaluation Worker knew about. This is accepted and self-healing.
 
 `id_type` is read from the request's required `idType` field, then validated against the live Run
 config in KV before Assignment Store lookup, Exposure logging, or DO writes. The Run config is the
-authority; the request is the candidate value. A mismatch returns `422 VALIDATION_ERROR`.
+authority; the request is the candidate value. A mismatch returns `400 VALIDATION_ERROR`.
 
 After validation, the Evaluation Worker stamps the validated `id_type` and derives
 `targeting_key_hash` server-side. This keeps the Assignment Store DO key

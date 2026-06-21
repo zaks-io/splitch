@@ -87,8 +87,10 @@ permissive). Abuse surface is bounded by rate limiting regardless.
 - **Left side (caller):** the evaluate Worker, which presents the credential from the
   request header (`Authorization: Bearer <value>`)
 - **Right side (adapter):** KV lookup + Zod parse; falls through to D1 only on KV miss
-- **Failure contract:** invalid or revoked credential → `401 Unauthorized` with
-  `ErrorResponse { code: 'INVALID_CREDENTIAL', message }` (ADR-0025 error shape)
+- **Failure contract:** missing or invalid credential → `401` with
+  `ErrorResponse { code: 'UNAUTHORIZED' }`; revoked credential → `403` with
+  `ErrorResponse { code: 'CREDENTIAL_REVOKED' }` (canonical codes, ADR-0025 error shape —
+  see [../contracts/error-responses.md](../contracts/error-responses.md))
 - **Deletion test:** passes — API Key and Client Key are two real adapters on this
   same validation port, distinguished by `type`
 

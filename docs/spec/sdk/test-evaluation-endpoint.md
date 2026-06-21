@@ -116,12 +116,12 @@ propagation — if it shows the old Variant for a few seconds after Start, so do
 
 Same `ErrorResponse` shape as all endpoints (ADR-0025):
 
-| HTTP status | `code`               | Meaning                                  |
-| ----------- | -------------------- | ---------------------------------------- |
-| 401         | `INVALID_CREDENTIAL` | Missing or invalid control-plane token   |
-| 403         | `FORBIDDEN`          | Token does not have access to this appId |
-| 404         | `FLAG_NOT_FOUND`     | flagKey does not exist in this App       |
-| 422         | `VALIDATION_ERROR`   | Request body failed Zod parse            |
+| HTTP status | `code`             | Meaning                                  |
+| ----------- | ------------------ | ---------------------------------------- |
+| 401         | `UNAUTHORIZED`     | Missing or invalid control-plane token   |
+| 403         | `FORBIDDEN`        | Token does not have access to this appId |
+| 404         | `FLAG_NOT_FOUND`   | flagKey does not exist in this App       |
+| 400         | `VALIDATION_ERROR` | Request body failed Zod parse            |
 
 ## CLI / MCP surface
 

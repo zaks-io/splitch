@@ -155,20 +155,22 @@ ErrorResponse {
 }
 ```
 
-| HTTP status | `code`                 | Meaning                                                                         |
-| ----------- | ---------------------- | ------------------------------------------------------------------------------- |
-| 401         | `INVALID_CREDENTIAL`   | Missing, invalid, or revoked Client Key                                         |
-| 403         | `APP_MISMATCH`         | Client Key does not belong to the requested appId                               |
-| 404         | `FLAG_NOT_FOUND`       | flagKey does not exist in this App                                              |
-| 422         | `VALIDATION_ERROR`     | Request body failed Zod parse; `details` has field errors                       |
-| 429         | `RATE_LIMITED`         | Per-key rate limit exceeded (may be WAF-level)                                  |
-| 503         | `PROVIDER_UNAVAILABLE` | Flag config could not be resolved; SDK returns Default Variant, `reason: ERROR` |
+| HTTP status | `code`                | Meaning                                                                         |
+| ----------- | --------------------- | ------------------------------------------------------------------------------- |
+| 401         | `UNAUTHORIZED`        | Missing or invalid Client Key                                                   |
+| 403         | `CREDENTIAL_REVOKED`  | Client Key is revoked                                                           |
+| 403         | `APP_MISMATCH`        | Client Key does not belong to the requested appId                               |
+| 404         | `FLAG_NOT_FOUND`      | flagKey does not exist in this App                                              |
+| 400         | `VALIDATION_ERROR`    | Request body failed Zod parse; `details` has field errors                       |
+| 429         | `RATE_LIMITED`        | Per-key rate limit exceeded (may be WAF-level)                                  |
+| 503         | `SERVICE_UNAVAILABLE` | Flag config could not be resolved; SDK returns Default Variant, `reason: ERROR` |
 
 **Failure (loud) vs. legitimate default (normal), per ADR-0036:**
 
-- **503 `PROVIDER_UNAVAILABLE`** and network/parse errors are _failures_: the SDK returns the
-  Default Variant with `reason: ERROR` + `errorCode`, fires no Exposure, and logs loudly. Not
-  silent.
+- **503 `SERVICE_UNAVAILABLE`** and network/parse errors are _failures_: the SDK returns the
+  Default Variant with `reason: ERROR` + `errorCode: PROVIDER_NOT_READY`, fires no Exposure, and
+  logs loudly. Not silent. The 503 carries a `Retry-After` header; the SDK does not auto-retry the
+  Exposure-bearing call (a retry would be a fresh resolution, not a replay).
 - **404 `FLAG_NOT_FOUND`** is a _failure_ too (a flagKey that does not exist is a setup bug,
   not a normal value): `reason: ERROR`, `errorCode: FLAG_NOT_FOUND`, no Exposure, loud.
 - A flag that **exists but is disabled** or **has no Configuration in this Environment**, or

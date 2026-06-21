@@ -81,27 +81,25 @@ const ErrorResponseSchema = z.object({
 const RunFrozenErrorSchema = ErrorResponseSchema.extend({
   code: z.literal("RUN_FROZEN"),
   details: z.object({
-    frozen_fields: z.array(z.string()),
-    run_id: z.string(),
+    frozenFields: z.array(z.string()),
+    currentRunId: z.string(),
+    attemptedChange: z.string(),
   }),
 });
 ```
 
-**Shared error codes (non-exhaustive):**
+**Error codes are defined once, not here.** The canonical `ErrorCode` enum, every per-code
+detail shape, and the HTTP-status mapping live in
+[../contracts/error-responses.md](../contracts/error-responses.md) — the single source. This
+doc owns only the Zod _shape_ (one base `ErrorResponse`, narrowed by `code`), shown above; it
+deliberately does not restate the code list, so the two cannot drift.
 
-| code                     | http | meaning                                                |
-| ------------------------ | ---- | ------------------------------------------------------ |
-| `RUN_FROZEN`             | 422  | Attempt to mutate frozen assignment field on a Run     |
-| `RUN_NOT_RUNNING`        | 422  | End called on a non-running Run                        |
-| `RUN_INVALID_ALLOCATION` | 422  | Allocation sum != 100 or unknown variant name          |
-| `EXPERIMENT_RUNNING`     | 422  | Delete blocked by running Experiment                   |
-| `UNKNOWN_ISSUER`         | 401  | ID-JAG from unknown IdP                                |
-| `INTERACTION_REQUIRED`   | 403  | Email collision on claim; consent required             |
-| `NOT_FOUND`              | 404  | Resource not found (or not visible to caller)          |
-| `FORBIDDEN`              | 403  | Caller lacks role for this operation                   |
-| `VALIDATION_ERROR`       | 400  | Zod parse failure; details contains field-level errors |
+The OAuth-flow doors (ID-JAG unknown issuer, claim `interaction_required`) are a **separate**
+namespace with OAuth-shaped bodies (lowercase `error`), not the `ErrorResponse` union; they live
+in [auth-doors.md](./auth-doors.md) and [access-control-matrix.md](./access-control-matrix.md).
 
-Zod parse failures and domain-invariant failures return the same shape. No parallel error format exists.
+Zod parse failures and domain-invariant failures return the same `ErrorResponse` shape. No
+parallel error format exists.
 
 ## Validation contract
 

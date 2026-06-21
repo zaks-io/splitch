@@ -141,9 +141,9 @@ One canonical `ErrorResponse`, extensible by `code`:
 
 ```
 ErrorResponse {
-  code:     string   // shared enum; e.g. 'RUN_FROZEN', 'NOT_FOUND', 'INVALID_INPUT'
+  code:     string   // shared enum; e.g. 'RUN_FROZEN', 'FLAG_NOT_FOUND', 'VALIDATION_ERROR'
   message:  string   // human-readable
-  details?: unknown  // typed per-code extension (see below)
+  details:  unknown  // typed per-code extension; always present ({} for codes with no detail)
 }
 ```
 

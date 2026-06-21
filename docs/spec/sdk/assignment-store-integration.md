@@ -59,7 +59,7 @@ is always populated — the defaulting is a client ergonomic, not a server behav
 
 An Experiment pins one idType at Run creation. The SDK presents the idType the caller
 provided; the Worker validates it matches the Experiment's pinned idType and returns a
-`422 VALIDATION_ERROR` if not.
+`400 VALIDATION_ERROR` if not.
 
 ## Holdover invariants
 

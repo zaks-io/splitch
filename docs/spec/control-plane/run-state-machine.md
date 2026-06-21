@@ -134,13 +134,17 @@ decision-valid result with `DECISION_LOCKED`.
 
 ## Error codes for Run invariants
 
-| code                     | when                                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------------- |
-| `RUN_FROZEN`             | Attempt to mutate frozen assignment field on a running Run                              |
-| `RUN_NOT_RUNNING`        | Attempt to end a Run that is not `running`                                              |
-| `RUN_INVALID_ALLOCATION` | Allocation percentages do not sum to 100, or unknown variant name                       |
-| `EXPERIMENT_NO_DRAFT`    | Start attempted when draft has no changes from current Run                              |
-| `VARIANT_NOT_AVAILABLE`  | A referenced Variant is not in the Flag's available set for this Environment (ADR-0028) |
+These are the canonical `ErrorCode` values relevant to Run lifecycle. Codes, detail shapes, and
+HTTP status live once in [../contracts/error-responses.md](../contracts/error-responses.md); this
+table is the Run-scoped subset for quick reference (it names codes, not statuses, to avoid drift).
+
+| code                    | when                                                                                    |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| `RUN_FROZEN`            | Attempt to mutate a frozen assignment field on a running Run                            |
+| `RUN_NOT_RUNNING`       | Attempt to end (or otherwise run-only-op) a Run that is not `running`                   |
+| `ALLOCATION_INVALID`    | Allocation percentages do not sum to 100, or unknown variant name                       |
+| `EXPERIMENT_NO_DRAFT`   | Start attempted when draft has no changes from current Run                              |
+| `VARIANT_NOT_AVAILABLE` | A referenced Variant is not in the Flag's available set for this Environment (ADR-0028) |
 
 ## Sources
 

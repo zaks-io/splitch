@@ -96,8 +96,9 @@ POST /apps/:appId/peek-evaluate
 Authorization: Bearer <apiKey>      -- API Key (server-side), NOT a Client Key (ADR-0034)
 ```
 
-A Client Key presented to this endpoint is rejected `401 INVALID_CREDENTIAL`. The Worker gates
-peek on an API Key's `data-plane:evaluate` scope, the same credential the server-side SDK holds.
+A Client Key presented to this endpoint is rejected `403 INSUFFICIENT_SCOPES` (the key is valid but
+structurally lacks the peek scope; a missing/invalid credential is `401 UNAUTHORIZED`). The Worker
+gates peek on an API Key's `data-plane:evaluate` scope, the same credential the server-side SDK holds.
 
 Request: same as `EvaluateRequest` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
 

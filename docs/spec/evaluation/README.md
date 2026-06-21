@@ -9,16 +9,16 @@ zero superposition — every branch is visible, every decision maps to one point
 
 ## Files
 
-| File                                                                 | Purpose                                                                                                                                           |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [assign-pure-function.md](./assign-pure-function.md)                 | `assign(Run, targetingKey) -> variantName` — signature, determinism contract, no-event discipline                                                 |
-| [run-lifecycle.md](./run-lifecycle.md)                               | Run state machine (`draft → running → ended`), the three edit types, what's frozen vs recomputable                                                |
-| [provider-port.md](./provider-port.md)                               | Provider interface as consumed by evaluate path — stateless config resolver, FlagConfig/ExperimentConfig/TargetingRule shapes                     |
-| [assignment-store-port.md](./assignment-store-port.md)               | Assignment Store interface (`getAll`/`put`), key/value shapes, KV/DO substrate, holdover write failure contract                                   |
-| [evaluate-path-orchestration.md](./evaluate-path-orchestration.md)   | Hot-path pseudocode orchestrating Provider + Assignment Store; EvaluateResult shape; no-superposition guarantee                                   |
-| [holdover-and-replay-policy.md](./holdover-and-replay-policy.md)     | Holdover predicate, replay semantic, experience-vs-analysis split, no-re-counting invariant                                                       |
-| [exposure-firing-and-accessor.md](./exposure-firing-and-accessor.md) | `evaluate()` vs `peekVariant()`/`verify()` accessor contract; Exposure event shape; first-touch identity + wire dedup_key; holdover short-circuit |
-| [test-evaluation-endpoint.md](./test-evaluation-endpoint.md)         | Control-plane dry-run endpoint — request/response shapes, ReasonDetail discriminated union, structural exposure-free guarantee                    |
+| File                                                                     | Purpose                                                                                                                                                             |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [assign-pure-function.md](./assign-pure-function.md)                     | `assign(Run, targetingKey) -> variantName` — signature, determinism contract, no-event discipline                                                                   |
+| [run-lifecycle.md](./run-lifecycle.md)                                   | Run state machine (`draft → running → ended`), the three edit types, what's frozen vs recomputable                                                                  |
+| [provider-port.md](./provider-port.md)                                   | Provider interface as consumed by evaluate path — stateless config resolver, FlagConfig/ExperimentConfig/TargetingRule shapes                                       |
+| [assignment-store-port.md](./assignment-store-port.md)                   | Assignment Store interface (`getAll`/`put`), key/value shapes, KV/DO substrate, holdover write failure contract                                                     |
+| [evaluate-path-orchestration.md](./evaluate-path-orchestration.md)       | Hot-path pseudocode orchestrating Provider + Assignment Store; EvaluateResult shape; no-superposition guarantee                                                     |
+| [holdover-and-replay-policy.md](./holdover-and-replay-policy.md)         | Holdover predicate, replay semantic, experience-vs-analysis split, no-re-counting invariant                                                                         |
+| [exposure-firing-and-accessor.md](./exposure-firing-and-accessor.md)     | `evaluate()` vs `peekVariant()`/`verify()` accessor contract; Exposure event shape; first-touch identity + wire dedup_key; holdover short-circuit                   |
+| [../sdk/test-evaluation-endpoint.md](../sdk/test-evaluation-endpoint.md) | Control-plane dry-run endpoint — request/response shapes, ReasonDetail discriminated union, structural exposure-free guarantee (single spec; lives in the SDK area) |
 
 ## Key invariants across files
 

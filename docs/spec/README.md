@@ -88,8 +88,8 @@ Some topics are touched by more than one area, each from its own angle. The cano
   [`pipeline/exposure-event-contract.md`](./pipeline/exposure-event-contract.md).
 - **Test-evaluation (dry-run)** → canonical envelope:
   [`contracts/request-response-envelopes-conventions.md`](./contracts/request-response-envelopes-conventions.md);
-  behavior: [`evaluation/test-evaluation-endpoint.md`](./evaluation/test-evaluation-endpoint.md) +
-  SDK distinction: [`sdk/test-evaluation-endpoint.md`](./sdk/test-evaluation-endpoint.md). Reads the same KV-backed config the data plane reads.
+  behavior + surface: [`sdk/test-evaluation-endpoint.md`](./sdk/test-evaluation-endpoint.md)
+  (the single spec for this endpoint). Reads the same KV-backed config the data plane reads.
 - **Privacy lifecycle / deletion / export** → [`platform/privacy-data-lifecycle.md`](./platform/privacy-data-lifecycle.md)
   is the source of truth. Narrow storage and endpoint specs link there instead of redefining lifecycle rules.
 - **Agent-verifiable Done** → [`platform/agent-verification.md`](./platform/agent-verification.md)

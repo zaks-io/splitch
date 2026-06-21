@@ -36,6 +36,10 @@ ErrorCode =
   | 'RUN_FROZEN'                  // attempted assignment edit on a running Run
   | 'DECISION_LOCKED'             // attempted decision-family / alpha edit on a running Run
   | 'TARGETING_KEY_MISMATCH'      // targetingKey changed; a new Run is required
+  | 'RUN_NOT_RUNNING'            // End (or other running-only op) called on a non-running Run
+  | 'EXPERIMENT_RUNNING'         // operation (e.g. delete) blocked while the Experiment has a running Run
+  | 'EXPERIMENT_NO_DRAFT'        // Start attempted when the draft has no changes from the current Run
+  | 'VARIANT_NOT_AVAILABLE'      // a referenced Variant is not in the Flag's available set for this Environment (ADR-0028)
 
   // Not found
   | 'EXPERIMENT_NOT_FOUND'
@@ -65,6 +69,8 @@ ErrorCode =
 
   // System
   | 'RATE_LIMITED'
+  | 'SERVICE_UNAVAILABLE'         // Provider config could not be resolved; retryable (503 + Retry-After).
+                                 //   SDK maps this to OpenFeature errorCode PROVIDER_NOT_READY (ADR-0036)
   | 'PRIVACY_JOB_FAILED'
   | 'INTERNAL_SERVER_ERROR'       // includes corrupted KV blob (fail-loud per ADR-0025)
 ```
@@ -83,12 +89,17 @@ ErrorCode =
 | `RUN_FROZEN`                    | `{ frozenFields: string[], currentRunId: string, attemptedChange: string }`                                 |
 | `DECISION_LOCKED`               | `{ lockedFields: string[], currentRunId: string, attemptedChange: string }`                                 |
 | `TARGETING_KEY_MISMATCH`        | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string }`                      |
+| `RUN_NOT_RUNNING`               | `{ runId: string, currentState: 'draft' \| 'ended', attemptedOp: string }`                                  |
+| `EXPERIMENT_RUNNING`            | `{ experimentId: string, runningRunId: string, attemptedOp: string }`                                       |
+| `EXPERIMENT_NO_DRAFT`           | `{ experimentId: string, currentRunId: string \| null }`                                                    |
+| `VARIANT_NOT_AVAILABLE`         | `{ flagId: string, environmentId: string, missingVariants: string[] }`                                      |
 | `INSUFFICIENT_SCOPES`           | `{ requiredScopes: string[], heldScopes: string[] }`                                                        |
 | `LAST_OWNER_REQUIRED`           | `{ orgId: string }`                                                                                         |
 | `PRIVACY_CONFIRMATION_REQUIRED` | `{ confirmationRequired: true, confirmationExpiresAt: string }`                                             |
 | `PRIVACY_JOB_FAILED`            | `{ requestId: string, failedStores: string[] }`                                                             |
 | `MULTIPLE_VARIANT_CONFLICT`     | `{ experimentId: string, runId: string, idType: string, targetingKeyHash: string }`                         |
 | `RATE_LIMITED`                  | `{ retryAfterMs: number }`                                                                                  |
+| `SERVICE_UNAVAILABLE`           | `{ retryAfterMs: number }` — Provider unresolvable; mirrors the `Retry-After` response header               |
 | `ORIGIN_NOT_ALLOWED`            | `{ origin: string, hint: string }` — names the offending origin + how to fix (add to allow-list / open key) |
 | `APP_MISMATCH`                  | `{}`                                                                                                        |
 | All `*_NOT_FOUND` codes         | `{}`                                                                                                        |
@@ -169,15 +180,16 @@ frozenFields = [
 
 ## HTTP status mapping
 
-| code group                                                                                                                                     | HTTP status |
-| ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `VALIDATION_ERROR`, `ALLOCATION_INVALID`, `ACTIVATION_TIMESTAMP_INVALID`, `INVALID_*`                                                          | 400         |
-| `UNAUTHORIZED`                                                                                                                                 | 401         |
-| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`, `ORIGIN_NOT_ALLOWED`, `APP_MISMATCH`                                                 | 403         |
-| `*_NOT_FOUND`                                                                                                                                  | 404         |
-| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED` | 409         |
-| `RATE_LIMITED`                                                                                                                                 | 429         |
-| `PRIVACY_JOB_FAILED`, `INTERNAL_SERVER_ERROR`                                                                                                  | 500         |
+| code group                                                                                                                                                                                                                              | HTTP status |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `VALIDATION_ERROR`, `ALLOCATION_INVALID`, `ACTIVATION_TIMESTAMP_INVALID`, `INVALID_*`                                                                                                                                                   | 400         |
+| `UNAUTHORIZED`                                                                                                                                                                                                                          | 401         |
+| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`, `ORIGIN_NOT_ALLOWED`, `APP_MISMATCH`                                                                                                                                          | 403         |
+| `*_NOT_FOUND`                                                                                                                                                                                                                           | 404         |
+| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `RUN_NOT_RUNNING`, `EXPERIMENT_RUNNING`, `EXPERIMENT_NO_DRAFT`, `VARIANT_NOT_AVAILABLE`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED` | 409         |
+| `RATE_LIMITED`                                                                                                                                                                                                                          | 429         |
+| `PRIVACY_JOB_FAILED`, `INTERNAL_SERVER_ERROR`                                                                                                                                                                                           | 500         |
+| `SERVICE_UNAVAILABLE`                                                                                                                                                                                                                   | 503         |
 
 ## Sources
 
