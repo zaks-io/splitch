@@ -43,6 +43,7 @@ Uncached or root-wide tasks:
 | ------------------------------------- | ----- | ---------------------------------------------------------------------- |
 | `format:check` / `format:write`       | no    | repo-wide Biome formatting plus Prettier for Markdown only             |
 | `depcruise`                           | no    | root architecture import graph gate                                    |
+| `duplicates`                          | no    | root duplicate-code detection over source-bearing paths                |
 | `knip`                                | no    | root unused files, exports, dependencies, and config-hints gate        |
 | `secrets:*`                           | no    | Gitleaks scans working tree or git history; never cache security scans |
 | `d1:migrate:local` / `tinybird:local` | no    | local backing-resource validators                                      |
@@ -58,7 +59,8 @@ production builds cannot reuse the wrong cache entry.
 
 Local hook policy lives in [local-quality-gates.md](./local-quality-gates.md). Commit hooks block
 format, lint, type, Knip, and Gitleaks failures before code is committed. The pre-push hook runs the
-same validation set as CI except hosted smoke tests and remote-state mutations.
+same validation set as CI except hosted smoke tests and remote-state mutations, including duplicate-code
+detection.
 
 ## Package layout
 

@@ -73,14 +73,14 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 
 ## Required GitHub workflows
 
-| Workflow                | Trigger                                              | Concurrency                      | Required result                                                                                                        |
-| ----------------------- | ---------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `ci`                    | PR and push to main                                  | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, Knip, Gitleaks, local D1/Tinybird checks |
-| `gitleaks`              | PR and push                                          | none                             | wired: full git secret scan                                                                                            |
-| `deploy-shared-preview` | manual dispatch, or trusted maintainer label/comment | `shared-preview-deploy`, queued  | not wired: deploy selected ref to the one hosted preview target                                                        |
-| `reset-shared-preview`  | manual dispatch                                      | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                          |
-| `deploy-production`     | push to main, or manual dispatch from main           | `production-deploy`, queued      | not wired: migration-backed production release with smoke checks                                                       |
-| `rollback-production`   | manual dispatch                                      | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                           |
+| Workflow                | Trigger                                              | Concurrency                      | Required result                                                                                                               |
+| ----------------------- | ---------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `ci`                    | PR and push to main                                  | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks |
+| `gitleaks`              | PR and push                                          | none                             | wired: full git secret scan                                                                                                   |
+| `deploy-shared-preview` | manual dispatch, or trusted maintainer label/comment | `shared-preview-deploy`, queued  | not wired: deploy selected ref to the one hosted preview target                                                               |
+| `reset-shared-preview`  | manual dispatch                                      | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                 |
+| `deploy-production`     | push to main, or manual dispatch from main           | `production-deploy`, queued      | not wired: migration-backed production release with smoke checks                                                              |
+| `rollback-production`   | manual dispatch                                      | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                  |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.

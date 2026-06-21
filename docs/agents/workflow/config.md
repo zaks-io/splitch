@@ -15,7 +15,7 @@ production deploy, and real backing resources are still not provisioned.
   `package.json` files, Worker `wrangler.jsonc` files, `tinybird/`, filesystem
   listing.
 - Safe commands run: `pnpm typecheck`, `pnpm format:check`, `pnpm lint`,
-  `pnpm build`, `pnpm test`, `pnpm depcruise`, `pnpm knip`, and
+  `pnpm build`, `pnpm test`, `pnpm depcruise`, `pnpm duplicates`, `pnpm knip`, and
   `pnpm verify:ci` passed locally on 2026-06-21.
 - Read-only tool calls: Linear `list_teams` (query "splitch"), `get_team`,
   `list_issue_statuses`, `list_issue_labels` (limit 250), `list_projects`,
@@ -46,7 +46,7 @@ production deploy, and real backing resources are still not provisioned.
 - Commit gate: `pnpm verify:commit`
 - Build: `pnpm build`
 - Test: `pnpm test`
-- Lint / format / typecheck / Knip / Gitleaks: wired through root scripts,
+- Lint / format / typecheck / Knip / duplicate-code / Gitleaks: wired through root scripts,
   Turborepo, Lefthook, and GitHub Actions. See
   `docs/spec/platform/local-quality-gates.md`.
 - Generated artifacts: package-local `dist/**`, `.output/**`, `build/**`,

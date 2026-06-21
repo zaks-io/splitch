@@ -1,0 +1,9 @@
+{
+  "minTokens": 80,
+  "minLines": 12,
+  "mode": "weak",
+  "formats": ["typescript", "tsx", "javascript", "jsx"],
+  "ignore": ["**/*.test.ts", "**/*.spec.ts", "**/dist/**", "**/.turbo/**", "**/.wrangler/**"],
+  "reporters": ["console"],
+  "threshold": 0
+}

@@ -7,7 +7,8 @@ Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 
 Use Lefthook for checked-in Git hook orchestration, Turborepo for package-aware task execution,
 Biome for lint/format, TypeScript for type checks, Knip for unused files/exports/dependencies,
-Gitleaks for secret scanning, dependency-cruiser for architecture boundaries, and Vitest for tests.
+jscpd for duplicate-code detection, Gitleaks for secret scanning, dependency-cruiser for architecture
+boundaries, and Vitest for tests.
 
 The local hooks are not a replacement for CI. They are the first failure surface so agents and humans
 catch ordinary failures before pushing.
@@ -38,6 +39,7 @@ The root `package.json` exposes these scripts:
 | `test`             | `turbo run test`                                       |
 | `build`            | `turbo run build`                                      |
 | `depcruise`        | `dependency-cruiser --config .dependency-cruiser.cjs`  |
+| `duplicates`       | `jscpd --config .jscpd.json --exit-code`               |
 | `knip`             | `knip --treat-config-hints-as-errors`                  |
 | `secrets:worktree` | `gitleaks dir --redact --no-banner .`                  |
 | `secrets:git`      | `gitleaks git --redact --no-banner .`                  |
@@ -65,7 +67,7 @@ deployments, or secrets.
 `pre-push` mirrors CI without smoke tests:
 
 - Run the same validation sequence as `verify:ci`: format check, lint, typecheck, tests, build,
-  dependency-cruiser, Knip, Gitleaks, local D1 migrations, and Tinybird Local validation.
+  dependency-cruiser, jscpd, Knip, Gitleaks, local D1 migrations, and Tinybird Local validation.
 - Skip only hosted smoke checks, shared-preview deploy/reset, production deploy, rollback, and other
   remote-state mutations.
 - Use Turborepo remote cache when `TURBO_TOKEN` and `TURBO_TEAM` are available; local cache is still
@@ -95,6 +97,17 @@ Knip is required in commit, pre-push, and CI gates.
 - Generated route files, OpenAPI artifacts, and Worker bundles must be generated before Knip when Knip
   needs them to resolve the graph.
 
+## Duplicate-code policy
+
+jscpd is required in pre-push and CI gates.
+
+- Scan source-bearing paths only: `apps`, `packages`, and `scripts`.
+- Keep docs out of the duplicate-code gate. Specification files intentionally repeat canonical terms
+  and cross-references.
+- Keep the threshold at `0` so any detected source clone fails the gate.
+- Fix findings by extracting the shared capability, narrowing an over-broad scaffold, or adding a
+  narrowly justified ignore when the repetition is not executable source behavior.
+
 ## Gitleaks policy
 
 Gitleaks is required in commit, pre-push, and CI gates.
@@ -120,6 +133,7 @@ not best-effort warnings.
       `knip.json`, `.gitleaks.toml`, and `lefthook.yml`.
 - [x] Add package-level `lint`, `typecheck`, `test`, and `build` scripts.
 - [x] Add root `verify:commit`, `verify:push`, and `verify:ci` scripts.
+- [x] Wire jscpd duplicate-code detection into `verify:push` and `verify:ci`.
 - [x] Install Lefthook during setup through `prepare`.
 - [x] Wire CI to call `pnpm verify:ci` and the pre-push hook to call `pnpm verify:push`.
 - [x] Keep remote-mutating smoke/deploy steps outside commit and pre-push hooks.
@@ -138,3 +152,5 @@ not best-effort warnings.
   <https://knip.dev/guides/handling-issues>
 - Gitleaks docs:
   <https://github.com/gitleaks/gitleaks>
+- jscpd docs:
+  <https://github.com/kucherenko/jscpd>
