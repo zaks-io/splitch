@@ -14,7 +14,7 @@ replay-vs-`assign()` choice, first-touch write timing, runId stamping. The store
 `assign()`, never decides anything.
 
 This rejects a "deeper" `resolveAssignment(exp, run, key) -> variant` that would consult holdover, fall
-through to `assign()`, and maybe stamp — all internally. That interface is *shallower than it looks*: it is
+through to `assign()`, and maybe stamp — all internally. That interface is _shallower than it looks_: it is
 more complex than what it hides, because a caller cannot tell from the call site which of three states
 occurred (replayed / freshly assigned / stamped). It is a superposition you have to read the implementation
 to collapse. Dumb get/put keeps the evaluate path a readable straight line where every branch is visible:

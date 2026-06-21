@@ -1,7 +1,7 @@
 # Environments & promotion UX
 
 > **Status: stub — deferred to the Control Panel UX design session.** The domain model
-> (ADR-0027/0028/0029) and the control-plane endpoints are pinned; the *screens* are not yet
+> (ADR-0027/0028/0029) and the control-plane endpoints are pinned; the _screens_ are not yet
 > designed. This file exists so cross-references resolve and lists what the UX session must cover.
 
 ## What is settled (see the ADRs / control-plane specs)
@@ -9,7 +9,7 @@
 - **Environment** is a URL scope segment `/{orgSlug}/{appSlug}/{env}/…` with an environment switcher
   (ADR-0027, [navigation-and-ia.md](./navigation-and-ia.md)).
 - **Flag Configuration** is per-Environment (available Variants, targeting, rollout, enabled state);
-  the Flag *definition* (key, schema, Variant catalog) is App-level (ADR-0028).
+  the Flag _definition_ (key, schema, Variant catalog) is App-level (ADR-0028).
 - **Promotion** copies a Flag Configuration — or one Variant's availability — between Environments
   (`POST /apps/{app_id}/envs/{target_environment_id}/flags/{flag_id}/promote`,
   [../control-plane/endpoints-flag-segment.md](../control-plane/endpoints-flag-segment.md)).

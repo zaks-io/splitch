@@ -71,27 +71,27 @@ ErrorCode =
 
 ## Per-code detail shapes
 
-| code | details shape |
-|---|---|
-| `VALIDATION_ERROR` | `{ issues: Array<{ path: string[], message: string }> }` — Zod `.format()` output |
-| `ALLOCATION_INVALID` | `{ expected: 100, got: number, variantAllocations: Record<string, number> }` |
-| `ACTIVATION_TIMESTAMP_INVALID` | `{ activationTs: string, firstExposureTs: string, message: 'activation must occur after first exposure' }` |
-| `INVALID_PAGINATION` | `{ field: 'cursor' \| 'limit', reason: string }` |
-| `INVALID_SORT` | `{ field: string, allowedFields: string[] }` |
-| `RUN_FROZEN` | `{ frozenFields: string[], currentRunId: string, attemptedChange: string }` |
-| `DECISION_LOCKED` | `{ lockedFields: string[], currentRunId: string, attemptedChange: string }` |
-| `TARGETING_KEY_MISMATCH` | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string }` |
-| `INSUFFICIENT_SCOPES` | `{ requiredScopes: string[], heldScopes: string[] }` |
-| `LAST_OWNER_REQUIRED` | `{ orgId: string }` |
-| `PRIVACY_CONFIRMATION_REQUIRED` | `{ confirmationRequired: true, confirmationExpiresAt: string }` |
-| `PRIVACY_JOB_FAILED` | `{ requestId: string, failedStores: string[] }` |
-| `MULTIPLE_VARIANT_CONFLICT` | `{ experimentId: string, runId: string, idType: string, targetingKeyHash: string }` |
-| `RATE_LIMITED` | `{ retryAfterMs: number }` |
-| All `*_NOT_FOUND` codes | `{}` |
-| `UNAUTHORIZED` | `{}` |
-| `CREDENTIAL_REVOKED` | `{}` |
-| `FORBIDDEN` | `{}` |
-| `INTERNAL_SERVER_ERROR` | `{}` |
+| code                            | details shape                                                                                              |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_ERROR`              | `{ issues: Array<{ path: string[], message: string }> }` — Zod `.format()` output                          |
+| `ALLOCATION_INVALID`            | `{ expected: 100, got: number, variantAllocations: Record<string, number> }`                               |
+| `ACTIVATION_TIMESTAMP_INVALID`  | `{ activationTs: string, firstExposureTs: string, message: 'activation must occur after first exposure' }` |
+| `INVALID_PAGINATION`            | `{ field: 'cursor' \| 'limit', reason: string }`                                                           |
+| `INVALID_SORT`                  | `{ field: string, allowedFields: string[] }`                                                               |
+| `RUN_FROZEN`                    | `{ frozenFields: string[], currentRunId: string, attemptedChange: string }`                                |
+| `DECISION_LOCKED`               | `{ lockedFields: string[], currentRunId: string, attemptedChange: string }`                                |
+| `TARGETING_KEY_MISMATCH`        | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string }`                     |
+| `INSUFFICIENT_SCOPES`           | `{ requiredScopes: string[], heldScopes: string[] }`                                                       |
+| `LAST_OWNER_REQUIRED`           | `{ orgId: string }`                                                                                        |
+| `PRIVACY_CONFIRMATION_REQUIRED` | `{ confirmationRequired: true, confirmationExpiresAt: string }`                                            |
+| `PRIVACY_JOB_FAILED`            | `{ requestId: string, failedStores: string[] }`                                                            |
+| `MULTIPLE_VARIANT_CONFLICT`     | `{ experimentId: string, runId: string, idType: string, targetingKeyHash: string }`                        |
+| `RATE_LIMITED`                  | `{ retryAfterMs: number }`                                                                                 |
+| All `*_NOT_FOUND` codes         | `{}`                                                                                                       |
+| `UNAUTHORIZED`                  | `{}`                                                                                                       |
+| `CREDENTIAL_REVOKED`            | `{}`                                                                                                       |
+| `FORBIDDEN`                     | `{}`                                                                                                       |
+| `INTERNAL_SERVER_ERROR`         | `{}`                                                                                                       |
 
 ---
 
@@ -113,17 +113,20 @@ frozenFields = [
 ## Per-endpoint error contracts (representative)
 
 **POST /api/apps/:appId/envs/:environmentId/experiments/:id/start** (open a new Experiment Run)
+
 - `ALLOCATION_INVALID` — percentages don't sum to 100
 - `VALIDATION_ERROR` — malformed request body
 - `EXPERIMENT_NOT_FOUND` — `experimentId` not found in App/Environment
 - `RUN_FROZEN` — Experiment already has a running Run (must end it before opening a new one via Start)
 
 **PATCH /api/apps/:appId/envs/:environmentId/experiments/:id/runs/:runId** (non-material patch only)
+
 - `RUN_FROZEN` — if request body includes any frozen field (`salt`, `allocation`, `variantSet`, `targetingSegmentId`)
 - `RUN_NOT_FOUND`
 - `VALIDATION_ERROR`
 
 **PATCH /api/apps/:appId/envs/:environmentId/experiments/:experimentId** (pause / resume / measurement edits)
+
 - `EXPERIMENT_NOT_FOUND`
 - `RUN_FROZEN` — if patch includes `targetingKey` and there is a running Run
 - `DECISION_LOCKED` — if patch changes confidence level, horizon/tuning fields, goal Metric membership, Guardrail thresholds, or Primary Dimensions for a running Run's decision-valid result
@@ -131,21 +134,25 @@ frozenFields = [
 - `VALIDATION_ERROR`
 
 **PATCH /api/metrics/:metricId** (measurement edit, no new Run)
+
 - `METRIC_NOT_FOUND`
 - `VALIDATION_ERROR`
   — Note: Metric patches never return `RUN_FROZEN`; they recompute over the existing Run (ADR-0003).
 
 **PATCH /api/flags/:flagId/variants/:variantId**
+
 - `RUN_FROZEN` — if any running Run's `variantSet` includes this Variant (value is frozen per Run)
 - `FLAG_NOT_FOUND` / `VARIANT_NOT_FOUND`
 - `VALIDATION_ERROR`
 
 **GET /api/flags/:flagId/test-evaluate** (dry-run, control-plane token)
+
 - `FLAG_NOT_FOUND`
 - `VALIDATION_ERROR`
   — Note: never returns Exposure-related errors; never writes.
 
 **POST /api/sdk/evaluate** (data-plane, Client Key)
+
 - `APP_NOT_FOUND` / `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED`
   — Note: no `RUN_FROZEN`, no `INSUFFICIENT_SCOPES` (Client Key holds only `evaluate`, enforced structurally); response is bare `{ variantName, variantId }`, never reason or rule set.
 
@@ -153,15 +160,15 @@ frozenFields = [
 
 ## HTTP status mapping
 
-| code group | HTTP status |
-|---|---|
-| `VALIDATION_ERROR`, `ALLOCATION_INVALID`, `ACTIVATION_TIMESTAMP_INVALID`, `INVALID_*` | 400 |
-| `UNAUTHORIZED` | 401 |
-| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES` | 403 |
-| `*_NOT_FOUND` | 404 |
-| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED` | 409 |
-| `RATE_LIMITED` | 429 |
-| `PRIVACY_JOB_FAILED`, `INTERNAL_SERVER_ERROR` | 500 |
+| code group                                                                                                                                     | HTTP status |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `VALIDATION_ERROR`, `ALLOCATION_INVALID`, `ACTIVATION_TIMESTAMP_INVALID`, `INVALID_*`                                                          | 400         |
+| `UNAUTHORIZED`                                                                                                                                 | 401         |
+| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`                                                                                       | 403         |
+| `*_NOT_FOUND`                                                                                                                                  | 404         |
+| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED` | 409         |
+| `RATE_LIMITED`                                                                                                                                 | 429         |
+| `PRIVACY_JOB_FAILED`, `INTERNAL_SERVER_ERROR`                                                                                                  | 500         |
 
 ## Sources
 

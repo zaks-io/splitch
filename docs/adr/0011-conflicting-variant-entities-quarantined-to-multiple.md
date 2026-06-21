@@ -5,7 +5,7 @@
 When an Entity's raw Exposures show **more than one distinct Variant within a single Run**, the dedup
 query buckets it into a `__multiple__` sentinel, **excludes it from all real arms**, and surfaces the rate
 as a **health metric** (GrowthBook's approach; ~1% tolerated, above which it signals a real defect). We do
-*not* take the first-touch (`MIN(ts)`) Variant and move on.
+_not_ take the first-touch (`MIN(ts)`) Variant and move on.
 
 The reason is splitch's own invariants. Given pure `assign()` (ADR-0001), an authoritative per-key
 holdover DO (ADR-0009), and assignment-edit-opens-a-new-Run (ADR-0003), a same-Run Variant conflict can
@@ -16,7 +16,7 @@ holdover DO (ADR-0009), and assignment-edit-opens-a-new-Run (ADR-0003), a same-R
 3. a **salt/allocation change without a new Run** — a direct ADR-0003 violation (these are
    assignment-affecting edits and must open a new Run; a measurement edit cannot cause a Variant conflict).
 
-All three are defects you want to see *loudly*. "First-touch wins" does not erase the conflict; it
+All three are defects you want to see _loudly_. "First-touch wins" does not erase the conflict; it
 **silently biases whichever arm won the timestamp**, and SRM will not reliably catch it because the
 Entity still counts cleanly in one arm — a corrupted Experiment behind a green dashboard, in the seam
 explicitly identified as the subtlest correctness seam in splitch.

@@ -12,14 +12,14 @@ days.
 
 ## Privacy roles
 
-| Data class | Examples | Role | Durable stores |
-|---|---|---|---|
-| Control-plane User data | WorkOS user ID, email in WorkOS, memberships, sessions, device-flow tokens | Splitch-controlled | WorkOS, D1 IDs, KV sessions, keychain/CLI |
-| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata | Customer-controlled | D1, KV config cache, per-App DO |
-| Entity data | Targeting Key, idType, Exposures, Activations, Assignment Store holdovers, Metric rows | Customer-controlled; Splitch is processor/service provider | Tinybird, KV, Assignment Store DO |
-| Audit/security data | control-plane mutation audit, auth door, actor ID, request logs | shared legal/security record | Tinybird audit log, D1 privacy request log |
-| Observability data | errors, traces, structured logs | Splitch-controlled operations data | Sentry, Axiom, Cloudflare logs |
-| Billing data | plan, Stripe customer/subscription IDs, invoices | Splitch-controlled billing data | D1, Stripe when enabled |
+| Data class              | Examples                                                                               | Role                                                       | Durable stores                             |
+| ----------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------ |
+| Control-plane User data | WorkOS user ID, email in WorkOS, memberships, sessions, device-flow tokens             | Splitch-controlled                                         | WorkOS, D1 IDs, KV sessions, keychain/CLI  |
+| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata   | Customer-controlled                                        | D1, KV config cache, per-App DO            |
+| Entity data             | Targeting Key, idType, Exposures, Activations, Assignment Store holdovers, Metric rows | Customer-controlled; Splitch is processor/service provider | Tinybird, KV, Assignment Store DO          |
+| Audit/security data     | control-plane mutation audit, auth door, actor ID, request logs                        | shared legal/security record                               | Tinybird audit log, D1 privacy request log |
+| Observability data      | errors, traces, structured logs                                                        | Splitch-controlled operations data                         | Sentry, Axiom, Cloudflare logs             |
+| Billing data            | plan, Stripe customer/subscription IDs, invoices                                       | Splitch-controlled billing data                            | D1, Stripe when enabled                    |
 
 ## Entity privacy identity
 
@@ -31,6 +31,7 @@ targeting_key_hash = key_version + ":" + HMAC_SHA256(app_privacy_salt[key_versio
 ```
 
 Rules:
+
 - `app_privacy_salt` is secret, App-scoped, versioned, and stored outside Tinybird.
 - New Entity rows use the latest salt version. Historical rows keep their original hash version.
 - Entity export/delete computes one `targeting_key_hash` per active salt version and operates on all
@@ -45,21 +46,21 @@ Rules:
 
 D1 owns a bounded `privacy_requests` table:
 
-| column | meaning |
-|---|---|
-| `request_id` | ULID |
-| `org_id` | Organization receiving the request |
-| `app_id` | nullable; present for App/Entity requests |
-| `request_type` | `access` \| `export` \| `correct` \| `delete` \| `opt_out_sale_share` \| `limit_sensitive` |
-| `subject_type` | `user` \| `organization` \| `app` \| `entity` |
-| `subject_ref` | WorkOS user ID, org/app ID, or JSON array of `targeting_key_hash` values |
-| `requested_by` | WorkOS user ID of the requester |
-| `status` | `received` \| `verifying` \| `processing` \| `completed` \| `denied` |
-| `received_at` | server timestamp |
-| `ack_due_at` | received_at + 10 business days |
-| `response_due_at` | received_at + 45 calendar days, extendable once |
-| `completed_at` | nullable |
-| `denial_reason` | nullable; policy/legal reason only |
+| column            | meaning                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------ |
+| `request_id`      | ULID                                                                                       |
+| `org_id`          | Organization receiving the request                                                         |
+| `app_id`          | nullable; present for App/Entity requests                                                  |
+| `request_type`    | `access` \| `export` \| `correct` \| `delete` \| `opt_out_sale_share` \| `limit_sensitive` |
+| `subject_type`    | `user` \| `organization` \| `app` \| `entity`                                              |
+| `subject_ref`     | WorkOS user ID, org/app ID, or JSON array of `targeting_key_hash` values                   |
+| `requested_by`    | WorkOS user ID of the requester                                                            |
+| `status`          | `received` \| `verifying` \| `processing` \| `completed` \| `denied`                       |
+| `received_at`     | server timestamp                                                                           |
+| `ack_due_at`      | received_at + 10 business days                                                             |
+| `response_due_at` | received_at + 45 calendar days, extendable once                                            |
+| `completed_at`    | nullable                                                                                   |
+| `denial_reason`   | nullable; policy/legal reason only                                                         |
 
 The ledger stores hashes and IDs, not email, raw Targeting Keys, or raw Evaluation Context attributes.
 Keep it for at least 24 months or the contractually configured audit period, whichever is longer.
@@ -68,12 +69,12 @@ Keep it for at least 24 months or the contractually configured audit period, whi
 
 Exports are asynchronous jobs with a signed, expiring download URL. Raw secrets are never exported.
 
-| Export | Included | Excluded |
-|---|---|---|
-| User export | WorkOS profile, org/app memberships, sessions, issued tokens metadata, audit entries where actor | API Key raw values, other users' data |
-| Organization export | Org, Apps, Environments, config, credential metadata, members, audit log, billing metadata | raw API Key values, processor-internal secrets |
-| App export | Flag/Experiment/Metric/Segment config, Runs, results, credential metadata, audit rows | other Apps in the Org |
-| Entity export | rows matching `targeting_key_hash` in Assignment Store, raw events, deduped snapshots, result inputs | raw Targeting Rules for non-admin requesters |
+| Export              | Included                                                                                             | Excluded                                       |
+| ------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| User export         | WorkOS profile, org/app memberships, sessions, issued tokens metadata, audit entries where actor     | API Key raw values, other users' data          |
+| Organization export | Org, Apps, Environments, config, credential metadata, members, audit log, billing metadata           | raw API Key values, processor-internal secrets |
+| App export          | Flag/Experiment/Metric/Segment config, Runs, results, credential metadata, audit rows                | other Apps in the Org                          |
+| Entity export       | rows matching `targeting_key_hash` in Assignment Store, raw events, deduped snapshots, result inputs | raw Targeting Rules for non-admin requesters   |
 
 Entity exports are scoped by App and idType. They include the categories, sources, purposes, and
 processors for the data, not only the physical rows.
@@ -82,13 +83,13 @@ processors for the data, not only the physical rows.
 
 Deletion is a two-phase job: stop future use first, then hard-purge every store that can hold the data.
 
-| Deletion | Immediate action | Purge action |
-|---|---|---|
-| User | revoke sessions, refresh tokens, CLI/MCP tokens; remove memberships | delete or disable WorkOS user; remove D1 memberships; replace actor display with deleted-user tombstone |
-| Personal Organization | revoke all SDK credentials and stop ingest/evaluate | purge all Apps, config, KV, DO state, Tinybird data, WorkOS org |
-| Enterprise Organization | require owner approval and SSO/billing checks | same as personal Org after approval; preserve contracted audit records |
-| App | revoke App credentials; block SDK evaluate/ingest | purge D1/KV config, Assignment Store, event rows, snapshots, rollups, audit read visibility |
-| Entity | insert `entity_deletions` tombstone and exclude from analysis | delete Assignment Store key/DO row and Tinybird rows matching `targeting_key_hash` |
+| Deletion                | Immediate action                                                    | Purge action                                                                                            |
+| ----------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| User                    | revoke sessions, refresh tokens, CLI/MCP tokens; remove memberships | delete or disable WorkOS user; remove D1 memberships; replace actor display with deleted-user tombstone |
+| Personal Organization   | revoke all SDK credentials and stop ingest/evaluate                 | purge all Apps, config, KV, DO state, Tinybird data, WorkOS org                                         |
+| Enterprise Organization | require owner approval and SSO/billing checks                       | same as personal Org after approval; preserve contracted audit records                                  |
+| App                     | revoke App credentials; block SDK evaluate/ingest                   | purge D1/KV config, Assignment Store, event rows, snapshots, rollups, audit read visibility             |
+| Entity                  | insert `entity_deletions` tombstone and exclude from analysis       | delete Assignment Store key/DO row and Tinybird rows matching `targeting_key_hash`                      |
 
 `entity_deletions` contains `{ app_id, id_type, targeting_key_hash, delete_before_ts, requested_at,
 completed_at }`. The Analysis Worker MUST exclude rows where `server_ts <= delete_before_ts` as soon as
@@ -129,6 +130,7 @@ Privacy tests are required before any production implementation of evaluate, ing
 or deletion can ship.
 
 Minimum required coverage:
+
 - Redaction unit tests for nested Evaluation Context values, common PII names, breadcrumbs, exception
   messages, arrays, and stringified JSON.
 - Cross-surface tests proving every Worker, CLI, MCP, SDK test harness, and frontend boundary calls the

@@ -1,6 +1,7 @@
 ---
 description: "Use to turn a spec, PRD, or epic ticket into dependency-ordered one-PR implementation tickets, adopting any hand-created tickets, applying the agent-ready body contract and kind labels, and emitting a dependency graph and predicted file footprint."
 ---
+
 # To Issues
 
 Turn planned work into implementation tickets that are ready to run and fit the

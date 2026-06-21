@@ -4,12 +4,12 @@ The pipeline drives the Assignment Store write. This document specifies the trig
 
 ## Two jobs, two authorities
 
-| Job | Primitive | Authority |
-|---|---|---|
-| Experience (what the Entity sees on the next request) | Durable Object → KV | DO is truth |
-| Analysis (what the denominator counts) | `raw_events` → dedup query | Raw log + dedup query is truth |
+| Job                                                   | Primitive                  | Authority                      |
+| ----------------------------------------------------- | -------------------------- | ------------------------------ |
+| Experience (what the Entity sees on the next request) | Durable Object → KV        | DO is truth                    |
+| Analysis (what the denominator counts)                | `raw_events` → dedup query | Raw log + dedup query is truth |
 
-The two can momentarily disagree (the DO write guesses first-touch; the batch dedup confirms it later). That is fine — the DO governs what a returning Entity *sees*, never what analysis *counts*.
+The two can momentarily disagree (the DO write guesses first-touch; the batch dedup confirms it later). That is fine — the DO governs what a returning Entity _sees_, never what analysis _counts_.
 
 ## DO key structure
 
@@ -37,7 +37,7 @@ The DO executes `get → decide → put` atomically (no intervening non-storage 
 1. **Get** the current value for this key from DO storage.
 2. **If absent**: write `{ run_id, variant }` (first-touch winner).
 3. **If present and same `run_id`**: no-op (Entity already has a holdover for this Run).
-4. **If present with different `run_id`**: the Entity is a holdover from a prior Run. The evaluate path handles the replay decision — the DO write here is for the *new* Run's first-touch only if the new Run's `run_id` is not yet recorded. On Run boundary, a returning holdover Entity is NOT re-counted in the new Run; it keeps its prior Variant (sticky experience, ADR-0006). The DO stores only the most recent `(run_id, variant)` per key.
+4. **If present with different `run_id`**: the Entity is a holdover from a prior Run. The evaluate path handles the replay decision — the DO write here is for the _new_ Run's first-touch only if the new Run's `run_id` is not yet recorded. On Run boundary, a returning holdover Entity is NOT re-counted in the new Run; it keeps its prior Variant (sticky experience, ADR-0006). The DO stores only the most recent `(run_id, variant)` per key.
 
 ## Write-through to KV
 
@@ -62,12 +62,12 @@ The DO write is non-blocking — executed in `ctx.waitUntil` (Cloudflare's backg
 
 ## Failure contract
 
-| Failure | Effect on experience | Effect on analysis | Recovery |
-|---|---|---|---|
-| DO write fails (timeout or error) | Holdover miss on next cross-POP request | None — raw log append unaffected | Async retry; assign() deterministic → same Variant computed on miss |
-| KV write-through fails (after DO write succeeds) | KV miss for ~60s | None | Self-healing: next evaluate hits KV miss → DO write-through retried |
-| Raw log append fails (after DO write succeeds) | DO has holdover → experience correct | Exposure never in dedup → Entity not counted in analysis Run | At-least-once retry on the ingest call; SDK re-fires on next evaluate |
-| Both DO write and raw log append fail | No holdover; no analysis row | None — clean miss | Both retry independently |
+| Failure                                          | Effect on experience                    | Effect on analysis                                           | Recovery                                                              |
+| ------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------- |
+| DO write fails (timeout or error)                | Holdover miss on next cross-POP request | None — raw log append unaffected                             | Async retry; assign() deterministic → same Variant computed on miss   |
+| KV write-through fails (after DO write succeeds) | KV miss for ~60s                        | None                                                         | Self-healing: next evaluate hits KV miss → DO write-through retried   |
+| Raw log append fails (after DO write succeeds)   | DO has holdover → experience correct    | Exposure never in dedup → Entity not counted in analysis Run | At-least-once retry on the ingest call; SDK re-fires on next evaluate |
+| Both DO write and raw log append fail            | No holdover; no analysis row            | None — clean miss                                            | Both retry independently                                              |
 
 No distributed transaction. The failure modes are accepted as self-healing within the ~60s KV propagation window.
 
@@ -92,6 +92,7 @@ There is no multi-Run holdover history in the DO. The pipeline's `raw_events` lo
 **Boundary:** Evaluation Worker ↔ Assignment Store DO
 
 **What each side owns:**
+
 - Evaluation Worker: decides when to call `putIfAbsent` (on KV miss); supplies `(key, run_id, variant)`.
 - DO: serializes concurrent writes; guarantees one true first-touch winner; write-throughs to KV.
 

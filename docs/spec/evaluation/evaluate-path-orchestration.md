@@ -114,6 +114,7 @@ on the hashing identity.
 
 `evaluate()` runs on Workers, Durable Objects, and lambdas (five runtimes). It must
 produce identical output on all. This requires:
+
 - `assign()` is pure (no runtime-specific entropy).
 - `AssignmentStore.getAll()` is edge-local (~10ms KV read; no DO hop on evaluate).
 - `Provider.getFlag/getExperiment()` are cache reads (no upstream network hop on hot path).

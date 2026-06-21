@@ -12,14 +12,14 @@ assign(run: RunConfig, targetingKey: string) -> string   // returns Variant name
 
 `RunConfig` is the frozen snapshot the Provider delivers. Its fields:
 
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `runId` | string | yes | Unique, immutable Run identity |
-| `salt` | string | yes | Per-experiment bucketing seed; changes mean a different split |
-| `allocation` | `{ variantName: string; weight: number }[]` | yes | Weights sum to 1.0; deterministic split |
-| `variantSet` | `string[]` | yes | Ordered list of Variant names; frozen for the Run |
-| `targetingRules` | `TargetingRule[]` | yes | Priority-ordered; first match wins |
-| `targetingKey` | string | yes | The attribute name in EvaluationContext that identifies the Entity |
+| Field            | Type                                        | Required | Meaning                                                            |
+| ---------------- | ------------------------------------------- | -------- | ------------------------------------------------------------------ |
+| `runId`          | string                                      | yes      | Unique, immutable Run identity                                     |
+| `salt`           | string                                      | yes      | Per-experiment bucketing seed; changes mean a different split      |
+| `allocation`     | `{ variantName: string; weight: number }[]` | yes      | Weights sum to 1.0; deterministic split                            |
+| `variantSet`     | `string[]`                                  | yes      | Ordered list of Variant names; frozen for the Run                  |
+| `targetingRules` | `TargetingRule[]`                           | yes      | Priority-ordered; first match wins                                 |
+| `targetingKey`   | string                                      | yes      | The attribute name in EvaluationContext that identifies the Entity |
 
 ## Determinism contract
 

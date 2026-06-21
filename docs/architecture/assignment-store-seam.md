@@ -51,11 +51,12 @@ interface AssignmentStore:
 ```
 
 **Key — `(Experiment, idType, Targeting Key)`.** The Entity-type (`idType`) is explicit in the key even
-though an Experiment pins one Entity type today. It is the cheap guard against a Targeting Key *value*
+though an Experiment pins one Entity type today. It is the cheap guard against a Targeting Key _value_
 colliding across Entity types (a `session` id string that equals a `user` id string). Mirrors Statsig's
 `<userID>:<idType>` keying. Fail-loud over fail-clever.
 
 **Value — `(runId, Variant)`.** Both fields are load-bearing:
+
 - `Variant` — what to **replay** for a holdover.
 - `runId` — which **Run owns this Entity's Exposures**. Without it, ADR-0006's "counted in the old Run" is
   unimplementable; replay would show the right Variant but lose the attribution anchor.
@@ -63,7 +64,7 @@ colliding across Entity types (a `session` id string that equals a `user` id str
 **Load model — eager pre-load (GrowthBook-style).** One edge-local read pre-loads an Entity's holdovers
 into context before flag resolution, so each per-flag decision is an in-memory lookup. Chosen over Statsig's
 lazy per-call fetch because the hot path across five edge runtimes wants the round-trips front-loaded, not
-one read per Experiment. (The *physical* substrate behind this read — Workers KV, with a per-key Durable
+one read per Experiment. (The _physical_ substrate behind this read — Workers KV, with a per-key Durable
 Object as the serialized writer — is pinned below in [The substrate](#the-substrate-adr-0009-kv-read-per-key-durable-object-write).)
 
 ## The evaluate path (no superposition — every branch visible)
@@ -118,18 +119,18 @@ so the canonical control-plane/data-plane split applies. Verified against Cloudf
   first-touch cannot both win. On commit the DO write-throughs to KV.
 
 **Why fine-grained DOs (one per key), not one per Entity.** Cloudflare supports unlimited DOs ("millions...
-scale horizontally"); idle DOs hibernate free (only bytes at rest cost). The *only* documented anti-pattern
+scale horizontally"); idle DOs hibernate free (only bytes at rest cost). The _only_ documented anti-pattern
 is the opposite — a single hot DO is a ~1,000 req/s bottleneck whose fix is to shard into more DOs. One DO
 per key has zero cross-key contention and one cheap write before hibernation. A coarser per-Entity DO would
 funnel a busy Entity's many concurrent Experiments through one single-threaded object — the bottleneck shape
-to avoid. The per-key DO can't *enumerate* an Entity's assignments, but it never needs to: enumeration is
+to avoid. The per-key DO can't _enumerate_ an Entity's assignments, but it never needs to: enumeration is
 `getAll`, which KV serves.
 
 ### The consistency window (accepted, self-healing)
 
 KV-only reads accept a transient window: for up to ~60s after a Run-boundary first-touch, a concurrent
 cross-POP read may miss the holdover and compute a fresh `assign()` instead of replaying. It is **cosmetic
-and self-healing**, bounded to *returning Entity × live Run boundary × cross-POP × within propagation*. For a
+and self-healing**, bounded to _returning Entity × live Run boundary × cross-POP × within propagation_. For a
 new Entity it cannot happen — `assign()` is deterministic (ADR-0001), so a stale miss computes the identical
 Variant the DO is about to store. The DO still yields exactly one true first-touch winner, so **no Run's
 dataset is ever corrupted**; only one returning user's momentary experience near a boundary, which converges.

@@ -71,6 +71,7 @@ FieldError {
 ```
 
 HTTP status codes:
+
 - `400` — validation failure (field or entity constraint violated)
 - `409` — conflict (e.g. edit-version mismatch, optimistic lock)
 - `403` — caller lacks App role required for the operation
@@ -86,10 +87,12 @@ Form inputs are `useState` — uncommitted edits are local component state. They
 to the Query cache. The Query cache holds only server-confirmed, DO-persisted data.
 
 When the form is submitted:
+
 - Valid 200 → form state is cleared; Query cache is updated via refetch
 - 4xx → form state is retained (user keeps their edits); errors are displayed inline
 
 When the user abandons an edit (navigates away):
+
 - Form state is discarded by component unmount; no cache write occurred
 
 ## Draft Run edits

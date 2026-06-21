@@ -44,11 +44,11 @@ per Run.
 
 ## What is excluded
 
-| Excluded member        | Reason                                                          |
-|------------------------|----------------------------------------------------------------|
-| Guardrail Metrics      | Fire on CI-bound breach regardless of significance; no budget  |
-| Secondary Metrics      | Exploratory; not part of the decision family                   |
-| Secondary Dimensions   | Not declared at design time; cannot change locked `m`          |
+| Excluded member      | Reason                                                        |
+| -------------------- | ------------------------------------------------------------- |
+| Guardrail Metrics    | Fire on CI-bound breach regardless of significance; no budget |
+| Secondary Metrics    | Exploratory; not part of the decision family                  |
+| Secondary Dimensions | Not declared at design time; cannot change locked `m`         |
 
 See [inference-engine.md](inference-engine.md) §Guardrail Metric behavior for the Guardrail
 exclusion and [dimension-slicing.md](dimension-slicing.md) for Dimension family expansion.

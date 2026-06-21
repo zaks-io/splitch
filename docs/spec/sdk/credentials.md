@@ -8,21 +8,22 @@ An App issues exactly two kinds of SDK credential, **per Environment** (ADR-0027
 prod config only, a dev key reaches dev config only; keys never span Environments. The choice between
 the two kinds is determined by the runtime context — trusted server vs untrusted client.
 
-| Property | API Key (Secret) | Client Key (Public) |
-|----------|-----------------|---------------------|
-| Secrecy | Secret — never shipped client-side | Public by design — safe in browser / mobile |
-| Runtime | Server-side trusted environment | Client-side (browser, mobile, any untrusted runtime) |
-| Capability | Full data-plane access | Evaluate flags for its App only |
-| Can read config/rules/salt | Yes | No |
-| Can write / mint keys | No (SDK-only; control plane manages) | No |
-| Cross-App access | No (scoped to issuing App) | No |
-| Edge binding | Per-key rate limiting | Origin/referrer allow-list + per-key rate limiting |
+| Property                   | API Key (Secret)                     | Client Key (Public)                                  |
+| -------------------------- | ------------------------------------ | ---------------------------------------------------- |
+| Secrecy                    | Secret — never shipped client-side   | Public by design — safe in browser / mobile          |
+| Runtime                    | Server-side trusted environment      | Client-side (browser, mobile, any untrusted runtime) |
+| Capability                 | Full data-plane access               | Evaluate flags for its App only                      |
+| Can read config/rules/salt | Yes                                  | No                                                   |
+| Can write / mint keys      | No (SDK-only; control plane manages) | No                                                   |
+| Cross-App access           | No (scoped to issuing App)           | No                                                   |
+| Edge binding               | Per-key rate limiting                | Origin/referrer allow-list + per-key rate limiting   |
 
 ## Storage and validation
 
 Both credential types follow the same D1/KV pattern (ADR-0018):
 
 **D1 record shape** (system of record, not on hot path):
+
 ```
 CredentialRecord {
   id:         string        -- UUID, primary key
@@ -38,11 +39,13 @@ CredentialRecord {
 ```
 
 **KV hot-validation cache** (per-request hot path):
+
 ```
 KV key:   sha256(rawCredentialValue)
 KV value: { app_id, environment_id, type, scopes, revoked }   -- Zod-parsed on every read (ADR-0025)
 TTL:      synced from D1 on write/revoke; no fixed TTL
 ```
+
 Every SDK call validates the presented credential against KV before proceeding. The
 `environment_id` in the cache value is how the edge resolves which Environment's config to serve
 from the key (ADR-0027). A revoked key propagates to KV immediately on revoke (write-through), so
@@ -51,12 +54,14 @@ revocation is effective at the next request.
 ## Lifecycle
 
 **Client Key lifecycle:**
+
 1. Control plane creates record in D1, writes KV entry.
 2. Agent/CLI freely retrieves and shares the Client Key value (it is public).
 3. Consumer embeds it in shipped client code.
 4. To revoke: control plane sets `revoked = true` in D1 and updates KV; next request fails.
 
 **API Key lifecycle:**
+
 1. Control plane creates record in D1, writes KV entry.
 2. Raw value surfaced **once** at creation — agent does not re-read or paste it after (ADR-0022 secret discipline).
 3. Developer stores it in their secret manager.
@@ -65,6 +70,7 @@ revocation is effective at the next request.
 ## Seam: Client Key edge binding
 
 Client Key requests additionally pass through Cloudflare WAF before reaching the Worker:
+
 - **Origin/referrer allow-list**: configured per Client Key on the WAF; requests from
   unlisted origins are rejected at the edge, never reaching the SDK Worker.
 - **Per-key rate limiting**: WAF-enforced; SDK code has no awareness of WAF rejections.

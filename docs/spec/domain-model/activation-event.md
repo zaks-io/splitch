@@ -12,17 +12,17 @@ Activation is its own row type on the same append-only Exposure log (ADR-0010, A
 
 ### Activation row additional fields
 
-| Field | Type | Req | Meaning |
-|-------|------|-----|---------|
-| `app_id` | `string` | ✓ | Data-isolation key |
-| `environment_id` | `string` | ✓ | Environment scope; Exposures/activations are per-Environment (ADR-0027) |
-| `experiment_id` | `string` | ✓ | Owning Experiment |
-| `run_id` | `string` | ✓ | Experiment Run at activation time |
-| `targeting_key_hash` | `string` | ✓ | HMAC-derived Entity identifier |
-| `id_type` | `string` | ✓ | Entity type; always explicit |
-| `server_ts` | `timestamp` | ✓ | Server-received-at |
-| `type` | `"activation"` | ✓ | Discriminator |
-| `counterfactual` | `boolean \| null` | ✗ | `null` in v1; `true` on future Control-arm would-have-activated events (additive extension, no schema change) |
+| Field                | Type              | Req | Meaning                                                                                                 |
+| -------------------- | ----------------- | --- | ------------------------------------------------------------------------------------------------------- |
+| `app_id`             | `string`          | ✓   | Data-isolation key                                                                                      |
+| `environment_id`     | `string`          | ✓   | Environment scope; Exposures/activations are per-Environment (ADR-0027)                                 |
+| `experiment_id`      | `string`          | ✓   | Owning Experiment                                                                                       |
+| `run_id`             | `string`          | ✓   | Experiment Run at activation time                                                                       |
+| `targeting_key_hash` | `string`          | ✓   | HMAC-derived Entity identifier                                                                          |
+| `id_type`            | `string`          | ✓   | Entity type; always explicit                                                                            |
+| `server_ts`          | `timestamp`       | ✓   | Server-received-at                                                                                      |
+| `type`               | `"activation"`    | ✓   | Discriminator                                                                                           |
+| `counterfactual`     | `boolean \| null` | ✗   | `null` unless emitted by Control-arm would-have-activated events (additive extension, no schema change) |
 
 Counterfactual triggering is additive: the future Kohavi-correct gate is implemented as the Control arm emitting an activation row with `counterfactual: true`. Same log, same join, same anchor, same SRM. Zero schema change. (ADR-0013)
 
@@ -45,7 +45,7 @@ When an Activation Metric is set, the Conversion Window anchor shifts:
 
 The anchor for **CUPED pre-period** stays fixed at `first_exposure_ts` even when activation re-anchors the Conversion Window. Pre-period = "before exposed", immutable. It does not shift to "before activated."
 
-**Gating scope:** the Activation gate is a binary Experiment property — when set, it gates **all Metrics** in the Experiment's analysis. There is no per-Metric gating in v1.
+**Gating scope:** the Activation gate is a binary Experiment property — when set, it gates **all Metrics** in the Experiment's analysis. There is no per-Metric gating.
 
 ## Query composition
 

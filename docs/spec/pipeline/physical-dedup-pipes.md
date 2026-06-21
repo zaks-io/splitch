@@ -1,6 +1,6 @@
 # Physical dedup engine — Copy Pipe, serving UNION, materialized views
 
-Pins the Tinybird pipes and materialized views that derive the deduped serving layer from the raw log: the batch Copy Pipe, the snapshot+tail serving UNION, and the v1 rollup MVs. Datasource shapes are in [physical-datasources.md](./physical-datasources.md). ADR-0024 lambda architecture.
+Pins the Tinybird pipes and materialized views that derive the deduped serving layer from the raw log: the batch Copy Pipe, the snapshot+tail serving UNION, and rollup MVs. Datasource shapes are in [physical-datasources.md](./physical-datasources.md). ADR-0024 lambda architecture.
 
 ## Copy Pipe (batch layer)
 
@@ -76,7 +76,7 @@ carry an earlier `server_ts` still appear in the tail. The final union re-dedup 
 
 **Shared definition rule (ADR-0024, seam finding):** The dedup logic in the Copy Pipe and the tail node is identical. Both are generated from one shared Jinja template at build time — never hand-copied. Drift between the two is a correctness failure.
 
-## v1 Materialized Views (rollups off snapshot, never raw log)
+## Materialized Views (rollups off snapshot, never raw log)
 
 All MVs attach to `deduped_exposures`, never to `raw_events`. Attaching to `raw_events` would leak redundant edge events into rollup counts (double-counting), invalidating SRM and all metrics (ADR-0024, ADR-0017).
 
@@ -117,12 +117,12 @@ Enables fast per-arm activation rate reads for the bias guardrail dashboard.
 
 ## Freshness SLA
 
-| Layer | Latency | Correctness |
-|---|---|---|
-| Raw ingest (`raw_events`) | Near-real-time (Workers → Tinybird Events API) | Always correct (raw is truth) |
-| Snapshot (`deduped_exposures`) | Up to 1 hour stale | Correct — tail covers the gap |
-| Serving queries | Tail covers since last snapshot; ~1h lag for bulk + real-time for tail | Always correct |
-| `mv_srm_counts`, `mv_activation_rate` | Snapshot cadence (~1h) | Guardrail dashboards refresh hourly |
+| Layer                                 | Latency                                                                | Correctness                         |
+| ------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------- |
+| Raw ingest (`raw_events`)             | Near-real-time (Workers → Tinybird Events API)                         | Always correct (raw is truth)       |
+| Snapshot (`deduped_exposures`)        | Up to 1 hour stale                                                     | Correct — tail covers the gap       |
+| Serving queries                       | Tail covers since last snapshot; ~1h lag for bulk + real-time for tail | Always correct                      |
+| `mv_srm_counts`, `mv_activation_rate` | Snapshot cadence (~1h)                                                 | Guardrail dashboards refresh hourly |
 
 ## Sources
 

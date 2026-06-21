@@ -1,0 +1,28 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "splitch-mcp-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "SPLITCH_PLATFORM_TARGET": "local"
+  },
+  "env": {
+    "shared-preview": {
+      "name": "splitch-mcp-server-shared-preview",
+      "vars": {
+        "SPLITCH_PLATFORM_TARGET": "shared-preview"
+      }
+    },
+    "production": {
+      "name": "splitch-mcp-server",
+      "vars": {
+        "SPLITCH_PLATFORM_TARGET": "production"
+      }
+    }
+  }
+}

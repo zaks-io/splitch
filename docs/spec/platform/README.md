@@ -7,20 +7,20 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 
 ## Files
 
-| File | One-line purpose |
-|---|---|
-| [storage-map.md](./storage-map.md) | Canonical table: what data lives in KV, D1, DO, Tinybird, Analytics Engine, and why |
-| [privacy-data-lifecycle.md](./privacy-data-lifecycle.md) | Privacy roles, export/delete lifecycle, Entity tombstones, retention, redaction |
-| [config-store.md](./config-store.md) | Draft/live config, `liveRunId`, no separate-copy property, config write failure contract |
-| [assignment-store-substrate.md](./assignment-store-substrate.md) | KV-read / DO-write split for holdover sticky experience; consistency window and failure semantics |
-| [exposure-pipeline.md](./exposure-pipeline.md) | Raw append-only log as system of record; dedup at query time; Exposure row schema; SRM denominator |
-| [physical-dedup-engine.md](./physical-dedup-engine.md) | Lambda architecture: Copy Pipe snapshot + real-time tail UNION; rollup MV correctness constraint |
-| [live-updates-do.md](./live-updates-do.md) | Per-App fan-out DO: hibernating WebSocket, write-through, delta-nudge, persisted-before-announced |
-| [multi-tenant-isolation.md](./multi-tenant-isolation.md) | App-enforced `app_id` isolation in D1 (Drizzle seam) and Tinybird (two-seam enforcement) |
-| [contracts-and-validation.md](./contracts-and-validation.md) | Zod-first authoring; package split; KV schema-version envelope; one canonical ErrorResponse |
-| [monorepo-and-toolchain.md](./monorepo-and-toolchain.md) | pnpm + Turborepo layout; capability Workers; shared `ui` seam; TanStack Query; cron Workers; StrykerJS policy |
-| [local-quality-gates.md](./local-quality-gates.md) | Git hooks, CI-parity pre-push, Biome, TypeScript, Knip, Gitleaks, dependency-cruiser, local validation policy |
-| [deployment-pipeline.md](./deployment-pipeline.md) | GitHub Actions on Blacksmith with Turborepo cache; PR CI with Tinybird Local; shared preview; production rollback rules |
+| File                                                             | One-line purpose                                                                                                        |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| [storage-map.md](./storage-map.md)                               | Canonical table: what data lives in KV, D1, DO, Tinybird, Analytics Engine, and why                                     |
+| [privacy-data-lifecycle.md](./privacy-data-lifecycle.md)         | Privacy roles, export/delete lifecycle, Entity tombstones, retention, redaction                                         |
+| [config-store.md](./config-store.md)                             | Draft/live config, `liveRunId`, no separate-copy property, config write failure contract                                |
+| [assignment-store-substrate.md](./assignment-store-substrate.md) | KV-read / DO-write split for holdover sticky experience; consistency window and failure semantics                       |
+| [exposure-pipeline.md](./exposure-pipeline.md)                   | Raw append-only log as system of record; dedup at query time; Exposure row schema; SRM denominator                      |
+| [physical-dedup-engine.md](./physical-dedup-engine.md)           | Lambda architecture: Copy Pipe snapshot + real-time tail UNION; rollup MV correctness constraint                        |
+| [live-updates-do.md](./live-updates-do.md)                       | Per-App fan-out DO: hibernating WebSocket, write-through, delta-nudge, persisted-before-announced                       |
+| [multi-tenant-isolation.md](./multi-tenant-isolation.md)         | App-enforced `app_id` isolation in D1 (Drizzle seam) and Tinybird (two-seam enforcement)                                |
+| [contracts-and-validation.md](./contracts-and-validation.md)     | Zod-first authoring; package split; KV schema-version envelope; one canonical ErrorResponse                             |
+| [monorepo-and-toolchain.md](./monorepo-and-toolchain.md)         | pnpm + Turborepo layout; capability Workers; shared `ui` seam; TanStack Query; cron Workers; StrykerJS policy           |
+| [local-quality-gates.md](./local-quality-gates.md)               | Git hooks, CI-parity pre-push, Biome, TypeScript, Knip, Gitleaks, dependency-cruiser, local validation policy           |
+| [deployment-pipeline.md](./deployment-pipeline.md)               | GitHub Actions on Blacksmith with Turborepo cache; PR CI with Tinybird Local; shared preview; production rollback rules |
 
 Architecture map: [system-architecture.md](../../architecture/system-architecture.md) lays out the
 Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcement.

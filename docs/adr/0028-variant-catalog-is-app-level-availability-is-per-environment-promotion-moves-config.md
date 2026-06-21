@@ -10,8 +10,8 @@ a procedure someone can forget.
 
 **The Variant catalog is App-level; availability is per-Environment.** A Flag has one **Variant catalog**
 (the full set of Variants, defined once against the Flag's schema). Each Environment's **Flag
-Configuration** names `available_variant_names` — the subset of the catalog that may be served *in that
-Environment*. A Variant not in an Environment's available set **cannot be served there** by any targeting
+Configuration** names `available_variant_names` — the subset of the catalog that may be served _in that
+Environment_. A Variant not in an Environment's available set **cannot be served there** by any targeting
 rule or rollout, and cannot be used by an Experiment Run in that Environment. So a half-tested model name
 lives in the catalog, is available and served in dev, and is **structurally unable to reach prod traffic**
 until it is promoted — the "extra check for prod" is enforced by the data model, not by discipline.
@@ -22,11 +22,11 @@ Variants by name. It is **not** a per-Variant-per-Environment matrix scattered a
 keeps **one config object per Environment** as the unit that is edited, audited, diffed, and promoted —
 rather than reconstructing an environment's state from a matrix.
 
-**Promotion moves Flag Configuration between Environments.** *Promote* is the verb for copying configuration
+**Promotion moves Flag Configuration between Environments.** _Promote_ is the verb for copying configuration
 from a source Environment to a target — either a whole Flag Configuration ("promote this flag's dev config
 to prod") or a single Variant's availability ("make `gpt-5` available in prod"). Availability and
-value/targeting are **separate promotable acts**: making a Variant *available* in an Environment is distinct
-from *setting it to actually be served* (targeting/rollout). The Environment Policy (ADR-0029) decides which
+value/targeting are **separate promotable acts**: making a Variant _available_ in an Environment is distinct
+from _setting it to actually be served_ (targeting/rollout). The Environment Policy (ADR-0029) decides which
 of these acts requires a Confirmation, independently. Promotion is distinct from **Start** (which opens an
 Experiment Run for measurement) and from a plain in-place flag edit (which changes one Environment without
 reference to another).

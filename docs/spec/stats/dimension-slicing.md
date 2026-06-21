@@ -11,10 +11,10 @@ Per-Dimension results are separate CI computations scoped to `Dimension = dimens
 
 ## Two classes of Dimension
 
-| Class       | Declared when          | In BH family | Use case                            |
-|-------------|------------------------|--------------|-------------------------------------|
-| Primary     | At Experiment design time | Yes       | Geographic region, large cohort     |
-| Secondary   | At Experiment design time | No        | Exploratory; discovery, not guardians |
+| Class     | Declared when             | In BH family | Use case                              |
+| --------- | ------------------------- | ------------ | ------------------------------------- |
+| Primary   | At Experiment design time | Yes          | Geographic region, large cohort       |
+| Secondary | At Experiment design time | No           | Exploratory; discovery, not guardians |
 
 The class is set once, at Experiment creation or during the draft phase, and is frozen per Run.
 Post-start Dimensions are allowed only as Secondary / exploratory outputs for the current Run.
@@ -55,7 +55,7 @@ population = activated_entities             # gated population first
   |> per_value: compute CI + SRM_check
 ```
 
-Dimensions slice the *activated* population, not the full-exposed population. This preserves
+Dimensions slice the _activated_ population, not the full-exposed population. This preserves
 the analysis integrity: the gate defines the valid measurement population; Dimensions explore
 within it.
 
@@ -91,6 +91,7 @@ it is suppressed in the output with `status = 'insufficient_n'`.
 ## Seam note: no superposition
 
 A Dimension analysis can always determine:
+
 - Whether a Dimension is Primary or Secondary (declared at design time, not inferred).
 - Whether Activation filter was applied before slicing (from the input row's `activated` field).
 - Whether `is_significant` was BH-corrected or raw (from `in_bh_family` flag).

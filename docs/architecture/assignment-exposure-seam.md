@@ -31,13 +31,13 @@ and Conversion Window anchoring. The complexity is concentrated, not smeared acr
 
 **Deletion test**: collapse Run into a bare `configVersion` counter and the complexity reappears at
 every analysis query (which versions are comparable? where did re-bucketing happen?). The Run earns
-its keep — it *is* the "this dataset is analyzable as a unit" invariant, made explicit.
+its keep — it _is_ the "this dataset is analyzable as a unit" invariant, made explicit.
 
 ## Core Invariants
 
 1. **Assignment is a pure function, not an event.** Determinism means you never persist it — you
    recompute it. Advanced diagnostics (deterministic replay to separate a bucketing bug from an
-   exposure bug) are therefore available *on demand later*, without recording anything extra now.
+   exposure bug) are therefore available _on demand later_, without recording anything extra now.
 
 2. **The Run is the unit of analysis; Exposure is stamped with `runId`.** Replaces an ad-hoc
    `configVersion`. The immutability invariant is what SRM, significance, and Conversion Windows all
@@ -54,7 +54,7 @@ its keep — it *is* the "this dataset is analyzable as a unit" invariant, made 
    the Conversion Window anchors to it and a later anchor would let post-treatment behavior bias
    results. Two layers, two jobs: **SDK seen-set = hot-path/wire efficiency** (per-instance, not
    trusted); **pipeline dedup = correctness authority** (`GROUP BY entity, run`, `MIN(timestamp)`).
-   Across five edge runtimes the SDK set is per-node and *cannot* be the source of truth, so the
+   Across five edge runtimes the SDK set is per-node and _cannot_ be the source of truth, so the
    pipeline dedup is the only correct one. Session is a **Dimension**, never the denominator unit.
 
 5. **SRM is a standard query, not a built mechanism.** Chi-square of observed Exposure counts per
@@ -64,7 +64,7 @@ its keep — it *is* the "this dataset is analyzable as a unit" invariant, made 
 
 ## Run lifecycle
 
-The Run freezes **bucketing**: a Run means *assignment* was frozen for its entire life. Measurement is
+The Run freezes **bucketing**: a Run means _assignment_ was frozen for its entire life. Measurement is
 **not** frozen into the Run; it recomputes losslessly over the Run's raw log (ADR-0003).
 
 ### Assignment vs measurement vs non-material edits
@@ -105,10 +105,11 @@ on evaluate(flag, targetingKey) when live Run is N+1:
 ```
 
 This separates two ideas usually conflated:
-- **Assignment-for-experience** (which Variant to *show* a returning user) → sticky, avoids carryover
+
+- **Assignment-for-experience** (which Variant to _show_ a returning user) → sticky, avoids carryover
   bias from a mid-stream flip.
 - **Assignment-for-analysis** (which Run's denominator the Entity counts toward) → the Run it was
-  *first exposed* under, never reassigned.
+  _first exposed_ under, never reassigned.
 
 Run N+1's dataset stays pure (only Entities first-exposed under N+1's config), and users don't get
 whiplash. A holdover is "shown the experiment but not measured by the live Run" — legible because every
@@ -117,7 +118,7 @@ exposure already carries its `runId`.
 ### The holdover predicate, and the one piece of durable per-Entity state
 
 - **Holdover = has a first-touch Exposure under a prior Run.** Not "was assigned" — assignment is pure
-  and leaves no trace, so an Entity bucketable-but-never-exposed under Run N is simply a *new* Entity to
+  and leaves no trace, so an Entity bucketable-but-never-exposed under Run N is simply a _new_ Entity to
   Run N+1 (correct, and free). Only an **Exposure** marks entry into a Run.
 - **Sticky experience requires persisting the holdover's original Variant.** `assign()` cannot recompute
   it (Run N's config may be gone). So the system keeps exactly one piece of durable per-Entity state:

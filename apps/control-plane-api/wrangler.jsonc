@@ -1,0 +1,31 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "splitch-control-plane-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    "crons": ["0 8 * * *"]
+  },
+  "vars": {
+    "SPLITCH_PLATFORM_TARGET": "local"
+  },
+  "env": {
+    "shared-preview": {
+      "name": "splitch-control-plane-api-shared-preview",
+      "vars": {
+        "SPLITCH_PLATFORM_TARGET": "shared-preview"
+      }
+    },
+    "production": {
+      "name": "splitch-control-plane-api",
+      "vars": {
+        "SPLITCH_PLATFORM_TARGET": "production"
+      }
+    }
+  }
+}

@@ -25,8 +25,8 @@ SCHEMA:
   dedup_key       String               -- configured as Tinybird dedup_key
   source_id       String               -- POP identifier
   is_holdover     UInt8                -- exposure rows: 1 = holdover replay, 0 = fresh assign; activation rows: 0
-  activation_ts   Nullable(DateTime64(3)) -- activation rows: equals server_ts in v1; exposure rows: NULL
-  counterfactual  UInt8                -- 0 in v1; 1 when SDK counterfactual path fires (deferred)
+  activation_ts   Nullable(DateTime64(3)) -- activation rows: equals server_ts; exposure rows: NULL
+  counterfactual  UInt8                -- 0 by default; 1 when SDK counterfactual path fires (deferred)
   sdk_version     Nullable(String)
 
 DEDUP_KEY: dedup_key

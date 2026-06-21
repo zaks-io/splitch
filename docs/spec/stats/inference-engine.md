@@ -21,7 +21,7 @@ per-Entity Metric values (one row per Entity, aggregated upstream — ADR-0015)
   ▼ 8. Benjamini-Hochberg FDR (across goal-metric × Variant family)  → is_significant (post-FDR)
 ```
 
-Note: step 3 winsorizes input values *before* variance computation (effective ordering:
+Note: step 3 winsorizes input values _before_ variance computation (effective ordering:
 winsorize → type variance → delta-method → CUPED → aCS).
 
 ## Inference framework (ADR-0014)
@@ -30,11 +30,11 @@ winsorize → type variance → delta-method → CUPED → aCS).
 from 5% to 25–57% (Optimizely A/A simulations); always-valid holds FPR at target regardless of how
 often a user looks.
 
-| Config field      | Type                        | Default        |
-|-------------------|-----------------------------|----------------|
-| `horizon`         | `'sequential' \| 'fixed'`   | `'sequential'` |
-| `confidence_level`| `number` (0–1)              | `0.95`         |
-| `sample_size_locked` | `integer \| null`        | `null`         |
+| Config field         | Type                      | Default        |
+| -------------------- | ------------------------- | -------------- |
+| `horizon`            | `'sequential' \| 'fixed'` | `'sequential'` |
+| `confidence_level`   | `number` (0–1)            | `0.95`         |
+| `sample_size_locked` | `integer \| null`         | `null`         |
 
 `confidence_level` is **per-Experiment**, locked at Run Start for decision-valid results, and
 applied to all Metrics in the locked decision family. Post-start exploratory views may compute
@@ -151,14 +151,14 @@ rules (Guardrails, Secondary Metrics/Dimensions) live in
 
 ## Failure contracts
 
-| Failure                       | Behavior                                                   |
-|-------------------------------|-------------------------------------------------------------|
-| N = 0 in an arm               | Return CI = `[-∞, +∞]`, p_value = 1.0, status = `running` |
-| N < 100                       | Report result with `health.low_n_warning = true`; do not suppress |
-| CUPED pre-period missing       | Fall back per [variance-reduction.md](variance-reduction.md); log method in `variance_techniques` |
-| Ratio arm-level denominator mean `B = 0` | Return CI = `[-∞, +∞]`, p_value = 1.0, status = `insufficient_denominator`; log zero-denominator Entity count |
+| Failure                                  | Behavior                                                                                                             |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| N = 0 in an arm                          | Return CI = `[-∞, +∞]`, p_value = 1.0, status = `running`                                                            |
+| N < 100                                  | Report result with `health.low_n_warning = true`; do not suppress                                                    |
+| CUPED pre-period missing                 | Fall back per [variance-reduction.md](variance-reduction.md); log method in `variance_techniques`                    |
+| Ratio arm-level denominator mean `B = 0` | Return CI = `[-∞, +∞]`, p_value = 1.0, status = `insufficient_denominator`; log zero-denominator Entity count        |
 | Relative lift Control estimate `R_c = 0` | Return relative lift and CI as `null`, p_value = 1.0, status = `insufficient_denominator`; keep absolute-lift result |
-| aCS divergence (NaN/inf)      | Return error status; do not return a corrupt CI            |
+| aCS divergence (NaN/inf)                 | Return error status; do not return a corrupt CI                                                                      |
 
 ## Sources
 

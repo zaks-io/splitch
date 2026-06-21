@@ -14,31 +14,31 @@ conventions live in [request-response-envelopes-conventions.md](./request-respon
 
 ### CreateMetricRequest
 
-| Field | Required | Notes |
-|---|---|---|
-| `appId` | yes | — |
-| `name` | yes | — |
-| `key` | yes | Unique per App |
-| `kind` | yes | `'binomial' \| 'count' \| 'revenue' \| 'ratio'` |
-| `eventName` | yes | — |
-| `eventValueField` | no | Required for `count`/`revenue`; validated by Worker |
-| `denominator` | no | Required for `ratio`; `{ metricId }` must be in same App |
-| `description` | no | — |
+| Field             | Required | Notes                                                    |
+| ----------------- | -------- | -------------------------------------------------------- |
+| `appId`           | yes      | —                                                        |
+| `name`            | yes      | —                                                        |
+| `key`             | yes      | Unique per App                                           |
+| `kind`            | yes      | `'binomial' \| 'count' \| 'revenue' \| 'ratio'`          |
+| `eventName`       | yes      | —                                                        |
+| `eventValueField` | no       | Required for `count`/`revenue`; validated by Worker      |
+| `denominator`     | no       | Required for `ratio`; `{ metricId }` must be in same App |
+| `description`     | no       | —                                                        |
 
 ### PatchMetricRequest
 
 All fields optional. No Run-frozen check — Metric patches are measurement edits that recompute over
 the existing Run (ADR-0003). Never returns `RUN_FROZEN`.
 
-| Field | Required |
-|---|---|
-| `name` | no |
-| `key` | no |
-| `kind` | no |
-| `eventName` | no |
-| `eventValueField` | no |
-| `denominator` | no |
-| `description` | no |
+| Field             | Required |
+| ----------------- | -------- |
+| `name`            | no       |
+| `key`             | no       |
+| `kind`            | no       |
+| `eventName`       | no       |
+| `eventValueField` | no       |
+| `denominator`     | no       |
+| `description`     | no       |
 
 ---
 
@@ -46,12 +46,12 @@ the existing Run (ADR-0003). Never returns `RUN_FROZEN`.
 
 ### CreateAppRequest
 
-| Field | Required |
-|---|---|
-| `organizationId` | yes |
-| `name` | yes |
-| `key` | yes |
-| `description` | no |
+| Field            | Required |
+| ---------------- | -------- |
+| `organizationId` | yes      |
+| `name`           | yes      |
+| `key`            | yes      |
+| `description`    | no       |
 
 ### CreateAppResponse
 

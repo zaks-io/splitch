@@ -10,16 +10,16 @@ that an opaque version number does not. Because the Run is immutable, Assignment
 and re-bucketing within a Run is impossible by construction.
 
 The invariant is **frozen bucketing**, not frozen measurement. Metric definitions, the Conversion Window,
-and Guardrail/Activation config are *not* part of the Run's frozen config — they recompute losslessly over
-the Run's raw log (ADR-0003). Analyzability requires only that *who is in which arm* was fixed; *what we
-measure over them* is reproducible at query time.
+and Guardrail/Activation config are _not_ part of the Run's frozen config — they recompute losslessly over
+the Run's raw log (ADR-0003). Analyzability requires only that _who is in which arm_ was fixed; _what we
+measure over them_ is reproducible at query time.
 
 ## Considered options
 
 - **`configVersion` counter** — rejected: answers "did this change?" but not "is this comparable?"
   Analysis would have to reconstruct comparability at query time.
 - **GrowthBook Phase / Statsig version** — the closest prior art and the model we follow: a Phase/version
-  windows the *assignment* config and lets measurement recompute over the collected data (ADR-0003).
+  windows the _assignment_ config and lets measurement recompute over the collected data (ADR-0003).
 
 ## Consequences
 

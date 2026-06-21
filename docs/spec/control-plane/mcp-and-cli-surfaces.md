@@ -1,6 +1,6 @@
-# MCP and CLI surfaces: parity skins over the shared typed client
+# MCP and CLI surfaces: parity skins over the Control Plane SDK
 
-Both surfaces are thin wrappers over the same `@splitch/client`. Capability is identical; only
+Both surfaces are thin wrappers over the same `@splitch/control-plane-sdk`. Capability is identical; only
 presentation differs. New endpoint → new CLI command + new MCP tool, by construction.
 
 ## Package structure
@@ -9,13 +9,14 @@ presentation differs. New endpoint → new CLI command + new MCP tool, by constr
 @splitch/contracts   – Zod schemas, z.infer types, @hono/zod-openapi route defs
                        (zero transport code; safe to import from MCP, marketing site, CLI)
         ^
-@splitch/client      – Hono hc<AppType> instance; type-inferred from server type; no codegen
+@splitch/control-plane-sdk      – Hono hc<AppType> transport SDK; type-inferred from server type; no codegen
         ^
-        ├── CLI (@splitch/cli)
-        └── MCP server (@splitch/mcp)
+        ├── CLI app (@splitch/cli)
+        ├── MCP server (@splitch/mcp-server)
+        └── Control Panel app (@splitch/control-panel)
 ```
 
-The split passes the deletion test: `@splitch/contracts` has 4+ real consumers (Worker, client,
+The split passes the deletion test: `@splitch/contracts` has 4+ real consumers (Worker, SDK,
 CLI, MCP, control panel). See ADR-0025.
 
 ## CLI
@@ -27,10 +28,12 @@ CLI, MCP, control panel). See ADR-0025.
 ### Credential storage
 
 Credentials stored in order of preference:
+
 1. System keychain (macOS Keychain, Linux Secret Service)
 2. `~/.splitch/credentials.json` (mode 0600, fallback for sandboxes without keychain)
 
 **Credential file format (`~/.splitch/credentials.json`):**
+
 ```json
 {
   "version": 1,
@@ -48,6 +51,7 @@ Credentials stored in order of preference:
 ```
 
 For ID-JAG path:
+
 ```json
 {
   "version": 1,
@@ -92,7 +96,7 @@ splitch api-keys create --app <app_id> --env <environment_id>
 splitch api-keys revoke --app <app_id> --env <environment_id> <key_id>
 ```
 
-One command per endpoint. No composite multi-step commands in v1 unless agent ergonomics demand them.
+One command per endpoint. No composite multi-step commands unless agent ergonomics demand them.
 Experiments, Experiment Runs, and SDK credentials are per-Environment (ADR-0027), so their commands
 carry `--env`; Flag definition, Environment CRUD, and policy reads are App/Env scoped accordingly.
 Environment-level writes that the Environment Policy gates may require a `--confirm` flag (ADR-0029).
@@ -123,6 +127,7 @@ Agent connects to MCP server URL
 ### MCP tool schema derivation
 
 MCP tool schemas are derived from the same Zod route definitions that validate the Worker:
+
 - Tool `inputSchema` = Zod request body schema (converted to JSON Schema)
 - Tool `outputSchema` = Zod response body schema
 
@@ -133,6 +138,7 @@ because the schemas are byte-for-byte identical.
 ### Tool naming convention
 
 `{resource}_{operation}` mapping to HTTP endpoints:
+
 - `environments_list`, `environments_create`, `environments_get`
 - `flags_list`, `flags_create`, `flags_get`, `flags_update` (App-level definition)
 - `flags_promote` (move Flag Configuration into an Environment, ADR-0028)
@@ -151,12 +157,13 @@ across Environments), and Confirm (the Environment Policy gate).
 
 A capability available through the CLI must be available through an MCP tool and vice versa.
 Divergence only in presentation:
+
 - CLI: formatted text, exit codes, human-readable tables
 - MCP: structured JSON, typed error responses, discriminated union reasons
 
 ## Invariants live in the Worker, not the skins
 
-Neither CLI nor MCP contains any domain logic. Both call `@splitch/client` methods which call the
+Neither CLI nor MCP contains any domain logic. Both call `@splitch/control-plane-sdk` methods which call the
 control-plane HTTP API. The Worker rejects invalid states (frozen Run edits, missing permissions,
 failed Zod parse). Both surfaces inherit correctness from one guardian. (ADR-0023)
 

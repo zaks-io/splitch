@@ -50,14 +50,15 @@ implies it. `getAll` filters to the request's Environment via that binding.
 `{ run_id: string; variant: string }`
 
 Both fields are load-bearing:
+
 - `variant` — what to replay when serving a holdover (the Variant name, not value)
 - `run_id` — which Run owns this Entity's Exposures; without it, "counted in old Run" is unimplementable
 
 ## Storage substrate
 
-| Operation | Substrate | Why |
-|---|---|---|
-| `getAll` (hot-path read) | Workers KV | Edge-local (~10ms hot reads), read-heavy; no DO hop on evaluate |
+| Operation                 | Substrate                                     | Why                                                                                                   |
+| ------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `getAll` (hot-path read)  | Workers KV                                    | Edge-local (~10ms hot reads), read-heavy; no DO hop on evaluate                                       |
 | `put` (first-touch write) | Durable Object per key, then KV write-through | Single-threaded, globally-unique; atomic get-then-put-if-absent; two POPs cannot both win first-touch |
 
 DO grain: one DO per `(experiment_id, id_type, targeting_key_hash)`. Fine-grained is correct — coarser DOs create a bottleneck; per-key DOs have zero cross-key contention, idle cheaply, and are the Cloudflare-documented pattern. (ADR-0009)
@@ -68,17 +69,18 @@ The DO's `get → decide → put-if-absent` must execute within `blockConcurrenc
 
 ## Failure contract
 
-| Failure | Behavior |
-|---|---|
-| KV write-through fails after DO commit | DO is truth; KV miss is self-healing. Next `getAll` from any POP misses KV and recomputes `assign()` fresh. Because `assign()` is deterministic (ADR-0001) and the salt/allocation are frozen (same Run), the recomputed Variant is identical to what the DO stored. **No Run dataset is corrupted; no Entity sees the wrong Variant.** The cosmetic glitch (one extra Exposure fired by the fresh assign path) deduplicates in the pipeline; the DO still stamps the holdover on the next put attempt. |
-| DO process crash mid-write (after get, before put) | DO state is Cloudflare-durable; next request to the same DO key re-executes put-if-absent idempotently. The pipeline's at-least-once Exposure delivery retries the Exposure, which re-triggers the put. |
-| KV read returns stale value near Run boundary | At most ~60s window. The fresh `assign()` is deterministic and yields the correct Variant (same as what would have been replayed). Accepted cosmetic glitch; self-healing. (ADR-0009) |
+| Failure                                            | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| KV write-through fails after DO commit             | DO is truth; KV miss is self-healing. Next `getAll` from any POP misses KV and recomputes `assign()` fresh. Because `assign()` is deterministic (ADR-0001) and the salt/allocation are frozen (same Run), the recomputed Variant is identical to what the DO stored. **No Run dataset is corrupted; no Entity sees the wrong Variant.** The cosmetic glitch (one extra Exposure fired by the fresh assign path) deduplicates in the pipeline; the DO still stamps the holdover on the next put attempt. |
+| DO process crash mid-write (after get, before put) | DO state is Cloudflare-durable; next request to the same DO key re-executes put-if-absent idempotently. The pipeline's at-least-once Exposure delivery retries the Exposure, which re-triggers the put.                                                                                                                                                                                                                                                                                                 |
+| KV read returns stale value near Run boundary      | At most ~60s window. The fresh `assign()` is deterministic and yields the correct Variant (same as what would have been replayed). Accepted cosmetic glitch; self-healing. (ADR-0009)                                                                                                                                                                                                                                                                                                                   |
 
 **No distributed transaction on the hot path.** The experience (DO) and analysis (log) each self-correct independently.
 
 ## Policy boundary
 
 The Assignment Store has **zero policy**. It does not:
+
 - Evaluate the holdover predicate
 - Call `assign()`
 - Decide whether to write

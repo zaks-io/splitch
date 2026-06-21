@@ -10,17 +10,17 @@ surfaces; splitch owns the protocol endpoints at its own edge.
 
 **One principal, many doors.** An agent is **never a distinct principal** — it is a WorkOS user reached
 through a different door. Authorization is single-sourced on the user (resolved to D1 Org/App membership per
-ADR-0018/0021); *which* door was used is recorded for **audit only** and never branches an authz decision.
+ADR-0018/0021); _which_ door was used is recorded for **audit only** and never branches an authz decision.
 An agent can do exactly what the user it acts for can do — no more, no less. Future per-session limits are
 expressed as **scopes on the issued credential**, not as a new class of principal.
 
-**Three doors, all terminating at the same auth-issuer and minting the same control-plane access token:**
+**Three doors, all terminating at the same auth-api and minting the same control-plane access token:**
 
 1. **ID-JAG (agent-verified)** — the frictionless primary for agents. The agent's IdP (Anthropic, OpenAI,
    Cursor) issues an audience-specific ID-JAG attesting to the user; the agent POSTs it to splitch's
    `/agent/identity`; splitch validates it (JWKS, `aud`, `exp`, `jti` replay cache, `email_verified`/
    `phone_verified`, `auth_time` freshness) and resolves to a **real, persistent** user. No demo expiry — the
-   attestation *is* verification.
+   attestation _is_ verification.
 2. **Anonymous / pre-claim** — first-class, not a fallback (not every runtime supports ID-JAG). The agent
    self-registers, gets a credential immediately scoped to limited `pre_claim_scopes`, provisioning a **24h
    provisional demo** account. The user later completes a claim ceremony (`/claim`, OTP) to upgrade scopes
@@ -34,13 +34,13 @@ removing a trusted provider is a row change, not a deploy. Seed rows: **Anthropi
 unknown issuer is **rejected — fail loud** (design principle), never silently trusted.
 
 **Email collision on claim forces a step-up; never a silent merge.** If an anonymous/claiming agent presents
-an email that already maps to a real user, splitch returns `interaction_required` and requires the *real*
+an email that already maps to a real user, splitch returns `interaction_required` and requires the _real_
 user to authenticate through splitch's own login and **consent** to linking the provider identity. Binding on
 verified email alone is an account-takeover vector and is forbidden — matching the auth.md spec.
 
 **Two credential systems, deliberately not unified.** The control-plane access token from this flow is
 **separate from the SDK data-plane API key** (ADR-0018, validated per-request in KV on the hot path). They
-never mix: agents/humans *manage* config with short-lived control-plane tokens; deployed SDKs *evaluate*
+never mix: agents/humans _manage_ config with short-lived control-plane tokens; deployed SDKs _evaluate_
 flags with long-lived KV-validated API keys. **This agent-auth work touches zero of the serving hot path.**
 
 ## Considered options
@@ -66,15 +66,15 @@ flags with long-lived KV-validated API keys. **This agent-auth work touches zero
 
 ## Consequences
 
-- **splitch implements the full auth.md surface** on a dedicated **auth-issuer Worker** (ADR-0023): the
+- **splitch implements the full auth.md surface** on a dedicated **auth-api Worker** (ADR-0023): the
   discovery chain (401 `WWW-Authenticate` → `/.well-known/oauth-protected-resource` →
   `/.well-known/oauth-authorization-server` with the `agent_auth` block), `/agent/identity`,
   `/agent/identity/claim`, the user-facing `/claim` page, `/oauth2/token`, `/oauth2/revoke`, and the SET
   receiver `/agent/event/notify`. The issuer is its **own service** so its `aud` origin is stable (every
   ID-JAG's `aud` points at it) and the credential-minting surface is isolated for security review.
 - **The durable client-side artifact is splitch's `identity_assertion`** (re-exchanged for short-lived access
-  tokens), *not* a refresh token, on the ID-JAG path. The device-flow path stores a WorkOS refresh token.
-- **Anonymous registration is the abuse surface** (mints accounts with no auth), so the auth-issuer Worker
+  tokens), _not_ a refresh token, on the ID-JAG path. The device-flow path stores a WorkOS refresh token.
+- **Anonymous registration is the abuse surface** (mints accounts with no auth), so the auth-api Worker
   **rate-limits it at the Cloudflare edge** (per-IP / per-issuer).
 - **24h provisional demos must be reaped.** Unclaimed provisional Orgs/Apps are swept from D1 by a Cloudflare
   **Cron Trigger** Worker, going through the ADR-0018 data-access seam (so tenant scoping is enforced in one

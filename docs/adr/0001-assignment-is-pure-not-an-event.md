@@ -9,7 +9,7 @@ is **Exposure**, which carries the assigned Variant. This matches universal prac
 (Statsig/Eppo/GrowthBook all recompute assignment; none log it as a primary fact) and means advanced
 diagnostics like deterministic replay are available later without recording anything extra now.
 
-Note: this deliberately *corrects* CONTEXT.md, which originally defined Assignment as "the event that
+Note: this deliberately _corrects_ CONTEXT.md, which originally defined Assignment as "the event that
 an Entity was bucketed." It is not an event.
 
 ## Consequences
@@ -17,4 +17,4 @@ an Entity was bucketed." It is not an event.
 - There is no "assigned but unexposed" record — an Entity bucketable but never exposed simply has no
   footprint. This is what makes the Run-boundary holdover logic (ADR-0006) fall out for free.
 - Determinism is only meaningful relative to a frozen config, which is why Assignment is defined as
-  pure *over a Run* (ADR-0002).
+  pure _over a Run_ (ADR-0002).

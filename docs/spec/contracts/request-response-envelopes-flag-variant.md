@@ -18,18 +18,18 @@ request seeds the DEFINITION plus an initial CONFIGURATION for `environmentId`.
 
 ### CreateFlagRequest
 
-| Field | Required | Notes |
-|---|---|---|
-| `appId` | yes | — |
-| `environmentId` | yes | Environment the initial CONFIGURATION is written for (ADR-0027) |
-| `name` | yes | — (DEFINITION) |
-| `key` | yes | Unique per App; immutable after create (DEFINITION) |
-| `variants` | yes | `Variant[]`, min 1; the App-level Variant catalog (DEFINITION) |
-| `enabled` | yes | Per-Environment (CONFIGURATION) |
-| `availableVariantNames` | no | Per-Environment subset of the catalog; defaults to all (CONFIGURATION) |
-| `defaultVariantId` | yes | Must match one of `variants[].id` (CONFIGURATION) |
-| `targetingRules` | no | Defaults to `[]` (CONFIGURATION) |
-| `description` | no | — |
+| Field                   | Required | Notes                                                                  |
+| ----------------------- | -------- | ---------------------------------------------------------------------- |
+| `appId`                 | yes      | —                                                                      |
+| `environmentId`         | yes      | Environment the initial CONFIGURATION is written for (ADR-0027)        |
+| `name`                  | yes      | — (DEFINITION)                                                         |
+| `key`                   | yes      | Unique per App; immutable after create (DEFINITION)                    |
+| `variants`              | yes      | `Variant[]`, min 1; the App-level Variant catalog (DEFINITION)         |
+| `enabled`               | yes      | Per-Environment (CONFIGURATION)                                        |
+| `availableVariantNames` | no       | Per-Environment subset of the catalog; defaults to all (CONFIGURATION) |
+| `defaultVariantId`      | yes      | Must match one of `variants[].id` (CONFIGURATION)                      |
+| `targetingRules`        | no       | Defaults to `[]` (CONFIGURATION)                                       |
+| `description`           | no       | —                                                                      |
 
 Worker computes: `id`, `createdAt`, `updatedAt`.
 
@@ -39,13 +39,13 @@ Accepts only non-key, non-appId fields. `key` and `appId` are immutable (audit b
 CONFIGURATION fields (`enabled`, `availableVariantNames`, `defaultVariantId`) patch against the
 Environment in the path (ADR-0027).
 
-| Field | Required | Notes |
-|---|---|---|
-| `name` | no | DEFINITION |
-| `enabled` | no | per-Environment CONFIGURATION |
-| `availableVariantNames` | no | per-Environment CONFIGURATION |
-| `defaultVariantId` | no | Must match existing `variants[].id` if supplied; per-Environment CONFIGURATION |
-| `description` | no | — |
+| Field                   | Required | Notes                                                                          |
+| ----------------------- | -------- | ------------------------------------------------------------------------------ |
+| `name`                  | no       | DEFINITION                                                                     |
+| `enabled`               | no       | per-Environment CONFIGURATION                                                  |
+| `availableVariantNames` | no       | per-Environment CONFIGURATION                                                  |
+| `defaultVariantId`      | no       | Must match existing `variants[].id` if supplied; per-Environment CONFIGURATION |
+| `description`           | no       | —                                                                              |
 
 Variants and TargetingRules are managed via sub-resource endpoints (`/variants`, `/targeting-rules`).
 
@@ -59,20 +59,20 @@ Returns the full Flag leaf. No storage internals (no `version`, no `createdBy`).
 
 ### CreateVariantRequest
 
-| Field | Required | Notes |
-|---|---|---|
-| `flagId` | yes | — |
-| `name` | yes | — |
-| `value` | yes | `boolean \| string \| number \| object` |
-| `description` | no | — |
+| Field         | Required | Notes                                   |
+| ------------- | -------- | --------------------------------------- |
+| `flagId`      | yes      | —                                       |
+| `name`        | yes      | —                                       |
+| `value`       | yes      | `boolean \| string \| number \| object` |
+| `description` | no       | —                                       |
 
 ### PatchVariantRequest
 
-| Field | Required | Notes |
-|---|---|---|
-| `name` | no | — |
-| `value` | no | **Worker rejects if any running Run's `variantSet` includes this Variant** → `RUN_FROZEN` error |
-| `description` | no | — |
+| Field         | Required | Notes                                                                                           |
+| ------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `name`        | no       | —                                                                                               |
+| `value`       | no       | **Worker rejects if any running Run's `variantSet` includes this Variant** → `RUN_FROZEN` error |
+| `description` | no       | —                                                                                               |
 
 ## Sources
 

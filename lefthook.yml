@@ -1,0 +1,11 @@
+pre-commit:
+  parallel: false
+  commands:
+    verify-commit:
+      run: CI=true pnpm verify:commit
+
+pre-push:
+  parallel: false
+  commands:
+    verify-push:
+      run: CI=true pnpm verify:push

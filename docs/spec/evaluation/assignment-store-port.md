@@ -29,12 +29,12 @@ Logical key: `(appId, experimentId, idType, targetingKey)` — four components, 
 Physical key: `(appId, experimentId, idType, targetingKeyHash)`, derived inside the substrate before
 touching KV or Durable Objects. Callers never pass the hash.
 
-| Component | Type | Why load-bearing |
-|---|---|---|
-| `appId` | string | Isolation boundary; prevents cross-App key collisions |
-| `experimentId` | string | Scopes to one Experiment |
-| `idType` | string | Guards against Targeting Key *value* collisions across Entity types (e.g. a session ID string that equals a user ID string). Mirrors Statsig's `<userID>:<idType>` keying. Explicit even though v1 has one Entity type per Experiment |
-| `targetingKey` | string | The Entity identifier within the Experiment's idType |
+| Component      | Type   | Why load-bearing                                                                                                                                                                                                                |
+| -------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `appId`        | string | Isolation boundary; prevents cross-App key collisions                                                                                                                                                                           |
+| `experimentId` | string | Scopes to one Experiment                                                                                                                                                                                                        |
+| `idType`       | string | Guards against Targeting Key _value_ collisions across Entity types (e.g. a session ID string that equals a user ID string). Mirrors Statsig's `<userID>:<idType>` keying. Explicit even when an Experiment has one Entity type |
+| `targetingKey` | string | The Entity identifier within the Experiment's idType                                                                                                                                                                            |
 
 `getAll` takes `(appId, idType, targetingKey)` without `experimentId` — one call returns
 holdovers for **all Experiments** this Entity has been exposed in, as a map keyed by
@@ -85,6 +85,7 @@ concurrent POPs cannot both win first-touch. On commit, the DO write-throughs to
 ## Policy-free contract
 
 The store does not:
+
 - Call `assign()`
 - Decide whether to replay or assign
 - Branch on runId or Variant values

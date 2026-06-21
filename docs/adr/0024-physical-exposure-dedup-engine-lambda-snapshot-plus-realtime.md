@@ -2,9 +2,9 @@
 
 **Status:** accepted
 
-ADR-0010 decided the Exposure pipeline *logically* — ELT, raw append-only log as the system of
+ADR-0010 decided the Exposure pipeline _logically_ — ELT, raw append-only log as the system of
 record, first-touch dedup as a re-runnable windowed query at analysis time. It deliberately left the
-*physical* engine open. This ADR pins it: on Tinybird (ADR-0017), first-touch is served by a **lambda
+_physical_ engine open. This ADR pins it: on Tinybird (ADR-0017), first-touch is served by a **lambda
 architecture** — a scheduled **Copy Pipe** snapshots the deduped first-touch table, and serving
 queries **`UNION ALL` the snapshot with raw rows ingested after the snapshot watermark**, deduping
 only that small tail at query time. The raw log stays the source of truth and the snapshot is always
@@ -32,7 +32,7 @@ late arrivals still become first-touch when their event time is earliest.
   query is the thing lambda exists to avoid. It remains the correct **v0** while volume is tiny — the
   snapshot layer is a strict refinement we add when scans get slow, not a different design.
 - **ReplacingMergeTree + `FINAL`** — rejected. RMT collapses the raw log to "latest row per key,"
-  which is the wrong reducer (we want *earliest* `ts`, first-touch) and, decisively, it would
+  which is the wrong reducer (we want _earliest_ `ts`, first-touch) and, decisively, it would
   destroy raw-as-truth: ADR-0010 requires the complete redundant log to stay intact so the transform
   can be re-run when a rule changes. `FINAL` is also a per-query merge cost the skill flags for
   removal under load. RMT answers "current state per key"; Exposure analysis is "first event per key

@@ -11,6 +11,7 @@ is the authoritative first-touch gate. The seen-set exists only to reduce networ
 and raw log volume within a single SDK instance — it does not change correctness.
 
 The seen-set is:
+
 - **Per SDK instance** — not shared across Workers, POPs, or processes
 - **In-memory** — does not survive a Worker restart or cold start
 - **Not a dedup authority** — the pipeline dedup query (`MIN(server_ts)` per `(entity, run)`)
@@ -48,6 +49,7 @@ Exposure on the next `evaluate` call — acceptable, because the pipeline dedup 
 ## What the seen-set does NOT prevent
 
 The seen-set suppresses within a single SDK instance. It does NOT prevent:
+
 - Multiple raw Exposures from different POPs (cross-POP is expected; pipeline deduplicates)
 - Multiple raw Exposures across Worker restarts (cold starts have empty seen-sets)
 - Duplicate Exposures from parallel `evaluate` calls before the seen-set is updated

@@ -6,6 +6,7 @@ verbatim for the **flag** side, and defines its own terms only for the **experim
 which both leave undefined.
 
 Sources of truth:
+
 - [Flagship concepts](https://developers.cloudflare.com/flagship/concepts/) — App, Flag, Variation,
   Targeting Rule, Percentage Rollout, Evaluation Context.
 - [OpenFeature glossary](https://openfeature.dev/specification/glossary/) — Targeting Key, Variant,
@@ -21,17 +22,17 @@ Organization owns one or more Apps and has Users as members (with roles). Every 
 Organization: self-serve signups get a **personal Organization**; **enterprise** accounts are sibling
 Organizations of the same shape that additionally carry SSO/SCIM. The term is adopted verbatim from
 **WorkOS**, where the Organization physically lives on the identity side. Distinct from App: an
-Organization is an *organizational/ownership* unit, **not** a product. (See ADR-0021.)
+Organization is an _organizational/ownership_ unit, **not** a product. (See ADR-0021.)
 _Avoid_: using "App" for this (App is a product, not an owner); Tenant, Workspace, Account (Organization
 is canonical, matching WorkOS)
 
 **App**:
 A **product / service surface**; groups related flags. Maps to one product/service surface. In
 splitch, the **five runtimes of one product share a single App** (define a flag once, consume it
-everywhere). Owns Flags; hosts Experiments. **Belongs to exactly one Organization** — an App is *not*
+everywhere). Owns Flags; hosts Experiments. **Belongs to exactly one Organization** — an App is _not_
 an ownership unit; the Organization is. The `app_id` boundary remains splitch's data-isolation seam
-(ADR-0018). An App spans one or more **Environments** (dev, prod, …): the Flag's *definition* — key,
-schema, full Variant catalog — is App-level and defined once, but its *configuration* (which Variants
+(ADR-0018). An App spans one or more **Environments** (dev, prod, …): the Flag's _definition_ — key,
+schema, full Variant catalog — is App-level and defined once, but its _configuration_ (which Variants
 are available, targeting, rollout, enabled state) is held **per Environment** (ADR-0027).
 _Avoid_: Site, Project, Tenant, Workspace (Site was the user's first word — App is canonical); treating
 an App as an org/account/tenant (that is the Organization); treating an App as a single environment
@@ -93,8 +94,8 @@ holdover state lives in the [[Assignment Store]], a sibling seam, not behind the
 OpenFeature, which routes side-effecting experiment writes through `track()`, not `resolve`.)
 
 **Evaluation** vs **Resolution**:
-*Evaluation* is the full retrieval of a flag value including hooks and default fallback.
-*Resolution* is the Provider retrieving the value from its source of truth. (Evaluation wraps Resolution.)
+_Evaluation_ is the full retrieval of a flag value including hooks and default fallback.
+_Resolution_ is the Provider retrieving the value from its source of truth. (Evaluation wraps Resolution.)
 
 ### Credential terms (how an SDK authenticates to the data plane — standard public/secret SDK keys)
 
@@ -142,7 +143,7 @@ _Avoid_: stage, tier, instance, deployment (Environment is canonical); treating 
 The configuration of a single Flag **within one Environment**: `available_variant_names` (the subset of
 the Flag's App-level [[Variant]] catalog that may be served here), the Targeting Rules, the rollout, and
 the enabled/disabled state. The unit that is edited, audited, diffed, and **promoted**. The Flag's
-*definition* (key, schema, full catalog, Default Variant) is App-level and shared; the Flag *Configuration*
+_definition_ (key, schema, full catalog, Default Variant) is App-level and shared; the Flag _Configuration_
 is per-Environment and diverges freely between Environments. (ADR-0028.)
 _Avoid_: env config, flag state (Flag Configuration is canonical); putting availability on the Variant
 itself (it lives in the Environment's Flag Configuration)
@@ -151,7 +152,7 @@ itself (it lives in the Environment's Flag Configuration)
 Moving [[Flag Configuration]] — a whole config, or a single Variant's availability — **from one Environment
 to another** (the headline flow: build/tune in dev, promote to prod). Distinct from **Start** (which opens
 an Experiment Run for measurement) and from a plain flag edit (which changes one Environment in place).
-Promotion is the *deployment* verb; Start is the *measurement* verb. A Promotion is subject to the target
+Promotion is the _deployment_ verb; Start is the _measurement_ verb. A Promotion is subject to the target
 Environment's [[Environment Policy]] (it may require a [[Confirmation]]). (ADR-0028.)
 _Avoid_: deploy, ship, publish, push (Promote is canonical; "publish" is retired entirely)
 
@@ -163,13 +164,13 @@ Experiment Run**. Each is independently set to `allow` | `confirm` (| `approve`,
 typically all-`allow`; prod's Policy is the user's choice — confirm on availability only, on value too, or
 on everything. This makes "prod is more careful" **configurable and structural**, not a hardcoded special
 case. (ADR-0029.)
-_Avoid_: guardrail (that is a Metric concept), approval flow (approval is one Policy *level*, future),
+_Avoid_: guardrail (that is a Metric concept), approval flow (approval is one Policy _level_, future),
 "prod is special" as a hardcoded rule (Policy is configurable per env)
 
 **Confirmation**:
 The intentionality gate an [[Environment Policy]] interposes between an intended change and its commit —
 the "are you sure, this affects production" step. Not a draft and not optimistic state: the change is still
-live and per-change once confirmed; Confirmation only guards the *commit*. The kill switch is never blocked
+live and per-change once confirmed; Confirmation only guards the _commit_. The kill switch is never blocked
 from turning a flag **off** regardless of Policy (incident control always wins).
 _Avoid_: review, approval (approval is the future Policy level above Confirmation); staging/draft (a
 Confirmation does not batch or stage the change)
@@ -218,12 +219,12 @@ Guardrail config) changes what the numbers mean but not who is in which arm, so 
 over the existing Run** — no new Run, no sample reset (the raw log is the system of record; the dedup/metric
 query re-runs). The decision spec (confidence level, horizon mode/tuning, goal Metric family, Guardrail
 thresholds, Primary Dimensions) is locked at Run start for decision-valid results; post-start changes are exploratory for the
-current Run. **Non-material** edits (description, owner, tags) apply in place. The Run freezes *bucketing* and
+current Run. **Non-material** edits (description, owner, tags) apply in place. The Run freezes _bucketing_ and
 the decision spec, while allowing exploratory recomputes. Runs are **independent**: the latest is the live result, prior Runs are frozen archives, never
 pooled (an assignment edit resets the sample; a measurement edit recomputes). **Assignment is pure over a Run** — because the Run is
 immutable, re-bucketing within a Run is impossible by construction. At a Run boundary a returning Entity
 already **exposed** under a prior Run is a **holdover**: it keeps showing its prior Variant (sticky
-experience) but is *not* re-counted in the new Run. (GrowthBook calls the window a Phase; Statsig
+experience) but is _not_ re-counted in the new Run. (GrowthBook calls the window a Phase; Statsig
 restarts a version; the holdover-Variant store is their Persistent Assignment / Sticky Bucketing.)
 _Avoid_: phase, version, configVersion (Experiment Run is canonical), analysis window; bare "Run" where
 the experiment context is not already clear (say "Experiment Run"); "publish" as the start verb (use
@@ -301,7 +302,7 @@ users who reached checkout) — an Entity is **activated** when it performs that
 occur **after** first Exposure (`activation_ts > first_exposure_ts`); a pre-exposure activation never
 counts (counting it is post-treatment selection bias). When set, it **re-anchors the Conversion Window to
 `activation_ts`** — activation is the true entry moment. **Bias trap**: if the Treatment changes whether an
-Entity activates, conditioning on activation biases results in a way the full-population SRM does *not*
+Entity activates, conditioning on activation biases results in a way the full-population SRM does _not_
 catch, so splitch ships two guardrails — **SRM on the activated population** (separate from the full-exposed
 SRM) and **per-arm activation rate as a first-class balance metric** tested by activated / not-activated
 chi-square at `p < 0.001`; either firing means the gated results are untrusted. Activation is a
@@ -371,7 +372,7 @@ everywhere, never a separate raw-count denominator.
   Organization. Organization is the ownership/account unit; App is the product unit.
 - An **App** owns many **Flags** and hosts many **Experiments**. The five runtimes of one product
   share a single App.
-- An **App** spans one or more **Environments** (dev, prod, …). A Flag's *definition* (key, schema,
+- An **App** spans one or more **Environments** (dev, prod, …). A Flag's _definition_ (key, schema,
   Variant catalog, Default Variant) is App-level; its **Flag Configuration** (available Variants,
   targeting, rollout, enabled state) is per-Environment. **Promotion** moves a Flag Configuration (or one
   Variant's availability) from one Environment to another. Each Environment has an **Environment Policy**
@@ -394,7 +395,7 @@ everywhere, never a separate raw-count denominator.
 - **Assignment** is the pure, deterministic result of `assign(Run, Targeting Key)` — it records nothing
   on its own. **Exposure** is the only event recorded; it carries the assigned Variant and `runId`. An
   Experiment's results are computed over **Exposures**, scoped to a **Run**.
-- An **Experiment** runs as a sequence of **Runs**; each Run freezes the *assignment* config and is the
+- An **Experiment** runs as a sequence of **Runs**; each Run freezes the _assignment_ config and is the
   unit of analysis. An assignment edit ends one Run and opens the next, keeping each Run's dataset clean; a
   measurement edit recomputes over the existing Run. Assignment is pure over a Run, so re-bucketing within a
   Run cannot happen.
@@ -433,8 +434,8 @@ everywhere, never a separate raw-count denominator.
   are **per-Environment** (ADR-0027).
 - "Environment" was absent from the original model ("five runtimes share one App, define once everywhere")
   — **resolved**: Environment is a first-class **second axis** under App. "Define once" applies to the Flag
-  *definition* (key, schema, Variant catalog); the per-Environment **Flag Configuration** is what diverges
-  and is **promoted** between Environments. Variant *catalog* is App-level, Variant *availability* is
+  _definition_ (key, schema, Variant catalog); the per-Environment **Flag Configuration** is what diverges
+  and is **promoted** between Environments. Variant _catalog_ is App-level, Variant _availability_ is
   per-Environment (ADR-0027/0028).
 - "publish" vs "promote" vs "start" — **resolved**: three distinct verbs, none overlapping. **Start/End** an
   **Experiment Run** (measurement). **Promote** a **Flag Configuration** between **Environments** (deployment).
@@ -450,4 +451,4 @@ everywhere, never a separate raw-count denominator.
 
 - This (`~/src/splitch`) is the canonical repo.
 - This file is a **glossary only** — no implementation details, no spec, no architecture. Application
-  structure (packages, storage, etc.) is undecided and deliberately not scaffolded yet.
+  structure, package layout, storage seams, and deployment workflow live in the specs and repo config.

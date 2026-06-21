@@ -39,10 +39,10 @@ GROUP BY app_id, experiment_id, run_id, id_type, targeting_key_hash
 
 ## `__multiple__` handling
 
-| Population | Included in SRM denominator? | Included in analysis arms? | Reported separately? |
-|---|---|---|---|
-| `variant != '__multiple__'` | YES | YES | — |
-| `variant = '__multiple__'` | NO | NO | YES — as `variant_conflict_rate` health metric |
+| Population                  | Included in SRM denominator? | Included in analysis arms? | Reported separately?                           |
+| --------------------------- | ---------------------------- | -------------------------- | ---------------------------------------------- |
+| `variant != '__multiple__'` | YES                          | YES                        | —                                              |
+| `variant = '__multiple__'`  | NO                           | NO                         | YES — as `variant_conflict_rate` health metric |
 
 `variant_conflict_rate` = `COUNT(*) WHERE variant = '__multiple__'` / `COUNT(*)` per `(run_id)`. Threshold: ~1% triggers an alert; above that signals a real defect.
 

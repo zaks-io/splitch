@@ -108,6 +108,7 @@ winner — the Entity will replay that Variant. But if the second POP's Exposure
 for analysis — counting a Variant the Entity did not actually see.
 
 This is an accepted, bounded gap:
+
 - It can only occur during a narrow race window at first-touch.
 - Both Variants assigned must be from the same Run's valid allocation.
 - The Entity is still deduplicated to a single row (not double-counted).

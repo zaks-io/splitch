@@ -1,0 +1,28 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "splitch-marketing",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "SPLITCH_PLATFORM_TARGET": "local"
+  },
+  "env": {
+    "shared-preview": {
+      "name": "splitch-marketing-shared-preview",
+      "vars": {
+        "SPLITCH_PLATFORM_TARGET": "shared-preview"
+      }
+    },
+    "production": {
+      "name": "splitch-marketing",
+      "vars": {
+        "SPLITCH_PLATFORM_TARGET": "production"
+      }
+    }
+  }
+}

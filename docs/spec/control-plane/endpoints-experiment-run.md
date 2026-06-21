@@ -18,8 +18,11 @@ conventions are described in [control-plane-endpoint-inventory.md](control-plane
 ## Experiment endpoints
 
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments`
+
 ### `POST /apps/{app_id}/envs/{environment_id}/experiments`
+
 Body (create draft):
+
 ```
 {
   name: string,
@@ -32,6 +35,7 @@ Body (create draft):
   confidence_level?: number           // default 0.95
 }
 ```
+
 Returns: `{ experiment_id, app_id, environment_id, flag_id, name, status: "draft", variants, created_at }`
 Status is always `draft` on creation; no Run yet.
 
@@ -40,10 +44,13 @@ Status is always `draft` on creation; no Run yet.
 `VARIANT_NOT_AVAILABLE` — a Run cannot test a Variant that cannot be served here.
 
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}`
+
 Returns: Experiment including `live_run_id` (null if no running Run), draft allocation, draft targeting.
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}`
+
 **Draft assignment-config fields** (accumulate on draft, Start to apply):
+
 ```
 {
   allocation?: { [variant_name]: number },  // must sum to 100
@@ -54,7 +61,9 @@ Returns: Experiment including `live_run_id` (null if no running Run), draft allo
   activation_metric_id?: string | null       // assignment-affecting
 }
 ```
+
 **Measurement-config fields** (apply to live Run in place, no reset):
+
 ```
 {
   metrics?: MetricRef[],                  // post-start additions are Secondary / exploratory
@@ -62,18 +71,22 @@ Returns: Experiment including `live_run_id` (null if no running Run), draft allo
   guardrail_config?: GuardrailConfig[]     // thresholds locked for decision-valid Guardrails
 }
 ```
+
 Decision-locked fields (`confidence_level`, `horizon`, `target_n`, `sample_size_locked`, goal
 Metric membership, Guardrail thresholds, and Primary Dimensions) cannot be changed for the current
 running Run's decision-valid result after Start. They may be drafted for the next Run or surfaced
 as exploratory analysis.
 
 **Non-material fields** (apply in place):
+
 ```
 { name?, description?, hypothesis?, owner?, tags? }
 ```
+
 Returns: updated Experiment.
 
 ### `POST /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/start`
+
 Starts the draft as a new Run; ends any running Run.
 Body: `{}` (no body required)
 Returns: `{ experiment_id, run: RunObject, previous_run_id?: string }`
@@ -83,18 +96,22 @@ Policy gates "Start an Experiment Run" at `confirm`, the call requires the Confi
 `confirm: true` body field over CLI/MCP) before it commits.
 
 ### `DELETE /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}`
+
 Blocked if status is `running`. Soft-deletes; archived experiments and their Runs are retained for
 analysis replayability. Hard-delete on explicit archive/purge (future).
 
 ## Experiment Run endpoints
 
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/runs`
+
 Returns: list of Runs (all statuses), newest first.
 
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/runs/{run_id}`
+
 Returns: full Run object (frozen assignment config + measurement config snapshot + status).
 
 ### `POST /apps/{app_id}/envs/{environment_id}/runs/{run_id}/end`
+
 Ends a running Run. See [run-state-machine.md](run-state-machine.md).
 Body: `{ reason?: string }` (optional human-readable note)
 Returns: ended Run object.

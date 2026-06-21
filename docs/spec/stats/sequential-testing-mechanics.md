@@ -16,14 +16,14 @@ CI is only valid at the pre-declared N.
 
 ### Inputs
 
-| Variable      | Source                            | Description                                      |
-|---------------|-----------------------------------|--------------------------------------------------|
-| `estimate`    | treatment minus Control estimator | Absolute-lift estimate at the current look       |
-| `sampling_var`| variance layer                    | Sampling variance of `estimate`; already includes `1/n` terms |
-| `n_t`         | deduped Exposures                 | Treatment unique Entity count                    |
-| `n_c`         | deduped Exposures                 | Control unique Entity count                      |
-| `alpha`       | locked Run decision spec          | `1 - confidence_level`                           |
-| `target_n`    | Run config                        | Optional tuning target for where the sequence is tightest |
+| Variable       | Source                            | Description                                                   |
+| -------------- | --------------------------------- | ------------------------------------------------------------- |
+| `estimate`     | treatment minus Control estimator | Absolute-lift estimate at the current look                    |
+| `sampling_var` | variance layer                    | Sampling variance of `estimate`; already includes `1/n` terms |
+| `n_t`          | deduped Exposures                 | Treatment unique Entity count                                 |
+| `n_c`          | deduped Exposures                 | Control unique Entity count                                   |
+| `alpha`        | locked Run decision spec          | `1 - confidence_level`                                        |
+| `target_n`     | Run config                        | Optional tuning target for where the sequence is tightest     |
 
 `sampling_var` is the variance of the estimator, not the raw per-Entity variance. For a simple
 difference in means this is `s2_t / n_t + s2_c / n_c`; for Ratio and relative-lift estimators it
@@ -33,7 +33,7 @@ sequential adapter must not divide by `N` again.
 ### Algorithm contract
 
 The implementation must use a named confidence-sequence algorithm with source-level tests, not a
-hand-copied width sketch in this document. v1 uses an asymptotic confidence sequence adapter over
+hand-copied width sketch in this document. The inference engine uses an asymptotic confidence sequence adapter over
 the asymptotically normal estimator produced by the variance layer. The adapter owns:
 
 1. The time-uniform boundary / wealth process.
@@ -113,16 +113,17 @@ decision results.
 
 ## Failure contracts
 
-| Condition                          | Behavior                                           |
-|------------------------------------|----------------------------------------------------|
-| `sampling_var = 0` (zero variance) | CI = `[-∞, +∞]` for the Metric; warn in output    |
-| `N = 0` in any arm                 | CI = `[-∞, +∞]`; status = `running`               |
-| Invalid tuning schedule            | Reject at config validation; do not use            |
-| Numerical overflow in log term     | Return error status; do not return corrupt CI      |
+| Condition                          | Behavior                                       |
+| ---------------------------------- | ---------------------------------------------- |
+| `sampling_var = 0` (zero variance) | CI = `[-∞, +∞]` for the Metric; warn in output |
+| `N = 0` in any arm                 | CI = `[-∞, +∞]`; status = `running`            |
+| Invalid tuning schedule            | Reject at config validation; do not use        |
+| Numerical overflow in log term     | Return error status; do not return corrupt CI  |
 
 ## Seam: sequential vs. fixed-horizon
 
 Two real adapters exist:
+
 1. `SequentialCI` — implements the aCS; output is `{ci_lower, ci_upper, p_value}` valid at any N.
 2. `FixedHorizonCI` — implements the t-test; output is `{ci_lower, ci_upper, p_value}` valid only at declared N.
 

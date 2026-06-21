@@ -2,7 +2,7 @@
 
 **Status:** accepted
 
-The analysis denominator is **unique Entities per Run, first-touch**: an Entity's *earliest* Exposure
+The analysis denominator is **unique Entities per Run, first-touch**: an Entity's _earliest_ Exposure
 in a Run is the one that counts and anchors its Conversion Window; repeat reads, sessions, and edge
 nodes do not add to the count. Dedup happens at two layers doing two different jobs: the **SDK seen-set**
 is a hot-path/wire optimization only, and the **pipeline dedup** (`GROUP BY entity, run`, `MIN(timestamp)`)

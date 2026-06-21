@@ -67,6 +67,7 @@ See [websocket-lifecycle.md](./websocket-lifecycle.md) for the full contract.
 
 The socket's mount/unmount is driven by `(appId, environmentId)`. When either changes (App switch or
 Environment switch), the layout effect:
+
 1. Closes the socket connected to `DO(prev)`
 2. Purges the cache for the previous scope: `invalidateQueries({ queryKey: ['app', appId, 'env', envId] })`
 3. Opens a new socket to `DO(next)`
@@ -77,10 +78,10 @@ its owning `(appId, environmentId)`.
 
 ## Why URL over session state
 
-| Approach                    | Problem                                          |
-|-----------------------------|--------------------------------------------------|
-| `currentAppId` in session   | Server and client can drift; not bookmarkable    |
-| `currentAppId` in React ctx | Context can outlive navigation; cache contamination risk |
+| Approach                    | Problem                                                                             |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `currentAppId` in session   | Server and client can drift; not bookmarkable                                       |
+| `currentAppId` in React ctx | Context can outlive navigation; cache contamination risk                            |
 | `appId` from URL (chosen)   | Isolation boundary is visible at every loader; shareable; no ambient state to drift |
 
 The URL is the only state that is simultaneously visible to the SSR loader (server) and the

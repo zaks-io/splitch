@@ -6,16 +6,16 @@ A **Metric** = a fact (the event/action measured) combined with an aggregation (
 
 ## ExperimentMetric shape
 
-| Field | Type | Req | Meaning |
-|---|---|---|---|
-| `metric_id` | `string` (ULID) | ✓ | Internal identifier |
-| `app_id` | `string` | ✓ | Owning App |
-| `name` | `string` | ✓ | Display name |
-| `event_name` | `string` | ✓ | The event/action tracked in the log |
-| `metric_type` | `MetricType` | ✓ | See below |
-| `aggregation` | `AggregationConfig` | ✓ | Per-Entity aggregation spec (sum, binary, mean, ratio) |
-| `role` | `"goal" \| "guardrail" \| "secondary"` | ✓ | Role in this Experiment's analysis |
-| `guardrail_config` | `GuardrailConfig \| null` | ✗ | Required when `role = "guardrail"` |
+| Field              | Type                                   | Req | Meaning                                                |
+| ------------------ | -------------------------------------- | --- | ------------------------------------------------------ |
+| `metric_id`        | `string` (ULID)                        | ✓   | Internal identifier                                    |
+| `app_id`           | `string`                               | ✓   | Owning App                                             |
+| `name`             | `string`                               | ✓   | Display name                                           |
+| `event_name`       | `string`                               | ✓   | The event/action tracked in the log                    |
+| `metric_type`      | `MetricType`                           | ✓   | See below                                              |
+| `aggregation`      | `AggregationConfig`                    | ✓   | Per-Entity aggregation spec (sum, binary, mean, ratio) |
+| `role`             | `"goal" \| "guardrail" \| "secondary"` | ✓   | Role in this Experiment's analysis                     |
+| `guardrail_config` | `GuardrailConfig \| null`              | ✗   | Required when `role = "guardrail"`                     |
 
 ## Metric types
 
@@ -53,6 +53,7 @@ One Metric divided by another; numerator and denominator are aggregated independ
 `MetricType = "ratio"`
 
 `AggregationConfig` for Ratio:
+
 ```
 {
   numerator:   { event_name: string; aggregation: "sum" | "count" }

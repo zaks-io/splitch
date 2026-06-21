@@ -41,13 +41,13 @@ per-route — it is a convention enforced by the panel app's routing config.
 
 ## Pending / loading UI
 
-| Scenario                              | Loading treatment                                       |
-|---------------------------------------|---------------------------------------------------------|
-| First paint, loader-seeded route      | No spinner. Data is SSR'd into the Query cache.         |
-| Client-side navigation to loaded route | No spinner. Query cache has the data already.           |
+| Scenario                                | Loading treatment                                       |
+| --------------------------------------- | ------------------------------------------------------- |
+| First paint, loader-seeded route        | No spinner. Data is SSR'd into the Query cache.         |
+| Client-side navigation to loaded route  | No spinner. Query cache has the data already.           |
 | Client-side navigation, data not loaded | `pendingComponent` shows skeleton from `ui` package.    |
-| Suspense boundary (lazy component)    | `<Suspense fallback={<Skeleton />}>` from `ui` package  |
-| Form submit in progress               | Submit button disabled + loading state (local useState) |
+| Suspense boundary (lazy component)      | `<Suspense fallback={<Skeleton />}>` from `ui` package  |
+| Form submit in progress                 | Submit button disabled + loading state (local useState) |
 
 Skeletons are **brand components** living in `packages/ui`. The panel app uses them but does not
 define them. There is one skeleton shape per major content type (list, detail card, data table).
@@ -64,11 +64,11 @@ app places them behind the appropriate boundary at the right tier. The `ui` pack
 
 ## Sentry severity summary
 
-| Tier | Failure type               | Sentry level      |
-|------|----------------------------|-------------------|
-| 1    | Unexpected/catastrophic    | `error` (pages)   |
-| 2    | 403 / 404 / domain failure | `info` breadcrumb |
-| 3    | Background refetch failure | `debug` breadcrumb|
+| Tier | Failure type               | Sentry level       |
+| ---- | -------------------------- | ------------------ |
+| 1    | Unexpected/catastrophic    | `error` (pages)    |
+| 2    | 403 / 404 / domain failure | `info` breadcrumb  |
+| 3    | Background refetch failure | `debug` breadcrumb |
 
 ## Sources
 

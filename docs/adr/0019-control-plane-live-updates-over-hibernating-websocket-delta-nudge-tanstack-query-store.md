@@ -17,7 +17,7 @@ the DO evicts from memory and **billable Duration (GB-s) stops accruing**, with 
 the socket and re-waking the DO on the next message. SSE is a long-lived HTTP response held open
 inside a `fetch` handler, which keeps the DO **resident and billing for the whole connection**, idle
 or not — there is no SSE hibernation. So the connection-cost worry that motivated "not WebSocket" is
-in fact *worse* for SSE on this stack; hibernating WebSocket is the cheap option, not the expensive
+in fact _worse_ for SSE on this stack; hibernating WebSocket is the cheap option, not the expensive
 one. (`https://developers.cloudflare.com/durable-objects/best-practices/websockets/`.)
 
 ## Scope
@@ -38,11 +38,11 @@ separate problem with a separate mechanism and is out of scope here.
   authenticated to App X can attach only to `DO(X)`, so the `app_id` application-enforced isolation of
   ADR-0018 extends cleanly to "which DO you may connect to."
 - **Notify path: write-through-the-DO.** The config-write Worker calls `DO(appId)`, which validates,
-  commits the KV/D1 write, *then* broadcasts. The DO is the single serialization point for write and
+  commits the KV/D1 write, _then_ broadcasts. The DO is the single serialization point for write and
   notify, so a broadcast can never describe unpersisted state (**persisted-before-announced**). This
   reuses ADR-0009's shape verbatim — a per-key DO serializing a write that write-throughs to KV — so
   config and the hot path share one mental model. (Consequence: the DO wakes on every config write
-  because it *is* the writer; config writes are rare human clicks, so it re-hibernates immediately.)
+  because it _is_ the writer; config writes are rare human clicks, so it re-hibernates immediately.)
 - **Payload + client state: delta-shaped nudge, Query-as-store.** The broadcast names the changed
   entity (e.g. `{type:"config.changed", entity:"experiment", id, version}`) — small, so fan-out is
   cheap and the DO never learns the config schema. The client does **not** apply the delta; it
@@ -69,7 +69,7 @@ separate problem with a separate mechanism and is out of scope here.
   socket is down — it is just the refetch on a timer.)
 - **Full-state push over the socket** — rejected. Couples the DO to the config schema, bloats fan-out
   messages, and still needs a snapshot on reconnect (which is a refetch anyway). The delta-nudge gets
-  small messages *and* a trivial reconnect story.
+  small messages _and_ a trivial reconnect story.
 - **Versioned delta log with client-side replay** (client applies patches to a local normalized
   store, asks `getSince(version)` on reconnect) — rejected as over-built for a single-digit-editor,
   low-volume surface. It is correct and minimal-reads at scale, but it reintroduces ordering, log
@@ -88,4 +88,4 @@ separate problem with a separate mechanism and is out of scope here.
 - **No client state-management platform is added.** TanStack Query (already in the stack) is the store;
   the WebSocket replaces a polling timer, nothing more.
 - **No config-copy seam is introduced** (ADR-0017 consequence preserved): the panel always reads
-  config from the same store the hot path reads; the socket only changes *when* it refetches.
+  config from the same store the hot path reads; the socket only changes _when_ it refetches.

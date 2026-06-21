@@ -5,12 +5,12 @@ variance computation ([inference-engine.md](inference-engine.md)).
 
 ## Metric taxonomy
 
-| Type       | CONTEXT.md term     | Aggregation per Entity       | Variance estimator          |
-|------------|---------------------|------------------------------|-----------------------------|
-| `binomial` | Binomial Metric     | `0` or `1` (did/didn't)      | `p(1-p)`                    |
-| `count`    | Count Metric        | sum of event values          | sample variance of sums     |
-| `revenue`  | Revenue Metric      | sum of event values          | sample variance of sums     |
-| `ratio`    | Ratio Metric        | `(num_sum, denom_sum)` pair  | delta method with covariance |
+| Type       | CONTEXT.md term | Aggregation per Entity      | Variance estimator           |
+| ---------- | --------------- | --------------------------- | ---------------------------- |
+| `binomial` | Binomial Metric | `0` or `1` (did/didn't)     | `p(1-p)`                     |
+| `count`    | Count Metric    | sum of event values         | sample variance of sums      |
+| `revenue`  | Revenue Metric  | sum of event values         | sample variance of sums      |
+| `ratio`    | Ratio Metric    | `(num_sum, denom_sum)` pair | delta method with covariance |
 
 A "Conversion" is informal language for a Binomial Metric event. It is not a first-class type.
 
@@ -72,10 +72,10 @@ ratio   = SUM(num_i) / SUM(denom_i)   (population-level)
 
 A regular Metric (any type) annotated with a `downside_threshold`.
 
-| Field               | Type     | Meaning                                                    |
-|---------------------|----------|------------------------------------------------------------|
-| `base_metric_id`    | `string` | The underlying Metric being guarded                        |
-| `downside_threshold`| `number` | Minimum acceptable relative-lift lower bound (e.g., `-0.005`) |
+| Field                | Type     | Meaning                                                       |
+| -------------------- | -------- | ------------------------------------------------------------- |
+| `base_metric_id`     | `string` | The underlying Metric being guarded                           |
+| `downside_threshold` | `number` | Minimum acceptable relative-lift lower bound (e.g., `-0.005`) |
 
 Guardrail fires when `ci_lower < downside_threshold`. Excluded from the BH FDR family (see
 [multiple-comparisons-fdr.md](multiple-comparisons-fdr.md)).
@@ -88,9 +88,9 @@ window_end       = window_anchor + window_duration
 event_in_window  = event_ts >= window_anchor AND event_ts < window_end
 ```
 
-| Config field       | Type         | Scope           | Default         |
-|--------------------|--------------|-----------------|-----------------|
-| `window_duration`  | `duration`   | per-Metric      | Experiment-level default (e.g., 7 days) |
+| Config field      | Type       | Scope      | Default                                 |
+| ----------------- | ---------- | ---------- | --------------------------------------- |
+| `window_duration` | `duration` | per-Metric | Experiment-level default (e.g., 7 days) |
 
 Events before `window_anchor` or after `window_end` do not count toward the Metric.
 
@@ -98,6 +98,7 @@ Events before `window_anchor` or after `window_end` do not count toward the Metr
 
 When an Activation gate is set, `window_anchor = activation_ts` (the true entry moment).
 `first_exposure_ts` is still available for:
+
 - CUPED pre-period (always anchored at `first_exposure_ts`; immutable).
 - Full-exposed SRM denominator (all Exposed Entities, not just activated).
 
@@ -111,18 +112,18 @@ activation rows satisfy this invariant.
 
 ## Metric definition fields
 
-| Field               | Type                                    | Required | Meaning                              |
-|---------------------|-----------------------------------------|----------|--------------------------------------|
-| `metric_id`         | `string`                                | yes      | Unique within App                    |
-| `metric_type`       | `binomial \| count \| revenue \| ratio` | yes      |                                      |
-| `event_name`        | `string`                                | yes      | Event type to match in log           |
-| `event_value_field` | `string \| null`                        | cond.    | Required for count/revenue/ratio num |
-| `denom_event_name`  | `string \| null`                        | cond.    | Required for ratio denominator       |
-| `denom_value_field` | `string \| null`                        | cond.    | Required for ratio denominator       |
-| `window_duration`   | `duration`                              | yes      | Per-Metric window override           |
-| `winsorize`         | `boolean`                               | yes      | Default `true` for count/revenue, `false` for binomial |
-| `winsorize_pct`     | `number`                                | yes      | Default `99.9`; ignored if winsorize=false |
-| `downside_threshold`| `number \| null`                        | no       | Set to make this a Guardrail Metric  |
+| Field                | Type                                    | Required | Meaning                                                |
+| -------------------- | --------------------------------------- | -------- | ------------------------------------------------------ |
+| `metric_id`          | `string`                                | yes      | Unique within App                                      |
+| `metric_type`        | `binomial \| count \| revenue \| ratio` | yes      |                                                        |
+| `event_name`         | `string`                                | yes      | Event type to match in log                             |
+| `event_value_field`  | `string \| null`                        | cond.    | Required for count/revenue/ratio num                   |
+| `denom_event_name`   | `string \| null`                        | cond.    | Required for ratio denominator                         |
+| `denom_value_field`  | `string \| null`                        | cond.    | Required for ratio denominator                         |
+| `window_duration`    | `duration`                              | yes      | Per-Metric window override                             |
+| `winsorize`          | `boolean`                               | yes      | Default `true` for count/revenue, `false` for binomial |
+| `winsorize_pct`      | `number`                                | yes      | Default `99.9`; ignored if winsorize=false             |
+| `downside_threshold` | `number \| null`                        | no       | Set to make this a Guardrail Metric                    |
 
 ## Measurement edits (no new Run)
 

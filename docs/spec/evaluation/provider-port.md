@@ -30,47 +30,47 @@ It returns the rule set; the evaluate path iterates and matches.
 
 ## ExperimentConfig shape
 
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `experimentId` | string | yes | Stable Experiment identity |
-| `appId` | string | yes | Isolation scope |
-| `environmentId` | string | yes | Co-scoped with `appId`; Experiment/Run are per-Environment (ADR-0027) |
-| `liveRunId` | string \| null | yes | Hydrated: the current live Run; null if no Run is live yet |
-| `liveRun` | `RunConfig \| null` | yes | Full frozen RunConfig for the live Run (hydrated inline) |
-| `status` | `'draft' \| 'running' \| 'ended'` | yes | Current lifecycle state |
+| Field           | Type                              | Required | Meaning                                                               |
+| --------------- | --------------------------------- | -------- | --------------------------------------------------------------------- |
+| `experimentId`  | string                            | yes      | Stable Experiment identity                                            |
+| `appId`         | string                            | yes      | Isolation scope                                                       |
+| `environmentId` | string                            | yes      | Co-scoped with `appId`; Experiment/Run are per-Environment (ADR-0027) |
+| `liveRunId`     | string \| null                    | yes      | Hydrated: the current live Run; null if no Run is live yet            |
+| `liveRun`       | `RunConfig \| null`               | yes      | Full frozen RunConfig for the live Run (hydrated inline)              |
+| `status`        | `'draft' \| 'running' \| 'ended'` | yes      | Current lifecycle state                                               |
 
 `RunConfig` shape: see [assign-pure-function.md](./assign-pure-function.md).
 
 ## FlagConfig shape
 
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `flagKey` | string | yes | Unique within App |
-| `appId` | string | yes | Isolation scope |
-| `environmentId` | string | yes | Co-scoped with `appId`; Flag Configuration is per-Environment (ADR-0027) |
-| `enabled` | boolean | yes | If false: return Default Variant on all requests |
-| `defaultVariant` | string | yes | Variant name returned when disabled or no rule matches |
-| `variants` | `{ name: string; value: boolean \| string \| number \| object }[]` | yes | All possible Variants; value type is JSON |
-| `targetingRules` | `TargetingRule[]` | yes | Priority-ordered; evaluate path iterates, first match wins |
+| Field            | Type                                                               | Required | Meaning                                                                  |
+| ---------------- | ------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------ |
+| `flagKey`        | string                                                             | yes      | Unique within App                                                        |
+| `appId`          | string                                                             | yes      | Isolation scope                                                          |
+| `environmentId`  | string                                                             | yes      | Co-scoped with `appId`; Flag Configuration is per-Environment (ADR-0027) |
+| `enabled`        | boolean                                                            | yes      | If false: return Default Variant on all requests                         |
+| `defaultVariant` | string                                                             | yes      | Variant name returned when disabled or no rule matches                   |
+| `variants`       | `{ name: string; value: boolean \| string \| number \| object }[]` | yes      | All possible Variants; value type is JSON                                |
+| `targetingRules` | `TargetingRule[]`                                                  | yes      | Priority-ordered; evaluate path iterates, first match wins               |
 
 ## TargetingRule shape
 
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `ruleId` | string | yes | Stable rule identity; appears in test-evaluation reason |
-| `ruleName` | string | yes | Human-readable label |
-| `priority` | integer | yes | Lower = matched first; evaluate path sorts ascending |
-| `conditions` | `Condition[]` | yes | All must match (AND); each Condition is `{attribute, operator, value}` |
-| `variant` | string | yes | Variant name to serve when rule matches |
+| Field               | Type                                                             | Required | Meaning                                                                           |
+| ------------------- | ---------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------- |
+| `ruleId`            | string                                                           | yes      | Stable rule identity; appears in test-evaluation reason                           |
+| `ruleName`          | string                                                           | yes      | Human-readable label                                                              |
+| `priority`          | integer                                                          | yes      | Lower = matched first; evaluate path sorts ascending                              |
+| `conditions`        | `Condition[]`                                                    | yes      | All must match (AND); each Condition is `{attribute, operator, value}`            |
+| `variant`           | string                                                           | yes      | Variant name to serve when rule matches                                           |
 | `percentageRollout` | `{ weights: { variantName: string; weight: number }[] } \| null` | optional | If set, Fractional Evaluation applies within matched Entities; weights sum to 1.0 |
 
 ## Condition shape
 
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `attribute` | string | yes | Key in EvaluationContext (e.g. `"country"`, `"plan"`) |
-| `operator` | `'eq' \| 'neq' \| 'in' \| 'not_in' \| 'gt' \| 'lt' \| 'gte' \| 'lte' \| 'contains' \| 'segment_in' \| 'segment_not_in'` | yes | Comparison or Segment membership |
-| `value` | `string \| number \| boolean \| string[]` | yes | Operand |
+| Field       | Type                                                                                                                    | Required | Meaning                                               |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------- |
+| `attribute` | string                                                                                                                  | yes      | Key in EvaluationContext (e.g. `"country"`, `"plan"`) |
+| `operator`  | `'eq' \| 'neq' \| 'in' \| 'not_in' \| 'gt' \| 'lt' \| 'gte' \| 'lte' \| 'contains' \| 'segment_in' \| 'segment_not_in'` | yes      | Comparison or Segment membership                      |
+| `value`     | `string \| number \| boolean \| string[]`                                                                               | yes      | Operand                                               |
 
 `segment_in` / `segment_not_in`: the `value` is a Segment ID. Segment membership = the
 Entity matches the Segment's own Conditions. Segments are Conditions, not a separate
@@ -78,11 +78,11 @@ authorization layer.
 
 ## EvaluationContext shape
 
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `targetingKey` | string | yes | The Entity identifier; first-class field; used for Fractional Evaluation hashing |
-| `idType` | string | yes | Entity type (e.g. `"user"`, `"workspace"`); guards Assignment Store key |
-| `[attribute]` | `string \| number \| boolean` | optional | Arbitrary attributes available to Targeting Rule Conditions |
+| Field          | Type                          | Required | Meaning                                                                          |
+| -------------- | ----------------------------- | -------- | -------------------------------------------------------------------------------- |
+| `targetingKey` | string                        | yes      | The Entity identifier; first-class field; used for Fractional Evaluation hashing |
+| `idType`       | string                        | yes      | Entity type (e.g. `"user"`, `"workspace"`); guards Assignment Store key          |
+| `[attribute]`  | `string \| number \| boolean` | optional | Arbitrary attributes available to Targeting Rule Conditions                      |
 
 `targetingKey` is required and first-class. All attributes in context are available to
 Condition matching. `idType` must match the Experiment's configured Entity type and must be

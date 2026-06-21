@@ -19,11 +19,11 @@ The SDK maintains a per-`(experiment_id, run_id)` seen-set as a **hot-path optim
 
 ## Timestamp sourcing
 
-| Field | Source | Use |
-|---|---|---|
+| Field       | Source                                                   | Use                                                             |
+| ----------- | -------------------------------------------------------- | --------------------------------------------------------------- |
 | `server_ts` | Evaluation Worker's `Date.now()` when the Exposure fires | Canonical for `MIN(ts)` first-touch ordering in the dedup query |
-| `ingest_ts` | Raw-log append / collector receive time | Snapshot/tail watermark only; never used for analysis ordering |
-| `client_ts` | SDK payload from the client runtime | Diagnostics only; never used for ordering |
+| `ingest_ts` | Raw-log append / collector receive time                  | Snapshot/tail watermark only; never used for analysis ordering  |
+| `client_ts` | SDK payload from the client runtime                      | Diagnostics only; never used for ordering                       |
 
 `server_ts` and `ingest_ts` are always populated. `client_ts` is optional — if absent,
 diagnostics degrade gracefully. Never use `client_ts` for first-touch ordering (clock skew
@@ -72,11 +72,11 @@ The DO write is **non-blocking on the hot path** — it executes with a short ti
 
 ## Ingest failure contract
 
-| Failure | Effect | Recovery |
-|---|---|---|
-| Tinybird append fails | Raw row never written; dedup never sees this Exposure | Retry at-least-once; eventual consistency; SDK can re-fire on next evaluate |
-| DO write fails after Tinybird append | Holdover miss for up to ~60s + retry window | `assign()` is deterministic — same Variant computed on miss; DO retry picks up |
-| KV write-through from DO fails | KV miss for ~60s | Next KV read recomputes and re-propagates via DO (self-healing) |
+| Failure                              | Effect                                                | Recovery                                                                       |
+| ------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Tinybird append fails                | Raw row never written; dedup never sees this Exposure | Retry at-least-once; eventual consistency; SDK can re-fire on next evaluate    |
+| DO write fails after Tinybird append | Holdover miss for up to ~60s + retry window           | `assign()` is deterministic — same Variant computed on miss; DO retry picks up |
+| KV write-through from DO fails       | KV miss for ~60s                                      | Next KV read recomputes and re-propagates via DO (self-healing)                |
 
 There is no distributed transaction across Tinybird + DO + KV. The failure modes are cosmetic and self-healing within the ~60s KV propagation window.
 

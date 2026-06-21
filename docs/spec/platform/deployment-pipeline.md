@@ -1,6 +1,7 @@
 # Deployment pipeline: PR CI, shared preview, production release, rollback
 
-Status: designed, not wired.
+Status: CI and local gates wired; shared preview, production deploy, rollback, and real resource
+provisioning are still designed, not wired.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md). This document uses **platform target** for
 CI/deployment targets such as local, PR CI, shared preview, and production. A platform target is not a
 splitch product **Environment** under an App.
@@ -13,17 +14,21 @@ analytics resources. Every non-doc PR gets local validation against disposable C
 preview is a single shared target updated on demand. Production releases are queued, approval-gated
 GitHub deployments that run migrations as part of the release, not as a side manual step.
 
+The scaffold has the `ci` and `gitleaks` workflows, Turborepo task graph, package scripts,
+Lefthook hooks, and placeholder Wrangler configs. It does not provision or deploy Cloudflare or
+Tinybird resources.
+
 Do not use Cloudflare dashboard edits as the source of truth. Wrangler config, generated preview
 configs, Tinybird project files, and GitHub environment settings are the release contract.
 
 ## Platform targets
 
-| Target | Purpose | Resource shape | Approval |
-|---|---|---|---|
-| `local` | Developer loop and CI unit/integration checks | Local Wrangler storage simulation, Tinybird Local, fixture data | none |
-| `pr-ci` | Required PR validation | Local Wrangler storage simulation, Tinybird Local, fixture data | none |
-| `shared-preview` | One hosted preview to share on demand | Persistent non-production Cloudflare resources plus one Tinybird Branch | maintainer-triggered |
-| `production` | Customer-serving platform | Persistent Cloudflare resources, Tinybird Cloud main workspace, production routes/domains | GitHub `production` environment approval |
+| Target           | Purpose                                       | Resource shape                                                                            | Approval                                 |
+| ---------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `local`          | Developer loop and CI unit/integration checks | Local Wrangler storage simulation, Tinybird Local, fixture data                           | none                                     |
+| `pr-ci`          | Required PR validation                        | Local Wrangler storage simulation, Tinybird Local, fixture data                           | none                                     |
+| `shared-preview` | One hosted preview to share on demand         | Persistent non-production Cloudflare resources plus one Tinybird Branch                   | maintainer-triggered                     |
+| `production`     | Customer-serving platform                     | Persistent Cloudflare resources, Tinybird Cloud main workspace, production routes/domains | GitHub `production` environment approval |
 
 PRs do not get hosted previews by default. The shared preview target is intentionally mutable and
 single-tenant: when a maintainer deploys a branch or PR there, it replaces the previous preview.
@@ -56,7 +61,7 @@ Required Turbo shape:
   are declared. Coverage output is cacheable only for deterministic test jobs.
 - `dev` is `cache: false` and `persistent: true`.
 - Provisioning, deploy, migration, preview cleanup, `wrangler`, and `tb deploy` tasks are `cache:
-  false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secrets is never served
+false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secrets is never served
   from cache.
 - `globalEnv` and task-level `env` list every environment variable that changes build output, including
   public app URLs and platform target names. Missing env declarations can produce preview/prod cache
@@ -68,13 +73,14 @@ Required Turbo shape:
 
 ## Required GitHub workflows
 
-| Workflow | Trigger | Concurrency | Required result |
-|---|---|---|---|
-| `ci` | PR and push to main | cancel in-progress per branch/PR | `verify:ci`: format, lint, typecheck, test, build, dependency-cruiser, Knip, Gitleaks, local D1/Tinybird checks |
-| `deploy-shared-preview` | manual dispatch, or trusted maintainer label/comment | `shared-preview-deploy`, queued | deploys selected ref to the one hosted preview target |
-| `reset-shared-preview` | manual dispatch | `shared-preview-deploy`, queued | restores shared preview to the default branch or clears preview data |
-| `deploy-production` | push to main, or manual dispatch from main | `production-deploy`, queued | migration-backed production release with smoke checks |
-| `rollback-production` | manual dispatch | `production-deploy`, queued | Worker rollback or roll-forward runbook execution |
+| Workflow                | Trigger                                              | Concurrency                      | Required result                                                                                                        |
+| ----------------------- | ---------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `ci`                    | PR and push to main                                  | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, Knip, Gitleaks, local D1/Tinybird checks |
+| `gitleaks`              | PR and push                                          | none                             | wired: full git secret scan                                                                                            |
+| `deploy-shared-preview` | manual dispatch, or trusted maintainer label/comment | `shared-preview-deploy`, queued  | not wired: deploy selected ref to the one hosted preview target                                                        |
+| `reset-shared-preview`  | manual dispatch                                      | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                          |
+| `deploy-production`     | push to main, or manual dispatch from main           | `production-deploy`, queued      | not wired: migration-backed production release with smoke checks                                                       |
+| `rollback-production`   | manual dispatch                                      | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                           |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
@@ -87,17 +93,17 @@ deploy must specify a platform target.
 
 Per-Worker configs must declare only the bindings owned by that Worker:
 
-| Worker | Binding rule |
-|---|---|
+| Worker                   | Binding rule                                                                                         |
+| ------------------------ | ---------------------------------------------------------------------------------------------------- |
 | Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update Durable Object binding |
-| MCP Worker | No D1, KV, Tinybird, or Durable Object data bindings; calls through `@splitch/client` |
-| Evaluation Worker | Provider/config KV, Assignment Store KV/DO, Event Ingest service binding |
-| Event Ingest Worker | Queue, sharded ingest/dedup Durable Objects, Tinybird write secret |
-| Analysis Worker | Tinybird read secret; no SDK evaluate or ingest bindings |
-| Auth Issuer Worker | Auth/session/token bindings only; no post-create App management bindings |
-| Control Panel Worker | UI/session/client bindings only; no direct D1/KV/Tinybird access |
-| Marketing Worker | Static/public bindings only; no authenticated App data |
-| Cron Workers | One job per Worker: demo reaper, Tinybird snapshot refresh |
+| MCP Worker               | No D1, KV, Tinybird, or Durable Object data bindings; calls through `@splitch/control-plane-sdk`     |
+| Evaluation Worker        | Provider/config KV, Assignment Store KV/DO, Event Ingest service binding                             |
+| Event Ingest Worker      | Queue, sharded ingest/dedup Durable Objects, Tinybird write secret                                   |
+| Analysis Worker          | Tinybird read secret; no SDK evaluate or ingest bindings                                             |
+| Auth API Worker          | Auth/session/token bindings only; no post-create App management bindings                             |
+| Control Panel Worker     | UI/session/client bindings only; no direct D1/KV/Tinybird access                                     |
+| Marketing Worker         | Static/public bindings only; no authenticated App data                                               |
+| Scheduled jobs           | Cron triggers stay on owning Workers: Control Plane API demo cleanup and Analysis snapshot refresh   |
 
 ### Shared Cloudflare preview
 
@@ -191,8 +197,8 @@ Tinybird flow:
    They are not allowed in the default production deploy workflow.
 
 The splitch physical dedup Copy Pipe snapshot is separate from Tinybird Branch snapshots. Production
-runs the scheduled Tinybird snapshot Cron Worker. Shared preview runs Copy Pipes on demand for smoke
-tests only; it does not schedule its own hourly snapshot job by default.
+runs the scheduled Tinybird snapshot refresh on the Analysis Worker. Shared preview runs Copy Pipes on
+demand for smoke tests only; it does not schedule its own hourly snapshot job by default.
 
 ## Production deploy order
 
@@ -204,9 +210,10 @@ Production deployments run from the default branch only.
    be enabled.
 4. Deploy Tinybird to Cloud main.
 5. Apply D1 migrations to production.
-6. Deploy stateful/internal Workers first: Event Ingest, Analysis, Control Plane API, Auth Issuer.
+6. Deploy stateful/internal Workers first: Event Ingest, Analysis, Control Plane API, Auth API.
 7. Deploy Evaluation Worker after Event Ingest is healthy.
-8. Deploy MCP Worker, Control Panel Worker, Marketing Worker, and Cron Workers.
+8. Deploy MCP Worker, Control Panel Worker, and Marketing Worker; verify cron trigger registration on
+   Control Plane API and Analysis Workers.
 9. Run smoke checks for public routes, service bindings, event ingest, analysis reads, and cron trigger
    registration.
 10. Record Worker version IDs, D1 migration names, Tinybird deployment URL, commit SHA, and smoke results
@@ -243,20 +250,21 @@ Rollback limits:
 Default incident policy is roll forward unless the release is code-only and the previous Worker version
 is compatible with current data.
 
-## First implementation checklist
+## Implementation checklist
 
-- Add Wrangler configs for every Worker with explicit `preview` and `production` platform target values.
-- Add `turbo.json`, package scripts, cacheable outputs, explicit env hashing, and uncached deploy/migrate
-  tasks.
-- Add local hook wiring from [local-quality-gates.md](./local-quality-gates.md), including
-  `verify:commit`, `verify:push`, Knip, and Gitleaks.
-- Add scripts for `ci`, `shared-preview:deploy`, `shared-preview:smoke`, `shared-preview:reset`,
-  `deploy:production`, and `rollback:production`.
-- Add Tinybird project files and `tinybird.config.json` with branch-mode development.
-- Add Blacksmith-backed GitHub workflows for CI, shared preview deploy/reset, production deploy, and rollback.
-- Configure GitHub `preview` and `production` environments and required production reviewers.
-- Configure `TURBO_TOKEN` and `TURBO_TEAM` for CI remote caching.
-- Seed deterministic Tinybird Local fixtures for CI and document how to refresh the shared-preview branch.
+- [x] Add Wrangler configs for every Worker with explicit `shared-preview` and `production` platform target values.
+- [x] Add `turbo.json`, package scripts, cacheable outputs, explicit env hashing, and uncached deploy/migrate
+      tasks.
+- [x] Add local hook wiring from [local-quality-gates.md](./local-quality-gates.md), including
+      `verify:commit`, `verify:push`, Knip, and Gitleaks.
+- [ ] Add scripts for `shared-preview:deploy`, `shared-preview:smoke`, `shared-preview:reset`,
+      `deploy:production`, and `rollback:production`.
+- [ ] Add Tinybird project files and `tinybird.config.json` with branch-mode development.
+- [x] Add Blacksmith-backed GitHub workflows for CI and Gitleaks.
+- [ ] Add Blacksmith-backed GitHub workflows for shared preview deploy/reset, production deploy, and rollback.
+- [ ] Configure GitHub `preview` and `production` environments and required production reviewers.
+- [ ] Configure `TURBO_TOKEN` and `TURBO_TEAM` for CI remote caching.
+- [ ] Seed deterministic Tinybird Local fixtures for CI and document how to refresh the shared-preview branch.
 
 ## Sources
 

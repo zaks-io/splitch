@@ -4,18 +4,18 @@
 
 The durable holdover state from ADR-0006 — per-Entity `(Experiment, idType, Targeting Key) -> (runId,
 Variant)`, read on evaluate, written at first Exposure — lives in its own **Assignment Store** port, a
-**sibling** to the Provider, *not* behind the Provider interface. The evaluate path consults both: it
+**sibling** to the Provider, _not_ behind the Provider interface. The evaluate path consults both: it
 reads holdover from the Assignment Store, and falls through to `assign()` over the Run config the Provider
 resolved. The Provider stays a stateless read-side flag-config resolver.
 
 This follows the grain of the OpenFeature contract. `resolve` is defined as
 `(flag key, default, evaluation context) -> resolution details` (spec §2.2); the Provider state the spec
-*describes* is an invalidatable flag-config cache, and side-effecting experiment writes are given their own
+_describes_ is an invalidatable flag-config cache, and side-effecting experiment writes are given their own
 path — **`track()` on the Client** (spec §6, Requirements 6.1.x), deliberately separate from resolve. The
 spec is **silent** on per-subject assignment storage behind a Provider — it neither sanctions nor forbids it
-— so this is an argument from the *design's grain*, not a literal prohibition: OpenFeature clearly intends
+— so this is an argument from the _design's grain_, not a literal prohibition: OpenFeature clearly intends
 evaluation (read) and tracking (write) to be separate concerns, and a per-Entity write store buried behind
-`resolve` cuts across that. (Note: §2.7.1 is a *different, optional* provider-side tracking hook — "the
+`resolve` cuts across that. (Note: §2.7.1 is a _different, optional_ provider-side tracking hook — "the
 provider MAY define a function for tracking" — not the Client `track()` that carries experiment data; the
 load-bearing requirement is §6.) flagd, the reference Provider, gets stickiness with **zero per-user
 storage** (deterministic hash only), which is exactly why a holdover write store doesn't belong behind a

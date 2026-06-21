@@ -20,11 +20,11 @@ The `appId` tag is set by the loader after `requireAppAccess` succeeds, not at s
 
 Trace context propagates across these hops:
 
-| Hop                                 | Mechanism                                  |
-|-------------------------------------|--------------------------------------------|
-| SSR loader → read API               | `traceparent` / `sentry-trace` HTTP header injected by the TanStack Start server handler |
-| Client-side fetch → read API        | `traceparent` header on every `hc` client request |
-| Panel Worker → DO                   | Carried internally by the Worker runtime   |
+| Hop                          | Mechanism                                                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------------- |
+| SSR loader → read API        | `traceparent` / `sentry-trace` HTTP header injected by the TanStack Start server handler |
+| Client-side fetch → read API | `traceparent` header on every `hc` client request                                        |
+| Panel Worker → DO            | Carried internally by the Worker runtime                                                 |
 
 A panel error and its backend cause appear as one trace in Sentry. The read API Workers must
 accept and continue the incoming trace context.
@@ -45,6 +45,7 @@ Sentry.captureException(new Error('403 access denied'))
 ## Root and segment boundary errors: reported as errors
 
 When a Tier 1 or Tier 2 boundary catches an unexpected error:
+
 ```
 Sentry.captureException(error, {
   tags: { boundary: 'root' | 'segment', route: currentRoute },

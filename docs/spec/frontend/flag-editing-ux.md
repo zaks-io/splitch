@@ -22,7 +22,7 @@ This gate is a **general control-plane concern**, not flag-specific — it will 
 experiment launches and other production-affecting actions. Treated as a cross-cutting confirm
 layer, designed once.
 
-**Open dependency — what is "production"?** With no environment split, *every* flag edit is a
+**Open dependency — what is "production"?** With no environment split, _every_ flag edit is a
 production change, so the gate would fire on every write (possibly noisy). Scoping it cleanly
 likely needs a dev/staging/prod environment concept, which splitch does **not** currently have
 (not in the glossary). Resolve the environment question before finalizing when the confirm fires.
@@ -40,8 +40,8 @@ experiment is isolated by construction.
 ### Controlled fields are read-only while a Run is live (option 3c)
 
 While an Experiment controls a Flag, the experiment-controlled fields (Variant set and the
-Targeting the Experiment owns) are **read-only in the UI**, with a banner: *"Controlled by
-Experiment X."* The banner links to the owning Experiment. To change those fields you must end the
+Targeting the Experiment owns) are **read-only in the UI**, with a banner: _"Controlled by
+Experiment X."_ The banner links to the owning Experiment. To change those fields you must end the
 Experiment.
 
 Chosen over the alternatives because it is the easiest to reason about: one owner at a time, no

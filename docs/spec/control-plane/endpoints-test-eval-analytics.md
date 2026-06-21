@@ -11,8 +11,8 @@ All require a control-plane bearer token unless noted. All requests/responses ar
 in [control-plane-endpoint-inventory.md](control-plane-endpoint-inventory.md).
 
 **Per-Environment (ADR-0027).** Test-eval, results, and the audit log are scoped to one Environment,
-so they live under `/apps/{app_id}/envs/{environment_id}/…`. A dry-run resolves against *that*
-Environment's Flag Configuration; results read *that* Environment's Exposures.
+so they live under `/apps/{app_id}/envs/{environment_id}/…`. A dry-run resolves against _that_
+Environment's Flag Configuration; results read _that_ Environment's Exposures.
 
 ## Test-evaluation endpoint (dry-run)
 
@@ -23,6 +23,7 @@ touching the Assignment Store. Lives behind the control-plane token (never Clien
 resolution reason (which Targeting Rule matched), which the public evaluate endpoint must never reveal.
 
 **Request body:**
+
 ```
 {
   targeting_key: string,
@@ -35,6 +36,7 @@ resolution reason (which Targeting Rule matched), which the public evaluate endp
 ```
 
 **Response:**
+
 ```
 {
   variant_name: string,
@@ -65,11 +67,13 @@ Tinybird is never queried directly by clients or agents. The Analysis Worker pro
 reads, injecting `app_id` and `environment_id` from the auth/path context (mandatory, non-defaulted).
 
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/results`
+
 Returns experiment analysis summary for the live Run (or specified `?run_id=`), over this
 Environment's Exposures.
 Response shape: defined in stats area spec; cross-link here when available.
 
 ### `GET /apps/{app_id}/audit-log`
+
 Returns `?limit=50&offset=0` paginated audit events for the App. App-level (spans Environments); each
 event carries its `environment_id` (null for App-level definition changes). Filter with
 `?environment_id=`.
@@ -77,6 +81,7 @@ event carries its `environment_id` (null for App-level definition changes). Filt
 ## Schema discovery
 
 ### `GET /.well-known/openapi.json`
+
 Unauthenticated. Returns the OpenAPI 3.1 document generated from Zod schemas at build time.
 Agents can fetch this at handshake time to discover all tool schemas.
 

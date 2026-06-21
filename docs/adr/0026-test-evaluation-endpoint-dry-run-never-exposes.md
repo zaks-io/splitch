@@ -12,17 +12,17 @@ the "verify" step; it is also the human's debugging tool.
 
 **A dry-run NEVER fires an Exposure — by construction.** A test evaluation is not a real Entity encountering its
 Variant; counting it would inject phantom Exposures into a Run and poison analysis (the glossary's Exposure
-definition; ADR-0005 dedup). ADR-0004 makes *the SDK accessor* the exposure-firing path; the test-evaluation
+definition; ADR-0005 dedup). ADR-0004 makes _the SDK accessor_ the exposure-firing path; the test-evaluation
 endpoint is categorically the **non-exposing** path — the same role as the "peek without exposing" accessor,
 exposed as a control-plane operation. It computes Assignment (a pure function, ADR-0001) and the resolution
 reason, and **writes nothing**: no Exposure log row, no Assignment Store write (ADR-0007/0008). Exposure-free is
 a structural property of the endpoint, not a flag a caller can forget to set.
 
-**It runs against live edge config**, so "verify it's working" verifies the *deployed* truth — the same
+**It runs against live edge config**, so "verify it's working" verifies the _deployed_ truth — the same
 config the data-plane evaluate endpoint would resolve against — not a staged copy that could disagree.
 
 **Reached with the control-plane token (ADR-0022), not a Client/API Key (ADR-0018).** It is a management/debug
-operation that returns the resolution *reason* (which rule matched), which the public Client Key is forbidden to
+operation that returns the resolution _reason_ (which rule matched), which the public Client Key is forbidden to
 reveal (ADR-0018: the evaluate endpoint returns only the resolved Variant, never the rule set). So the
 test-evaluation endpoint lives behind the control-plane authz surface, authorized like every other config
 operation, and is a thin 1:1 control-plane endpoint surfaced as one MCP tool and one CLI command (ADR-0023).
@@ -31,7 +31,7 @@ operation, and is a thin 1:1 control-plane endpoint surfaced as one MCP tool and
 
 - **Reuse the data-plane evaluate endpoint for verification** — rejected: that path fires Exposures by design
   (ADR-0004) and deliberately withholds the resolution reason (ADR-0018). A verify step that pollutes analysis
-  and can't explain *why* a Variant was chosen is the wrong tool. The dry-run is a distinct, exposure-free,
+  and can't explain _why_ a Variant was chosen is the wrong tool. The dry-run is a distinct, exposure-free,
   reason-returning surface.
 - **A "test mode" boolean on the real evaluate call that suppresses the Exposure** — rejected: a suppressible
   side effect is exactly the forget-to-set footgun ADR-0004 designed out. Exposure-free must be structural (a

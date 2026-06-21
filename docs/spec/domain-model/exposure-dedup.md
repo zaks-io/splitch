@@ -1,4 +1,4 @@
-# Exposure dedup: first-touch rule, __multiple__ quarantine, and SRM denominator
+# Exposure dedup: first-touch rule, **multiple** quarantine, and SRM denominator
 
 ## Dedup rule
 
@@ -10,14 +10,14 @@ An Entity's earliest Exposure in a Run is the one that counts and anchors its Co
 
 ## Dedup layers
 
-| Layer | Role | Authority |
-|---|---|---|
-| SDK seen-set | Hot-path wire optimization; suppresses re-fire within one SDK instance per `(experiment_id, run_id)` | Optimization only; not authoritative |
-| Pipeline dedup | `GROUP BY (app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)` + `MIN(server_ts)` | Correctness authority |
+| Layer          | Role                                                                                                       | Authority                            |
+| -------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| SDK seen-set   | Hot-path wire optimization; suppresses re-fire within one SDK instance per `(experiment_id, run_id)`       | Optimization only; not authoritative |
+| Pipeline dedup | `GROUP BY (app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)` + `MIN(server_ts)` | Correctness authority                |
 
 The SDK seen-set is **per-`(experiment_id, run_id)`** so a Run boundary correctly lets a fresh Exposure fire under the new Run. The seen-set is per-instance only; across five edge runtimes, per-node sets cannot be the source of truth. The pipeline dedup is the only authoritative deduplication.
 
-## The __multiple__ quarantine
+## The **multiple** quarantine
 
 When an Entity's raw Exposures show **more than one distinct Variant within a single Run**, the dedup query places the Entity in the `__multiple__` sentinel bucket and **excludes it from all real arms.**
 
@@ -37,6 +37,7 @@ GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_h
 ```
 
 The `__multiple__` sentinel is not a real Variant. It is excluded from:
+
 - All real arms / analysis
 - SRM denominator
 - Conversion Window anchor
@@ -57,6 +58,7 @@ First-touch-wins would silently bias whichever arm won the timestamp race. SRM w
 ## SRM denominator
 
 SRM chi-square compares:
+
 - **Observed:** deduped first-touch unique Entities per arm per Run (`__multiple__` excluded)
 - **Expected:** Run's declared `allocation` (e.g. `{ "control": 50, "treatment": 50 }`)
 
@@ -69,6 +71,7 @@ Session is a **Dimension** (an attribute for slicing results), never the denomin
 ## Peek accessor (non-exposing path)
 
 The SDK `peekVariant(...)` accessor resolves the Variant **without** firing an Exposure. No Exposure row is written. Peeked Entities:
+
 - Are **not** counted in the SRM denominator
 - Have **no** Conversion Window anchor
 - Are **not** eligible for analysis

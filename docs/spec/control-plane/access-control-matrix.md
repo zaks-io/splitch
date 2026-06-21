@@ -10,10 +10,11 @@ For how a principal authenticates (the three doors and claim ceremony), see [aut
 Short-lived bearer token (JWT, default TTL 1h) issued by `/oauth2/token`.
 
 **Claims:**
+
 ```
 {
   sub: string,             // WorkOS user_id
-  iss: string,             // auth-issuer origin
+  iss: string,             // auth-api origin
   aud: string,             // control-plane protected-resource origin
   exp: number,             // unix timestamp
   iat: number,
@@ -27,7 +28,8 @@ A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-leve
 `org:{org_id}:owner` or `org:{org_id}:admin`.
 
 **Token validation on any control-plane-authorized Worker:**
-1. Verify JWT signature (JWKS from auth-issuer `/.well-known/oauth-authorization-server`)
+
+1. Verify JWT signature (JWKS from auth-api `/.well-known/oauth-authorization-server`)
 2. Assert `aud` matches the control-plane protected resource
 3. Assert `exp` not passed
 4. Extract `scopes`; match against required scope for the requested operation
@@ -37,20 +39,20 @@ A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-leve
 
 ### D1: `trusted_idps` table
 
-| column       | type    | required | meaning                                                        |
-|--------------|---------|----------|----------------------------------------------------------------|
-| `idp_id`     | TEXT PK | yes      | Splitch-generated identifier                                   |
-| `issuer`     | TEXT    | yes      | JWT `iss` value; must be unique                                |
-| `jwks_uri`   | TEXT    | yes      | URL to fetch JWKS for signature verification                   |
-| `client_ids` | TEXT    | yes      | JSON array of expected `aud` values (client IDs for this IdP)  |
-| `enabled`    | INTEGER | yes      | 0 \| 1; disabled IdPs are rejected, not silently skipped       |
-| `created_at` | TEXT    | yes      | ISO 8601                                                       |
+| column       | type    | required | meaning                                                       |
+| ------------ | ------- | -------- | ------------------------------------------------------------- |
+| `idp_id`     | TEXT PK | yes      | Splitch-generated identifier                                  |
+| `issuer`     | TEXT    | yes      | JWT `iss` value; must be unique                               |
+| `jwks_uri`   | TEXT    | yes      | URL to fetch JWKS for signature verification                  |
+| `client_ids` | TEXT    | yes      | JSON array of expected `aud` values (client IDs for this IdP) |
+| `enabled`    | INTEGER | yes      | 0 \| 1; disabled IdPs are rejected, not silently skipped      |
+| `created_at` | TEXT    | yes      | ISO 8601                                                      |
 
 **Seed rows:** Anthropic, OpenAI, Cursor.
 
 **Who can CRUD:** Org `owner` role only. CRUD is an Org-level operation (not App-level). An org owner
 can add/remove trusted IdPs for their Organization. Global (cross-Org) IdP config is splitch-internal
-only (seeded at deploy; not user-facing in v1).
+only (seeded at deploy; not user-facing).
 
 **Failure contract:** Unknown `iss` → 401 `unknown_issuer`. Never silently trusted. Never falls through.
 
@@ -59,6 +61,7 @@ only (seeded at deploy; not user-facing in v1).
 (resolves fused-responsibility seam findings)
 
 **Auth-issuer Worker** owns (minimal surface, stable `aud`, isolated for security review):
+
 - `/.well-known/oauth-protected-resource`
 - `/.well-known/oauth-authorization-server`
 - `POST /agent/identity` (all three door entry points)
@@ -70,7 +73,8 @@ only (seeded at deploy; not user-facing in v1).
 - Anon provisional Org+App create (initial create only, through D1 seam)
 
 **Control Plane API Worker** owns authenticated management mutations and D1/KV-backed reads:
-- Org CRUD (rename, billing, member management, SSO config) — auth-issuer creates on anon register;
+
+- Org CRUD (rename, billing, member management, SSO config) — auth-api creates on anon register;
   control-plane manages everything after
 - App CRUD; Environment CRUD (per App, ADR-0027)
 - Flag **definition** CRUD (App-level), Flag **Configuration** + Promotion across Environments (per-Env, ADR-0028)
@@ -83,22 +87,26 @@ only (seeded at deploy; not user-facing in v1).
 - `GET /.well-known/openapi.json` (generated OpenAPI, unauthenticated)
 
 **MCP Worker** owns the remote MCP protocol surface:
+
 - MCP OAuth PRM/auth.md handshake
 - Tool registry and schema derivation
-- Calls the shared typed client; no direct D1/KV/Tinybird bindings and no domain invariants
+- Calls the Control Plane SDK; no direct D1/KV/Tinybird bindings and no domain invariants
 
 **Evaluation Worker** owns resolution:
+
 - Public SDK evaluate/peek endpoints using Client Key or API Key
 - Control-plane dry-run test-evaluation using the control-plane bearer token
 - Provider and Assignment Store read orchestration
 - No config writes, no analytics reads, and no direct result calculation
 
 **Event Ingest Worker** owns append-only intake:
+
 - Assignment, Exposure, and Metric event validation
 - Queueing, sharded Durable Object dedup, and Tinybird delivery
 - No Variant resolution, no Experiment result calculation, and no control-plane CRUD
 
 **Analysis Worker** owns result reads:
+
 - Analytics proxy endpoints
 - Tinybird-backed SRM, Metric, and statistical result reads
 - `app_id` and `environment_id` injection from auth/path context

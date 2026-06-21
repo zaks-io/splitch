@@ -7,9 +7,9 @@ A config edit is sorted by **what it invalidates**, and the two cases get differ
 - **Assignment-affecting edits** — salt, allocation, Variant set, Targeting, Targeting Key — change
   `assign()`, so Exposures collected before and after are bucketed differently and are **not comparable**.
   These **end the current Run and open the next** (sample resets to zero). This is the ADR-0002 invariant:
-  a Run is a window over which *bucketing* was frozen.
-- **Measurement edits** — Secondary Metric definitions, Conversion Window, and exploratory Guardrail config — change *what
-  the numbers mean*, but not *who is in which arm*. The raw Exposure/event log is untouched and still
+  a Run is a window over which _bucketing_ was frozen.
+- **Measurement edits** — Secondary Metric definitions, Conversion Window, and exploratory Guardrail config — change _what
+  the numbers mean_, but not _who is in which arm_. The raw Exposure/event log is untouched and still
   comparable. These **recompute losslessly over the existing Run**: re-run the analysis query with the new
   definition over the same raw log. **No new Run, no sample reset.**
 - **Activation Metric config** is assignment-affecting for splitch because it redefines the analysis entry
@@ -26,8 +26,8 @@ a new pre-registered analysis version.
 
 This is what the reference platforms do, and we follow it deliberately. All three decouple metric
 definitions from collected data and recompute: **Eppo** backfills a changed/added metric "from the start of
-the experiment"; **Statsig** calls a measurement-definition change a *metric refresh* (recompute), reserving
-*restart* for re-rolling the salt; **GrowthBook** Phases window only dates *because* metrics are decoupled
+the experiment"; **Statsig** calls a measurement-definition change a _metric refresh_ (recompute), reserving
+_restart_ for re-rolling the salt; **GrowthBook** Phases window only dates _because_ metrics are decoupled
 and reprocessed, not as a limitation. The earlier splitch rule (freeze measurement into the Run too) had
 this backwards — it treated GrowthBook's dates-only Phase as a weakness we improved on, when it is the
 deliberate result of the recompute design.
@@ -44,8 +44,8 @@ on every metric typo-fix or window extension) to avoid a recompute the architect
   the industry pattern and pays a real sample-loss cost to enforce an immutability the recompute design gives
   for free. The one legitimate motive for freezing measurement is **pre-registration discipline** ("the
   analysis you registered is the analysis you got," anti-p-hacking). That is a real stance, but it is a
-  *discipline tradeoff*, not a correctness win, and it belongs as an **opt-in "locked analysis" mode on an
-  experiment**, never as the global default that taxes every honest measurement fix. (Deferred; not in v1.)
+  _discipline tradeoff_, not a correctness win, and it belongs as an **opt-in "locked analysis" mode on an
+  experiment**, never as the global default that taxes every honest measurement fix. (Deferred.)
 - **One flat "material edit" rule** (any edit opens a Run) — rejected: simpler to state but conflates two
   genuinely different axes (bucketing vs measurement) and resets the sample on edits that don't need it.
 

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["biome.json", "tsconfig.base.json"],
+  "globalEnv": ["CI", "NODE_ENV", "SPLITCH_PLATFORM_TARGET"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".output/**", "build/**"],
+      "inputs": ["$TURBO_DEFAULT$"]
+    },
+    "clean": {
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "deploy": {
+      "cache": false
+    },
+    "deploy:dry-run": {
+      "cache": false
+    },
+    "wrangler:types": {
+      "cache": false
+    }
+  }
+}

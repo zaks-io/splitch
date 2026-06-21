@@ -37,7 +37,7 @@ vendors' own words — annotated below.
 - **Server SDK (Go) reference**: https://docs.statsig.com/server/golangSDK/
 - **Open source — server core (readable bucketing/eval code)**:
   https://github.com/statsig-io/statsig-server-core
-  Org: https://github.com/statsig-io  (note: client JS uses djb2 for name obfuscation, not bucketing).
+  Org: https://github.com/statsig-io (note: client JS uses djb2 for name obfuscation, not bucketing).
 
 ### Eppo (assignment logging, dedup, warehouse-native analysis)
 
@@ -79,14 +79,14 @@ All three platforms ship **Sticky Bucketing / Persistent Assignment** (keep a us
 Variant across a config change). splitch's answer: **both, at different layers.**
 
 - A **material** edit opens a **new Run** → fresh, clean dataset (dataset cleanliness).
-- At the Run boundary, a holdover Entity (one already *exposed* under a prior Run) keeps its prior
-  Variant for **experience** but is **not re-counted** in the new Run (continuity *without*
+- At the Run boundary, a holdover Entity (one already _exposed_ under a prior Run) keeps its prior
+  Variant for **experience** but is **not re-counted** in the new Run (continuity _without_
   contaminating the new dataset).
 
 So the platforms' sticky-bucketing store maps to our **holdover-Variant store**:
 `(Experiment, Targeting Key) -> (runId, Variant)`, written at first Exposure — the one piece of durable
 per-Entity state on the seam. See [assignment-exposure-seam.md](./assignment-exposure-seam.md) §
-"Run lifecycle". Carryover bias is avoided on *both* axes (clean data AND no jarring experience flip).
+"Run lifecycle". Carryover bias is avoided on _both_ axes (clean data AND no jarring experience flip).
 
 ## Cloudflare storage primitives (Assignment Store substrate grill, 2026-06-20)
 
@@ -168,7 +168,7 @@ in the Kohavi/Microsoft OCE literature, not the vendor docs.
   filtering"): https://exp-platform.com/Documents/2019_KDDFabijanGupchupFuptaOmhoverVermeerDmitriev.pdf
 - **Microsoft — diagnosing SRM** (triggered-analysis SRM with trustworthy untriggered analysis = misconfigured
   trigger): https://www.microsoft.com/en-us/research/articles/diagnosing-sample-ratio-mismatch-in-a-b-testing/
-- **Kohavi & Longbotham — counterfactual triggering** (include control entities that *would have* triggered):
+- **Kohavi & Longbotham — counterfactual triggering** (include control entities that _would have_ triggered):
   https://exp-platform.com/Documents/2023-03-11EncyclopeiaMLDSABTestingFinal.pdf
 
 ## Metric analysis / stats engine (Metric analysis seam grill, 2026-06-20)
@@ -178,6 +178,7 @@ randomization unit), ADR-0016 (CUPED + winsorization, conditional). The peeking 
 variance trap are the two silent, high-bias errors this seam exists to prevent.
 
 ### Sequential / always-valid inference
+
 - **Johari, Pekelis, Walsh — Always Valid Inference** (the foundational paper; "always valid p-values…
   continuous monitoring"): https://arxiv.org/abs/1512.04922
 - **Optimizely — Stats Engine** (peeking inflates A/A false-declaration to 26–57%; mSPRT + FDR):
@@ -190,10 +191,12 @@ variance trap are the two silent, high-bias errors this seam exists to prevent.
   https://docs.statsig.com/experiments/advanced-setup/sequential-testing
 
 ### Bayesian vs frequentist
+
 - **GrowthBook — Bayesian default** (chance-to-win; uninformative prior): https://docs.growthbook.io/statistics/overview
 - **Statsig — frequentist by default** (Bayesian opt-in): https://docs.statsig.com/experiments-plus/bayesian/
 
 ### Variance correctness — delta method & clustered data
+
 - **Deng, Knoblich, Lu — Applying the Delta Method in Metric Analytics** (KDD 2018; naive method
   under-estimates variance for clustered metrics): https://arxiv.org/abs/1803.06336
 - **Eppo — ratio metrics / delta method** (formula with covariance term):
@@ -206,6 +209,7 @@ variance trap are the two silent, high-bias errors this seam exists to prevent.
   delta-method ratio): https://docs.growthbook.io/statistics/details
 
 ### CUPED & winsorization
+
 - **Deng, Xu, Kohavi, Walker — CUPED** (WSDM 2013; ~50% variance reduction):
   https://www.exp-platform.com/Documents/2013-02-CUPED-ImprovingSensitivityOfControlledExperiments.pdf
 - **Statsig — variance reduction (CUPED auto-on) & winsorization (99.9%)**:
@@ -214,6 +218,7 @@ variance trap are the two silent, high-bias errors this seam exists to prevent.
 - **Eppo — CUPED++ (conditional; no pre-period for new users)**: https://docs.geteppo.com/statistics/cuped/
 
 ### Multiple comparisons & guardrails
+
 - **Benjamini & Hochberg (1995) FDR** — the standard; Statsig BH:
   https://docs.statsig.com/experiments/statistical-methods/methodologies/benjamini-hochberg-procedure
 - **GrowthBook — multiple corrections** (Holm-Bonferroni or BH): https://docs.growthbook.io/statistics/multiple-corrections

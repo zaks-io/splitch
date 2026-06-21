@@ -9,8 +9,11 @@ conventions are described in [control-plane-endpoint-inventory.md](control-plane
 ## Metric endpoints
 
 ### `GET /apps/{app_id}/metrics`
+
 ### `POST /apps/{app_id}/metrics`
+
 Body:
+
 ```
 {
   name: string,
@@ -28,15 +31,20 @@ Body:
   guardrail_threshold?: number
 }
 ```
+
 Returns: `{ metric_id, app_id, type, name, created_at }`
 
 ### `GET /apps/{app_id}/metrics/{metric_id}`
+
 ### `PATCH /apps/{app_id}/metrics/{metric_id}`
+
 Body: all fields except `type` (type is immutable once set).
 If the Metric is in a running Run's locked decision family, changes recompute only exploratory
 views for that Run; the Worker returns `DECISION_LOCKED` for attempts to mutate the decision-valid
 Metric definition in place.
+
 ### `DELETE /apps/{app_id}/metrics/{metric_id}`
+
 Blocked if referenced by a running Experiment.
 
 ## Sources

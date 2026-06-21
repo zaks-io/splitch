@@ -13,6 +13,7 @@ Calling `evaluate` **always** fires an Exposure as a side effect. There is no wa
 `evaluate` without firing one (ADR-0004: the safe default eliminates the forget-to-expose bug).
 
 **What happens inside:**
+
 1. Validates context (targetingKey required).
 2. Checks SDK seen-set for `(flagKey, runId, targetingKey)`. If present, returns cached
    Variant without an HTTP call and without a second Exposure.
@@ -39,12 +40,14 @@ Peek is still a public Client Key path, so it returns only the Variant value. Re
 reasons live on the control-plane test-evaluation endpoint, not the public SDK.
 
 **Peek does NOT:**
+
 - Write to the Exposure log
 - Write to the Assignment Store
 - Count the Entity in any Run's analysis denominator
 - Anchor a Conversion Window
 
 **Peek use cases:**
+
 - Below-the-fold UI (peek to decide layout; `evaluate` when the user scrolls to see it)
 - Server-side pre-computation before client-side evaluation
 - Conditional rendering that should only expose after a meaningful interaction
@@ -63,6 +66,7 @@ Authorization: Bearer <clientKey>
 Request: same as `EvaluateRequest` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
 
 Response:
+
 ```
 PeekEvaluateResponse {
   variant: VariantValue
@@ -75,22 +79,22 @@ The Worker appends the following to the raw Exposure log on every `evaluate` cal
 **The SDK does not own this schema** — it is owned by the [pipeline area spec](../pipeline/).
 This table is a cross-reference only; do not duplicate the authoritative definition.
 
-| Field | Type | Source |
-|-------|------|--------|
-| `event_id` | string | generated once by the Worker when it creates the raw row |
-| `dedup_key` | string | sha256 over row type, identity fields, source id, and event id |
-| `app_id` | string | from auth context (not from client) |
-| `environment_id` | string | from the SDK key's Environment (co-scoped with `app_id`, ADR-0027) |
-| `experiment_id` | string | resolved from Flag's controlling Experiment |
-| `run_id` | string | live Run at evaluation time (stamped at server-received time) |
-| `targeting_key_hash` | string | derived server-side from request Targeting Key |
-| `id_type` | string | from request |
-| `variant` | string | Variant name (not value) — immutable experimental arm label |
-| `source_id` | string | edge POP identifier |
-| `server_ts` | timestamp | server-received-at (canonical for MIN(ts) first-touch) |
-| `ingest_ts` | timestamp | raw-log append watermark; never used for first-touch |
-| `client_ts` | timestamp | client-fired time (diagnostics only; may have clock skew) |
-| `type` | 'exposure' \| 'activation' | always 'exposure' here |
+| Field                | Type                       | Source                                                             |
+| -------------------- | -------------------------- | ------------------------------------------------------------------ |
+| `event_id`           | string                     | generated once by the Worker when it creates the raw row           |
+| `dedup_key`          | string                     | sha256 over row type, identity fields, source id, and event id     |
+| `app_id`             | string                     | from auth context (not from client)                                |
+| `environment_id`     | string                     | from the SDK key's Environment (co-scoped with `app_id`, ADR-0027) |
+| `experiment_id`      | string                     | resolved from Flag's controlling Experiment                        |
+| `run_id`             | string                     | live Run at evaluation time (stamped at server-received time)      |
+| `targeting_key_hash` | string                     | derived server-side from request Targeting Key                     |
+| `id_type`            | string                     | from request                                                       |
+| `variant`            | string                     | Variant name (not value) — immutable experimental arm label        |
+| `source_id`          | string                     | edge POP identifier                                                |
+| `server_ts`          | timestamp                  | server-received-at (canonical for MIN(ts) first-touch)             |
+| `ingest_ts`          | timestamp                  | raw-log append watermark; never used for first-touch               |
+| `client_ts`          | timestamp                  | client-fired time (diagnostics only; may have clock skew)          |
+| `type`               | 'exposure' \| 'activation' | always 'exposure' here                                             |
 
 `run_id` is stamped **server-side at request time** (not at dedup time) to avoid race
 conditions with Run closure. `variant` is the Variant name;

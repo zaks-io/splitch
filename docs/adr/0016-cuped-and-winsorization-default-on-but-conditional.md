@@ -53,7 +53,7 @@ consensus we inherited. The percentile is configurable and winsorization can be 
 
 Both techniques are default-on, so users get tighter CIs and shorter experiments without opting in, but both
 are gated so they cannot corrupt results when their precondition is absent. The thresholds (CUPED coverage
-%, winsorization percentile) are configurable; the *gating behavior* is not. Together with ADR-0014/0015 this
+%, winsorization percentile) are configurable; the _gating behavior_ is not. Together with ADR-0014/0015 this
 completes the one CI object: delta-method variance → winsorization (additive) → CUPED (gated) → always-valid
 sequence → relative-lift CI → Guardrail bound → Benjamini-Hochberg FDR across the goal-metric × variant
 family (guardrails excluded).

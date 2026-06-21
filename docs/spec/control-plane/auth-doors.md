@@ -19,9 +19,10 @@ Door C: Device flow┘
 
 ## Door A: ID-JAG (agent-IdP-verified)
 
-**Endpoint:** `POST /agent/identity` on the auth-issuer Worker
+**Endpoint:** `POST /agent/identity` on the auth-api Worker
 
 **Request body:**
+
 ```
 {
   id_jag: string,        // signed JWT from the agent's IdP
@@ -30,10 +31,11 @@ Door C: Device flow┘
 ```
 
 **Validation steps (all must pass; fail loud on any failure):**
+
 1. Decode JWT header, extract `iss` (issuer)
 2. Look up `iss` in `trusted_idps` D1 table; reject with 401 if not found
 3. Fetch JWKS from `trusted_idps.jwks_uri`; verify JWT signature
-4. Assert `aud` matches splitch's auth-issuer origin
+4. Assert `aud` matches splitch's auth-api origin
 5. Assert `exp` not passed; assert `auth_time` freshness (default: within 5 min)
 6. Assert `email_verified = true` (or `phone_verified = true`)
 7. Check `jti` replay cache (KV key `jti:{jti}`, TTL = exp - now); reject if seen
@@ -48,6 +50,7 @@ control-plane access token. No refresh token on ID-JAG path.
 **Endpoint:** `POST /agent/identity` with no `id_jag` field (anonymous body)
 
 **Flow:**
+
 1. Rate-limit per source IP (Cloudflare WAF; default: 10 provisional creates per IP per hour)
 2. Create WorkOS user (unverified email placeholder)
 3. Create provisional Org: `is_provisional = 1`, `demo_expires_at = now + 24h`
@@ -57,9 +60,10 @@ control-plane access token. No refresh token on ID-JAG path.
 
 ### Claim ceremony
 
-**Endpoint:** `POST /agent/identity/claim` on the auth-issuer Worker (also `POST /claim` for human UI)
+**Endpoint:** `POST /agent/identity/claim` on the auth-api Worker (also `POST /claim` for human UI)
 
 **Request body:**
+
 ```
 {
   identity_assertion: string,   // the provisional assertion
@@ -69,6 +73,7 @@ control-plane access token. No refresh token on ID-JAG path.
 ```
 
 **Claim steps:**
+
 1. Validate `identity_assertion`; assert provisional
 2. Verify `otp` against D1 OTP record (TTL 10 min); check `idempotency_key` to skip if already processed
 3. If `email` maps to an existing real user → return `interaction_required` (see below)

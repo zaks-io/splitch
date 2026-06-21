@@ -6,7 +6,7 @@ This ADR records the **non-negotiable** correctness rules of the variance comput
 preferences — all three reference platforms (Statsig, Eppo, GrowthBook) implement exactly this method
 (aggregate-to-unit + delta method), and the methodology literature (Deng/Knoblich/Lu, KDD 2018) is the
 canonical proof (Eppo cites it directly; Statsig and GrowthBook implement the same method without naming a
-source). Each rule guards a *silent*
+source). Each rule guards a _silent_
 error: the point estimate (lift) looks correct while the variance is wrong in the dangerous direction —
 understated — so CIs are too narrow and the false-positive rate explodes.
 
@@ -23,7 +23,7 @@ understated — so CIs are too narrow and the false-positive rate explodes.
    the **same** fix.
 
 3. **No naive variance code path exists.** The engine does **not** expose a ratio-of-means or
-   events-as-independent variance path at all. The delta-method-over-Entity-aggregates path is the *only*
+   events-as-independent variance path at all. The delta-method-over-Entity-aggregates path is the _only_
    path, so the silent error is structurally unreachable, not merely discouraged.
 
 4. **Relative lift is itself a ratio**, so its CI variance is a delta-method computation too (absolute lift

@@ -32,22 +32,22 @@ The side effect **must be documented prominently** in the SDK reference.
 
 ## Exposure event shape
 
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `eventId` | string | yes | Retry-stable physical raw-row id generated once before any retry |
-| `dedupKey` | string | yes | Wire-level idempotency key; hashes row type, identity fields, source id, and `eventId` |
-| `appId` | string | yes | Isolation scope |
-| `environmentId` | string | yes | Co-scoped with `appId`; Exposures are per-Environment (ADR-0027) |
-| `experimentId` | string | yes | The Experiment being evaluated |
-| `runId` | string | yes | The Run that produced this Exposure (stamped at fire time from `EvaluateResult.liveRunId`) |
-| `flagKey` | string | yes | The Flag evaluated |
-| `targetingKey` | string | yes | The Entity identifier |
-| `idType` | string | yes | Entity type; matches Assignment Store key (guards cross-type collisions) |
-| `variant` | string | yes | The resolved Variant name |
-| `sourceId` | string | yes | Edge POP identifier |
-| `serverReceivedAt` | ISO 8601 | yes | Canonical first-touch ordering; monotonic; no client clock skew |
-| `ingestTs` | ISO 8601 | yes | Raw-log append watermark; never used for first-touch |
-| `clientFiredAt` | ISO 8601 | yes | Wall-clock at fire time; diagnostics only |
+| Field              | Type     | Required | Meaning                                                                                    |
+| ------------------ | -------- | -------- | ------------------------------------------------------------------------------------------ |
+| `eventId`          | string   | yes      | Retry-stable physical raw-row id generated once before any retry                           |
+| `dedupKey`         | string   | yes      | Wire-level idempotency key; hashes row type, identity fields, source id, and `eventId`     |
+| `appId`            | string   | yes      | Isolation scope                                                                            |
+| `environmentId`    | string   | yes      | Co-scoped with `appId`; Exposures are per-Environment (ADR-0027)                           |
+| `experimentId`     | string   | yes      | The Experiment being evaluated                                                             |
+| `runId`            | string   | yes      | The Run that produced this Exposure (stamped at fire time from `EvaluateResult.liveRunId`) |
+| `flagKey`          | string   | yes      | The Flag evaluated                                                                         |
+| `targetingKey`     | string   | yes      | The Entity identifier                                                                      |
+| `idType`           | string   | yes      | Entity type; matches Assignment Store key (guards cross-type collisions)                   |
+| `variant`          | string   | yes      | The resolved Variant name                                                                  |
+| `sourceId`         | string   | yes      | Edge POP identifier                                                                        |
+| `serverReceivedAt` | ISO 8601 | yes      | Canonical first-touch ordering; monotonic; no client clock skew                            |
+| `ingestTs`         | ISO 8601 | yes      | Raw-log append watermark; never used for first-touch                                       |
+| `clientFiredAt`    | ISO 8601 | yes      | Wall-clock at fire time; diagnostics only                                                  |
 
 `runId` is stamped from `EvaluateResult.liveRunId` at fire time — set by the evaluate path,
 not the pipeline.
@@ -83,6 +83,7 @@ fire under the new Run.
 ## Peek: no Exposure, no Assignment Store write
 
 `sdk.peek()` returns the same `EvaluateResult` as `sdk.evaluate()` but fires nothing:
+
 - No Exposure event queued.
 - No Assignment Store write (pipeline does not receive anything to trigger `put()`).
 - The peeked Entity is not counted in any Run's denominator.

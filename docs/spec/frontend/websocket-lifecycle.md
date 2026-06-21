@@ -67,6 +67,7 @@ no last-seen-version bookkeeping, no `getSince(v)` API.
 
 When the resolved `(appId, environmentId)` changes — an App switch or an Environment switch, e.g.
 navigating from `/{org}/A/dev/...` to `/{org}/B/dev/...` or `/{org}/A/dev/...` to `/{org}/A/prod/...`:
+
 1. The layout effect cleanup closes the socket connected to `DO(prev)`
 2. The old scope's cache is invalidated: `invalidateQueries({ queryKey: ['app', prevAppId, 'env', prevEnvId] })`
 3. The effect re-runs with the new `(appId, environmentId)`, opening a new socket to `DO(next)`
@@ -102,6 +103,7 @@ See [query-key-factory.md](./query-key-factory.md) for the full key mapping.
 ## Failure contract (Tier 3)
 
 A failed nudge-triggered refetch is **non-fatal**:
+
 - The failed refetch never unmounts existing data
 - The UI degrades to stale + dismissable toast ("couldn't refresh, retrying")
 - Retry policy: exponential backoff, 3 attempts, delays 2 s / 4 s / 8 s with ±20% jitter

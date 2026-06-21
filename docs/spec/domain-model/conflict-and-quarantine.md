@@ -1,4 +1,4 @@
-# Variant conflict detection and __multiple__ quarantine
+# Variant conflict detection and **multiple** quarantine
 
 ## Conflict definition
 
@@ -9,17 +9,18 @@ The dedup query detects this at analysis time — not at ingest, not at SDK fire
 ## Root causes (exhaustive given splitch's invariants)
 
 Given:
+
 - Pure deterministic `assign()` (ADR-0001)
 - Authoritative per-key holdover DO with atomic put-if-absent (ADR-0009)
 - Assignment-affecting edits open a new Run (ADR-0003)
 
 A same-Run Variant conflict can **only** be one of three defects:
 
-| Defect | Description |
-|---|---|
-| Config-propagation race | Salt or allocation is mid-flight across POPs; one POP hashes with old config, another with new. The new Run should have been opened before any POP saw the config change. |
-| SDK bug or bad integration | The evaluate path bypassed the holdover read, allowing a second assignment under the same Run. |
-| ADR-0003 violation | Salt or allocation changed without opening a new Run. A measurement edit cannot cause a Variant conflict; only an assignment-affecting edit can, and that must open a new Run by contract. |
+| Defect                     | Description                                                                                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Config-propagation race    | Salt or allocation is mid-flight across POPs; one POP hashes with old config, another with new. The new Run should have been opened before any POP saw the config change.                  |
+| SDK bug or bad integration | The evaluate path bypassed the holdover read, allowing a second assignment under the same Run.                                                                                             |
+| ADR-0003 violation         | Salt or allocation changed without opening a new Run. A measurement edit cannot cause a Variant conflict; only an assignment-affecting edit can, and that must open a new Run by contract. |
 
 All three are defects. None are expected concurrency or normal operation. `__multiple__` exists to surface them, not to gracefully absorb them.
 
@@ -34,19 +35,21 @@ When `COUNT(DISTINCT variant) > 1` for `(app_id, environment_id, experiment_id, 
 5. Excluded from all Metric aggregations
 
 The `__multiple__` rate is surfaced as a **health metric** per Run:
+
 - ~1% tolerated (cosmetic config-race noise at very high traffic)
 - Above 1%: alert that a real defect (race, SDK, or ADR-0003 violation) is in play
 
 ## Why not first-touch-wins
 
 First-touch-wins (`MIN(server_ts)` Variant) would:
+
 1. Silently bias whichever arm won the timestamp race
 2. Not be detected by SRM — the Entity still counts cleanly in one arm
 3. Produce a corrupted Experiment behind a green dashboard
 
 This is the specific failure mode the fail-loud principle (ADR-0011) exists to prevent. "Silently bias one arm" is worse than "lose one Entity from analysis."
 
-## Relationship to __multiple__ and analysis
+## Relationship to **multiple** and analysis
 
 `__multiple__` is excluded everywhere the same way real Variants are included:
 
@@ -57,7 +60,7 @@ Metric aggregation  = over analysis population
 activated analysis  = filter on activated Entities within analysis population
 ```
 
-The `__multiple__` rate is the only thing computed *on* the quarantined Entities.
+The `__multiple__` rate is the only thing computed _on_ the quarantined Entities.
 
 ## Sources
 

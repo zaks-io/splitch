@@ -11,14 +11,14 @@ query (ADR-0010); `__multiple__` Entities are already excluded upstream.
 
 ### Deduped Exposure row
 
-| Field              | Type                       | Required | Meaning                                                       |
-|--------------------|----------------------------|----------|---------------------------------------------------------------|
-| `entity_id`        | `string`                   | yes      | Targeting Key value (the randomization unit)                  |
-| `id_type`          | `string`                   | yes      | Entity type label (e.g. `"user"`, `"workspace"`)             |
-| `run_id`           | `string`                   | yes      | The Run this Exposure belongs to                              |
-| `variant`          | `string`                   | yes      | Variant name assigned to this Entity in this Run             |
-| `first_exposure_ts`| `timestamp`                | yes      | `MIN(server_ts)` — the Conversion Window anchor (ungated)    |
-| `window_anchor`    | `timestamp`                | yes      | `COALESCE(activation_ts, first_exposure_ts)` — effective anchor |
+| Field               | Type        | Required | Meaning                                                         |
+| ------------------- | ----------- | -------- | --------------------------------------------------------------- |
+| `entity_id`         | `string`    | yes      | Targeting Key value (the randomization unit)                    |
+| `id_type`           | `string`    | yes      | Entity type label (e.g. `"user"`, `"workspace"`)                |
+| `run_id`            | `string`    | yes      | The Run this Exposure belongs to                                |
+| `variant`           | `string`    | yes      | Variant name assigned to this Entity in this Run                |
+| `first_exposure_ts` | `timestamp` | yes      | `MIN(server_ts)` — the Conversion Window anchor (ungated)       |
+| `window_anchor`     | `timestamp` | yes      | `COALESCE(activation_ts, first_exposure_ts)` — effective anchor |
 
 `window_anchor` is computed by the Activation gate layer (see
 [../pipeline/activation-gate-query-contract.md](../pipeline/activation-gate-query-contract.md));
@@ -30,16 +30,16 @@ For each (Entity, Run, Metric) the pipeline delivers values pre-aggregated in Ti
 views for Binomial / Count / Revenue; query-time for Ratio pairs). The engine **never receives
 event-level rows** — that loses the covariance term for Ratio delta-method variance (ADR-0015).
 
-| Field          | Type      | Required | Meaning                                                             |
-|----------------|-----------|----------|---------------------------------------------------------------------|
-| `entity_id`    | `string`  | yes      | Matches the deduped Exposure row                                    |
-| `run_id`       | `string`  | yes      | Same Run scope                                                      |
-| `metric_id`    | `string`  | yes      | References Metric definition                                        |
-| `metric_type`  | `enum`    | yes      | `binomial \| count \| revenue \| ratio`                            |
-| `value`        | `number`  | yes      | Per-Entity aggregate (0/1 for binomial; sum for count/revenue)      |
-| `num_value`    | `number`  | cond.    | Ratio numerator per-Entity sum (required when `metric_type=ratio`)  |
-| `denom_value`  | `number`  | cond.    | Ratio denominator per-Entity sum (required when `metric_type=ratio`)|
-| `in_window`    | `boolean` | yes      | True if event fell within `[window_anchor, window_anchor + window_duration)` |
+| Field         | Type      | Required | Meaning                                                                      |
+| ------------- | --------- | -------- | ---------------------------------------------------------------------------- |
+| `entity_id`   | `string`  | yes      | Matches the deduped Exposure row                                             |
+| `run_id`      | `string`  | yes      | Same Run scope                                                               |
+| `metric_id`   | `string`  | yes      | References Metric definition                                                 |
+| `metric_type` | `enum`    | yes      | `binomial \| count \| revenue \| ratio`                                      |
+| `value`       | `number`  | yes      | Per-Entity aggregate (0/1 for binomial; sum for count/revenue)               |
+| `num_value`   | `number`  | cond.    | Ratio numerator per-Entity sum (required when `metric_type=ratio`)           |
+| `denom_value` | `number`  | cond.    | Ratio denominator per-Entity sum (required when `metric_type=ratio`)         |
+| `in_window`   | `boolean` | yes      | True if event fell within `[window_anchor, window_anchor + window_duration)` |
 
 The `num_value` / `denom_value` pair for Ratio Metrics is the **hard input-contract rule**: it must
 arrive as a per-Entity pair so the delta-method covariance term is computable — unrecoverable after
@@ -50,12 +50,12 @@ randomized population and can bias denominator-sensitive Metrics.
 
 Supplied only when CUPED applies (pre-period data present, coverage above threshold).
 
-| Field             | Type      | Required | Meaning                                                       |
-|-------------------|-----------|----------|---------------------------------------------------------------|
-| `entity_id`       | `string`  | yes      | Same Entity                                                   |
-| `metric_id`       | `string`  | yes      | Same Metric                                                   |
-| `pre_period_value`| `number`  | yes      | Metric value in `[first_exposure_ts - lookback, first_exposure_ts)` |
-| `covariate_source`| `enum`    | yes      | `pre_period \| declared_attribute \| historical_attribute`    |
+| Field              | Type     | Required | Meaning                                                             |
+| ------------------ | -------- | -------- | ------------------------------------------------------------------- |
+| `entity_id`        | `string` | yes      | Same Entity                                                         |
+| `metric_id`        | `string` | yes      | Same Metric                                                         |
+| `pre_period_value` | `number` | yes      | Metric value in `[first_exposure_ts - lookback, first_exposure_ts)` |
+| `covariate_source` | `enum`   | yes      | `pre_period \| declared_attribute \| historical_attribute`          |
 
 Pre-period is **always anchored at `first_exposure_ts`**, even when the Conversion Window re-anchors
 to `activation_ts`. Immutable: it captures what the Entity did before
@@ -63,13 +63,13 @@ exposure, not before activation.
 
 ### Activation rows (when Activation gate is set)
 
-| Field              | Type      | Required | Meaning                                              |
-|--------------------|-----------|----------|------------------------------------------------------|
-| `entity_id`        | `string`  | yes      |                                                      |
-| `run_id`           | `string`  | yes      |                                                      |
-| `activation_ts`    | `timestamp`| yes     | `MIN(activation_ts)` per (Entity, Run)               |
-| `counterfactual`   | `boolean` | yes      | `true` for Control-arm would-have-activated (v1: always `false`) |
-| `activated`        | `boolean` | yes      | `true` if activation event exists with `activation_ts > first_exposure_ts` |
+| Field            | Type        | Required | Meaning                                                                    |
+| ---------------- | ----------- | -------- | -------------------------------------------------------------------------- |
+| `entity_id`      | `string`    | yes      |                                                                            |
+| `run_id`         | `string`    | yes      |                                                                            |
+| `activation_ts`  | `timestamp` | yes      | `MIN(activation_ts)` per (Entity, Run)                                     |
+| `counterfactual` | `boolean`   | yes      | `true` for Control-arm would-have-activated; defaults to `false`           |
+| `activated`      | `boolean`   | yes      | `true` if activation event exists with `activation_ts > first_exposure_ts` |
 
 Un-activated Entities (`activated = false`) are excluded from gated analysis but still counted in
 the full-exposed SRM denominator.

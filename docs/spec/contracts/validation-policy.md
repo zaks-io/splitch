@@ -7,19 +7,20 @@ trusts are not optional. Each rule here is non-negotiable; the reasoning is in t
 
 ## Layer matrix
 
-| Layer | What it receives | Zod parse? | Failure action |
-|---|---|---|---|
-| Worker HTTP edge | Every request (body, path params, query params) | **Always** | `ErrorResponse { code: 'VALIDATION_ERROR', details: { issues } }` — no partial accepts |
-| KV reads (all, including hot path) | JSON blobs | **Always** | `ErrorResponse { code: 'INTERNAL_SERVER_ERROR' }` + loud log — blob is corrupted cache, not user error |
-| D1 reads | Drizzle ORM rows | **Never** (trusted) | — column schema enforced by Drizzle migrations; structurally sound by construction |
-| Tinybird reads | Raw event rows | **Never** | Query-time filtering is on values; append-only log corruption is a platform incident, not app-boundary concern |
-| Assignment Store KV | `AssignmentStoreValue` blobs | **Always** | `INTERNAL_SERVER_ERROR` + miss-and-recompute (self-healing) |
+| Layer                              | What it receives                                | Zod parse?          | Failure action                                                                                                 |
+| ---------------------------------- | ----------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Worker HTTP edge                   | Every request (body, path params, query params) | **Always**          | `ErrorResponse { code: 'VALIDATION_ERROR', details: { issues } }` — no partial accepts                         |
+| KV reads (all, including hot path) | JSON blobs                                      | **Always**          | `ErrorResponse { code: 'INTERNAL_SERVER_ERROR' }` + loud log — blob is corrupted cache, not user error         |
+| D1 reads                           | Drizzle ORM rows                                | **Never** (trusted) | — column schema enforced by Drizzle migrations; structurally sound by construction                             |
+| Tinybird reads                     | Raw event rows                                  | **Never**           | Query-time filtering is on values; append-only log corruption is a platform incident, not app-boundary concern |
+| Assignment Store KV                | `AssignmentStoreValue` blobs                    | **Always**          | `INTERNAL_SERVER_ERROR` + miss-and-recompute (self-healing)                                                    |
 
 ---
 
 ## Rule 1: Worker boundary — every untrusted input is Zod-parsed
 
 "Untrusted" means anything crossing the HTTP boundary from outside the Worker:
+
 - Request body (JSON)
 - Path parameters (strings)
 - Query parameters (strings, coerced to typed values)
@@ -28,6 +29,7 @@ No exceptions for "high-traffic" endpoints. The hot-path data-plane evaluate end
 (ADR-0025: "contract edge always".)
 
 Parse failure returns HTTP 400 with `ErrorResponse` shape:
+
 ```
 { code: 'VALIDATION_ERROR', message: '...', details: { issues: [{path, message}] } }
 ```
@@ -43,6 +45,7 @@ schema. Every KV read — including the latency-critical Assignment Store `getAl
 reads — is Zod-parsed before the value is used.
 
 Failure contract:
+
 - Malformed blob → `INTERNAL_SERVER_ERROR` response + structured log entry (blob key, parse errors).
 - **No silent swallowing.** Fail loud, not fail-open.
 - The hot path trades latency for loudness. Optimize only with a measured reason. (ADR-0025.)
@@ -74,18 +77,18 @@ values (e.g. `WHERE app_id = ?`), not schema validation.
 
 All domain invariants live in the Worker — both skins (MCP, CLI) inherit correctness for free (ADR-0023).
 
-| Invariant | Enforcement | Error code |
-|---|---|---|
-| **Run frozen fields** | Reject `PatchRunRequest` with any of `{salt, allocation, variantSet, targetingSegmentId}` | `RUN_FROZEN` |
-| **Variant frozen per Run** | Reject `PatchVariantRequest.value` if any running Run's `variantSet` includes this variant | `RUN_FROZEN` |
-| **Allocation sums to 100** | Sum check on `StartRunRequest.allocation` | `ALLOCATION_INVALID` |
-| **Activation ordering** | `activation_ts > first_exposure_ts`; enforced at ingest time in the Exposure pipeline | `ACTIVATION_TIMESTAMP_INVALID` |
-| **app_id scoping** | Every D1/Tinybird query filtered by `app_id` (and `environment_id` co-scoped for experiments/runs/exposures/credentials, ADR-0027) in the data-access layer | `FORBIDDEN` (wrong app) |
-| **Credential scopes** | KV cache lookup on every request; checked before the handler runs | `INSUFFICIENT_SCOPES` / `CREDENTIAL_REVOKED` |
-| **targetingKey assignment edit** | Reject `PatchExperimentRequest.targetingKey` when Experiment.status = `'running'` | `RUN_FROZEN` |
-| **Activation Metric assignment edit** | Reject `PatchExperimentRequest.activationMetricId` when Experiment.status = `'running'` | `RUN_FROZEN` |
-| **Decision family lock** | Reject changing `confidenceLevel`, horizon/tuning fields, goal Metric roles, Guardrail thresholds/directions, or Primary Dimensions for a running Run's decision-valid result | `DECISION_LOCKED` |
-| **Metric denominator same App** | Check `denominator.metricId` belongs to same `appId` on create | `VALIDATION_ERROR` |
+| Invariant                             | Enforcement                                                                                                                                                                   | Error code                                   |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| **Run frozen fields**                 | Reject `PatchRunRequest` with any of `{salt, allocation, variantSet, targetingSegmentId}`                                                                                     | `RUN_FROZEN`                                 |
+| **Variant frozen per Run**            | Reject `PatchVariantRequest.value` if any running Run's `variantSet` includes this variant                                                                                    | `RUN_FROZEN`                                 |
+| **Allocation sums to 100**            | Sum check on `StartRunRequest.allocation`                                                                                                                                     | `ALLOCATION_INVALID`                         |
+| **Activation ordering**               | `activation_ts > first_exposure_ts`; enforced at ingest time in the Exposure pipeline                                                                                         | `ACTIVATION_TIMESTAMP_INVALID`               |
+| **app_id scoping**                    | Every D1/Tinybird query filtered by `app_id` (and `environment_id` co-scoped for experiments/runs/exposures/credentials, ADR-0027) in the data-access layer                   | `FORBIDDEN` (wrong app)                      |
+| **Credential scopes**                 | KV cache lookup on every request; checked before the handler runs                                                                                                             | `INSUFFICIENT_SCOPES` / `CREDENTIAL_REVOKED` |
+| **targetingKey assignment edit**      | Reject `PatchExperimentRequest.targetingKey` when Experiment.status = `'running'`                                                                                             | `RUN_FROZEN`                                 |
+| **Activation Metric assignment edit** | Reject `PatchExperimentRequest.activationMetricId` when Experiment.status = `'running'`                                                                                       | `RUN_FROZEN`                                 |
+| **Decision family lock**              | Reject changing `confidenceLevel`, horizon/tuning fields, goal Metric roles, Guardrail thresholds/directions, or Primary Dimensions for a running Run's decision-valid result | `DECISION_LOCKED`                            |
+| **Metric denominator same App**       | Check `denominator.metricId` belongs to same `appId` on create                                                                                                                | `VALIDATION_ERROR`                           |
 
 ---
 
@@ -93,6 +96,7 @@ All domain invariants live in the Worker — both skins (MCP, CLI) inherit corre
 
 The test-evaluate endpoint (`GET /api/flags/:flagKey/test-evaluate`) runs the full Provider
 resolution + rule-matching but is wired to **no write path**. There is no code path from it to:
+
 - The Exposure log (Tinybird append)
 - The Assignment Store (KV / DO write)
 
@@ -107,6 +111,7 @@ not a partial resolution.
 ## Start action: atomicity contract
 
 When `POST /apps/{app_id}/envs/{environment_id}/experiments/:id/start` fires:
+
 1. Worker validates the request (Zod).
 2. D1 transaction: end running Run (set `ended_at`, `status = 'ended'`), insert new Run, update `experiments.live_run_id`.
 3. KV write: update `app:{appId}:{environmentId}:liveRun` and `app:{appId}:{environmentId}:run:{newRunId}`.

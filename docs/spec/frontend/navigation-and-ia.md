@@ -28,7 +28,7 @@ that a link could disagree with.
 
 `appId` resolves server-side to exactly one org. A request where `{appId}` does not belong to
 `{orgSlug}` is a contradiction, not a silent redirect: the loader rejects it (404 — the app does
-not exist *under this org*), rather than switching the user's org out from under them.
+not exist _under this org_), rather than switching the user's org out from under them.
 
 ## The three switchers
 
@@ -62,12 +62,13 @@ the URL because:
 - An `appId` already resolves to exactly one org. With org in the URL, a link carries its own
   scope and the appId/org pair is either consistent or a clean 404 — never an ambiguous
   "switch your active org silently or 403" decision.
-- It is the same no-hidden-state discipline already chosen for `appId`. Adding a *second*
+- It is the same no-hidden-state discipline already chosen for `appId`. Adding a _second_
   ambient "current org" cookie would reintroduce exactly the drift the spine principle rejects.
 
 ## Reconciled
 
 The spine and session docs are reconciled to this IA:
+
 - [appid-is-the-spine.md](./appid-is-the-spine.md) — `(appId, environmentId)` co-spine; slugs resolve
   to IDs at the loader; DO/cache/socket keyed by the pair.
 - [session-loader-isolation.md](./session-loader-isolation.md) — multi-org cookie (`orgs[]`, no current

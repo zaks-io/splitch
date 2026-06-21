@@ -12,9 +12,9 @@ Vocabulary: domain terms per [CONTEXT.md](../../CONTEXT.md). Builds directly on
 
 ## Where this came from
 
-The ADRs pin the rendering *substrate* — TanStack Start on two Workers, a shared `ui` package, TanStack
+The ADRs pin the rendering _substrate_ — TanStack Start on two Workers, a shared `ui` package, TanStack
 Query as the sole synced server-state store, a hibernating WebSocket per App for live updates. They do not
-pin the *contracts between the pieces*: how code is split into packages, how the panel knows who you are,
+pin the _contracts between the pieces_: how code is split into packages, how the panel knows who you are,
 how a WebSocket nudge maps to the caches it invalidates, when the socket connects, how errors and loading
 are handled, or how mutations flow. This is that layer — below the ADRs, above the screens. It is not a UX
 spec (no screen inventory) and not a glossary.
@@ -50,12 +50,12 @@ speculative indirection.
   changes in one place and both surfaces move.
 - **`contracts`** — shared types and the typed read-API client (ADR-0017's contracts-first OpenAPI/Zod).
   Consumed by both apps (and the SDK), so it is its own package independent of the frontend.
-- **panel app / marketing app** — each owns its **own** feature/page components, *composed from* `ui`
+- **panel app / marketing app** — each owns its **own** feature/page components, _composed from_ `ui`
   primitives. Anything domain-aware (a `RunStatusBadge`, an SRM panel) lives **inside** the app that uses
   it, not in a shared package — one consumer, so extracting it would be speculative indirection.
 
 Marketing and the panel look like one product because they are built from the same primitives on the same
-tokens; they are not the *same* compositions (marketing's gradient hero, the panel's data tables differ).
+tokens; they are not the _same_ compositions (marketing's gradient hero, the panel's data tables differ).
 When marketing wants a treatment the panel never uses, that is a marketing-only **component** built from
 shared **tokens** — the palette is never forked, only the composition differs.
 
@@ -73,7 +73,7 @@ on first paint, so it needs the authenticated identity at request time, before a
 - **Active App is the URL** (`/app/:appId/...`). The loader checks the session has access to `:appId` or
   returns 403. Switching App is a navigation.
 
-**Deferred (product decision):** what *issues* the session — email/password, OAuth/SSO, magic link. The
+**Deferred (product decision):** what _issues_ the session — email/password, OAuth/SSO, magic link. The
 `cookie → server validation → loader context` seam holds regardless of issuer; the issuer plugs in behind
 it.
 
@@ -81,7 +81,7 @@ it.
 
 ADR-0019's live-update model only works if there is a deterministic, shared mapping from a nudge
 `{entity, id}` to the exact cache keys it must invalidate. That mapping is a **query-key factory** — one
-module, the single source of truth for key shapes — and the WebSocket handler invalidates *through* it,
+module, the single source of truth for key shapes — and the WebSocket handler invalidates _through_ it,
 never by hand-assembling key arrays.
 
 - **Entity-rooted hierarchical keys** under the spine: `['app', appId, 'experiment', expId, ...]`. The
@@ -110,10 +110,10 @@ The factory is domain-aware → it lives in the panel app, not `ui`.
 ## Error and loading conventions
 
 Three tiers, at fixed levels of the route tree. The visual components (error pages, empty states,
-skeletons) live in `ui` (they are brand surfaces); *which boundary catches what* is panel routing config.
+skeletons) live in `ui` (they are brand surfaces); _which boundary catches what_ is panel routing config.
 
 1. **Root error boundary** (app shell) — catastrophic / unexpected failures. The "something broke" page.
-2. **Segment error boundaries** (`/app/:appId` layout and major sections) — *expected* domain failures:
+2. **Segment error boundaries** (`/app/:appId` layout and major sections) — _expected_ domain failures:
    403 → "you don't have access to this App," 404 → "experiment not found." Designed states, not stack
    traces.
 3. **Failed background refetch** (the nudge path) — **non-fatal**. A failed nudge-refetch never unmounts
@@ -131,7 +131,7 @@ Sentry severity tracks the error tier — expected states never page anyone.
   fail loud.
 - **Expected domain failures (403/404)** → **not** Sentry errors. Normal control flow; logging them poisons
   the signal. At most a breadcrumb.
-- **Failed background refetch** → low-severity breadcrumb, not a page-breaking error. A *pattern* of them
+- **Failed background refetch** → low-severity breadcrumb, not a page-breaking error. A _pattern_ of them
   (read API down) is worth surfacing; one blip is not.
 
 **Distributed tracing across the hops that matter:** trace context propagates SSR-loader → read-API and
@@ -145,15 +145,15 @@ end-user PII. They are **scrubbed from Sentry payloads.**
 ## Data flow: reads and mutations
 
 ADR-0019 is explicit — the client never applies deltas; it invalidates and refetches truth, and config is
-persisted-before-announced (the per-App DO validates, commits KV/D1, *then* broadcasts).
+persisted-before-announced (the per-App DO validates, commits KV/D1, _then_ broadcasts).
 
 The frontend mirrors that discipline: **server-confirmed mutations, no optimistic cache writes.**
 
 - A config edit POSTs to the read/write API → through the DO → commit → broadcast → every client (including
   the writer) invalidates and refetches. The UI **always** shows persisted state and can never display an
   edit that failed validation. The writer's own 200 already carries the new version; the echoed nudge is a
-  no-op (version gate). The nudge is what updates *other* editors.
-- **Form-level state is ephemeral `useState`** — typing in an edit form is local UI state; only *committed*
+  no-op (version gate). The nudge is what updates _other_ editors.
+- **Form-level state is ephemeral `useState`** — typing in an edit form is local UI state; only _committed_
   config is ever written to the Query cache, and only by refetch.
 - **Validation is the DO's, surfaced to the form.** The DO is the authoritative gate; a rejected write
   returns a structured error the form renders inline. The panel may add cheap client-side hints but never
@@ -163,7 +163,7 @@ The frontend mirrors that discipline: **server-confirmed mutations, no optimisti
 
 - **Session issuer** (email/password vs SSO vs magic link) — product decision; the seam is issuer-agnostic.
 - **Screens / information architecture** — this is the architecture spec, not the UX spec.
-- **Brand token *values*** — coming in the branding guide; this spec pins *where* tokens live, not what
+- **Brand token _values_** — coming in the branding guide; this document pins _where_ tokens live, not what
   they are.
 - **Marketing's live-data touchpoints** (pricing, status) — ADR-0020 routes them through the same Query
   store; specifics are a marketing-spec concern.

@@ -9,7 +9,7 @@ Three domain terms, one immutable relationship. This is the subtlest correctness
 - **Pure deterministic function.** Same inputs always produce the same output.
 - **Never recorded as an event.** There is no "assignment record" in any store.
 - **Recomputable anywhere, anytime** — any of the five edge runtimes, offline, in backfills.
-- **Pure *over a Run*.** The Run's frozen config (salt, allocation, Variant set, Targeting) is what makes determinism meaningful. The same `targetingKey` under a *different* Run (different salt) may yield a different Variant — that is correct and expected.
+- **Pure _over a Run_.** The Run's frozen config (salt, allocation, Variant set, Targeting) is what makes determinism meaningful. The same `targetingKey` under a _different_ Run (different salt) may yield a different Variant — that is correct and expected.
 
 Assignment leaves no trace. An Entity that is bucketable but has never been Exposed has **zero footprint**. This is not a limitation; it is the invariant that makes the holdover predicate work.
 
@@ -19,19 +19,19 @@ The **only event recorded on this seam.**
 
 ### Canonical Exposure row shape
 
-| Field | Type | Req | Meaning |
-|-------|------|-----|---------|
-| `app_id` | `string` | ✓ | Data-isolation key (injected at ingest, not from SDK) |
-| `environment_id` | `string` | ✓ | Environment scope; Exposures are per-Environment (injected at ingest, not from SDK) (ADR-0027) |
-| `experiment_id` | `string` | ✓ | Experiment identifier |
-| `run_id` | `string` | ✓ | Experiment Run that owns this Exposure; stamped at SDK fire-time from the live Run config the SDK holds |
-| `targeting_key_hash` | `string` | ✓ | HMAC-derived Entity identifier |
-| `id_type` | `string` | ✓ | Entity type (e.g. `"user"`, `"workspace"`); always explicit, never derived |
-| `variant` | `string` | ✓ | Variant **name** assigned; never the value |
-| `server_ts` | `timestamp` | ✓ | Server-received-at; canonical for `MIN(ts)` first-touch ordering (no client clock skew) |
-| `client_ts` | `timestamp \| null` | ✗ | Client-fired time; diagnostics only |
-| `type` | `"exposure" \| "activation"` | ✓ | Row type discriminator (unified event log; see [activation-event.md](./activation-event.md)) |
-| `counterfactual` | `boolean \| null` | ✗ | `true` only on Control-arm would-have-activated events (additive v2; null in v1) |
+| Field                | Type                         | Req | Meaning                                                                                                 |
+| -------------------- | ---------------------------- | --- | ------------------------------------------------------------------------------------------------------- |
+| `app_id`             | `string`                     | ✓   | Data-isolation key (injected at ingest, not from SDK)                                                   |
+| `environment_id`     | `string`                     | ✓   | Environment scope; Exposures are per-Environment (injected at ingest, not from SDK) (ADR-0027)          |
+| `experiment_id`      | `string`                     | ✓   | Experiment identifier                                                                                   |
+| `run_id`             | `string`                     | ✓   | Experiment Run that owns this Exposure; stamped at SDK fire-time from the live Run config the SDK holds |
+| `targeting_key_hash` | `string`                     | ✓   | HMAC-derived Entity identifier                                                                          |
+| `id_type`            | `string`                     | ✓   | Entity type (e.g. `"user"`, `"workspace"`); always explicit, never derived                              |
+| `variant`            | `string`                     | ✓   | Variant **name** assigned; never the value                                                              |
+| `server_ts`          | `timestamp`                  | ✓   | Server-received-at; canonical for `MIN(ts)` first-touch ordering (no client clock skew)                 |
+| `client_ts`          | `timestamp \| null`          | ✗   | Client-fired time; diagnostics only                                                                     |
+| `type`               | `"exposure" \| "activation"` | ✓   | Row type discriminator (unified event log; see [activation-event.md](./activation-event.md))            |
+| `counterfactual`     | `boolean \| null`            | ✗   | `true` only on Control-arm would-have-activated events (additive deferred extension; null by default)   |
 
 **`run_id` stamping:** stamped at SDK fire-time using the live Run config the SDK currently holds. The SDK is responsible for carrying `run_id` from its most recent flag resolution. The pipeline validates `run_id` is a known Run for the Experiment at ingest; malformed rows are quarantined.
 

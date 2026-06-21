@@ -1,0 +1,41 @@
+{
+  "name": "splitch-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.8.0",
+  "scripts": {
+    "build": "turbo run build",
+    "clean": "turbo run clean && rm -rf node_modules .turbo coverage",
+    "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
+    "d1:migrate:local": "node scripts/check-d1-local.mjs",
+    "dev": "turbo run dev --parallel",
+    "format:check": "biome format . && prettier --check \"**/*.md\"",
+    "format:write": "biome format --write . && prettier --write \"**/*.md\"",
+    "knip": "knip --treat-config-hints-as-errors",
+    "lint": "turbo run lint",
+    "prepare": "lefthook install",
+    "secrets:git": "gitleaks git --redact --no-banner .",
+    "secrets:worktree": "gitleaks dir --redact --no-banner .",
+    "smoke:ci": "node scripts/optional-check.mjs smoke:ci \"Hosted smoke checks run after preview or production targets exist.\"",
+    "test": "turbo run test",
+    "tinybird:local": "node scripts/check-tinybird-local.mjs",
+    "typecheck": "turbo run typecheck",
+    "verify:ci": "pnpm verify:push && pnpm smoke:ci",
+    "verify:commit": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:worktree",
+    "verify:push": "pnpm verify:commit && pnpm test && pnpm build && pnpm depcruise && pnpm secrets:git && pnpm d1:migrate:local && pnpm tinybird:local"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@cloudflare/workers-types": "^4.20260617.1",
+    "@types/node": "^24.13.2",
+    "dependency-cruiser": "^17.4.3",
+    "knip": "^6.17.1",
+    "lefthook": "^2.1.9",
+    "prettier": "^3.8.4",
+    "turbo": "^2.9.18",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "wrangler": "^4.102.0"
+  }
+}

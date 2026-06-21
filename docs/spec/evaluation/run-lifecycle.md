@@ -5,14 +5,14 @@ allocation, Variant set, Targeting rules, Targeting Key) is frozen for its entir
 
 ## Identity
 
-| Field | Type | Required | Meaning |
-|---|---|---|---|
-| `runId` | string | yes | Unique per Experiment; immutable once created |
-| `experimentId` | string | yes | Parent Experiment |
-| `appId` | string | yes | Isolation boundary; always scoped |
-| `environmentId` | string | yes | Co-scoped with `appId`; Experiment Runs are per-Environment (ADR-0027) |
-| `startedAt` | ISO 8601 | yes | When the Run went live (explicit Start action) |
-| `endedAt` | ISO 8601 | optional | Set when the Run closes; absent means live |
+| Field           | Type     | Required | Meaning                                                                |
+| --------------- | -------- | -------- | ---------------------------------------------------------------------- |
+| `runId`         | string   | yes      | Unique per Experiment; immutable once created                          |
+| `experimentId`  | string   | yes      | Parent Experiment                                                      |
+| `appId`         | string   | yes      | Isolation boundary; always scoped                                      |
+| `environmentId` | string   | yes      | Co-scoped with `appId`; Experiment Runs are per-Environment (ADR-0027) |
+| `startedAt`     | ISO 8601 | yes      | When the Run went live (explicit Start action)                         |
+| `endedAt`       | ISO 8601 | optional | Set when the Run closes; absent means live                             |
 
 ## State machine
 
@@ -37,7 +37,7 @@ allocation, Variant set, Targeting rules, Targeting Key) is frozen for its entir
 
 States: `draft → running → ended`
 
-- **draft**: The staging area for the *next* Run. A newly created Experiment has one draft
+- **draft**: The staging area for the _next_ Run. A newly created Experiment has one draft
   and no live Run. Entities receive the Flag's Default Variant until Start.
 - **running**: Started at least once; one Run is live. `running` is the only state in
   which Exposures stamp with this Run's `runId`.
@@ -83,12 +83,13 @@ re-run of the dedup/metric query with the new definition. No new `runId`, no sam
 
 - The latest Run is the live result.
 - Prior Runs are frozen archives; never pooled by default (pooling is a documented future
-  extension — v1 Flag/Experiment scope).
+  extension — one-Flag Experiment scope).
 - Prior Run's Exposures stay attributed to their own `runId`; they never accrue to the new Run.
 
 ## No-superposition guarantee
 
 The three edit types map to distinct, observable outcomes:
+
 - Assignment edit → new `runId` in KV, new Run in D1 after Start.
 - Measurement edit → same `runId`, analysis query re-runs.
 - Non-material edit → same `runId`, no query impact.

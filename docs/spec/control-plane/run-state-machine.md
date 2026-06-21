@@ -23,7 +23,7 @@ draft ──[start]──► running ──[end]──► ended
 - **`ended`**: Run closed; config frozen archive; no new Exposures stamped against it; analysis still
   reads it.
 
-There is no `paused` state in v1. Pausing is modeled as editing allocation to 0% (effectively stops
+There is no `paused` state. Pausing is modeled as editing allocation to 0% (effectively stops
 new Entities from being assigned) without closing the Run.
 
 ## Transitions
@@ -35,6 +35,7 @@ this Environment gates "Start an Experiment Run" at `confirm`, the call must car
 before it commits.
 
 What happens (atomic in the Control Plane API Worker, ordered):
+
 1. Validate all draft config is valid (allocation sums to 100%, at least one Variant, Targeting Key set,
    every Variant available in this Environment per ADR-0028)
 2. If a `running` Run exists: transition it to `ended`, set `ended_at = now()`
@@ -54,6 +55,7 @@ sample reset, not N.
 Triggered by: explicit user/agent End action.
 
 What happens:
+
 1. Assert Run is `running`; reject with `RUN_NOT_RUNNING` if already ended
 2. Set `status = ended`, `ended_at = now()` in D1
 3. Clear `live_run_id` from KV (or write a sentinel value indicating no running Run)
@@ -85,6 +87,7 @@ not just Worker logic):
 ## Measurement edit fields (apply to live Run in place, no Run reset)
 
 These are PATCH'd on the Experiment (not the Run); they recompute over the existing raw log:
+
 - Metric definitions, Conversion Window, Guardrail config
 - Non-material edits: description, owner, tags
 
@@ -92,6 +95,7 @@ These are PATCH'd on the Experiment (not the Run); they recompute over the exist
 
 These fields are copied into the Run at Start time and define what can produce
 decision-valid significance or Guardrail breach output:
+
 - `confidence_level`
 - `horizon` and fixed/sequential tuning (`sample_size_locked`, `target_n`)
 - goal Metric family members
@@ -104,39 +108,39 @@ decision-valid result with `DECISION_LOCKED`.
 
 ## Run D1 record shape
 
-| column                  | type    | required | meaning                                                  |
-|-------------------------|---------|----------|----------------------------------------------------------|
-| `run_id`                | TEXT PK | yes      | `run_<ulid>`                                             |
-| `experiment_id`         | TEXT FK | yes      | Parent Experiment                                        |
-| `app_id`                | TEXT    | yes      | Denormalized for isolation seam scoping                  |
-| `environment_id`        | TEXT    | yes      | Denormalized; co-scope with `app_id` (ADR-0027)          |
-| `status`                | TEXT    | yes      | `running` \| `ended`                                     |
-| `started_at`            | TEXT    | yes      | ISO 8601; set at Start                                   |
-| `ended_at`              | TEXT    | no       | ISO 8601; set at End                                     |
-| `salt`                  | TEXT    | yes      | Frozen assignment seed                                   |
-| `allocation`            | TEXT    | yes      | JSON: `{ [variant_name]: number }`                       |
-| `variant_set`           | TEXT    | yes      | JSON: string[]                                           |
-| `targeting_key_field`   | TEXT    | yes      | Frozen Targeting Key field name                          |
-| `targeting_rules`       | TEXT    | yes      | JSON: TargetingRule[]                                    |
-| `segment_ids`           | TEXT    | yes      | JSON: string[]                                           |
-| `activation_metric_id`  | TEXT    | no       | Frozen Activation Metric; null if no gate                |
-| `confidence_level`      | REAL    | yes      | Locked decision alpha input; default 0.95                |
-| `horizon`               | TEXT    | yes      | `sequential` \| `fixed`; locked at Run Start             |
-| `target_n`              | INTEGER | no       | Sequential tuning target; null unless set                |
-| `sample_size_locked`    | INTEGER | no       | Fixed-horizon sample size; required when `horizon = fixed` |
-| `decision_family`       | TEXT    | yes      | JSON: locked goal Metric × Variant × Primary Dimension members |
-| `guardrail_decisions`   | TEXT    | yes      | JSON: locked Guardrail Metric thresholds/directions      |
-| `created_at`            | TEXT    | yes      | ISO 8601                                                 |
+| column                 | type    | required | meaning                                                        |
+| ---------------------- | ------- | -------- | -------------------------------------------------------------- |
+| `run_id`               | TEXT PK | yes      | `run_<ulid>`                                                   |
+| `experiment_id`        | TEXT FK | yes      | Parent Experiment                                              |
+| `app_id`               | TEXT    | yes      | Denormalized for isolation seam scoping                        |
+| `environment_id`       | TEXT    | yes      | Denormalized; co-scope with `app_id` (ADR-0027)                |
+| `status`               | TEXT    | yes      | `running` \| `ended`                                           |
+| `started_at`           | TEXT    | yes      | ISO 8601; set at Start                                         |
+| `ended_at`             | TEXT    | no       | ISO 8601; set at End                                           |
+| `salt`                 | TEXT    | yes      | Frozen assignment seed                                         |
+| `allocation`           | TEXT    | yes      | JSON: `{ [variant_name]: number }`                             |
+| `variant_set`          | TEXT    | yes      | JSON: string[]                                                 |
+| `targeting_key_field`  | TEXT    | yes      | Frozen Targeting Key field name                                |
+| `targeting_rules`      | TEXT    | yes      | JSON: TargetingRule[]                                          |
+| `segment_ids`          | TEXT    | yes      | JSON: string[]                                                 |
+| `activation_metric_id` | TEXT    | no       | Frozen Activation Metric; null if no gate                      |
+| `confidence_level`     | REAL    | yes      | Locked decision alpha input; default 0.95                      |
+| `horizon`              | TEXT    | yes      | `sequential` \| `fixed`; locked at Run Start                   |
+| `target_n`             | INTEGER | no       | Sequential tuning target; null unless set                      |
+| `sample_size_locked`   | INTEGER | no       | Fixed-horizon sample size; required when `horizon = fixed`     |
+| `decision_family`      | TEXT    | yes      | JSON: locked goal Metric × Variant × Primary Dimension members |
+| `guardrail_decisions`  | TEXT    | yes      | JSON: locked Guardrail Metric thresholds/directions            |
+| `created_at`           | TEXT    | yes      | ISO 8601                                                       |
 
 ## Error codes for Run invariants
 
-| code                    | when                                                             |
-|-------------------------|------------------------------------------------------------------|
-| `RUN_FROZEN`            | Attempt to mutate frozen assignment field on a running Run        |
-| `RUN_NOT_RUNNING`       | Attempt to end a Run that is not `running`                        |
-| `RUN_INVALID_ALLOCATION`| Allocation percentages do not sum to 100, or unknown variant name |
-| `EXPERIMENT_NO_DRAFT`   | Start attempted when draft has no changes from current Run        |
-| `VARIANT_NOT_AVAILABLE` | A referenced Variant is not in the Flag's available set for this Environment (ADR-0028) |
+| code                     | when                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------- |
+| `RUN_FROZEN`             | Attempt to mutate frozen assignment field on a running Run                              |
+| `RUN_NOT_RUNNING`        | Attempt to end a Run that is not `running`                                              |
+| `RUN_INVALID_ALLOCATION` | Allocation percentages do not sum to 100, or unknown variant name                       |
+| `EXPERIMENT_NO_DRAFT`    | Start attempted when draft has no changes from current Run                              |
+| `VARIANT_NOT_AVAILABLE`  | A referenced Variant is not in the Flag's available set for this Environment (ADR-0028) |
 
 ## Sources
 

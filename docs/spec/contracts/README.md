@@ -7,24 +7,24 @@ codes. The spine: one Zod schema per glossary noun, everything else derived from
 
 ## Files
 
-| File | One-line purpose |
-|---|---|
-| [leaf-schemas-flag.md](./leaf-schemas-flag.md) | Canonical field lists for the flag-side leaves: Flag, Variant, TargetingRule, PercentageRollout, Condition, Segment |
-| [leaf-schemas-experiment.md](./leaf-schemas-experiment.md) | Canonical field lists for the experimentation leaves: Experiment, Run, Metric (allocation, MetricKind) |
-| [leaf-schemas-runtime.md](./leaf-schemas-runtime.md) | Canonical field lists for runtime/identity leaves: EvaluationContext, Exposure event, Organization, App, User, SDKCredential |
-| [error-responses.md](./error-responses.md) | ErrorResponse shape, ErrorCode enum, per-code detail shapes, HTTP status map, and per-endpoint error contracts |
-| [request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md) | Shared envelope conventions (pagination, create/patch asymmetry) plus test-evaluate and data-plane evaluate contracts |
-| [request-response-envelopes-flag-variant.md](./request-response-envelopes-flag-variant.md) | Wire shapes for Flag and Variant endpoints: create/patch asymmetry, Variant Run-frozen guard |
-| [request-response-envelopes-experiment-run.md](./request-response-envelopes-experiment-run.md) | Wire shapes for Experiment and Experiment Run endpoints: edit taxonomy, Start, Run immutability guards |
-| [request-response-envelopes-org-app-credentials.md](./request-response-envelopes-org-app-credentials.md) | Wire shapes for Metric, App/Org, and SDK Credential endpoints; once-only credential surfacing |
-| [storage-schemas-kv.md](./storage-schemas-kv.md) | KV namespace key patterns + value schemas (Zod-parsed) and the per-Entity Assignment Store KV read model |
-| [storage-schemas-d1.md](./storage-schemas-d1.md) | D1 identity and flag-side table columns: organizations, memberships, apps, flags, variants, targeting_rules, segments |
-| [storage-schemas-d1-privacy.md](./storage-schemas-d1-privacy.md) | D1 privacy request and Entity deletion tombstone tables |
-| [storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md) | D1 experiment-side table columns: experiments, runs, metrics, sdk_credentials |
-| [storage-schemas-tinybird.md](./storage-schemas-tinybird.md) | Tinybird datasource schemas: exposures (raw log) and audit_log |
-| [validation-policy.md](./validation-policy.md) | Which layer validates (Worker always, KV always, D1 trusts), invariants enforced in the Worker, Start atomicity contract |
-| [two-packages-topology.md](./two-packages-topology.md) | `@splitch/contracts` vs `@splitch/client`: what each exports, dependencies, consumer import map, seam contracts |
-| [mcp-tool-derivation.md](./mcp-tool-derivation.md) | How MCP tools derive from Zod route schemas, canonical tool list, error handling, authorization model |
+| File                                                                                                     | One-line purpose                                                                                                             |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| [leaf-schemas-flag.md](./leaf-schemas-flag.md)                                                           | Canonical field lists for the flag-side leaves: Flag, Variant, TargetingRule, PercentageRollout, Condition, Segment          |
+| [leaf-schemas-experiment.md](./leaf-schemas-experiment.md)                                               | Canonical field lists for the experimentation leaves: Experiment, Run, Metric (allocation, MetricKind)                       |
+| [leaf-schemas-runtime.md](./leaf-schemas-runtime.md)                                                     | Canonical field lists for runtime/identity leaves: EvaluationContext, Exposure event, Organization, App, User, SDKCredential |
+| [error-responses.md](./error-responses.md)                                                               | ErrorResponse shape, ErrorCode enum, per-code detail shapes, HTTP status map, and per-endpoint error contracts               |
+| [request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md)                 | Shared envelope conventions (pagination, create/patch asymmetry) plus test-evaluate and data-plane evaluate contracts        |
+| [request-response-envelopes-flag-variant.md](./request-response-envelopes-flag-variant.md)               | Wire shapes for Flag and Variant endpoints: create/patch asymmetry, Variant Run-frozen guard                                 |
+| [request-response-envelopes-experiment-run.md](./request-response-envelopes-experiment-run.md)           | Wire shapes for Experiment and Experiment Run endpoints: edit taxonomy, Start, Run immutability guards                       |
+| [request-response-envelopes-org-app-credentials.md](./request-response-envelopes-org-app-credentials.md) | Wire shapes for Metric, App/Org, and SDK Credential endpoints; once-only credential surfacing                                |
+| [storage-schemas-kv.md](./storage-schemas-kv.md)                                                         | KV namespace key patterns + value schemas (Zod-parsed) and the per-Entity Assignment Store KV read model                     |
+| [storage-schemas-d1.md](./storage-schemas-d1.md)                                                         | D1 identity and flag-side table columns: organizations, memberships, apps, flags, variants, targeting_rules, segments        |
+| [storage-schemas-d1-privacy.md](./storage-schemas-d1-privacy.md)                                         | D1 privacy request and Entity deletion tombstone tables                                                                      |
+| [storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md)                                   | D1 experiment-side table columns: experiments, runs, metrics, sdk_credentials                                                |
+| [storage-schemas-tinybird.md](./storage-schemas-tinybird.md)                                             | Tinybird datasource schemas: exposures (raw log) and audit_log                                                               |
+| [validation-policy.md](./validation-policy.md)                                                           | Which layer validates (Worker always, KV always, D1 trusts), invariants enforced in the Worker, Start atomicity contract     |
+| [two-packages-topology.md](./two-packages-topology.md)                                                   | `@splitch/contracts` vs `@splitch/control-plane-sdk`: what each exports, dependencies, consumer import map, seam contracts   |
+| [mcp-tool-derivation.md](./mcp-tool-derivation.md)                                                       | How MCP tools derive from Zod route schemas, canonical tool list, error handling, authorization model                        |
 
 ---
 
@@ -35,7 +35,7 @@ codes. The spine: one Zod schema per glossary noun, everything else derived from
 
 - TypeScript types come from `z.infer` (never hand-written).
 - The OpenAPI document is generated by `@hono/zod-openapi` (never authored; never committed).
-- The typed client (`@splitch/client`) is Hono's `hc` — type-inferred, zero codegen.
+- The Control Plane SDK (`@splitch/control-plane-sdk`) wraps Hono's `hc` — type-inferred, zero codegen.
 - MCP tool schemas derive at server startup from the same Zod route definitions.
 - Worker request validation runs the same schemas at the HTTP edge.
 
@@ -47,7 +47,7 @@ validation, types, OpenAPI, and MCP tools from one edit.
 
 ## Key Contract Invariants
 
-- One Flag per Experiment in v1; `Experiment.flagId` is a single string.
+- One Flag per Experiment; `Experiment.flagId` is a single string.
 - Draft → Start is the only assignment-config carrier for Experiment Runs.
 - Activation Metric changes are assignment edits; `RUN_FROZEN` applies while an Experiment is running.
 - First Start opens the first Experiment Run; `liveRunId` is explicit persisted state in KV.

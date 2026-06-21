@@ -1,0 +1,20 @@
+{
+  "name": "@splitch/auth-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist coverage",
+    "deploy": "wrangler deploy",
+    "deploy:dry-run": "wrangler deploy --dry-run",
+    "dev": "wrangler dev",
+    "lint": "biome lint src",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "wrangler:types": "wrangler types src/worker-configuration.d.ts"
+  },
+  "dependencies": {
+    "@splitch/contracts": "workspace:*"
+  }
+}

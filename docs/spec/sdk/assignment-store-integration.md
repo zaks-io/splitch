@@ -95,6 +95,7 @@ self-healing**, bounded to returning Entity × Run boundary × cross-POP × with
 ## Write path: not SDK's concern
 
 The `put` call that creates holdover entries flows:
+
 ```
 evaluate() Exposure fires → Worker appends raw log → pipeline → DO.putIfAbsent → KV write-through
 ```

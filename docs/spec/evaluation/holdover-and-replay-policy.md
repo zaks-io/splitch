@@ -18,6 +18,7 @@ footprint, correct by construction.
 ## Replay semantic
 
 If the Entity is a holdover:
+
 - Serve `holdoverRecord.variant` (the Variant from the original Exposure).
 - Do **not** recompute `assign(liveRun, targetingKey)`.
 - Do **not** fire a new Exposure.
@@ -30,9 +31,9 @@ allocation may be archived or deleted; recomputing is impossible without them. T
 
 ## Experience vs analysis split
 
-| Concern | Behavior |
-|---|---|
-| **Experience** (what to show) | Replay prior Variant; no mid-experiment flip |
+| Concern                                    | Behavior                                                                           |
+| ------------------------------------------ | ---------------------------------------------------------------------------------- |
+| **Experience** (what to show)              | Replay prior Variant; no mid-experiment flip                                       |
 | **Analysis** (what Run counts this Entity) | Exposures remain attributed to `holdoverRecord.runId`; not accrued to the live Run |
 
 Run N+1's dataset is pure: it contains only Entities first-exposed under Run N+1's config.
@@ -46,6 +47,7 @@ Exposure pipeline receives nothing new for a holdover request. The dedup query c
 Entity exactly once: under the Run whose `runId` is stored in `holdoverRecord.runId`.
 
 This is a load-bearing implementation invariant. The pipeline must enforce it:
+
 - Evaluate path returns `isHoldover: true` to signal "do not fire Exposure."
 - `read-variant()` accessor checks `isHoldover` before firing (see
   [exposure-firing-and-accessor.md](./exposure-firing-and-accessor.md)).
@@ -57,7 +59,7 @@ This is a load-bearing implementation invariant. The pipeline must enforce it:
 For up to ~60s after a Run-boundary first-touch write, a concurrent cross-POP KV read may
 miss the holdover and fall through to `assign(liveRun, targetingKey)` instead of replaying.
 Since `assign()` is deterministic, a brand-new Entity gets the identical Variant the DO is
-about to store — no corruption. A *returning* holdover in this exact window may momentarily
+about to store — no corruption. A _returning_ holdover in this exact window may momentarily
 get a fresh assignment instead of a replay — cosmetic and self-healing once KV propagates.
 No Run dataset is corrupted; only momentary experience near a boundary. (ADR-0009 accepted.)
 

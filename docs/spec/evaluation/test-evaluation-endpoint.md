@@ -77,6 +77,7 @@ debugger whether the matched rule selected a direct Variant or used Percentage R
 ## Exposure-free contract (structural)
 
 The endpoint has **no code path** to:
+
 - The Exposure log
 - The Assignment Store (`put()`)
 - Any `runId` stamping
@@ -101,12 +102,12 @@ actually evaluated.
 
 ## Error contract
 
-| Condition | HTTP status | Detail |
-|---|---|---|
-| Flag not found for appId | 404 | `{ error: 'FLAG_NOT_FOUND' }` |
-| No live Run (Experiment is draft) | 200 | `variant = defaultVariant`, `reason = { type: 'default_disabled' }`, `liveRunId = null` |
-| Invalid flagKey / missing required field | 400 | Zod validation error shape |
-| Auth failure | 401/403 | Control-plane token invalid or insufficient scope |
+| Condition                                | HTTP status | Detail                                                                                  |
+| ---------------------------------------- | ----------- | --------------------------------------------------------------------------------------- |
+| Flag not found for appId                 | 404         | `{ error: 'FLAG_NOT_FOUND' }`                                                           |
+| No live Run (Experiment is draft)        | 200         | `variant = defaultVariant`, `reason = { type: 'default_disabled' }`, `liveRunId = null` |
+| Invalid flagKey / missing required field | 400         | Zod validation error shape                                                              |
+| Auth failure                             | 401/403     | Control-plane token invalid or insufficient scope                                       |
 
 ## Seam boundary
 

@@ -1,22 +1,22 @@
 # SDK area spec index
 
-Spine: the SDK is a thin JS/TS HTTP client (v1). One public accessor fires an Exposure; a
+Spine: the SDK is a thin JS/TS HTTP client. One public accessor fires an Exposure; a
 distinct accessor peeks without one. The evaluate endpoint is safe under a public Client Key
 (returns only the resolved Variant, never config/rules/salt). The full OpenFeature provider
 surface is deferred.
 
 ## Files
 
-| File | One-line purpose |
-|------|-----------------|
-| [credentials.md](./credentials.md) | Client Key vs API Key: which credential, what it can do, lifecycle |
-| [public-evaluate-endpoint.md](./public-evaluate-endpoint.md) | `POST /evaluate` contract: request/response shapes, safety invariants, edge binding |
-| [exposure-accessor.md](./exposure-accessor.md) | `evaluate` (fires Exposure) and `peekVariant` (no Exposure) |
-| [seen-set.md](./seen-set.md) | SDK-local per-instance exposure dedup cache (hot-path optimization only) |
-| [assignment-store-integration.md](./assignment-store-integration.md) | How the SDK consumes the Assignment Store (holdover pre-load, evaluate-path ordering) |
-| [five-runtimes.md](./five-runtimes.md) | SDK invariants across five Cloudflare edge runtimes |
-| [test-evaluation-endpoint.md](./test-evaluation-endpoint.md) | Control-plane dry-run: `POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval` — resolves without Exposure (per-Env, ADR-0027) |
-| [openfeature-deferred.md](./openfeature-deferred.md) | Explicitly-deferred full OpenFeature provider surface (v1 out of scope) |
+| File                                                                 | One-line purpose                                                                                                                       |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [credentials.md](./credentials.md)                                   | Client Key vs API Key: which credential, what it can do, lifecycle                                                                     |
+| [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)         | `POST /evaluate` contract: request/response shapes, safety invariants, edge binding                                                    |
+| [exposure-accessor.md](./exposure-accessor.md)                       | `evaluate` (fires Exposure) and `peekVariant` (no Exposure)                                                                            |
+| [seen-set.md](./seen-set.md)                                         | SDK-local per-instance exposure dedup cache (hot-path optimization only)                                                               |
+| [assignment-store-integration.md](./assignment-store-integration.md) | How the SDK consumes the Assignment Store (holdover pre-load, evaluate-path ordering)                                                  |
+| [five-runtimes.md](./five-runtimes.md)                               | SDK invariants across five Cloudflare edge runtimes                                                                                    |
+| [test-evaluation-endpoint.md](./test-evaluation-endpoint.md)         | Control-plane dry-run: `POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval` — resolves without Exposure (per-Env, ADR-0027) |
+| [openfeature-deferred.md](./openfeature-deferred.md)                 | Explicitly deferred full OpenFeature provider surface                                                                                  |
 
 ## Sources
 

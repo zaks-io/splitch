@@ -32,7 +32,7 @@ much of its data is static, not which framework renders it.
 - **Both surfaces are TanStack Start apps.** Not "Start for the panel, SSG for marketing." One
   framework, one rendering model, one mental model for routing, loaders, and data fetching across
   the whole frontend.
-- **TanStack Query is the server-state store on both.** ADR-0019 already pinned Query as the *sole*
+- **TanStack Query is the server-state store on both.** ADR-0019 already pinned Query as the _sole_
   synced server-state store for the panel; marketing inherits the same discipline (no Redux/Zustand,
   no second copy of server state). Most marketing data is build-time static, so its Query usage is
   thin — but where it does fetch (e.g. live pricing, status), it reads through the same store the
@@ -60,14 +60,14 @@ much of its data is static, not which framework renders it.
   reading and it is the thing this ADR exists to refuse. Two toolchains and two component idioms put
   a wall between the marketing and product UIs precisely where we want them to share components; the
   shared-component goal is the whole reason to standardize. SSG's one real win (trivially static
-  marketing) is already available *inside* Start via per-route prerendering, so we get static
+  marketing) is already available _inside_ Start via per-route prerendering, so we get static
   marketing HTML without the second stack.
 - **Plain SPA (TanStack Router, no Start) for both** — rejected. Router-only ships a client-rendered
   shell; marketing then has no server-rendered HTML for crawlers and a blank-until-JS first paint,
   and the panel loses the loader-seeded first paint ADR-0019 assumes. Start is the minimal addition
   that fixes both, over a router we already chose.
 - **Next.js for both** — rejected. It would render and deploy on Workers and has the larger
-  ecosystem, but it is a *different* router/data model from the TanStack Router/Query already
+  ecosystem, but it is a _different_ router/data model from the TanStack Router/Query already
   committed in ADR-0017 — adopting it would mean re-litigating 0017, not extending it. No advantage
   here outweighs throwing away a standing decision.
 - **One Worker serving both surfaces** — rejected. Folding marketing and the panel into a single

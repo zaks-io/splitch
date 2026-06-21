@@ -2,31 +2,31 @@
 
 **Status:** accepted
 
-splitch introduces **Environment** as a first-class tier *under* the App: a named deployment context
+splitch introduces **Environment** as a first-class tier _under_ the App: a named deployment context
 (`dev`, `prod`, and any others the user defines). An App **spans** one or more Environments. This is the
 standard LaunchDarkly/Statsig environment model, and it is a **second axis** orthogonal to the Flag
-catalog: the App axis says *which product*, the Environment axis says *which deployment context*.
+catalog: the App axis says _which product_, the Environment axis says _which deployment context_.
 
 The original model (ADR-0017, CONTEXT.md) said "the five runtimes of one product share a single App —
 define a flag once, consume it everywhere." That remains true for the Flag's **definition**, but it was
 silently carrying a second job it should not: it implied one live configuration per Flag. Real use needs
-the *same* Flag (a model-ID string, a copy block, a gating boolean) to carry **different live values in
+the _same_ Flag (a model-ID string, a copy block, a gating boolean) to carry **different live values in
 dev and prod** — you trial a model in dev, vet it, and only then let it reach production traffic. "Define
-once" is a property of the Flag *definition*; the live *configuration* must diverge per Environment.
+once" is a property of the Flag _definition_; the live _configuration_ must diverge per Environment.
 
-**What is per-Environment vs. per-App.** The split is drawn so the App axis holds *identity and schema*
-(defined once) and the Environment axis holds *live configuration and runtime artifacts* (diverge per
+**What is per-Environment vs. per-App.** The split is drawn so the App axis holds _identity and schema_
+(defined once) and the Environment axis holds _live configuration and runtime artifacts_ (diverge per
 context):
 
-| Concept | Axis |
-|---|---|
-| Flag existence, key, user-defined schema, Variant catalog, Default Variant | **App** |
-| Flag Configuration: available Variants, targeting, rollout, enabled state | **Environment** (ADR-0028) |
-| Client Key, API Key | **Environment** |
-| Experiments, Experiment Runs, Exposures / analysis data | **Environment** |
-| Metric definitions, Segments | **App** (defined once, usable in any Environment) |
-| Members, billing, roles | **Org / App** (unchanged, ADR-0021) |
-| Environment Policy (confirm gates) | **Environment** (ADR-0029) |
+| Concept                                                                    | Axis                                              |
+| -------------------------------------------------------------------------- | ------------------------------------------------- |
+| Flag existence, key, user-defined schema, Variant catalog, Default Variant | **App**                                           |
+| Flag Configuration: available Variants, targeting, rollout, enabled state  | **Environment** (ADR-0028)                        |
+| Client Key, API Key                                                        | **Environment**                                   |
+| Experiments, Experiment Runs, Exposures / analysis data                    | **Environment**                                   |
+| Metric definitions, Segments                                               | **App** (defined once, usable in any Environment) |
+| Members, billing, roles                                                    | **Org / App** (unchanged, ADR-0021)               |
+| Environment Policy (confirm gates)                                         | **Environment** (ADR-0029)                        |
 
 **Credentials are per-Environment.** Both the secret API Key and the public Client Key reach exactly one
 Environment's data plane — a prod API Key reads prod config only. This keeps "one credential = one

@@ -3,7 +3,7 @@
 Request/response shapes for the Flag (definition + per-Environment Configuration), Promotion, and
 Segment resource groups.
 
-**App-level vs Environment-level (ADR-0027/0028).** A Flag's *definition* — key, schema, the full
+**App-level vs Environment-level (ADR-0027/0028).** A Flag's _definition_ — key, schema, the full
 **Variant catalog**, Default Variant — is **App-level** (defined once): `/apps/{app_id}/flags/…`. Its
 **Flag Configuration** — which catalog Variants are available, targeting rules, rollout, enabled state
 — is **per-Environment**: `/apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`. **Promotion**
@@ -16,10 +16,13 @@ conventions are described in [control-plane-endpoint-inventory.md](control-plane
 ## Flag definition endpoints (App-level — the catalog, defined once)
 
 ### `GET /apps/{app_id}/flags`
+
 Returns: list of Flag definitions.
 
 ### `POST /apps/{app_id}/flags`
+
 Body:
+
 ```
 {
   flag_key: string,          // unique within App; snake_case recommended
@@ -31,37 +34,45 @@ Body:
   ]
 }
 ```
+
 Returns: `{ flag_id, app_id, flag_key, name, schema, variants, created_at }`
 Invariant: exactly one Variant has `is_default: true`; every Variant `value` satisfies `schema`.
 **No `enabled` here** — enabled state is per-Environment (it lives on the Flag Configuration).
 
 ### `GET /apps/{app_id}/flags/{flag_id}`
+
 Returns: full Flag definition (catalog Variants + schema). No per-Environment config.
 
 ### `PATCH /apps/{app_id}/flags/{flag_id}`
+
 Body: `{ name?, description?, schema? }`. Does NOT accept `variants` or `enabled`.
 Returns: updated Flag definition.
 
 ### `POST /apps/{app_id}/flags/{flag_id}/variants`
+
 Adds a Variant to the **catalog** (App-level). Body: `{ name, value, is_default? }`; `value` must
 satisfy the Flag's `schema`. A new catalog Variant is **not** available in any Environment until
 **promoted** (ADR-0028).
 Returns: updated Flag definition.
 
 ### `DELETE /apps/{app_id}/flags/{flag_id}/variants/{variant_name}`
+
 Removes a Variant from the catalog. Blocked if the Variant is available in any Environment or
 referenced in a running Experiment.
 
 ### `DELETE /apps/{app_id}/flags/{flag_id}`
+
 Blocked if referenced by a running Experiment in any Environment.
 
 ## Flag Configuration endpoints (per-Environment)
 
 ### `GET /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
+
 Returns: the Flag's Configuration in this Environment:
 `{ flag_id, environment_id, enabled, available_variant_names: string[], targeting_rules: TargetingRule[] }`.
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
+
 Body: `{ enabled?: boolean, available_variant_names?: string[] }`.
 `available_variant_names` must be a subset of the Flag's catalog (ADR-0028). Subject to this
 Environment's Policy (ADR-0029): the "Variant availability" and "enabled state" change types may
@@ -69,6 +80,7 @@ require a Confirmation. **Turning `enabled` off is never gated** (kill-switch ex
 Returns: updated Flag Configuration.
 
 ### `PUT /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/targeting-rules`
+
 Full replace of this Environment's Targeting Rule list (ordered; first match wins). Body:
 `TargetingRule[]`. Rules may only reference Variants in this Environment's available set. Subject to
 the Environment's "targeting/rollout/value" Policy.
@@ -77,8 +89,10 @@ Returns: updated Flag Configuration.
 ## Promotion endpoints
 
 ### `POST /apps/{app_id}/envs/{target_environment_id}/flags/{flag_id}/promote`
+
 Promotes Flag Configuration from a source Environment into this (target) Environment.
 Body:
+
 ```
 {
   from_environment_id: string,
@@ -87,6 +101,7 @@ Body:
   confirm?: boolean                    // required when the target Policy gates this at confirm
 }
 ```
+
 Returns: the updated target Flag Configuration + a diff summary `{ before, after }`.
 Subject to the target Environment's Policy (ADR-0029): a gated Promotion requires `confirm: true`.
 `scope: "variant"` adds `variant_name` to the target's available set (availability only); `scope:
@@ -96,14 +111,20 @@ Subject to the target Environment's Policy (ADR-0029): a gated Promotion require
 ## Segment endpoints
 
 ### `GET /apps/{app_id}/segments`
+
 ### `POST /apps/{app_id}/segments`
+
 Body: `{ name: string, description?: string, conditions: Condition[] }`
 Returns: `{ segment_id, app_id, name, conditions, created_at }`
 
 ### `GET /apps/{app_id}/segments/{segment_id}`
+
 ### `PATCH /apps/{app_id}/segments/{segment_id}`
+
 Body: `{ name?, description?, conditions? }`
+
 ### `DELETE /apps/{app_id}/segments/{segment_id}`
+
 Blocked if referenced by a running Experiment.
 
 ## Sources

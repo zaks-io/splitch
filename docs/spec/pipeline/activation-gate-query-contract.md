@@ -4,7 +4,7 @@ Composes onto the first-touch dedup output (see [dedup-query-contract.md](./dedu
 
 ## Activation gate scope
 
-The gate is a **binary property on a Run**. When `run.activationMetric` is set, ALL Metrics for that Run are gated — the activated population is the analysis unit for everything. Per-Metric gating is not v1 scope.
+The gate is a **binary property on a Run**. When `run.activationMetric` is set, ALL Metrics for that Run are gated — the activated population is the analysis unit for everything. Per-Metric gating is not part of the contract.
 
 ## Inputs
 
@@ -112,15 +112,15 @@ activated-population SRM fired.
 
 The full-exposed SRM (from [dedup-query-contract.md](./dedup-query-contract.md)) always runs in parallel. The two SRMs together form the canonical bias fingerprint:
 
-| full-exposed SRM | activated-population SRM | Interpretation |
-|---|---|---|
-| Clean | Clean | No bias detected |
-| Fires | Any | Bucketing broken — experiment invalid |
-| Clean | Fires | Treatment-affected gate — gated results untrusted |
+| full-exposed SRM | activated-population SRM | Interpretation                                    |
+| ---------------- | ------------------------ | ------------------------------------------------- |
+| Clean            | Clean                    | No bias detected                                  |
+| Fires            | Any                      | Bucketing broken — experiment invalid             |
+| Clean            | Fires                    | Treatment-affected gate — gated results untrusted |
 
 ## Counterfactual extension point (additive, ADR-0013)
 
-In v1, `counterfactual = false` on all activation rows. When the SDK-side counterfactual evaluation is built (deferred), Control-arm would-have-activated events flow as `counterfactual = true` rows through the same `raw_events` log, the same JOIN, and the same anchor. No schema change, no query rewrite. The `{include_counterfactual}` parameter gates their inclusion.
+Activation rows default to `counterfactual = false`. When the SDK-side counterfactual evaluation is built (deferred), Control-arm would-have-activated events flow as `counterfactual = true` rows through the same `raw_events` log, the same JOIN, and the same anchor. No schema change, no query rewrite. The `{include_counterfactual}` parameter gates their inclusion.
 
 ## Output shape (per-Entity gated population)
 

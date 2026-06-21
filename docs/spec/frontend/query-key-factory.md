@@ -7,14 +7,16 @@ A nudge arriving from the WebSocket (`{ entity: 'experiment', id: expId }`) must
 set of cache key prefixes to invalidate. That mapping must be **one module, one source of truth**;
 hand-assembled key arrays in components or loaders break the guarantee.
 
-The factory lives in the panel app (`apps/panel/lib/query-keys.ts`), not in `packages/ui` or
-`packages/contracts`. It is domain-aware and has one consumer (panel), so it stays in the panel.
+The factory lives in the Control Panel app (`apps/control-panel/lib/query-keys.ts`), not in
+`packages/ui` or `packages/contracts`. It is domain-aware and has one consumer (Control Panel), so it
+stays in the Control Panel app.
 If a second consumer needs it the deletion test is re-evaluated.
 
 ## Spine: (appId, environmentId) at the root
 
 Every key in the factory MUST start with `['app', appId, 'env', environmentId, ...]`. This invariant
 enables:
+
 - **Prefix invalidation** by (App, Environment): `invalidateQueries({ queryKey: ['app', appId, 'env', environmentId] })` clears all of one App+Environment's cache
 - **App/Environment-switch purge**: `invalidateQueries({ queryKey: ['app', previousAppId, 'env', previousEnvironmentId] })` on `(appId, environmentId)` change
 - **Isolation**: queries for App A can never accidentally serve App B, and dev's cache can never serve prod
@@ -88,12 +90,12 @@ This single prefix call invalidates the list, detail, runs, and all sub-resource
 one operation — no enumeration of individual keys.
 
 Mapping table (nudge entity → invalidated prefix):
-| nudge `entity`   | prefix invalidated                              |
+| nudge `entity` | prefix invalidated |
 |------------------|-------------------------------------------------|
-| `experiment`     | `keys.experiment.prefix(appId, environmentId)`  |
-| `flag`           | `keys.flag.prefix(appId, environmentId)`        |
-| `metric`         | `keys.metric.prefix(appId, environmentId)`      |
-| `segment`        | `keys.segment.prefix(appId, environmentId)`     |
+| `experiment` | `keys.experiment.prefix(appId, environmentId)` |
+| `flag` | `keys.flag.prefix(appId, environmentId)` |
+| `metric` | `keys.metric.prefix(appId, environmentId)` |
+| `segment` | `keys.segment.prefix(appId, environmentId)` |
 
 ## Version gating (no double-refetch for the editor)
 
@@ -120,7 +122,7 @@ builder returns a key array unconditionally. Malformed usage is caught at compil
 ## Invariants
 
 - No component or loader constructs a key array by hand. All keys come from this factory.
-- The factory is the only import site for cache keys in the panel app.
+- The factory is the only import site for cache keys in the Control Panel app.
 - `appId` is always at index 1 and `environmentId` at index 3 (after the `'env'` tag) of every key;
   any key without the `(appId, environmentId)` root is a bug.
 

@@ -16,7 +16,7 @@ how types, clients, and MCP schemas derive from one source. Avoids any second au
     - OpenAPI document (generated; never committed to repo)
   Dependencies: zod, @hono/zod-openapi only
 
-@splitch/client
+@splitch/control-plane-sdk
   Contains: Hono hc<AppType> instance
   Derives: per-route input/output types from AppType (type-inferred, no codegen)
   Dependencies: @splitch/contracts, hono/client
@@ -40,6 +40,7 @@ Zod schema (authored, @splitch/contracts)
 ## Schema composition rules
 
 **Leaf schemas** are reusable across request, response, and storage shapes:
+
 - `VariantSchema` — `{ name: string, value: z.union([z.boolean(), z.string(), z.number(), z.object({...})]), is_default: z.boolean() }`
 - `TargetingRuleSchema` — `{ rule_id: string, name: string, priority: number, conditions: Condition[], allocation?: AllocationMap }`
 - `ConditionSchema` — `{ attribute: string, operator: z.enum(['eq','neq','gt','lt','in','not_in','contains']), value: unknown }`
@@ -47,12 +48,14 @@ Zod schema (authored, @splitch/contracts)
 - `MetricRefSchema` — `{ metric_id: string, is_goal: boolean, is_guardrail: boolean }`
 
 **Request schemas** compose leaves; never expose storage internals:
+
 - `CreateFlagRequestSchema` — has `variants: VariantSchema[]` (not `flag_id`, not `created_at`)
 - `CreateRunRequestSchema` does not exist separately — Runs are created implicitly by Start
 - Per-Environment request/response schemas (Experiment, Run, credential) carry `environment_id`
   co-scoped with `app_id`, matching the `/apps/{app_id}/envs/{environment_id}/…` routes (ADR-0027)
 
 **Response schemas** include computed/server-set fields:
+
 - `FlagResponseSchema` — has `flag_id`, `created_at`, `updated_at` + all request fields
 
 **Storage shapes are NOT exported** from `@splitch/contracts`. They live in the Worker/repository
@@ -69,34 +72,34 @@ Single base error schema, extended per code:
 ```typescript
 // Base (every endpoint; every failure mode)
 const ErrorResponseSchema = z.object({
-  code: z.string(),           // shared enum value; see codes below
-  message: z.string(),        // human-readable; agent-actionable
-  details: z.unknown().optional()
-})
+  code: z.string(), // shared enum value; see codes below
+  message: z.string(), // human-readable; agent-actionable
+  details: z.unknown().optional(),
+});
 
 // Extended example — RUN_FROZEN carries the frozen fields list
 const RunFrozenErrorSchema = ErrorResponseSchema.extend({
   code: z.literal("RUN_FROZEN"),
   details: z.object({
     frozen_fields: z.array(z.string()),
-    run_id: z.string()
-  })
-})
+    run_id: z.string(),
+  }),
+});
 ```
 
 **Shared error codes (non-exhaustive):**
 
-| code                     | http | meaning                                                  |
-|--------------------------|------|----------------------------------------------------------|
-| `RUN_FROZEN`             | 422  | Attempt to mutate frozen assignment field on a Run       |
-| `RUN_NOT_RUNNING`        | 422  | End called on a non-running Run                          |
-| `RUN_INVALID_ALLOCATION` | 422  | Allocation sum != 100 or unknown variant name            |
-| `EXPERIMENT_RUNNING`     | 422  | Delete blocked by running Experiment                     |
-| `UNKNOWN_ISSUER`         | 401  | ID-JAG from unknown IdP                                  |
-| `INTERACTION_REQUIRED`   | 403  | Email collision on claim; consent required               |
-| `NOT_FOUND`              | 404  | Resource not found (or not visible to caller)            |
-| `FORBIDDEN`              | 403  | Caller lacks role for this operation                     |
-| `VALIDATION_ERROR`       | 400  | Zod parse failure; details contains field-level errors   |
+| code                     | http | meaning                                                |
+| ------------------------ | ---- | ------------------------------------------------------ |
+| `RUN_FROZEN`             | 422  | Attempt to mutate frozen assignment field on a Run     |
+| `RUN_NOT_RUNNING`        | 422  | End called on a non-running Run                        |
+| `RUN_INVALID_ALLOCATION` | 422  | Allocation sum != 100 or unknown variant name          |
+| `EXPERIMENT_RUNNING`     | 422  | Delete blocked by running Experiment                   |
+| `UNKNOWN_ISSUER`         | 401  | ID-JAG from unknown IdP                                |
+| `INTERACTION_REQUIRED`   | 403  | Email collision on claim; consent required             |
+| `NOT_FOUND`              | 404  | Resource not found (or not visible to caller)          |
+| `FORBIDDEN`              | 403  | Caller lacks role for this operation                   |
+| `VALIDATION_ERROR`       | 400  | Zod parse failure; details contains field-level errors |
 
 Zod parse failures and domain-invariant failures return the same shape. No parallel error format exists.
 

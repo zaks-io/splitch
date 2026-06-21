@@ -4,15 +4,15 @@
 
 ## Files
 
-| File | Purpose |
-|---|---|
-| [exposure-event-contract.md](./exposure-event-contract.md) | Canonical field list for Exposure and Activation rows on the unified `raw_events` log; dedup key definition; non-exposing paths (peek, test-eval) |
-| [dedup-query-contract.md](./dedup-query-contract.md) | The one canonical first-touch dedup query; `__multiple__` quarantine rule; SRM denominator shape; stats engine handoff contract |
+| File                                                                     | Purpose                                                                                                                                                                                     |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [exposure-event-contract.md](./exposure-event-contract.md)               | Canonical field list for Exposure and Activation rows on the unified `raw_events` log; dedup key definition; non-exposing paths (peek, test-eval)                                           |
+| [dedup-query-contract.md](./dedup-query-contract.md)                     | The one canonical first-touch dedup query; `__multiple__` quarantine rule; SRM denominator shape; stats engine handoff contract                                                             |
 | [activation-gate-query-contract.md](./activation-gate-query-contract.md) | Activation gate JOIN query; ordering invariant (`activation_ts > first_exposure_ts`); window anchor re-definition; two bias guardrails (activated-population SRM + per-arm activation rate) |
-| [edge-ingest-contract.md](./edge-ingest-contract.md) | Five-runtime ingest contract; at-least-once delivery; timestamp sourcing; `run_id`/`id_type`/`app_id` injection rules; holdover write trigger; ingest failure modes |
-| [physical-datasources.md](./physical-datasources.md) | Tinybird datasource column lists (`raw_events`, `deduped_exposures`); raw-log retention TTL |
-| [physical-dedup-pipes.md](./physical-dedup-pipes.md) | Copy Pipe definition; serving snapshot+tail UNION query; v1 rollup MVs (`mv_srm_counts`, `mv_activation_rate`); freshness SLA |
-| [holdover-write-contract.md](./holdover-write-contract.md) | Pipeline → Assignment Store DO write; `putIfAbsent` semantics; KV write-through; timing (non-blocking in `ctx.waitUntil`); failure contract; port seam definition |
+| [edge-ingest-contract.md](./edge-ingest-contract.md)                     | Five-runtime ingest contract; at-least-once delivery; timestamp sourcing; `run_id`/`id_type`/`app_id` injection rules; holdover write trigger; ingest failure modes                         |
+| [physical-datasources.md](./physical-datasources.md)                     | Tinybird datasource column lists (`raw_events`, `deduped_exposures`); raw-log retention TTL                                                                                                 |
+| [physical-dedup-pipes.md](./physical-dedup-pipes.md)                     | Copy Pipe definition; serving snapshot+tail UNION query; rollup MVs (`mv_srm_counts`, `mv_activation_rate`); freshness SLA                                                                  |
+| [holdover-write-contract.md](./holdover-write-contract.md)               | Pipeline → Assignment Store DO write; `putIfAbsent` semantics; KV write-through; timing (non-blocking in `ctx.waitUntil`); failure contract; port seam definition                           |
 
 ## Key invariants
 

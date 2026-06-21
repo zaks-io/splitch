@@ -13,12 +13,12 @@ Every KV value is a JSON blob Zod-parsed on read. A malformed blob fails loud wi
 `INTERNAL_SERVER_ERROR` — never a partial valid object flowing into evaluation.
 (ADR-0025 "every KV read is Zod-parsed, including hot-path reads".)
 
-| Namespace key pattern | Value schema | TTL | Notes |
-|---|---|---|---|
-| `app:{appId}:{environmentId}:flag:{flagKey}` | `FlagConfigKV` | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027) |
-| `app:{appId}:{environmentId}:run:{runId}` | `RunConfigKV` | none | Hot-path live Experiment Run read; per-Environment (ADR-0027) |
-| `cred:{hash}` | `CredentialCacheKV` | 60s | Credential validation cache; evicted on revoke |
-| `app:{appId}:{environmentId}:liveRun` | `{ runId: string }` | none | Written on Start; edge reads this to know the live Experiment Run (ADR-0027) |
+| Namespace key pattern                        | Value schema        | TTL                          | Notes                                                                        |
+| -------------------------------------------- | ------------------- | ---------------------------- | ---------------------------------------------------------------------------- |
+| `app:{appId}:{environmentId}:flag:{flagKey}` | `FlagConfigKV`      | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027)  |
+| `app:{appId}:{environmentId}:run:{runId}`    | `RunConfigKV`       | none                         | Hot-path live Experiment Run read; per-Environment (ADR-0027)                |
+| `cred:{hash}`                                | `CredentialCacheKV` | 60s                          | Credential validation cache; evicted on revoke                               |
+| `app:{appId}:{environmentId}:liveRun`        | `{ runId: string }` | none                         | Written on Start; edge reads this to know the live Experiment Run (ADR-0027) |
 
 ### FlagConfigKV
 

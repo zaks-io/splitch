@@ -37,12 +37,12 @@ See also [mcp-tool-derivation.md](./mcp-tool-derivation.md) for the tool contrac
 
 ### TestEvaluationRequest
 
-| Field | Required | Notes |
-|---|---|---|
-| `flagKey` | yes | Identifies the Flag |
-| `targetingKey` | yes | The Entity identifier; separate from `attributes` (spec contract) |
-| `idType` | yes | Entity type; must match Experiment's `targetingKey` entity type |
-| `attributes` | no | `Record<string, boolean \| string \| number \| unknown[]>`; Condition-matching attributes; defaults to `{}` |
+| Field          | Required | Notes                                                                                                       |
+| -------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `flagKey`      | yes      | Identifies the Flag                                                                                         |
+| `targetingKey` | yes      | The Entity identifier; separate from `attributes` (spec contract)                                           |
+| `idType`       | yes      | Entity type; must match Experiment's `targetingKey` entity type                                             |
+| `attributes`   | no       | `Record<string, boolean \| string \| number \| unknown[]>`; Condition-matching attributes; defaults to `{}` |
 
 Internally the Worker adds `targetingKey` to context under a reserved key before Condition evaluation.
 
@@ -83,12 +83,12 @@ No Exposure-related fields. Writes nothing.
 
 ### DataPlaneEvaluateRequest
 
-| Field | Required | Notes |
-|---|---|---|
-| `flagKey` | yes | — |
-| `targetingKey` | yes | — |
-| `idType` | yes | — |
-| `attributes` | no | Defaults to `{}` |
+| Field          | Required | Notes            |
+| -------------- | -------- | ---------------- |
+| `flagKey`      | yes      | —                |
+| `targetingKey` | yes      | —                |
+| `idType`       | yes      | —                |
+| `attributes`   | no       | Defaults to `{}` |
 
 ### DataPlaneEvaluateResponse
 

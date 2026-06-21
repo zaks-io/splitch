@@ -10,22 +10,26 @@ Every D1 query routes through a single Drizzle repository layer. This seam is lo
 security.
 
 **Allowed patterns:**
+
 - Query builder calls made through the repository interface, where `app_id` is injected as a
   mandatory WHERE clause parameter for all tenant-scoped tables
 - Repository methods accept an explicit `appId: string` parameter that the implementation binds
   into every query
 
 **Forbidden patterns:**
+
 - Raw Drizzle client access that bypasses the repository (skipping `app_id` scoping)
 - Queries that omit `app_id` on tenant-scoped tables — a query without the scope is a security bug
 - Dynamic WHERE clause construction that makes `app_id` scoping conditional
 
 **Tenant-scoped tables** (every query must carry `app_id`):
+
 - `apps`, `environments`, `flags`, `flag_configs`, `experiments`, `runs`, `api_keys`, `client_keys`, `segments`, `metrics`
 - Per-Environment tables (`experiments`, `runs`, `flag_configs`, `api_keys`, `client_keys`) also carry
   `environment_id` co-scoped with `app_id` (ADR-0027); `app_id` remains the isolation boundary.
 
 **Global / Org-scoped tables** (not App-scoped; queried by Org or identity directly):
+
 - `organizations`, `org_memberships`, `privacy_requests`
 
 The repository is the designated migration boundary: if DB-enforced RLS becomes a hard requirement
@@ -35,6 +39,7 @@ Postgres+RLS calls is a mechanical seam swap, not a cross-system refactor.
 ## KV isolation
 
 KV keys are namespaced by `app_id` at the key-construction level:
+
 - Flag config: `config:app:{appId}:{environmentId}:flag:{flagKey}` (Flag Configuration is
   per-Environment, ADR-0027)
 - Assignment Store: `assignment:{appId}:{idType}:{targetingKeyHash}` (per-Entity read key; `appId`
@@ -71,6 +76,7 @@ Never use `timestamp` as the first sorting key in a multi-tenant datasource — 
 tenants and makes per-tenant scans full-table scans.
 
 **Why both are required (not one as fallback):**
+
 - The parameter is the conceptual boundary: `app_id` is an explicit typed input that can be
   validated and logged.
 - The SORTING_KEY is the physical boundary: the index structure provides query-level isolation even
@@ -81,6 +87,7 @@ tenants and makes per-tenant scans full-table scans.
 
 All Tinybird reads proxy through an Analysis Worker endpoint. The Worker injects `app_id` from the
 authenticated control-plane token. This means:
+
 - No Tinybird token is exposed to the browser, SDK, or agent
 - The app_id parameter is always server-injected, never client-supplied
 - The Tinybird `app_id` scope matches the control-plane auth scope by construction
@@ -106,6 +113,7 @@ seams.
 ## Revisit condition
 
 DB-enforced RLS (Postgres+RLS) becomes a hard requirement if:
+
 - Compliance requirements mandate DB-level isolation guarantees
 - An audit finds the application-level scoping insufficient
 - Multi-tenant set grows to where application discipline alone is judged inadequate

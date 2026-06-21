@@ -84,12 +84,13 @@ the Exposure. The endpoint distinguishes them by the SDK call path, not a caller
   in memory for subsequent calls within the session/instance.
 - If the endpoint is unreachable and no cached value exists, the SDK returns the
   **Default Variant** (CONTEXT.md) without firing an Exposure.
-- Single-flag-per-call in v1. Batch evaluation (`evaluateAll`) is a future
-  extension; no `/evaluate-batch` endpoint is built in v1.
+- Single-flag-per-call. Batch evaluation (`evaluateAll`) is deferred; no `/evaluate-batch` endpoint
+  is defined.
 
 ## Edge binding
 
 Client Key requests pass through Cloudflare WAF before reaching the Worker (ADR-0018):
+
 - Origin/referrer allow-list enforcement (per-key, WAF-level)
 - Per-key rate limiting (WAF-level)
 
@@ -99,6 +100,7 @@ these as non-retryable (403) or back-off (429) errors.
 ## Error responses (ADR-0025 shape)
 
 All errors use the shared `ErrorResponse` shape:
+
 ```
 ErrorResponse {
   code:     string        -- machine-readable enum value
@@ -107,14 +109,14 @@ ErrorResponse {
 }
 ```
 
-| HTTP status | `code` | Meaning |
-|------------|--------|---------|
-| 401 | `INVALID_CREDENTIAL` | Missing, invalid, or revoked Client Key |
-| 403 | `APP_MISMATCH` | Client Key does not belong to the requested appId |
-| 404 | `FLAG_NOT_FOUND` | flagKey does not exist in this App |
-| 422 | `VALIDATION_ERROR` | Request body failed Zod parse; `details` has field errors |
-| 429 | `RATE_LIMITED` | Per-key rate limit exceeded (may be WAF-level) |
-| 503 | `PROVIDER_UNAVAILABLE` | Flag config could not be resolved; SDK should return Default Variant |
+| HTTP status | `code`                 | Meaning                                                              |
+| ----------- | ---------------------- | -------------------------------------------------------------------- |
+| 401         | `INVALID_CREDENTIAL`   | Missing, invalid, or revoked Client Key                              |
+| 403         | `APP_MISMATCH`         | Client Key does not belong to the requested appId                    |
+| 404         | `FLAG_NOT_FOUND`       | flagKey does not exist in this App                                   |
+| 422         | `VALIDATION_ERROR`     | Request body failed Zod parse; `details` has field errors            |
+| 429         | `RATE_LIMITED`         | Per-key rate limit exceeded (may be WAF-level)                       |
+| 503         | `PROVIDER_UNAVAILABLE` | Flag config could not be resolved; SDK should return Default Variant |
 
 On 503 the SDK returns Default Variant and does NOT fire an Exposure. On 404 the SDK
 returns Default Variant and does NOT fire an Exposure (the Flag may not exist yet).

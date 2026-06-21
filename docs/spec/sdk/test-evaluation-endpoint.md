@@ -6,14 +6,14 @@ evaluate endpoint (ADR-0026).
 
 ## Categorical distinction from `POST /evaluate`
 
-| Property | `POST /evaluate` (data plane) | `POST /test-evaluation` (control plane) |
-|----------|------------------------------|----------------------------------------|
-| Credential | Client Key (public) | Control-plane token (ADR-0022) |
-| Fires Exposure | Yes (structural) | Never (structural) |
-| Returns reason | No (ADR-0018) | Yes |
-| Writes to Assignment Store | Via pipeline | Never |
-| Counts in Run denominator | Yes | Never |
-| Use case | Production SDK calls | Debugging, CLI verify step, agent pre-deploy |
+| Property                   | `POST /evaluate` (data plane) | `POST /test-evaluation` (control plane)      |
+| -------------------------- | ----------------------------- | -------------------------------------------- |
+| Credential                 | Client Key (public)           | Control-plane token (ADR-0022)               |
+| Fires Exposure             | Yes (structural)              | Never (structural)                           |
+| Returns reason             | No (ADR-0018)                 | Yes                                          |
+| Writes to Assignment Store | Via pipeline                  | Never                                        |
+| Counts in Run denominator  | Yes                           | Never                                        |
+| Use case                   | Production SDK calls          | Debugging, CLI verify step, agent pre-deploy |
 
 Exposure-free is **structural** at the endpoint level — the Worker code path from
 `/test-evaluation` is wired to no write path (no Exposure log append, no DO call).
@@ -98,16 +98,17 @@ propagation — if it shows the old Variant for a few seconds after Start, so do
 
 Same `ErrorResponse` shape as all endpoints (ADR-0025):
 
-| HTTP status | `code` | Meaning |
-|------------|--------|---------|
-| 401 | `INVALID_CREDENTIAL` | Missing or invalid control-plane token |
-| 403 | `FORBIDDEN` | Token does not have access to this appId |
-| 404 | `FLAG_NOT_FOUND` | flagKey does not exist in this App |
-| 422 | `VALIDATION_ERROR` | Request body failed Zod parse |
+| HTTP status | `code`               | Meaning                                  |
+| ----------- | -------------------- | ---------------------------------------- |
+| 401         | `INVALID_CREDENTIAL` | Missing or invalid control-plane token   |
+| 403         | `FORBIDDEN`          | Token does not have access to this appId |
+| 404         | `FLAG_NOT_FOUND`     | flagKey does not exist in this App       |
+| 422         | `VALIDATION_ERROR`   | Request body failed Zod parse            |
 
 ## CLI / MCP surface
 
 This endpoint is exposed as:
+
 - One MCP tool: `splitch_test_evaluation` with schema derived from the Zod request shape
 - One CLI command: `splitch verify flag <flagKey> --context <json>`
 

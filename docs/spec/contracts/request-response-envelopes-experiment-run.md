@@ -18,22 +18,22 @@ live in [request-response-envelopes-conventions.md](./request-response-envelopes
 
 ### CreateExperimentRequest
 
-| Field | Required | Notes |
-|---|---|---|
-| `appId` | yes | — |
-| `environmentId` | yes | Co-scoped with `appId`; Experiment is per-Environment (ADR-0027) |
-| `name` | yes | — |
-| `key` | yes | Unique per `(App, Environment)` |
-| `flagId` | yes | One Flag per Experiment in v1 (v1 Flag/Experiment scope) |
-| `targetingKey` | yes | Inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN` |
-| `description` | no | — |
-| `hypothesis` | no | — |
-| `confidenceLevel` | no | Defaults to `0.95` |
-| `metrics` | yes | `MetricRef[]`, min 0 |
-| `guardrailMetrics` | no | Defaults to `[]` |
-| `activationMetricId` | no | Assignment-affecting when set |
-| `conversionWindowMs` | no | Defaults to `0` (unbounded) |
-| `dimensions` | no | Defaults to `[]` |
+| Field                | Required | Notes                                                                     |
+| -------------------- | -------- | ------------------------------------------------------------------------- |
+| `appId`              | yes      | —                                                                         |
+| `environmentId`      | yes      | Co-scoped with `appId`; Experiment is per-Environment (ADR-0027)          |
+| `name`               | yes      | —                                                                         |
+| `key`                | yes      | Unique per `(App, Environment)`                                           |
+| `flagId`             | yes      | One Flag per Experiment                                                   |
+| `targetingKey`       | yes      | Inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN` |
+| `description`        | no       | —                                                                         |
+| `hypothesis`         | no       | —                                                                         |
+| `confidenceLevel`    | no       | Defaults to `0.95`                                                        |
+| `metrics`            | yes      | `MetricRef[]`, min 0                                                      |
+| `guardrailMetrics`   | no       | Defaults to `[]`                                                          |
+| `activationMetricId` | no       | Assignment-affecting when set                                             |
+| `conversionWindowMs` | no       | Defaults to `0` (unbounded)                                               |
+| `dimensions`         | no       | Defaults to `[]`                                                          |
 
 Worker sets: `id`, `status = 'draft'`, `liveRunId = null`, `createdAt`, `updatedAt`.
 
@@ -42,17 +42,20 @@ Worker sets: `id`, `status = 'draft'`, `liveRunId = null`, `createdAt`, `updated
 Sorted by edit type. The Worker enforces the edit taxonomy (ADR-0003):
 
 **Assignment edits** — rejected with `RUN_FROZEN` when Experiment.status = `'running'`:
+
 - `targetingKey` — changing Entity type
 - `activationMetricId` — Activation Metric change is an assignment edit
 - `flagId` — changing the controlled Flag
 
 **Measurement edits** — applied to existing Run, triggers recompute, no sample reset:
+
 - `metrics` — Secondary / exploratory Metrics recompute; goal Metric membership and locked goal Metric definitions are decision-locked
 - `guardrailMetrics` — exploratory Guardrails recompute; locked Guardrail thresholds/directions are decision-locked
 - `conversionWindowMs`
 - `dimensions` — new post-start Dimensions are Secondary / exploratory; Primary Dimensions are locked at Run Start
 
 **Decision-locked fields** — rejected for decision use when Experiment.status = `'running'`:
+
 - `confidenceLevel`
 - `horizon`, `targetN`, `sampleSizeLocked`
 - goal Metric membership / roles
@@ -60,28 +63,30 @@ Sorted by edit type. The Worker enforces the edit taxonomy (ADR-0003):
 - Primary Dimension membership / declared values
 
 **Non-material edits** — applied in place:
+
 - `name`
 - `description`
 - `hypothesis`
 
 **Status transitions** (non-material):
+
 - `status: 'ended'` — ends the running Run (if any) and freezes the Experiment
 
 `PatchExperimentRequest` field set (all optional, Worker validates taxonomy on each):
 
-| Field | Required | Edit type |
-|---|---|---|
-| `name` | no | non-material |
-| `description` | no | non-material |
-| `hypothesis` | no | non-material |
-| `targetingKey` | no | assignment |
-| `activationMetricId` | no | assignment |
-| `metrics` | no | measurement |
-| `guardrailMetrics` | no | measurement |
-| `conversionWindowMs` | no | measurement |
-| `dimensions` | no | measurement |
-| `confidenceLevel` | no | decision-locked |
-| `status` | no | non-material (only `'ended'` accepted via PATCH) |
+| Field                | Required | Edit type                                        |
+| -------------------- | -------- | ------------------------------------------------ |
+| `name`               | no       | non-material                                     |
+| `description`        | no       | non-material                                     |
+| `hypothesis`         | no       | non-material                                     |
+| `targetingKey`       | no       | assignment                                       |
+| `activationMetricId` | no       | assignment                                       |
+| `metrics`            | no       | measurement                                      |
+| `guardrailMetrics`   | no       | measurement                                      |
+| `conversionWindowMs` | no       | measurement                                      |
+| `dimensions`         | no       | measurement                                      |
+| `confidenceLevel`    | no       | decision-locked                                  |
+| `status`             | no       | non-material (only `'ended'` accepted via PATCH) |
 
 ---
 
@@ -93,13 +98,13 @@ The Start action ends the current running Experiment Run (if any) and opens a ne
 is the only path to open an Experiment Run (first-Start Run rule "first Experiment Run opens on first
 Start"). All assignment config is supplied here.
 
-| Field | Required | Notes |
-|---|---|---|
-| `experimentId` | yes | — |
-| `variantSet` | yes | `Variant[]`; snapshot of the Flag's current Variants at Start time |
-| `allocation` | yes | `Record<variantId, number>`; must sum to 100 |
-| `salt` | no | Auto-generated UUID4 if omitted; guaranteed unique per Experiment |
-| `targetingSegmentId` | no | Optional Segment gate |
+| Field                | Required | Notes                                                              |
+| -------------------- | -------- | ------------------------------------------------------------------ |
+| `experimentId`       | yes      | —                                                                  |
+| `variantSet`         | yes      | `Variant[]`; snapshot of the Flag's current Variants at Start time |
+| `allocation`         | yes      | `Record<variantId, number>`; must sum to 100                       |
+| `salt`               | no       | Auto-generated UUID4 if omitted; guaranteed unique per Experiment  |
+| `targetingSegmentId` | no       | Optional Segment gate                                              |
 
 Worker computes: `id`, `configHash`, `status = 'running'`, `startedAt`.
 Worker writes `liveRunId` to Experiment and KV.
@@ -110,11 +115,11 @@ Worker writes `liveRunId` to Experiment and KV.
 Explicitly rejects all assignment-config fields.
 Accepted Zod shape uses `.strict()` to fail on any unrecognized key.
 
-| Field | Required | Notes |
-|---|---|---|
-| `description` | no | — |
-| `owner` | no | — |
-| `tags` | no | `string[]` |
+| Field         | Required | Notes      |
+| ------------- | -------- | ---------- |
+| `description` | no       | —          |
+| `owner`       | no       | —          |
+| `tags`        | no       | `string[]` |
 
 **Rejected fields** (Worker returns `RUN_FROZEN` if present):
 `salt`, `allocation`, `variantSet`, `targetingSegmentId`, `targetingKey`

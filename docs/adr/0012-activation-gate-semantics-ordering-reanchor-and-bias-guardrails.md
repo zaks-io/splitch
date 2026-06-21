@@ -3,7 +3,7 @@
 **Status:** accepted
 
 **Production target.** This is a production decision on the final data model, not a bootstrap stopgap.
-The v1 gate is fully functional and correct for variant-independent activations (the common case) and
+This spec gate is fully functional and correct for variant-independent activations (the common case) and
 loud for the rest; nothing here is intended to be rewritten.
 
 An Activation Metric gates analysis to **activated** Entities. Three semantics are locked:
@@ -23,19 +23,19 @@ An Activation Metric gates analysis to **activated** Entities. Three semantics a
 
 If the Treatment changes whether an Entity activates, conditioning on activation biases every downstream
 Metric — and, per GrowthBook's explicit warning, this "can cause bias that is not picked up by SRM
-errors": the full-population assignment SRM can read a clean 50/50 while the *activated* subpopulation is
+errors": the full-population assignment SRM can read a clean 50/50 while the _activated_ subpopulation is
 skewed. This is the same silent-corruption-behind-a-green-dashboard failure ADR-0011 rejects. No reference vendor
 ships a **dedicated, built-in per-arm activation-rate balance diagnostic** with SRM-style alerting (the
-nearest miss is GrowthBook's Health Tab, which *displays* traffic by activation status across variations but
+nearest miss is GrowthBook's Health Tab, which _displays_ traffic by activation status across variations but
 does not alert on it as a balance metric), so splitch goes further:
 
 - **Activated-population SRM** — chi-square on the activated Entities per arm per Run (p < 0.001),
-  *separate* from the full-exposed SRM. An SRM that appears only in the gated scorecard is the canonical
+  _separate_ from the full-exposed SRM. An SRM that appears only in the gated scorecard is the canonical
   fingerprint of a Treatment-affected gate (Microsoft OCE diagnosis).
 - **Per-arm activation rate as a first-class Metric** — a chi-square test over activated /
-  not-activated by arm (p < 0.001) is a loud alert and the rate gap explains *why* the gated SRM fired.
+  not-activated by arm (p < 0.001) is a loud alert and the rate gap explains _why_ the gated SRM fired.
 
-Either guardrail firing means the gated results are **untrusted**. v1 also prefers/assumes
+Either guardrail firing means the gated results are **untrusted**. The gate prefers and assumes
 activation conditions determinable independent of variant; the guardrails catch violations loudly.
 
 ## Considered options

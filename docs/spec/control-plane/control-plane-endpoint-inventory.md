@@ -4,7 +4,7 @@ Thin index of the full HTTP endpoint inventory, split by resource group. Shared 
 conventions live here; per-resource shapes live in the linked files.
 
 Management CRUD endpoints live on the **Control Plane API Worker**. Auth endpoints live on the
-**Auth Issuer Worker** (see [auth-doors.md](auth-doors.md) and
+**Auth API Worker** (see [auth-doors.md](auth-doors.md) and
 [access-control-matrix.md](access-control-matrix.md)). Dry-run test-evaluation is
 control-plane-authorized but mounted on the **Evaluation Worker**. Analytics reads are
 control-plane-authorized but mounted on the **Analysis Worker**. All require a control-plane bearer
@@ -31,15 +31,15 @@ IDs). Environment-level writes are subject to the Environment Policy (ADR-0029).
 
 ## Resource groups
 
-| file | endpoints |
-|------|-----------|
-| [endpoints-org-app.md](endpoints-org-app.md) | Organization + member management; App CRUD; **Environment CRUD** |
-| [endpoints-flag-segment.md](endpoints-flag-segment.md) | Flag **definition** (App-level) + **Flag Configuration** (per-Env) + **Promotion**; Segment CRUD |
-| [endpoints-experiment-run.md](endpoints-experiment-run.md) | Experiment draft/**start** lifecycle; Experiment Run reads + end (per-Env) |
-| [endpoints-metric.md](endpoints-metric.md) | Metric CRUD (binomial, count, revenue, ratio, guardrail) |
-| [endpoints-credentials.md](endpoints-credentials.md) | Client Key + API Key management (per-Env) |
+| file                                                                 | endpoints                                                                                                                |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [endpoints-org-app.md](endpoints-org-app.md)                         | Organization + member management; App CRUD; **Environment CRUD**                                                         |
+| [endpoints-flag-segment.md](endpoints-flag-segment.md)               | Flag **definition** (App-level) + **Flag Configuration** (per-Env) + **Promotion**; Segment CRUD                         |
+| [endpoints-experiment-run.md](endpoints-experiment-run.md)           | Experiment draft/**start** lifecycle; Experiment Run reads + end (per-Env)                                               |
+| [endpoints-metric.md](endpoints-metric.md)                           | Metric CRUD (binomial, count, revenue, ratio, guardrail)                                                                 |
+| [endpoints-credentials.md](endpoints-credentials.md)                 | Client Key + API Key management (per-Env)                                                                                |
 | [endpoints-test-eval-analytics.md](endpoints-test-eval-analytics.md) | Dry-run test-evaluation (Evaluation Worker), analytics proxy reads (Analysis Worker), OpenAPI schema discovery (per-Env) |
-| [endpoints-privacy-data.md](endpoints-privacy-data.md) | Privacy requests, export jobs, delete jobs, and Entity data subject requests |
+| [endpoints-privacy-data.md](endpoints-privacy-data.md)               | Privacy requests, export jobs, delete jobs, and Entity data subject requests                                             |
 
 ## Sources
 

@@ -49,6 +49,7 @@ DeltaNudge {
 
 The DO never learns the config schema. Clients do not apply the delta. On receiving a nudge, the
 client:
+
 1. Checks if `nudge.version <= cached_version` — if so, skip (self-edit, already have this state)
 2. Invalidates the matching TanStack Query cache key via the query-key factory
 3. Refetches from the read API
@@ -68,12 +69,12 @@ mechanism.
 
 ## Seam contract
 
-| Side | Responsibility |
-|---|---|
-| Config-write Worker (caller) | Passes validated input to DO; surfaces DO error to user |
-| DO (this seam) | Validates invariants, commits to D1, writes KV, broadcasts nudge |
-| WebSocket client (subscriber) | Receives nudge, invalidates Query cache key, refetches |
-| TanStack Query cache | Sole synced server-state store; authoritative after refetch |
+| Side                          | Responsibility                                                   |
+| ----------------------------- | ---------------------------------------------------------------- |
+| Config-write Worker (caller)  | Passes validated input to DO; surfaces DO error to user          |
+| DO (this seam)                | Validates invariants, commits to D1, writes KV, broadcasts nudge |
+| WebSocket client (subscriber) | Receives nudge, invalidates Query cache key, refetches           |
+| TanStack Query cache          | Sole synced server-state store; authoritative after refetch      |
 
 **Failure contract:** if D1 commit fails → error returned to Worker → no KV write, no broadcast,
 caller retries. If KV write fails after D1 commit → KV miss self-heals via D1 fallback on next

@@ -13,23 +13,24 @@ authenticated principal can touch lives here, not in WorkOS org claims.
 
 ### D1: `organizations` table
 
-| column            | type      | required | meaning                                                              |
-|-------------------|-----------|----------|----------------------------------------------------------------------|
-| `org_id`          | TEXT PK   | yes      | WorkOS Organization ID (wos prefix); stable across all ops           |
-| `name`            | TEXT      | yes      | Display name                                                         |
-| `plan`            | TEXT      | yes      | `free` \| `pro` \| `enterprise`; defaults to `free` in v1           |
-| `stripe_customer_id` | TEXT   | no       | Null until billing seam is wired; seam exists, integration deferred  |
-| `stripe_subscription_id` | TEXT | no    | Same — billing seam shape, live integration deferred                 |
-| `sso_enabled`     | INTEGER   | yes      | 0 \| 1 boolean; true only for enterprise orgs with WorkOS SSO wired  |
-| `is_provisional`  | INTEGER   | yes      | 0 \| 1; true while this Org was created by anon door, not yet claimed|
-| `demo_expires_at` | TEXT      | no       | ISO 8601; set on anon create; cleared on successful claim ceremony    |
-| `created_at`      | TEXT      | yes      | ISO 8601                                                             |
-| `updated_at`      | TEXT      | yes      | ISO 8601                                                             |
+| column                   | type    | required | meaning                                                               |
+| ------------------------ | ------- | -------- | --------------------------------------------------------------------- |
+| `org_id`                 | TEXT PK | yes      | WorkOS Organization ID (wos prefix); stable across all ops            |
+| `name`                   | TEXT    | yes      | Display name                                                          |
+| `plan`                   | TEXT    | yes      | `free` \| `pro` \| `enterprise`; defaults to `free`                   |
+| `stripe_customer_id`     | TEXT    | no       | Null until billing seam is wired; seam exists, integration deferred   |
+| `stripe_subscription_id` | TEXT    | no       | Same — billing seam shape, live integration deferred                  |
+| `sso_enabled`            | INTEGER | yes      | 0 \| 1 boolean; true only for enterprise orgs with WorkOS SSO wired   |
+| `is_provisional`         | INTEGER | yes      | 0 \| 1; true while this Org was created by anon door, not yet claimed |
+| `demo_expires_at`        | TEXT    | no       | ISO 8601; set on anon create; cleared on successful claim ceremony    |
+| `created_at`             | TEXT    | yes      | ISO 8601                                                              |
+| `updated_at`             | TEXT    | yes      | ISO 8601                                                              |
 
 **Invariants:**
+
 - `is_provisional = 1` implies `demo_expires_at IS NOT NULL`
 - Reaper checks `is_provisional = 1 AND demo_expires_at < now()` (see [auth-doors.md](auth-doors.md))
-- `plan` defaults to `free`; billing seam owns transitions (v1 billing seam scope)
+- `plan` defaults to `free`; billing seam owns transitions
 
 ## App
 
@@ -38,15 +39,16 @@ isolation boundary for all data in D1 and Tinybird.
 
 ### D1: `apps` table
 
-| column       | type    | required | meaning                                                          |
-|--------------|---------|----------|------------------------------------------------------------------|
-| `app_id`     | TEXT PK | yes      | Splitch-generated, stable identifier (e.g. `app_<ulid>`)        |
-| `org_id`     | TEXT FK | yes      | Owner Organization; never nullable                               |
-| `name`       | TEXT    | yes      | Display name; must be unique within the Org                      |
-| `created_at` | TEXT    | yes      | ISO 8601                                                         |
-| `updated_at` | TEXT    | yes      | ISO 8601                                                         |
+| column       | type    | required | meaning                                                  |
+| ------------ | ------- | -------- | -------------------------------------------------------- |
+| `app_id`     | TEXT PK | yes      | Splitch-generated, stable identifier (e.g. `app_<ulid>`) |
+| `org_id`     | TEXT FK | yes      | Owner Organization; never nullable                       |
+| `name`       | TEXT    | yes      | Display name; must be unique within the Org              |
+| `created_at` | TEXT    | yes      | ISO 8601                                                 |
+| `updated_at` | TEXT    | yes      | ISO 8601                                                 |
 
 **Invariants:**
+
 - `org_id` is never null; every App has exactly one Organization
 - App deletion cascades or blocks depending on running Run state (policy: block if running Experiments)
 
@@ -56,23 +58,23 @@ Org membership controls who can manage the Organization itself (billing, SSO con
 
 ### D1: `org_memberships` table
 
-| column       | type    | required | meaning                                         |
-|--------------|---------|----------|-------------------------------------------------|
-| `org_id`     | TEXT FK | yes      | Organization; composite PK with `user_id`       |
-| `user_id`    | TEXT FK | yes      | WorkOS User ID; composite PK with `org_id`      |
-| `role`       | TEXT    | yes      | `owner` \| `admin` \| `member`                  |
-| `created_at` | TEXT    | yes      | ISO 8601                                        |
+| column       | type    | required | meaning                                    |
+| ------------ | ------- | -------- | ------------------------------------------ |
+| `org_id`     | TEXT FK | yes      | Organization; composite PK with `user_id`  |
+| `user_id`    | TEXT FK | yes      | WorkOS User ID; composite PK with `org_id` |
+| `role`       | TEXT    | yes      | `owner` \| `admin` \| `member`             |
+| `created_at` | TEXT    | yes      | ISO 8601                                   |
 
 **Role matrix (Org scope):**
 
-| operation            | owner | admin | member |
-|----------------------|-------|-------|--------|
-| Manage billing/plan  | yes   | no    | no     |
-| Configure SSO/SCIM   | yes   | yes   | no     |
-| Create/delete Apps   | yes   | yes   | no     |
-| Manage Org members   | yes   | yes   | no     |
-| View Org settings    | yes   | yes   | yes    |
-| Manage trusted IdPs  | yes   | no    | no     |
+| operation           | owner | admin | member |
+| ------------------- | ----- | ----- | ------ |
+| Manage billing/plan | yes   | no    | no     |
+| Configure SSO/SCIM  | yes   | yes   | no     |
+| Create/delete Apps  | yes   | yes   | no     |
+| Manage Org members  | yes   | yes   | no     |
+| View Org settings   | yes   | yes   | yes    |
+| Manage trusted IdPs | yes   | no    | no     |
 
 ## App Membership
 
@@ -80,24 +82,24 @@ App membership controls who can read/write Flag, Experiment, and Run config for 
 
 ### D1: `app_memberships` table
 
-| column       | type    | required | meaning                                         |
-|--------------|---------|----------|-------------------------------------------------|
-| `app_id`     | TEXT FK | yes      | App; composite PK with `user_id`                |
-| `user_id`    | TEXT FK | yes      | WorkOS User ID; composite PK with `app_id`      |
-| `role`       | TEXT    | yes      | `owner` \| `admin` \| `member`                  |
-| `created_at` | TEXT    | yes      | ISO 8601                                        |
+| column       | type    | required | meaning                                    |
+| ------------ | ------- | -------- | ------------------------------------------ |
+| `app_id`     | TEXT FK | yes      | App; composite PK with `user_id`           |
+| `user_id`    | TEXT FK | yes      | WorkOS User ID; composite PK with `app_id` |
+| `role`       | TEXT    | yes      | `owner` \| `admin` \| `member`             |
+| `created_at` | TEXT    | yes      | ISO 8601                                   |
 
 **Role matrix (App scope):**
 
-| operation                          | owner | admin | member |
-|------------------------------------|-------|-------|--------|
-| Start/end Experiment Runs          | yes   | yes   | no     |
-| Edit Flags/Experiments (draft)     | yes   | yes   | yes    |
-| Promote Flag Config across Envs    | yes   | yes   | no     |
-| Edit Environment Policy            | yes   | yes   | no     |
-| Manage SDK credentials             | yes   | yes   | no     |
-| View config/results                | yes   | yes   | yes    |
-| Delete Flags/Experiments           | yes   | no    | no     |
+| operation                       | owner | admin | member |
+| ------------------------------- | ----- | ----- | ------ |
+| Start/end Experiment Runs       | yes   | yes   | no     |
+| Edit Flags/Experiments (draft)  | yes   | yes   | yes    |
+| Promote Flag Config across Envs | yes   | yes   | no     |
+| Edit Environment Policy         | yes   | yes   | no     |
+| Manage SDK credentials          | yes   | yes   | no     |
+| View config/results             | yes   | yes   | yes    |
+| Delete Flags/Experiments        | yes   | no    | no     |
 
 Roles are still App/Org level (not per-Environment). Promotion (moving Flag Configuration between
 Environments, ADR-0028) and Environment Policy edits are additionally gated by the per-change-type

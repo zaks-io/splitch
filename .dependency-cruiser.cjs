@@ -1,61 +1,59 @@
 module.exports = {
   forbidden: [
     {
-      name: "no-worker-to-other-worker-imports",
+      name: "no-app-to-other-app-imports",
       severity: "error",
       comment:
-        "Capability Workers are deploy and trust boundaries. Share code through packages, communicate through runtime bindings or clients.",
-      from: { path: "^workers/([^/]+)/" },
-      to: { path: "^workers/", pathNot: "^workers/$1/" },
+        "Deployable apps are capability and trust boundaries. Share code through packages; communicate through runtime bindings or clients.",
+      from: { path: "^apps/([^/]+)/" },
+      to: { path: "^apps/", pathNot: "^apps/$1/" },
     },
     {
-      name: "no-app-to-worker-imports",
-      severity: "error",
-      comment: "Apps call Workers through @splitch/client or public HTTP endpoints, never by importing Worker internals.",
-      from: { path: "^apps/" },
-      to: { path: "^workers/" },
-    },
-    {
-      name: "no-worker-to-app-imports",
-      severity: "error",
-      comment: "Workers are runtime services and cannot depend on UI app code.",
-      from: { path: "^workers/" },
-      to: { path: "^apps/" },
-    },
-    {
-      name: "no-shared-package-to-runtime-imports",
+      name: "no-shared-package-to-app-imports",
       severity: "error",
       comment: "Shared packages must stay runtime-agnostic.",
       from: { path: "^packages/" },
-      to: { path: "^(apps|workers)/" },
+      to: { path: "^apps/" },
     },
     {
       name: "contracts-stays-schema-only",
       severity: "error",
-      comment: "@splitch/contracts is Zod schemas, inferred types, route definitions, and error shapes only.",
+      comment:
+        "@splitch/contracts is Zod schemas, inferred types, route definitions, and error shapes only.",
       from: { path: "^packages/contracts/" },
-      to: { path: "^packages/(client|ui)/" },
+      to: { path: "^packages/(control-plane-sdk|sdk|ui)/" },
     },
     {
-      name: "client-does-not-import-runtimes",
+      name: "control-plane-sdk-does-not-import-apps",
       severity: "error",
-      comment: "@splitch/client wraps transport and error parsing; it cannot import deployed runtime code.",
-      from: { path: "^packages/client/" },
-      to: { path: "^(apps|workers)/" },
+      comment:
+        "@splitch/control-plane-sdk wraps transport and error parsing; it cannot import deployed app code.",
+      from: { path: "^packages/control-plane-sdk/" },
+      to: { path: "^apps/" },
+    },
+    {
+      name: "public-sdk-does-not-import-internal-surfaces",
+      severity: "error",
+      comment:
+        "@splitch/sdk is the public data-plane package. It must not import app code, control-plane transport, private contracts, or UI.",
+      from: { path: "^packages/sdk/" },
+      to: { path: "^(apps|packages/(contracts|control-plane-sdk|ui))/" },
     },
     {
       name: "ui-stays-domain-free",
       severity: "error",
-      comment: "@splitch/ui is design tokens and primitives only. It must not know domain contracts or transport.",
+      comment:
+        "@splitch/ui is design tokens and primitives only. It must not know domain contracts or transport.",
       from: { path: "^packages/ui/" },
-      to: { path: "^(apps|workers|packages/(contracts|client))/" },
+      to: { path: "^(apps|packages/(contracts|control-plane-sdk|sdk))/" },
     },
     {
-      name: "marketing-does-not-import-client",
+      name: "marketing-does-not-import-control-plane-sdk",
       severity: "error",
-      comment: "The Marketing Worker may import ui and contracts for examples, but not the control-plane transport client.",
+      comment:
+        "Marketing may import ui and contracts for examples, but not the control-plane transport SDK.",
       from: { path: "^apps/marketing/" },
-      to: { path: "^packages/client/" },
+      to: { path: "^packages/control-plane-sdk/" },
     },
   ],
   options: {

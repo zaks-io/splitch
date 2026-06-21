@@ -35,7 +35,7 @@ edge) → Tinybird (huge, append-only, analytical)** — each store sized for it
   (a cross-region hop the all-edge product can't take on the hot path), carries a **cost ceiling**
   that scales badly with volume, and — decisively — **forces a Convex → KV config-copy seam**
   (Convex can't bind to KV; it would need a binding-holding Worker it pushes to). So Convex doesn't
-  remove Cloudflare from the control plane, it adds itself *on top* of it and bolts a sync seam back
+  remove Cloudflare from the control plane, it adds itself _on top_ of it and bolts a sync seam back
   on. Staying all-Cloudflare deletes that seam instead of building it. (Reconsider only if the
   control plane becomes genuinely collaborative — live multi-editor, presence, optimistic
   concurrency — where rolling our own reactivity becomes real work. "Configure experiments, watch

@@ -14,25 +14,31 @@ keys never span Environments. `environment_id` is the canonical ID in the path.
 ## SDK credential endpoints
 
 ### `GET /apps/{app_id}/envs/{environment_id}/client-key`
+
 Returns: `{ key_id, key_material, origin_allowlist, created_at, revoked_at? }`
 `key_material` is the public value; safely returned.
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}/client-key`
+
 Body: `{ origin_allowlist?: string[] | null, rate_limit_rps?: number }`
 Returns: updated Client Key record.
 
 ### `POST /apps/{app_id}/envs/{environment_id}/client-key/revoke`
+
 Revokes current Client Key, creates a replacement.
 Returns: `{ new_key: { key_id, key_material }, revoked_key_id: string }`
 
 ### `POST /apps/{app_id}/envs/{environment_id}/api-keys`
+
 Creates a new API Key. The raw secret is returned **once only**.
 Returns: `{ key_id, secret: string, scopes, created_at }` — the `secret` field is omitted on all future reads.
 
 ### `GET /apps/{app_id}/envs/{environment_id}/api-keys`
+
 Returns list of API Key metadata (no secrets): `{ key_id, scopes, created_at, revoked_at? }`
 
 ### `POST /apps/{app_id}/envs/{environment_id}/api-keys/{key_id}/revoke`
+
 Body: `{}`
 Returns: `{ key_id, revoked_at }`
 

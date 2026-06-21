@@ -1,7 +1,7 @@
 # splitch — specification
 
 This is the **final-state source of truth** for building splitch. Read the spec; you should not
-need to read the ADRs to implement. The [ADRs](../adr/) record *why* each decision was made and
+need to read the ADRs to implement. The [ADRs](../adr/) record _why_ each decision was made and
 the [architecture seam docs](../architecture/) hold the longer design narrative — both are
 referenced from each spec file's `## Sources`, but the spec is what you build against.
 
@@ -60,28 +60,28 @@ scale to millions of events. Two planes:
 
 ## Areas
 
-| Area | Read it for | Canonical home of |
-|------|-------------|-------------------|
-| [domain-model/](./domain-model/) | the entity model, the Assignment/Exposure/Run spine, the edit taxonomy, holdover semantics | the **conceptual** model + entity field tables |
-| [contracts/](./contracts/) | Zod-first contract spine, leaf schemas, request/response envelopes, storage schemas, error model, validation policy | the **canonical shapes** every other area links to |
-| [platform/](./platform/) | storage map, config store, privacy lifecycle, multi-tenant isolation, the DO substrates, live-update DO, monorepo/toolchain, cron | **where data lives** + the physical substrates |
-| [evaluation/](./evaluation/) | `assign()`, Provider port, Assignment Store port, evaluate-path orchestration, holdover/replay, exposure firing, dry-run | the **hot path** behavior + its ports |
-| [pipeline/](./pipeline/) | edge ingest, exposure/activation event schema, first-touch dedup query, activation gate query, holdover write, physical Tinybird layer | the **Exposure pipeline** + event row schemas |
-| [stats/](./stats/) | the one CI object, variance + delta method, sequential aCS, CUPED/winsorization, SRM, FDR, dimension slicing, result shapes | the **statistics engine** |
-| [control-plane/](./control-plane/) | Organization tier, auth (doors + access matrix), Run state machine, the full endpoint inventory, MCP/CLI, credentials | the **control-plane API** + auth |
-| [sdk/](./sdk/) | the public data-plane SDK surface, evaluate/peek accessors, Client-Key-safe endpoint, seen-set, five runtimes | the **public SDK contract** |
-| [frontend/](./frontend/) | appId-is-the-spine, session/loader isolation, query-key factory, WebSocket lifecycle, mutations, error tiers, observability | the **panel + marketing** frontend |
+| Area                               | Read it for                                                                                                                            | Canonical home of                                  |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| [domain-model/](./domain-model/)   | the entity model, the Assignment/Exposure/Run spine, the edit taxonomy, holdover semantics                                             | the **conceptual** model + entity field tables     |
+| [contracts/](./contracts/)         | Zod-first contract spine, leaf schemas, request/response envelopes, storage schemas, error model, validation policy                    | the **canonical shapes** every other area links to |
+| [platform/](./platform/)           | storage map, config store, privacy lifecycle, multi-tenant isolation, the DO substrates, live-update DO, monorepo/toolchain, cron      | **where data lives** + the physical substrates     |
+| [evaluation/](./evaluation/)       | `assign()`, Provider port, Assignment Store port, evaluate-path orchestration, holdover/replay, exposure firing, dry-run               | the **hot path** behavior + its ports              |
+| [pipeline/](./pipeline/)           | edge ingest, exposure/activation event schema, first-touch dedup query, activation gate query, holdover write, physical Tinybird layer | the **Exposure pipeline** + event row schemas      |
+| [stats/](./stats/)                 | the one CI object, variance + delta method, sequential aCS, CUPED/winsorization, SRM, FDR, dimension slicing, result shapes            | the **statistics engine**                          |
+| [control-plane/](./control-plane/) | Organization tier, auth (doors + access matrix), Run state machine, the full endpoint inventory, MCP/CLI, credentials                  | the **control-plane API** + auth                   |
+| [sdk/](./sdk/)                     | the public data-plane SDK surface, evaluate/peek accessors, Client-Key-safe endpoint, seen-set, five runtimes                          | the **public SDK contract**                        |
+| [frontend/](./frontend/)           | appId-is-the-spine, session/loader isolation, query-key factory, WebSocket lifecycle, mutations, error tiers, observability            | the **panel + marketing** frontend                 |
 
 ### Where overlapping concerns live (canonical home)
 
 Some topics are touched by more than one area, each from its own angle. The canonical home:
 
 - **Run lifecycle / state machine** → [`control-plane/run-state-machine.md`](./control-plane/run-state-machine.md)
-  (operational states + transitions). domain-model and evaluation describe the *invariant*; they defer the state machine here.
+  (operational states + transitions). domain-model and evaluation describe the _invariant_; they defer the state machine here.
 - **Metric types** → [`contracts/leaf-schemas-experiment.md`](./contracts/leaf-schemas-experiment.md)
-  for the *shapes*; [`stats/metric-types.md`](./stats/metric-types.md) for *aggregation/variance* behavior; domain-model for the *concepts*.
+  for the _shapes_; [`stats/metric-types.md`](./stats/metric-types.md) for _aggregation/variance_ behavior; domain-model for the _concepts_.
 - **Assignment Store** → [`evaluation/assignment-store-port.md`](./evaluation/assignment-store-port.md)
-  for the *interface*; [`platform/assignment-store-substrate.md`](./platform/assignment-store-substrate.md) for the *KV/DO substrate*.
+  for the _interface_; [`platform/assignment-store-substrate.md`](./platform/assignment-store-substrate.md) for the _KV/DO substrate_.
 - **Exposure event row** → [`pipeline/exposure-event-contract.md`](./pipeline/exposure-event-contract.md) (the one canonical row schema; do not redefine it elsewhere).
 - **Two keys (first-touch identity vs wire `dedup_key`)** → defined once in
   [`pipeline/exposure-event-contract.md`](./pipeline/exposure-event-contract.md).

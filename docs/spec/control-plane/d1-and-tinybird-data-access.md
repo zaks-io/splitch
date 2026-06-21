@@ -8,26 +8,27 @@ D1 holds bounded mutable relational state. Not on the per-request hot path — h
 
 **What lives in D1:**
 
-| table                | purpose                                                                  |
-|----------------------|--------------------------------------------------------------------------|
-| `organizations`      | Org records (see [organization-and-membership.md](organization-and-membership.md))     |
-| `apps`               | App records                                                              |
-| `org_memberships`    | Org-level user roles                                                     |
-| `app_memberships`    | App-level user roles                                                     |
-| `privacy_requests`   | Bounded privacy request ledger (IDs/hashes only; no raw Targeting Keys)  |
-| `entity_deletions`   | Entity deletion tombstones for immediate analysis exclusion              |
-| `trusted_idps`       | Trusted IdP allow-list for ID-JAG validation                             |
-| `client_keys`        | Client Key records (public key material + revocation; per `(app_id, environment_id)`) |
-| `api_keys`           | API Key records (hash only; secret never stored; per `(app_id, environment_id)`) |
-| `environments`       | Environment records (per App; the live axis under App, ADR-0027)         |
-| `flags`              | Flag **definitions** (App-level: key, schema, Variant catalog as JSON)    |
-| `flag_configs`       | Flag **Configuration** per Environment (available Variants, targeting, rollout, enabled) |
-| `experiments`        | Experiment records + draft assignment config (per `(app_id, environment_id)`) |
-| `runs`               | Run records (frozen assignment config snapshot, status, timestamps; per `(app_id, environment_id)`) |
-| `segments`           | Segment definitions (Conditions as JSON)                                 |
-| `metrics`            | Metric definitions                                                       |
+| table              | purpose                                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| `organizations`    | Org records (see [organization-and-membership.md](organization-and-membership.md))                  |
+| `apps`             | App records                                                                                         |
+| `org_memberships`  | Org-level user roles                                                                                |
+| `app_memberships`  | App-level user roles                                                                                |
+| `privacy_requests` | Bounded privacy request ledger (IDs/hashes only; no raw Targeting Keys)                             |
+| `entity_deletions` | Entity deletion tombstones for immediate analysis exclusion                                         |
+| `trusted_idps`     | Trusted IdP allow-list for ID-JAG validation                                                        |
+| `client_keys`      | Client Key records (public key material + revocation; per `(app_id, environment_id)`)               |
+| `api_keys`         | API Key records (hash only; secret never stored; per `(app_id, environment_id)`)                    |
+| `environments`     | Environment records (per App; the live axis under App, ADR-0027)                                    |
+| `flags`            | Flag **definitions** (App-level: key, schema, Variant catalog as JSON)                              |
+| `flag_configs`     | Flag **Configuration** per Environment (available Variants, targeting, rollout, enabled)            |
+| `experiments`      | Experiment records + draft assignment config (per `(app_id, environment_id)`)                       |
+| `runs`             | Run records (frozen assignment config snapshot, status, timestamps; per `(app_id, environment_id)`) |
+| `segments`         | Segment definitions (Conditions as JSON)                                                            |
+| `metrics`          | Metric definitions                                                                                  |
 
 **What does NOT live in D1:**
+
 - Audit events (unbounded; Tinybird)
 - Exposure log (unbounded; Tinybird)
 - Assignment Store (KV + Durable Object — different seam entirely)
@@ -42,22 +43,24 @@ not re-Zod-parsed on read. Every HTTP input crossing the Worker boundary is Zod-
 D1 has no row-level security. Tenant isolation is enforced in a single repository/data-access layer.
 
 **Seam contract:**
+
 ```typescript
 // Pseudo-signature — every data-access function has this shape
 type Repository = {
   // every method requires app_id; it is never defaulted or optional
-  getFlag(app_id: string, flag_id: string): Promise<Flag | null>
-  listFlags(app_id: string, opts: PaginationOpts): Promise<Page<Flag>>
-  createFlag(app_id: string, input: CreateFlagInput): Promise<Flag>
+  getFlag(app_id: string, flag_id: string): Promise<Flag | null>;
+  listFlags(app_id: string, opts: PaginationOpts): Promise<Page<Flag>>;
+  createFlag(app_id: string, input: CreateFlagInput): Promise<Flag>;
   // ... etc for all entities scoped to an App
 
   // Org-level methods require org_id (not app_id)
-  getOrg(org_id: string): Promise<Org | null>
-  listAppsForOrg(org_id: string): Promise<App[]>
-}
+  getOrg(org_id: string): Promise<Org | null>;
+  listAppsForOrg(org_id: string): Promise<App[]>;
+};
 ```
 
 **What the seam enforces:**
+
 - Every query scopes `WHERE app_id = ?` in the SQL (never omitted)
 - No raw Drizzle client is used outside this layer
 - Cross-App queries do not exist; the seam has no multi-App query methods
@@ -71,6 +74,7 @@ and attaches it to request context). Repository methods are never called without
 ## KV hot-validation reads
 
 Two read types are hot enough for KV:
+
 1. **Session validation** — control-plane token validation (JWKS fetch is once; signature verify is CPU)
 2. **SDK key validation** — per-request API Key or Client Key validation
 
@@ -97,6 +101,7 @@ privacy request ledger is retained for at least 24 months or the contracted audi
 is longer. See [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md).
 
 **Audit event shape (row):**
+
 ```
 {
   event_id:    string     // ulid

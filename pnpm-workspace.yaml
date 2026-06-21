@@ -1,0 +1,12 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+minimumReleaseAge: 4320
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+blockExoticSubdeps: true
+allowBuilds:
+  esbuild: true
+  lefthook: true
+  sharp: true
+  workerd: true

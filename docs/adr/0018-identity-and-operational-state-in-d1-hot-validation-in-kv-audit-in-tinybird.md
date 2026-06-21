@@ -75,7 +75,7 @@ requirements harden (see below).
 The original "API keys as records" wording named only one credential; an SDK actually needs **two**, the
 standard public/secret split every provider ships (LaunchDarkly client-side ID vs SDK key, Statsig client vs
 server key, the `pk_`/`sk_` shape). Both are D1 records validated per-call in KV; they differ by secrecy,
-capability, and which runtime uses them. The glossary pins the language (CONTEXT.md, *Credential terms*:
+capability, and which runtime uses them. The glossary pins the language (CONTEXT.md, _Credential terms_:
 **API Key**, **Client Key**).
 
 - **API Key (secret / server).** For **server-side SDKs** in a trusted runtime. The full-data-plane key the
@@ -94,7 +94,7 @@ Two consequences this ADR now pins:
 - **The evaluate endpoint must be safe under a public credential.** It returns only the resolved Variant for
   the requested Targeting Key — never bulk config, the rule set, the salt, or other Entities' assignments.
   This is a hard endpoint-design constraint, not a policy bolted on later. (The control-plane config-read
-  surface, which *does* return rule sets, is a different surface reached with the control-plane token of
+  surface, which _does_ return rule sets, is a different surface reached with the control-plane token of
   ADR-0022, never with a Client Key.)
 - **The agent/control plane (CLI / MCP) freely retrieves and surfaces a Client Key** (it is public). For the
   secret **API Key** it **provisions and revokes** but **does not read an existing key's value** — it surfaces

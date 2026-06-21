@@ -8,13 +8,13 @@ caller must accept.
 
 An App's five runtimes (CONTEXT.md):
 
-| Runtime | Role | SDK usage |
-|---------|------|-----------|
-| HTTP Workers | Request handlers, API endpoints | Primary evaluate path; fires Exposures |
-| Durable Objects | Stateful long-lived objects | Can call evaluate; fires Exposures |
-| Analytics Engine | Event telemetry | Flag-gated metric collection |
-| Workers KV (read path) | Config / holdover reads | Read-only; no evaluate calls |
-| Tinybird | Exposure + metric store | Receives raw Exposure rows; no SDK calls |
+| Runtime                | Role                            | SDK usage                                |
+| ---------------------- | ------------------------------- | ---------------------------------------- |
+| HTTP Workers           | Request handlers, API endpoints | Primary evaluate path; fires Exposures   |
+| Durable Objects        | Stateful long-lived objects     | Can call evaluate; fires Exposures       |
+| Analytics Engine       | Event telemetry                 | Flag-gated metric collection             |
+| Workers KV (read path) | Config / holdover reads         | Read-only; no evaluate calls             |
+| Tinybird               | Exposure + metric store         | Receives raw Exposure rows; no SDK calls |
 
 All five runtimes that call the SDK use the same App, the same Client Key (or API Key for
 server Workers), and the same flag config. Flags are defined once and consumed everywhere.
@@ -26,6 +26,7 @@ server Workers), and the same flag config. Flags are defined once and consumed e
 Flag config is cached in Workers KV with up to ~60s propagation delay. A Start that
 changes assignment config (opens a new Run) may not be visible at all POPs simultaneously.
 During this window:
+
 - Some Workers evaluate with Run N config, others with Run N+1 config.
 - Exposures are stamped with the `run_id` the Worker resolved — whichever Run was live in
   its KV cache at evaluation time.
@@ -72,13 +73,13 @@ instance, or clock. This is a correctness requirement for the five-runtime model
 
 ## Credential usage by runtime
 
-| Runtime | Credential |
-|---------|-----------|
-| Browser/mobile client | Client Key (public, safe to embed) |
-| Server Workers (customer's backend) | API Key (secret, never client-side) |
-| Durable Objects (trusted) | API Key |
-| Analytics Engine | Not applicable (no evaluate; writes events) |
-| Control-plane Workers | Control-plane token (ADR-0022), not SDK credentials |
+| Runtime                             | Credential                                          |
+| ----------------------------------- | --------------------------------------------------- |
+| Browser/mobile client               | Client Key (public, safe to embed)                  |
+| Server Workers (customer's backend) | API Key (secret, never client-side)                 |
+| Durable Objects (trusted)           | API Key                                             |
+| Analytics Engine                    | Not applicable (no evaluate; writes events)         |
+| Control-plane Workers               | Control-plane token (ADR-0022), not SDK credentials |
 
 ## Sources
 

@@ -1,68 +1,90 @@
 # Agent Config
 
-Last updated: 2026-06-18
+Last updated: 2026-06-21
 
-First setup. This repo is a fresh monorepo skeleton: stub packages, no real
-code, no git, no CI, no issue tracker. Most workflow machinery is unverifiable
-and lives in `Unknowns`. Re-run `ziw-setup` once git, a tracker, and CI exist.
+Scaffold is in place. The repo is now a pnpm/Turborepo workspace with
+package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
+and Worker-shaped deploy units. Hosted code-host checks, shared-preview deploy,
+production deploy, and real backing resources are still not provisioned.
 
 ## Verification
 
-- Scope: full first-setup pass over the repo root.
+- Scope: scaffold pass over the repo root.
 - Evidence sources: root `package.json`, `pnpm-workspace.yaml`, `README.md`,
-  `packages/*/package.json`, `tinybird/`, filesystem listing.
-- Safe commands run: filesystem listing; `git rev-parse --is-inside-work-tree`
-  (returned: not a git repository); grep for `scripts` in sub-package manifests
-  (none found); checks for lockfile, `.github`, `CLAUDE.md`, `AGENTS.md`,
-  `.claude` (none present).
+  `turbo.json`, `lefthook.yml`, `.github/workflows/*`, workspace
+  `package.json` files, Worker `wrangler.jsonc` files, `tinybird/`, filesystem
+  listing.
+- Safe commands run: `pnpm typecheck`, `pnpm format:check`, `pnpm lint`,
+  `pnpm build`, `pnpm test`, `pnpm depcruise`, `pnpm knip`, and
+  `pnpm verify:ci` passed locally on 2026-06-21.
 - Read-only tool calls: Linear `list_teams` (query "splitch"), `get_team`,
   `list_issue_statuses`, `list_issue_labels` (limit 250), `list_projects`,
   `list_issues` — all against team `Splitch`
   (`eba9c622-4d28-4db2-93fe-12c43bd218b0`). Team, statuses, and labels verified
   live; 0 projects, 0 issues (fresh team).
-- Inferred values: branch prefix, PR conventions (no git history); Linear issue
-  key prefix (no issues exist yet to read an identifier from).
-- Critical unknowns: git not initialized; no CI; no code host; no working
-  build/test in sub-packages; no `splitch` repo-route label in Linear (blocks
-  issue-assigned delegation). Workflow skills cannot run end to end until these
-  exist. See `Unknowns`.
+- Inferred values: Linear issue key prefix (no issues exist yet to read an
+  identifier from); hosted PR check names (workflow YAML exists but has not run
+  on a remote).
+- Critical unknowns: no code host remote is configured, no `splitch` repo-route
+  label exists in Linear, shared preview is not provisioned, and production
+  deployment is not wired. See `Unknowns`.
 
 ## Repo
 
-- Name: `splitch-monorepo` (publishes packages under `@splitch/*` + bare `splitch`)
-- Default branch: unknown (not a git repo) — see `Unknowns`
-- Branch prefix: `feat/`, `fix/`, `chore/` (inferred; no git history)
-- Package manager: pnpm@9.0.0 (`packageManager` in root `package.json`)
+- Name: `splitch-monorepo` (workspace packages use `@splitch/*`; public npm publishing is not wired)
+- Default branch: `main`
+- Branch prefix: `codex/` for Codex-created branches unless the user asks for
+  another prefix
+- Package manager: pnpm@11.8.0 (`packageManager` in root `package.json`)
+- pnpm supply-chain policy: `minimumReleaseAge: 4320`, `minimumReleaseAgeStrict: true`,
+  `minimumReleaseAgeIgnoreMissingTime: false`, and `blockExoticSubdeps: true` in
+  `pnpm-workspace.yaml`
 - Install: `pnpm install`
-- Lockfile: none yet (`pnpm-lock.yaml` absent; install never run)
-- Full local gate: not wired. Intended gate is `pnpm verify:push`, which mirrors
-  CI except hosted smoke tests and remote-state mutations.
-- Build: not wired. Intended command: `pnpm turbo run build`.
-- Test: not wired. Intended command: `pnpm turbo run test`.
-- Lint / format / typecheck / Knip / Gitleaks: designed, not wired. See
+- Lockfile: `pnpm-lock.yaml`
+- Full local gate: `pnpm verify:push`, mirrored by `pnpm verify:ci` except hosted
+  smoke checks.
+- Commit gate: `pnpm verify:commit`
+- Build: `pnpm build`
+- Test: `pnpm test`
+- Lint / format / typecheck / Knip / Gitleaks: wired through root scripts,
+  Turborepo, Lefthook, and GitHub Actions. See
   `docs/spec/platform/local-quality-gates.md`.
-- Generated artifacts: none
-- PR CI and shared preview checks: designed, not wired. See
+- Generated artifacts: package-local `dist/**`, `.output/**`, `build/**`,
+  coverage, `.turbo/`, and `.wrangler/` are ignored.
+- PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci`.
+- Gitleaks CI: `.github/workflows/gitleaks.yml` on Blacksmith.
+- Shared preview checks: designed, not wired. See
   `docs/spec/platform/deployment-pipeline.md`.
 - Production deploy path: designed, not wired. See
   `docs/spec/platform/deployment-pipeline.md`.
 - Production approval required: yes
 
-## Packages
+## Workspaces
 
-| Path | Name | Status |
-|------|------|--------|
-| `packages/splitch` | `splitch` | bare-name placeholder, publish-ready, unpublished |
-| `packages/sdk` | `@splitch/sdk` | stub manifest only, no code |
-| `packages/react` | `@splitch/react` | stub, peer-deps `@splitch/sdk`, `react>=18` |
-| `packages/convex` | `@splitch/convex` | stub, peer-dep `@splitch/sdk` |
-| `packages/cli` | `@splitch/cli` | stub, `bin: splitch` |
-| `tinybird/` | (not a package) | README only; stats datasources/endpoints planned |
+Apps are graph entrypoints and deployable or executable surfaces. Packages are libraries or tooling
+workspaces; they can be internal-only or publishable. App-owned code stays local unless there is a
+real package API boundary.
 
-- All `@splitch/*` packages are `version: 0.0.0`, `publishConfig.access: public`.
-- Publish policy (from session handoff, user decision): publish bare `splitch`
-  placeholder to claim the name; keep `@splitch/*` unpublished at 0.0.0 until
-  real code exists. Publish requires user-authenticated npm — see `Unknowns`.
+| Path                         | Name                         | Status                                      |
+| ---------------------------- | ---------------------------- | ------------------------------------------- |
+| `apps/cli`                   | `@splitch/cli`               | CLI app scaffold, `bin: splitch`            |
+| `apps/control-panel`         | `@splitch/control-panel`     | Control Panel Worker-shaped scaffold        |
+| `apps/marketing`             | `@splitch/marketing`         | Marketing Worker-shaped scaffold            |
+| `apps/control-plane-api`     | `@splitch/control-plane-api` | Control Plane API Worker scaffold           |
+| `apps/mcp-server`            | `@splitch/mcp-server`        | MCP Worker scaffold                         |
+| `apps/evaluation-api`        | `@splitch/evaluation-api`    | Evaluation Worker scaffold                  |
+| `apps/event-ingest-api`      | `@splitch/event-ingest-api`  | Event Ingest Worker scaffold                |
+| `apps/analysis-api`          | `@splitch/analysis-api`      | Analysis Worker scaffold                    |
+| `apps/auth-api`              | `@splitch/auth-api`          | Auth API Worker scaffold                    |
+| `packages/contracts`         | `@splitch/contracts`         | shared Zod/platform contracts scaffold      |
+| `packages/control-plane-sdk` | `@splitch/control-plane-sdk` | shared Control Plane SDK transport scaffold |
+| `packages/sdk`               | `@splitch/sdk`               | public JS/TS data-plane SDK scaffold        |
+| `packages/ui`                | `@splitch/ui`                | shared UI primitive scaffold                |
+| `tinybird/`                  | (not present)                | analytics project files planned             |
+
+- All workspace packages are `version: 0.0.0`.
+- Apps and internal packages are private. `@splitch/sdk` is a public package scaffold with
+  `publishConfig.access = public`, but no npm publication workflow or credentials are configured.
 
 ## Issue Tracker
 
@@ -155,15 +177,14 @@ and lives in `Unknowns`. Re-run `ziw-setup` once git, a tracker, and CI exist.
 
 ## Work Coordination
 
-- Worker delegation paths: `issue-assigned` (Linear-exposed agent, `remote-cursor`
-  environment) is the intended path, but it is **blocked** until a `splitch`
-  repo-route label and a code host exist. `local-worktree` is usable once git is
-  initialized. See `Unknowns`.
+- Worker delegation paths: `local-worktree` is usable now. `issue-assigned`
+  (Linear-exposed agent, `remote-cursor` environment) is blocked until a
+  `splitch` repo-route label and a code host exist. See `Unknowns`.
 - Default worker path: unset (decide once repo-route + code host exist).
 - Orchestrator recurring mechanism: none configured yet (Claude Code `/loop`,
   schedule, or wake-up timer when adopted).
-- Handoff format: `references/handoff.md` shape. SHA/PR/check fields are not
-  meaningful until git + a code host exist.
+- Handoff format: `references/handoff.md` shape. PR/check fields are not
+  meaningful until a code host exists.
 - Capacity, merge-automation, and friction-intake fields are unverifiable until
   a code host and CI exist. Active PR/preview cap defaults to 3 when adopted.
 
@@ -184,26 +205,29 @@ and lives in `Unknowns`. Re-run `ziw-setup` once git, a tracker, and CI exist.
 
 ## Pull Requests
 
-- All PR/CI/CodeRabbit fields are unverifiable until a code host and CI exist.
+- PR CI workflow source: `.github/workflows/ci.yml`; hosted check name not
+  verified until the repo is pushed to a code host.
+- Gitleaks workflow source: `.github/workflows/gitleaks.yml`; hosted check name
+  not verified until the repo is pushed to a code host.
 - CodeRabbit config source: none (`.coderabbit.yaml` absent).
 - CodeRabbit auto-review: unknown (no config).
 
 ## Environments
 
-- Local: self-contained. `pnpm install` then the Turborepo gate once real code
-  and scripts exist.
-- Git hooks: designed, not wired. `pre-commit` runs `pnpm verify:commit`;
-  `pre-push` runs `pnpm verify:push`. See
-  `docs/spec/platform/local-quality-gates.md`.
-- PR CI / Shared Preview / Production: designed, not wired. PR CI uses
-  Tinybird Local and local Wrangler storage. Shared Preview is one
+- Local: self-contained. `pnpm install` then `pnpm verify:push`.
+- Git hooks: wired with Lefthook. `pre-commit` runs `pnpm verify:commit`;
+  `pre-push` runs `pnpm verify:push`.
+- PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
+  Blacksmith. Tinybird Local and D1 local checks currently skip until project
+  files and migrations exist.
+- Shared Preview / Production: designed, not wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
   resources plus one Tinybird Branch. Production requires GitHub `production`
   environment approval.
-- Planned backing services (from README/handoff, not yet wired): Cloudflare
-  Flagship (flag delivery), Tinybird (event ingestion + significance).
+- Planned backing services not yet provisioned: Cloudflare Flagship, D1, KV,
+  Durable Objects, Queues, Tinybird Cloud.
 - Production: explicit approval required.
-- Hosted checks allowed without approval: none configured.
+- Hosted checks allowed without approval: CI and Gitleaks only.
 
 ## Instruction Trust Boundaries
 
@@ -217,9 +241,6 @@ and lives in `Unknowns`. Re-run `ziw-setup` once git, a tracker, and CI exist.
 
 ## Unknowns
 
-- [ ] Git not initialized (`git init` not run). Blocks branch/PR/SHA fields,
-      default branch, branch conventions. Verifier: run `git init`, set default
-      branch, make first commit, then re-run `ziw-setup`.
 - [ ] No `splitch` repo-route label in Linear (group `repo`). Hard block on
       issue-assigned delegation: the assigned agent can't resolve which repo to
       clone. Verifier: create the `splitch` (or `<org>/splitch`) repo label once
@@ -228,26 +249,22 @@ and lives in `Unknowns`. Re-run `ziw-setup` once git, a tracker, and CI exist.
       of the first created issue.
 - [ ] No code host configured. Blocks PR conventions, required checks, merge
       method, CodeRabbit. Verifier: create the remote repo, push, re-run setup.
-- [ ] No CI. Blocks the integrate gate's "green" definition and required checks.
-      Verifier: add Blacksmith-backed GitHub Actions workflows using Turborepo
-      remote cache; record exact check names.
-- [ ] Sub-packages define no `build`/`test`/`lint`/`typecheck` scripts, so the
-      root gate is a no-op. Blocks a real local gate. Verifier: add scripts (and
-      a lockfile via `pnpm install`); record exact commands.
-- [ ] Local quality gates designed but not wired. Verifier: implement
-      `docs/spec/platform/local-quality-gates.md`, including Lefthook
-      `pre-commit`/`pre-push`, `verify:commit`, `verify:push`, `verify:ci`,
-      Biome, TypeScript, Knip, Gitleaks, dependency-cruiser, Tinybird Local, and
-      local D1 migration checks.
-- [ ] npm publish auth unverified. Bare `splitch` claim is blocked on the user
-      authenticating npm (`npm whoami` returned not-logged-in last session).
-      Verifier: user runs `npm login` (or confirms a web automation token), then
-      `npm publish --workspace splitch`.
-- [ ] Deployment pipeline designed but not wired. Verifier: implement
-      `docs/spec/platform/deployment-pipeline.md`, including Turborepo cache
-      config, PR CI with Tinybird Local, shared-preview deploy/reset, D1
-      migrations, Durable Object migrations, Tinybird deploy/branch flow, and
-      production approval rules.
+- [ ] Hosted CI check names unverified. Workflow files exist locally but have not
+      run on a remote. Verifier: push to the code host and record exact required
+      check names for CI and Gitleaks.
+- [ ] Tinybird project files are absent. `pnpm tinybird:local` intentionally
+      skips until `tinybird/` exists. Verifier: add Tinybird datasources, pipes,
+      fixtures, and tests, then make the local script fail on validation errors.
+- [ ] Real D1 migrations are absent. `pnpm d1:migrate:local` intentionally skips
+      until migrations exist. Verifier: add the schema toolchain and committed
+      migration files, then run local migration checks in CI.
+- [ ] Public npm publishing workflow and credentials are unverified. `@splitch/sdk` exists as the
+      public data-plane SDK scaffold, but no package has been published. Verifier: create a release
+      slice with ownership, provenance, changelog, npm token/OIDC setup, and publish dry run.
+- [ ] Shared-preview, production deploy, and rollback workflows are designed but
+      not wired. Verifier: implement `docs/spec/platform/deployment-pipeline.md`,
+      including deploy/reset workflows, D1 migrations, Durable Object migrations,
+      Tinybird deploy/branch flow, and production approval rules.
 - [ ] Shared preview branch not provisioned. Verifier: create the single
       Tinybird `shared_preview` Branch and matching non-production Cloudflare
       resources when hosted preview is needed.

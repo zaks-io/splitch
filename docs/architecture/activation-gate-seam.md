@@ -1,15 +1,14 @@
 # The Activation gate seam
 
 Status: designed (no code yet). Output of an upfront architecture grill on 2026-06-20.
-**Production target — not a bootstrap stopgap.** Every decision here is on the final data model; v1 is a
-production-ready, fully functioning foundation, and the explicit guarantee is **no rewrite** to reach the
-complete (counterfactual) gate. Vocabulary: domain terms per [CONTEXT.md](../../CONTEXT.md); architecture
+Every decision here is on the final data model; the explicit guarantee is **no rewrite** to reach the
+complete counterfactual gate. Vocabulary: domain terms per [CONTEXT.md](../../CONTEXT.md); architecture
 terms per the deepening discipline. Builds directly on the
 [Exposure pipeline seam](./exposure-pipeline-seam.md) (ADR-0010/0011).
 
 ## Where this came from
 
-The Exposure pipeline grill named the Activation gate as a forward thread: it *re-anchors* first-touch.
+The Exposure pipeline grill named the Activation gate as a forward thread: it _re-anchors_ first-touch.
 This grill specifies it. The gate is the subtlest bias surface in the platform — conditioning analysis on a
 post-exposure action is exactly how randomization gets silently broken — so it was designed against the
 Kohavi/Microsoft experimentation literature, not just vendor docs (see [references.md](./references.md)).
@@ -36,11 +35,11 @@ is the true entry moment (Eppo's automatic behavior; Statsig's toggle). The anch
 Metric — and the **full-population SRM does not catch it** (GrowthBook's explicit warning). The assignment
 split can read a clean 50/50 while the activated subpopulation is skewed. splitch goes past every vendor:
 
-- **Activated-population SRM** — chi-square on activated Entities per arm per Run (p < 0.001), *separate*
+- **Activated-population SRM** — chi-square on activated Entities per arm per Run (p < 0.001), _separate_
   from the full-exposed SRM. A gated-scorecard SRM with a clean full-exposed SRM is the canonical
   fingerprint of a Treatment-affected gate.
 - **Per-arm activation rate as a first-class Metric** — chi-square over activated / not-activated by
-  arm (p < 0.001) is a loud alert and the rate gap explains *why* the gated SRM fired.
+  arm (p < 0.001) is a loud alert and the rate gap explains _why_ the gated SRM fired.
 
 Either firing → gated results untrusted. Same fail-loud ethos as the `__multiple__` quarantine (ADR-0011).
 
@@ -68,16 +67,17 @@ JOIN activated a
 
 ## Production-ready and progressive (ADR-0013): no rewrite to reach the full gate
 
-The rewrite risk is the **data model**, not the counterfactual logging. v1 removes that risk:
+The rewrite risk is the **data model**, not the counterfactual logging. The first-class Activation event
+removes that risk:
 
 - **Activation is a first-class logged event** — its own row on the same append-only log (ADR-0010), not a
   query-derived flag. This is the load-bearing choice.
-- **Counterfactual triggering** (Kohavi's full unbiased gate: include Control Entities that *would have*
+- **Counterfactual triggering** (Kohavi's full unbiased gate: include Control Entities that _would have_
   activated) is then **additive** — the Control arm emits an activation-shaped event with
-  `counterfactual: true`. A new column *value*, flowing through the **same** log, JOIN, anchor, and SRM.
+  `counterfactual: true`. A new column _value_, flowing through the **same** log, JOIN, anchor, and SRM.
   Zero schema change, zero query rewrite.
 - **Deferred, and only because it's un-buildable now:** the SDK-side Control-arm would-have-activated
-  *evaluation logic* needs a running SDK/pipeline/experiment to build and test. Building it blind today adds
+  _evaluation logic_ needs a running SDK/pipeline/experiment to build and test. Building it blind today adds
   untestable code, not production-readiness. The activated-population SRM is precisely the signal that tells
   you which real experiment justifies building it.
 

@@ -12,7 +12,7 @@ Upstream seams deliver the inputs: deduped first-touch unique Entities per arm p
 excluded (ADR-0010/0011), each with per-Entity Metric values windowed on `window_anchor` =
 `COALESCE(activation_ts, first_exposure_ts)` (ADR-0012). This seam turns those into the result a user
 trusts: point estimate, uncertainty, significance call. It is where peeking bias, clustered-data variance,
-ratio-metric variance, heavy tails, and multiple comparisons all live — each a known, often *silent*, trap.
+ratio-metric variance, heavy tails, and multiple comparisons all live — each a known, often _silent_, trap.
 
 ## The one CI object
 
@@ -50,7 +50,7 @@ rules, the peeking correction, and the multiple-comparison control smear across 
   matter how often they look. Fixed-horizon is opt-in for a pre-committed sample.
 - **Frequentist** point of view (no prior-manipulation surface in self-serve; converges with Bayesian at
   scale). Bayesian view may be added later, not the default.
-- **Asymptotic confidence sequences (aCS)**, not mSPRT — they *are* CIs, so they compose with the
+- **Asymptotic confidence sequences (aCS)**, not mSPRT — they _are_ CIs, so they compose with the
   delta-method and CUPED machinery as one object. (aCS is Waudby-Smith et al.'s construction, closely related
   to but not identical to Howard et al.'s GAVI; both carry a tuning knob, so the win is compositionality, not
   being parameter-free — see ADR-0014.)

@@ -1,6 +1,7 @@
 ---
 description: "Use for code review before opening a PR, before handing off a branch, or when reviewing the latest committed changes, an explicitly requested working tree, a PR branch, or a main-branch commit range for correctness, security, scope, tests, and issue tracker fit."
 ---
+
 # Code Review
 
 Run a bug-focused review from local files or a clean worktree. This is the

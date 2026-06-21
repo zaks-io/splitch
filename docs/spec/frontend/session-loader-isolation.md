@@ -9,6 +9,7 @@ hot path. D1 is the system of record; KV is the edge replica written through on 
 Cookie: `Set-Cookie: __session=<opaque_token>; HttpOnly; Secure; SameSite=Lax; Path=/`
 
 KV schema for cached session:
+
 ```
 key:   session:<sha256(token)>
 value: { userId: string, orgs: OrgMembership[], expiresAt: number }
@@ -21,17 +22,17 @@ segment (navigation-and-ia.md). The org switcher lists `orgs`; each App switcher
 Org's Apps.
 
 `OrgMembership`:
-| field     | type            | req | meaning                                   |
+| field | type | req | meaning |
 |-----------|-----------------|-----|-------------------------------------------|
-| `orgId`   | string          | yes | Org the user belongs to                   |
-| `orgRole` | OrgRole         | yes | `owner \| admin \| member`                |
-| `apps`    | AppMembership[] | yes | Apps in this Org the user can access      |
+| `orgId` | string | yes | Org the user belongs to |
+| `orgRole` | OrgRole | yes | `owner \| admin \| member` |
+| `apps` | AppMembership[] | yes | Apps in this Org the user can access |
 
 `AppMembership`:
-| field     | type   | req | meaning                        |
+| field | type | req | meaning |
 |-----------|--------|-----|--------------------------------|
-| `appId`   | string | yes | App the user is a member of    |
-| `role`    | AppRole| yes | `owner \| admin \| member \| viewer` |
+| `appId` | string | yes | App the user is a member of |
+| `role` | AppRole| yes | `owner \| admin \| member \| viewer` |
 
 `OrgRole`: `owner | admin | member`
 
@@ -92,6 +93,7 @@ state. See [error-loading-tiers.md](./error-loading-tiers.md).
 ## Session issuer (WorkOS session issuer rule)
 
 The issuer behind the cookie is **WorkOS**:
+
 - Self-serve: WorkOS AuthKit (email/password + social OAuth)
 - Enterprise: WorkOS SSO/SCIM
 
@@ -101,6 +103,7 @@ creation (it issues the token splitch stores in the cookie). The loader never ca
 ## App/Org switch and browser history
 
 Navigating back to a URL with a stale `orgSlug`/`appSlug` the user no longer has access to:
+
 - Loader runs `requireOrgAccess` / `requireAppAccess` → fails → 403 (or 404 for an appId∉org pairing)
 - Segment boundary renders "you don't have access" / "not found"
 - Session remains valid; user can navigate to any Org/App they do have access to

@@ -1,6 +1,6 @@
 # Local quality gates: commit hooks, pre-push, CI parity
 
-Status: designed, not wired.
+Status: wired for the scaffold.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 
 ## Decision
@@ -12,25 +12,41 @@ Gitleaks for secret scanning, dependency-cruiser for architecture boundaries, an
 The local hooks are not a replacement for CI. They are the first failure surface so agents and humans
 catch ordinary failures before pushing.
 
+## pnpm supply-chain policy
+
+`pnpm-workspace.yaml` enforces dependency age and transitive-source policy:
+
+- `minimumReleaseAge: 4320` requires package versions to be at least 3 days old before install.
+- `minimumReleaseAgeStrict: true` fails resolution instead of falling back to immature versions.
+- `minimumReleaseAgeIgnoreMissingTime: false` fails packages whose registry metadata omits publish time.
+- `blockExoticSubdeps: true` blocks transitive dependencies from using untrusted exotic sources such as
+  git URLs or direct tarball URLs.
+
+Do not add `minimumReleaseAgeExclude` entries as a convenience path. Security fixes can use a narrowly
+reviewed exception, but normal tool upgrades wait until the package version satisfies the 3-day policy.
+
 ## Required scripts
 
-Once the package scaffold lands, the root `package.json` should expose these scripts:
+The root `package.json` exposes these scripts:
 
-| Script | Command contract |
-|---|---|
-| `format:check` | `biome format --check .` |
-| `format:write` | `biome format --write .` |
-| `lint` | `turbo run lint` |
-| `typecheck` | `turbo run typecheck` |
-| `test` | `turbo run test` |
-| `build` | `turbo run build` |
-| `depcruise` | `dependency-cruiser --config .dependency-cruiser.cjs "apps/**/*.{ts,tsx}" "workers/**/*.{ts,tsx}" "packages/**/*.{ts,tsx}"` |
-| `knip` | `knip` |
-| `secrets:worktree` | `gitleaks dir --redact --no-banner .` |
-| `secrets:git` | `gitleaks git --redact --no-banner .` |
-| `verify:commit` | commit hook entrypoint |
-| `verify:push` | pre-push and local CI-parity entrypoint |
-| `verify:ci` | CI entrypoint |
+| Script             | Command contract                                       |
+| ------------------ | ------------------------------------------------------ |
+| `format:check`     | `biome format . && prettier --check "**/*.md"`         |
+| `format:write`     | `biome format --write . && prettier --write "**/*.md"` |
+| `lint`             | `turbo run lint`                                       |
+| `typecheck`        | `turbo run typecheck`                                  |
+| `test`             | `turbo run test`                                       |
+| `build`            | `turbo run build`                                      |
+| `depcruise`        | `dependency-cruiser --config .dependency-cruiser.cjs`  |
+| `knip`             | `knip --treat-config-hints-as-errors`                  |
+| `secrets:worktree` | `gitleaks dir --redact --no-banner .`                  |
+| `secrets:git`      | `gitleaks git --redact --no-banner .`                  |
+| `verify:commit`    | commit hook entrypoint                                 |
+| `verify:push`      | pre-push and local CI-parity entrypoint                |
+| `verify:ci`        | CI entrypoint                                          |
+
+Root scripts own repository-wide static analysis commands that do not belong to one runtime package.
+Biome formats code/config. Prettier formats Markdown only.
 
 `verify:ci` and `verify:push` must stay aligned. The only required difference is that `verify:push`
 does not run hosted smoke tests or any command that mutates Cloudflare, Tinybird, GitHub
@@ -62,16 +78,17 @@ run the matching root script locally, fix the failure, and rerun `verify:push` b
 
 The required CI check runs on Blacksmith and executes `verify:ci`. It includes everything in
 `verify:push`, plus hosted smoke checks where the workflow has trusted credentials and an appropriate
-platform target.
+platform target. The scaffold's hosted smoke command is an intentional skip until shared-preview
+or production targets exist.
 
 Gitleaks also runs as its own required CI workflow so secret scanning remains visible even if the JS
 toolchain is broken.
 
 ## Knip policy
 
-Knip is required in commit, pre-push, and CI gates once the workspace has real entrypoints.
+Knip is required in commit, pre-push, and CI gates.
 
-- Start with explicit `entry` and `project` patterns for `apps/**`, `workers/**`, and `packages/**`.
+- Let Knip infer pnpm workspaces unless a package needs an explicit override; config hints are errors.
 - Fix Knip findings in this order: unused files, unresolved imports, unused exports, unused
   dependencies.
 - Use `ignore*` options only when the entry graph is correct and the ignore has a reason.
@@ -90,15 +107,23 @@ Gitleaks is required in commit, pre-push, and CI gates.
 - The repo should use `gitleaks git` and `gitleaks dir`; older hidden `detect` and `protect` commands
   are not the documented interface.
 
-## First implementation checklist
+## D1 and Tinybird local policy
 
-- Add `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `turbo.json`, `biome.json`,
-  `knip.json`, `.gitleaks.toml`, and `lefthook.yml`.
-- Add package-level `lint`, `typecheck`, `test`, and `build` scripts.
-- Add root `verify:commit`, `verify:push`, and `verify:ci` scripts.
-- Install Lefthook during setup and document `pnpm lefthook install`.
-- Wire CI to call `pnpm verify:ci` and the pre-push hook to call `pnpm verify:push`.
-- Keep remote-mutating smoke/deploy steps outside commit and pre-push hooks.
+`pnpm d1:migrate:local` and `pnpm tinybird:local` are wired into `verify:push` and `verify:ci`.
+During the scaffold they skip with an explicit message because no committed D1 migrations or
+Tinybird project files exist yet. Once those files land, these scripts must become failing validators,
+not best-effort warnings.
+
+## Implementation checklist
+
+- [x] Add `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `turbo.json`, `biome.json`,
+      `knip.json`, `.gitleaks.toml`, and `lefthook.yml`.
+- [x] Add package-level `lint`, `typecheck`, `test`, and `build` scripts.
+- [x] Add root `verify:commit`, `verify:push`, and `verify:ci` scripts.
+- [x] Install Lefthook during setup through `prepare`.
+- [x] Wire CI to call `pnpm verify:ci` and the pre-push hook to call `pnpm verify:push`.
+- [x] Keep remote-mutating smoke/deploy steps outside commit and pre-push hooks.
+- [ ] Replace D1 and Tinybird skip guards with real validators when those project files exist.
 
 ## Sources
 

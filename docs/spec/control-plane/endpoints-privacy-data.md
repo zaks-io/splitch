@@ -55,6 +55,7 @@ actor. Raw API Key values and other Users' data are excluded.
 Requests deletion of the authenticated User.
 
 Rules:
+
 - Revokes sessions, device-flow refresh tokens, MCP tokens, and CLI tokens immediately.
 - Removes Org/App memberships.
 - If this User is the last owner of a personal Organization, deletion cascades to personal
@@ -86,6 +87,7 @@ inputs, and audit rows for that App.
 Auth: Org `owner`.
 
 Rules:
+
 - Requires explicit confirmation token from a prior dry-run response.
 - Revokes all SDK credentials immediately.
 - Ends running Experiment Runs with reason `org_delete`.
@@ -151,6 +153,7 @@ Returns: `{ request: PrivacyRequest, job: PrivacyJob }`
 Auth: requester, Org `owner`, or App `owner/admin` when the request is App-scoped.
 
 Returns: `{ request: PrivacyRequest, job?: PrivacyJob }`
+
 ## Error codes
 
 - `LAST_OWNER_REQUIRED` when User deletion would leave a shared Org with no owner.

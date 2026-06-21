@@ -1,6 +1,7 @@
 ---
 description: "Use for issue tracker triage when reconciling current project issues with reality, making Todo tickets agent-ready, applying workflow labels, setting dependencies, normalizing issue bodies, cleaning explicitly requested Linear Backlog review or backfill scope separately from configured intake issues, and updating verified stale states."
 ---
+
 # Issue Triage
 
 Maintain current issue tracker work so Todo tickets are ready for agents and

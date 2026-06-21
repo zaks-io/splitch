@@ -20,20 +20,22 @@ source-of-truth discipline — the Zod source is the fix target.
 ## Package split
 
 **`@splitch/contracts`**
+
 - Zod leaf schemas (glossary nouns: `VariantSchema`, `TargetingRuleSchema`, `RunSchema`, ...)
 - `@hono/zod-openapi` route definitions (input + output composed from leaf schemas)
 - `z.infer` types re-exported for consumers
 - Dependencies: `zod`, `@hono/zod-openapi` only
-- Consumers: Worker (validation), `@splitch/client`, CLI/MCP, control panel, marketing site
+- Consumers: Worker (validation), `@splitch/control-plane-sdk`, CLI/MCP, control panel, marketing site
 
-**`@splitch/client`**
+**`@splitch/control-plane-sdk`**
+
 - Hono `hc<AppType>()` HTTP client (type-inferred, zero codegen)
 - Depends on `@splitch/contracts`
 - Consumers: control panel, CLI, MCP server
 
-The split keeps schema-only consumers (marketing site, MCP) free of transport code.
+The split keeps schema-only consumers (marketing site, MCP schemas) free of transport code.
 
-The deletion test passes for both: `contracts` has 4+ real consumers; `client` has 3+ real
+The deletion test passes for both: `contracts` has 4+ real consumers; `control-plane-sdk` has 3+ real
 consumers. Neither is speculative indirection.
 
 ## Schema shapes: leaf reuse, distinct envelopes
@@ -60,12 +62,12 @@ different shapes (patch must reject assignment-config fields on a live Run).
 
 ## Validation discipline
 
-| Boundary | Rule |
-|---|---|
-| HTTP edge (Worker input) | Zod-parse all untrusted input — non-negotiable; ADR-0023's invariant home |
+| Boundary                   | Rule                                                                       |
+| -------------------------- | -------------------------------------------------------------------------- |
+| HTTP edge (Worker input)   | Zod-parse all untrusted input — non-negotiable; ADR-0023's invariant home  |
 | KV reads (hot path + cold) | Zod-parse all, including Assignment Store and flag config on evaluate path |
-| D1 reads | Trusted — column schema + migrations enforce structure; no re-parse |
-| Tinybird query results | Parse at the control-plane endpoint before returning to callers |
+| D1 reads                   | Trusted — column schema + migrations enforce structure; no re-parse        |
+| Tinybird query results     | Parse at the control-plane endpoint before returning to callers            |
 
 **KV hot-path validation trade-off:** latency is accepted in exchange for loudness. A malformed
 KV blob fails loud (returns error, falls back to D1) rather than flowing a half-valid object into
@@ -83,6 +85,7 @@ KVEnvelope<T> {
 ```
 
 **On KV read:**
+
 1. Parse the raw blob as `KVEnvelope` (schemaVersion + data).
 2. If `schemaVersion` matches current → validate `data` against current Zod schema.
 3. If `schemaVersion` is unknown (old format or future format) → **fall back to D1** (one extra

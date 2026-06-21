@@ -34,6 +34,7 @@ assignment-affecting edits (salt, allocation, Variant set, Targeting/Segment, Ta
 Activation Metric). The live Run's config remains unchanged at the edge until Start.
 
 **Start** is the one action that:
+
 1. Ends the current live Run (sets `ended_at`).
 2. Creates Run N+1 carrying all batched draft changes.
 3. Writes the new `liveRunId` into `AppFlagConfig` in both D1 and KV.
@@ -43,11 +44,11 @@ N draft edits = **one** sample reset (one new Run), never N.
 
 ## Edit taxonomy and their config-write behavior
 
-| Edit type | Drafts? | Opens new Run? | KV update? |
-|---|---|---|---|
-| Assignment-affecting (salt, allocation, Variant set, Targeting, Targeting Key, Activation Metric) | Yes — accumulates on draft | On Start only | On Start |
-| Measurement edit (Metric defs, Conversion Window, Guardrail config) | No — applies in place | No — recomputes over live Run | Yes, immediately |
-| Non-material edit (description, owner, tags) | No — applies in place | No | Yes, immediately |
+| Edit type                                                                                         | Drafts?                    | Opens new Run?                | KV update?       |
+| ------------------------------------------------------------------------------------------------- | -------------------------- | ----------------------------- | ---------------- |
+| Assignment-affecting (salt, allocation, Variant set, Targeting, Targeting Key, Activation Metric) | Yes — accumulates on draft | On Start only                 | On Start         |
+| Measurement edit (Metric defs, Conversion Window, Guardrail config)                               | No — applies in place      | No — recomputes over live Run | Yes, immediately |
+| Non-material edit (description, owner, tags)                                                      | No — applies in place      | No                            | Yes, immediately |
 
 The Activation Metric is an assignment-affecting edit because it re-anchors the
 Conversion Window retroactively, redefining the analysis population's entry timestamp. It is frozen

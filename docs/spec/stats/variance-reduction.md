@@ -20,10 +20,10 @@ neutralizes that.
 
 ### Defaults
 
-| Config field     | Default   | Scope      |
-|------------------|-----------|------------|
-| `winsorize`      | `true`    | per-Metric (count/revenue) |
-| `winsorize_pct`  | `99.9`    | per-Metric |
+| Config field    | Default | Scope                      |
+| --------------- | ------- | -------------------------- |
+| `winsorize`     | `true`  | per-Metric (count/revenue) |
+| `winsorize_pct` | `99.9`  | per-Metric                 |
 
 This default-on is a deliberate divergence from Eppo and GrowthBook, which are opt-in per Metric
 (ADR-0016). We follow Statsig's default-on reasoning: the untreated failure (a whale silently
@@ -63,19 +63,19 @@ the same confidence level.
 
 CUPED applies only when **both** conditions are met:
 
-| Condition                | Threshold               | Config field             |
-|--------------------------|-------------------------|--------------------------|
-| Pre-period data exists   | Coverage ≥ threshold    | `cuped_coverage_threshold` (default 70%) |
-| Coverage > threshold     | Fraction of arm Entities with pre-period data | same |
+| Condition              | Threshold                                     | Config field                             |
+| ---------------------- | --------------------------------------------- | ---------------------------------------- |
+| Pre-period data exists | Coverage ≥ threshold                          | `cuped_coverage_threshold` (default 70%) |
+| Coverage > threshold   | Fraction of arm Entities with pre-period data | same                                     |
 
 Coverage = `count(Entities with pre_period_value) / n` per arm. If either arm falls below the
 threshold, CUPED does not apply (for consistency; both arms must use the same technique).
 
 ### Pre-period window
 
-| Config field          | Default   | Scope          |
-|-----------------------|-----------|----------------|
-| `cuped_lookback_days` | `7`       | per-Experiment |
+| Config field          | Default | Scope          |
+| --------------------- | ------- | -------------- |
+| `cuped_lookback_days` | `7`     | per-Experiment |
 
 Pre-period = `[first_exposure_ts - cuped_lookback_days, first_exposure_ts)`.
 
@@ -121,11 +121,11 @@ is unchanged.
 `VarianceTechniques` in the output always states the method used (see
 [result-contracts.md](result-contracts.md)):
 
-| `cuped_method` value   | Meaning                                     |
-|------------------------|---------------------------------------------|
-| `pre_period`           | CUPED with pre-period data (coverage met)   |
-| `attribute_covariate`  | CUPED with attribute fallback               |
-| `none`                 | CUPED not applied (coverage insufficient)   |
+| `cuped_method` value  | Meaning                                   |
+| --------------------- | ----------------------------------------- |
+| `pre_period`          | CUPED with pre-period data (coverage met) |
+| `attribute_covariate` | CUPED with attribute fallback             |
+| `none`                | CUPED not applied (coverage insufficient) |
 
 No silent degradation. An implementing agent reading the output can always tell which path ran.
 

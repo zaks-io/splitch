@@ -41,7 +41,7 @@ for an edge origin.
 Why this fits the edge specifically: five POPs give no global ordering and at-least-once delivery — exactly
 where "collapse early" is hardest (needs a global edge dedup store) and "append raw, dedup in query" is
 easiest (the deduper sees everything and picks `MIN(ts)`). ADR-0004's intentional redundancy is the correct
-*input* to an ELT deduper.
+_input_ to an ELT deduper.
 
 ## The dedup query is the one place all the rules live
 
@@ -64,28 +64,28 @@ GROUP BY entity, run
 
 An Entity showing >1 distinct Variant in one Run is **excluded from all arms** and surfaced as a health
 metric (~1% tolerated). Given pure `assign()` + the authoritative holdover DO + material-edit-opens-new-Run,
-a conflict can *only* be a config race, an SDK bug, or an ADR-0003 violation — all defects to surface
+a conflict can _only_ be a config race, an SDK bug, or an ADR-0003 violation — all defects to surface
 loudly. "First-touch wins" would silently bias the timestamp-winning arm; SRM wouldn't catch it. Fail loud.
 
 ## Holdover write timing: eager edge write, pipeline reconciles
 
-ADR-0009 has the pipeline drive the holdover `put`, but authoritative first-touch is only known *after* the
+ADR-0009 has the pipeline drive the holdover `put`, but authoritative first-touch is only known _after_ the
 batch dedup runs. Splitting the two jobs resolves the timing:
 
 - **Experience (replay now):** the edge fires `DO.putIfAbsent(key, run, variant)` optimistically on apparent
   first-touch. The DO's get-then-put-if-absent (ADR-0009) makes concurrent writers safe — first writer
-  wins — so replay works for the *very next* request without waiting for the batch.
+  wins — so replay works for the _very next_ request without waiting for the batch.
 - **Analysis (the denominator):** the raw log + batch dedup remains authoritative for SRM and all metrics.
 
 So **the DO is for experience, the log is for analysis** — the same separation the Assignment Store seam
 already draws, now extended to the write path. The two can momentarily disagree (the eager write guesses
-first-touch; the batch confirms it), and that is fine: the DO only governs what a returning Entity *sees*,
-never what the analysis *counts*.
+first-touch; the batch confirms it), and that is fine: the DO only governs what a returning Entity _sees_,
+never what the analysis _counts_.
 
 ## SRM reads the same denominator as everything else
 
 SRM compares **observed deduped first-touch unique Entities per arm per Run** (the `__multiple__` bucket
-excluded) against the Run's **declared allocation**, via chi-square. Crucially it uses the *same*
+excluded) against the Run's **declared allocation**, via chi-square. Crucially it uses the _same_
 denominator definition as every metric and the Conversion Window anchor — one notion of "how many Entities
 in each arm," never two. A second (raw-count) denominator was rejected as a reconciliation/debt source.
 

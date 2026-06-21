@@ -18,13 +18,13 @@ Org-scoped tables use `org_id`. No table has RLS; scoping is enforced by the Wor
 
 ### `organizations`
 
-| Column | Type | Constraints |
-|---|---|---|
-| `id` | text | PK |
-| `name` | text | not null |
-| `plan` | text | not null, default `'free'` |
-| `created_at` | timestamptz | not null |
-| `updated_at` | timestamptz | not null |
+| Column       | Type        | Constraints                |
+| ------------ | ----------- | -------------------------- |
+| `id`         | text        | PK                         |
+| `name`       | text        | not null                   |
+| `plan`       | text        | not null, default `'free'` |
+| `created_at` | timestamptz | not null                   |
+| `updated_at` | timestamptz | not null                   |
 
 ### No `users` profile table
 
@@ -34,23 +34,23 @@ PII unless a new ADR replaces this lifecycle contract.
 
 ### `org_memberships`
 
-| Column | Type | Constraints |
-|---|---|---|
-| `org_id` | text | FK → organizations, not null |
-| `user_id` | text | WorkOS user ID, not null |
-| `role` | text | not null |
-| `created_at` | timestamptz | not null |
+| Column       | Type        | Constraints                  |
+| ------------ | ----------- | ---------------------------- |
+| `org_id`     | text        | FK → organizations, not null |
+| `user_id`    | text        | WorkOS user ID, not null     |
+| `role`       | text        | not null                     |
+| `created_at` | timestamptz | not null                     |
 
 Composite PK: `(org_id, user_id)`.
 
 ### `app_memberships`
 
-| Column | Type | Constraints |
-|---|---|---|
-| `app_id` | text | FK → apps, not null |
-| `user_id` | text | WorkOS user ID, not null |
-| `role` | text | not null |
-| `created_at` | timestamptz | not null |
+| Column       | Type        | Constraints              |
+| ------------ | ----------- | ------------------------ |
+| `app_id`     | text        | FK → apps, not null      |
+| `user_id`    | text        | WorkOS user ID, not null |
+| `role`       | text        | not null                 |
+| `created_at` | timestamptz | not null                 |
 
 Composite PK: `(app_id, user_id)`.
 
@@ -58,31 +58,31 @@ Privacy request tables live in [storage-schemas-d1-privacy.md](./storage-schemas
 
 ### `apps`
 
-| Column | Type | Constraints |
-|---|---|---|
-| `id` | text | PK |
-| `organization_id` | text | FK → organizations, not null |
-| `name` | text | not null |
-| `key` | text | not null, unique per org (index) |
-| `description` | text | nullable |
-| `created_at` | timestamptz | not null |
-| `updated_at` | timestamptz | not null |
-| `created_by` | text | WorkOS user ID or deleted-user tombstone |
+| Column            | Type        | Constraints                              |
+| ----------------- | ----------- | ---------------------------------------- |
+| `id`              | text        | PK                                       |
+| `organization_id` | text        | FK → organizations, not null             |
+| `name`            | text        | not null                                 |
+| `key`             | text        | not null, unique per org (index)         |
+| `description`     | text        | nullable                                 |
+| `created_at`      | timestamptz | not null                                 |
+| `updated_at`      | timestamptz | not null                                 |
+| `created_by`      | text        | WorkOS user ID or deleted-user tombstone |
 
 ### `environments`
 
 A first-class axis under App (ADR-0027). Experiments, Experiment Runs, Exposures, SDK credentials,
 and Flag CONFIGURATION are scoped to one Environment.
 
-| Column | Type | Constraints |
-|---|---|---|
-| `id` | text | PK |
-| `app_id` | text | FK → apps, not null |
-| `key` | text | not null, unique per `(app_id)` (e.g. `'production'`, `'staging'`) |
-| `name` | text | not null |
-| `created_at` | timestamptz | not null |
-| `updated_at` | timestamptz | not null |
-| `created_by` | text | WorkOS user ID or deleted-user tombstone |
+| Column       | Type        | Constraints                                                        |
+| ------------ | ----------- | ------------------------------------------------------------------ |
+| `id`         | text        | PK                                                                 |
+| `app_id`     | text        | FK → apps, not null                                                |
+| `key`        | text        | not null, unique per `(app_id)` (e.g. `'production'`, `'staging'`) |
+| `name`       | text        | not null                                                           |
+| `created_at` | timestamptz | not null                                                           |
+| `updated_at` | timestamptz | not null                                                           |
+| `created_by` | text        | WorkOS user ID or deleted-user tombstone                           |
 
 ### `flags` (DEFINITION — App-level)
 
@@ -90,78 +90,78 @@ Flag DEFINITION is App-level: `key`, value schema, and the Variant catalog. Per-
 CONFIGURATION (enabled state, available Variant subset, targeting, rollout) lives in `flag_configs`
 (ADR-0027).
 
-| Column | Type | Constraints |
-|---|---|---|
-| `id` | text | PK |
-| `app_id` | text | FK → apps, not null |
-| `key` | text | not null, unique per `(app_id)` |
-| `name` | text | not null |
-| `description` | text | nullable |
-| `default_variant_id` | text | FK → variants |
-| `created_at` | timestamptz | not null |
-| `updated_at` | timestamptz | not null |
-| `created_by` | text | WorkOS user ID or deleted-user tombstone |
-| `updated_by` | text | WorkOS user ID or deleted-user tombstone |
-| `version` | integer | not null, default 1; optimistic-lock counter |
+| Column               | Type        | Constraints                                  |
+| -------------------- | ----------- | -------------------------------------------- |
+| `id`                 | text        | PK                                           |
+| `app_id`             | text        | FK → apps, not null                          |
+| `key`                | text        | not null, unique per `(app_id)`              |
+| `name`               | text        | not null                                     |
+| `description`        | text        | nullable                                     |
+| `default_variant_id` | text        | FK → variants                                |
+| `created_at`         | timestamptz | not null                                     |
+| `updated_at`         | timestamptz | not null                                     |
+| `created_by`         | text        | WorkOS user ID or deleted-user tombstone     |
+| `updated_by`         | text        | WorkOS user ID or deleted-user tombstone     |
+| `version`            | integer     | not null, default 1; optimistic-lock counter |
 
 ### `flag_configs` (CONFIGURATION — per-Environment)
 
 Per-Environment Flag CONFIGURATION (ADR-0027): the `available_variant_names` subset of the App-level
 Variant catalog, targeting, rollout, and enabled state. One row per `(flag_id, environment_id)`.
 
-| Column | Type | Constraints |
-|---|---|---|
-| `id` | text | PK |
-| `app_id` | text | FK → apps, not null |
-| `environment_id` | text | FK → environments, not null (co-scoped with `app_id`) |
-| `flag_id` | text | FK → flags, not null |
-| `enabled` | boolean | not null, default false |
-| `available_variant_names` | text | not null (JSON string array; subset of the Flag's Variant catalog) |
-| `default_variant_id` | text | FK → variants |
-| `created_at` | timestamptz | not null |
-| `updated_at` | timestamptz | not null |
-| `version` | integer | not null, default 1; optimistic-lock counter |
+| Column                    | Type        | Constraints                                                        |
+| ------------------------- | ----------- | ------------------------------------------------------------------ |
+| `id`                      | text        | PK                                                                 |
+| `app_id`                  | text        | FK → apps, not null                                                |
+| `environment_id`          | text        | FK → environments, not null (co-scoped with `app_id`)              |
+| `flag_id`                 | text        | FK → flags, not null                                               |
+| `enabled`                 | boolean     | not null, default false                                            |
+| `available_variant_names` | text        | not null (JSON string array; subset of the Flag's Variant catalog) |
+| `default_variant_id`      | text        | FK → variants                                                      |
+| `created_at`              | timestamptz | not null                                                           |
+| `updated_at`              | timestamptz | not null                                                           |
+| `version`                 | integer     | not null, default 1; optimistic-lock counter                       |
 
 UNIQUE constraint: `(flag_id, environment_id)`. Targeting rules and rollout for the config live in the
 per-Environment `targeting_rules` rows (`environment_id` co-scoped).
 
 ### `variants`
 
-| Column | Type | Constraints |
-|---|---|---|
-| `id` | text | PK |
-| `flag_id` | text | FK → flags, not null |
-| `name` | text | not null |
-| `value` | text | not null (JSON-serialized) |
-| `description` | text | nullable |
-| `created_at` | timestamptz | not null |
+| Column        | Type        | Constraints                |
+| ------------- | ----------- | -------------------------- |
+| `id`          | text        | PK                         |
+| `flag_id`     | text        | FK → flags, not null       |
+| `name`        | text        | not null                   |
+| `value`       | text        | not null (JSON-serialized) |
+| `description` | text        | nullable                   |
+| `created_at`  | timestamptz | not null                   |
 
 ### `targeting_rules` (per-Environment Flag CONFIGURATION)
 
-| Column | Type | Constraints |
-|---|---|---|
-| `id` | text | PK |
-| `app_id` | text | FK → apps, not null |
-| `environment_id` | text | FK → environments, not null (co-scoped with `app_id`, ADR-0027) |
-| `flag_id` | text | FK → flags, not null |
-| `priority` | integer | not null |
-| `conditions` | text | not null (JSON array of Condition) |
-| `variant_id` | text | FK → variants |
-| `percentage_rollout` | text | nullable (JSON PercentageRollout) |
-| `created_at` | timestamptz | not null |
-| `updated_at` | timestamptz | not null |
+| Column               | Type        | Constraints                                                     |
+| -------------------- | ----------- | --------------------------------------------------------------- |
+| `id`                 | text        | PK                                                              |
+| `app_id`             | text        | FK → apps, not null                                             |
+| `environment_id`     | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027) |
+| `flag_id`            | text        | FK → flags, not null                                            |
+| `priority`           | integer     | not null                                                        |
+| `conditions`         | text        | not null (JSON array of Condition)                              |
+| `variant_id`         | text        | FK → variants                                                   |
+| `percentage_rollout` | text        | nullable (JSON PercentageRollout)                               |
+| `created_at`         | timestamptz | not null                                                        |
+| `updated_at`         | timestamptz | not null                                                        |
 
 ### `segments`
 
-| Column | Type | Constraints |
-|---|---|---|
-| `id` | text | PK |
-| `app_id` | text | FK → apps, not null |
-| `name` | text | not null |
-| `conditions` | text | not null (JSON array) |
-| `description` | text | nullable |
-| `created_at` | timestamptz | not null |
-| `updated_at` | timestamptz | not null |
+| Column        | Type        | Constraints           |
+| ------------- | ----------- | --------------------- |
+| `id`          | text        | PK                    |
+| `app_id`      | text        | FK → apps, not null   |
+| `name`        | text        | not null              |
+| `conditions`  | text        | not null (JSON array) |
+| `description` | text        | nullable              |
+| `created_at`  | timestamptz | not null              |
+| `updated_at`  | timestamptz | not null              |
 
 ## Sources
 

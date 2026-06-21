@@ -18,8 +18,8 @@ AssignmentStore:
 `getAll` returns all stored holdovers for this Entity across all Experiments in one call. The map
 key is `experimentId` (string). A missing entry means no holdover — new Entity.
 
-`idType` is explicit in both key and call signature even though v1 Experiments pin one Entity type.
-It is a cheap guard against Targeting Key *value* collisions across Entity types (a `session` id
+`idType` is explicit in both key and call signature even when an Experiment pins one Entity type.
+It is a cheap guard against Targeting Key _value_ collisions across Entity types (a `session` id
 that equals a `user` id). Mirrors Statsig's `<userId>:<idType>` keying.
 
 ## Physical split
@@ -46,7 +46,7 @@ physical key. The raw Targeting Key never appears in KV key names or DO names.
   between get and put (use `blockConcurrencyWhile` or keep the storage access synchronous)
 - **First writer wins:** if the key already exists in the DO's storage, the new `put` is a no-op
 - **Write-through to KV on commit:** after storing, the DO merges its `{ runId, variant,
-  schemaVersion }` into the Entity-keyed KV value under its `experimentId`, so subsequent
+schemaVersion }` into the Entity-keyed KV value under its `experimentId`, so subsequent
   `getAll` calls on any POP are served without a DO round-trip. Read granularity (per-Entity)
   and write granularity (per-Experiment) differ by design (ADR-0008/0009)
 

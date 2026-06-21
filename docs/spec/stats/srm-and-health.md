@@ -15,6 +15,7 @@ expected split. Signals broken bucketing/Assignment and **invalidates the Experi
 Chi-square test over the full exposed population.
 
 **Denominator:** `COUNT DISTINCT entity_id` per arm, from the first-touch dedup query (ADR-0010).
+
 - First-touch per `(entity_id, run_id)`: `MIN(server_ts)`.
 - `__multiple__` Entities excluded from all arms (ADR-0011).
 - This is the **same denominator** Metrics and Conversion Window anchoring use. No secondary
@@ -44,6 +45,7 @@ Computed separately when an Activation gate is set. Guards against Treatment-aff
 (ADR-0012 / CONTEXT.md §Activation Metric).
 
 **Denominator:** `COUNT DISTINCT entity_id` per arm among activated Entities only:
+
 ```sql
 -- uses activation_rows from data-contracts.md
 SELECT variant, COUNT(DISTINCT entity_id) AS activated_n
@@ -57,11 +59,11 @@ GROUP BY variant
 
 **Two-guardrail interpretation:**
 
-| Full-exposed SRM | Activated-population SRM | Interpretation                                     |
-|------------------|--------------------------|-----------------------------------------------------|
-| Clean            | Clean                    | Gated results are trustworthy                       |
-| Mismatch         | Mismatch                 | Broken bucketing; all results untrusted             |
-| Clean            | Mismatch                 | Treatment-affected gate; gated results biased       |
+| Full-exposed SRM | Activated-population SRM | Interpretation                                                          |
+| ---------------- | ------------------------ | ----------------------------------------------------------------------- |
+| Clean            | Clean                    | Gated results are trustworthy                                           |
+| Mismatch         | Mismatch                 | Broken bucketing; all results untrusted                                 |
+| Clean            | Mismatch                 | Treatment-affected gate; gated results biased                           |
 | Mismatch         | Clean                    | Bucketing broken; gated results may be incidentally OK; still untrusted |
 
 **Either SRM firing → gated results untrusted.**
@@ -95,16 +97,16 @@ arm and SRM would not catch it (ADR-0011).
 
 ## Health metrics object
 
-| Field                | Type                       | Meaning                                                      |
-|----------------------|----------------------------|--------------------------------------------------------------|
-| `multiple_rate`      | `number`                   | `__multiple__` Entities / total Exposed Entities in Run      |
-| `multiple_count`     | `integer`                  | Raw count of `__multiple__` Entities                         |
-| `activation_rates`   | `Record<variant, number> \| null` | Per-arm activation rate; null if no gate              |
-| `activation_balance_p_value` | `number \| null` | Chi-square p-value for activated / not-activated by arm |
-| `activation_balance_mismatch` | `boolean \| null` | `true` if `activation_balance_p_value < 0.001` |
-| `exposure_counts`    | `Record<variant, integer>` | Raw (pre-dedup) Exposure event counts per arm                |
-| `deduped_counts`     | `Record<variant, integer>` | First-touch deduped Entity counts per arm (the SRM input)    |
-| `low_n_warning`      | `boolean`                  | `true` if any arm has deduped n < 100                        |
+| Field                         | Type                              | Meaning                                                   |
+| ----------------------------- | --------------------------------- | --------------------------------------------------------- |
+| `multiple_rate`               | `number`                          | `__multiple__` Entities / total Exposed Entities in Run   |
+| `multiple_count`              | `integer`                         | Raw count of `__multiple__` Entities                      |
+| `activation_rates`            | `Record<variant, number> \| null` | Per-arm activation rate; null if no gate                  |
+| `activation_balance_p_value`  | `number \| null`                  | Chi-square p-value for activated / not-activated by arm   |
+| `activation_balance_mismatch` | `boolean \| null`                 | `true` if `activation_balance_p_value < 0.001`            |
+| `exposure_counts`             | `Record<variant, integer>`        | Raw (pre-dedup) Exposure event counts per arm             |
+| `deduped_counts`              | `Record<variant, integer>`        | First-touch deduped Entity counts per arm (the SRM input) |
+| `low_n_warning`               | `boolean`                         | `true` if any arm has deduped n < 100                     |
 
 ## SRM output fields in the result object
 
@@ -112,9 +114,9 @@ See [result-contracts.md](result-contracts.md) §SRM result object for the full 
 
 Summary:
 
-| Field                    | Condition on threshold             |
-|--------------------------|-------------------------------------|
-| `srm_is_mismatch`        | `p_value < 0.001` (full-exposed)   |
+| Field                    | Condition on threshold                       |
+| ------------------------ | -------------------------------------------- |
+| `srm_is_mismatch`        | `p_value < 0.001` (full-exposed)             |
 | `activated_srm_mismatch` | `p_value < 0.001` (activated; when gate set) |
 
 ## Seam boundary

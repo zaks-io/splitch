@@ -5,69 +5,69 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 
 ## Per-arm result object (one per (Variant, Metric))
 
-| Field                   | Type                   | Meaning                                                             |
-|-------------------------|------------------------|---------------------------------------------------------------------|
-| `variant`               | `string`               | Variant name                                                        |
-| `metric_id`             | `string`               |                                                                     |
-| `sample_size_n`         | `integer`              | Unique Entities in this arm (deduped)                               |
-| `point_estimate`        | `number`               | Per-Entity mean for this arm                                        |
-| `relative_lift_pct`     | `number \| null`       | `(treatment / control - 1) × 100`; null for Control or undefined Control estimate |
-| `ci_lower`              | `number \| null`       | Always-valid CI lower bound (relative-lift %); null for Control or undefined relative lift |
-| `ci_upper`              | `number \| null`       | Always-valid CI upper bound (relative-lift %); null for Control or undefined relative lift |
-| `p_value`               | `number`               | Always-valid p-value (valid under continuous peeking)               |
-| `is_significant`        | `boolean`              | After Benjamini-Hochberg FDR correction                             |
-| `in_bh_family`          | `boolean`              | True only for locked goal Metric × Variant family members           |
-| `exploratory`           | `boolean`              | True for post-start additions or Secondary outputs                  |
-| `decision_valid`        | `boolean`              | True only when the result belongs to the locked decision spec        |
-| `status`                | `enum`                 | `running \| ready \| stopped \| insufficient_denominator \| insufficient_n \| error` |
-| `variance_techniques`   | `VarianceTechniques`   | Which variance-reduction methods applied (see below)                |
+| Field                 | Type                 | Meaning                                                                                    |
+| --------------------- | -------------------- | ------------------------------------------------------------------------------------------ |
+| `variant`             | `string`             | Variant name                                                                               |
+| `metric_id`           | `string`             |                                                                                            |
+| `sample_size_n`       | `integer`            | Unique Entities in this arm (deduped)                                                      |
+| `point_estimate`      | `number`             | Per-Entity mean for this arm                                                               |
+| `relative_lift_pct`   | `number \| null`     | `(treatment / control - 1) × 100`; null for Control or undefined Control estimate          |
+| `ci_lower`            | `number \| null`     | Always-valid CI lower bound (relative-lift %); null for Control or undefined relative lift |
+| `ci_upper`            | `number \| null`     | Always-valid CI upper bound (relative-lift %); null for Control or undefined relative lift |
+| `p_value`             | `number`             | Always-valid p-value (valid under continuous peeking)                                      |
+| `is_significant`      | `boolean`            | After Benjamini-Hochberg FDR correction                                                    |
+| `in_bh_family`        | `boolean`            | True only for locked goal Metric × Variant family members                                  |
+| `exploratory`         | `boolean`            | True for post-start additions or Secondary outputs                                         |
+| `decision_valid`      | `boolean`            | True only when the result belongs to the locked decision spec                              |
+| `status`              | `enum`               | `running \| ready \| stopped \| insufficient_denominator \| insufficient_n \| error`       |
+| `variance_techniques` | `VarianceTechniques` | Which variance-reduction methods applied (see below)                                       |
 
 ## VarianceTechniques object (never silent)
 
-| Field                | Type                              | Meaning                                                    |
-|----------------------|-----------------------------------|------------------------------------------------------------|
-| `winsorized`         | `boolean`                         | True if winsorization was applied                          |
-| `winsorize_pct`      | `number \| null`                  | Percentile used (e.g., `99.9`); null if not winsorized     |
-| `winsorize_cap`      | `number \| null`                  | Realized pooled cap value; null if not winsorized          |
-| `cuped_applied`      | `boolean`                         | True if CUPED adjustment was applied                       |
-| `cuped_method`       | `enum \| null`                    | `pre_period \| attribute_covariate \| none`               |
-| `cuped_attribute`    | `string \| null`                  | Named attribute used (for `attribute_covariate`)           |
-| `cuped_attribute_source` | `enum \| null`                | `declared \| pre_period_selected \| historical_selected \| null` |
-| `cuped_coverage_pct` | `number \| null`                  | Fraction of Entities with pre-period data (0–100)          |
-| `delta_method`       | `boolean`                         | True if delta method was applied (always true for Ratio)   |
+| Field                    | Type             | Meaning                                                          |
+| ------------------------ | ---------------- | ---------------------------------------------------------------- |
+| `winsorized`             | `boolean`        | True if winsorization was applied                                |
+| `winsorize_pct`          | `number \| null` | Percentile used (e.g., `99.9`); null if not winsorized           |
+| `winsorize_cap`          | `number \| null` | Realized pooled cap value; null if not winsorized                |
+| `cuped_applied`          | `boolean`        | True if CUPED adjustment was applied                             |
+| `cuped_method`           | `enum \| null`   | `pre_period \| attribute_covariate \| none`                      |
+| `cuped_attribute`        | `string \| null` | Named attribute used (for `attribute_covariate`)                 |
+| `cuped_attribute_source` | `enum \| null`   | `declared \| pre_period_selected \| historical_selected \| null` |
+| `cuped_coverage_pct`     | `number \| null` | Fraction of Entities with pre-period data (0–100)                |
+| `delta_method`           | `boolean`        | True if delta method was applied (always true for Ratio)         |
 
 ## SRM result object
 
-| Field                   | Type      | Meaning                                                    |
-|-------------------------|-----------|------------------------------------------------------------|
-| `srm_p_value`           | `number`  | Chi-square p-value over full-exposed deduped denominator   |
-| `srm_is_mismatch`       | `boolean` | `true` if `srm_p_value < 0.001`                            |
-| `observed_counts`       | `Record<variant, integer>` | Deduped first-touch Entity counts per arm    |
-| `expected_counts`       | `Record<variant, integer>` | Expected counts per declared allocation      |
-| `activated_srm_p_value` | `number \| null`   | Chi-square on activated population; null if no gate  |
-| `activated_srm_mismatch`| `boolean \| null`  | `true` if `activated_srm_p_value < 0.001`            |
+| Field                    | Type                       | Meaning                                                  |
+| ------------------------ | -------------------------- | -------------------------------------------------------- |
+| `srm_p_value`            | `number`                   | Chi-square p-value over full-exposed deduped denominator |
+| `srm_is_mismatch`        | `boolean`                  | `true` if `srm_p_value < 0.001`                          |
+| `observed_counts`        | `Record<variant, integer>` | Deduped first-touch Entity counts per arm                |
+| `expected_counts`        | `Record<variant, integer>` | Expected counts per declared allocation                  |
+| `activated_srm_p_value`  | `number \| null`           | Chi-square on activated population; null if no gate      |
+| `activated_srm_mismatch` | `boolean \| null`          | `true` if `activated_srm_p_value < 0.001`                |
 
 ## Guardrail result object
 
-| Field              | Type      | Meaning                                                        |
-|--------------------|-----------|----------------------------------------------------------------|
-| `metric_id`        | `string`  |                                                                |
-| `variant`          | `string`  |                                                                |
-| `ci_lower`         | `number \| null` | Relative-lift CI lower bound; null when relative lift is undefined |
-| `threshold`        | `number`  | Downside threshold declared on the Metric                      |
-| `is_breached`      | `boolean \| null` | `true` if `ci_lower < threshold`; null when undefined       |
-| `decision_valid`   | `boolean` | True only if the Guardrail and threshold were locked at Run Start |
-| `breach_reason`    | `string \| null` | E.g., `"CI lower bound −0.02 < threshold −0.005"`        |
+| Field            | Type              | Meaning                                                            |
+| ---------------- | ----------------- | ------------------------------------------------------------------ |
+| `metric_id`      | `string`          |                                                                    |
+| `variant`        | `string`          |                                                                    |
+| `ci_lower`       | `number \| null`  | Relative-lift CI lower bound; null when relative lift is undefined |
+| `threshold`      | `number`          | Downside threshold declared on the Metric                          |
+| `is_breached`    | `boolean \| null` | `true` if `ci_lower < threshold`; null when undefined              |
+| `decision_valid` | `boolean`         | True only if the Guardrail and threshold were locked at Run Start  |
+| `breach_reason`  | `string \| null`  | E.g., `"CI lower bound −0.02 < threshold −0.005"`                  |
 
 ## Health metrics object
 
-| Field                | Type                       | Meaning                                                    |
-|----------------------|----------------------------|------------------------------------------------------------|
-| `multiple_rate`      | `number`                   | Fraction of Entities in `__multiple__` bucket              |
-| `activation_rates`   | `Record<variant, number> \| null` | Per-arm activation rate; null if no gate          |
-| `activation_balance_p_value` | `number \| null` | Chi-square p-value for activated / not-activated by arm |
-| `activation_balance_mismatch` | `boolean \| null` | `true` if `activation_balance_p_value < 0.001` |
-| `exposure_counts`    | `Record<variant, integer>` | Raw (pre-dedup) Exposure counts per arm                    |
+| Field                         | Type                              | Meaning                                                 |
+| ----------------------------- | --------------------------------- | ------------------------------------------------------- |
+| `multiple_rate`               | `number`                          | Fraction of Entities in `__multiple__` bucket           |
+| `activation_rates`            | `Record<variant, number> \| null` | Per-arm activation rate; null if no gate                |
+| `activation_balance_p_value`  | `number \| null`                  | Chi-square p-value for activated / not-activated by arm |
+| `activation_balance_mismatch` | `boolean \| null`                 | `true` if `activation_balance_p_value < 0.001`          |
+| `exposure_counts`             | `Record<variant, integer>`        | Raw (pre-dedup) Exposure counts per arm                 |
 
 Dimension result shapes (`DimensionResult`) are defined in
 [dimension-slicing.md](dimension-slicing.md).
