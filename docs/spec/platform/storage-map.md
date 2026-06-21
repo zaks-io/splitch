@@ -5,22 +5,22 @@ must not move data between stores without a new ADR.
 
 ## Store assignments (by concern)
 
-| Concern | Store | Why |
-|---|---|---|
-| Users, Organizations, Apps, membership, roles | D1 | Relational, bounded, low-write OLTP |
-| SDK credentials (API Key hash/scopes/revoked; Client Key record) | D1 | Relational, per-`(app_id, environment_id)` record (ADR-0027) |
-| Billing (plan, Stripe subscription linkage) | D1 | Relational, bounded |
-| Privacy request ledger and Entity deletion tombstones | D1 | Bounded control-plane workflow state; immediate analysis exclusion |
-| Flag definition (App-level) + Flag Configuration + live Experiment config per Environment (including `liveRunId`) | D1 (authoritative) + KV (read cache) | D1 = truth, KV = edge-local ~10ms reads |
-| Session validity cache | KV | Hot-path per-request, write-through from D1 on revoke |
-| API Key validation cache (hash → `{app_id, environment_id}`/scopes/validity) | KV | Hot-path per-SDK-call; `environment_id` resolves which Env's config to serve (ADR-0027); write-through from D1 on revoke |
-| Assignment Store (holdover sticky experience) | KV (read) + DO (first-touch write) | See [assignment-store-substrate.md](./assignment-store-substrate.md) |
-| Per-App live-update fan-out | DO (one per App, `idFromName(appId)`) | Serialized write + WebSocket broadcast |
-| Raw Exposure log (system of record for analysis) | Tinybird datasource (append-only) | Columnar, unbounded, ELT substrate |
-| First-touch dedup snapshot | Tinybird datasource (Copy Pipe target) | Lambda architecture (ADR-0024) |
-| Metric rollup materialized views | Tinybird AggregatingMergeTree MVs (on snapshot, never raw log) | Correctness constraint: raw log has edge duplicates |
-| Audit log (who/what/when) | Tinybird datasource | Append-only, unbounded; wrong shape for D1 |
-| Ops telemetry (request rates, error counts) | Analytics Engine | Sampled/lossy by design — fine for non-critical ops metrics |
+| Concern                                                                                                           | Store                                                          | Why                                                                                                                      |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Users, Organizations, Apps, membership, roles                                                                     | D1                                                             | Relational, bounded, low-write OLTP                                                                                      |
+| SDK credentials (API Key hash/scopes/revoked; Client Key record)                                                  | D1                                                             | Relational, per-`(app_id, environment_id)` record (ADR-0027)                                                             |
+| Billing (plan, Stripe subscription linkage)                                                                       | D1                                                             | Relational, bounded                                                                                                      |
+| Privacy request ledger and Entity deletion tombstones                                                             | D1                                                             | Bounded control-plane workflow state; immediate analysis exclusion                                                       |
+| Flag definition (App-level) + Flag Configuration + live Experiment config per Environment (including `liveRunId`) | D1 (authoritative) + KV (read cache)                           | D1 = truth, KV = edge-local ~10ms reads                                                                                  |
+| Session validity cache                                                                                            | KV                                                             | Hot-path per-request, write-through from D1 on revoke                                                                    |
+| API Key validation cache (hash → `{app_id, environment_id}`/scopes/validity)                                      | KV                                                             | Hot-path per-SDK-call; `environment_id` resolves which Env's config to serve (ADR-0027); write-through from D1 on revoke |
+| Assignment Store (holdover sticky experience)                                                                     | KV (read) + DO (first-touch write)                             | See [assignment-store-substrate.md](./assignment-store-substrate.md)                                                     |
+| Per-App live-update fan-out                                                                                       | DO (one per App, `idFromName(appId)`)                          | Serialized write + WebSocket broadcast                                                                                   |
+| Raw Exposure log (system of record for analysis)                                                                  | Tinybird datasource (append-only)                              | Columnar, unbounded, ELT substrate                                                                                       |
+| First-touch dedup snapshot                                                                                        | Tinybird datasource (Copy Pipe target)                         | Lambda architecture (ADR-0024)                                                                                           |
+| Metric rollup materialized views                                                                                  | Tinybird AggregatingMergeTree MVs (on snapshot, never raw log) | Correctness constraint: raw log has edge duplicates                                                                      |
+| Audit log (who/what/when)                                                                                         | Tinybird datasource                                            | Append-only, unbounded; wrong shape for D1                                                                               |
+| Ops telemetry (request rates, error counts)                                                                       | Analytics Engine                                               | Sampled/lossy by design — fine for non-critical ops metrics                                                              |
 
 ## Critical exclusions
 
@@ -48,8 +48,10 @@ D1 holds bounded mutable records only.
 
 ## Usage counters
 
-High-frequency usage counters (for billing metering) live in a Durable Object counter or Analytics
-Engine. Written to D1 only as periodic rollups. This is a billing-build detail, not re-litigable here.
+Authoritative high-frequency usage counters for billing metering live in an exact Durable Object
+counter and are written to D1 only as periodic rollups. Analytics Engine may mirror usage for
+reporting and forecasting, but it is sampled/lossy and must not be authoritative for quota, debt,
+credit burn, or enforcement. The billing contract is pinned in ADR-0033.
 
 ## Sources
 
