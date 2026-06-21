@@ -67,6 +67,7 @@ detection.
 ```
 packages/
   contracts/           @splitch/contracts           Zod schemas, z.infer types, @hono/zod-openapi routes
+  worker-runtime/      @splitch/worker-runtime      Contract-mounted Hono request guard and shared error/status helpers
   control-plane-sdk/   @splitch/control-plane-sdk   Hono hc transport SDK for control-plane consumers
   sdk/                 @splitch/sdk                 Public JS/TS data-plane SDK package
   ui/                  @splitch/ui                  Design system tokens and primitives
@@ -112,6 +113,17 @@ not collapse them into generic `api` or `edge` Workers during slicing.
 Worker bindings and capability-specific orchestration stay local to the owning Worker. Shared library
 code belongs in `packages/` when it is imported through a stable package API or published as a customer
 SDK. The public seam should stay shallow; the module behind it can be deep.
+
+## Shared Worker runtime guard
+
+`@splitch/worker-runtime` is the shared request guard for Hono-based capability Workers. It consumes
+route contracts from `@splitch/contracts` and mounts handlers through one fixed guard chain for
+request IDs, Zod parsing, principal resolution, scope checks, rate-limit classes, idempotency header
+handling, and canonical `ErrorResponse` rendering.
+
+It does not own domain invariants, storage bindings, Provider reads, Assignment Store orchestration,
+Tinybird queries, MCP protocol handling, or UI data loading. Those stay in the owning capability
+Worker. See [worker-runtime.md](./worker-runtime.md).
 
 ## Two frontend deploy units
 

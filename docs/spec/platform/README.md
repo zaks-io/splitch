@@ -18,6 +18,7 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 | [live-updates-do.md](./live-updates-do.md)                       | Per-App fan-out DO: hibernating WebSocket, write-through, delta-nudge, persisted-before-announced                       |
 | [multi-tenant-isolation.md](./multi-tenant-isolation.md)         | App-enforced `app_id` isolation in D1 (Drizzle seam) and Tinybird (two-seam enforcement)                                |
 | [contracts-and-validation.md](./contracts-and-validation.md)     | Zod-first authoring; package split; KV schema-version envelope; one canonical ErrorResponse                             |
+| [worker-runtime.md](./worker-runtime.md)                         | Shared contract-mounted request guard for auth, scopes, rate limits, idempotency, and error envelopes                   |
 | [monorepo-and-toolchain.md](./monorepo-and-toolchain.md)         | pnpm + Turborepo layout; capability Workers; shared `ui` seam; TanStack Query; cron Workers; StrykerJS policy           |
 | [local-quality-gates.md](./local-quality-gates.md)               | Git hooks, CI-parity pre-push, Biome, TypeScript, Knip, Gitleaks, dependency-cruiser, local validation policy           |
 | [deployment-pipeline.md](./deployment-pipeline.md)               | GitHub Actions on Blacksmith with Turborepo cache; PR CI with Tinybird Local; shared preview; production rollback rules |
@@ -43,6 +44,8 @@ Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcemen
    default; the hosted shared preview target is updated only on maintainer intent.
 10. **Bad commits should fail before they leave the machine.** Commit hooks block format/lint/type
     drift and secret leaks; pre-push mirrors CI except hosted smoke/deploy steps.
+11. **Route contracts are load-bearing.** HTTP routes are mounted through the shared request guard
+    so auth, scopes, rate limits, idempotency, and `ErrorResponse` status mapping cannot drift per Worker.
 
 ## Cross-links
 

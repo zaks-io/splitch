@@ -7,10 +7,12 @@ This file pins the authoring discipline, package split, KV schema-version envelo
 
 ```
 Authored (in tree):       Zod schemas + @hono/zod-openapi route definitions
+                          + route metadata (auth, scopes, rate-limit, idempotency, errors)
                           → z.infer<...>        (TypeScript types, compile-time)
                           → hc<AppType>()       (typed HTTP client, compile-time)
                           → OpenAPI document    (generated at build/runtime, never committed)
                           → MCP tool schemas    (derived at build/startup, never committed)
+                          → @splitch/worker-runtime request guard (runtime enforcement)
 ```
 
 No generated artifact is committed to the repo. Only Zod schemas live in the tree. Agents that
@@ -23,9 +25,23 @@ source-of-truth discipline — the Zod source is the fix target.
 
 - Zod leaf schemas (glossary nouns: `VariantSchema`, `TargetingRuleSchema`, `RunSchema`, ...)
 - `@hono/zod-openapi` route definitions (input + output composed from leaf schemas)
+- Route metadata for runtime enforcement: auth requirement, scopes, rate-limit class,
+  idempotency policy, and allowed error codes
 - `z.infer` types re-exported for consumers
 - Dependencies: `zod`, `@hono/zod-openapi` only
-- Consumers: Worker (validation), `@splitch/control-plane-sdk`, CLI/MCP, control panel, marketing site
+- Consumers: `@splitch/worker-runtime`, capability Workers, `@splitch/control-plane-sdk`, CLI/MCP,
+  control panel, marketing site
+
+**`@splitch/worker-runtime`**
+
+- Contract-mounted Hono request guard
+- Depends on `@splitch/contracts` and Hono runtime types
+- Owns shared request ID, input parsing, auth resolver dispatch, scope/rate-limit/idempotency guard,
+  and canonical `ErrorResponse` status rendering
+- Does not own repositories, storage bindings, domain invariants, Provider logic, Tinybird queries,
+  or MCP protocol handling
+- Consumers: Control Plane API Worker, Evaluation Worker, Event Ingest Worker, Analysis Worker,
+  Auth API Worker
 
 **`@splitch/control-plane-sdk`**
 
@@ -37,6 +53,10 @@ The split keeps schema-only consumers (marketing site, MCP schemas) free of tran
 
 The deletion test passes for both: `contracts` has 4+ real consumers; `control-plane-sdk` has 3+ real
 consumers. Neither is speculative indirection.
+
+`@splitch/worker-runtime` passes a different deletion test: without it, every capability Worker must
+hand-write the same auth/scope/rate-limit/idempotency/error-envelope chain and keep it in sync with
+route metadata. That duplicated guard logic is the tech-debt path this spec rejects.
 
 ## Schema shapes: leaf reuse, distinct envelopes
 
@@ -99,6 +119,21 @@ in production and schedule a KV backfill.
 
 This policy enables rolling upgrades: the writer can bump `schemaVersion` and old readers fall
 back to D1 gracefully, without a synchronized cutover.
+
+## Route metadata as runtime input
+
+A route contract is not documentation for a handler to remember. It is mounted through
+`@splitch/worker-runtime`, which enforces:
+
+- input parsing from the route's Zod schemas
+- auth kind and Worker-provided resolver
+- required scopes and App/Environment co-scope
+- declared rate-limit class
+- idempotency header policy for mutating routes
+- allowed `ErrorCode` values and their shared HTTP status mapping
+
+Adding an endpoint without route metadata is invalid. Adding route metadata that no Worker can mount
+fails during boot or tests. See [worker-runtime.md](./worker-runtime.md).
 
 ## Error shape
 

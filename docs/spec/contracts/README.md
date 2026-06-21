@@ -38,6 +38,8 @@ codes. The spine: one Zod schema per glossary noun, everything else derived from
 - The Control Plane SDK (`@splitch/control-plane-sdk`) wraps Hono's `hc` — type-inferred, zero codegen.
 - MCP tool schemas derive at server startup from the same Zod route definitions.
 - Worker request validation runs the same schemas at the HTTP edge.
+- The shared Worker runtime guard mounts route contracts and enforces auth, scopes, rate limits,
+  idempotency, and `ErrorResponse` status mapping.
 
 No second authored representation of any shape exists anywhere. Adding a field in the leaf-schemas
 files (`leaf-schemas-flag.md`, `leaf-schemas-experiment.md`, `leaf-schemas-runtime.md`) propagates to

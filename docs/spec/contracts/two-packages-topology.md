@@ -25,11 +25,13 @@ free of transport code. (ADR-0025 "two packages".)
 
 **Deletion test (4+ real consumers):**
 
-1. Control Plane API Worker — imports route definitions to mount handlers; uses Zod schemas for
+1. Control Plane API Worker: imports route definitions to mount handlers; uses Zod schemas for
    request validation at the HTTP edge.
-2. MCP server — imports Zod schemas to derive `inputSchema`/`outputSchema` for every tool.
-3. CLI — imports types for type-safe argument construction; imports error schema for error parsing.
-4. Marketing site / docs — imports types for example shapes in documentation; imports no transport.
+2. Worker runtime: imports route definitions plus auth/scope/rate-limit/idempotency metadata to
+   mount a uniform request guard for Hono Workers.
+3. MCP server: imports Zod schemas to derive `inputSchema`/`outputSchema` for every tool.
+4. CLI: imports types for type-safe argument construction; imports error schema for error parsing.
+5. Marketing site / docs: imports types for example shapes in documentation; imports no transport.
 
 ### `@splitch/control-plane-sdk`
 
@@ -58,6 +60,7 @@ for non-browser environments. No other transport frameworks.
 | Consumer                 | Imports from contracts                | Imports from SDK          | Imports Worker directly |
 | ------------------------ | ------------------------------------- | ------------------------- | ----------------------- |
 | Control Plane API Worker | yes (route defs + Zod schemas)        | no (or rarely, self-call) | —                       |
+| Worker runtime           | yes (route defs + guard metadata)     | no                        | no                      |
 | MCP server               | yes (Zod schemas for tool derivation) | yes (API calls)           | no                      |
 | CLI                      | yes (types + error schema)            | yes (API calls)           | no                      |
 | Control panel            | yes (types for forms/display)         | yes (data fetching)       | no                      |
@@ -84,6 +87,8 @@ a committed file that agents or humans would edit.
   Building it would be speculative indirection. (ADR-0025.)
 - No shared MCP tool definition file committed to the repo. MCP schemas derive at startup from
   `@splitch/contracts` schemas. See [mcp-tool-derivation.md](./mcp-tool-derivation.md).
+- No per-Worker hand-written auth/scope/rate-limit/error guard chains. Capability Workers mount
+  route contracts through `@splitch/worker-runtime`; domain invariants still live in the Worker.
 
 ---
 
@@ -92,13 +97,13 @@ a committed file that agents or humans would edit.
 **Port:** `@splitch/contracts` ↔ all consumers.
 **What's on each side:**
 
-- Left (contracts): Zod schemas, inferred types, route definitions. Zero runtime I/O.
+- Left (contracts): Zod schemas, inferred types, route definitions, and guard metadata. Zero runtime I/O.
 - Right (consumers): Workers, servers, CLIs that import and use the schemas.
   **Failure contract:** A schema change that removes a required field fails `tsc` in every consumer
-  that references the field — zero runtime surprises.
-  **Deletion test:** 4 real consumers listed above. Removing `@splitch/contracts` would require
-  hand-writing validation in the Worker, hand-writing types in the CLI, and hand-writing MCP schemas
-  in the MCP server — all three would diverge. The package earns its keep.
+  that references the field; zero runtime surprises.
+  **Deletion test:** 5 real consumers listed above. Removing `@splitch/contracts` would require
+  hand-writing validation and guard metadata in the Worker, hand-writing types in the CLI, and
+  hand-writing MCP schemas in the MCP server. All three would diverge. The package earns its keep.
 
 **Port:** `@splitch/control-plane-sdk` ↔ CLI, MCP server, control panel.
 **What's on each side:**
