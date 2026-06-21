@@ -88,6 +88,31 @@ OpenFeature, which routes side-effecting experiment writes through `track()`, no
 *Evaluation* is the full retrieval of a flag value including hooks and default fallback.
 *Resolution* is the Provider retrieving the value from its source of truth. (Evaluation wraps Resolution.)
 
+### Credential terms (how an SDK authenticates to the data plane — standard public/secret SDK keys)
+
+The standard two-key SDK model, same as every provider (LaunchDarkly, Statsig, the `pk_`/`sk_` shape):
+a **secret API Key** for server-side code, a **public Client Key** for client-side code. Which one you
+use is determined by context — trusted server runtime vs untrusted client. (See ADR-0018.)
+
+**API Key** (Secret / Server API Key):
+The **secret** credential a **server-side SDK** (the customer's own backend, a trusted runtime) presents for
+full data-plane access. Stored as a record (hash, scopes, revoked) and validated per-call in KV (ADR-0018).
+Secret because the runtime holding it is private; **never** shipped to a browser/client. An agent provisions
+and revokes API Keys but **does not read or paste a key's value** (consistent with ADR-0022's secret
+discipline) — it surfaces the key once at creation the way every provider does, then directs the developer
+to where it lives.
+_Avoid_: shipping it client-side; using it as the client-side SDK credential (that's the Client Key)
+
+**Client Key** (Public / Publishable Client Key):
+The **public, non-secret** identifier a **client-side SDK** (browser, mobile, any untrusted runtime) presents.
+**Safe to embed in shipped client code** — public by design. Grants exactly one capability: **evaluate flags
+for its App** for the Targeting Key in the request. It **cannot** read the full flag config / rule set / salt,
+cannot write, cannot mint keys, cannot reach another App. Abuse is bounded at the edge (origin/referrer
+allow-list, rate limiting), not by hiding the value. The control plane (CLI / MCP / agent) **freely retrieves
+and shares** it to wire up a client SDK.
+_Avoid_: treating it as secret (it ships in the browser); using it for server-side full access (that's the
+API Key)
+
 ### Experiment terms (defined by splitch — Flagship & OpenFeature are silent here)
 
 Adopted verbatim from the experimentation industry (Statsig, Eppo, GrowthBook), not invented.
@@ -146,9 +171,12 @@ an Entity's earliest Exposure in a Run is the one that counts, anchoring its Con
 repeat reads, sessions, and edge nodes do not add to the count. The SDK keeps a seen-set as a hot-path
 optimization only — the dedup is authoritative in the pipeline (across five edge runtimes, per-node SDK
 sets cannot be the source of truth). Reading a Variant through the SDK accessor fires the Exposure; a
-distinct, loudly-named "peek without exposing" accessor is the explicit deferral path.
+distinct, loudly-named "peek without exposing" accessor is the explicit deferral path. The control-plane
+**test-evaluation (dry-run)** endpoint is likewise a **non-exposing** path: it resolves a Variant and its
+reason for debugging/verification and records nothing (ADR-0026).
 _Avoid_: impression, view; "grain"/session as the denominator unit (the unit is Entity-per-Run; session
-is a Dimension; "grain" is warehouse-internal language, never domain/SDK)
+is a Dimension; "grain" is warehouse-internal language, never domain/SDK); counting a dry-run/test
+evaluation as an Exposure
 
 **Exposure Pipeline**:
 The path from a raw Exposure firing at the edge to a trustworthy, deduplicated analysis dataset. **ELT, not
@@ -272,6 +300,9 @@ everywhere, never a separate raw-count denominator.
   Organization. Organization is the ownership/account unit; App is the product unit.
 - An **App** owns many **Flags** and hosts many **Experiments**. The five runtimes of one product
   share a single App.
+- An **App** issues two kinds of SDK credential: a secret **API Key** (server-side, full data-plane) and a
+  public **Client Key** (client-side, evaluate-only). The control plane (CLI / MCP / agent) freely shares a
+  Client Key; it provisions/revokes API Keys but never reads an existing key's value.
 - A **Flag** has one or more **Variants**; one is the **Default Variant**.
 - **Targeting** selects a **Variant** using the **Evaluation Context** (keyed by the **Targeting Key**).
 - **Fractional Evaluation** / **Percentage Rollout** splits traffic across **Variants** using the
@@ -318,6 +349,10 @@ everywhere, never a separate raw-count denominator.
 - "Variation" (Flagship) vs "Variant" (OpenFeature) — **resolved**: **Variant** wins because the public
   SDK is OpenFeature-shaped. "Variation" is quarantined to the Flagship adapter, never in SDK/glossary.
 - "Site" (user's first word for the ownership root) — **resolved**: it is Flagship's **App**. Adopt App.
+- "API key" vs "client key" — **resolved**: the standard two-key SDK model. **API Key** = secret,
+  server-side, full data-plane. **Client Key** = public, client-side, evaluate-only. A client-side SDK can't
+  hold a secret (it ships in the browser), so it gets the public Client Key and the endpoint is made safe by
+  edge controls. The agent shares Client Keys; it provisions API Keys but never reads their value.
 
 ## Notes
 

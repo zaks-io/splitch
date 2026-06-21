@@ -7,8 +7,9 @@ relational layer — users, Apps, membership, API keys, billing — without a ho
 **Cloudflare D1**, keeping splitch all-Cloudflare (ADR-0017) and reusing agent-paste's Drizzle
 schema/migration discipline, just pointed at D1 instead of Postgres. The split, by data shape:
 
-- **D1 — the bounded mutable relational system of record.** Users, App, App membership + roles, API
-  keys as records (hash, scopes, revoked), billing (plan/subscription/Stripe linkage). Relational,
+- **D1 — the bounded mutable relational system of record.** Users, App, App membership + roles, SDK
+  credentials as records (hash, scopes, revoked — both the secret **API Key** and the public **Client
+  Key**; see the amendment below), billing (plan/subscription/Stripe linkage). Relational,
   transactional, low-write, single-primary with edge-replicated reads — the exact OLTP shape D1
   serves, and small (megabytes; the unbounded table is routed out, below). Drizzle is the access
   layer.
@@ -68,3 +69,35 @@ requirements harden (see below).
   the billing build, not re-litigable here.)
 - Drizzle schema/migration tooling carries over from agent-paste; only the driver target changes
   (D1, not Postgres).
+
+## Amendment: SDK credentials are two kinds — a secret API Key and a public Client Key
+
+The original "API keys as records" wording named only one credential; an SDK actually needs **two**, the
+standard public/secret split every provider ships (LaunchDarkly client-side ID vs SDK key, Statsig client vs
+server key, the `pk_`/`sk_` shape). Both are D1 records validated per-call in KV; they differ by secrecy,
+capability, and which runtime uses them. The glossary pins the language (CONTEXT.md, *Credential terms*:
+**API Key**, **Client Key**).
+
+- **API Key (secret / server).** For **server-side SDKs** in a trusted runtime. The full-data-plane key the
+  original wording described (hash, scopes, revoked; KV hot-validation). Secret **because the runtime holding
+  it is private**. **Never** shipped client-side.
+- **Client Key (public / publishable).** For **client-side SDKs** (browser, mobile, any untrusted runtime).
+  **Non-secret by design** — shipped in client code. Capability is **evaluate-only, App-scoped**: resolve a
+  flag value for the Targeting Key in the request, nothing more. It **cannot** return the full config / rule
+  set / salt, cannot write, cannot mint keys, cannot reach another App. Blast radius if leaked is "someone
+  evaluates your flags as themselves" — bounded by design. Abuse is contained at the **edge** (origin/referrer
+  allow-list bound to the key, per-key rate limiting via the Cloudflare WAF already in use for ADR-0022's
+  anon-registration surface), **not** by hiding the value.
+
+Two consequences this ADR now pins:
+
+- **The evaluate endpoint must be safe under a public credential.** It returns only the resolved Variant for
+  the requested Targeting Key — never bulk config, the rule set, the salt, or other Entities' assignments.
+  This is a hard endpoint-design constraint, not a policy bolted on later. (The control-plane config-read
+  surface, which *does* return rule sets, is a different surface reached with the control-plane token of
+  ADR-0022, never with a Client Key.)
+- **The agent/control plane (CLI / MCP) freely retrieves and surfaces a Client Key** (it is public). For the
+  secret **API Key** it **provisions and revokes** but **does not read an existing key's value** — it surfaces
+  the secret once at creation, the way every provider does, then directs the developer to where it lives
+  (consistent with ADR-0022's secret discipline). KV validation is identical for both kinds; what differs is
+  secrecy, capability, edge binding, and agent-reachability.
