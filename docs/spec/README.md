@@ -5,8 +5,9 @@ need to read the ADRs to implement. The [ADRs](../adr/) record _why_ each decisi
 the [architecture seam docs](../architecture/) hold the longer design narrative — both are
 referenced from each spec file's `## Sources`, but the spec is what you build against.
 
-- **Glossary / ubiquitous language:** [`../../CONTEXT.md`](../../CONTEXT.md). Use these terms
-  exactly; never invent synonyms.
+- **Context index / ubiquitous language:** [`../../CONTEXT.md`](../../CONTEXT.md). Read it first,
+  then follow the domain-specific context link for the area you are touching. Use these terms exactly;
+  never invent synonyms.
 
 Each area is a directory with a thin `README.md` index and small, single-concern files
 (≤165 lines) so an implementing agent reads only what its ticket touches.
