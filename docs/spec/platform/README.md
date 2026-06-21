@@ -19,6 +19,9 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 | [contracts-and-validation.md](./contracts-and-validation.md) | Zod-first authoring; package split; KV schema-version envelope; one canonical ErrorResponse |
 | [monorepo-and-toolchain.md](./monorepo-and-toolchain.md) | pnpm + Turborepo layout; capability Workers; shared `ui` seam; TanStack Query; cron Workers |
 
+Architecture map: [system-architecture.md](../../architecture/system-architecture.md) lays out the
+Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcement.
+
 ## Key invariants
 
 1. **No separate config-copy seam.** Editing and serving share KV/D1 directly. No cross-system copy.
