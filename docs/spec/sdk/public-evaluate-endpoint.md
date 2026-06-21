@@ -1,7 +1,8 @@
 # Public evaluate endpoint: `POST /evaluate`
 
 The single data-plane endpoint the client-side SDK calls. Safe under a public Client Key:
-returns only the resolved Variant — never config, rules, allocation, or salt (ADR-0018).
+returns the resolved Variant and a **non-revealing** `reason` (OpenFeature `ResolutionDetails`,
+ADR-0036) — never config, rules, allocation, salt, or which rule matched (ADR-0018).
 
 ## Endpoint
 
@@ -17,8 +18,9 @@ Content-Type: application/json
 EvaluateRequest {
   flagKey:           string        -- required; Flag Key unique within the App
   targetingKey:      string        -- required; the Entity identifier (CONTEXT.md: Targeting Key)
-  idType:            string        -- required; the Entity type label (e.g. 'user', 'workspace')
-                                   -- carried through to Exposure row and Assignment Store key
+  idType:            string        -- required on the wire; the Entity type label (e.g. 'user',
+                                   -- 'workspace'); carried through to Exposure row and
+                                   -- Assignment Store key. SDK defaults it to 'user' (see below).
   evaluationContext: {             -- required object; attributes for Targeting Rule evaluation
     targetingKey: string           -- must equal top-level targetingKey (redundant but required
                                    -- for OpenFeature context shape compatibility)
@@ -27,8 +29,13 @@ EvaluateRequest {
 }
 ```
 
-`idType` is a first-class required field (not derived from context) so the Assignment Store
-key `(experiment, idType, targetingKey)` is unambiguous (ADR-0007).
+`idType` is a first-class required field **on the wire** (not derived from context) so the
+Assignment Store key `(experiment, idType, targetingKey)` is unambiguous (ADR-0007). The
+**SDK defaults `idType` to `'user'`** when the caller omits it — the common case buckets on
+users — and it is overridable per call (`evaluate(flagKey, { targetingKey, idType })`). The
+default is applied client-side before the request is sent; the wire contract still requires
+the field. This removes the most common DX paper cut (a hello-world evaluate is `flagKey` +
+`targetingKey`) without weakening the server's disambiguation guarantee.
 
 The **Environment is resolved from the Client Key**, not a request field: a Client Key is per
 `(app_id, environment_id)` (ADR-0027), and the edge reads `environment_id` from the key's validation
@@ -44,11 +51,35 @@ path param could be read as authoritative.
 
 ## Response shape
 
+The response carries the OpenFeature [`ResolutionDetails`](https://openfeature.dev/specification/types/)
+shape (ADR-0036) — never a bare value. Every result is observable and self-explaining; a
+fallback caused by failure is never disguised as a real resolution.
+
 ```
 EvaluateResponse {
-  variant: VariantValue    -- the resolved Variant value for this Entity (see Variant type below)
+  variant:      VariantValue   -- the resolved Variant value for this Entity (see Variant type below)
+  variantName:  string         -- the Variant name (immutable arm label; public-safe)
+  reason:       Reason         -- why this value (NON-REVEALING set under a Client Key, see below)
+  errorCode?:   ErrorCode      -- present only when reason = ERROR (OpenFeature enum)
+  errorMessage?: string        -- present only when reason = ERROR
 }
 ```
+
+`evaluate` (value accessor) unwraps this to `variant`; `evaluateDetails` returns the whole
+shape. See [exposure-accessor.md](./exposure-accessor.md).
+
+### Reason under a public Client Key (ADR-0018, ADR-0036)
+
+A Client Key sees only the **non-revealing** reason set — it never learns _which_ Targeting
+Rule matched, the allocation fraction, or the salt:
+
+```
+Reason = 'SPLIT' | 'DEFAULT' | 'DISABLED' | 'CACHED' | 'STALE' | 'ERROR'
+```
+
+`TARGETING_MATCH` (which names rule-driven resolution) and the rule identity are reserved for
+the API-Key and control-plane tiers (peek, test-eval — ADR-0026, ADR-0037). A rule-driven
+result under a Client Key reports `SPLIT` or `TARGETING_MATCH` **without** naming the rule.
 
 ### Variant value type
 
@@ -90,9 +121,12 @@ SRM-invisible read under a public key is an allocation oracle. This public endpo
 
 - SDK instantiation succeeds immediately; no flag config is fetched at init time.
 - The first `evaluate(flagKey)` call fetches from the endpoint and caches the resolved Variant
-  in memory for subsequent calls within the session/instance.
-- If the endpoint is unreachable and no cached value exists, the SDK returns the
-  **Default Variant** (CONTEXT.md) without firing an Exposure.
+  in memory for subsequent calls within the session/instance (`reason: CACHED` on hits).
+- If the endpoint is unreachable and no cached value exists, the SDK returns the **Default
+  Variant** (CONTEXT.md) with `reason: ERROR` + an `errorCode`, fires **no** Exposure, and
+  emits a loud error log / error hook (ADR-0036). **This is never silent** — the caller can
+  always tell a failure-fallback from a real resolution via `reason`. A degraded-to-default
+  result keeps the customer's app running; a _hidden_ one is forbidden.
 - Single-flag-per-call. Batch evaluation (`evaluateAll`) is deferred; no `/evaluate-batch` endpoint
   is defined.
 
@@ -121,17 +155,30 @@ ErrorResponse {
 }
 ```
 
-| HTTP status | `code`                 | Meaning                                                              |
-| ----------- | ---------------------- | -------------------------------------------------------------------- |
-| 401         | `INVALID_CREDENTIAL`   | Missing, invalid, or revoked Client Key                              |
-| 403         | `APP_MISMATCH`         | Client Key does not belong to the requested appId                    |
-| 404         | `FLAG_NOT_FOUND`       | flagKey does not exist in this App                                   |
-| 422         | `VALIDATION_ERROR`     | Request body failed Zod parse; `details` has field errors            |
-| 429         | `RATE_LIMITED`         | Per-key rate limit exceeded (may be WAF-level)                       |
-| 503         | `PROVIDER_UNAVAILABLE` | Flag config could not be resolved; SDK should return Default Variant |
+| HTTP status | `code`                 | Meaning                                                                         |
+| ----------- | ---------------------- | ------------------------------------------------------------------------------- |
+| 401         | `INVALID_CREDENTIAL`   | Missing, invalid, or revoked Client Key                                         |
+| 403         | `APP_MISMATCH`         | Client Key does not belong to the requested appId                               |
+| 404         | `FLAG_NOT_FOUND`       | flagKey does not exist in this App                                              |
+| 422         | `VALIDATION_ERROR`     | Request body failed Zod parse; `details` has field errors                       |
+| 429         | `RATE_LIMITED`         | Per-key rate limit exceeded (may be WAF-level)                                  |
+| 503         | `PROVIDER_UNAVAILABLE` | Flag config could not be resolved; SDK returns Default Variant, `reason: ERROR` |
 
-On 503 the SDK returns Default Variant and does NOT fire an Exposure. On 404 the SDK
-returns Default Variant and does NOT fire an Exposure (the Flag may not exist yet).
+**Failure (loud) vs. legitimate default (normal), per ADR-0036:**
+
+- **503 `PROVIDER_UNAVAILABLE`** and network/parse errors are _failures_: the SDK returns the
+  Default Variant with `reason: ERROR` + `errorCode`, fires no Exposure, and logs loudly. Not
+  silent.
+- **404 `FLAG_NOT_FOUND`** is a _failure_ too (a flagKey that does not exist is a setup bug,
+  not a normal value): `reason: ERROR`, `errorCode: FLAG_NOT_FOUND`, no Exposure, loud.
+- A flag that **exists but is disabled** or **has no Configuration in this Environment**, or
+  whose targeting produced **no match**, is a legitimate resolution: the SDK returns the
+  Default Variant with `reason: DISABLED` / `DEFAULT` (not `ERROR`) and the dev still learns
+  why. These are normal, not alarmist.
+
+`errorCode` uses the OpenFeature standard enum (`PROVIDER_NOT_READY`, `FLAG_NOT_FOUND`,
+`PARSE_ERROR`, `TYPE_MISMATCH`, `TARGETING_KEY_MISSING`, `INVALID_CONTEXT`, `PROVIDER_FATAL`,
+`GENERAL`), mapped from the HTTP `ErrorResponse.code` at the SDK boundary.
 
 ## Seam contract
 
@@ -139,8 +186,10 @@ returns Default Variant and does NOT fire an Exposure (the Flag may not exist ye
 - **Left side:** SDK HTTP client (presents Client Key in Authorization header)
 - **Right side:** Worker that validates credential, loads Provider config + Assignment Store
   holdover, calls `assign()`, fires Exposure, returns Variant value
-- **Failure contract:** credential invalid → 401; flag missing → 404 + Default Variant;
-  Provider unreachable → 503 + Default Variant; no distributed transaction (ADR-0006)
+- **Failure contract (fail-loud, ADR-0036):** credential invalid → 401; flag missing → 404 +
+  Default Variant with `reason: ERROR`; Provider unreachable → 503 + Default Variant with
+  `reason: ERROR`. Every failure-fallback carries `reason: ERROR` + `errorCode` and is
+  logged loudly — never a silent default. No distributed transaction (ADR-0006).
 - **Idempotency:** read-only except for the Exposure side effect; retrying a failed call may
   produce a duplicate raw Exposure row, which is correct (at-least-once, pipeline deduplicates)
 
@@ -150,3 +199,5 @@ returns Default Variant and does NOT fire an Exposure (the Flag may not exist ye
 - [ADR-0018](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [ADR-0025](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [ADR-0036](../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md) — fail-loud, ResolutionDetails, idType default
+- [ADR-0037](../../adr/0037-client-side-configuration-verification-tiered-by-credential.md) — tiered verification

@@ -1,25 +1,38 @@
-# Exposure firing and SDK accessor contract
+# Exposure firing and evaluate-path accessor contract
 
 Reading a Variant through the SDK fires an Exposure as a side effect. Deferral is a
 distinct, loudly-named accessor. There is no middle path — no boolean flag to suppress
 Exposure, no forget-to-fire footgun.
 
-## Two accessors (no others)
+This file describes the **evaluate-path** side of the seam (Exposure assembly, holdover
+short-circuit, the internal `EvaluateResult` that carries `liveRunId`/`isHoldover`). The
+**public SDK accessor surface** — exact method names, the OpenFeature `ResolutionDetails`
+return shape, the fail-loud failure contract, `evaluateDetails`, and `verify` — is owned by
+[../sdk/exposure-accessor.md](../sdk/exposure-accessor.md). Names here match that file
+verbatim (one name per concept, no synonyms).
+
+## Accessors
 
 ```
 // Evaluates the Flag and fires an Exposure as a side effect.
 // SAFE DEFAULT. Use unless you specifically intend to defer.
-sdk.evaluate(flagKey: string, context: EvaluationContext): EvaluateResult
+sdk.evaluate(flagKey, context)          -> VariantValue        (fires Exposure)
+sdk.evaluateDetails(flagKey, context)   -> ResolutionDetails   (fires Exposure; ADR-0036)
 
-// Evaluates the Flag and returns the Variant WITHOUT firing an Exposure.
-// EXPLICIT DEFERRAL. Use only when the Entity has not yet encountered the Variant
-// (e.g. below-the-fold UI rendered later; the exposure fires when it renders).
-sdk.peek(flagKey: string, context: EvaluationContext): EvaluateResult
+// Resolve WITHOUT firing an Exposure. Distinct method names, never a parameter on evaluate().
+sdk.peekVariant(flagKey, context)       -> VariantValue        (API Key only; ADR-0034)
+sdk.verify(flagKey, context)            -> ResolutionDetails   (setup confirmation; ADR-0037)
 ```
 
-`peek()` is a distinct method name, not a parameter on `evaluate()`. Naming must prevent
-conflation. A `{ withoutExposure: true }` boolean option is rejected — it is the
-suppressible-flag footgun ADR-0004 designed out.
+Internally each returns an `EvaluateResult` (carrying `liveRunId`, `isHoldover`, the resolved
+Variant, and the `reason`); the public value accessors unwrap it. `peekVariant`/`verify` are
+distinct method names, not a parameter on `evaluate()`. A `{ withoutExposure: true }` boolean
+option is rejected — it is the suppressible-flag footgun ADR-0004 designed out.
+
+**Fail-loud (ADR-0036):** on a resolution _failure_ (provider unreachable, KV miss, network),
+`evaluate()` returns the Default Variant with `reason: ERROR` + `errorCode`, fires no Exposure,
+and logs loudly — never a silent default. A disabled / no-config / no-match flag is a normal
+`DISABLED`/`DEFAULT`, not an error. See [../sdk/exposure-accessor.md](../sdk/exposure-accessor.md).
 
 ## Exposure fires on read
 
@@ -82,7 +95,7 @@ fire under the new Run.
 
 ## Peek: no Exposure, no Assignment Store write
 
-`sdk.peek()` returns the same `EvaluateResult` as `sdk.evaluate()` but fires nothing:
+`sdk.peekVariant()` returns the same resolved Variant as `sdk.evaluate()` but fires nothing:
 
 - No Exposure event queued.
 - No Assignment Store write (pipeline does not receive anything to trigger `put()`).
@@ -90,8 +103,7 @@ fire under the new Run.
 - If peeked many times, no cumulative state is built up.
 
 A peeked Entity who later encounters the Variant via a real page render should call
-`sdk.evaluate()` at that point (or the component should fire the Exposure via a dedicated
-`sdk.recordExposure()` helper).
+`sdk.evaluate()` at that point, which fires the Exposure then.
 
 ## Pipeline first-touch write
 
@@ -109,19 +121,22 @@ not blocked on DO commit.
 
 ## Seam boundary
 
-**What's on this side (SDK accessor):** `evaluate()` / `peek()` method surface; Exposure
-event assembly; seen-set optimization; holdover short-circuit.
+**What's on this side (SDK accessor):** `evaluate()` / `peekVariant()` / `verify()` method
+surface; Exposure event assembly; seen-set optimization; holdover short-circuit.
 
 **What's NOT here:** dedup logic (pipeline), first-touch write (pipeline via DO), rule
 matching (evaluate path).
 
-**No superposition:** `evaluate()` always fires Exposure (unless holdover). `peek()` never
-fires. There is no third state. A caller cannot accidentally skip Exposure on the
-`evaluate()` path.
+**No superposition:** `evaluate()` always fires Exposure (unless holdover). `peekVariant()` and
+`verify()` never fire. There is no third state. A caller cannot accidentally skip Exposure on
+the `evaluate()` path.
 
 ## Sources
 
 - [../../adr/0004-exposure-fires-on-read.md](../../adr/0004-exposure-fires-on-read.md)
 - [../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md](../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md](../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md)
+- [../../adr/0037-client-side-configuration-verification-tiered-by-credential.md](../../adr/0037-client-side-configuration-verification-tiered-by-credential.md)
+- [../sdk/exposure-accessor.md](../sdk/exposure-accessor.md) — canonical public accessor surface
 - [../../architecture/assignment-exposure-seam.md](../../architecture/assignment-exposure-seam.md) (decision 3, Exposure definition)

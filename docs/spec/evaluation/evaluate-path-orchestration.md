@@ -71,9 +71,12 @@ EvaluateResult {
 ```
 
 The internal resolution reason uses the discriminated union defined in
-[test-evaluation-endpoint.md](./test-evaluation-endpoint.md). The data-plane SDK response does not
-return it, but test-evaluation exposes it by sharing the same Provider, holdover-detection, and
-`assign()` logic without re-implementation or write-side effects.
+[test-evaluation-endpoint.md](./test-evaluation-endpoint.md). The data-plane SDK response returns
+only the **non-revealing** OpenFeature `reason` (`SPLIT`/`DEFAULT`/`DISABLED`/`CACHED`/`STALE`/
+`ERROR`) — never which rule matched (ADR-0018, ADR-0036). The full rule-naming reason is exposed
+only by test-evaluation (control-plane) and the API-Key `verify` tier (ADR-0037), which share the
+same Provider, holdover-detection, and `assign()` logic without re-implementation or write-side
+effects.
 
 `isHoldover` and `priorRunId` are present on the replay path so callers (SDK, Exposure
 pipeline) can distinguish replay from fresh assignment without inspecting the Variant name.

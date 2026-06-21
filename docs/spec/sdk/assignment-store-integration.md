@@ -51,9 +51,11 @@ even if the new Run's salt differs.
 ## idType cardinality: why it is a required request field
 
 The Assignment Store key includes `idType` to guard against Targeting Key value collisions
-across Entity types (e.g., a `session` id that happens to equal a `user` id). The SDK
-carries `idType` from the `EvaluateRequest` through to the `getAll` call without deriving
-or defaulting it (ADR-0007).
+across Entity types (e.g., a `session` id that happens to equal a `user` id). It is a
+**required field on the wire** (`EvaluateRequest`), carried through to the `getAll` call; the
+Worker neither derives nor defaults it (ADR-0007). The SDK client applies a `'user'` default
+**before** assembling the request when the caller omits `idType` (ADR-0036), so the wire field
+is always populated — the defaulting is a client ergonomic, not a server behavior.
 
 An Experiment pins one idType at Run creation. The SDK presents the idType the caller
 provided; the Worker validates it matches the Experiment's pinned idType and returns a

@@ -68,38 +68,88 @@ For ID-JAG path:
 **One credential per principal** (not per App). App scope is carried in the token's `scopes` claim,
 not in separate credential files.
 
+### Active context (which App / Environment to target)
+
+Credentials are one-per-principal; **context** is the orthogonal "which App and Environment am I
+operating on" selection, so `--app`/`--env` are not retyped on every command. This is a pure DX
+convenience over the same endpoints — it changes which IDs the skin fills in, never authorization
+(the token's scopes still gate every call).
+
+Resolution order for `app_id` / `environment_id`, first match wins:
+
+1. Explicit `--app` / `--env` flag on the command (always wins; the override)
+2. `SPLITCH_APP` / `SPLITCH_ENV` environment variable
+3. `.splitch/config.json` discovered by walking up from the cwd (nearest wins), then `~/.splitch/config.json`
+4. If still unresolved and the command needs it: **fail loud** with a message naming the missing
+   scope and how to set it (`splitch use ...` / `--app`), never a silent guess or a default to an
+   arbitrary App.
+
+```json
+// .splitch/config.json (project-local; safe to commit — holds IDs/slugs, never credentials)
+{ "version": 1, "app": "app_...", "environment": "env_..." }
+```
+
+```
+splitch use --app <app_id|slug> [--env <environment_id|slug>]   # writes nearest .splitch/config.json
+splitch use --env <environment_id|slug>                          # switch Environment within the current App
+splitch context                                                  # print the resolved app/env and where each came from
+```
+
+`splitch use` accepts slugs (human/agent-readable) and resolves them to canonical IDs (CONTEXT.md:
+slugs for URLs, IDs canonical in storage). It never stores credentials — only the target selection.
+
+**MCP active context.** The MCP server carries the active App/Environment in the **transport
+session** (alongside the token, which already lives there — line above). A `context_use` tool sets
+it; subsequent tool calls inherit `app_id`/`environment_id` from the session unless the call passes
+them explicitly. This is what stops an agent from re-passing full scope on every tool call. The
+session context is never persisted server-side beyond the session and never widens token scope.
+
 **Auto-refresh on 401:** CLI exchanges refresh token or identity_assertion for a new access token
 silently. Only prompts for re-login if the refresh fails (expired refresh token or revoked assertion).
 On re-login for device flow, CLI outputs the verification URL and polls until approved.
 
 ### Command structure (illustrative; mirrors endpoint inventory)
 
+`--app` / `--env` below are shown for completeness; with an active context set (`splitch use`,
+`SPLITCH_APP`/`SPLITCH_ENV`, or `.splitch/config.json`) they are **optional** and only needed to
+override. Flags that resolve from context are marked `[ctx]`.
+
 ```
 splitch login                        # device flow; writes to credential store
 splitch logout                       # revokes token; removes credential file entry
+splitch use --app <app|slug> [--env <env|slug>]   # set active context (writes .splitch/config.json)
+splitch context                                    # show resolved app/env and source
 splitch orgs get <org_id>
 splitch apps list --org <org_id>
-splitch apps create --org <org_id> --name <name>
-splitch envs list --app <app_id>
-splitch envs create --app <app_id> --name <name>
-splitch flags list --app <app_id>
-splitch flags create --app <app_id> --key <key> ...                       # App-level definition
-splitch flags promote --app <app_id> --env <environment_id> <flag_id>     # move Flag Configuration into an Env (ADR-0028)
-splitch env-policy get --app <app_id> --env <environment_id>
-splitch env-policy set --app <app_id> --env <environment_id> ...          # per-change-type confirm gates (ADR-0029)
-splitch experiments create --app <app_id> --env <environment_id> ...
-splitch experiments start --app <app_id> --env <environment_id> <experiment_id>
-splitch runs end --app <app_id> --env <environment_id> <run_id>
-splitch flags test-eval --app <app_id> --env <environment_id> <flag_id> --targeting-key <key> [--context-json <json>]
-splitch client-key get --app <app_id> --env <environment_id>
-splitch api-keys create --app <app_id> --env <environment_id>
-splitch api-keys revoke --app <app_id> --env <environment_id> <key_id>
+splitch apps create --org <org_id> --name <name>   # provisions dev + prod Environments (DX default)
+splitch envs list [--app <app_id>]                  # [ctx]
+splitch envs create [--app <app_id>] --name <name>  # [ctx]
+splitch flags list [--app <app_id>]                 # [ctx]
+splitch flags create [--app <app_id>] --key <key> ...                       # [ctx] App-level definition
+splitch flags promote [--app <app_id>] [--env <environment_id>] <flag_id>   # [ctx] move Flag Configuration into an Env (ADR-0028)
+splitch env-policy get [--app <app_id>] [--env <environment_id>]            # [ctx]
+splitch env-policy set [--app <app_id>] [--env <environment_id>] ...        # [ctx] per-change-type confirm gates (ADR-0029)
+splitch experiments create [--app <app_id>] [--env <environment_id>] ...    # [ctx]
+splitch experiments start [--app <app_id>] [--env <environment_id>] <experiment_id>  # [ctx]
+splitch runs end [--app <app_id>] [--env <environment_id>] <run_id>         # [ctx]
+splitch flags test-eval [--app <app_id>] [--env <environment_id>] <flag_id> --targeting-key <key> [--context-json <json>]  # [ctx] control-plane, full reason
+splitch flags verify [--app <app_id>] [--env <environment_id>] <flag_id> --targeting-key <key> [--context-json <json>]     # [ctx] setup confirmation (ADR-0037)
+splitch client-key get [--app <app_id>] [--env <environment_id>]            # [ctx]
+splitch api-keys create [--app <app_id>] [--env <environment_id>]           # [ctx]
+splitch api-keys revoke [--app <app_id>] [--env <environment_id>] <key_id>  # [ctx]
 ```
 
 One command per endpoint. No composite multi-step commands unless agent ergonomics demand them.
 Experiments, Experiment Runs, and SDK credentials are per-Environment (ADR-0027), so their commands
-carry `--env`; Flag definition, Environment CRUD, and policy reads are App/Env scoped accordingly.
-Environment-level writes that the Environment Policy gates may require a `--confirm` flag (ADR-0029).
+need an Environment (from `[ctx]` or `--env`); Flag definition, Environment CRUD, and policy reads
+are App/Env scoped accordingly. Environment-level writes that the Environment Policy gates may
+require a `--confirm` flag (ADR-0029).
+
+**Output and scripting:** every command accepts `--json` for machine-readable output (the same
+shape the MCP tool returns), so the CLI is pipe-able and an agent shelling out to the CLI parses one
+contract. Default output is human-formatted (tables, exit codes). When a required scope is
+unresolved, the CLI fails loud with the exact `splitch use` / `--app` remedy — never a silent
+default.
 
 ## MCP server
 

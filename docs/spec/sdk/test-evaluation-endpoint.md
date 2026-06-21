@@ -4,17 +4,27 @@ Resolves a Variant and its reason without firing an Exposure. Used by CLI/MCP/ag
 pre-deploy verification and by humans for debugging. Categorically NOT the data-plane
 evaluate endpoint (ADR-0026).
 
-## Categorical distinction from `POST /evaluate`
+## Three verification tiers (ADR-0037)
 
-| Property                   | `POST /evaluate` (data plane) | `POST /test-eval` (control plane)            |
-| -------------------------- | ----------------------------- | -------------------------------------------- |
-| Credential                 | Client Key (public)           | Control-plane token (ADR-0022)               |
-| Fires Exposure             | Yes (structural)              | Never (structural)                           |
-| Returns reason             | No (ADR-0018)                 | Yes                                          |
-| Reads holdover             | Yes                           | Yes, read-only diagnostic                    |
-| Writes to Assignment Store | Via pipeline                  | Never                                        |
-| Counts in Run denominator  | Yes                           | Never                                        |
-| Use case                   | Production SDK calls          | Debugging, CLI verify step, agent pre-deploy |
+There are three non-production ways to confirm a Flag resolves, tiered by credential. This file
+specifies the richest tier (`test-eval`, control-plane); the lower tiers (`verify`) are summarized
+below and detailed in [exposure-accessor.md](./exposure-accessor.md) and
+[credentials-and-keys.md](../control-plane/credentials-and-keys.md).
+
+| Property                   | `POST /evaluate` (data plane) | `POST /verify` (data plane, ADR-0037)              | `POST /test-eval` (control plane)            |
+| -------------------------- | ----------------------------- | -------------------------------------------------- | -------------------------------------------- |
+| Credential                 | Client Key (public)           | Client Key **or** API Key                          | Control-plane token (ADR-0022)               |
+| Fires Exposure             | Yes (structural)              | Never (structural)                                 | Never (structural)                           |
+| Returns reason             | Non-revealing set (ADR-0036)  | Non-revealing under Client Key; full under API Key | Full reason incl. rule identity              |
+| Reads holdover             | Yes                           | Yes, read-only                                     | Yes, read-only diagnostic                    |
+| Writes to Assignment Store | Via pipeline                  | Never                                              | Never                                        |
+| Counts in Run denominator  | Yes                           | Never                                              | Never                                        |
+| Use case                   | Production SDK calls          | In-app / SDK-credential setup confirmation         | Debugging, CLI verify step, agent pre-deploy |
+
+`verify` exists so a developer or agent can confirm setup **with the credential their code holds**,
+from where their code runs — without a control-plane token and without polluting analysis. The
+public tier reveals nothing reverse-engineerable (ADR-0018); reason detail scales up with
+credential trust.
 
 Exposure-free is **structural** at the endpoint level — the Worker code path from
 `/test-eval` is wired to no write path (no Exposure log append, no DO call).
@@ -140,3 +150,5 @@ resolves as expected.
 - [ADR-0018](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [ADR-0025](../../adr/0025-zod-first-contract-hono-openapi-hc-client-derived-everywhere.md)
 - [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [ADR-0036](../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md)
+- [ADR-0037](../../adr/0037-client-side-configuration-verification-tiered-by-credential.md)

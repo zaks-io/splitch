@@ -55,6 +55,8 @@ ErrorCode =
   | 'CREDENTIAL_REVOKED'          // presented credential is revoked
   | 'INSUFFICIENT_SCOPES'         // credential valid but lacks required scopes
   | 'FORBIDDEN'                   // authenticated but not authorized for the resource
+  | 'ORIGIN_NOT_ALLOWED'         // valid Client Key, request origin not on the key's allow-list (ADR-0034)
+  | 'APP_MISMATCH'               // Client Key does not belong to the requested appId (ADR-0018)
   | 'LAST_OWNER_REQUIRED'         // deletion would leave a shared Org without an owner
   | 'PRIVACY_CONFIRMATION_REQUIRED' // destructive privacy job lacks confirmation
 
@@ -71,27 +73,29 @@ ErrorCode =
 
 ## Per-code detail shapes
 
-| code                            | details shape                                                                                              |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `VALIDATION_ERROR`              | `{ issues: Array<{ path: string[], message: string }> }` — Zod `.format()` output                          |
-| `ALLOCATION_INVALID`            | `{ expected: 100, got: number, variantAllocations: Record<string, number> }`                               |
-| `ACTIVATION_TIMESTAMP_INVALID`  | `{ activationTs: string, firstExposureTs: string, message: 'activation must occur after first exposure' }` |
-| `INVALID_PAGINATION`            | `{ field: 'cursor' \| 'limit', reason: string }`                                                           |
-| `INVALID_SORT`                  | `{ field: string, allowedFields: string[] }`                                                               |
-| `RUN_FROZEN`                    | `{ frozenFields: string[], currentRunId: string, attemptedChange: string }`                                |
-| `DECISION_LOCKED`               | `{ lockedFields: string[], currentRunId: string, attemptedChange: string }`                                |
-| `TARGETING_KEY_MISMATCH`        | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string }`                     |
-| `INSUFFICIENT_SCOPES`           | `{ requiredScopes: string[], heldScopes: string[] }`                                                       |
-| `LAST_OWNER_REQUIRED`           | `{ orgId: string }`                                                                                        |
-| `PRIVACY_CONFIRMATION_REQUIRED` | `{ confirmationRequired: true, confirmationExpiresAt: string }`                                            |
-| `PRIVACY_JOB_FAILED`            | `{ requestId: string, failedStores: string[] }`                                                            |
-| `MULTIPLE_VARIANT_CONFLICT`     | `{ experimentId: string, runId: string, idType: string, targetingKeyHash: string }`                        |
-| `RATE_LIMITED`                  | `{ retryAfterMs: number }`                                                                                 |
-| All `*_NOT_FOUND` codes         | `{}`                                                                                                       |
-| `UNAUTHORIZED`                  | `{}`                                                                                                       |
-| `CREDENTIAL_REVOKED`            | `{}`                                                                                                       |
-| `FORBIDDEN`                     | `{}`                                                                                                       |
-| `INTERNAL_SERVER_ERROR`         | `{}`                                                                                                       |
+| code                            | details shape                                                                                               |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_ERROR`              | `{ issues: Array<{ path: string[], message: string }> }` — Zod `.format()` output                           |
+| `ALLOCATION_INVALID`            | `{ expected: 100, got: number, variantAllocations: Record<string, number> }`                                |
+| `ACTIVATION_TIMESTAMP_INVALID`  | `{ activationTs: string, firstExposureTs: string, message: 'activation must occur after first exposure' }`  |
+| `INVALID_PAGINATION`            | `{ field: 'cursor' \| 'limit', reason: string }`                                                            |
+| `INVALID_SORT`                  | `{ field: string, allowedFields: string[] }`                                                                |
+| `RUN_FROZEN`                    | `{ frozenFields: string[], currentRunId: string, attemptedChange: string }`                                 |
+| `DECISION_LOCKED`               | `{ lockedFields: string[], currentRunId: string, attemptedChange: string }`                                 |
+| `TARGETING_KEY_MISMATCH`        | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string }`                      |
+| `INSUFFICIENT_SCOPES`           | `{ requiredScopes: string[], heldScopes: string[] }`                                                        |
+| `LAST_OWNER_REQUIRED`           | `{ orgId: string }`                                                                                         |
+| `PRIVACY_CONFIRMATION_REQUIRED` | `{ confirmationRequired: true, confirmationExpiresAt: string }`                                             |
+| `PRIVACY_JOB_FAILED`            | `{ requestId: string, failedStores: string[] }`                                                             |
+| `MULTIPLE_VARIANT_CONFLICT`     | `{ experimentId: string, runId: string, idType: string, targetingKeyHash: string }`                         |
+| `RATE_LIMITED`                  | `{ retryAfterMs: number }`                                                                                  |
+| `ORIGIN_NOT_ALLOWED`            | `{ origin: string, hint: string }` — names the offending origin + how to fix (add to allow-list / open key) |
+| `APP_MISMATCH`                  | `{}`                                                                                                        |
+| All `*_NOT_FOUND` codes         | `{}`                                                                                                        |
+| `UNAUTHORIZED`                  | `{}`                                                                                                        |
+| `CREDENTIAL_REVOKED`            | `{}`                                                                                                        |
+| `FORBIDDEN`                     | `{}`                                                                                                        |
+| `INTERNAL_SERVER_ERROR`         | `{}`                                                                                                        |
 
 ---
 
@@ -153,8 +157,13 @@ frozenFields = [
 
 **POST /api/sdk/evaluate** (data-plane, Client Key)
 
-- `APP_NOT_FOUND` / `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED`
-  — Note: no `RUN_FROZEN`, no `INSUFFICIENT_SCOPES` (Client Key holds only `evaluate`, enforced structurally); response is bare `{ variant: VariantValue }`, never reason or rule set.
+- `APP_NOT_FOUND` / `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `APP_MISMATCH` / `ORIGIN_NOT_ALLOWED` / `RATE_LIMITED`
+  — Note: no `RUN_FROZEN`, no `INSUFFICIENT_SCOPES` (Client Key holds only `evaluate`, enforced structurally). Response is the OpenFeature `ResolutionDetails` shape (`value`, `variantName`, `reason`, `errorCode?`, `errorMessage?`) — the `reason` is the **non-revealing** set under a Client Key and never names the matched rule (ADR-0018, ADR-0036). A failure-fallback carries `reason: ERROR` + `errorCode`, never silent.
+
+**POST /api/sdk/verify** (data-plane setup confirmation, Client Key or API Key — ADR-0037)
+
+- `APP_NOT_FOUND` / `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `APP_MISMATCH` / `ORIGIN_NOT_ALLOWED` / `RATE_LIMITED`
+  — Note: never fires an Exposure. Returns `ResolutionDetails`; under a Client Key the `reason` is the non-revealing set (never names the rule), under an API Key it returns the full reason. Fail-loud like evaluate.
 
 ---
 
@@ -164,7 +173,7 @@ frozenFields = [
 | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | `VALIDATION_ERROR`, `ALLOCATION_INVALID`, `ACTIVATION_TIMESTAMP_INVALID`, `INVALID_*`                                                          | 400         |
 | `UNAUTHORIZED`                                                                                                                                 | 401         |
-| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`                                                                                       | 403         |
+| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`, `ORIGIN_NOT_ALLOWED`, `APP_MISMATCH`                                                 | 403         |
 | `*_NOT_FOUND`                                                                                                                                  | 404         |
 | `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED` | 409         |
 | `RATE_LIMITED`                                                                                                                                 | 429         |
@@ -179,4 +188,6 @@ frozenFields = [
 - [../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md](../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
+- [../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md](../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md)
+- [../../adr/0037-client-side-configuration-verification-tiered-by-credential.md](../../adr/0037-client-side-configuration-verification-tiered-by-credential.md)
 - [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)

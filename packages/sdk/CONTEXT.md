@@ -41,6 +41,24 @@ The object carrying the Targeting Key and attributes used for Targeting.
 Evaluation is the SDK-facing flag value retrieval, including hooks and fallback. Resolution is the
 Provider retrieving a value from its source of truth.
 
+**Resolution Details**:
+The OpenFeature result shape every accessor speaks: `value`, `variantName`, `reason`,
+`errorCode?`, `errorMessage?`. `evaluate` returns the value; `evaluateDetails` returns the full
+shape. `reason` and `errorCode` use the OpenFeature standard enums. See ADR-0036.
+
+**Reason**:
+Why an evaluation produced its value (`SPLIT`, `TARGETING_MATCH`, `DEFAULT`, `DISABLED`,
+`CACHED`, `STALE`, `ERROR`). Under a Client Key it is the non-revealing subset and never names
+the matched rule (ADR-0018). `TARGETING_MATCH` + rule identity are API-Key / control-plane only.
+
+**idType**:
+The Entity type label (`'user'`, `'workspace'`, ...). Required on the wire; the SDK defaults it
+to `'user'` and lets the caller override it. See ADR-0036.
+
+**Verify**:
+The non-exposing "is my setup correct" accessor. Available on every credential tier; what it
+reveals scales with credential trust (ADR-0037). Distinct from peek (API-Key-only).
+
 **Assignment**:
 The pure deterministic selection of a Variant for an Entity in an Experiment Run. Assignment is not an
 event.
@@ -60,6 +78,9 @@ A non-exposing evaluation path used for debugging and verification. It records n
 - The SDK seen-set is a hot-path optimization only. Pipeline dedup is authoritative.
 - Reading through the exposing accessor fires Exposure.
 - Peeking must be explicit and loudly named.
+- Evaluation is **fail-loud**: a failure-fallback to the Default Variant always carries
+  `reason: ERROR` + `errorCode` and a loud log/hook, never a silent default (ADR-0036). A
+  disabled / no-config / no-match flag is a normal `DEFAULT`/`DISABLED`, not an error.
 
 ## Example dialogue
 

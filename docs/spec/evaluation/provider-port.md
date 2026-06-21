@@ -107,14 +107,18 @@ Evaluation bucketing, holdover replay, Exposure firing.
 each returns the same FlagConfig shape. The evaluate path's rule-matching logic is
 Provider-agnostic. Seam is real.
 
-**Failure contract:** If Provider.getExperiment() or getFlag() throws (network error, KV
-miss), the evaluate path returns the Default Variant. No Exposure is fired on a Provider
-error. The error is logged (fail-loud principle).
+**Failure contract (fail-loud, ADR-0036):** If Provider.getExperiment() or getFlag() throws
+(network error, KV miss), the evaluate path returns the Default Variant \*\*with `reason: ERROR`
+
+- an `errorCode`\** and fires no Exposure. The error is logged loudly — the failure is always
+  observable in the result, never a silent default. (A *disabled\* flag, by contrast, is a
+  legitimate `reason: DISABLED`, not an error.)
 
 ## Sources
 
 - [../../adr/0007-assignment-store-is-a-sibling-seam-not-behind-the-provider.md](../../adr/0007-assignment-store-is-a-sibling-seam-not-behind-the-provider.md)
 - [../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md](../../adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md)
+- [../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md](../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md)
 - [../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md](../../adr/0019-control-plane-live-updates-over-hibernating-websocket-delta-nudge-tanstack-query-store.md)
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md](../../adr/0028-variant-catalog-is-app-level-availability-is-per-environment-promotion-moves-config.md)

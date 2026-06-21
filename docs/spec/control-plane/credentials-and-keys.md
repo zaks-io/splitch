@@ -122,14 +122,28 @@ layered, not either/or: rate limiting bounds volume, origin/referrer bounds reac
   spend another's budget.
 - **Origin/referrer check:** if `origin_allowlist` is non-null, requests must match. New keys are
   origin-closed by default (see the origin-closed note above) — allow-all is an explicit, loud choice.
+  **An origin-blocked request fails loud, not generic (DX).** When a valid Client Key is rejected only
+  because the request origin is not on its allow-list, the response is a distinct, self-explaining
+  `403 ORIGIN_NOT_ALLOWED` carrying the offending origin in `details` (`{ origin, hint:
+"add this origin to the Client Key allow-list or open the key" }`) — not an undistinguished WAF 403.
+  This closes the "origin-closed key silently fails until deploy" trap: the developer sees exactly why
+  and how to fix it. The detail is safe to reveal (the caller already knows its own origin); it leaks
+  no config, rules, or allocation. Where the WAF blocks before the Worker, the WAF response uses the
+  same `ORIGIN_NOT_ALLOWED` code so both layers read identically (ADR-0036 fail-loud spirit).
 - **Public evaluate surface:** progressive WAF rate-limit rules (challenge before block) layered over the
   per-key counter.
 - **Anonymous registration endpoint:** Cloudflare **Turnstile** (challenge before any row is created,
   verified server-side via siteverify, single-use, 300s token) **plus** a **global** WAF rate limit, in
   addition to the per-IP limit — per-IP alone is defeated by IP rotation (see [auth-doors.md](auth-doors.md)).
 - **Peek is not a Client Key surface (ADR-0034):** `peekVariant` requires an API Key, not a Client Key —
-  see [../sdk/exposure-accessor.md](../sdk/exposure-accessor.md). The public Client Key's only capability
+  see [../sdk/exposure-accessor.md](../sdk/exposure-accessor.md). The Client Key's evaluation capability
   is Exposure-bearing `evaluate`.
+- **Verify is a Client Key surface (ADR-0037):** the non-exposing setup-confirmation path `/verify` IS
+  available under a Client Key, because it reveals nothing beyond what `evaluate` already returns (the
+  Variant value + a non-revealing `reason`) and never names the matched rule (ADR-0018). It is
+  rate-limited and origin-bound exactly like `evaluate`, so it is not an allocation oracle (unlike a
+  silent peek). Under an API Key, `/verify` returns the full resolution reason. See
+  [../sdk/exposure-accessor.md](../sdk/exposure-accessor.md) and ADR-0037.
 - Mechanism throughout: Cloudflare WAF / rate-limiting rules / Turnstile (ADR-0017, all-Cloudflare).
 
 ## Sources
@@ -138,3 +152,5 @@ layered, not either/or: rate limiting bounds volume, origin/referrer bounds reac
 - [../../adr/0027-environment-is-a-first-class-axis-under-app.md](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md](../../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md)
 - [../../adr/0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md](../../adr/0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md)
+- [../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md](../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md)
+- [../../adr/0037-client-side-configuration-verification-tiered-by-credential.md](../../adr/0037-client-side-configuration-verification-tiered-by-credential.md)

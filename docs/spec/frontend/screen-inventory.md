@@ -289,26 +289,70 @@ defaults to all-`allow`; prod defaults to `confirm` on production-affecting rows
 "prod is more careful" is configured — structural and per-env, not a hardcoded special case. The
 kill-switch-off is shown as **never gated** (incident control always wins) and is not an editable row.
 
-## Onboarding — agent-first is the primary path
+## Onboarding — agent and developer paths, co-equal and parity-shaped
 
-Signup → personal **Organization** → first **App** → first **Flag** → wire an **SDK key** → first
-**evaluation**.
+Signup → personal **Organization** → first **App** (provisions `dev` + `prod`) → first **Flag** →
+copy an **SDK key** → **verify it resolves** → first real **evaluation**.
 
-**The first-run persona is the agent, not the developer-with-a-key.** This is not a guess to revisit
-later — splitch already _built_ agent-first: the auth.md in-band handshake and remote MCP server
-(ADR-0022/0023) exist precisely so an agent can authenticate and provision over MCP without a human
-pasting anything. So onboarding **leads with the agent/MCP path** (connect the MCP server →
-authenticate in-band → provision App/Flag/key via tools), and the **visual click-through and the
-copy-a-Client-Key developer path are the secondary** route, not co-equal.
+**Two first-run personas, one journey.** splitch is built agent-first — the auth.md in-band handshake
+and remote MCP server (ADR-0022/0023) exist precisely so an agent can authenticate and provision over
+MCP with no human pasting anything, and an agent can spin up a provisional Org and convert it to a
+real account later (ADR-0021). But the developer-with-a-key path is **co-equal, not a fallback**:
+reducing DX friction is a first-class goal, and the two paths are the same effort because both are
+**parity-shaped** — every onboarding step maps 1:1 to a CLI command / MCP tool and to a panel
+affordance, never a panel-only wizard (ADR-0023). Whatever a developer can click, an agent can call,
+and vice versa.
 
-Mechanics, on every path: the **Client Key** is shown for copy-paste (public); the **API Key** is
-provisioned-and-shown-once (ADR-0022, agent provisions but never reads an existing value); and the
-**test-evaluation (dry-run)** endpoint powers the "see it resolve without firing an Exposure" first
-moment (ADR-0026 — a dry-run never counts as an Exposure).
+### The visual quickstart sequence (the developer path, specified)
 
-The detailed screen-by-screen sequence is deferred, but two things are now pinned: it is
-**parity-shaped** (every step maps to a CLI command / MCP tool, never a panel-only wizard) and it is
-**agent-primary** (the agent flow is the headline, the visual flow the fallback).
+Each step names the CLI/MCP parity it mirrors. No step is panel-only.
+
+1. **Signup → personal Org** (auto). Lands on an **empty Apps screen** whose empty state is the first
+   teaching surface: one primary "Create your first App" action, a one-line explanation of
+   App→Environment→Flag, and a "prefer your terminal / agent?" link revealing the equivalent
+   `splitch login` + `apps create` + MCP connect snippet. (Parity: `apps_create`.)
+2. **Create App.** On submit, **`dev` and `prod` are provisioned automatically** (ADR-0027 default,
+   see endpoints-org-app.md). The UI states this ("we created `dev` and `prod` — `dev` is selected so
+   you can experiment safely"). The active Environment defaults to **`dev`**, never `prod`. (Parity:
+   `apps_create` → `environments_list`.)
+3. **Create first Flag.** Guided form: key, a sensible default Variant pre-filled (a boolean
+   `enabled`/`disabled` catalog so a first flag needs zero JSON), one Variant marked default. Empty
+   state teaches "a Flag is a named toggle with Variants." (Parity: `flags_create`.)
+4. **Get your SDK key + install snippet** — the handoff that was the missing link. On flag create,
+   a **"Connect your code" card** shows: the active Environment's **Client Key** (public, copyable),
+   an `npm i @splitch/sdk` line, and a **pre-filled copy-paste snippet** with the user's real `appId`,
+   `clientKey`, and the new `flagKey` already substituted:
+
+   ```ts
+   import { createSplitchClient } from "@splitch/sdk";
+   const splitch = createSplitchClient({ appId: "app_…", clientKey: "ck_…" });
+   const value = await splitch.evaluate("your-flag-key", { targetingKey: user.id });
+   ```
+
+   (`idType` defaults to `'user'`, so the snippet is two lines, ADR-0036.) The card links to the
+   API-Key flow for server runtimes (provisioned-and-shown-once, ADR-0022). (Parity: `client_key_get`.)
+
+5. **Verify it resolves** — the first green check. An inline **"Test this Flag"** panel on the card
+   takes a Targeting Key and calls **`verify`** (ADR-0037): it shows the resolved Variant and a
+   plain-language `reason`, **fires no Exposure**, and is **fail-loud** — a misconfiguration or
+   unreachable config shows a distinct, self-explaining error, never a silent "looks fine"
+   (ADR-0036). The dev confirms the wiring before deploying a single user. (Parity: `splitch flags
+verify`; the agent uses `flags_test_eval` for the full-reason tier.)
+6. **First real evaluation.** The dev runs their app; the dashboard's empty Exposures state flips to
+   "first Exposure received," closing the loop.
+
+### Empty states teach, not just decorate
+
+Every first-run empty surface (Apps, Flags, Experiments, Exposures) carries: a one-line concept
+explanation, a single primary next action, and the CLI/MCP equivalent. An experiment-less dashboard
+shows a calm "nothing needs attention yet — create a Flag to begin," not a blank panel.
+
+### Mechanics shared by both paths
+
+The **Client Key** is shown for copy-paste (public); the **API Key** is provisioned-and-shown-once
+(ADR-0022, agent provisions but never reads an existing value); **`verify`/test-eval** powers the
+"see it resolve without firing an Exposure" first moment (ADR-0026/0037); and the active Environment
+starts on **`dev`** so the first move never touches production.
 
 ## Promotion & the prod-change approval workflow
 
@@ -370,3 +414,5 @@ and the gate live in the Worker; every skin inherits them.
 - [ADR-0002](../../adr/0002-run-is-the-immutable-unit-of-analysis.md) — Run is the immutable unit of analysis
 - [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md) — Environment axis
 - [ADR-0030](../../adr/0030-statistical-rigor-is-an-enforced-product-contract.md) — rigor contract
+- [ADR-0036](../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md) — fail-loud verify, idType default in the snippet
+- [ADR-0037](../../adr/0037-client-side-configuration-verification-tiered-by-credential.md) — verify powers the first green check

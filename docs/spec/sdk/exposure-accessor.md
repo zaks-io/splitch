@@ -1,27 +1,54 @@
-# SDK exposure accessors: evaluate (fires Exposure) vs peekVariant (no Exposure)
+# SDK accessors: evaluate / evaluateDetails (fire Exposure), peekVariant + verify (no Exposure)
 
-Two accessors for reading a Variant. The default fires an Exposure as a structural side
-effect. The explicit deferral path is a distinctly-named method — never a boolean parameter.
+Accessors for reading a Variant. `evaluate` and `evaluateDetails` fire an Exposure as a
+structural side effect; `peekVariant` and `verify` do not. The non-exposing paths are
+distinctly-named methods — never a boolean parameter on `evaluate`. Every accessor speaks the
+OpenFeature [`ResolutionDetails`](https://openfeature.dev/specification/types/) shape under
+the hood (ADR-0036); the value accessors just unwrap it to the Variant value.
+
+## EvaluationContext and the idType default
+
+```
+EvaluationContext {
+  targetingKey: string         -- required; the Entity identifier (CONTEXT.md: Targeting Key)
+  idType?:      string         -- optional in the SDK; defaults to 'user'. Required on the wire,
+                               -- so the SDK fills the default before sending (ADR-0036).
+  [key: string]: unknown       -- arbitrary attributes for Targeting Rule Conditions
+}
+```
+
+The hello-world call is therefore `sdk.evaluate(flagKey, { targetingKey })`. Override the
+bucketing unit with `{ targetingKey, idType: 'workspace' }` when bucketing on something other
+than a user.
 
 ## The evaluate accessor (fires Exposure)
 
 ```
 sdk.evaluate(flagKey: string, context: EvaluationContext): Promise<VariantValue>
+sdk.evaluateDetails(flagKey: string, context: EvaluationContext): Promise<ResolutionDetails>
 ```
 
-Calling `evaluate` **always** fires an Exposure as a side effect. There is no way to call
-`evaluate` without firing one (ADR-0004: the safe default eliminates the forget-to-expose bug).
+`evaluate` returns the resolved Variant value; `evaluateDetails` returns the full OpenFeature
+`ResolutionDetails` (`value`, `variantName`, `reason`, `errorCode?`, `errorMessage?`). Both
+**always** fire an Exposure as a side effect — there is no way to call them without firing one
+(ADR-0004: the safe default eliminates the forget-to-expose bug). Use `evaluateDetails` to
+branch on `reason` / `errorCode` (e.g. surface a banner on `STALE`, throw in your own code on
+`ERROR`).
 
 **What happens inside:**
 
-1. Validates context (targetingKey required).
+1. Validates context (targetingKey required; idType defaulted to 'user' if omitted).
 2. Checks SDK seen-set for `(flagKey, runId, targetingKey)`. If present, returns cached
-   Variant without an HTTP call and without a second Exposure.
+   Variant without an HTTP call and without a second Exposure (`reason: CACHED`).
 3. On seen-set miss: calls `POST /apps/:appId/evaluate` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
 4. Worker fires Exposure to raw log (server-side; client does not send a separate track call).
 5. SDK updates seen-set with `(flagKey, runId, targetingKey) -> VariantValue`.
-6. Returns resolved Variant.
-7. On any error (network, 503): returns Default Variant without firing Exposure.
+6. Returns resolved Variant (or full details).
+7. **On failure (network, 503, 404): returns Default Variant with `reason: ERROR` + an
+   `errorCode`, fires NO Exposure, and emits a loud error log / error hook (ADR-0036). Never
+   silent** — the caller can always distinguish a failure-fallback from a real resolution. A
+   _disabled / no-config / no-match_ flag is not a failure: it returns the Default Variant
+   with `reason: DISABLED` / `DEFAULT`, no error.
 
 The Exposure fires in the Worker, not in the SDK client process. The client has no
 "send exposure" step to forget.
@@ -82,6 +109,29 @@ PeekEvaluateResponse {
 }
 ```
 
+## The verify accessor (no Exposure) — setup confirmation
+
+```
+sdk.verify(flagKey: string, context: EvaluationContext): Promise<ResolutionDetails>
+```
+
+`verify` is the "is my setup correct?" call (ADR-0037). It resolves the Flag and returns
+`ResolutionDetails` **without firing an Exposure**, so a dev or agent can loop it during setup
+without polluting analysis. It is distinct from `peekVariant` in intent: `verify` is for
+confirming reachability + configuration during onboarding, and is available on **every
+credential tier** (unlike peek, which is API-Key-only).
+
+What `verify` reveals scales with the credential (ADR-0037):
+
+- **Client Key:** Variant value + `reason` from the non-revealing set only (`SPLIT`,
+  `DEFAULT`, `DISABLED`, `CACHED`, `STALE`, `ERROR`). Never names the matched rule (ADR-0018).
+- **API Key:** full `ResolutionDetails` including `TARGETING_MATCH` and which rule matched.
+- The control-plane test-evaluation endpoint (ADR-0026) remains the richest tier.
+
+`verify` is fail-loud like `evaluate`: an unreachable config returns `reason: ERROR` +
+`errorCode`, loudly. A green verify is an unambiguous success `reason`, never a disguised
+fallback.
+
 ## Exposure row on the wire (Exposure pipeline schema cross-reference)
 
 The Worker appends the following to the raw Exposure log on every `evaluate` call.
@@ -122,11 +172,14 @@ at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/
 
 ## Seam boundary
 
-- **Port (evaluate):** `evaluate(flagKey, context) -> VariantValue` — side effect: Exposure fired
-- **Port (peek):** `peekVariant(flagKey, context) -> VariantValue` — no side effect
+- **Port (evaluate):** `evaluate(flagKey, context) -> VariantValue` / `evaluateDetails(...) -> ResolutionDetails` — side effect: Exposure fired
+- **Port (peek):** `peekVariant(flagKey, context) -> VariantValue` — no side effect (API Key only)
+- **Port (verify):** `verify(flagKey, context) -> ResolutionDetails` — no side effect (all tiers, ADR-0037)
 - **Left side:** SDK consumer (application code)
 - **Right side:** Cloudflare Worker (calls Provider, Assignment Store, fires Exposure)
-- **Failure contract:** network or server error → Default Variant returned, no Exposure fired
+- **Failure contract (fail-loud, ADR-0036):** network or server failure → Default Variant
+  returned with `reason: ERROR` + `errorCode`, no Exposure fired, loud error log/hook. Never a
+  silent default. Disabled/no-config/no-match → Default Variant with `reason: DISABLED`/`DEFAULT`.
 - **No manual exposure():** there is no `fireExposure(flagKey, variant)` call. Exposure is
   structural (fires on `evaluate`), not imperative. This is intentional (ADR-0004).
 - **Deletion test:** both `evaluate` and `peekVariant` are real adapters on the
@@ -140,3 +193,5 @@ at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/
 - [ADR-0018](../../adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)
 - [ADR-0027](../../adr/0027-environment-is-a-first-class-axis-under-app.md)
 - [ADR-0034](../../adr/0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md) — peek behind the API Key
+- [ADR-0036](../../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md) — fail-loud, ResolutionDetails, evaluateDetails, idType default
+- [ADR-0037](../../adr/0037-client-side-configuration-verification-tiered-by-credential.md) — verify accessor, tiered by credential

@@ -21,8 +21,10 @@ has a canonical enforcing contract.
 
 The Evaluation Worker is reachable by untrusted clients holding a **Client Key**.
 
-- Client Keys are public and origin-closed; `peek()` is **API-Key-only**; anon
-  registration is gated by Turnstile; revoke is **fail-loud**.
+- Client Keys are public and origin-closed; `peekVariant()` is **API-Key-only**; `verify()` is
+  available on all tiers but reveals nothing extra under a Client Key (ADR-0037); origin-blocked
+  requests fail loud with `ORIGIN_NOT_ALLOWED`; anon registration is gated by Turnstile; revoke is
+  **fail-loud**.
 - Canonical contract: **ADR-0034** + [`edge-abuse-controls`](../pipeline/edge-ingest-contract.md).
 
 ### 2. Tenant isolation

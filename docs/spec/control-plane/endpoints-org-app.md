@@ -52,7 +52,13 @@ Auth: Org member (any role).
 Body: `{ name: string, slug?: string }` (slug auto-derived from name if omitted; unique within Org)
 Returns: `{ app_id, org_id, name, slug, created_at }`
 Auth: Org `owner` or `admin`.
-On create, a `prod` Environment is provisioned by default; more can be added (see Environment endpoints).
+On create, **two Environments are provisioned by default: `dev` and `prod`**. `dev` ships with an
+all-`allow` Environment Policy (no confirmation gates) so the first flag/experiment lands in a
+safe, non-production place by default; `prod` ships with the stricter default Policy. A developer
+or agent never has to create an Environment before getting their first value, and the obvious
+first move ("try a flag") cannot accidentally target production. More Environments can be added
+(see Environment endpoints). This is a DX default, not a constraint — an App may later delete
+`dev` (subject to the last-Environment guard).
 
 ### `GET /apps/{app_id}`
 
