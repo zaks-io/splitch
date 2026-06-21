@@ -11,10 +11,42 @@ ui package contract, and the toolchain/quality-gate stack.
 | Build orchestration | Turborepo |
 | Language | TypeScript strict |
 | Lint / format | Biome (single tool, no ESLint/Prettier split) |
+| Git hooks | Lefthook |
+| Unused files / exports / dependencies | Knip |
+| Secret scanning | Gitleaks |
 | Unit tests | Vitest |
 | Mutation testing | StrykerJS (advisory first; scoped to critical domains) |
 | Deploy | Wrangler + GitHub Actions |
 | Observability | Sentry (errors, distributed traces) + Axiom (structured logs, dashboards) |
+
+## Turborepo task graph
+
+The root package scripts should delegate to Turborepo. Avoid `pnpm -r` as the primary CI gate because
+it ignores task outputs, affected-package selection, and remote cache reuse.
+
+Required root tasks once the package scaffold lands:
+
+| Task | Cache | Contract |
+|---|---|---|
+| `build` | yes | `dependsOn: ["^build"]`; outputs are package-local bundles such as `dist/**`, `.output/**`, and Worker build artifacts |
+| `lint` | yes | inputs include source, Biome config, package manifest, and generated contract inputs |
+| `format:check` | yes | Biome formatting gate |
+| `typecheck` | yes | depends on upstream build where generated types are consumed |
+| `test` | yes | deterministic unit/integration tests; coverage output declared only where stable |
+| `depcruise` | yes | architecture import graph gate |
+| `knip` | yes | unused files, exports, and dependencies gate after generated files exist |
+| `secrets:*` | no | Gitleaks scans working tree or git history; never cache security scans |
+| `dev` | no | persistent local dev task |
+| `preview:*`, `deploy:*`, `migrate:*`, `rollback:*` | no | remote-state mutation; never served from cache |
+
+CI uses Turborepo remote caching with `TURBO_TOKEN` and `TURBO_TEAM`, plus `--affected` for PR gates.
+Deployment jobs use `--filter=<workspace>...` to build only the Worker/app graph being deployed.
+Every build-affecting environment variable must be listed in `globalEnv` or task `env` so preview and
+production builds cannot reuse the wrong cache entry.
+
+Local hook policy lives in [local-quality-gates.md](./local-quality-gates.md). Commit hooks block
+format, lint, type, Knip, and Gitleaks failures before code is committed. The pre-push hook runs the
+same validation set as CI except hosted smoke tests and remote-state mutations.
 
 ## Package layout
 

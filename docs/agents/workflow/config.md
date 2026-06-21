@@ -35,14 +35,17 @@ and lives in `Unknowns`. Re-run `ziw-setup` once git, a tracker, and CI exist.
 - Package manager: pnpm@9.0.0 (`packageManager` in root `package.json`)
 - Install: `pnpm install`
 - Lockfile: none yet (`pnpm-lock.yaml` absent; install never run)
-- Full local gate: `pnpm -r build && pnpm -r test` (root scripts exist, but NO
-  sub-package defines `build` or `test` — these currently no-op; not a real gate)
-- Build: `pnpm -r build` (no-op until sub-packages add a `build` script)
-- Test: `pnpm -r test` (no-op until sub-packages add a `test` script)
-- Lint / typecheck: none configured — see `Unknowns`
+- Full local gate: not wired. Intended gate is `pnpm verify:push`, which mirrors
+  CI except hosted smoke tests and remote-state mutations.
+- Build: not wired. Intended command: `pnpm turbo run build`.
+- Test: not wired. Intended command: `pnpm turbo run test`.
+- Lint / format / typecheck / Knip / Gitleaks: designed, not wired. See
+  `docs/spec/platform/local-quality-gates.md`.
 - Generated artifacts: none
-- Preview checks: none
-- Production deploy path: none configured — see `Unknowns`
+- PR CI and shared preview checks: designed, not wired. See
+  `docs/spec/platform/deployment-pipeline.md`.
+- Production deploy path: designed, not wired. See
+  `docs/spec/platform/deployment-pipeline.md`.
 - Production approval required: yes
 
 ## Packages
@@ -187,9 +190,16 @@ and lives in `Unknowns`. Re-run `ziw-setup` once git, a tracker, and CI exist.
 
 ## Environments
 
-- Local: self-contained. `pnpm install` then per-package build/test once real
-  code and scripts exist.
-- Development / Preview / Production: none configured.
+- Local: self-contained. `pnpm install` then the Turborepo gate once real code
+  and scripts exist.
+- Git hooks: designed, not wired. `pre-commit` runs `pnpm verify:commit`;
+  `pre-push` runs `pnpm verify:push`. See
+  `docs/spec/platform/local-quality-gates.md`.
+- PR CI / Shared Preview / Production: designed, not wired. PR CI uses
+  Tinybird Local and local Wrangler storage. Shared Preview is one
+  maintainer-triggered hosted target backed by non-production Cloudflare
+  resources plus one Tinybird Branch. Production requires GitHub `production`
+  environment approval.
 - Planned backing services (from README/handoff, not yet wired): Cloudflare
   Flagship (flag delivery), Tinybird (event ingestion + significance).
 - Production: explicit approval required.
@@ -219,13 +229,25 @@ and lives in `Unknowns`. Re-run `ziw-setup` once git, a tracker, and CI exist.
 - [ ] No code host configured. Blocks PR conventions, required checks, merge
       method, CodeRabbit. Verifier: create the remote repo, push, re-run setup.
 - [ ] No CI. Blocks the integrate gate's "green" definition and required checks.
-      Verifier: add a CI workflow; record its check names.
+      Verifier: add Blacksmith-backed GitHub Actions workflows using Turborepo
+      remote cache; record exact check names.
 - [ ] Sub-packages define no `build`/`test`/`lint`/`typecheck` scripts, so the
       root gate is a no-op. Blocks a real local gate. Verifier: add scripts (and
       a lockfile via `pnpm install`); record exact commands.
+- [ ] Local quality gates designed but not wired. Verifier: implement
+      `docs/spec/platform/local-quality-gates.md`, including Lefthook
+      `pre-commit`/`pre-push`, `verify:commit`, `verify:push`, `verify:ci`,
+      Biome, TypeScript, Knip, Gitleaks, dependency-cruiser, Tinybird Local, and
+      local D1 migration checks.
 - [ ] npm publish auth unverified. Bare `splitch` claim is blocked on the user
       authenticating npm (`npm whoami` returned not-logged-in last session).
       Verifier: user runs `npm login` (or confirms a web automation token), then
       `npm publish --workspace splitch`.
-- [ ] Production deploy path undefined (Flagship + Tinybird targets named but not
-      wired). Verifier: define deploy targets and approval rules.
+- [ ] Deployment pipeline designed but not wired. Verifier: implement
+      `docs/spec/platform/deployment-pipeline.md`, including Turborepo cache
+      config, PR CI with Tinybird Local, shared-preview deploy/reset, D1
+      migrations, Durable Object migrations, Tinybird deploy/branch flow, and
+      production approval rules.
+- [ ] Shared preview branch not provisioned. Verifier: create the single
+      Tinybird `shared_preview` Branch and matching non-production Cloudflare
+      resources when hosted preview is needed.

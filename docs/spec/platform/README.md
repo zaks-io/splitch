@@ -19,6 +19,8 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 | [multi-tenant-isolation.md](./multi-tenant-isolation.md) | App-enforced `app_id` isolation in D1 (Drizzle seam) and Tinybird (two-seam enforcement) |
 | [contracts-and-validation.md](./contracts-and-validation.md) | Zod-first authoring; package split; KV schema-version envelope; one canonical ErrorResponse |
 | [monorepo-and-toolchain.md](./monorepo-and-toolchain.md) | pnpm + Turborepo layout; capability Workers; shared `ui` seam; TanStack Query; cron Workers; StrykerJS policy |
+| [local-quality-gates.md](./local-quality-gates.md) | Git hooks, CI-parity pre-push, Biome, TypeScript, Knip, Gitleaks, dependency-cruiser, local validation policy |
+| [deployment-pipeline.md](./deployment-pipeline.md) | GitHub Actions on Blacksmith with Turborepo cache; PR CI with Tinybird Local; shared preview; production rollback rules |
 
 Architecture map: [system-architecture.md](../../architecture/system-architecture.md) lays out the
 Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcement.
@@ -37,6 +39,10 @@ Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcemen
    Store DO). Broadcasts only describe durable state.
 8. **Privacy tombstones win immediately.** Delete requests stop future use before every physical
    purge finishes.
+9. **PR CI is local; shared preview is explicit.** PRs validate against disposable local services by
+   default; the hosted shared preview target is updated only on maintainer intent.
+10. **Bad commits should fail before they leave the machine.** Commit hooks block format/lint/type
+    drift and secret leaks; pre-push mirrors CI except hosted smoke/deploy steps.
 
 ## Cross-links
 
