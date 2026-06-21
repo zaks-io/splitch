@@ -21,6 +21,7 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 | [worker-runtime.md](./worker-runtime.md)                         | Shared contract-mounted request guard for auth, scopes, rate limits, idempotency, and error envelopes                   |
 | [monorepo-and-toolchain.md](./monorepo-and-toolchain.md)         | pnpm + Turborepo layout; capability Workers; shared `ui` seam; TanStack Query; cron Workers; StrykerJS policy           |
 | [local-quality-gates.md](./local-quality-gates.md)               | Git hooks, CI-parity pre-push, Biome, TypeScript, Knip, Gitleaks, dependency-cruiser, local validation policy           |
+| [agent-verification.md](./agent-verification.md)                 | Slice-level Done proof, local Worker smoke, remote Cursor requirements, and verification ladder                         |
 | [deployment-pipeline.md](./deployment-pipeline.md)               | GitHub Actions on Blacksmith with Turborepo cache; PR CI with Tinybird Local; shared preview; production rollback rules |
 
 Architecture map: [system-architecture.md](../../architecture/system-architecture.md) lays out the
@@ -46,6 +47,8 @@ Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcemen
     drift and secret leaks; pre-push mirrors CI except hosted smoke/deploy steps.
 11. **Route contracts are load-bearing.** HTTP routes are mounted through the shared request guard
     so auth, scopes, rate limits, idempotency, and `ErrorResponse` status mapping cannot drift per Worker.
+12. **Done means locally proven.** Every executable slice names the command, fixture, expected result,
+    negative proof, and any behavior that local verification does not prove.
 
 ## Cross-links
 

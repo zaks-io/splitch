@@ -1,12 +1,16 @@
 import { createControlPlaneSdk } from "@splitch/control-plane-sdk";
-import { createHealthResponse } from "@splitch/contracts";
+import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { surfaceClassName } from "@splitch/ui";
 
 const service = "splitch-control-panel";
 
+type Env = {
+  SPLITCH_PLATFORM_TARGET?: string;
+};
+
 export default {
-  async fetch(): Promise<Response> {
-    const health = createHealthResponse(service);
+  async fetch(_request, env): Promise<Response> {
+    const health = createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET));
     const sdkFactory = createControlPlaneSdk.name;
 
     return new Response(
@@ -22,4 +26,4 @@ export default {
       },
     );
   },
-} satisfies ExportedHandler;
+} satisfies ExportedHandler<Env>;

@@ -10,6 +10,7 @@
     "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
     "d1:migrate:local": "node scripts/check-d1-local.mjs",
     "dev": "turbo run dev --parallel",
+    "dev:api": "turbo run dev --parallel --filter=@splitch/analysis-api --filter=@splitch/auth-api --filter=@splitch/control-plane-api --filter=@splitch/evaluation-api --filter=@splitch/event-ingest-api --filter=@splitch/mcp-server",
     "duplicates": "jscpd --config .jscpd.json --exit-code --no-tips --no-colors apps packages scripts",
     "format:check": "biome format . && prettier --check \"**/*.md\"",
     "format:write": "biome format --write . && prettier --write \"**/*.md\"",
@@ -19,12 +20,14 @@
     "secrets:git": "gitleaks git --redact --no-banner .",
     "secrets:worktree": "gitleaks dir --redact --no-banner .",
     "smoke:ci": "node scripts/optional-check.mjs smoke:ci \"Hosted smoke checks run after preview or production targets exist.\"",
+    "smoke:local": "node scripts/smoke-workers-local.mjs",
+    "smoke:local:api": "node scripts/smoke-workers-local.mjs api",
     "test": "turbo run test",
     "tinybird:local": "node scripts/check-tinybird-local.mjs",
     "typecheck": "turbo run typecheck",
     "verify:ci": "pnpm verify:push && pnpm smoke:ci",
     "verify:commit": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:worktree",
-    "verify:push": "pnpm verify:commit && pnpm test && pnpm build && pnpm depcruise && pnpm duplicates && pnpm secrets:git && pnpm d1:migrate:local && pnpm tinybird:local"
+    "verify:push": "pnpm verify:commit && pnpm test && pnpm build && pnpm smoke:local:api && pnpm depcruise && pnpm duplicates && pnpm secrets:git && pnpm d1:migrate:local && pnpm tinybird:local"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

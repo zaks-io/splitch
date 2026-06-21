@@ -38,6 +38,9 @@ The root `package.json` exposes these scripts:
 | `typecheck`        | `turbo run typecheck`                                  |
 | `test`             | `turbo run test`                                       |
 | `build`            | `turbo run build`                                      |
+| `dev:api`          | API/MCP Worker local dev set on stable ports           |
+| `smoke:local`      | local Wrangler smoke for selected Workers              |
+| `smoke:local:api`  | local Wrangler smoke for API/MCP Workers               |
 | `depcruise`        | `dependency-cruiser --config .dependency-cruiser.cjs`  |
 | `duplicates`       | `jscpd --config .jscpd.json --exit-code`               |
 | `knip`             | `knip --treat-config-hints-as-errors`                  |
@@ -54,6 +57,10 @@ Biome formats code/config. Prettier formats Markdown only.
 does not run hosted smoke tests or any command that mutates Cloudflare, Tinybird, GitHub
 deployments, or secrets.
 
+`verify:push` runs `smoke:local:api` after build. This starts each API/MCP Worker locally with
+Wrangler and fails if the Worker cannot boot or its health response has the wrong service or platform
+target. See [agent-verification.md](./agent-verification.md).
+
 ## Hook policy
 
 `pre-commit` blocks bad commits:
@@ -67,7 +74,8 @@ deployments, or secrets.
 `pre-push` mirrors CI without smoke tests:
 
 - Run the same validation sequence as `verify:ci`: format check, lint, typecheck, tests, build,
-  dependency-cruiser, jscpd, Knip, Gitleaks, local D1 migrations, and Tinybird Local validation.
+  local API Worker smoke, dependency-cruiser, jscpd, Knip, Gitleaks, local D1 migrations, and Tinybird
+  Local validation.
 - Skip only hosted smoke checks, shared-preview deploy/reset, production deploy, rollback, and other
   remote-state mutations.
 - Use Turborepo remote cache when `TURBO_TOKEN` and `TURBO_TEAM` are available; local cache is still
@@ -80,8 +88,9 @@ run the matching root script locally, fix the failure, and rerun `verify:push` b
 
 The required CI check runs on Blacksmith and executes `verify:ci`. It includes everything in
 `verify:push`, plus hosted smoke checks where the workflow has trusted credentials and an appropriate
-platform target. The scaffold's hosted smoke command is an intentional skip until shared-preview
-or production targets exist.
+platform target. The local API Worker smoke is safe in CI and remote Cursor because it uses Wrangler
+local mode and loopback ports only. The scaffold's hosted smoke command is an intentional skip until
+shared-preview or production targets exist.
 
 Gitleaks also runs as its own required CI workflow so secret scanning remains visible even if the JS
 toolchain is broken.
@@ -127,12 +136,36 @@ During the scaffold they skip with an explicit message because no committed D1 m
 Tinybird project files exist yet. Once those files land, these scripts must become failing validators,
 not best-effort warnings.
 
+## Local Worker smoke policy
+
+`pnpm smoke:local:api` is the first HTTP-level proof for API/MCP Workers. It builds the selected
+workspace graph, starts each Worker with `wrangler dev --local` on its stable port, calls `/`, checks
+the response, and stops the Worker.
+
+Stable local ports:
+
+| Worker                   | Port |
+| ------------------------ | ---- |
+| Control Plane API Worker | 8787 |
+| Evaluation Worker        | 8788 |
+| Event Ingest Worker      | 8789 |
+| Analysis Worker          | 8790 |
+| Auth API Worker          | 8791 |
+| MCP Worker               | 8792 |
+| Control Panel Worker     | 8793 |
+| Marketing Worker         | 8794 |
+
+New HTTP route slices must add a route-specific local proof instead of relying only on the baseline
+health smoke.
+
 ## Implementation checklist
 
 - [x] Add `package.json`, `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `turbo.json`, `biome.json`,
       `knip.json`, `.gitleaks.toml`, and `lefthook.yml`.
 - [x] Add package-level `lint`, `typecheck`, `test`, and `build` scripts.
+- [x] Add stable local dev ports for Worker packages and `dev:api`.
 - [x] Add root `verify:commit`, `verify:push`, and `verify:ci` scripts.
+- [x] Wire local API Worker smoke into `verify:push` and `verify:ci`.
 - [x] Wire jscpd duplicate-code detection into `verify:push` and `verify:ci`.
 - [x] Install Lefthook during setup through `prepare`.
 - [x] Wire CI to call `pnpm verify:ci` and the pre-push hook to call `pnpm verify:push`.

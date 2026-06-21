@@ -33,6 +33,11 @@ configs, Tinybird project files, and GitHub environment settings are the release
 PRs do not get hosted previews by default. The shared preview target is intentionally mutable and
 single-tenant: when a maintainer deploys a branch or PR there, it replaces the previous preview.
 
+Local and `pr-ci` both run the local API Worker smoke from
+[agent-verification.md](./agent-verification.md). That proves Workers boot and route contracts pass
+against local bindings. It does not prove hosted bindings, Cloudflare service bindings, Tinybird Cloud,
+routes, DNS, or GitHub environment configuration.
+
 ## Runner policy
 
 - All GitHub Actions jobs use Blacksmith runner tags, starting with `blacksmith-2vcpu-ubuntu-2404`.
@@ -118,6 +123,10 @@ Shared preview is provisioned once and updated on demand:
 5. Run smoke checks against the shared-preview URL.
 6. Post the shared-preview URL, deployed ref, Tinybird branch name, migration list, and smoke results to
    the PR or workflow summary.
+
+Shared-preview smoke is the first proof that hosted bindings are correct. Each smoke result must
+include the URL, expected `platformTarget = "shared-preview"`, deployed commit SHA, migration list,
+Tinybird Branch, and which routes were exercised.
 
 `wrangler versions upload` is useful for code-only preview URLs, but it is not the default for shared
 preview because Worker versions do not cover D1/KV/DO state, and Durable Object migrations are not
@@ -218,6 +227,10 @@ Production deployments run from the default branch only.
    registration.
 10. Record Worker version IDs, D1 migration names, Tinybird deployment URL, commit SHA, and smoke results
     in the GitHub deployment summary.
+
+Production smoke must assert `platformTarget = "production"` on every public Worker health or route
+probe that exposes it. A production deployment is not complete if the summary lacks route-level smoke
+evidence for changed Workers.
 
 For pure code changes without Durable Object migrations, a Worker may use Worker versions and gradual
 deployment. For any Durable Object migration, use `wrangler deploy`.

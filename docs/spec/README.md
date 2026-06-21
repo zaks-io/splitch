@@ -92,10 +92,14 @@ Some topics are touched by more than one area, each from its own angle. The cano
   SDK distinction: [`sdk/test-evaluation-endpoint.md`](./sdk/test-evaluation-endpoint.md). Reads the same KV-backed config the data plane reads.
 - **Privacy lifecycle / deletion / export** → [`platform/privacy-data-lifecycle.md`](./platform/privacy-data-lifecycle.md)
   is the source of truth. Narrow storage and endpoint specs link there instead of redefining lifecycle rules.
+- **Agent-verifiable Done** → [`platform/agent-verification.md`](./platform/agent-verification.md)
+  is the source of truth for proof commands, local Worker smoke, remote Cursor requirements, and what each
+  slice must show before handoff.
 
 ## Next phase
 
 These specs are written to be sliced into dependency-ordered `kind-slice` tickets (see
 [`../agents/workflow/config.md`](../agents/workflow/config.md)) for remote agent implementation.
-Build order roughly follows the dependency grain: contracts → platform/storage → domain-model →
-evaluation + pipeline → control-plane + sdk → stats → frontend.
+Each slice must include a `Done` section that names the exact local proof. Build order roughly follows
+the dependency grain: contracts → platform/storage → domain-model → evaluation + pipeline →
+control-plane + sdk → stats → frontend.

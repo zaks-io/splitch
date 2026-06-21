@@ -8,7 +8,7 @@
     "clean": "rm -rf dist coverage",
     "deploy": "wrangler deploy",
     "deploy:dry-run": "wrangler deploy --dry-run",
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --local --port 8788 --show-interactive-dev-session=false",
     "lint": "biome lint src",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit",

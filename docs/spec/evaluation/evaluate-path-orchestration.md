@@ -70,10 +70,10 @@ EvaluateResult {
 }
 ```
 
-The `reason` field uses the discriminated union defined in
-[test-evaluation-endpoint.md](./test-evaluation-endpoint.md). The evaluate path computes
-it on every non-holdover path, so test-evaluation shares the same logic without
-re-implementation.
+The internal resolution reason uses the discriminated union defined in
+[test-evaluation-endpoint.md](./test-evaluation-endpoint.md). The data-plane SDK response does not
+return it, but test-evaluation exposes it by sharing the same Provider, holdover-detection, and
+`assign()` logic without re-implementation or write-side effects.
 
 `isHoldover` and `priorRunId` are present on the replay path so callers (SDK, Exposure
 pipeline) can distinguish replay from fresh assignment without inspecting the Variant name.
