@@ -11,21 +11,19 @@ client-held pending draft.
 Flag never creates a Run. A Flag that is not under a running Experiment has no Run at all; its
 edits are plain config changes plus an audit entry.
 
-## Production-change confirmation (intended, future)
+## Production-change confirmation (resolved)
 
-A production-affecting change must be **intentional**. Before a flag edit commits to production it
-passes through a **confirmation step** — a guard against fat-fingering a rule and breaking prod.
-This is not a draft (the edit is still live and per-change once confirmed); it is an intentionality
-gate on the commit.
+A production-affecting flag edit must be **intentional**, and that gate is **not flag-specific** — it
+is the cross-cutting **Environment Policy** + **Approval Request** workflow, designed once and shared
+by Promotions, Variant/value changes, and Starting a Run. See
+[screen-inventory.md](./screen-inventory.md#promotion--the-prod-change-approval-workflow) for the
+full workflow and [ADR-0029](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md).
 
-This gate is a **general control-plane concern**, not flag-specific — it will also cover
-experiment launches and other production-affecting actions. Treated as a cross-cutting confirm
-layer, designed once.
-
-**Open dependency — what is "production"?** With no environment split, _every_ flag edit is a
-production change, so the gate would fire on every write (possibly noisy). Scoping it cleanly
-likely needs a dev/staging/prod environment concept, which splitch does **not** currently have
-(not in the glossary). Resolve the environment question before finalizing when the confirm fires.
+**"What is production?" — resolved.** Production is an **Environment** (ADR-0027), and "careful" is
+that Environment's **Policy** (per-change-type `allow | confirm | approve`), not a global hardcoded
+check. The gate fires only on the change types the env's Policy gates, so it is not noisy-by-default.
+A gated edit becomes an **Approval Request** (diff + Review); under `confirm` the editor self-reviews
+in one step, and the same object grows into second-person `approve` later without a rewrite.
 
 ## A Flag under a running Experiment
 

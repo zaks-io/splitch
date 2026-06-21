@@ -1,8 +1,10 @@
 # Environments & promotion UX
 
-> **Status: stub — deferred to the Control Panel UX design session.** The domain model
-> (ADR-0027/0028/0029) and the control-plane endpoints are pinned; the _screens_ are not yet
-> designed. This file exists so cross-references resolve and lists what the UX session must cover.
+> **Status: superseded by [screen-inventory.md](./screen-inventory.md).** The Control Panel UX
+> session designed these screens there: the Promotion diff screen, the Approval Request / Review
+> workflow (confirm now, second-person approve later), the Confirmation UX, and the per-Environment
+> flag screen. This file is retained for its settled-domain summary and cross-references; the
+> screens live in the inventory.
 
 ## What is settled (see the ADRs / control-plane specs)
 

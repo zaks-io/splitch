@@ -28,6 +28,17 @@ environment."
 the change is live and per-change, exactly as an unguarded edit would be. The kill switch can **always** turn
 a flag _off_ regardless of Policy — incident control is never gated.
 
+**The gate sits on an Approval Request object, present from day one even under `confirm`.** A gated change
+is modeled as an **Approval Request** (the industry-standard pending-change object — LaunchDarkly's term;
+Statsig's "submit for review" / "proposed changes") carrying a **diff** of proposed-vs-current config. Under
+`confirm` the proposer **self-reviews** it in the same step (a Confirmation _is_ a self-reviewed Approval
+Request); the user experiences one action while the system records a proposal that was approved. This is the
+deliberate "build a system we grow into" choice: shipping `confirm` as a fire-and-forget modal would have **no
+pending state**, and second-person `approve` requires one — so a modal would force re-plumbing every prod
+write later. Modeling the Approval Request now makes `approve` a **permission change** (self-review disallowed
+→ a distinct principal must Review), not a new pipeline. Both leading platforms model self-approve as exactly
+this configurable permission.
+
 **Why configurable Policy, not a hardcoded prod rule.** Hardcoding "prod requires confirmation" bakes one
 team's risk tolerance into the product and has no clean answer for users with more than two environments or
 unusual flows (a `canary` env stricter than `prod`, a `dev` that _is_ gated for a regulated team). A
@@ -57,7 +68,10 @@ gate is enforced at the commit seam) rather than advisory.
 - **The control plane gains a Confirmation step** surfaced consistently across change types; the panel
   renders it as a confirm dialog, the CLI/MCP as an explicit confirm flag/step (agent-friendly).
 - **The kill-switch-off exemption is a hard rule**, independent of Policy.
-- **CONTEXT.md** gains Environment Policy and Confirmation.
+- **CONTEXT.md** gains Environment Policy, Confirmation, **Approval Request**, and **Review**.
+- **A gated change is persisted as an Approval Request** (diff, proposer, status `pending → applied |
+declined`, audit) from day one — under `confirm` it is created and self-reviewed in one step. This is
+  the seam that makes the future `approve` level additive (who-may-review changes; the object does not).
 - **The "what is production" open question from flag-editing-ux.md is resolved**: production is an
   Environment, and "careful" is its Policy — not a global hardcoded check.
 - **CLI/MCP parity (ADR-0023) must carry Policy** — a `confirm`-level change over CLI/MCP requires an

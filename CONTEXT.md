@@ -160,20 +160,49 @@ _Avoid_: deploy, ship, publish, push (Promote is canonical; "publish" is retired
 The per-Environment rule set declaring, **per change type**, whether a change is allowed freely or must
 pass a [[Confirmation]] (and, future, an approval). Change types include: **Variant availability** (promote
 a Variant into this env), **targeting/rollout/value**, **enabled state** (kill switch), and **Start an
-Experiment Run**. Each is independently set to `allow` | `confirm` (| `approve`, future). Dev's Policy is
-typically all-`allow`; prod's Policy is the user's choice — confirm on availability only, on value too, or
-on everything. This makes "prod is more careful" **configurable and structural**, not a hardcoded special
-case. (ADR-0029.)
-_Avoid_: guardrail (that is a Metric concept), approval flow (approval is one Policy _level_, future),
-"prod is special" as a hardcoded rule (Policy is configurable per env)
+Experiment Run**. Each is independently set to `allow` | `confirm` (| `approve`, future). All three levels run the **same**
+[[Approval Request]] + [[Review]] machinery; the level only sets **who may review** — `allow` skips it,
+`confirm` lets the proposer self-review (a [[Confirmation]]), `approve` (future) requires a distinct
+principal. Dev's Policy is typically all-`allow`; prod's Policy is the user's choice — confirm on
+availability only, on value too, or on everything. This makes "prod is more careful" **configurable and
+structural**, not a hardcoded special case. (ADR-0029.)
+_Avoid_: guardrail (that is a Metric concept); a separate "approval flow" (approval is a Policy _level_ over
+the same [[Approval Request]] object, not a different mechanism); "prod is special" as a hardcoded rule
+(Policy is configurable per env)
+
+**Approval Request** (the pending-change object):
+The record of a proposed production-affecting change while it awaits a [[Review]] — the object an
+[[Environment Policy]] gate sits on. Adopted from the industry standard (**LaunchDarkly**'s
+_approval request_ shown in a _pending changes_ area; **Statsig**'s _submit for review_ / _proposed
+changes_); modeled on a code-review / pull-request flow. Carries the **diff** (proposed config vs the
+target Environment's current config), the proposer, status (`pending → applied | declined`), and audit
+trail. It exists **from day one even under `confirm`**, where the proposer is also the reviewer: the
+proposal is created and **self-reviewed in the same step**, so a single operator feels one action while
+the system still records a proposal that was approved. This is the seam splitch **grows into**
+second-person `approve` without a rewrite — the same object, the same diff, the same Review screen; only
+_who may review_ changes (see [[Review]]). Every gated change type (Promotion, a direct prod Flag edit, a
+Variant/value change, Start a Run) becomes an Approval Request.
+_Avoid_: change proposal, change request, pending change (Approval Request is canonical, matching
+LaunchDarkly); inventing a bespoke name
+
+**Review** (verb: **Review**; the act on an [[Approval Request]]):
+Acting on an [[Approval Request]] — **approve-and-apply**, approve-without-applying, or **decline**.
+**Who may Review** is the [[Environment Policy]] level: under `confirm` the proposer **may self-review**
+(single-operator [[Confirmation]]); under `approve` (future) **self-review is disallowed** and a distinct
+principal must Review. The level is the _permission to self-review_, nothing more — which is why moving
+from confirm to approval is a policy/role change, not a new pipeline. (LaunchDarkly/Statsig both model
+self-approve as exactly this configurable permission.)
+_Avoid_: approval-as-a-separate-pipeline (it is the same Approval Request object at every level)
 
 **Confirmation**:
-The intentionality gate an [[Environment Policy]] interposes between an intended change and its commit —
-the "are you sure, this affects production" step. Not a draft and not optimistic state: the change is still
-live and per-change once confirmed; Confirmation only guards the _commit_. The kill switch is never blocked
-from turning a flag **off** regardless of Policy (incident control always wins).
-_Avoid_: review, approval (approval is the future Policy level above Confirmation); staging/draft (a
-Confirmation does not batch or stage the change)
+The single-operator form of [[Review]] under the `confirm` [[Environment Policy]] level — the "are you
+sure, this affects production" intentionality gate, structurally a **self-reviewed [[Approval Request]]**.
+Not a draft and not optimistic state: the change is still live and per-change once applied; Confirmation
+only guards the _commit_. The kill switch is never blocked from turning a flag **off** regardless of
+Policy (incident control always wins). The `approve` level is the same flow with self-review disallowed.
+_Avoid_: treating Confirmation and approval as different mechanisms (both are a [[Review]] on an
+[[Approval Request]]; the Policy level only decides who may review); staging/draft (a Confirmation does
+not batch or stage the change)
 
 ### Experiment terms (defined by splitch — Flagship & OpenFeature are silent here)
 
