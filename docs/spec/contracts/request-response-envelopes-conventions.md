@@ -10,6 +10,34 @@ audit) that must not leak to the wire. (ADR-0025 "reuse at the leaf".)
 All envelopes are Zod schemas in `@splitch/contracts`. No field documented across the envelope files is
 inferred or optional unless explicitly marked `no`.
 
+## Wire conventions (all control-plane endpoints)
+
+**Optional fields are present-with-null, never omitted.** A field marked optional (`no`) in any
+envelope or leaf schema appears in the JSON with a `null` value rather than being absent. Consumers
+never need `hasOwnProperty` checks; the field always exists, the value may be `null`. The only
+exception is a field explicitly documented as "omitted when X" in its own schema.
+
+**Standard response headers.** Every JSON response carries:
+
+| Header         | When          | Meaning                                                                                             |
+| -------------- | ------------- | --------------------------------------------------------------------------------------------------- |
+| `X-Request-Id` | always        | Stable per-request id; echoed in server logs and `INTERNAL_SERVER_ERROR`. Quote it in support.      |
+| `Retry-After`  | `429` / `503` | Seconds to wait; mirrors `details.retryAfterMs` in the `RATE_LIMITED` / `SERVICE_UNAVAILABLE` body. |
+| `Content-Type` | always        | `application/json; charset=utf-8`.                                                                  |
+
+Clients and agents read `Retry-After` for backoff and surface `X-Request-Id` on failures so a human
+can find the request in logs.
+
+**Timestamps.** All timestamps are ISO 8601, UTC, millisecond precision (`YYYY-MM-DDTHH:mm:ss.sssZ`),
+server-normalized. Clients never supply a timezone.
+
+**API versioning.** The control-plane API is **unversioned** (one canonical version per release;
+ADR-0025 makes the Zod contract the single source). Breaking changes ship behind a minor release with
+a CHANGELOG entry; a soon-to-change endpoint carries a `Deprecation` response header (RFC 8594) for at
+least 90 days before the change. Long-lived clients must tolerate **unknown** `ErrorCode` and
+`reason` enum values (log and treat as the nearest known category) rather than hard-failing on a new
+member.
+
 Resource envelope files:
 
 - [request-response-envelopes-flag-variant.md](./request-response-envelopes-flag-variant.md) — Flag and Variant endpoints
@@ -23,11 +51,34 @@ Resource envelope files:
 ```
 PaginatedResponse<T> = {
   items:      T[]
-  cursor:     string | null  // opaque; pass back as ?cursor= to fetch next page
+  cursor:     string | null  // opaque; pass back as ?cursor= to fetch next page; null on the last page
   limit:      number         // the limit that was applied
-  total:      number | null  // null when count is expensive (Tinybird endpoints)
+  total:      number | null  // see "total semantics" below
 }
 ```
+
+Pagination is **cursor-based, not offset-based**, on every list endpoint. Request a page with
+`?limit=<n>&cursor=<opaque>`; `limit` defaults to `50` and is capped at `500` (over-cap →
+`INVALID_PAGINATION { field: 'limit' }`). To iterate, keep calling with the returned `cursor` until
+`cursor === null`.
+
+**Cursor contract.** The `cursor` is an opaque, server-encoded string. Do not parse, construct, or
+mutate it. A cursor is valid for **15 minutes** and is scoped to the exact `(endpoint, filters, limit)`
+it was issued for — reusing it across a different filter set or after expiry returns
+`INVALID_PAGINATION { field: 'cursor', reason: 'cursor_expired' | 'cursor_invalid' }`. Never reuse a
+cursor across Environments.
+
+**`total` semantics.** Whether `total` is a number or `null` is determined by the backing store, and
+is stable per endpoint:
+
+- **D1-backed lists** (Flags, Experiments, Runs, Metrics, Segments, Members, credentials) always
+  return `total` as a number — the count is cheap.
+- **Tinybird-backed lists** (Exposures, analytics, audit-log) return `total: null` — counting can be
+  100M+ rows. Consumers render "showing X (more available)", never "page N of M", when `total` is
+  `null`.
+
+**Agent iteration.** Loop on `cursor` (`while (cursor !== null)`), not on `total`. `total` is for UI
+display and may be `null`; the `cursor` is the authoritative end-of-list signal on every endpoint.
 
 ---
 

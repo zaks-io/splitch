@@ -184,6 +184,56 @@ ErrorResponse {
 `PARSE_ERROR`, `TYPE_MISMATCH`, `TARGETING_KEY_MISSING`, `INVALID_CONTEXT`, `PROVIDER_FATAL`,
 `GENERAL`), mapped from the HTTP `ErrorResponse.code` at the SDK boundary.
 
+### HTTP status to ResolutionDetails mapping
+
+This is the contract that makes fail-loud **usable**: the SDK turns every transport outcome into a
+structured [`ResolutionDetails`](../contracts/leaf-schemas-runtime.md#resolutiondetails-openfeature-sdk-return-shape)
+the caller can branch on. The caller never has to inspect HTTP status itself.
+
+| Transport outcome                     | `reason`   | `value`           | `errorCode`          | Exposure |
+| ------------------------------------- | ---------- | ----------------- | -------------------- | -------- |
+| `200`, rule/rollout resolved          | `SPLIT`    | resolved Variant  | —                    | fires    |
+| `200`, no rule matched                | `DEFAULT`  | Default Variant   | —                    | fires    |
+| `200`, Flag disabled / no Env config  | `DISABLED` | Default Variant   | —                    | fires    |
+| in-memory cache hit (same instance)   | `CACHED`   | cached Variant    | —                    | no       |
+| served from stale cache after failure | `STALE`    | last-good Variant | `PROVIDER_NOT_READY` | no       |
+| `401` / `403`                         | `ERROR`    | Default Variant   | `PROVIDER_FATAL`     | no       |
+| `404 FLAG_NOT_FOUND`                  | `ERROR`    | Default Variant   | `FLAG_NOT_FOUND`     | no       |
+| `400 VALIDATION_ERROR`                | `ERROR`    | Default Variant   | `INVALID_CONTEXT`    | no       |
+| `429 RATE_LIMITED`                    | `ERROR`    | Default Variant   | `GENERAL`            | no       |
+| `503` / network / timeout / parse     | `ERROR`    | Default Variant   | `PROVIDER_NOT_READY` | no       |
+
+Every `ERROR` row returns the **Default Variant** so the caller's UI still renders, carries a
+non-null `errorCode`, and logs loudly — never a silent default (ADR-0036). The recommended caller
+branch is a single check on `details.reason === 'ERROR'`.
+
+## SDK initialization defaults
+
+So a hello-world is genuinely copy-paste, the SDK ships sane defaults; each is overridable at
+construction:
+
+| Setting     | Default                                                                                                                  | Notes                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `endpoint`  | `https://edge.splitch.dev` (the public Evaluation Worker, ADR-0038)                                                      | Override for self-hosted / preview Workers.                             |
+| `timeoutMs` | `1000`                                                                                                                   | On timeout the SDK fails loud to the Default Variant (`reason: ERROR`). |
+| `retries`   | `0` on the Exposure-bearing `evaluate` (a retry is a fresh resolution, not a replay); peek/verify may retry idempotently | Never silently retry an Exposure-firing call.                           |
+| `idType`    | `'user'`                                                                                                                 | Overridable per call.                                                   |
+
+```ts
+import { createSplitchClient } from "@splitch/sdk";
+
+// Minimal: only the Client Key is required.
+const splitch = createSplitchClient({ clientKey: "ck_live_..." });
+
+// Hello-world resolution (idType defaults to 'user'):
+const variant = await splitch.evaluate("new-checkout", { targetingKey: userId });
+
+// Branch with details (fail-loud is one check):
+const d = await splitch.evaluateDetails("new-checkout", { targetingKey: userId });
+if (d.reason === "ERROR") renderFallback(d.errorCode);
+else render(d.value);
+```
+
 ## Seam contract
 
 - **Port:** `evaluate(appId, clientKey, flagKey, targetingKey, idType, evaluationContext) -> VariantValue`

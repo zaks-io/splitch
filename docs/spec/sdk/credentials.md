@@ -18,6 +18,28 @@ the two kinds is determined by the runtime context — trusted server vs untrust
 | Cross-App access           | No (scoped to issuing App)           | No                                                   |
 | Edge binding               | Per-key rate limiting                | Origin/referrer allow-list + per-key rate limiting   |
 
+## Which key goes where (first-run placement)
+
+The single most common first-run mistake is pasting the wrong key. The rule: **Client Key in code
+that ships to users; API Key only in a trusted server you control.**
+
+| You are…                                         | Use            | Get it with                                   | Goes in                          |
+| ------------------------------------------------ | -------------- | --------------------------------------------- | -------------------------------- |
+| Browser / mobile / any client a user can inspect | **Client Key** | `splitch client-key get` / `client_key_get`   | App config — safe to commit/ship |
+| Backend, edge function, trusted server runtime   | **API Key**    | `splitch api-keys create` / `api_keys_create` | A secret manager — never shipped |
+
+```ts
+// Browser / mobile — Client Key (public, safe to ship):
+const splitch = createSplitchClient({ clientKey: "ck_live_..." });
+
+// Backend / trusted server — API Key (secret; from your secret manager):
+const splitch = createSplitchClient({ apiKey: process.env.SPLITCH_API_KEY });
+```
+
+If you paste an API Key into client code it is now leaked — rotate it. If you paste a Client Key into
+a server, evaluation still works (Client Keys hold `evaluate`), you just don't get the API-Key tier
+(peek, full `verify` reason). The keys are not interchangeable for capability; pick by runtime trust.
+
 ## Storage and validation
 
 Both credential types follow the same D1/KV pattern (ADR-0018):
@@ -78,8 +100,10 @@ Client Key requests additionally pass through Cloudflare WAF before reaching the
   SDK documentation must state this — a Client Key failure may be a WAF error, not a
   Worker-level error.
 
-No Client Key configuration is required for keys to be valid (allow-list defaults to
-permissive). Abuse surface is bounded by rate limiting regardless.
+New Client Keys are **origin-closed by default** — the allow-list starts empty and allow-all is an
+explicit, loud opt-in, never the silent default (ADR-0034; see
+[../control-plane/credentials-and-keys.md](../control-plane/credentials-and-keys.md)). Add your app's
+origins (or opt into allow-all) before shipping. Abuse surface is bounded by rate limiting regardless.
 
 ## Seam boundary
 

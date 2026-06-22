@@ -42,6 +42,7 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 
 | Tool                          | Method | Path                           |
 | ----------------------------- | ------ | ------------------------------ |
+| `organizations_list`          | GET    | `/orgs`                        |
 | `organizations_get`           | GET    | `/orgs/:orgId`                 |
 | `organizations_update`        | PATCH  | `/orgs/:orgId`                 |
 | `organizations_delete`        | DELETE | `/orgs/:orgId`                 |
@@ -69,6 +70,18 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 | `environments_get`    | GET    | `/apps/:appId/envs/:environmentId` |
 | `environments_update` | PATCH  | `/apps/:appId/envs/:environmentId` |
 | `environments_delete` | DELETE | `/apps/:appId/envs/:environmentId` |
+
+**Reading the Environment Policy.** There is no separate policy endpoint or tool: the Environment
+Policy (the per-change-type `allow | confirm` map, ADR-0029) is returned inline by `environments_get`
+and written by `environments_update` (endpoints-org-app.md). An agent reads `environments_get` and
+inspects `policy` **before** a gated write so it can pass `confirm: true` on the first attempt rather
+than round-tripping through a `409 CONFIRMATION_REQUIRED`. The CLI `splitch env-policy get` / `set`
+are presentation aliases that project the `policy` field of those same calls — same endpoint, friendlier
+surface, no second route (one way to do one thing).
+
+`organizations_list` (above) is the agent's **cold-start entry point**: with no `orgId` in hand on
+first connection, an agent calls it to discover the Organizations the token can reach, then proceeds
+to `apps_create` / `onboard_new_app`.
 
 ### Flags
 
@@ -200,8 +213,37 @@ naming the next step, so the agent's recovery branch is a token lookup, not pros
 - `VARIANT_NOT_AVAILABLE` → `details.missingVariants`, `details.recommendedAction: 'ADD_VARIANT_TO_ENV'`
 - `ALLOCATION_INVALID` → `details.got` (the actual sum; fix allocation to sum to 100)
 - `INSUFFICIENT_SCOPES` → `details.requiredScopes` (re-authenticate with broader scopes)
+- `CONFIRMATION_REQUIRED` → `details.gate` + `recommendedAction: 'RETRY_WITH_CONFIRMATION'` (the Environment Policy gates this change type; resend the **same** tool call with `confirm: true`)
 
 No per-tool ad-hoc error shapes. (ADR-0025 "one canonical ErrorResponse".)
+
+## Confirmation gate over MCP
+
+Gated writes (`experiments_start`, `flag_config_update`, `flags_promote`, the enabled-state toggle)
+derive a `confirm?: boolean` input from the same Zod request body the Worker validates, so the field
+is exposed on the tool by construction — there is no separate confirmation ceremony. If the
+Environment Policy gates the change type (ADR-0029) and `confirm` is omitted/false, the Worker
+returns `409 CONFIRMATION_REQUIRED` naming `details.gate`; the agent resends the identical call with
+`confirm: true`. To avoid the round-trip, an agent reads the Policy from `environments_get` first and
+sets `confirm` up front. `confirm: true` satisfies the gate but does not widen authorization (full Worker validation
+still applies). Canonical shape in [error-responses.md](./error-responses.md#confirmation_required-the-environment-policy-confirmation-handshake).
+
+## Pagination inputs
+
+Every `*_list` tool derives `limit?` and `cursor?` from its route query params (default `limit` 50,
+max 500). Responses are the `PaginatedResponse<T>` wrapper; an agent paginates by resending the tool
+with the returned `cursor` until `cursor === null`. Do not iterate on `total` — it is `null` on
+Tinybird-backed lists. Canonical contract in
+[request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md#pagination-wrapper-reused-by-all-list-endpoints).
+
+## Idempotency on retried creates
+
+Non-idempotent control-plane creates (`apps_create`, `experiments_create`, `experiments_start`,
+`flag_variants_create`, `metrics_create`, `segments_create`, `api_keys_create`) accept an optional
+`idempotency_key` (caller-supplied, derived from the route body schema). The Worker records the key
+and returns the **same** resource on a retry with the same key, so an agent retrying after a network
+timeout never double-creates. Omitting the key preserves at-most-once-per-call semantics only; agents
+that retry should always supply one. (Mirrors the auth-claim idempotency key, auth-doors.md.)
 
 ## Authorization
 

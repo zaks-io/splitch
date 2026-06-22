@@ -78,13 +78,39 @@ reads, injecting `app_id` and `environment_id` from the auth/path context (manda
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/results`
 
 Returns experiment analysis summary for the live Run (or specified `?run_id=`), over this
-Environment's Exposures.
-Response shape: defined in stats area spec; cross-link here when available.
+Environment's Exposures. The metrics payload shape is defined in the stats area spec
+([../../spec/stats/result-contracts.md](../../spec/stats/result-contracts.md)); cross-link the leaf
+schema here once stabilized.
+
+**Readiness envelope (polling contract).** Analysis is not instantaneous after a Run starts, so the
+response always carries an explicit readiness state — a caller never has to infer "ready" from the
+presence of a field:
+
+```
+{
+  state: "warming_up" | "ready" | "insufficient_data",
+  asOf: string (ISO 8601),         // when this snapshot was computed
+  nextPollAfterMs: number | null,  // server-advised backoff; null once state === "ready" and final
+  metrics: ResultPayload | null    // null while "warming_up"; present for "ready"/"insufficient_data"
+}
+```
+
+- `warming_up` — the Run is live but the first analysis snapshot is not computed yet. Poll again after
+  `nextPollAfterMs` (the server advises the interval; clients must honor it rather than fixed-spin).
+- `ready` — metrics are populated; `nextPollAfterMs` indicates when the next refreshed snapshot is
+  expected (sequential testing recomputes, ADR-0014), or `null` for an ended Run's final result.
+- `insufficient_data` — the Run is live but has too few Exposures for a valid read; `metrics` carries
+  the counts so a caller can show "collecting data" rather than a spurious result.
+
+Agents polling `experiment_results_get` (the `run_an_experiment` workflow) loop on `state`, sleeping
+`nextPollAfterMs` between calls, and stop when `state === 'ready'`. There is no fixed client-side
+interval and no infinite spin — the server owns the cadence.
 
 ### `GET /apps/{app_id}/audit-log`
 
-Returns `?limit=50&offset=0` paginated audit events for the App. App-level (spans Environments); each
-event carries its `environment_id` (null for App-level definition changes). Filter with
+Returns cursor-paginated audit events for the App (`?limit=50&cursor=<opaque>`, the shared
+`PaginatedResponse<T>` wrapper; `total` is `null` — Tinybird-backed). App-level (spans Environments);
+each event carries its `environment_id` (null for App-level definition changes). Filter with
 `?environment_id=`.
 
 ## Schema discovery

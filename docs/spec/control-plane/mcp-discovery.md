@@ -44,6 +44,14 @@ verify steps built in. The agent gets a plan, then executes it with tools.
 
 Notes:
 
+- An agent with no `orgId` in hand calls `organizations_list` first to discover the Organizations
+  its token can reach, then feeds the chosen one to `onboard_new_app` (cold-start entry point).
+- If the session authenticated via the **anonymous door**, the Org is a 24h demo
+  (`splitch://active-context` carries `demoExpiresAt`). The `onboard_new_app` plan ends by telling
+  the human to claim the account before it expires.
+- Verify proves **wiring**; the **first real `evaluate`** proves the integration. The plan's final
+  message tells the agent onboarding is complete only at the first real Exposure (deploy → call
+  `evaluate` with a real Targeting Key → dashboard flips to "first Exposure received").
 - Every workflow prompt **ends on a real `verify` / `test_eval` round-trip**, so the agent's
   time-to-first-confidence is one call, on any tier (ADR-0037). A prompt never ends on "probably
   fine."
@@ -60,13 +68,13 @@ Notes:
 Resources are the "what does this mean / what is my situation" layer. They are addressable,
 cacheable, read-only, and carry no side effects.
 
-| Resource URI               | MIME             | Content                                                                                                    |
-| -------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------- |
-| `splitch://context`        | text/markdown    | The CONTEXT.md ubiquitous-language glossary (Flag, Variant, Run, Exposure, Targeting Key, …). One source.  |
-| `splitch://auth`           | text/markdown    | The `auth.md` companion: the three doors, how the agent authenticated, how to widen scope (ADR-0022).      |
-| `splitch://active-context` | application/json | The resolved active `{ app, environment, source }` for this session — the same data `context` returns.     |
-| `splitch://capabilities`   | application/json | The token's scopes + which tools they gate, so the agent knows up front what it can and cannot do.         |
-| `splitch://quickstart`     | text/markdown    | The agent-first quickstart: the canonical first-run narrative that the `onboard_new_app` prompt automates. |
+| Resource URI               | MIME             | Content                                                                                                                                                                                                                                                                 |
+| -------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `splitch://context`        | text/markdown    | The CONTEXT.md ubiquitous-language glossary (Flag, Variant, Run, Exposure, Targeting Key, …). One source.                                                                                                                                                               |
+| `splitch://auth`           | text/markdown    | The `auth.md` companion: the three doors, how the agent authenticated, how to widen scope (ADR-0022).                                                                                                                                                                   |
+| `splitch://active-context` | application/json | The resolved active `{ app, environment, source }` for this session — the same data `context` returns. Includes `demoExpiresAt` (ISO 8601) when the Org is a provisional anon-door demo, so the agent can see the 24h deadline and prompt the human to claim before it. |
+| `splitch://capabilities`   | application/json | The token's scopes + which tools they gate, so the agent knows up front what it can and cannot do.                                                                                                                                                                      |
+| `splitch://quickstart`     | text/markdown    | The agent-first quickstart: transports [../quickstart.md](../quickstart.md) verbatim — the canonical first-run narrative the `onboard_new_app` prompt automates.                                                                                                        |
 
 Notes:
 
@@ -97,6 +105,7 @@ START_A_RUN                → experiments_start (or experiments_create then sta
 EDIT_DRAFT_THEN_START      → apply a draft change → experiments_start
 ADD_VARIANT_TO_ENV         → flags_promote (or variant promotion) → retry the original op
 RETRY_AFTER                → wait details.retryAfterMs → retry
+RETRY_WITH_CONFIRMATION    → resend the same call with confirm: true (Environment Policy gate, ADR-0029)
 ```
 
 The token is the contract; the prompt is the convenience. An agent that already knows the token

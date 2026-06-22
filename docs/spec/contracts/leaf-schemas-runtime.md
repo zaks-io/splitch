@@ -49,6 +49,34 @@ resolved by `MIN(serverReceivedAt)` — the earliest wins. Distinct from the wir
 
 ---
 
+## ResolutionDetails (OpenFeature SDK return shape)
+
+The shape every SDK accessor returns (`evaluate`, `evaluateDetails`, `peekVariant`, `verify`). It is
+**not a wire schema** — the data-plane wire response is `DataPlaneEvaluateResponse = { variant }`
+(see [request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md)). The
+SDK synthesizes `ResolutionDetails` from that wire value plus the HTTP status, so the caller always
+gets a structured, fail-loud result (ADR-0036). It is the same OpenFeature `ResolutionDetails` shape
+the verify and error contracts reference; defined here once.
+
+| Field          | Type               | Required | Meaning                                                                                                       |
+| -------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `value`        | `VariantValue`     | yes      | The resolved Variant value; the Default Variant value on a failure-fallback                                   |
+| `variantName`  | `string \| null`   | yes      | The Variant name served; `null` when no Variant resolved (error / disabled with no Default)                   |
+| `reason`       | `ResolutionReason` | yes      | Why this value was returned (enum below)                                                                      |
+| `errorCode`    | `ErrorCode`        | no       | Present iff `reason === 'ERROR'`; the canonical `ErrorCode` enum ([error-responses.md](./error-responses.md)) |
+| `errorMessage` | `string`           | no       | Human-readable; present iff `reason === 'ERROR'`                                                              |
+
+`ResolutionReason` enum: `'SPLIT' | 'DEFAULT' | 'DISABLED' | 'CACHED' | 'STALE' | 'ERROR'`.
+`VariantValue = boolean | string | number | JsonObject`.
+
+A failure-fallback **always** carries `reason: 'ERROR'` + `errorCode`, never a silent default
+(ADR-0036). Under a Client Key, `reason` is the non-revealing set and never names the matched rule
+(ADR-0018); under an API Key, `verify` returns the full reason (ADR-0037). The HTTP-status →
+`reason`/`errorCode` mapping the SDK applies is in
+[../sdk/public-evaluate-endpoint.md](../sdk/public-evaluate-endpoint.md#http-status-to-resolutiondetails-mapping).
+
+---
+
 ## Organization, App, Environment, User, SDK credentials
 
 See [two-packages-topology.md](./two-packages-topology.md) for credential consumer policy.

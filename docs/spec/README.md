@@ -8,6 +8,9 @@ referenced from each spec file's `## Sources`, but the spec is what you build ag
 - **Context index / ubiquitous language:** [`../../CONTEXT.md`](../../CONTEXT.md). Read it first,
   then follow the domain-specific context link for the area you are touching. Use these terms exactly;
   never invent synonyms.
+- **First-run narrative:** [`quickstart.md`](./quickstart.md) — zero to a resolving Flag, the same
+  steps for human/agent/panel. It is the canonical text the `splitch://quickstart` MCP resource and
+  the `onboard_new_app` prompt serve.
 
 Each area is a directory with a thin `README.md` index and small, single-concern files
 (≤165 lines) so an implementing agent reads only what its ticket touches.
@@ -95,6 +98,12 @@ Some topics are touched by more than one area, each from its own angle. The cano
 - **Agent-verifiable Done** → [`platform/agent-verification.md`](./platform/agent-verification.md)
   is the source of truth for proof commands, local Worker smoke, remote Cursor requirements, and what each
   slice must show before handoff.
+
+## Human setup
+
+Most of the build is agent-doable. The setup that an agent **cannot** do for you — first-trust
+roots, external accounts, human approval gates, and open product decisions — is captured once in
+[`HUMAN-SETUP.md`](./HUMAN-SETUP.md). Do those once, record the outcome there, and don't re-derive.
 
 ## Next phase
 
