@@ -38,7 +38,7 @@ never a fork of the palette, never a new `ui` component with one consumer.
 
 **Token location:** `packages/ui/src/theme.css` (Tailwind 4 `@theme` block). The actual token values
 are defined by the branding guide. Placeholder token names are pinned here; values are filled in from
-`docs/branding/design-tokens.md` (to be created by design).
+[`docs/branding/design-tokens.md`](../../branding/design-tokens.md).
 
 Token categories (names pinned, values deferred to branding guide):
 | category | example tokens |

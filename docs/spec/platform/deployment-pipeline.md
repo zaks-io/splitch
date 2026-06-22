@@ -96,6 +96,11 @@ Wrangler config is the source of truth. Use `wrangler.jsonc` for each deployable
 shared-preview configs from those checked-in configs. Do not deploy the root Worker accidentally; every
 deploy must specify a platform target.
 
+Public hostnames and per-Worker routes are fixed by
+[ADR-0038](../../adr/0038-public-hostnames-are-a-fixed-human-owned-subdomain-map.md) on the
+`splitch.dev` zone (subdomain per surface; Analysis is internal, no public host). Generate
+`wrangler.jsonc` routes from that table — do not invent hostnames.
+
 Per-Worker configs must declare only the bindings owned by that Worker:
 
 | Worker                   | Binding rule                                                                                         |
