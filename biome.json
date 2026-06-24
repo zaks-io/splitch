@@ -9,6 +9,7 @@
       "!**/.turbo/**",
       "!**/.wrangler/**",
       "!**/.tinyb/**",
+      "!**/.claude/worktrees/**",
       "!**/*.md"
     ],
     "ignoreUnknown": true
