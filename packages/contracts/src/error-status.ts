@@ -1,0 +1,59 @@
+import type { ErrorCode } from "./errors.js";
+
+/**
+ * Canonical ErrorCode -> HTTP status map. The single source for the status of
+ * every error code; the guard and every handler render through this. Kept in its
+ * own module so the error-shape definitions and the status table stay
+ * independently small and single-purpose. See
+ * docs/spec/contracts/error-responses.md#http-status-mapping.
+ */
+export const errorStatusByCode: Record<ErrorCode, number> = {
+  VALIDATION_ERROR: 400,
+  ALLOCATION_INVALID: 400,
+  ACTIVATION_TIMESTAMP_INVALID: 400,
+  INVALID_PAGINATION: 400,
+  INVALID_SORT: 400,
+
+  UNAUTHORIZED: 401,
+
+  CREDENTIAL_REVOKED: 403,
+  FORBIDDEN: 403,
+  INSUFFICIENT_SCOPES: 403,
+  ORIGIN_NOT_ALLOWED: 403,
+  APP_MISMATCH: 403,
+
+  EXPERIMENT_NOT_FOUND: 404,
+  RUN_NOT_FOUND: 404,
+  FLAG_NOT_FOUND: 404,
+  VARIANT_NOT_FOUND: 404,
+  METRIC_NOT_FOUND: 404,
+  APP_NOT_FOUND: 404,
+  ORGANIZATION_NOT_FOUND: 404,
+  USER_NOT_FOUND: 404,
+  CREDENTIAL_NOT_FOUND: 404,
+  SEGMENT_NOT_FOUND: 404,
+  PRIVACY_JOB_NOT_FOUND: 404,
+
+  RUN_FROZEN: 409,
+  DECISION_LOCKED: 409,
+  TARGETING_KEY_MISMATCH: 409,
+  RUN_NOT_RUNNING: 409,
+  EXPERIMENT_RUNNING: 409,
+  EXPERIMENT_NO_DRAFT: 409,
+  VARIANT_NOT_AVAILABLE: 409,
+  MULTIPLE_VARIANT_CONFLICT: 409,
+  LAST_OWNER_REQUIRED: 409,
+  PRIVACY_CONFIRMATION_REQUIRED: 409,
+  CONFIRMATION_REQUIRED: 409,
+
+  RATE_LIMITED: 429,
+
+  PRIVACY_JOB_FAILED: 500,
+  INTERNAL_SERVER_ERROR: 500,
+
+  SERVICE_UNAVAILABLE: 503,
+};
+
+export function httpStatusForError(code: ErrorCode): number {
+  return errorStatusByCode[code];
+}

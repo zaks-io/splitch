@@ -55,6 +55,22 @@ module.exports = {
       from: { path: "^apps/marketing/" },
       to: { path: "^packages/control-plane-sdk/" },
     },
+    {
+      name: "worker-runtime-does-not-import-apps",
+      severity: "error",
+      comment:
+        "@splitch/worker-runtime is shared request-guard plumbing; it cannot import deploy units. Apps mount the runtime, never the reverse.",
+      from: { path: "^packages/worker-runtime/" },
+      to: { path: "^apps/" },
+    },
+    {
+      name: "worker-runtime-does-not-own-storage",
+      severity: "error",
+      comment:
+        "@splitch/worker-runtime owns the HTTP edge guard only. It must not import D1 schema modules, Tinybird clients, Provider adapters, or the transport SDKs — storage and capability code stay in their owning Workers.",
+      from: { path: "^packages/worker-runtime/" },
+      to: { path: "^packages/(control-plane-sdk|sdk|ui)/" },
+    },
   ],
   options: {
     doNotFollow: {

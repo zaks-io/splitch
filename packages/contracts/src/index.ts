@@ -1,5 +1,39 @@
 import { z } from "zod";
 
+// biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the contracts surface is intentionally aggregated here
+export { errorStatusByCode, httpStatusForError } from "./error-status.js";
+export {
+  ErrorCodeSchema,
+  errorCodes,
+  ErrorResponseSchema,
+  PolicyChangeTypeSchema,
+  policyChangeTypes,
+  RecommendedActionSchema,
+  recommendedActions,
+} from "./errors.js";
+export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors.js";
+export {
+  AuthKindSchema,
+  authKinds,
+  defineRoute,
+  HttpMethodSchema,
+  httpMethods,
+  IdempotencyModeSchema,
+  idempotencyModes,
+  RateLimitClassSchema,
+  rateLimitClasses,
+  RouteOwnerSchema,
+  routeOwners,
+} from "./route-contract.js";
+export type {
+  AuthKind,
+  HttpMethod,
+  IdempotencyMode,
+  RateLimitClass,
+  RouteContract,
+  RouteOwner,
+} from "./route-contract.js";
+
 export const platformTargets = ["local", "pr-ci", "shared-preview", "production"] as const;
 
 export const PlatformTargetSchema = z.enum(platformTargets);
