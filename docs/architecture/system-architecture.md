@@ -29,7 +29,7 @@ flowchart LR
   Client --> CPA["Control Plane API Worker"]
   Panel["Control Panel Worker"] --> Client
   CPA --> D1["D1 and KV config"]
-  CPA --> Fanout["per-App live-update DO"]
+  CPA --> Fanout["per-(App, Environment) live-update DO"]
   Auth["Auth API Worker"] --> CPA
   Marketing["Marketing Worker"] --> UI["@splitch/ui"]
   Panel --> UI
@@ -37,16 +37,16 @@ flowchart LR
 
 ## Worker boundaries
 
-| Worker                   | Trust boundary               | Owns                                                                                                                                                     | Must not own                                                               |
-| ------------------------ | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Control Plane API Worker | Authenticated management API | Organization, App, Environment, Flag definition, Flag Configuration, Promotion, Experiment, Run, Metric, Segment, Client Key, API Key, generated OpenAPI | MCP transport, public SDK evaluate, event ingest, Tinybird result reads    |
-| MCP Worker               | Agent protocol adapter       | Remote MCP OAuth PRM/auth.md handshake, tool registry, schema derivation, calls through `@splitch/control-plane-sdk`                                     | D1/KV/Tinybird bindings, domain invariants, direct Worker imports          |
-| Evaluation Worker        | Data-plane resolution        | Public evaluate and peek, control-plane dry-run test-eval, Provider reads, Assignment Store reads/writes, Exposure creation                              | Config mutation, Tinybird result reads, Metric/statistical calculation     |
-| Event Ingest Worker      | Append-only intake           | Assignment, Exposure, and Metric event validation; queueing; sharded Durable Object dedup; Tinybird delivery                                             | Variant resolution, Run lifecycle, results calculation, control-plane CRUD |
-| Analysis Worker          | Results read model           | Tinybird proxy reads, SRM, Metric and statistical result contracts, `app_id` and `environment_id` injection from auth/path context                       | SDK evaluate, event ingest, config mutation                                |
-| Auth API Worker          | Identity and token surface   | OAuth metadata, ID-JAG/device/anonymous doors, token issuance, token revocation, provisional create handoff                                              | Post-create Organization/App management, SDK credentials, analytics        |
-| Control Panel Worker     | Authenticated UI             | SSR routes, loader session validation, TanStack Query cache, live-update socket lifecycle                                                                | Domain invariants, direct storage access, direct Worker code imports       |
-| Marketing Worker         | Public UI                    | Static/prerendered marketing surface, shared design system usage                                                                                         | Authenticated App data, control-plane SDK transport, Worker bindings       |
+| Worker                   | Trust boundary               | Owns                                                                                                                                                        | Must not own                                                               |
+| ------------------------ | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Control Plane API Worker | Authenticated management API | Organization, App, Environment, Flag definition, Flag Configuration, Promotion, Experiment, Run, Metric, Segment, Client Key, API Key, generated OpenAPI    | MCP transport, public SDK evaluate, event ingest, Tinybird result reads    |
+| MCP Worker               | Agent protocol adapter       | Remote MCP OAuth PRM/auth.md handshake, tool registry, schema derivation, calls through `@splitch/control-plane-sdk`                                        | D1/KV/Tinybird bindings, domain invariants, direct Worker imports          |
+| Evaluation Worker        | Data-plane resolution        | Public Client Key evaluate, API-Key-only peek (ADR-0034), control-plane dry-run test-eval, Provider reads, Assignment Store reads/writes, Exposure creation | Config mutation, Tinybird result reads, Metric/statistical calculation     |
+| Event Ingest Worker      | Append-only intake           | Assignment, Exposure, and Metric event validation; queueing; sharded Durable Object dedup; Tinybird delivery                                                | Variant resolution, Run lifecycle, results calculation, control-plane CRUD |
+| Analysis Worker          | Results read model           | Tinybird proxy reads, SRM, Metric and statistical result contracts, `app_id` and `environment_id` injection from auth/path context                          | SDK evaluate, event ingest, config mutation                                |
+| Auth API Worker          | Identity and token surface   | OAuth metadata, ID-JAG/device/anonymous doors, token issuance, token revocation, provisional create handoff                                                 | Post-create Organization/App management, SDK credentials, analytics        |
+| Control Panel Worker     | Authenticated UI             | SSR routes, loader session validation, TanStack Query cache, live-update socket lifecycle                                                                   | Domain invariants, direct storage access, direct Worker code imports       |
+| Marketing Worker         | Public UI                    | Static/prerendered marketing surface, shared design system usage                                                                                            | Authenticated App data, control-plane SDK transport, Worker bindings       |
 
 ## Runtime flows
 
@@ -72,8 +72,8 @@ flowchart LR
 1. Human CLI, Control Panel Worker, and MCP Worker call `@splitch/control-plane-sdk`.
 2. `@splitch/control-plane-sdk` calls the Control Plane API Worker.
 3. Control Plane API Worker enforces management invariants and writes D1/KV config.
-4. Live updates use the per-App fan-out DO. UI clients receive nudges, then refetch through the typed
-   client.
+4. Live updates use the per-(App, Environment) fan-out DO (ADR-0019). UI clients receive nudges, then
+   refetch through the typed client.
 
 ### Agent flow
 
@@ -88,14 +88,15 @@ flowchart LR
 The architecture is enforced at the import graph, not by convention. The root
 [`.dependency-cruiser.cjs`](../../.dependency-cruiser.cjs) defines these rules:
 
-| Rule                                          | Enforces                                                                                                                         |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `no-app-to-other-app-imports`                 | Deployable apps cannot import another app's code. Cross-app communication uses HTTP, queues, service bindings, or typed clients. |
-| `no-shared-package-to-app-imports`            | `packages/` stay reusable and cannot import apps.                                                                                |
-| `contracts-stays-schema-only`                 | `@splitch/contracts` cannot import runtime code, UI, or transport packages.                                                      |
-| `control-plane-sdk-does-not-import-apps`      | `@splitch/control-plane-sdk` cannot import apps.                                                                                 |
-| `ui-stays-domain-free`                        | `@splitch/ui` cannot import contracts, the Control Plane SDK, or apps.                                                           |
-| `marketing-does-not-import-control-plane-sdk` | Marketing cannot import the Control Plane SDK.                                                                                   |
+| Rule                                           | Enforces                                                                                                                         |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `no-app-to-other-app-imports`                  | Deployable apps cannot import another app's code. Cross-app communication uses HTTP, queues, service bindings, or typed clients. |
+| `no-shared-package-to-app-imports`             | `packages/` stay reusable and cannot import apps.                                                                                |
+| `contracts-stays-schema-only`                  | `@splitch/contracts` cannot import runtime code, UI, or transport packages.                                                      |
+| `control-plane-sdk-does-not-import-apps`       | `@splitch/control-plane-sdk` cannot import apps.                                                                                 |
+| `public-sdk-does-not-import-internal-surfaces` | `@splitch/sdk` (public data-plane package) cannot import app code, control-plane transport, private contracts, or UI.            |
+| `ui-stays-domain-free`                         | `@splitch/ui` cannot import contracts, the Control Plane SDK, or apps.                                                           |
+| `marketing-does-not-import-control-plane-sdk`  | Marketing cannot import the Control Plane SDK.                                                                                   |
 
 The gate runs as:
 

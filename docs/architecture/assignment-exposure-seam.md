@@ -16,8 +16,10 @@ Three domain terms, one immutable relationship between them:
   Never an event, never recorded on its own. Recomputable anywhere, anytime (any of the five
   runtimes, offline, in a backfill).
 - **Exposure** — the **only event recorded on this seam**. Carries
-  `(Targeting Key, Experiment, Run, Variant, timestamp)`. Deduped to **unique Entities per Run,
-  first-touch**. This is the denominator for all analysis.
+  `(app_id, environment_id, Targeting Key, Experiment, Run, Variant, timestamp)`. Deduped to **unique
+  Entities per Run, first-touch**. This is the denominator for all analysis. `app_id` and
+  `environment_id` co-scope every record because Experiments and their Runs are per-Environment
+  (ADR-0027); they ride through dedup as carried scope columns, never collapsing rows.
 - **Run** — a **time-boxed, immutable window** of an Experiment. Config (salt, allocation, Variant
   set, Targeting) is frozen for the Run's life. The **unit of analysis**. A material config edit ends
   one Run and opens the next, keeping each Run's dataset clean. Because the Run is immutable,

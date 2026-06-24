@@ -51,14 +51,19 @@ expressed in (or read from) the single shared dedup query — one definition, ce
 ```sql
 -- one row per (entity, run): the analysis unit
 SELECT
-  entity, run,
+  app_id, environment_id, entity, run,                             -- app_id + environment_id co-scope (ADR-0027)
   MIN(ts)                                   AS first_exposure_ts,   -- Conversion Window anchor
   CASE WHEN COUNT(DISTINCT variant) > 1
        THEN '__multiple__'                                          -- ADR-0011 quarantine
        ELSE MAX(variant) END                AS variant
 FROM raw_exposures
-GROUP BY entity, run
+GROUP BY app_id, environment_id, entity, run
 ```
+
+`app_id` and `environment_id` ride the `GROUP BY` as carried scope columns, not because they change which
+rows collapse — Exposures are per-Environment (ADR-0027), so every downstream consumer (SRM, Metrics, the
+Activation gate) receives them. The canonical column list lives in
+[dedup-query-contract.md](../spec/pipeline/dedup-query-contract.md).
 
 ## Variant conflict → `__multiple__` (ADR-0011)
 

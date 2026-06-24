@@ -83,9 +83,9 @@ on first paint, so it needs the authenticated identity at request time, before a
   the App's Environments as a 404 — Environment access follows App access, no separate membership check
   (ADR-0027). Switching App or Environment is a navigation.
 
-**Deferred (product decision):** what _issues_ the session — email/password, OAuth/SSO, magic link. The
-`cookie → server validation → loader context` seam holds regardless of issuer; the issuer plugs in behind
-it.
+**Session issuer — WorkOS (ADR-0022).** WorkOS issues the session: AuthKit (email/password + social
+OAuth) for self-serve, SSO/SCIM for enterprise. The `cookie → server validation → loader context` seam is
+issuer-agnostic — WorkOS plugs in only at session creation, and the loader never calls WorkOS per request.
 
 ## Query keys and the nudge → invalidation mapping
 
@@ -174,7 +174,6 @@ The frontend mirrors that discipline: **server-confirmed mutations, no optimisti
 
 ## Deliberately not decided here
 
-- **Session issuer** (email/password vs SSO vs magic link) — product decision; the seam is issuer-agnostic.
 - **Screens / information architecture** — this is the architecture spec, not the UX spec.
 - **Brand token _values_** — coming in the branding guide; this document pins _where_ tokens live, not what
   they are.

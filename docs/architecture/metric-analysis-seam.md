@@ -19,13 +19,18 @@ ratio-metric variance, heavy tails, and multiple comparisons all live — each a
 The engine's spine is a single confidence-interval object that every Metric type flows through. Reading it
 top to bottom is reading the whole engine:
 
+Every step below runs per `(app_id, environment_id, run_id)` — `app_id` and `environment_id` co-scope the
+analysis population because Experiments and their Runs are per-Environment (ADR-0027); the
+[Exposure pipeline](./exposure-pipeline-seam.md) and [Activation gate](./activation-gate-seam.md) carry
+both columns through to this seam.
+
 ```
 per-Entity Metric values (aggregated to the randomization unit — ADR-0015)
         │
+        ▼  winsorize additive Metrics (99.9% default; never binary)        (ADR-0016, before variance)
+        │
         ▼  type-appropriate variance: Binomial p(1-p) | Count/Revenue sample var | Ratio delta method
    delta-method variance  ──────────────────────────────────────────────  (ADR-0015, covariance term)
-        │
-        ▼  winsorize additive Metrics (99.9% default; never binary)        (ADR-0016)
         │
         ▼  CUPED adjustment, gated on pre-period data; attribute-covariate fallback for new Entities (ADR-0016)
         │

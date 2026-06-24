@@ -46,11 +46,17 @@ get/put keeps the evaluate path a readable straight line.
 
 ```
 interface AssignmentStore:
-  getAll(experiment, idType, targetingKey) -> Map<experiment, {runId, variant}>   # eager pre-load
-  put(experiment, idType, targetingKey, runId, variant)                            # first-touch write
+  getAll(appId, idType, targetingKey) -> Map<experiment, {runId, variant}>          # eager pre-load
+  put(appId, experiment, idType, targetingKey, runId, variant)                      # first-touch write
 ```
 
-**Key — `(Experiment, idType, Targeting Key)`.** The Entity-type (`idType`) is explicit in the key even
+**Environment is bound at the substrate, not in the key (ADR-0027).** The store instance is scoped to one
+Environment by its KV namespace / DO binding, so `environment_id` never appears as a call parameter — the
+`experiment_id` in each holdover record implies its Environment. `getAll` filters to the request's
+Environment via that binding. `app_id` is an explicit parameter and co-scopes every call. (See
+[assignment-store.md](../spec/domain-model/assignment-store.md) for the canonical signatures.)
+
+**Key — `(app_id, Experiment, idType, Targeting Key)`.** The Entity-type (`idType`) is explicit in the key even
 though an Experiment pins one Entity type today. It is the cheap guard against a Targeting Key _value_
 colliding across Entity types (a `session` id string that equals a `user` id string). Mirrors Statsig's
 `<userID>:<idType>` keying. Fail-loud over fail-clever.
@@ -70,7 +76,7 @@ Object as the serialized writer — is pinned below in [The substrate](#the-subs
 ## The evaluate path (no superposition — every branch visible)
 
 ```
-held = AssignmentStore.getAll(experiment, idType, targetingKey)   # one edge-local read, all Experiments
+held = AssignmentStore.getAll(appId, idType, targetingKey)   # one edge-local read, all Experiments
 
 for flag in flags:
     if held[exp] present:                       # holdover: returning Entity, already exposed

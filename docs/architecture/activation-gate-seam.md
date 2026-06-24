@@ -47,19 +47,21 @@ Either firing → gated results untrusted. Same fail-loud ethos as the `__multip
 
 ```sql
 -- exposures already deduped to first-touch per (entity, run), __multiple__ quarantined (ADR-0010/0011)
-WITH exposed AS ( /* ... first_exposure_ts, variant ... */ ),
+-- app_id + environment_id co-scope every CTE and join key — Experiments are per-Environment (ADR-0027)
+WITH exposed AS ( /* ... app_id, environment_id, first_exposure_ts, variant ... */ ),
 activated AS (
-  SELECT entity, run, MIN(activation_ts) AS activation_ts        -- activation is a first-class event row
+  SELECT app_id, environment_id, entity, run, MIN(activation_ts) AS activation_ts  -- first-class event row
   FROM raw_events WHERE type = 'activation'
-  GROUP BY entity, run
+  GROUP BY app_id, environment_id, entity, run
 )
 SELECT
-  e.entity, e.run, e.variant,
+  e.app_id, e.environment_id, e.entity, e.run, e.variant,
   a.activation_ts                                       AS anchor_ts,   -- re-anchor (ADR-0012)
   COALESCE(a.activation_ts, e.first_exposure_ts)        AS window_anchor
 FROM exposed e
 JOIN activated a
-  ON a.entity = e.entity AND a.run = e.run
+  ON a.app_id = e.app_id AND a.environment_id = e.environment_id
+ AND a.entity = e.entity AND a.run = e.run
  AND a.activation_ts > e.first_exposure_ts                             -- activation follows exposure
 -- un-activated exposed entities are dropped from the gated population;
 -- activation rate per arm and activated-population SRM are computed from (exposed JOIN/ANTI-JOIN activated)
