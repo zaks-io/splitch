@@ -1,5 +1,12 @@
 # Security model
 
+> **Build-fast phase:** the trust boundaries and threat model below are the target contract. The
+> automated CI/local **scanning gates** that enforce them (CodeQL, Semgrep, OSV-Scanner, Trivy,
+> `pnpm audit`, pinact, the pnpm install quarantine) are **parked** until the dependency tree is
+> final, so they don't block build work on dependency noise — see the parked-gate table in
+> [local-quality-gates.md](./local-quality-gates.md) and [ADR-0035](../../adr/0035-security-automation-and-supply-chain-integrity-are-an-enforced-ci-contract.md).
+> gitleaks secret scanning and the in-code boundary enforcement stay on.
+
 Security is an **enforced product contract** in splitch, on the same footing as
 statistical rigor (ADR-0030) and privacy (ADR-0032). This file is the one place
 that states the trust boundaries and threat model; the enforcing contracts live

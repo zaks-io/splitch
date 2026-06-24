@@ -21,7 +21,10 @@ package contracts, and the toolchain/quality-gate stack.
 
 pnpm is also the supply-chain policy gate. Workspace installs require package versions to be at least
 3 days old, enforce that rule strictly for direct and transitive dependencies, fail when registry
-publish time is missing, and block transitive exotic dependency sources.
+publish time is missing, and block transitive exotic dependency sources. **Parked in the build-fast
+phase** (the four keys are commented out in `pnpm-workspace.yaml` so installs don't fail on dependency
+churn); re-enabled at the lockdown milestone. Current gate reality:
+[local-quality-gates.md](./local-quality-gates.md).
 
 ## Turborepo task graph
 

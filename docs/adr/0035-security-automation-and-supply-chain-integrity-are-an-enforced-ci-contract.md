@@ -1,6 +1,18 @@
 # Security automation and supply-chain integrity are an enforced CI contract
 
-**Status:** accepted
+**Status:** accepted — **enforcement deferred until the app is built (see Rollout phase below)**
+
+> **Rollout phase (build-fast).** This ADR defines the target security posture, and the tooling is
+> in the repo, but during the pre-build phase the **dependency/CVE/SAST/supply-chain gates are
+> parked**, not enforcing. Pre-build they only fail builds on noise unrelated to the work in flight —
+> a transitive dev-dependency CVE, SAST over scaffolding, a freshly published or non-registry
+> transitive blocked at install — which makes agents detour to fix dependency churn instead of
+> shipping. The deterministic, your-code-only checks stay on (gitleaks secret scanning, linters,
+> typecheck, knip). The plan: build everything, audit the **final** dependency set once, fix, then
+> turn every gate in this ADR back on and ratchet from there. **Re-enabling is a single, explicit
+> lockdown milestone — a launch prerequisite — not something done incrementally per-PR.** What is
+> currently parked and how to restore it is tracked in
+> [local-quality-gates.md](../spec/platform/local-quality-gates.md).
 
 Splitch is public and asks others to trust it with flag config, SDK credentials, and per-tenant
 data. ADRs 0018, 0022, 0032, and 0034 each pinned one security boundary as an enforced product
@@ -33,6 +45,10 @@ blind spots by design.
 
 ### 3. Gate on change, alert on schedule
 
+_(Parked in the build-fast phase: `security.yml` and `codeql.yml` are `workflow_dispatch`-only, so
+nothing below gates a PR yet. The jobs are unchanged and ready; the lockdown milestone flips their
+triggers back to `pull_request`/`push`.)_
+
 On pull_request/push, a high-or-critical finding fails the job so branch protection blocks the merge.
 A daily scheduled run re-runs the same scans against `main` — there is nothing to gate, so it uploads
 SARIF and opens a single deduped tracking issue instead. New CVEs disclosed against already-merged
@@ -42,15 +58,24 @@ code surface within a day, not at the next unrelated PR.
 
 Every GitHub Action is pinned to a full commit SHA with a version comment; tag references are
 forbidden and enforced in CI (`pinact -check`). StepSecurity Harden-Runner monitors egress on every
-job. This composes with the existing pnpm install-time quarantine (`minimumReleaseAge`,
-`blockExoticSubdeps`). Dependabot keeps both the SHA and the comment current, so pinning costs no
-update automation.
+job. This composes with the pnpm install-time quarantine (`minimumReleaseAge`, `blockExoticSubdeps`).
+Dependabot keeps both the SHA and the comment current, so pinning costs no update automation.
+
+_(Parked in the build-fast phase: the `pinact -check` gate and the pnpm install quarantine are off so
+they don't fail builds/installs on actions or transitives unrelated to the work in flight. SHA-pinning
+the actions we keep is still good practice; the lockdown milestone re-enables the `pinact` gate and
+uncomments the pnpm quarantine.)_
 
 ### 5. Local gates mirror CI
 
 The same secret, SAST, dependency-audit, and pin checks run via Lefthook before code leaves the
 machine. Tools absent locally warn and skip so contributors are not forced to install Python/Go
 toolchains; in CI the same checks are required and fail loud. Bad commits fail before they are pushed.
+
+_(Parked in the build-fast phase: the local Lefthook gate runs only the deterministic, your-code-only
+checks — format, lint, typecheck, knip, gitleaks. SAST, dependency-audit, and pin checks are out of
+the `verify:*` path; the `security:full` script still runs the whole battery on demand, and the
+lockdown milestone restores it to `verify:ci`.)_
 
 ## Considered options
 

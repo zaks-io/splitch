@@ -3,6 +3,31 @@
 Status: wired for the scaffold.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 
+> **Build-fast phase — what is actually enforcing right now.** The full gate set below is the
+> **target** posture. While we are building toward a final dependency tree, the gates that fail on
+> things unrelated to the work in flight are **parked** so agents ship instead of chasing dependency
+> noise. This is deliberate and tracked here as the single source of truth; re-enabling is one
+> explicit lockdown milestone (a launch prerequisite, see [ADR-0035](../../adr/0035-security-automation-and-supply-chain-integrity-are-an-enforced-ci-contract.md)),
+> not per-PR work.
+>
+> **Enforcing now (deterministic, your-code-only):** `format:check`, `lint`, `typecheck`, `knip`,
+> `gitleaks` — locally (commit + pre-push) and in CI. Plus `test` + `build` in CI.
+>
+> **Parked until lockdown:**
+>
+> | Parked gate                                                         | Where it was               | How to restore                                   |
+> | ------------------------------------------------------------------- | -------------------------- | ------------------------------------------------ |
+> | `pnpm audit` (dep CVEs)                                             | `verify:*`                 | add back to `verify:ci`                          |
+> | Semgrep SAST (`sast`)                                               | `verify:*`, `security.yml` | add to `verify:ci`; flip `security.yml` triggers |
+> | `pinact -check` (`pins:check`)                                      | `verify:*`, `ci.yml`       | add to `verify:ci`; restore CI install step      |
+> | CodeQL                                                              | `codeql.yml`               | flip triggers to `pull_request`/`push`           |
+> | OSV-Scanner / Trivy / Scorecard                                     | `security.yml`             | flip `security.yml` triggers                     |
+> | pnpm install quarantine (`minimumReleaseAge`, `blockExoticSubdeps`) | `pnpm-workspace.yaml`      | uncomment the four keys                          |
+> | smoke / depcruise / jscpd / d1 / tinybird in pre-push               | `verify:push`              | restore once apps/migrations exist               |
+>
+> The `security:full` script still runs the SAST + pin + audit + secret battery on demand. The rest of
+> this file describes the **target** gates; treat the table above as the current reality where they differ.
+
 ## Decision
 
 Use Lefthook for checked-in Git hook orchestration, Turborepo for package-aware task execution,
@@ -15,7 +40,9 @@ catch ordinary failures before pushing.
 
 ## pnpm supply-chain policy
 
-`pnpm-workspace.yaml` enforces dependency age and transitive-source policy:
+**Parked in the build-fast phase** (commented out in `pnpm-workspace.yaml`): these reject `pnpm
+install` on a freshly published or non-registry transitive — dependency churn unrelated to the work
+in flight. The lockdown milestone uncomments all four keys. The target policy:
 
 - `minimumReleaseAge: 4320` requires package versions to be at least 3 days old before install.
 - `minimumReleaseAgeStrict: true` fails resolution instead of falling back to immature versions.
@@ -73,9 +100,11 @@ target. See [agent-verification.md](./agent-verification.md).
 
 `pre-push` mirrors CI without smoke tests:
 
-- Run the same validation sequence as `verify:ci`: format check, lint, typecheck, tests, build,
-  local API Worker smoke, dependency-cruiser, jscpd, Knip, Gitleaks, local D1 migrations, and Tinybird
-  Local validation.
+- **Build-fast phase:** `verify:push` runs the same lean set as `verify:commit` (format check, lint,
+  typecheck, Knip, Gitleaks). The fuller sequence below is the target once the app exists.
+- **Target sequence** (restored at lockdown / as apps and migrations land): format check, lint,
+  typecheck, tests, build, local API Worker smoke, dependency-cruiser, jscpd, Knip, Gitleaks, local D1
+  migrations, and Tinybird Local validation.
 - Skip only hosted smoke checks, shared-preview deploy/reset, production deploy, rollback, and other
   remote-state mutations.
 - Use Turborepo remote cache when `TURBO_TOKEN` and `TURBO_TEAM` are available; local cache is still

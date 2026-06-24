@@ -55,7 +55,15 @@ We will not pursue or support legal action against researchers who:
 
 Security is an enforced product contract here, not an afterthought. See
 [`docs/spec/platform/security-model.md`](docs/spec/platform/security-model.md)
-for the trust boundaries and threat model. Continuous controls:
+for the trust boundaries and threat model.
+
+> **Pre-build status:** splitch is in active early development. The automated scanning gates listed
+> below are configured and ready, but **enforcement is deferred** until the application and its
+> dependency set are built out — running them now would gate work on dependency noise rather than real
+> findings. Secret scanning (gitleaks) and in-code boundary checks remain active throughout. Turning
+> the full battery back on is a tracked launch prerequisite (ADR-0035).
+
+Continuous controls (target posture; see status note above):
 
 - **Dependency scanning** — Dependabot alerts/updates plus OSV-Scanner in CI;
   pnpm supply-chain quarantine (`minimumReleaseAge`, `blockExoticSubdeps`).
