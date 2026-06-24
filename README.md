@@ -23,6 +23,7 @@ Two planes on Cloudflare:
 
 ## Documentation
 
+- **[`docs/vision.md`](docs/vision.md)** — the north star: who it's for and what "good" means.
 - **[`CONTEXT.md`](CONTEXT.md)** — the project glossary / ubiquitous language. Start here.
 - **[`docs/spec/`](docs/spec/)** — the implementation source of truth.
 - **[`docs/adr/`](docs/adr/)** — why each decision was made.

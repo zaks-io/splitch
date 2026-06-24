@@ -1,8 +1,9 @@
 # splitch — specification
 
 This is the **final-state source of truth** for building splitch. Read the spec; you should not
-need to read the ADRs to implement. The [ADRs](../adr/) record _why_ each decision was made and
-the [architecture seam docs](../architecture/) hold the longer design narrative — both are
+need to read the ADRs to implement. The [vision](../vision.md) is the north star this serves (who
+it's for and what "good" means); the [ADRs](../adr/) record _why_ each decision was made and
+the [architecture seam docs](../architecture/) hold the longer design narrative — all are
 referenced from each spec file's `## Sources`, but the spec is what you build against.
 
 - **Context index / ubiquitous language:** [`../../CONTEXT.md`](../../CONTEXT.md). Read it first,
@@ -26,6 +27,18 @@ scale to millions of events. Two planes:
 - **Control plane:** authoring (Org/App/Flag/Experiment/Run/Metric/Segment), auth (WorkOS +
   OAuth PRM + auth.md), and the MCP/CLI surfaces — all thin skins over one Zod-first typed contract. The
   analytics/stats engine reads the raw Tinybird log.
+
+## How we build (applies to every slice)
+
+The [vision](../vision.md) says _what_ to build; these are the non-negotiable rules for _how_:
+
+1. **Production-ready, not a prototype.** Every slice ships as a real, working piece of the final
+   system — built to run the author's own production with confidence — never a stub or throwaway.
+2. **Progressive, on the final schema.** We build incrementally but on the _final_ data model.
+   Deferring a feature is fine; deferring the schema that lets it drop in additively is the trap.
+   Hard future features land as additive markers/events with **zero schema or query rewrite**.
+3. **Rewrites are failure.** If a change forces us to rewrite work we already shipped, the earlier
+   design was wrong. Don't duplicate effort; design the seam once, correctly.
 
 ## The spine (read these first)
 

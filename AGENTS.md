@@ -1,6 +1,11 @@
 # Agents
 
-Read **`CONTEXT.md`** (repo root) first — the project glossary / ubiquitous
+Read **[`docs/vision.md`](docs/vision.md)** for the north star: who splitch is
+for (agents first) and what "good" means (agent parity, enterprise scale,
+statistical rigor, fail-loud, privacy). When a decision is ambiguous, resolve it
+toward that document.
+
+Read **`CONTEXT.md`** (repo root) next — the project glossary / ubiquitous
 language. It adopts the Flagship and OpenFeature terms verbatim for the flag side
 and the industry-standard experimentation terms (Statsig/Eppo/GrowthBook) for the
 A/B side. Use these terms exactly; do not invent synonyms.
