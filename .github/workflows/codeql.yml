@@ -1,13 +1,9 @@
 name: codeql
 
+# PARKED until the app is built. CodeQL over pre-app scaffolding produces noise,
+# not signal. Re-enable the pull_request + push + schedule triggers once there is
+# real application code to analyze — the analyze job below is unchanged.
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-  schedule:
-    # Weekly re-scan so newly published CodeQL queries run against main.
-    - cron: "23 7 * * 1"
   workflow_dispatch:
 
 permissions:

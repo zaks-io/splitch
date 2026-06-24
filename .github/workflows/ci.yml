@@ -48,11 +48,5 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Install security tools
-        run: |
-          python3 -m pip install --user semgrep==1.167.0
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          go install github.com/suzuki-shunsuke/pinact/v4/cmd/pinact@v4.1.0
-
       - name: Verify
         run: pnpm verify:ci

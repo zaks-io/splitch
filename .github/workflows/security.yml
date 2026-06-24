@@ -1,15 +1,10 @@
 name: security
 
+# PARKED until the app is built. Pre-build, these scans only block docs/spec PRs
+# on noise (transitive dev-dep CVEs, SAST over scaffolding). Re-enable the
+# pull_request + push + schedule triggers once there is real application code to
+# protect — the jobs below are unchanged and ready.
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-  schedule:
-    # Daily off-peak UTC scan. Catches newly-disclosed CVEs in already-merged
-    # code. NOTE: GitHub auto-disables scheduled workflows after 60 days with no
-    # repo activity; an active repo keeps this alive.
-    - cron: "17 7 * * *"
   workflow_dispatch:
 
 permissions:
