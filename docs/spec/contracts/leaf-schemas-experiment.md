@@ -11,28 +11,28 @@ Any field addition here propagates to every envelope automatically.
 
 One Experiment controls one Flag. `targetingKey` lives here, not on each Run. Multi-Flag is a documented additive extension; the schema does not preclude it.
 
-| Field                | Type                | Required | Meaning                                                  |
-| -------------------- | ------------------- | -------- | -------------------------------------------------------- |
-| `id`                 | `string`            | yes      | Stable UUID                                              |
-| `appId`              | `string`            | yes      | Owning App                                               |
-| `environmentId`      | `string`            | yes      | Owning Environment; co-scoped with `appId` (ADR-0027)    |
-| `key`                | `string`            | yes      | Unique per `(App, Environment)`                          |
-| `flagId`             | `string`            | yes      | The one Flag this Experiment controls                    |
-| `name`               | `string`            | yes      | —                                                        |
-| `description`        | `string`            | no       | —                                                        |
-| `hypothesis`         | `string`            | no       | Formal statement of expected effect                      |
-| `status`             | `ExperimentStatus`  | yes      | See state machine below                                  |
-| `targetingKey`       | `string`            | yes      | Inherited by every Run; changing this requires a new Run |
-| `confidenceLevel`    | `number`            | yes      | Default `0.95`; per-Experiment                           |
-| `defaultVariantId`   | `string`            | yes      | Served before first Start                                |
-| `metrics`            | `MetricRef[]`       | yes      | Goal Metrics                                             |
-| `guardrailMetrics`   | `MetricRef[]`       | yes      | Metrics watched for harm                                 |
-| `activationMetricId` | `string \| null`    | no       | Gate metric; setting/changing is an assignment edit      |
-| `conversionWindowMs` | `number`            | yes      | Duration in ms; 0 = unbounded                            |
-| `dimensions`         | `string[]`          | yes      | Attribute keys for result slicing                        |
-| `liveRunId`          | `string \| null`    | yes      | `null` before first Start                                |
-| `createdAt`          | `string` (ISO 8601) | yes      | —                                                        |
-| `updatedAt`          | `string` (ISO 8601) | yes      | —                                                        |
+| Field                | Type                | Required | Meaning                                                                                                                                                                     |
+| -------------------- | ------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                 | `string`            | yes      | Stable UUID                                                                                                                                                                 |
+| `appId`              | `string`            | yes      | Owning App                                                                                                                                                                  |
+| `environmentId`      | `string`            | yes      | Owning Environment; co-scoped with `appId` (ADR-0027)                                                                                                                       |
+| `key`                | `string`            | yes      | Unique per `(App, Environment)`                                                                                                                                             |
+| `flagId`             | `string`            | yes      | The one Flag this Experiment controls                                                                                                                                       |
+| `name`               | `string`            | yes      | —                                                                                                                                                                           |
+| `description`        | `string`            | no       | —                                                                                                                                                                           |
+| `hypothesis`         | `string`            | no       | Formal statement of expected effect                                                                                                                                         |
+| `status`             | `ExperimentStatus`  | yes      | See state machine below                                                                                                                                                     |
+| `targetingKey`       | `string`            | yes      | Inherited by every Run; changing this requires a new Run                                                                                                                    |
+| `confidenceLevel`    | `number`            | yes      | Default `0.95`; per-Experiment                                                                                                                                              |
+| `defaultVariantId`   | `string`            | yes      | Served before first Start. Not caller-supplied — the Worker copies it from the bound Flag's per-Environment `defaultVariantId` at create time (see CreateExperimentRequest) |
+| `metrics`            | `MetricRef[]`       | yes      | Goal Metrics                                                                                                                                                                |
+| `guardrailMetrics`   | `MetricRef[]`       | yes      | Metrics watched for harm                                                                                                                                                    |
+| `activationMetricId` | `string \| null`    | no       | Gate metric; setting/changing is an assignment edit                                                                                                                         |
+| `conversionWindowMs` | `number`            | yes      | Duration in ms; 0 = unbounded                                                                                                                                               |
+| `dimensions`         | `string[]`          | yes      | Attribute keys for result slicing                                                                                                                                           |
+| `liveRunId`          | `string \| null`    | yes      | `null` before first Start                                                                                                                                                   |
+| `createdAt`          | `string` (ISO 8601) | yes      | —                                                                                                                                                                           |
+| `updatedAt`          | `string` (ISO 8601) | yes      | —                                                                                                                                                                           |
 
 `ExperimentStatus` enum: `'draft' | 'running' | 'ended'`
 

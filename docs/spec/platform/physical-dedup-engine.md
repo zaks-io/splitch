@@ -28,11 +28,11 @@ is deduped inline).
 
 ```sql
 -- snapshot (Copy Pipe):
-QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, targeting_key_hash, experiment_id, run_id ORDER BY server_ts) = 1
+QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash ORDER BY server_ts) = 1
 
 -- real-time tail (inline dedup on fresh rows):
 WHERE ingest_ts > {last_snapshot_watermark_ts}
-QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, targeting_key_hash, experiment_id, run_id ORDER BY server_ts) = 1
+QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash ORDER BY server_ts) = 1
 ```
 
 Both use `ROW_NUMBER()` equivalent to `MIN(server_ts)` for first-touch. The tail boundary uses
@@ -80,16 +80,16 @@ queries:
 
 ```sql
 -- v0 query (full history, no snapshot):
-SELECT ... FROM raw_exposures
-WHERE app_id = {{String(app_id)}}
-GROUP BY targeting_key_hash, environment_id, experiment_id, run_id
+SELECT ... FROM raw_events
+WHERE type = 'exposure' AND app_id = {{String(app_id)}}
+GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
 -- MIN(server_ts), __multiple__ quarantine, etc.
 
 -- production query (snapshot + tail):
 SELECT * FROM first_touch_snapshot WHERE app_id = {{String(app_id)}}
 UNION ALL
-SELECT ... FROM raw_exposures
-WHERE app_id = {{String(app_id)}} AND ingest_ts > {{DateTime(last_snapshot_watermark_ts)}}
+SELECT ... FROM raw_events
+WHERE type = 'exposure' AND app_id = {{String(app_id)}} AND ingest_ts > {{DateTime(last_snapshot_watermark_ts)}}
 GROUP BY ...
 ```
 

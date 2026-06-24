@@ -88,12 +88,15 @@ Returns: updated Experiment.
 ### `POST /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/start`
 
 Starts the draft as a new Run; ends any running Run.
-Body: `{}` (no body required)
+Body: `{ confirm?: boolean }`
 Returns: `{ experiment_id, run: RunObject, previous_run_id?: string }`
 See [run-state-machine.md](run-state-machine.md) for transition details.
 Auth: App `owner` or `admin`. **Subject to the Environment Policy** (ADR-0029): if this Environment's
-Policy gates "Start an Experiment Run" at `confirm`, the call requires the Confirmation step (a
-`confirm: true` body field over CLI/MCP) before it commits.
+Policy gates "Start an Experiment Run" at `confirm`, the call must carry `confirm: true` in the body
+or it is rejected with `409 CONFIRMATION_REQUIRED` before any state change. When the Policy does not
+gate this change type, `confirm` is ignored and the body may be omitted entirely. The CLI/MCP
+`--confirm` flag derives from this same `confirm` field (see
+[../contracts/mcp-tool-derivation.md](../contracts/mcp-tool-derivation.md)).
 
 ### `DELETE /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}`
 

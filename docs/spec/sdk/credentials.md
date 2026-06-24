@@ -100,10 +100,11 @@ Client Key requests additionally pass through Cloudflare WAF before reaching the
   SDK documentation must state this — a Client Key failure may be a WAF error, not a
   Worker-level error.
 
-New Client Keys are **origin-closed by default** — the allow-list starts empty and allow-all is an
-explicit, loud opt-in, never the silent default (ADR-0034; see
-[../control-plane/credentials-and-keys.md](../control-plane/credentials-and-keys.md)). Add your app's
-origins (or opt into allow-all) before shipping. Abuse surface is bounded by rate limiting regardless.
+Client Keys are **auto-provisioned open to all origins** (`origin_allowlist = null`) so the public SDK
+works with zero setup; the open state is never silent — it is loudly surfaced (`is_origin_open` flag +
+control-panel banner) and one `PATCH …/client-key` from locked (ADR-0034; see
+[../control-plane/credentials-and-keys.md](../control-plane/credentials-and-keys.md)). Lock to your app's
+origins before shipping to production. Abuse surface is bounded by rate limiting regardless.
 
 ## Seam boundary
 

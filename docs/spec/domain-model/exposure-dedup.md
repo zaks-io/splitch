@@ -31,7 +31,7 @@ SELECT
     WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
     ELSE MAX(variant)
   END AS assigned_variant
-FROM raw_exposures
+FROM raw_events
 WHERE type = 'exposure'
 GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
 ```

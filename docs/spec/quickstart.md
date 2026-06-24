@@ -95,8 +95,9 @@ splitch client-key get          # public, safe to ship
 api_keys_create                 # secret, surfaced once — store it in a secret manager
 ```
 
-New Client Keys are **origin-closed by default** (ADR-0034): add your app's origins (or opt into
-allow-all, loudly) before shipping, or browser requests are rejected at the edge.
+Your Client Key is **auto-provisioned and open to all origins** so it works immediately (ADR-0034).
+Before shipping to production, lock it to your app's origins in one step (control panel or
+`PATCH …/client-key`) — the panel flags any open key until you do.
 
 ## 6. Create a Flag
 

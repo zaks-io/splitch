@@ -105,10 +105,11 @@ Two consequences this ADR now pins:
 ## Amendment (ADR-0034): the Client Key abuse bound is tightened
 
 This ADR named origin/referrer allow-list + per-key rate limiting as the Client Key abuse bound, with
-origin allow-list optional. **ADR-0034 hardens that posture** and is the current contract for these edges:
+origin allow-list optional. **ADR-0034 sets the current contract for these edges:**
 
-- New Client Keys are **origin-closed by default** — allow-all is an explicit, loud choice, not the silent
-  default.
+- Client Keys are **auto-provisioned open** per Environment for frictionless onboarding; the open state
+  is loudly surfaced (control-panel banner + `is_origin_open`) and one click from locked, never a silent
+  default. Origin lockdown is a `PATCH`, not a create-time gate (ADR-0034 §1).
 - **Peek is not a Client Key capability.** A silent, SRM-invisible read under a public key is an allocation
   oracle, so `peekVariant` moves behind the secret **API Key**. The public Client Key keeps exactly one
   capability: Exposure-bearing `evaluate`.

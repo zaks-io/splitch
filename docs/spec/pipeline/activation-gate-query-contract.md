@@ -16,23 +16,24 @@ The gate is a **binary property on a Run**. When `run.activationMetric` is set, 
 ```sql
 WITH exposed AS (
   -- deduped first-touch output, __multiple__ excluded
-  SELECT app_id, experiment_id, run_id, id_type, targeting_key_hash, variant, first_exposure_ts
+  SELECT app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash, variant, first_exposure_ts
   FROM deduped_exposures          -- or the real-time equivalent; see physical-dedup-pipes.md
   WHERE variant != '__multiple__'
     AND app_id = {app_id: String}
 ),
 activations AS (
   SELECT
-    app_id, experiment_id, run_id, targeting_key_hash,
+    app_id, environment_id, experiment_id, run_id, targeting_key_hash,
     MIN(activation_ts)          AS activation_ts        -- earliest activation per Entity per Run
   FROM raw_events
   WHERE type = 'activation'
     AND (counterfactual = false OR {include_counterfactual: Bool} = true)
     AND app_id = {app_id: String}
-  GROUP BY app_id, experiment_id, run_id, targeting_key_hash
+  GROUP BY app_id, environment_id, experiment_id, run_id, targeting_key_hash
 )
 SELECT
   e.app_id,
+  e.environment_id,
   e.experiment_id,
   e.run_id,
   e.id_type,
@@ -125,7 +126,7 @@ Activation rows default to `counterfactual = false`. When the SDK-side counterfa
 ## Output shape (per-Entity gated population)
 
 ```
-{ app_id, experiment_id, run_id, id_type, targeting_key_hash, variant, first_exposure_ts, activation_ts, window_anchor }
+{ app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash, variant, first_exposure_ts, activation_ts, window_anchor }
 ```
 
 This is handed to the stats engine for Metric aggregation. The stats engine uses `window_anchor` as the Conversion Window start.

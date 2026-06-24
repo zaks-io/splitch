@@ -23,56 +23,32 @@ at analysis time — never a collapse at ingest.
 
 ## Raw Exposure row schema
 
-```
-ExposureRow {
-  // First-touch identity components (resolved by MIN(server_ts) at query time)
-  app_id:           string    // required — tenant scope
-  environment_id:   string    // required — co-scoped with app_id; Exposures are per-Environment (ADR-0027)
-  experiment_id:    string    // required
-  run_id:           string    // required — stamped at SDK fire-time from liveRunId in config
-  id_type:          string    // required — Entity type (e.g. "user", "workspace")
-  targeting_key_hash:    string    // required, HMAC-derived Entity identity
+The canonical raw-row shape (all fields, both `type = 'exposure'` and `type = 'activation'`) lives in
+[pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md) and its physical
+Tinybird form in [contracts/storage-schemas-tinybird.md](../../spec/contracts/storage-schemas-tinybird.md).
+**Do not redefine the row here.** What matters at this layer:
 
-  // Event fields
-  event_id:        string    // required — retry-stable physical raw-row id
-  dedup_key:       string    // required — hashes type + identity + source_id + event_id
-  source_id:       string    // required — POP identifier
-  variant:          string    // required — Variant name assigned
-  server_ts:        datetime  // required — server-received-at (canonical)
-  ingest_ts:        datetime  // required — raw-log append watermark, not analysis time
-  client_ts:        datetime  // optional — client-fired-at (diagnostics)
-  type:             'exposure' | 'activation'  // required — discriminator
+- **First-touch identity components** (resolved by `MIN(server_ts)` at query time):
+  `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`. `environment_id`
+  is co-scoped with `app_id` — Exposures are per-Environment (ADR-0027). `environment_id`,
+  `experiment_id`, and `id_type` are functionally determined by `run_id`; the determinant is
+  `(targeting_key_hash, run_id)`.
+- **`run_id`** is stamped at SDK fire-time from the `liveRunId` present in the resolved flag config.
+  It is never inferred at pipeline ingest-time. This ensures the Run boundary is anchored to the
+  config the SDK actually evaluated against, not a server-side lookup at log time.
 
-  // Activation-only fields (null for exposure rows)
-  counterfactual:   boolean | null  // additive marker for counterfactual triggering (ADR-0013)
-}
-```
+## Canonical dedup query
 
-`run_id` is stamped at SDK fire-time from the `liveRunId` present in the resolved flag config.
-It is never inferred at pipeline ingest-time. This ensures the Run boundary is anchored to the
-config the SDK actually evaluated against, not a server-side lookup at log time.
+The first-touch dedup query — the single place where first-touch, the `__multiple__` quarantine,
+the SRM denominator, and the Conversion Window anchor are all defined — lives in
+[pipeline/dedup-query-contract.md](../pipeline/dedup-query-contract.md). **Do not re-state it here.**
+The lambda snapshot and the real-time tail both derive from that one definition (ADR-0024); a second
+copy in this file would be exactly the drift the "never hand-copied" rule forbids.
 
-## Canonical dedup query (single source of truth)
-
-```sql
--- First-touch per (entity, run). One row per Entity per Run.
-SELECT
-  targeting_key_hash,
-  environment_id,
-  experiment_id,
-  run_id,
-  MIN(server_ts) AS first_exposure_ts,
-  CASE WHEN COUNT(DISTINCT variant) > 1
-       THEN '__multiple__'
-       ELSE MAX(variant) END AS variant
-FROM raw_exposures
-WHERE app_id = {{String(app_id)}}
-GROUP BY targeting_key_hash, environment_id, experiment_id, run_id
-```
-
-This query is the single place where first-touch, the `__multiple__` quarantine, the SRM
-denominator, and the Conversion Window anchor are all defined. It must never be hand-copied —
-the lambda snapshot and the real-time tail both derive from this definition (ADR-0024).
+The dedup groups over the first-touch identity tuple
+`(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`, with
+`(targeting_key_hash, run_id)` as the determinant (the rest are run-implied carry-through columns).
+Reads `raw_events` rows where `type = 'exposure'`.
 
 ## Variant conflict: `__multiple__` quarantine (ADR-0011)
 

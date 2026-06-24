@@ -11,12 +11,26 @@ See [credentials-and-keys.md](credentials-and-keys.md) for the credential model 
 live under `/apps/{app_id}/envs/{environment_id}/…`. A prod Client/API Key reaches prod config only;
 keys never span Environments. `environment_id` is the canonical ID in the path.
 
+## Auto-provisioning
+
+Exactly one Client Key is **auto-created when an Environment is created** — there is no separate
+Client-Key create endpoint and `GET …/client-key` never 404s for a live Environment. The
+auto-provisioned key starts `origin_allowlist = null` (open to all origins, immediately usable),
+loudly flagged for lockdown. See
+[credentials-and-keys.md](credentials-and-keys.md) for the open-state default and its rationale.
+App creation provisions two Environments (see
+[endpoints-org-app.md](endpoints-org-app.md)); each gets its own auto-provisioned Client Key.
+
+API Keys are **not** auto-provisioned — they are secret and minted on demand via `POST …/api-keys`.
+
 ## SDK credential endpoints
 
 ### `GET /apps/{app_id}/envs/{environment_id}/client-key`
 
-Returns: `{ key_id, key_material, origin_allowlist, created_at, revoked_at? }`
-`key_material` is the public value; safely returned.
+Returns: `{ key_id, key_material, origin_allowlist, is_origin_open, created_at, revoked_at? }`
+`key_material` is the public value; safely returned. `is_origin_open` is `true` when
+`origin_allowlist = null` (open to all origins) — the skins surface it as a loud warning with a
+"lock to origins" action.
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}/client-key`
 

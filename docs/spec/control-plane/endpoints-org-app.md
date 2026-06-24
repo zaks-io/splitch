@@ -60,6 +60,12 @@ first move ("try a flag") cannot accidentally target production. More Environmen
 (see Environment endpoints). This is a DX default, not a constraint — an App may later delete
 `dev` (subject to the last-Environment guard).
 
+Each provisioned Environment also gets **one auto-provisioned Client Key** (open-to-all-origins,
+loudly flagged for lockdown) so the public SDK is usable with zero extra steps; see
+[endpoints-credentials.md](endpoints-credentials.md#auto-provisioning). API Keys are not
+auto-provisioned. Any Environment created later (via the Environment endpoints) provisions its
+Client Key the same way.
+
 ### `GET /apps/{app_id}`
 
 Returns: `{ app_id, org_id, name, slug, created_at, updated_at }`

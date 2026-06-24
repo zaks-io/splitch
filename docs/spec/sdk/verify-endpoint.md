@@ -124,7 +124,8 @@ is what makes it a faithful setup check.
 `verify` is rate-limited and origin-bound exactly like `evaluate`:
 
 - Client Key requests pass through Cloudflare WAF (origin/referrer allow-list, per-key rate
-  limiting) before reaching the Worker. New Client Keys are origin-closed by default.
+  limiting) before reaching the Worker. Client Keys are auto-provisioned open and locked down via
+  `PATCH …/client-key`.
 - API Key requests are rate-limited per key.
 
 Because `verify` carries no richer information than `evaluate` already does (the Variant value is

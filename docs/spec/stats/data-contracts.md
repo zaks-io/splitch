@@ -11,14 +11,15 @@ query (ADR-0010); `__multiple__` Entities are already excluded upstream.
 
 ### Deduped Exposure row
 
-| Field               | Type        | Required | Meaning                                                         |
-| ------------------- | ----------- | -------- | --------------------------------------------------------------- |
-| `entity_id`         | `string`    | yes      | Targeting Key value (the randomization unit)                    |
-| `id_type`           | `string`    | yes      | Entity type label (e.g. `"user"`, `"workspace"`)                |
-| `run_id`            | `string`    | yes      | The Run this Exposure belongs to                                |
-| `variant`           | `string`    | yes      | Variant name assigned to this Entity in this Run                |
-| `first_exposure_ts` | `timestamp` | yes      | `MIN(server_ts)` — the Conversion Window anchor (ungated)       |
-| `window_anchor`     | `timestamp` | yes      | `COALESCE(activation_ts, first_exposure_ts)` — effective anchor |
+| Field               | Type        | Required | Meaning                                                                                                 |
+| ------------------- | ----------- | -------- | ------------------------------------------------------------------------------------------------------- |
+| `entity_id`         | `string`    | yes      | Targeting Key value (the randomization unit)                                                            |
+| `environment_id`    | `string`    | yes      | Per-Environment scope (ADR-0027); run-implied, carried from the dedup output for scope-complete handoff |
+| `id_type`           | `string`    | yes      | Entity type label (e.g. `"user"`, `"workspace"`)                                                        |
+| `run_id`            | `string`    | yes      | The Run this Exposure belongs to                                                                        |
+| `variant`           | `string`    | yes      | Variant name assigned to this Entity in this Run                                                        |
+| `first_exposure_ts` | `timestamp` | yes      | `MIN(server_ts)` — the Conversion Window anchor (ungated)                                               |
+| `window_anchor`     | `timestamp` | yes      | `COALESCE(activation_ts, first_exposure_ts)` — effective anchor                                         |
 
 `window_anchor` is computed by the Activation gate layer (see
 [../pipeline/activation-gate-query-contract.md](../pipeline/activation-gate-query-contract.md));

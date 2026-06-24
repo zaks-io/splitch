@@ -8,11 +8,12 @@ Pins the Tinybird datasource shapes: the raw append-only log, the deduped first-
 datasource: raw_events
 ENGINE: MergeTree
 ENGINE_PARTITION_KEY: toYYYYMM(server_ts)
-ENGINE_SORTING_KEY: app_id, experiment_id, run_id, server_ts, targeting_key_hash
+ENGINE_SORTING_KEY: app_id, environment_id, experiment_id, run_id, server_ts, targeting_key_hash
 
 SCHEMA:
   type            String               -- 'exposure' | 'activation'
   app_id          String               -- data-isolation key; mandatory, non-defaulted
+  environment_id  String               -- co-scoped with app_id; per-Environment (ADR-0027)
   experiment_id   String
   run_id          String
   id_type         String
@@ -32,9 +33,9 @@ SCHEMA:
 DEDUP_KEY: dedup_key
 ```
 
-**Partitioning by month** keeps per-month scans fast and enables TTL-based retention. Sorting by `(app_id, experiment_id, run_id, server_ts, targeting_key_hash)` makes per-experiment, per-run queries efficient.
+**Partitioning by month** keeps per-month scans fast and enables TTL-based retention. Sorting by `(app_id, environment_id, experiment_id, run_id, server_ts, targeting_key_hash)` makes per-environment, per-experiment, per-run queries efficient.
 
-The `type` discriminator on a single datasource (not two tables) keeps the activation JOIN query simple and avoids coordination overhead. Both row types share `app_id`, `experiment_id`, `run_id`, `id_type`, `targeting_key_hash` — the fields the dedup and gate queries join on.
+The `type` discriminator on a single datasource (not two tables) keeps the activation JOIN query simple and avoids coordination overhead. Both row types share `app_id`, `environment_id`, `experiment_id`, `run_id`, `id_type`, `targeting_key_hash` — the fields the dedup and gate queries join on.
 
 The `dedup_key` column is the wire-level sha256 idempotency key (at-least-once ingest)
 over `(type, app_id, experiment_id, run_id, id_type, targeting_key_hash, source_id, event_id)`.
@@ -46,10 +47,11 @@ time, defined in [exposure-event-contract.md](./exposure-event-contract.md).
 ```
 datasource: deduped_exposures
 ENGINE: MergeTree
-ENGINE_SORTING_KEY: app_id, experiment_id, run_id, variant, targeting_key_hash
+ENGINE_SORTING_KEY: app_id, environment_id, experiment_id, run_id, variant, targeting_key_hash
 
 SCHEMA:
   app_id          String
+  environment_id  String               -- co-scoped with app_id; per-Environment (ADR-0027)
   experiment_id   String
   run_id          String
   id_type         String
@@ -60,7 +62,7 @@ SCHEMA:
   watermark_ts    DateTime64(3)        -- max raw_events.ingest_ts included in this snapshot
 ```
 
-This is the Copy Pipe target. **Only deduped first-touch rows live here** — one row per `(app_id, experiment_id, run_id, targeting_key_hash)`. Rollup MVs hang off this datasource, never off `raw_events`. The Copy Pipe, serving UNION, and MVs that populate and read this datasource are specified in [physical-dedup-pipes.md](./physical-dedup-pipes.md).
+This is the Copy Pipe target. **Only deduped first-touch rows live here** — one row per `(app_id, environment_id, experiment_id, run_id, targeting_key_hash)` (`environment_id`, `experiment_id`, and `id_type` are run-implied carry-through columns; the dedup determinant is `(targeting_key_hash, run_id)`). Rollup MVs hang off this datasource, never off `raw_events`. The Copy Pipe, serving UNION, and MVs that populate and read this datasource are specified in [physical-dedup-pipes.md](./physical-dedup-pipes.md).
 
 ## Raw log retention TTL
 

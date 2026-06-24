@@ -15,6 +15,7 @@ The canonical first-touch dedup query is the **single place** where first-touch,
 -- This is the analysis unit: the deduped denominator.
 SELECT
   app_id,
+  environment_id,
   experiment_id,
   run_id,
   id_type,
@@ -27,8 +28,15 @@ SELECT
 FROM raw_events
 WHERE type = 'exposure'
   AND app_id = {app_id: String}              -- mandatory
-GROUP BY app_id, experiment_id, run_id, id_type, targeting_key_hash
+GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
 ```
+
+The dedup determinant is `(targeting_key_hash, run_id)`: a Run belongs to exactly one Experiment
+in exactly one Environment with one declared Entity type, so `app_id`, `environment_id`,
+`experiment_id`, and `id_type` are functionally determined by `run_id`. They appear in the
+`GROUP BY` so they pass through to the output as carried scope columns, not because they change
+which rows collapse. `environment_id` is in the tuple because Exposures are per-Environment
+(ADR-0027) and downstream consumers filter by it; it does not split first-touch.
 
 ### Invariants
 
@@ -79,7 +87,7 @@ The dedup output (`first_exposure_ts`, `variant`) is the direct input to the act
 The dedup output feeds the stats engine as per-Entity rows:
 
 ```
-{ targeting_key_hash, run_id, variant, first_exposure_ts }
+{ app_id, environment_id, targeting_key_hash, run_id, variant, first_exposure_ts }
 ```
 
 For Ratio Metrics the stats engine also needs the per-Entity numerator/denominator pair. Delta-method covariance is not recoverable after aggregation. That pair is delivered by metric-specific queries that GROUP BY `targeting_key_hash`, not pre-aggregated here.

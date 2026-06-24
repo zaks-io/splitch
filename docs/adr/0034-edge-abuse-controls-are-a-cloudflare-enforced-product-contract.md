@@ -16,13 +16,22 @@ limiting as its abuse bound) and ADR-0022 (which rate-limited anonymous registra
 All four controls below are mandatory, not configurable-to-off, and enforced at the Cloudflare edge.
 No second mechanism is invented; these compose with the WAF already in use.
 
-### 1. Public Client Keys are origin-closed by default
+### 1. Public Client Keys are open by default, secured by loud open-state surfacing
 
-A newly minted Client Key is **not** open to all origins. `origin_allowlist = null` (allow-all) is no
-longer the creation default. A Client Key is created either with at least one origin, or in a state the
-control panel and CLI/MCP surface loudly flag as "open to all origins." The zero-friction path must be
-the safe one. Origin/referrer is a first-class Cloudflare rate-limit and match characteristic; leaving
-it unset leaves the strongest available edge control unused.
+One Client Key is **auto-provisioned when an Environment is created** so the public SDK works with zero
+setup; it starts `origin_allowlist = null` (open to all origins). The zero-friction path is the default
+because a public client-side key that needs configuration before the first `evaluate` is friction the
+industry norm has already rejected, and because the key carries exactly one capability — Exposure-bearing
+`evaluate` — never a silent oracle (see §2).
+
+The security obligation is met not by a create-time gate but by making the open state **impossible to
+miss and trivial to fix**: every surface flags an open key loudly (control-panel banner, an
+`is_origin_open` field on the CLI/MCP `client_key_get` response) and offers a one-action "lock to origins"
+(`PATCH …/client-key` with the origin list). `origin_allowlist = null` = open; `[]` = closed, serves
+nothing; a non-empty array = closed to all but the listed origins. Origin/referrer is a first-class
+Cloudflare match characteristic, so an open key leaves the strongest edge control unused — the contract
+is that this state is always visible and one click from closed, never that it is forbidden at creation.
+The per-key rate limit (default 100 rps) is the volume backstop while a key is open.
 
 ### 2. Peek is a server-side (API Key) path, not a public (Client Key) path
 
@@ -60,10 +69,15 @@ evaluate surface.
 
 ## Considered options
 
-- **Keep origin allow-list null-default (open), rely on rate limit alone** — rejected. Rate limiting
-  bounds volume but not a low-and-slow allocation oracle, and allow-all-by-default makes the insecure
-  configuration the path of least resistance. Cloudflare's own guidance treats origin/referrer as a
-  primary control, not an afterthought.
+- **Origin-closed at creation (require an origin or an explicit "open" acknowledgement before the key
+  works)** — rejected. It puts configuration friction in front of the first `evaluate`, the exact step
+  onboarding must keep frictionless, and it is out of step with how public client-side keys work
+  elsewhere. The oracle concern that would otherwise justify a closed default is removed at the source by
+  §2 (peek is API-Key-only), so the open Client Key carries only Exposure-bearing `evaluate`. Rate
+  limiting bounds volume, and the loud open-state surfacing (banner + `is_origin_open` + one-click lock)
+  keeps the insecure configuration visible and cheap to fix rather than silent. Cloudflare's guidance
+  still treats origin/referrer as a primary control — which is why locking down is one action, not a
+  buried setting.
 - **Keep peek on the public Client Key, just rate-limit it** — rejected. A silent, SRM-invisible read is
   a better reconnaissance tool than evaluate; sharing a rate budget caps volume but not the oracle's
   existence. Moving peek behind the API Key removes the oracle outright.
@@ -77,8 +91,11 @@ evaluate surface.
 - The public Client Key's only capability is Exposure-bearing `evaluate`. Peek, reasons, config, rule
   sets, and salt are all off the public path (reasons/config already lived behind the control-plane
   token per ADR-0018/0026; peek now joins the server-side surface).
-- New Client Keys require an origin decision (or an explicit, loud "open" acknowledgement) at creation.
-  This is a posture change that is cheap now and painful after keys exist in the wild.
+- A Client Key is auto-provisioned per Environment and usable immediately (open), so onboarding needs no
+  credential step. The trade is that an open key can exist unattended; the open-state surfacing
+  (banner + `is_origin_open` + one-click lock) is therefore part of the contract, not optional polish —
+  shipping the open default without the loud surfacing would reintroduce the silent-insecure-config
+  failure this ADR exists to prevent.
 - Revocation gains a fail-loud write contract and a negative cache; the KV write-through for revoke is
   no longer best-effort.
 - Anonymous registration depends on Turnstile being configured; the control is a launch blocker for that

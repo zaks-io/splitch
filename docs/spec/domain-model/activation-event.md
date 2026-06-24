@@ -55,7 +55,7 @@ activated_entities = (
          MIN(e.server_ts) AS first_exposure_ts,
          MIN(a.server_ts) AS activation_ts
   FROM   deduped_exposures e
-  JOIN   raw_exposures a
+  JOIN   raw_events a
     ON   a.experiment_id = e.experiment_id
     AND  a.run_id = e.run_id
     AND  a.targeting_key_hash = e.targeting_key_hash

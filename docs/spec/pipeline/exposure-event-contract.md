@@ -12,6 +12,7 @@ One Tinybird datasource (`raw_events`) holds all event types. The `type` discrim
 | -------------------- | --------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `type`               | `'exposure'`    | yes      | Row discriminator                                                                                                                                                                 |
 | `app_id`             | `string`        | yes      | Data-isolation key; injected by the Evaluation Worker, never from the client                                                                                                      |
+| `environment_id`     | `string`        | yes      | Co-scoped with `app_id`; Exposures are per-Environment (ADR-0027). Injected by the Evaluation Worker, never from the client                                                       |
 | `experiment_id`      | `string`        | yes      | Stable identifier of the Experiment                                                                                                                                               |
 | `run_id`             | `string`        | yes      | Stamped at SDK fire-time from the live Run config in KV; the live `liveRunId` the Evaluation Worker read when it evaluated                                                        |
 | `id_type`            | `string`        | yes      | Request `idType` after validation against the Run's declared Entity type (e.g. `'user'`, `'workspace'`); guards holdover DO key                                                   |
@@ -41,7 +42,7 @@ dedup_key = sha256(type + ':' + app_id + ':' + experiment_id + ':' + run_id + ':
 
 ### Idempotency invariant
 
-The dedup key is for wire-level ingest deduplication only. The first-touch dedup (query-time `GROUP BY entity, run` + `MIN(server_ts)`) is the **authoritative** first-touch definition and supersedes it. Two rows with different `dedup_key` values for the same `(targeting_key_hash, run_id)` are expected — the query picks `MIN(server_ts)` among them.
+The dedup key is for wire-level ingest deduplication only. The first-touch dedup (query-time `GROUP BY` over the first-touch identity tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)` + `MIN(server_ts)`) is the **authoritative** first-touch definition and supersedes it. `environment_id`, `experiment_id`, and `id_type` are functionally determined by `run_id` (a Run belongs to exactly one Experiment in exactly one Environment with one declared Entity type); they are carried through the grouping, not independent keys. `environment_id` is intentionally **not** part of the wire `dedup_key` for the same reason — it adds nothing to per-row idempotency. Two rows with different `dedup_key` values for the same `(targeting_key_hash, run_id)` are expected — the query picks `MIN(server_ts)` among them.
 
 ## Activation row (`type = 'activation'`)
 
@@ -49,6 +50,7 @@ The dedup key is for wire-level ingest deduplication only. The first-touch dedup
 | -------------------- | --------------- | -------- | ------------------------------------------------------------------------------------------------------ |
 | `type`               | `'activation'`  | yes      | Row discriminator                                                                                      |
 | `app_id`             | `string`        | yes      | Data-isolation key                                                                                     |
+| `environment_id`     | `string`        | yes      | Co-scoped with `app_id`; per-Environment (ADR-0027)                                                    |
 | `experiment_id`      | `string`        | yes      | Experiment this activation belongs to                                                                  |
 | `run_id`             | `string`        | yes      | Run under which the activation occurred                                                                |
 | `id_type`            | `string`        | yes      | Must match the Run's declared `id_type`                                                                |

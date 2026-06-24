@@ -31,18 +31,26 @@ prod config only.
 | `revoked_at`       | TEXT    | no       | ISO 8601; null = active                                                                                                                          |
 | `created_at`       | TEXT    | yes      | ISO 8601                                                                                                                                         |
 
-**Origin-closed by default (ADR-0034).** A new Client Key is **not** silently created open to all origins.
-Creation requires one of:
+**Auto-provisioned, open-but-loudly-flagged (ADR-0034 §1).** Exactly one
+Client Key is auto-created when an Environment is created (see
+[endpoints-credentials.md](endpoints-credentials.md#auto-provisioning)), so a key always exists and
+`GET …/client-key` never 404s. To keep onboarding friction-free, the auto-provisioned key starts
+`origin_allowlist = null` — **open to all origins** and immediately usable with zero config (industry
+norm for public client-side keys).
 
-- one or more origins in `origin_allowlist` (the recommended path), or
-- an explicit "open to all origins" acknowledgement, which the control panel and CLI/MCP surface **loudly**
-  (the key works everywhere; the UI/CLI flags it as open, it is never the quiet default).
+The security obligation is met not by a create-time gate but by a **loud, always-visible open-state
+warning** plus a one-action "lock to origins" affordance:
 
-`origin_allowlist = null` at rest still means "open to all origins" — but a key only reaches that state
-through the explicit acknowledgement above, never by omission. The key is immediately usable once created
-(no separate activation step); origin/referrer is a first-class Cloudflare match characteristic, so leaving
-it unset is leaving the strongest edge control unused. The per-key rate limit is the volume backstop, not
-the only layer.
+- The control panel shows a persistent banner on any open (`origin_allowlist = null`) Client Key
+  ("This key accepts requests from any origin — lock it to your domains").
+- The CLI/MCP `client_key_get` response carries an `is_origin_open: true` flag and a warning line.
+- The per-key rate limit (default 100 rps) is the volume backstop while a key is open.
+
+`origin_allowlist = null` = open to all origins; `origin_allowlist = []` = closed, serves nothing;
+a non-empty array = closed to all but the listed origins. Locking down is a single `PATCH …/client-key`
+with the origin list. Origin/referrer is a first-class Cloudflare match characteristic, so an open key
+is leaving the strongest edge control unused — the UI must never let that state be silent, only
+friction-free to start and one click to fix.
 
 ## D1: `api_keys` table
 
@@ -120,8 +128,9 @@ layered, not either/or: rate limiting bounds volume, origin/referrer bounds reac
 - **Per-Client-Key rate limit:** 100 rps default, configurable via `client_keys.rate_limit_rps`. The
   counter is keyed on the Client Key value (a per-credential header counter), so one key's abuse cannot
   spend another's budget.
-- **Origin/referrer check:** if `origin_allowlist` is non-null, requests must match. New keys are
-  origin-closed by default (see the origin-closed note above) — allow-all is an explicit, loud choice.
+- **Origin/referrer check:** if `origin_allowlist` is non-null, requests must match. Auto-provisioned
+  keys start open (`null`, loudly flagged — see the open-state note above); locking down is a one-step
+  `PATCH …/client-key`.
   **An origin-blocked request fails loud, not generic (DX).** When a valid Client Key is rejected only
   because the request origin is not on its allow-list, the response is a distinct, self-explaining
   `403 ORIGIN_NOT_ALLOWED` carrying the offending origin in `details` (`{ origin, hint:

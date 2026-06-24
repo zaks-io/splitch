@@ -35,7 +35,12 @@ live in [request-response-envelopes-conventions.md](./request-response-envelopes
 | `conversionWindowMs` | no       | Defaults to `0` (unbounded)                                               |
 | `dimensions`         | no       | Defaults to `[]`                                                          |
 
-Worker sets: `id`, `status = 'draft'`, `liveRunId = null`, `createdAt`, `updatedAt`.
+Worker sets: `id`, `status = 'draft'`, `liveRunId = null`, `createdAt`, `updatedAt`, and
+`defaultVariantId` — copied from the bound Flag's per-Environment `defaultVariantId` (resolved via
+`flagId` + `environmentId`). It is **not** a caller input: the Experiment's pre-Start default is the
+Flag's default by construction, so there is exactly one source of truth and no way for the two to
+diverge. If the bound Flag has no `defaultVariantId` for this Environment the create is rejected with
+`VALIDATION_ERROR` (a Flag must have a default before it can back an Experiment).
 
 ### PatchExperimentRequest
 
