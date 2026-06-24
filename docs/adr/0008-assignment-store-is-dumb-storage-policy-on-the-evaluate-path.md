@@ -5,9 +5,15 @@
 The Assignment Store interface promises exactly two operations and **zero policy**:
 
 ```
-getAll(experiment, idType, targetingKey) -> Map<experiment, {runId, variant}>   # eager pre-load
-put(experiment, idType, targetingKey, runId, variant)                            # first-touch write
+getAll(app_id, environment_id, idType, targetingKey) -> Map<experiment, {runId, variant}>   # eager pre-load
+put(app_id, environment_id, experiment, idType, targetingKey, runId, variant)               # first-touch write
 ```
+
+`app_id` and `environment_id` co-scope every call (Experiments and their Runs are per-Environment,
+ADR-0027); `getAll` returns one Environment's holdovers across all its Experiments in a single
+edge-local read. They do **not** enter the per-record storage key — an Experiment belongs to exactly one
+Environment, so `experiment_id` already implies the Environment. (Canonical signature:
+`docs/spec/domain-model/assignment-store.md`.)
 
 It is durable memory and nothing else. The **evaluate path** owns all policy — the holdover predicate, the
 replay-vs-`assign()` choice, first-touch write timing, runId stamping. The store never branches, never calls

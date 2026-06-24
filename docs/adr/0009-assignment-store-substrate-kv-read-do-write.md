@@ -8,7 +8,10 @@ The Assignment Store port (ADR-0008) maps onto two Cloudflare primitives, split 
   read-heavy sweet spot. This is the entire hot path; no Durable Object is touched on evaluate.
 - **`put` (first-touch write)** → a **Durable Object, one per `(experiment, idType, targetingKey)`.** The
   DO is a single-threaded, globally-unique instance per key; its `get`-then-`put-if-absent` is atomic by
-  construction, so two POPs racing the same Entity's first-touch cannot both win. On commit, the DO
+  construction, so two POPs racing the same Entity's first-touch cannot both win. The key needs no
+  `environment_id`: an Experiment is in exactly one Environment (ADR-0027), so `experiment_id` already
+  pins it — dev and prod first-touch writes for the same Entity address different Experiments, hence
+  different DOs, and cannot collide. On commit, the DO
   write-throughs to KV, fanning the assignment out to all POPs for subsequent reads.
 
 This is Cloudflare's documented control-plane/data-plane split: a Durable Object as the authoritative

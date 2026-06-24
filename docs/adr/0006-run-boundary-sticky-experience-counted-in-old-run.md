@@ -29,7 +29,9 @@ Assignment leaves no trace (ADR-0001), so there is no assigned-but-unexposed amb
 
 Sticky experience requires persisting the holdover's original Variant — `assign()` cannot recompute it
 once the old config is gone. This is the **single piece of durable per-Entity state** on the seam:
-`(Experiment, Targeting Key) -> (runId, Variant)`, written at first Exposure. The _storage_ is the same kind
+`(Experiment, Targeting Key) -> (runId, Variant)`, written at first Exposure. The key does not carry
+`environment_id`: an Experiment belongs to exactly one Environment (ADR-0027), so `experiment_id`
+already pins the Environment and the holdover is per-Environment by construction. The _storage_ is the same kind
 of port as Statsig Persistent Assignment / GrowthBook Sticky Bucketing (a per-Entity bucket record); the
 stored `runId` and the old-Run attribution it enables are splitch's addition on top. It needs a low-latency,
 edge-local read on the evaluate path — a hard constraint on the Provider/storage seam, to be designed there.

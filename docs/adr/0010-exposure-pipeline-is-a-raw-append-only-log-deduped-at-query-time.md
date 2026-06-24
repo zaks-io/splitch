@@ -11,7 +11,10 @@ ADR-0005 (pipeline-authoritative first-touch dedup) at the physical layer.
 The canonical first-touch query is the standard windowed dedup —
 `QUALIFY ROW_NUMBER() OVER (PARTITION BY entity, run ORDER BY ts) = 1`, equivalently `GROUP BY entity, run`
 
-- `MIN(ts)` — re-runnable over the complete raw log whenever rules change.
+- `MIN(ts)` — re-runnable over the complete raw log whenever rules change. (`entity, run` is the
+  determinant; the full partition also carries `app_id, environment_id` — per-Environment Exposures,
+  ADR-0027 — run-implied since a Run is in one Environment. Exact column list:
+  `docs/spec/pipeline/dedup-query-contract.md`.)
 
 This is the unanimous warehouse-native pattern (Eppo, GrowthBook, Statsig Warehouse Native), and the
 edge-origin shape makes it not just idiomatic but the only sane choice: five POPs give no global ordering

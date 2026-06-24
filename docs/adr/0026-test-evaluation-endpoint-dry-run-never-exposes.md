@@ -18,8 +18,12 @@ exposed as a control-plane operation. It computes Assignment (a pure function, A
 reason, and **writes nothing**: no Exposure log row, no Assignment Store write (ADR-0007/0008). Exposure-free is
 a structural property of the endpoint, not a flag a caller can forget to set.
 
-**It runs against live edge config**, so "verify it's working" verifies the _deployed_ truth — the same
-config the data-plane evaluate endpoint would resolve against — not a staged copy that could disagree.
+**It runs against live edge config for a named Environment**, so "verify it's working" verifies the
+_deployed_ truth — the same config the data-plane evaluate endpoint would resolve against — not a staged
+copy that could disagree. Flag Configuration is per-Environment (ADR-0027), so the dry-run is an
+Environment-scoped control-plane operation: the endpoint is routed under `/{app}/{env}/…` and resolves
+against that Environment's KV config, and the same `(orgSlug, appSlug, env)` the caller would verify in
+prod versus dev selects which deployed truth is checked.
 
 **Reached with the control-plane token (ADR-0022), not a Client/API Key (ADR-0018).** It is a management/debug
 operation that returns the resolution _reason_ (which rule matched), which the public Client Key is forbidden to

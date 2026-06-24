@@ -4,8 +4,9 @@
 
 ADR-0017 said a Durable Object fans out live config updates "(SSE/WebSocket)" to subscribed
 dashboards but left the slash unresolved. This ADR resolves it: the control-panel live-update
-transport is a **Hibernating WebSocket** served by **one fan-out DO per App** (`idFromName(appId)`);
-config writes go **through that DO** (it commits the KV/D1 write, then broadcasts); the broadcast is a
+transport is a **Hibernating WebSocket** served by **one fan-out DO per `(App, Environment)`**
+(`idFromName(`${appId}:${environmentId}`)`); config writes go **through that DO** (it commits the
+KV/D1 write, then broadcasts); the broadcast is a
 small **delta-shaped invalidation signal**, not the config body; and the client applies nothing —
 **TanStack Query is the sole synced server-state store**, and the signal just invalidates a query key
 so the client refetches truth from the normal read API.
@@ -22,9 +23,10 @@ one. (`https://developers.cloudflare.com/durable-objects/best-practices/websocke
 
 ## Scope
 
-Live updates carry **config / operational state changes** under an App — a Flag or Experiment edited
-by another editor, a Run starting or ending, enabled/disabled and status transitions — sourced from
-the KV/D1 config store. **Not** live experiment statistics (Exposure counts, p-values, CIs, SRM):
+Live updates carry **config / operational state changes** under an `(App, Environment)` — a Flag
+Configuration or Experiment edited by another editor, a Run starting or ending, enabled/disabled and
+status transitions — sourced from the KV/D1 config store. Configuration is per-Environment (ADR-0027),
+so the fan-out is too: editing a dev Flag must not nudge a prod dashboard. **Not** live experiment statistics (Exposure counts, p-values, CIs, SRM):
 those live in Tinybird, which ADR-0017 explicitly kept off the live-UI path. Streaming analytics is a
 separate problem with a separate mechanism and is out of scope here.
 
@@ -32,12 +34,14 @@ separate problem with a separate mechanism and is out of scope here.
 
 - **Transport: Hibernating WebSocket** (DO Hibernation API), for the billing reason above. Resolves
   ADR-0017's `SSE/WebSocket` slash.
-- **Fan-out grain: one DO per App** (`idFromName(appId)`). The App is the blast radius (D1
-  membership/roles, ADR-0018) and the audience is single-digit editors (ADR-0017), so per-App
-  fan-out is a handful of sockets per DO that hibernates whenever nobody is editing. A socket
-  authenticated to App X can attach only to `DO(X)`, so the `app_id` application-enforced isolation of
-  ADR-0018 extends cleanly to "which DO you may connect to."
-- **Notify path: write-through-the-DO.** The config-write Worker calls `DO(appId)`, which validates,
+- **Fan-out grain: one DO per `(App, Environment)`** (`idFromName(`${appId}:${environmentId}`)`).
+  Configuration is per-Environment (ADR-0027), so the `(app_id, environment_id)` pair is the blast
+  radius (the isolation seam, ADR-0018/0027) and the audience is single-digit editors of one
+  Environment (ADR-0017), so per-`(App, Environment)` fan-out is a handful of sockets per DO that
+  hibernates whenever nobody is editing. A socket authenticated to `(App X, Env E)` can attach only to
+  `DO(X:E)`, so the `(app_id, environment_id)` application-enforced isolation extends cleanly to "which
+  DO you may connect to" — and a dev edit never reaches a prod subscriber.
+- **Notify path: write-through-the-DO.** The config-write Worker calls `DO(appId:environmentId)`, which validates,
   commits the KV/D1 write, _then_ broadcasts. The DO is the single serialization point for write and
   notify, so a broadcast can never describe unpersisted state (**persisted-before-announced**). This
   reuses ADR-0009's shape verbatim — a per-key DO serializing a write that write-throughs to KV — so
@@ -83,8 +87,10 @@ separate problem with a separate mechanism and is out of scope here.
 - **ADR-0017's `SSE/WebSocket` slash is resolved to WebSocket**, on a billing argument specific to DO
   hibernation. Anyone who reads "avoid long-lived connections" into the choice should read this ADR:
   the long connection is unavoidable for push, and the hibernating one is the cheap one.
-- **The per-App fan-out DO is the only net-new server piece**, exactly as ADR-0017 forecast — now
-  pinned to a concrete shape (per-App, write-through, delta-broadcast) that mirrors ADR-0009.
+- **The per-`(App, Environment)` fan-out DO is the only net-new server piece**, exactly as ADR-0017
+  forecast — now pinned to a concrete shape (per-`(App, Environment)`, write-through, delta-broadcast)
+  that mirrors ADR-0009. The DO identity, connection lifecycle, and reconnect-on-Environment-switch are
+  specified in `docs/spec/frontend/websocket-lifecycle.md`.
 - **No client state-management platform is added.** TanStack Query (already in the stack) is the store;
   the WebSocket replaces a polling timer, nothing more.
 - **No config-copy seam is introduced** (ADR-0017 consequence preserved): the panel always reads

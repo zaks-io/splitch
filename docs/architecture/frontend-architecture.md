@@ -19,24 +19,32 @@ how a WebSocket nudge maps to the caches it invalidates, when the socket connect
 are handled, or how mutations flow. This is that layer — below the ADRs, above the screens. It is not a UX
 spec (no screen inventory) and not a glossary.
 
-## The spine: one `appId`, four jobs
+## The spine: `(appId, environmentId)`, four jobs
 
-Everything below keys off a single value — the **active App's id**, carried in the URL as
-`/app/:appId/...`. That one route param drives four otherwise-independent mechanisms, and because they all
-read the same source they cannot disagree:
+Everything below keys off the URL scope, carried as `/{orgSlug}/{appSlug}/{env}/...`. The active App's
+id is the spine; the active Environment is a **co-spine** (ADR-0027) — per-Environment data (Flag
+Configuration, Experiments, Exposures, credentials) means the resolved `(appId, environmentId)` pair
+drives four otherwise-independent mechanisms, and because they all read the same URL-derived source they
+cannot disagree:
 
-1. **Isolation check** — the loader validates the session's membership against `:appId` (or 403s). This is
-   the application-enforced `app_id` boundary of ADR-0018, made explicit at the loader seam.
-2. **Query-cache root** — every TanStack Query key is rooted at `['app', appId, ...]`, so one App's cache
-   can never serve another's, and an App switch / logout can purge by prefix.
-3. **Live-update DO** — the per-App fan-out DO is `idFromName(appId)` (ADR-0019); the socket connects to
-   the DO named by the same `appId`.
-4. **Socket lifecycle** — the socket is owned by the `/app/:appId` layout route, so "which DO am I
-   connected to" is derived from the URL, not ambient client state.
+1. **Isolation check** — the loader resolves `orgSlug → appSlug → env` and validates the session's
+   membership against the App (or 403s); a resolved `env` that is not an Environment of that App is a 404
+   (no separate membership check — Environment access follows App access). This is the
+   application-enforced `(app_id, environment_id)` boundary of ADR-0018/0027, made explicit at the loader
+   seam.
+2. **Query-cache root** — every TanStack Query key is rooted at `['app', appId, 'env', envId, ...]`
+   (`query-key-factory.md`), so one Environment's cache can never serve another's, and an App or
+   Environment switch / logout can purge by prefix.
+3. **Live-update DO** — the per-`(App, Environment)` fan-out DO is `idFromName(`${appId}:${envId}`)`
+   (ADR-0019); the socket connects to the DO named by the same pair, so a dev edit never nudges a prod
+   dashboard.
+4. **Socket lifecycle** — the socket is owned by the `/{orgSlug}/{appSlug}/{env}` layout route and tears
+   down / reconnects when **either** `appId` or `environmentId` changes (`websocket-lifecycle.md`), so
+   "which DO am I connected to" is derived from the URL, not ambient client state.
 
-App-in-the-URL (over a session-only "current app") is the deliberate choice that makes this work: the
-isolation boundary is visible at every loader, panel state is shareable/bookmarkable, and the active App is
-never hidden state that can drift from what the server believes.
+Scope-in-the-URL (over session-only "current app/env") is the deliberate choice that makes this work: the
+isolation boundary is visible at every loader, panel state is shareable/bookmarkable, and the active App
+and Environment are never hidden state that can drift from what the server believes.
 
 ## Package boundary
 
@@ -70,8 +78,10 @@ on first paint, so it needs the authenticated identity at request time, before a
 - **Session is a cookie**, validated server-side in the TanStack Start server handler against the D1
   identity/membership store (ADR-0018). The validated `{ userId, appId-memberships, role }` enters the
   **loader context**. Loaders never trust a client-supplied `appId`.
-- **Active App is the URL** (`/app/:appId/...`). The loader checks the session has access to `:appId` or
-  returns 403. Switching App is a navigation.
+- **Active App and Environment are the URL** (`/{orgSlug}/{appSlug}/{env}/...`). The loader resolves the
+  slugs to ids, checks the session has access to the App (or 403), and treats an `env` that is not one of
+  the App's Environments as a 404 — Environment access follows App access, no separate membership check
+  (ADR-0027). Switching App or Environment is a navigation.
 
 **Deferred (product decision):** what _issues_ the session — email/password, OAuth/SSO, magic link. The
 `cookie → server validation → loader context` seam holds regardless of issuer; the issuer plugs in behind
@@ -84,11 +94,13 @@ ADR-0019's live-update model only works if there is a deterministic, shared mapp
 module, the single source of truth for key shapes — and the WebSocket handler invalidates _through_ it,
 never by hand-assembling key arrays.
 
-- **Entity-rooted hierarchical keys** under the spine: `['app', appId, 'experiment', expId, ...]`. The
+- **Entity-rooted hierarchical keys** under the spine: `['app', appId, 'env', envId, 'experiment', expId, ...]`
+  (`appId` at index 1, `envId` at index 3 — any key without the `(appId, envId)` root is a bug). The
   factory exposes `keys.experiment.detail / .list / .runs`, etc. Components and loaders both construct keys
   only through the factory.
-- **Invalidate by prefix.** A nudge for `experiment/abc` invalidates the `['app', appId, 'experiment']`
-  prefix, catching list + detail + sub-resources in one call — no enumerating every dependent key.
+- **Invalidate by prefix.** A nudge for `experiment/abc` invalidates the
+  `['app', appId, 'env', envId, 'experiment']` prefix, catching list + detail + sub-resources in one call
+  — no enumerating every dependent key.
 - **Version-gated against self-edits.** The nudge carries `version` (ADR-0019). A client whose cached
   version is already ≥ the nudge's skips the refetch — so the editor who just wrote the change (and got the
   new version on its 200) treats the echoed nudge as a no-op; other editors refetch.
@@ -97,9 +109,10 @@ The factory is domain-aware → it lives in the panel app, not `ui`.
 
 ## WebSocket lifecycle
 
-- **Owned by the `/app/:appId` layout route**, one socket per tab per App — matching the per-App DO grain.
-  It persists across child navigations (experiments → flags → runs) because the layout route does not
-  unmount; it tears down / reconnects only when `appId` changes or the tab closes.
+- **Owned by the `/{orgSlug}/{appSlug}/{env}` layout route**, one socket per tab per `(App, Environment)` —
+  matching the per-`(App, Environment)` DO grain (ADR-0019). It persists across child navigations
+  (experiments → flags → runs) because the layout route does not unmount; it tears down / reconnects when
+  **either** `appId` or `environmentId` changes (an App switch or an Environment switch) or the tab closes.
 - **Client-only, attaches after hydration** (ADR-0019). The loader runs server-side with no socket; the
   socket attaches in a client effect at layout mount.
 - **Connect and reconnect both trigger a full invalidate-and-refetch.** This closes the sub-second gap
@@ -113,9 +126,9 @@ Three tiers, at fixed levels of the route tree. The visual components (error pag
 skeletons) live in `ui` (they are brand surfaces); _which boundary catches what_ is panel routing config.
 
 1. **Root error boundary** (app shell) — catastrophic / unexpected failures. The "something broke" page.
-2. **Segment error boundaries** (`/app/:appId` layout and major sections) — _expected_ domain failures:
-   403 → "you don't have access to this App," 404 → "experiment not found." Designed states, not stack
-   traces.
+2. **Segment error boundaries** (`/{orgSlug}/{appSlug}/{env}` layout and major sections) — _expected_
+   domain failures: 403 → "you don't have access to this App," 404 → "no such Environment" / "experiment
+   not found." Designed states, not stack traces.
 3. **Failed background refetch** (the nudge path) — **non-fatal**. A failed nudge-refetch never unmounts
    good data; it degrades to a stale-with-toast state ("couldn't refresh, retrying"). This is the rule that
    makes the live-update model feel solid instead of flickery.
@@ -135,9 +148,9 @@ Sentry severity tracks the error tier — expected states never page anyone.
   (read API down) is worth surfacing; one blip is not.
 
 **Distributed tracing across the hops that matter:** trace context propagates SSR-loader → read-API and
-client-fetch → read-API, so a panel error and its backend cause are one trace. User/App context
-(`userId`, `appId`, `role`) is set once at the session-validation seam, so every downstream Sentry event —
-server and client — is already tagged.
+client-fetch → read-API, so a panel error and its backend cause are one trace. User/App/Environment context
+(`userId`, `appId`, `environmentId`, `role`) is set once at the session-validation/route-resolution seam, so
+every downstream Sentry event — server and client — is already tagged.
 
 **Privacy (fail-loud rule):** the Targeting Key and Evaluation Context attributes can carry the customer's
 end-user PII. They are **scrubbed from Sentry payloads.**
@@ -145,7 +158,7 @@ end-user PII. They are **scrubbed from Sentry payloads.**
 ## Data flow: reads and mutations
 
 ADR-0019 is explicit — the client never applies deltas; it invalidates and refetches truth, and config is
-persisted-before-announced (the per-App DO validates, commits KV/D1, _then_ broadcasts).
+persisted-before-announced (the per-`(App, Environment)` DO validates, commits KV/D1, _then_ broadcasts).
 
 The frontend mirrors that discipline: **server-confirmed mutations, no optimistic cache writes.**
 
