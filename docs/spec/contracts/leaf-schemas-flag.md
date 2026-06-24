@@ -29,21 +29,22 @@ Flag DEFINITION (`key`, value schema, Variant catalog) is App-level. Flag CONFIG
 `availableVariantNames` subset of the catalog, `targetingRules`, rollout, `defaultVariantId`) is
 per-Environment (ADR-0027); the configuration fields below resolve against a given `environmentId`.
 
-| Field                   | Type                | Required | Meaning                                                                             |
-| ----------------------- | ------------------- | -------- | ----------------------------------------------------------------------------------- |
-| `id`                    | `string`            | yes      | Stable UUID                                                                         |
-| `appId`                 | `string`            | yes      | Owning App                                                                          |
-| `key`                   | `string`            | yes      | Unique per App; the stable string clients use (DEFINITION)                          |
-| `name`                  | `string`            | yes      | Display label (DEFINITION)                                                          |
-| `description`           | `string`            | no       | —                                                                                   |
-| `variants`              | `Variant[]`         | yes      | Min 1; the App-level Variant catalog (DEFINITION)                                   |
-| `environmentId`         | `string`            | yes      | Environment this CONFIGURATION resolves for (ADR-0027)                              |
-| `enabled`               | `boolean`           | yes      | Per-Environment; when `false`, always serves Default Variant (CONFIGURATION)        |
-| `availableVariantNames` | `string[]`          | yes      | Per-Environment subset of the Variant catalog this config may serve (CONFIGURATION) |
-| `defaultVariantId`      | `string`            | yes      | Per-Environment Variant served when disabled or no rule matches (CONFIGURATION)     |
-| `targetingRules`        | `TargetingRule[]`   | yes      | Per-Environment; priority-ordered; empty = never match (CONFIGURATION)              |
-| `createdAt`             | `string` (ISO 8601) | yes      | —                                                                                   |
-| `updatedAt`             | `string` (ISO 8601) | yes      | —                                                                                   |
+| Field                   | Type                 | Required | Meaning                                                                                        |
+| ----------------------- | -------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `id`                    | `string`             | yes      | Stable UUID                                                                                    |
+| `appId`                 | `string`             | yes      | Owning App                                                                                     |
+| `key`                   | `string`             | yes      | Unique per App; the stable string clients use (DEFINITION)                                     |
+| `name`                  | `string`             | yes      | Display label (DEFINITION)                                                                     |
+| `description`           | `string`             | no       | —                                                                                              |
+| `schema`                | `JSONSchema \| null` | no       | App-level value schema every Variant `value` must satisfy; `null` = unconstrained (DEFINITION) |
+| `variants`              | `Variant[]`          | yes      | Min 1; the App-level Variant catalog; each `value` validates against `schema` (DEFINITION)     |
+| `environmentId`         | `string`             | yes      | Environment this CONFIGURATION resolves for (ADR-0027)                                         |
+| `enabled`               | `boolean`            | yes      | Per-Environment; when `false`, always serves Default Variant (CONFIGURATION)                   |
+| `availableVariantNames` | `string[]`           | yes      | Per-Environment subset of the Variant catalog this config may serve (CONFIGURATION)            |
+| `defaultVariantId`      | `string`             | yes      | Per-Environment Variant served when disabled or no rule matches (CONFIGURATION)                |
+| `targetingRules`        | `TargetingRule[]`    | yes      | Per-Environment; priority-ordered; empty = never match (CONFIGURATION)                         |
+| `createdAt`             | `string` (ISO 8601)  | yes      | —                                                                                              |
+| `updatedAt`             | `string` (ISO 8601)  | yes      | —                                                                                              |
 
 ---
 

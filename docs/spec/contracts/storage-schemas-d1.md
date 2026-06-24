@@ -90,19 +90,20 @@ Flag DEFINITION is App-level: `key`, value schema, and the Variant catalog. Per-
 CONFIGURATION (enabled state, available Variant subset, targeting, rollout) lives in `flag_configs`
 (ADR-0027).
 
-| Column               | Type        | Constraints                                  |
-| -------------------- | ----------- | -------------------------------------------- |
-| `id`                 | text        | PK                                           |
-| `app_id`             | text        | FK → apps, not null                          |
-| `key`                | text        | not null, unique per `(app_id)`              |
-| `name`               | text        | not null                                     |
-| `description`        | text        | nullable                                     |
-| `default_variant_id` | text        | FK → variants                                |
-| `created_at`         | timestamptz | not null                                     |
-| `updated_at`         | timestamptz | not null                                     |
-| `created_by`         | text        | WorkOS user ID or deleted-user tombstone     |
-| `updated_by`         | text        | WorkOS user ID or deleted-user tombstone     |
-| `version`            | integer     | not null, default 1; optimistic-lock counter |
+| Column               | Type        | Constraints                                                          |
+| -------------------- | ----------- | -------------------------------------------------------------------- |
+| `id`                 | text        | PK                                                                   |
+| `app_id`             | text        | FK → apps, not null                                                  |
+| `key`                | text        | not null, unique per `(app_id)`                                      |
+| `name`               | text        | not null                                                             |
+| `description`        | text        | nullable                                                             |
+| `schema`             | text        | nullable (JSON Schema); value contract Variant `value`s must satisfy |
+| `default_variant_id` | text        | FK → variants                                                        |
+| `created_at`         | timestamptz | not null                                                             |
+| `updated_at`         | timestamptz | not null                                                             |
+| `created_by`         | text        | WorkOS user ID or deleted-user tombstone                             |
+| `updated_by`         | text        | WorkOS user ID or deleted-user tombstone                             |
+| `version`            | integer     | not null, default 1; optimistic-lock counter                         |
 
 ### `flag_configs` (CONFIGURATION — per-Environment)
 

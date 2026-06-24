@@ -14,9 +14,9 @@ expected split. Signals broken bucketing/Assignment and **invalidates the Experi
 
 Chi-square test over the full exposed population.
 
-**Denominator:** `COUNT DISTINCT entity_id` per arm, from the first-touch dedup query (ADR-0010).
+**Denominator:** `COUNT DISTINCT targeting_key_hash` per arm, from the first-touch dedup query (ADR-0010).
 
-- First-touch per `(entity_id, run_id)`: `MIN(server_ts)`.
+- First-touch per `(targeting_key_hash, run_id)`: `MIN(server_ts)`.
 - `__multiple__` Entities excluded from all arms (ADR-0011).
 - This is the **same denominator** Metrics and Conversion Window anchoring use. No secondary
   raw-count denominator exists.
@@ -44,13 +44,13 @@ conservative.
 Computed separately when an Activation gate is set. Guards against Treatment-affected gates
 (ADR-0012 / CONTEXT.md §Activation Metric).
 
-**Denominator:** `COUNT DISTINCT entity_id` per arm among activated Entities only:
+**Denominator:** `COUNT DISTINCT targeting_key_hash` per arm among activated Entities only:
 
 ```sql
 -- uses activation_rows from data-contracts.md
-SELECT variant, COUNT(DISTINCT entity_id) AS activated_n
+SELECT variant, COUNT(DISTINCT targeting_key_hash) AS activated_n
 FROM exposed e
-JOIN activation_rows a USING (entity_id, run_id)
+JOIN activation_rows a USING (targeting_key_hash, run_id)
 WHERE a.activated = true
 GROUP BY variant
 ```

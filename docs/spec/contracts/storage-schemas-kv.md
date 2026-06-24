@@ -57,13 +57,17 @@ new entity, just a nullable field on config the path already reads.
   id:                  string
   experimentId:        string
   salt:                string
-  allocation:          Record<string, number>  // variantId -> percentage
+  allocation:          Record<string, number>  // variantName -> percentage
   variantSet:          Variant[]
-  targetingSegmentId:  string | null
+  targetingRules:      TargetingRule[]          // resolved snapshot frozen at Start; [] = all eligible
   configHash:          string
   startedAt:           string  // ISO 8601
 }
 ```
+
+`allocation` is keyed by Variant **name** and `targetingRules` is the resolved rule snapshot, mirroring
+the Run leaf exactly — the edge evaluates eligibility from the frozen rules and buckets by name without
+resolving a Segment or joining ids at read time. `configHash` in KV equals the D1 Run's `configHash`.
 
 Note: `targetingKey` is NOT in RunConfigKV — it lives on Experiment and is fetched from D1 on the
 control plane. Edge evaluate path reads it from `ExperimentConfigKV` (see below).
@@ -72,11 +76,12 @@ control plane. Edge evaluate path reads it from `ExperimentConfigKV` (see below)
 
 ```
 {
-  id:            string
-  environmentId: string
-  flagId:        string
-  targetingKey:  string
-  liveRunId:     string | null
+  id:               string
+  environmentId:    string
+  flagId:           string
+  targetingKey:     string         // Evaluation Context field name to bucket on (e.g. "userId")
+  targetingKeyType: string         // Entity type label stamped as id_type on Exposure (e.g. "user")
+  liveRunId:        string | null
 }
 ```
 

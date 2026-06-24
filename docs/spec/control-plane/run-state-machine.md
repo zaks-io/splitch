@@ -80,8 +80,10 @@ not just Worker logic):
 - `allocation` (object `{ [variant_name]: number }`) — percentages, must sum to 100
 - `variant_set` (string[]) — names of Variants participating in this Run
 - `targeting_key_field` (string) — which attribute from Evaluation Context is the Targeting Key
-- `targeting_rules` (TargetingRule[]) — the ordered rule set
-- `segment_ids` (string[]) — Segment filter for this Run
+- `targeting_key_type` (string) — Entity type label (the Run's `id_type`); changes require a new Run
+- `targeting_rules` (TargetingRule[]) — the resolved rule snapshot. Any draft `segment_ids` are
+  resolved to their concrete rules at Start and merged in here; the Run stores the frozen rules, never
+  the segment references (a later Segment edit cannot change a finished Run's population)
 - `activation_metric_id` (string | null) — frozen at Start; changes require new Run
 
 ## Measurement edit fields (apply to live Run in place, no Run reset)
@@ -108,29 +110,29 @@ decision-valid result with `DECISION_LOCKED`.
 
 ## Run D1 record shape
 
-| column                 | type    | required | meaning                                                        |
-| ---------------------- | ------- | -------- | -------------------------------------------------------------- |
-| `run_id`               | TEXT PK | yes      | `run_<ulid>`                                                   |
-| `experiment_id`        | TEXT FK | yes      | Parent Experiment                                              |
-| `app_id`               | TEXT    | yes      | Denormalized for isolation seam scoping                        |
-| `environment_id`       | TEXT    | yes      | Denormalized; co-scope with `app_id` (ADR-0027)                |
-| `status`               | TEXT    | yes      | `running` \| `ended`                                           |
-| `started_at`           | TEXT    | yes      | ISO 8601; set at Start                                         |
-| `ended_at`             | TEXT    | no       | ISO 8601; set at End                                           |
-| `salt`                 | TEXT    | yes      | Frozen assignment seed                                         |
-| `allocation`           | TEXT    | yes      | JSON: `{ [variant_name]: number }`                             |
-| `variant_set`          | TEXT    | yes      | JSON: string[]                                                 |
-| `targeting_key_field`  | TEXT    | yes      | Frozen Targeting Key field name                                |
-| `targeting_rules`      | TEXT    | yes      | JSON: TargetingRule[]                                          |
-| `segment_ids`          | TEXT    | yes      | JSON: string[]                                                 |
-| `activation_metric_id` | TEXT    | no       | Frozen Activation Metric; null if no gate                      |
-| `confidence_level`     | REAL    | yes      | Locked decision alpha input; default 0.95                      |
-| `horizon`              | TEXT    | yes      | `sequential` \| `fixed`; locked at Run Start                   |
-| `target_n`             | INTEGER | no       | Sequential tuning target; null unless set                      |
-| `sample_size_locked`   | INTEGER | no       | Fixed-horizon sample size; required when `horizon = fixed`     |
-| `decision_family`      | TEXT    | yes      | JSON: locked goal Metric × Variant × Primary Dimension members |
-| `guardrail_decisions`  | TEXT    | yes      | JSON: locked Guardrail Metric thresholds/directions            |
-| `created_at`           | TEXT    | yes      | ISO 8601                                                       |
+| column                 | type    | required | meaning                                                                        |
+| ---------------------- | ------- | -------- | ------------------------------------------------------------------------------ |
+| `run_id`               | TEXT PK | yes      | `run_<ulid>`                                                                   |
+| `experiment_id`        | TEXT FK | yes      | Parent Experiment                                                              |
+| `app_id`               | TEXT    | yes      | Denormalized for isolation seam scoping                                        |
+| `environment_id`       | TEXT    | yes      | Denormalized; co-scope with `app_id` (ADR-0027)                                |
+| `status`               | TEXT    | yes      | `running` \| `ended`                                                           |
+| `started_at`           | TEXT    | yes      | ISO 8601; set at Start                                                         |
+| `ended_at`             | TEXT    | no       | ISO 8601; set at End                                                           |
+| `salt`                 | TEXT    | yes      | Frozen assignment seed                                                         |
+| `allocation`           | TEXT    | yes      | JSON: `{ [variant_name]: number }`                                             |
+| `variant_set`          | TEXT    | yes      | JSON: string[]                                                                 |
+| `targeting_key_field`  | TEXT    | yes      | Frozen Targeting Key field name                                                |
+| `targeting_key_type`   | TEXT    | yes      | Frozen Entity type label (the Run's `id_type`)                                 |
+| `targeting_rules`      | TEXT    | yes      | JSON: TargetingRule[]; resolved snapshot (draft segments resolved in at Start) |
+| `activation_metric_id` | TEXT    | no       | Frozen Activation Metric; null if no gate                                      |
+| `confidence_level`     | REAL    | yes      | Locked decision alpha input; default 0.95                                      |
+| `horizon`              | TEXT    | yes      | `sequential` \| `fixed`; locked at Run Start                                   |
+| `target_n`             | INTEGER | no       | Sequential tuning target; null unless set                                      |
+| `sample_size_locked`   | INTEGER | no       | Fixed-horizon sample size; required when `horizon = fixed`                     |
+| `decision_family`      | TEXT    | yes      | JSON: locked goal Metric × Variant × Primary Dimension members                 |
+| `guardrail_decisions`  | TEXT    | yes      | JSON: locked Guardrail Metric thresholds/directions                            |
+| `created_at`           | TEXT    | yes      | ISO 8601                                                                       |
 
 ## Error codes for Run invariants
 

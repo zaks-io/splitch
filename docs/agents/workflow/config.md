@@ -4,8 +4,11 @@ Last updated: 2026-06-21
 
 Scaffold is in place. The repo is now a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
-and Worker-shaped deploy units. Hosted code-host checks, shared-preview deploy,
-production deploy, and real backing resources are still not provisioned.
+and Worker-shaped deploy units. The code host now exists: `main` is pushed to
+`github.com/zaks-io/splitch` (private) and the `ci` and `gitleaks` workflows run
+on every push. Shared-preview deploy, production deploy, and real backing
+resources are still not provisioned. The `splitch` Linear repo-route label still
+does not exist (blocks only remote issue-assigned delegation, not local-worktree).
 
 ## Verification
 
@@ -23,11 +26,14 @@ production deploy, and real backing resources are still not provisioned.
   (`eba9c622-4d28-4db2-93fe-12c43bd218b0`). Team, statuses, and labels verified
   live; 0 projects, 0 issues (fresh team).
 - Inferred values: Linear issue key prefix (no issues exist yet to read an
-  identifier from); hosted PR check names (workflow YAML exists but has not run
-  on a remote).
-- Critical unknowns: no code host remote is configured, no `splitch` repo-route
-  label exists in Linear, shared preview is not provisioned, and production
-  deployment is not wired. See `Unknowns`.
+  identifier from).
+- Verified hosted PR check names: `ci` and `gitleaks` (both run on push to
+  `zaks-io/splitch`). NOTE: the `ci` check is currently **failing on `main`** —
+  `verify:ci` invokes `gitleaks` but the runner does not install it
+  (`gitleaks: not found`). See `Pull Requests`.
+- Critical unknowns: no `splitch` repo-route label exists in Linear, shared
+  preview is not provisioned, and production deployment is not wired. See
+  `Unknowns`. (The code host remote IS now configured — `zaks-io/splitch`.)
 
 ## Repo
 
@@ -205,10 +211,15 @@ real package API boundary.
 
 ## Pull Requests
 
-- PR CI workflow source: `.github/workflows/ci.yml`; hosted check name not
-  verified until the repo is pushed to a code host.
-- Gitleaks workflow source: `.github/workflows/gitleaks.yml`; hosted check name
-  not verified until the repo is pushed to a code host.
+- PR CI workflow source: `.github/workflows/ci.yml`; verified hosted check name `ci`.
+- Gitleaks workflow source: `.github/workflows/gitleaks.yml`; verified hosted check name `gitleaks`.
+- **Known-red:** the `ci` check fails on `main` because `verify:ci` runs `gitleaks`
+  (via `secrets:worktree`) but the runner has no `gitleaks` binary
+  (`sh: gitleaks: not found`). The dedicated `gitleaks` workflow passes, so the
+  scan itself is covered; the `verify:ci` step is redundantly invoking a tool it
+  does not install. Fix before treating green CI as a Done gate (either drop
+  `secrets:worktree` from `verify:ci` since the `gitleaks` workflow covers it, or
+  install gitleaks in the `ci` job).
 - CodeRabbit config source: none (`.coderabbit.yaml` absent).
 - CodeRabbit auto-review: unknown (no config).
 
@@ -247,11 +258,12 @@ real package API boundary.
       the code host repo exists, then record its ID here.
 - [ ] Linear issue key prefix inferred as `SPL-`. Verifier: read the identifier
       of the first created issue.
-- [ ] No code host configured. Blocks PR conventions, required checks, merge
-      method, CodeRabbit. Verifier: create the remote repo, push, re-run setup.
-- [ ] Hosted CI check names unverified. Workflow files exist locally but have not
-      run on a remote. Verifier: push to the code host and record exact required
-      check names for CI and Gitleaks.
+- [x] Code host configured: `github.com/zaks-io/splitch` (private), `main` pushed,
+      `ci` + `gitleaks` workflows run on push (confirmed 2026-06-24). Remaining PR
+      conventions (merge method, required-check enforcement, CodeRabbit) still to set.
+- [x] Hosted CI check names verified: `ci` and `gitleaks`. ⚠️ `ci` is currently
+      RED on `main` — `verify:ci` calls `gitleaks` but the runner doesn't install it.
+      See `Pull Requests` for the fix options.
 - [ ] Tinybird project files are absent. `pnpm tinybird:local` intentionally
       skips until `tinybird/` exists. Verifier: add Tinybird datasources, pipes,
       fixtures, and tests, then make the local script fail on validation errors.

@@ -159,7 +159,7 @@ An agent reads this to know what it cannot change without a new Run:
 
 ```
 frozenFields = [
-  'salt', 'allocation', 'variantSet', 'targetingSegmentId',
+  'salt', 'allocation', 'variantSet', 'targetingRules', 'targetingSegmentId',
   'experiment.targetingKey', // lives on Experiment; changing it triggers RUN_FROZEN with a running Run
   'activationMetricId',      // Activation Metric is an assignment edit
 ]
@@ -236,7 +236,7 @@ under an API Key `verify` returns the full reason (ADR-0037). The mapping from H
 
 **PATCH /api/apps/:appId/envs/:environmentId/experiments/:id/runs/:runId** (non-material patch only)
 
-- `RUN_FROZEN` — if request body includes any frozen field (`salt`, `allocation`, `variantSet`, `targetingSegmentId`)
+- `RUN_FROZEN` — if request body includes any frozen field (`salt`, `allocation`, `variantSet`, `targetingRules`, `targetingSegmentId`)
 - `RUN_NOT_FOUND`
 - `VALIDATION_ERROR`
 

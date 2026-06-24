@@ -39,7 +39,11 @@ If a slice cannot meet this shape, it is not ready for agent implementation.
 | Shared-preview smoke | Hosted integration, real bindings, URLs       | Maintainer-triggered `shared-preview` deploy and smoke, never default PR CI     |
 | Production smoke     | Production release                            | GitHub `production` environment approval plus deployment summary evidence       |
 
-`verify:push` includes `smoke:local:api`, so a Worker boot or health-regression failure blocks push.
+`smoke:local:api` is a **separate explicit step**, not part of `verify:push` (which mirrors
+`verify:commit`: format, lint, typecheck, Knip, secrets — no Worker boot). Run `pnpm smoke:local:api`
+before a PR handoff whenever a slice touches an API Worker, SDK, runtime, or contract; the smoke is
+not wired into the push hook today to keep pre-push fast. (Folding it into push — or into CI once a
+hosted baseline exists — is a deliberate later call, not an oversight.)
 
 ## Local API smoke
 

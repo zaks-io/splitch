@@ -18,22 +18,23 @@ live in [request-response-envelopes-conventions.md](./request-response-envelopes
 
 ### CreateExperimentRequest
 
-| Field                | Required | Notes                                                                     |
-| -------------------- | -------- | ------------------------------------------------------------------------- |
-| `appId`              | yes      | —                                                                         |
-| `environmentId`      | yes      | Co-scoped with `appId`; Experiment is per-Environment (ADR-0027)          |
-| `name`               | yes      | —                                                                         |
-| `key`                | yes      | Unique per `(App, Environment)`                                           |
-| `flagId`             | yes      | One Flag per Experiment                                                   |
-| `targetingKey`       | yes      | Inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN` |
-| `description`        | no       | —                                                                         |
-| `hypothesis`         | no       | —                                                                         |
-| `confidenceLevel`    | no       | Defaults to `0.95`                                                        |
-| `metrics`            | yes      | `MetricRef[]`, min 0                                                      |
-| `guardrailMetrics`   | no       | Defaults to `[]`                                                          |
-| `activationMetricId` | no       | Assignment-affecting when set                                             |
-| `conversionWindowMs` | no       | Defaults to `0` (unbounded)                                               |
-| `dimensions`         | no       | Defaults to `[]`                                                          |
+| Field                | Required | Notes                                                                                                        |
+| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `appId`              | yes      | —                                                                                                            |
+| `environmentId`      | yes      | Co-scoped with `appId`; Experiment is per-Environment (ADR-0027)                                             |
+| `name`               | yes      | —                                                                                                            |
+| `key`                | yes      | Unique per `(App, Environment)`                                                                              |
+| `flagId`             | yes      | One Flag per Experiment                                                                                      |
+| `targetingKey`       | yes      | EC field name to bucket on; inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN`        |
+| `targetingKeyType`   | yes      | Entity type label (the `id_type`); inherited by all Runs; changing it on a running Experiment → `RUN_FROZEN` |
+| `description`        | no       | —                                                                                                            |
+| `hypothesis`         | no       | —                                                                                                            |
+| `confidenceLevel`    | no       | Defaults to `0.95`                                                                                           |
+| `metrics`            | yes      | `MetricRef[]`, min 0                                                                                         |
+| `guardrailMetrics`   | no       | Defaults to `[]`                                                                                             |
+| `activationMetricId` | no       | Assignment-affecting when set                                                                                |
+| `conversionWindowMs` | no       | Defaults to `0` (unbounded)                                                                                  |
+| `dimensions`         | no       | Defaults to `[]`                                                                                             |
 
 Worker sets: `id`, `status = 'draft'`, `liveRunId = null`, `createdAt`, `updatedAt`, and
 `defaultVariantId` — copied from the bound Flag's per-Environment `defaultVariantId` (resolved via
@@ -48,7 +49,8 @@ Sorted by edit type. The Worker enforces the edit taxonomy (ADR-0003):
 
 **Assignment edits** — rejected with `RUN_FROZEN` when Experiment.status = `'running'`:
 
-- `targetingKey` — changing Entity type
+- `targetingKey` — changing the EC field bucketed on
+- `targetingKeyType` — changing the Entity type (`id_type`)
 - `activationMetricId` — Activation Metric change is an assignment edit
 - `flagId` — changing the controlled Flag
 
@@ -85,6 +87,7 @@ Sorted by edit type. The Worker enforces the edit taxonomy (ADR-0003):
 | `description`        | no       | non-material                                     |
 | `hypothesis`         | no       | non-material                                     |
 | `targetingKey`       | no       | assignment                                       |
+| `targetingKeyType`   | no       | assignment                                       |
 | `activationMetricId` | no       | assignment                                       |
 | `metrics`            | no       | measurement                                      |
 | `guardrailMetrics`   | no       | measurement                                      |
@@ -103,15 +106,19 @@ The Start action ends the current running Experiment Run (if any) and opens a ne
 is the only path to open an Experiment Run (first-Start Run rule "first Experiment Run opens on first
 Start"). All assignment config is supplied here.
 
-| Field                | Required | Notes                                                              |
-| -------------------- | -------- | ------------------------------------------------------------------ |
-| `experimentId`       | yes      | —                                                                  |
-| `variantSet`         | yes      | `Variant[]`; snapshot of the Flag's current Variants at Start time |
-| `allocation`         | yes      | `Record<variantId, number>`; must sum to 100                       |
-| `salt`               | no       | Auto-generated UUID4 if omitted; guaranteed unique per Experiment  |
-| `targetingSegmentId` | no       | Optional Segment gate                                              |
+| Field                | Required | Notes                                                                                                              |
+| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `experimentId`       | yes      | —                                                                                                                  |
+| `variantSet`         | yes      | `Variant[]`; snapshot of the Flag's current Variants at Start time                                                 |
+| `allocation`         | yes      | `Record<variantName, number>`; Variant **name** → percentage; must sum to 100                                      |
+| `salt`               | no       | Auto-generated UUID4 if omitted; guaranteed unique per Experiment                                                  |
+| `targetingSegmentId` | no       | Optional Segment to gate eligibility; **resolved to frozen rules at Start** (see below), not stored as a reference |
 
-Worker computes: `id`, `configHash`, `status = 'running'`, `startedAt`.
+Worker computes: `id`, `configHash`, `status = 'running'`, `startedAt`, and **`targetingRules`** —
+the resolved targeting snapshot. If `targetingSegmentId` is supplied, the Worker reads that Segment's
+current `TargetingRule[]` and freezes the resolved rules onto the Run; if omitted, `targetingRules = []`
+(all Entities eligible). The Run stores the frozen rules, never the segment id, so a later edit to the
+Segment cannot change a finished Run's population.
 Worker writes `liveRunId` to Experiment and KV.
 `targetingKey` is read from `Experiment.targetingKey` (not supplied here).
 
@@ -127,7 +134,7 @@ Accepted Zod shape uses `.strict()` to fail on any unrecognized key.
 | `tags`        | no       | `string[]` |
 
 **Rejected fields** (Worker returns `RUN_FROZEN` if present):
-`salt`, `allocation`, `variantSet`, `targetingSegmentId`, `targetingKey`
+`salt`, `allocation`, `variantSet`, `targetingSegmentId`, `targetingRules`, `targetingKey`
 
 ### RunResponse
 

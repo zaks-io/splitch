@@ -16,60 +16,74 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 
 ### `experiments`
 
-| Column                 | Type        | Constraints                                                     |
-| ---------------------- | ----------- | --------------------------------------------------------------- |
-| `id`                   | text        | PK                                                              |
-| `app_id`               | text        | FK → apps, not null                                             |
-| `environment_id`       | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027) |
-| `key`                  | text        | not null, unique per `(app_id, environment_id)`                 |
-| `flag_id`              | text        | FK → flags, not null                                            |
-| `name`                 | text        | not null                                                        |
-| `description`          | text        | nullable                                                        |
-| `hypothesis`           | text        | nullable                                                        |
-| `status`               | text        | not null, default `'draft'`                                     |
-| `targeting_key_field`  | text        | not null; Evaluation Context field used as the Targeting Key    |
-| `confidence_level`     | real        | not null, default 0.95                                          |
-| `default_variant_id`   | text        | FK → variants                                                   |
-| `metrics`              | text        | not null (JSON array of MetricRef)                              |
-| `guardrail_metrics`    | text        | not null (JSON array of MetricRef)                              |
-| `activation_metric_id` | text        | nullable, FK → metrics                                          |
-| `conversion_window_ms` | integer     | not null, default 0                                             |
-| `dimensions`           | text        | not null (JSON string array)                                    |
-| `live_run_id`          | text        | nullable, FK → runs                                             |
-| `created_at`           | timestamptz | not null                                                        |
-| `updated_at`           | timestamptz | not null                                                        |
-| `created_by`           | text        | WorkOS user ID or deleted-user tombstone                        |
-| `updated_by`           | text        | WorkOS user ID or deleted-user tombstone                        |
+| Column                  | Type        | Constraints                                                                                                                                           |
+| ----------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                    | text        | PK                                                                                                                                                    |
+| `app_id`                | text        | FK → apps, not null                                                                                                                                   |
+| `environment_id`        | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027)                                                                                       |
+| `key`                   | text        | not null, unique per `(app_id, environment_id)`                                                                                                       |
+| `flag_id`               | text        | FK → flags, not null                                                                                                                                  |
+| `name`                  | text        | not null                                                                                                                                              |
+| `description`           | text        | nullable                                                                                                                                              |
+| `hypothesis`            | text        | nullable                                                                                                                                              |
+| `status`                | text        | not null, default `'draft'`                                                                                                                           |
+| `targeting_key_field`   | text        | not null; Evaluation Context **field name** read as the Targeting Key (e.g. `"userId"`)                                                               |
+| `targeting_key_type`    | text        | not null; **Entity type label** the key identifies (e.g. `"user"`); stamped as `id_type` on every Exposure row and validated against inbound requests |
+| `confidence_level`      | real        | not null, default 0.95                                                                                                                                |
+| `default_variant_id`    | text        | FK → variants                                                                                                                                         |
+| `metrics`               | text        | not null (JSON array of MetricRef)                                                                                                                    |
+| `guardrail_metrics`     | text        | not null (JSON array of MetricRef)                                                                                                                    |
+| `activation_metric_id`  | text        | nullable, FK → metrics                                                                                                                                |
+| `conversion_window_ms`  | integer     | not null, default 0                                                                                                                                   |
+| `dimensions`            | text        | not null (JSON string array)                                                                                                                          |
+| `draft_allocation`      | text        | nullable (JSON `{ [variantName]: number }`); staged allocation for the next Run                                                                       |
+| `draft_salt`            | text        | nullable; optional salt override staged for the next Run                                                                                              |
+| `draft_targeting_rules` | text        | nullable (JSON `TargetingRule[]`); staged targeting for the next Run                                                                                  |
+| `draft_segment_ids`     | text        | nullable (JSON string array); staged Segments to resolve into rules at Start                                                                          |
+| `live_run_id`           | text        | nullable, FK → runs                                                                                                                                   |
+| `created_at`            | timestamptz | not null                                                                                                                                              |
+| `updated_at`            | timestamptz | not null                                                                                                                                              |
+| `created_by`            | text        | WorkOS user ID or deleted-user tombstone                                                                                                              |
+| `updated_by`            | text        | WorkOS user ID or deleted-user tombstone                                                                                                              |
+
+The `draft_*` columns are the **staging area for the next Run** (run-state-machine: "Assignment edits
+accumulate on the draft; Start is the single reset point"). Assignment-affecting PATCHes write here;
+`activation_metric_id` is also part of the draft set (a change to it is an assignment edit). At Start the
+Worker resolves `draft_segment_ids` to concrete rules, merges them with `draft_targeting_rules`, and
+copies the frozen assignment config (`allocation`, `salt`, `targeting_rules`, `variant_set`) into a new
+`runs` row. The draft columns are nullable because a freshly created Experiment has no staged Run yet.
 
 ### `runs`
 
 Immutable assignment config columns are marked; Drizzle migrations must not add UPDATE paths for them.
 
-| Column                 | Type        | Constraints                                                                        |
-| ---------------------- | ----------- | ---------------------------------------------------------------------------------- |
-| `id`                   | text        | PK                                                                                 |
-| `app_id`               | text        | FK → apps, not null                                                                |
-| `environment_id`       | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027)                    |
-| `experiment_id`        | text        | FK → experiments, not null                                                         |
-| `run_number`           | integer     | not null; 1-based ordinal within the Experiment; **immutable** (the "Run N" label) |
-| `status`               | text        | not null, default `'running'`                                                      |
-| `salt`                 | text        | not null; **immutable**                                                            |
-| `allocation`           | text        | not null (JSON); **immutable**                                                     |
-| `variant_set`          | text        | not null (JSON); **immutable**                                                     |
-| `targeting_segment_id` | text        | nullable; **immutable**                                                            |
-| `confidence_level`     | real        | not null; locked at Run Start                                                      |
-| `horizon`              | text        | not null, default `'sequential'`; locked at Run Start                              |
-| `target_n`             | integer     | nullable; sequential tuning                                                        |
-| `sample_size_locked`   | integer     | nullable; required for fixed horizon                                               |
-| `decision_family`      | text        | not null (JSON); locked goal Metric × Variant × Primary Dimension members          |
-| `guardrail_decisions`  | text        | not null (JSON); locked thresholds/directions                                      |
-| `config_hash`          | text        | not null; computed SHA-256; **immutable**                                          |
-| `started_at`           | timestamptz | not null                                                                           |
-| `ended_at`             | timestamptz | nullable                                                                           |
-| `start_reason`         | text        | nullable; optional human intent note given at Start; **immutable**                 |
-| `end_reason`           | text        | nullable; optional human note given at `/end`                                      |
-| `created_at`           | timestamptz | not null                                                                           |
-| `created_by`           | text        | WorkOS user ID or deleted-user tombstone                                           |
+| Column                | Type        | Constraints                                                                                              |
+| --------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| `id`                  | text        | PK                                                                                                       |
+| `app_id`              | text        | FK → apps, not null                                                                                      |
+| `environment_id`      | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027)                                          |
+| `experiment_id`       | text        | FK → experiments, not null                                                                               |
+| `run_number`          | integer     | not null; 1-based ordinal within the Experiment; **immutable** (the "Run N" label)                       |
+| `status`              | text        | not null, default `'running'`                                                                            |
+| `targeting_key_field` | text        | not null; EC field name frozen from the Experiment at Start; **immutable**                               |
+| `targeting_key_type`  | text        | not null; Entity type label frozen from the Experiment at Start (the Run's `id_type`); **immutable**     |
+| `salt`                | text        | not null; **immutable**                                                                                  |
+| `allocation`          | text        | not null (JSON `{ [variantName]: number }`, keyed by Variant name); **immutable**                        |
+| `variant_set`         | text        | not null (JSON); **immutable**                                                                           |
+| `targeting_rules`     | text        | not null (JSON `TargetingRule[]`; `[]` = all eligible); resolved snapshot frozen at Start; **immutable** |
+| `confidence_level`    | real        | not null; locked at Run Start                                                                            |
+| `horizon`             | text        | not null, default `'sequential'`; locked at Run Start                                                    |
+| `target_n`            | integer     | nullable; sequential tuning                                                                              |
+| `sample_size_locked`  | integer     | nullable; required for fixed horizon                                                                     |
+| `decision_family`     | text        | not null (JSON); locked goal Metric × Variant × Primary Dimension members                                |
+| `guardrail_decisions` | text        | not null (JSON); locked thresholds/directions                                                            |
+| `config_hash`         | text        | not null; computed SHA-256; **immutable**                                                                |
+| `started_at`          | timestamptz | not null                                                                                                 |
+| `ended_at`            | timestamptz | nullable                                                                                                 |
+| `start_reason`        | text        | nullable; optional human intent note given at Start; **immutable**                                       |
+| `end_reason`          | text        | nullable; optional human note given at `/end`                                                            |
+| `created_at`          | timestamptz | not null                                                                                                 |
+| `created_by`          | text        | WorkOS user ID or deleted-user tombstone                                                                 |
 
 UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
 UNIQUE constraint: `(experiment_id, run_number)` — run numbers are dense and unique per Experiment.
