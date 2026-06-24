@@ -6,7 +6,9 @@ The analysis denominator is **unique Entities per Run, first-touch**: an Entity'
 in a Run is the one that counts and anchors its Conversion Window; repeat reads, sessions, and edge
 nodes do not add to the count. Dedup happens at two layers doing two different jobs: the **SDK seen-set**
 is a hot-path/wire optimization only, and the **pipeline dedup** (`GROUP BY entity, run`, `MIN(timestamp)`)
-is the authority. We do not trust the SDK set as source of truth because, across splitch's five edge
+is the authority. (`entity, run` is the determinant shorthand; the full first-touch tuple carries
+`app_id, environment_id` too — Exposures are per-Environment, ADR-0027 — but a Run lives in one
+Environment so those are run-implied. Canonical query: `docs/spec/pipeline/dedup-query-contract.md`.) We do not trust the SDK set as source of truth because, across splitch's five edge
 runtimes, seen-sets are per-node — the same Entity hitting two POPs produces two "first" exposures, so
 only the pipeline dedup is correct.
 
