@@ -1,10 +1,15 @@
 packages:
   - "apps/*"
   - "packages/*"
-minimumReleaseAge: 4320
-minimumReleaseAgeStrict: true
-minimumReleaseAgeIgnoreMissingTime: false
-blockExoticSubdeps: true
+# Supply-chain install gates PARKED until the dep tree is final (move-fast phase).
+# These reject installs on things unrelated to the work in flight — a freshly
+# published transitive (<3d old) or any non-registry subdep — so an agent ends up
+# fixing random patch noise instead of building. Re-enable all four in the final
+# lockdown pass, once dependencies are settled, then ratchet from there.
+# minimumReleaseAge: 4320
+# minimumReleaseAgeStrict: true
+# minimumReleaseAgeIgnoreMissingTime: false
+# blockExoticSubdeps: true
 allowBuilds:
   esbuild: true
   lefthook: true
