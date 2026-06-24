@@ -45,30 +45,34 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 
 Immutable assignment config columns are marked; Drizzle migrations must not add UPDATE paths for them.
 
-| Column                 | Type        | Constraints                                                               |
-| ---------------------- | ----------- | ------------------------------------------------------------------------- |
-| `id`                   | text        | PK                                                                        |
-| `app_id`               | text        | FK → apps, not null                                                       |
-| `environment_id`       | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027)           |
-| `experiment_id`        | text        | FK → experiments, not null                                                |
-| `status`               | text        | not null, default `'running'`                                             |
-| `salt`                 | text        | not null; **immutable**                                                   |
-| `allocation`           | text        | not null (JSON); **immutable**                                            |
-| `variant_set`          | text        | not null (JSON); **immutable**                                            |
-| `targeting_segment_id` | text        | nullable; **immutable**                                                   |
-| `confidence_level`     | real        | not null; locked at Run Start                                             |
-| `horizon`              | text        | not null, default `'sequential'`; locked at Run Start                     |
-| `target_n`             | integer     | nullable; sequential tuning                                               |
-| `sample_size_locked`   | integer     | nullable; required for fixed horizon                                      |
-| `decision_family`      | text        | not null (JSON); locked goal Metric × Variant × Primary Dimension members |
-| `guardrail_decisions`  | text        | not null (JSON); locked thresholds/directions                             |
-| `config_hash`          | text        | not null; computed SHA-256; **immutable**                                 |
-| `started_at`           | timestamptz | not null                                                                  |
-| `ended_at`             | timestamptz | nullable                                                                  |
-| `created_at`           | timestamptz | not null                                                                  |
-| `created_by`           | text        | WorkOS user ID or deleted-user tombstone                                  |
+| Column                 | Type        | Constraints                                                                        |
+| ---------------------- | ----------- | ---------------------------------------------------------------------------------- |
+| `id`                   | text        | PK                                                                                 |
+| `app_id`               | text        | FK → apps, not null                                                                |
+| `environment_id`       | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027)                    |
+| `experiment_id`        | text        | FK → experiments, not null                                                         |
+| `run_number`           | integer     | not null; 1-based ordinal within the Experiment; **immutable** (the "Run N" label) |
+| `status`               | text        | not null, default `'running'`                                                      |
+| `salt`                 | text        | not null; **immutable**                                                            |
+| `allocation`           | text        | not null (JSON); **immutable**                                                     |
+| `variant_set`          | text        | not null (JSON); **immutable**                                                     |
+| `targeting_segment_id` | text        | nullable; **immutable**                                                            |
+| `confidence_level`     | real        | not null; locked at Run Start                                                      |
+| `horizon`              | text        | not null, default `'sequential'`; locked at Run Start                              |
+| `target_n`             | integer     | nullable; sequential tuning                                                        |
+| `sample_size_locked`   | integer     | nullable; required for fixed horizon                                               |
+| `decision_family`      | text        | not null (JSON); locked goal Metric × Variant × Primary Dimension members          |
+| `guardrail_decisions`  | text        | not null (JSON); locked thresholds/directions                                      |
+| `config_hash`          | text        | not null; computed SHA-256; **immutable**                                          |
+| `started_at`           | timestamptz | not null                                                                           |
+| `ended_at`             | timestamptz | nullable                                                                           |
+| `start_reason`         | text        | nullable; optional human intent note given at Start; **immutable**                 |
+| `end_reason`           | text        | nullable; optional human note given at `/end`                                      |
+| `created_at`           | timestamptz | not null                                                                           |
+| `created_by`           | text        | WorkOS user ID or deleted-user tombstone                                           |
 
 UNIQUE constraint: `(experiment_id, salt)` — salt unique per Experiment.
+UNIQUE constraint: `(experiment_id, run_number)` — run numbers are dense and unique per Experiment.
 
 ### `metrics`
 

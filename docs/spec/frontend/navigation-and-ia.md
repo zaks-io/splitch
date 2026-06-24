@@ -50,8 +50,17 @@ App's first-class children plus settings:
 - **Settings** — App config + per-Environment settings: the active Environment's SDK keys
   (Client/API), its **Environment Policy** (confirm gates), and Environment management
 
-Org-level concerns (members, billing, the App list itself) live at the org root, one level up
-from any App. Environment-scoped concerns (keys, Policy) live under the active `env`.
+Org-level concerns live at the org root, one level up from any App, as three screens (detailed in
+[screen-inventory.md](./screen-inventory.md)):
+
+- `/{orgSlug}` — the **App list** (org landing); each App card is the Environment picker (App name is
+  a label, one link per Environment, no implicit default).
+- `/{orgSlug}/members` — **Org Members** (distinct from per-App membership, which lives under App
+  Settings).
+- `/{orgSlug}/billing` — **Billing & Usage** (Evaluation-quota usage is real v1; payment is the
+  deferred stub, ADR-0033).
+
+Environment-scoped concerns (keys, Policy) live under the active `env`.
 
 ## Why org is in the URL (not session state)
 

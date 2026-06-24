@@ -22,14 +22,28 @@ Variants by name. It is **not** a per-Variant-per-Environment matrix scattered a
 keeps **one config object per Environment** as the unit that is edited, audited, diffed, and promoted —
 rather than reconstructing an environment's state from a matrix.
 
-**Promotion moves Flag Configuration between Environments.** _Promote_ is the verb for copying configuration
-from a source Environment to a target — either a whole Flag Configuration ("promote this flag's dev config
-to prod") or a single Variant's availability ("make `gpt-5` available in prod"). Availability and
-value/targeting are **separate promotable acts**: making a Variant _available_ in an Environment is distinct
-from _setting it to actually be served_ (targeting/rollout). The Environment Policy (ADR-0029) decides which
-of these acts requires a Confirmation, independently. Promotion is distinct from **Start** (which opens an
-Experiment Run for measurement) and from a plain in-place flag edit (which changes one Environment without
-reference to another).
+**Promotion moves a selected subset of Flag Configuration between Environments.** _Promote_ is the verb for
+copying configuration from a source Environment to a target. Because availability and value/targeting are
+**separate promotable acts** (making a Variant _available_ is distinct from _setting it to actually be
+served_), Promotion is **per-field-group**, not all-or-nothing and not only the two coarse presets "whole
+config" / "one Variant." The promotable field-groups are: **each Variant's availability** (one act per
+Variant), the **targeting rule list** (atomic — the ordered, first-match-wins list promotes whole or not at
+all, never per-rule, so a reordered hybrid can never be produced), the **rollout**, and the **enabled
+state**. "Promote whole config" and "promote one Variant's availability" are the two named presets of this
+one mechanism, not separate operations. The Environment Policy (ADR-0029) decides which of these acts
+requires a Confirmation, independently. Promotion is distinct from **Start** (which opens an Experiment Run
+for measurement) and from a plain in-place flag edit (which changes one Environment without reference to
+another).
+
+**A promoted subset must leave the target internally consistent — enforced at the Worker, eased in the
+panel.** Promoting a targeting rule that routes to a Variant not available in the target is a dangling
+reference (ADR-0028: an unavailable Variant is structurally unservable). The Worker **rejects** such an
+Approval Request with a structured error naming the missing Variant — fail-loud, no silent fix (ADR-0036).
+The panel removes the friction without hiding the act: it **offers** to also tick the depended-on Variant's
+availability (visibly, "added because rule X needs it"), but if submitted with the dependency unticked the
+Worker still blocks it. Convenience lives in the skin; the invariant lives in the Worker (ADR-0023), so the
+strictness cannot be skinned away and the friction-reducing nudge is just a panel affordance the CLI/MCP may
+reproduce or not.
 
 ## Considered options
 
@@ -45,6 +59,15 @@ reference to another).
 - **Promotion as a single all-or-nothing act** (availability and targeting always move together) — rejected.
   The user explicitly wants these separable and independently gated: "make it available" is a smaller,
   safer act than "serve it to 100% of prod." Keeping them distinct lets Policy gate them at different levels.
+- **Promotion as only the two coarse presets** (`scope: "config" | "variant"` and nothing between) —
+  rejected. It cannot express "promote these two rules' worth of config but not the rollout," which is the
+  realistic prod-promotion task. The two presets survive as named buttons over the per-field-group mechanism.
+- **Per-targeting-rule promotion** (tick rule #1 and #3, skip #2) — rejected. Targeting is an ordered,
+  first-match-wins list; a per-rule subset yields a reordered list that behaves like neither source nor
+  target. Targeting promotes as one atomic group.
+- **Auto-fixing dangling references silently / allowing them and failing at eval** — both rejected. Silent
+  auto-tick is the hidden side effect the edit-taxonomy works to avoid; shipping a known-dangling rule to
+  prod violates "mistakes against prod are hard." The chosen path is offer-in-panel, block-at-Worker.
 
 ## Consequences
 

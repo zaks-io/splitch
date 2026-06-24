@@ -90,23 +90,38 @@ Returns: updated Flag Configuration.
 
 ### `POST /apps/{app_id}/envs/{target_environment_id}/flags/{flag_id}/promote`
 
-Promotes Flag Configuration from a source Environment into this (target) Environment.
-Body:
+Promotes a **selected subset** of Flag Configuration from a source Environment into this (target)
+Environment (ADR-0028). The body carries the explicit set of ticked field-groups — a field is present
+only if it is being promoted, so absence means "leave the target's value untouched":
 
 ```
 {
   from_environment_id: string,
-  scope: "config" | "variant",         // whole config, or one Variant's availability
-  variant_name?: string,               // required when scope = "variant"
-  confirm?: boolean                    // required when the target Policy gates this at confirm
+  select: {
+    availability?: string[],           // Variant names whose source availability to copy (per-Variant act)
+    targeting?: true,                   // promote the whole ordered targeting-rule list (atomic; never per-rule)
+    rollout?: true,                     // promote the rollout
+    enabled?: true                      // promote the enabled state
+  },
+  confirm?: boolean                     // required when the target Policy gates any selected act at confirm
 }
 ```
 
+The two named UX presets are just shapes of `select`: **"whole config"** ticks every field-group
+(`availability` = the source's full available set, `targeting`, `rollout`, `enabled`); **"one Variant's
+availability"** sends `{ availability: ["variant_name"] }`. There is no separate `scope` enum.
+
 Returns: the updated target Flag Configuration + a diff summary `{ before, after }`.
-Subject to the target Environment's Policy (ADR-0029): a gated Promotion requires `confirm: true`.
-`scope: "variant"` adds `variant_name` to the target's available set (availability only); `scope:
-"config"` copies the source's available set + targeting + enabled state. See
-[../frontend/environments-and-promotion.md](../frontend/environments-and-promotion.md) for the diff UX.
+
+**Validation (Worker-enforced, fail-loud — ADR-0036):**
+
+- Subject to the target Environment's Policy (ADR-0029): a gated Promotion requires `confirm: true`.
+- **Dangling-reference check:** if the resulting target config would have a promoted targeting rule routing
+  to a Variant not in the target's available set (after applying `availability`), the request is **rejected**
+  with a structured error naming the missing Variant. The panel offers to also tick that Variant's
+  availability (`select.availability`), but never auto-applies it silently and the Worker blocks the submit
+  regardless of skin (ADR-0023/0028). See
+  [../frontend/screen-inventory.md](../frontend/screen-inventory.md) for the diff UX.
 
 ## Segment endpoints
 

@@ -88,7 +88,12 @@ Returns: updated Experiment.
 ### `POST /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/start`
 
 Starts the draft as a new Run; ends any running Run.
-Body: `{ confirm?: boolean }`
+Body: `{ confirm?: boolean, reason?: string }`
+`reason` is an optional human note capturing _intent_ for the new Run ("testing higher exposure to
+v2"). It is stored as the Run's `start_reason` and surfaced by the Run-history timeline alongside the
+**derived** assignment-config diff from the prior Run (the timeline never depends on it being present —
+see [../frontend/screen-inventory.md](../frontend/screen-inventory.md)). Symmetric with the optional
+`reason` on `/end`.
 Returns: `{ experiment_id, run: RunObject, previous_run_id?: string }`
 See [run-state-machine.md](run-state-machine.md) for transition details.
 Auth: App `owner` or `admin`. **Subject to the Environment Policy** (ADR-0029): if this Environment's

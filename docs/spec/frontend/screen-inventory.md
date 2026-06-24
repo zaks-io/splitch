@@ -47,6 +47,67 @@ The panel has two nested shells, matching the two URL scope roots:
   Segments, Metrics, Settings) and a top bar carrying all **three switchers** (org, app, environment).
   Everything below the App root is scoped to `(appId, environmentId)` resolved from the URL.
 
+## Org-level screens
+
+The org shell hangs three screens off `/{orgSlug}`: the **App list** (org landing), **Members**, and
+**Billing & Usage**. Org-scope role gates are the Org role matrix in
+[../control-plane/organization-and-membership.md](../control-plane/organization-and-membership.md);
+the panel renders locked affordances, the Worker is the guardian (ADR-0023).
+
+### App list — `/{orgSlug}` (org landing)
+
+The org's Apps for the current org only (never merged across orgs — `navigation-and-ia.md`). Each App
+is a **card**, and the card _is_ the Environment picker:
+
+- **App name** — a **label, not a link.** There is no app-without-an-env destination (everything below
+  the App root is `(appId, environmentId)`-scoped), so a bare app link would have to pick an env and
+  reintroduce a hidden default. The Environment links are the only way in.
+- **One link per Environment** (`dev`, `prod`, custom) → that env's App Overview
+  (`/{orgSlug}/{appSlug}/{env}`). No implicit default; you land where you mean to, and prod is never
+  the silent destination.
+- **A single attention rollup** — whether any Experiment in this App is in a failure state (SRM
+  firing, Guardrail breached) in any env. The rollup is **env-aware**: the marker sits on the failing
+  env's link (a dot on `prod` if prod is the one in trouble), so it points at _where_ to look. Deep
+  health lives on the App Overview; the card only flags which App and which env to open.
+
+- **Create App** — primary action, owner/admin only (Org role matrix). Provisions `dev` + `prod`
+  (ADR-0027). Parity: `apps_create`.
+- **Provisional-org claim banner** — if this Org is `is_provisional = 1` (anon door, not yet claimed —
+  organization-and-membership.md), a **loud, persistent banner**: "Demo workspace — expires
+  `{demo_expires_at}`. Claim it to keep your work," with a one-click entry to the claim ceremony
+  (auth-doors.md). Fail-loud: a reaper deletes provisional Orgs at expiry, so silently letting work
+  evaporate is exactly the disguised failure the project forbids (ADR-0036).
+- **Empty state** — the onboarding teaching surface (see Onboarding below): "Create your first App,"
+  the App→Environment→Flag one-liner, and the CLI/agent equivalent.
+
+### Members — `/{orgSlug}/members`
+
+The Org membership list (`org_memberships`): each member's identity (resolved from WorkOS) and Org
+role (`owner` | `admin` | `member`). Invite / change-role / remove are **owner/admin** only ("Manage
+Org members" in the matrix); a `member` sees the list read-only ("View Org settings"). SSO/SCIM config
+for enterprise Orgs lives here too, gated to the roles the matrix allows (`Configure SSO/SCIM`:
+owner/admin; `Manage trusted IdPs`: owner). Parity: the same membership operations over CLI/MCP.
+
+> **App membership vs Org membership.** This screen manages who is in the _Org_. Who can touch a
+> specific App's config (`app_memberships`, its own role matrix) is managed under that App's Settings,
+> not here — the two scopes are distinct (organization-and-membership.md).
+
+### Billing & Usage — `/{orgSlug}/billing` (usage-complete, payment-stubbed)
+
+V1 billing is one Org-scoped **Evaluation** quota (ADR-0033). The screen ships the **usage half now**
+because that data exists from day one and is the customer's central question; the **payment half is
+the visibly-deferred stub** (the `stripe_*` seam columns exist, integration deferred —
+organization-and-membership.md).
+
+- **Usage (real, v1):** current month's Evaluation consumption against the monthly allowance; the
+  **quota state** — **Active / Grace / Exhausted** (ADR-0033) — shown loudly, since Grace and
+  Exhausted are real runtime states where the data plane is about to or already does reject
+  Evaluations. The **usage breakdown** ADR-0033 mandates (by App, by Environment, batch-vs-single,
+  remote-vs-cached, Exposure-bearing-vs-not) as reporting dimensions — _not_ separate meters.
+- **Payment (stubbed, loud):** plan, payment method, invoices render a "managed by your account team /
+  coming soon" state backed by the present-but-unwired `stripe_*` seam. Stubbed visibly, never faked.
+- **Role gate:** "Manage billing/plan" is **owner only**; admin/member see usage read-only.
+
 ## App landing — the Overview
 
 Navigating to a bare `/{orgSlug}/{appSlug}/{env}` (no section) lands on the **App Overview**, a
@@ -111,16 +172,54 @@ name, lifecycle state (`draft` / `running` / `ended`), the Flag(s) it controls, 
 Experiments — a health badge (significance reached, SRM firing, Guardrail breached) so the list
 doubles as a triage surface alongside the Overview.
 
-### Experiment detail — one route, tabs, lifecycle-adaptive landing
+### Experiment detail — Run-scoped, one route, tabs, lifecycle-adaptive landing
+
+**Which Run is a URL path segment, not hidden state and not a query string** (the spine discipline —
+`appid-is-the-spine.md` — applied to Runs):
+
+- `/{orgSlug}/{appSlug}/{env}/experiments/{experimentId}` renders the **latest Run** — the everyday
+  URL. "Latest" is fine here precisely because it is the live working view; you are not pinning
+  anything.
+- `/{orgSlug}/{appSlug}/{env}/experiments/{experimentId}/runs/{runId}` renders **that specific frozen
+  Run** — the shareable, no-drift link. A link copied today still points at _that_ Run next week even
+  after Run N+1 opens (LaunchDarkly `/pull/123`, GitHub pinned shape).
+- The tab (`results` / `setup`) hangs **below** the Run: Run scopes the screen, tab is the view within
+  it. Switching Runs in the timeline keeps the current tab.
 
 Results and config live under **one** Experiment detail route as tabs, not separate top-level
-screens:
+screens, both scoped to the selected Run:
 
 - **Results tab** — per-arm Confidence Interval plot, significance, SRM and Guardrail health, the
-  per-Metric table, dimension slices. What you _watch_.
-- **Setup tab** — Variants/allocation, Targeting, Targeting Key, Metrics (goal/secondary/guardrail/
-  activation), and the **Run history** timeline (the sequence of frozen Runs; "which Run am I
-  looking at" scopes the Results). What you _author_.
+  per-Metric table, dimension slices — **for the selected Run** (Runs are never pooled, ADR-0006).
+  What you _watch_.
+- **Setup tab** — for the selected Run, its **frozen** assignment config (read-only, locked — see the
+  edit taxonomy below) plus the Experiment's current measurement config; Variants/allocation,
+  Targeting, Targeting Key, Metrics (goal/secondary/guardrail/activation). What you _author_.
+
+### The Run-history timeline — a screen-level strip above the tabs
+
+The timeline is **not** a Setup-tab widget; it sits at the **detail-screen level, above the tabs**,
+because which-Run scopes _both_ tabs. It is the Run context for the whole screen and a navigation
+control: clicking a Run node navigates to that Run's URL (above), keeping the current tab.
+
+It renders the Experiment's Runs (`GET …/runs`, newest-first) as a horizontal sequence. Each node
+carries:
+
+- **Run number + status** — "Run 3 · running", "Run 2 · ended"; the selected Run is visibly marked.
+- **Date range** — started → ended, or "started X · live". Runs are time-ordered and never pooled
+  (ADR-0006), so the gaps are real.
+- **Why this Run opened** — the boundary narrative, two layers:
+  - **Derived diff (always present, never wrong):** the assignment-config change from Run N-1's
+    frozen snapshot to Run N's ("allocation 50/50 → 70/30", "added Variant `v3`"). Computed from the
+    frozen snapshots the Runs already store (ADR-0002/0003) — no stored field, always accurate. Run 1
+    reads "Experiment started" (no prior).
+  - **Optional human note (intent):** if the operator gave a `reason` at Start (`/start` body, see
+    endpoints-experiment-run.md), it shows alongside the derived diff ("testing higher exposure to
+    v2"). Symmetric with the optional end-reason. The timeline never _requires_ it.
+
+The derived diff is the reliable backbone; the note adds the intent a diff can't express. Together
+they turn an opaque list of frozen samples into the narrative of what the experimenter actually
+tried.
 
 The landing tab is **lifecycle-adaptive**, because the state is a real URL-addressable property and
 a draft vs a running Experiment are genuinely different jobs:
@@ -381,16 +480,32 @@ second-person approval slots in later.
 
 Promotion is framed as a **pull into the target Environment**, not a push from the source. Standing
 in the target env (`prod`) on a Flag, you open **"Promote from `{source}`"** → a **side-by-side
-diff** of the source's Flag Configuration vs the target's, with **per-change selection**
-(checkboxes: this Targeting Rule, that Variant's availability, the rollout). You are standing in the
-env that is about to change, seeing exactly what changes, governed by _that_ env's Policy.
+diff** of the source's Flag Configuration vs the target's, with **per-field-group selection**. You
+are standing in the env that is about to change, seeing exactly what changes, governed by _that_
+env's Policy.
 
-The per-change diff answers the deferred stub's three granularities in **one mechanism** — they are
-not separate modes, just which boxes you tick:
+**The tickable rows are field-groups, not arbitrary changes** (ADR-0028, promote endpoint
+`select`):
 
-- **availability-only** — tick only Variant-availability rows
-- **whole-config** — tick everything
-- **single Variant** — tick one availability row
+- **one row per Variant's availability** (`+ checkout-v2`, `− legacy`) — the per-Variant act; the
+  one place granularity is genuinely per-item
+- **one atomic row for the whole targeting-rule list** — _not_ per-rule. Targeting is ordered and
+  first-match-wins, so a per-rule subset would yield a reordered list that behaves like neither env;
+  the list promotes whole or not at all
+- **one row for the rollout**
+- **one row for the enabled state**
+
+The two granularities the deferred stub asked for are just presets over this one mechanism, exposed
+as named buttons that pre-tick rows: **"Promote whole config"** (tick everything) and **"Promote
+this Variant"** (tick one availability row). "Availability-only" is ticking only availability rows.
+
+**Dependency safety — offer in the panel, block at the Worker (ADR-0028/0036).** Ticking the
+targeting row when a promoted rule routes to a Variant not available in the target produces a
+dangling reference. The panel detects this and **offers** a one-click "also make `checkout-v2`
+available here" (visibly ticking that availability row, labeled "added because rule X needs it") —
+friction removed, but never a silent side effect. If you submit anyway with the dependency unticked,
+the **Worker rejects** the Approval Request with a structured error naming the missing Variant. The
+strictness is the invariant; the nudge is the affordance.
 
 Ticking and submitting creates the Approval Request; the target env's Policy decides whether it
 self-confirms or (future) waits for a reviewer.
