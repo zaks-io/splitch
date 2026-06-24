@@ -82,4 +82,4 @@ reproduce or not.
 - **CONTEXT.md** gains Flag Configuration and Promotion, and amends Variant to split catalog from
   availability.
 - **A diff view is implied** — Promotion is most safely driven from a dev-vs-prod Flag Configuration diff;
-  specified in the frontend environments-and-promotion spec.
+  specified in the frontend screen-inventory spec.
