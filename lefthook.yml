@@ -1,6 +1,8 @@
 pre-commit:
   parallel: false
   commands:
+    file-size:
+      run: node scripts/check-file-size.mjs
     verify-commit:
       run: CI=true pnpm verify:commit
 

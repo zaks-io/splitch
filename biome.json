@@ -1,15 +1,17 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.0/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
     "includes": [
       "**",
-      "!**/dist/**",
-      "!**/coverage/**",
-      "!**/node_modules/**",
-      "!**/.turbo/**",
-      "!**/.wrangler/**",
-      "!**/.tinyb/**",
       "!**/.claude/worktrees/**",
+      "!**/worker-configuration.d.ts",
+      "!**/*.gen.ts",
+      "!pnpm-lock.yaml",
       "!**/*.md"
     ],
     "ignoreUnknown": true
@@ -39,7 +41,22 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended"
+      "recommended": true,
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 10 }
+        },
+        "noExcessiveLinesPerFunction": {
+          "level": "error",
+          "options": { "maxLines": 120, "skipBlankLines": true }
+        }
+      },
+      "performance": {
+        "noBarrelFile": "error",
+        "noReExportAll": "error",
+        "noNamespaceImport": "error"
+      }
     }
   },
   "assist": { "actions": { "source": { "organizeImports": "on" } } }
