@@ -14,7 +14,7 @@ analytics resources. Every non-doc PR gets local validation against disposable C
 preview is a single shared target updated on demand. Production releases are queued, approval-gated
 GitHub deployments that run migrations as part of the release, not as a side manual step.
 
-The scaffold has the `ci` and `gitleaks` workflows, Turborepo task graph, package scripts,
+The scaffold has the `ci` workflow (with a range-scoped Gitleaks secret-scan step), Turborepo task graph, package scripts,
 Lefthook hooks, and placeholder Wrangler configs. It does not provision or deploy Cloudflare or
 Tinybird resources.
 

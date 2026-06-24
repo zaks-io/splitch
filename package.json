@@ -20,8 +20,9 @@
     "audit": "pnpm audit --audit-level=high",
     "pins:check": "node scripts/security-check.mjs pinact run -check",
     "sast": "node scripts/security-check.mjs semgrep scan --config .semgrep/ --error apps packages scripts",
+    "secrets:staged": "gitleaks git --redact --no-banner --staged .",
+    "secrets:range": "node scripts/secrets-range.mjs",
     "secrets:git": "gitleaks git --redact --no-banner .",
-    "secrets:worktree": "gitleaks dir --redact --no-banner .",
     "security": "pnpm sast && pnpm pins:check && pnpm audit",
     "security:full": "pnpm sast && pnpm pins:check && pnpm audit && pnpm secrets:git",
     "smoke:ci": "node scripts/optional-check.mjs smoke:ci \"Hosted smoke checks run after preview or production targets exist.\"",
@@ -31,9 +32,9 @@
     "test:mutation": "turbo run test:mutation",
     "tinybird:local": "node scripts/check-tinybird-local.mjs",
     "typecheck": "turbo run typecheck",
-    "verify:ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm test && pnpm build && pnpm secrets:worktree",
-    "verify:commit": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:worktree",
-    "verify:push": "pnpm verify:commit"
+    "verify:ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm test && pnpm build",
+    "verify:commit": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:staged",
+    "verify:push": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:range"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

@@ -97,8 +97,9 @@ lockdown milestone restores it to `verify:ci`.)_
 
 - A new top-level `SECURITY.md`, root `README.md` (with CI/CodeQL/Security/Scorecard badges), and
   `docs/spec/platform/security-model.md`; the spec and platform READMEs index the security model.
-- Three new workflows (`security.yml`, `codeql.yml`) and hardening of the existing `ci.yml` and
-  `gitleaks.yml`; a Dependabot config for npm and github-actions.
+- Two new workflows (`security.yml`, `codeql.yml`) and hardening of the existing `ci.yml`, which
+  carries the range-scoped Gitleaks secret scan as a dedicated step; a Dependabot config for npm and
+  github-actions.
 - Repo-local Semgrep rules under `.semgrep/` enforce tenant `app_id` scoping, "API Key never returned
   in a response," and "no secret in logs" — the code-level edge of 0018, 0034, and the credential model.
 - CI installs Semgrep and pinact and runs them as required gates; the daily scan depends on the

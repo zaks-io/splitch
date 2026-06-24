@@ -5,8 +5,8 @@ Last updated: 2026-06-21
 Scaffold is in place. The repo is now a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
 and Worker-shaped deploy units. The code host now exists: `main` is pushed to
-`github.com/zaks-io/splitch` (private) and the `ci` and `gitleaks` workflows run
-on every push. Shared-preview deploy, production deploy, and real backing
+`github.com/zaks-io/splitch` (private) and the `ci` workflow (secret scanning
+included) runs on every push. Shared-preview deploy, production deploy, and real backing
 resources are still not provisioned. The `splitch` Linear repo-route label still
 does not exist (blocks only remote issue-assigned delegation, not local-worktree).
 
@@ -27,10 +27,9 @@ does not exist (blocks only remote issue-assigned delegation, not local-worktree
   live; 0 projects, 0 issues (fresh team).
 - Inferred values: Linear issue key prefix (no issues exist yet to read an
   identifier from).
-- Verified hosted PR check names: `ci` and `gitleaks` (both run on push to
-  `zaks-io/splitch`). NOTE: the `ci` check is currently **failing on `main`** —
-  `verify:ci` invokes `gitleaks` but the runner does not install it
-  (`gitleaks: not found`). See `Pull Requests`.
+- Verified hosted PR check name: `ci` (runs on push to `zaks-io/splitch`). Secret
+  scanning is a step inside `ci`; the standalone `gitleaks` workflow was removed.
+  See `Pull Requests`.
 - Critical unknowns: no `splitch` repo-route label exists in Linear, shared
   preview is not provisioned, and production deployment is not wired. See
   `Unknowns`. (The code host remote IS now configured — `zaks-io/splitch`.)
@@ -57,8 +56,8 @@ does not exist (blocks only remote issue-assigned delegation, not local-worktree
   `docs/spec/platform/local-quality-gates.md`.
 - Generated artifacts: package-local `dist/**`, `.output/**`, `build/**`,
   coverage, `.turbo/`, and `.wrangler/` are ignored.
-- PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci`.
-- Gitleaks CI: `.github/workflows/gitleaks.yml` on Blacksmith.
+- PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus
+  a range-scoped Gitleaks secret scan.
 - Shared preview checks: designed, not wired. See
   `docs/spec/platform/deployment-pipeline.md`.
 - Production deploy path: designed, not wired. See
@@ -212,14 +211,10 @@ real package API boundary.
 ## Pull Requests
 
 - PR CI workflow source: `.github/workflows/ci.yml`; verified hosted check name `ci`.
-- Gitleaks workflow source: `.github/workflows/gitleaks.yml`; verified hosted check name `gitleaks`.
-- **Known-red:** the `ci` check fails on `main` because `verify:ci` runs `gitleaks`
-  (via `secrets:worktree`) but the runner has no `gitleaks` binary
-  (`sh: gitleaks: not found`). The dedicated `gitleaks` workflow passes, so the
-  scan itself is covered; the `verify:ci` step is redundantly invoking a tool it
-  does not install. Fix before treating green CI as a Done gate (either drop
-  `secrets:worktree` from `verify:ci` since the `gitleaks` workflow covers it, or
-  install gitleaks in the `ci` job).
+- Secret scanning lives in the `ci` workflow as dedicated `Install gitleaks` +
+  `Scan for secrets` steps (the `Scan` step runs `pnpm secrets:range`, scoped to
+  the PR/push commit range, not the whole tree). The standalone `gitleaks`
+  workflow was removed to stop running the same scan twice.
 - CodeRabbit config source: none (`.coderabbit.yaml` absent).
 - CodeRabbit auto-review: unknown (no config).
 
@@ -259,11 +254,11 @@ real package API boundary.
 - [ ] Linear issue key prefix inferred as `SPL-`. Verifier: read the identifier
       of the first created issue.
 - [x] Code host configured: `github.com/zaks-io/splitch` (private), `main` pushed,
-      `ci` + `gitleaks` workflows run on push (confirmed 2026-06-24). Remaining PR
-      conventions (merge method, required-check enforcement, CodeRabbit) still to set.
-- [x] Hosted CI check names verified: `ci` and `gitleaks`. ⚠️ `ci` is currently
-      RED on `main` — `verify:ci` calls `gitleaks` but the runner doesn't install it.
-      See `Pull Requests` for the fix options.
+      the `ci` workflow (secret scanning included) runs on push (confirmed 2026-06-24).
+      Remaining PR conventions (merge method, required-check enforcement, CodeRabbit)
+      still to set.
+- [x] Hosted CI check name verified: `ci` (secret scanning is a step inside it;
+      the standalone `gitleaks` workflow was removed). See `Pull Requests`.
 - [ ] Tinybird project files are absent. `pnpm tinybird:local` intentionally
       skips until `tinybird/` exists. Verifier: add Tinybird datasources, pipes,
       fixtures, and tests, then make the local script fail on validation errors.
