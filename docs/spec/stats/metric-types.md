@@ -112,18 +112,18 @@ activation rows satisfy this invariant.
 
 ## Metric definition fields
 
-| Field                | Type                                    | Required | Meaning                                                |
-| -------------------- | --------------------------------------- | -------- | ------------------------------------------------------ |
-| `metric_id`          | `string`                                | yes      | Unique within App                                      |
-| `metric_type`        | `binomial \| count \| revenue \| ratio` | yes      |                                                        |
-| `event_name`         | `string`                                | yes      | Event type to match in log                             |
-| `event_value_field`  | `string \| null`                        | cond.    | Required for count/revenue/ratio num                   |
-| `denom_event_name`   | `string \| null`                        | cond.    | Required for ratio denominator                         |
-| `denom_value_field`  | `string \| null`                        | cond.    | Required for ratio denominator                         |
-| `window_duration`    | `duration`                              | yes      | Per-Metric window override                             |
-| `winsorize`          | `boolean`                               | yes      | Default `true` for count/revenue, `false` for binomial |
-| `winsorize_pct`      | `number`                                | yes      | Default `99.9`; ignored if winsorize=false             |
-| `downside_threshold` | `number \| null`                        | no       | Set to make this a Guardrail Metric                    |
+| Field                | Type                                    | Required | Meaning                                                                 |
+| -------------------- | --------------------------------------- | -------- | ----------------------------------------------------------------------- |
+| `metric_id`          | `string`                                | yes      | Unique within App                                                       |
+| `metric_type`        | `binomial \| count \| revenue \| ratio` | yes      |                                                                         |
+| `event_name`         | `string`                                | yes      | Event type to match in log                                              |
+| `event_value_field`  | `string \| null`                        | cond.    | Required for count/revenue/ratio num                                    |
+| `denom_event_name`   | `string \| null`                        | cond.    | Required for ratio denominator                                          |
+| `denom_value_field`  | `string \| null`                        | cond.    | Required for ratio denominator                                          |
+| `window_duration`    | `duration`                              | yes      | Per-Metric window override                                              |
+| `winsorize`          | `boolean`                               | yes      | Default `true` for count/revenue/ratio, `false` for binomial (ADR-0016) |
+| `winsorize_pct`      | `number`                                | yes      | Default `99.9`; ignored if winsorize=false                              |
+| `downside_threshold` | `number \| null`                        | no       | Set to make this a Guardrail Metric                                     |
 
 ## Measurement edits (no new Run)
 

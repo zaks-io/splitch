@@ -14,8 +14,8 @@ AppFlagConfig {
   flagKey:       string          // required — Flag Key, unique within App
   environmentId: string          // required — owning Environment; config is per-Environment (ADR-0027)
   enabled:       boolean         // required — false → Default Variant for all Entities
-  variants:      Variant[]       // required — full set; one is defaultVariant
-  defaultVariant: string         // required — Variant name to return when no rule matches or disabled
+  variants:      Variant[]       // required — full set; one is the default
+  defaultVariantId: string       // required — Variant ID to return when no rule matches or disabled (canonical: contracts/storage-schemas-kv.md FlagConfigKV)
   targetingRules: TargetingRule[] // ordered priority list; first match wins
   liveRunId:     string | null   // null if no started Experiment Run is controlling this Flag
   salt:          string          // required — stable hash salt for Fractional Evaluation

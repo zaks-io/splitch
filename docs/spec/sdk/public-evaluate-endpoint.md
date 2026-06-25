@@ -67,6 +67,12 @@ EvaluateResponse {
 }
 ```
 
+This is the **SDK-synthesized** return shape, not the HTTP wire body. The wire response is the bare
+`{ variant: VariantValue | null }` (see [contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md));
+the SDK synthesizes `ResolutionDetails` (`reason`, `errorCode`, …) from that wire value plus the HTTP
+status (see [contracts/leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md)). `Reason` is the
+`ResolutionReason` enum from `contracts/leaf-schemas-runtime.md` — do not redefine it.
+
 `evaluate` (value accessor) unwraps this to `variant`; `evaluateDetails` returns the whole
 shape. See [exposure-accessor.md](./exposure-accessor.md).
 

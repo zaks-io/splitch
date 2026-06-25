@@ -67,7 +67,7 @@ On apparent first-touch (the Evaluation Worker has no KV entry for this
 Assignment Store (ADR-0009). The sequencing:
 
 1. Evaluate the flag → produce `(run_id, variant)` from `assign()` or KV replay.
-2. Append the raw Exposure row to Tinybird (`raw_events`).
+2. Append the raw Exposure row to Tinybird (`raw_events`). Skipped on a holdover replay — a holdover fires no Exposure (see [evaluation/exposure-firing-and-accessor.md](../evaluation/exposure-firing-and-accessor.md) §Holdover path).
 3. If no KV entry was found: call `DO.putIfAbsent(key, run_id, variant)` asynchronously (fire-and-forget with short timeout).
 
 The DO write is **non-blocking on the hot path** — it executes with a short timeout (~100ms) and does not delay the response to the SDK caller. If the DO write times out or fails, it is retried asynchronously. A DO write failure is a holdover miss only for the KV propagation window; because `assign()` is deterministic (ADR-0001), the Entity gets the same Variant on the next evaluate even without the holdover. No distributed transaction — experience (DO) and analysis (log) each self-correct.

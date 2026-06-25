@@ -100,6 +100,12 @@ A Client Key presented to this endpoint is rejected `403 INSUFFICIENT_SCOPES` (t
 structurally lacks the peek scope; a missing/invalid credential is `401 UNAUTHORIZED`). The Worker
 gates peek on an API Key's `data-plane:evaluate` scope, the same credential the server-side SDK holds.
 
+All other error responses (`404 NOT_FOUND` for an unknown Flag, `429 RATE_LIMITED`, `503` on an
+unreachable Provider) follow the canonical error contract in
+[contracts/error-responses.md](../contracts/error-responses.md) — peek does not define its own. Unlike
+`evaluate`, peek has no Default-Variant fallback: it fails loud with the error envelope (peek is a
+server-side authoring/diagnostic call, never a hot-path resolution).
+
 Request: same as `EvaluateRequest` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
 
 Response:

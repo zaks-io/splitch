@@ -51,7 +51,7 @@ coverage threshold (with documented fallback). Nothing degrades silently.
 - Confidence Level: **95% per-Experiment**, locked at Run Start for decision-valid results.
 - CUPED pre-period: **always anchored at `first_exposure_ts`**, even under Activation gate.
 - CUPED fallback: **automatic within the locked eligible covariate set**, ranked by pre-period or historical variance-reduction; chosen method reported in output.
-- Winsorization: **99.9th percentile, default-on** for Count/Revenue; pooled cap, never per-arm, never for Binomial.
+- Winsorization: **99.9th percentile, default-on** for Count/Revenue/Ratio; pooled cap, never per-arm, never for Binomial (ADR-0016).
 - BH FDR family: **goal-metric × Variant, locked at Run Start**; Primary Dimensions included only if declared before Start; Guardrails and secondary Dimensions excluded.
 - Ratio Metric covariance: **per-Entity `(num_value, denom_value)` pair** delivered by pipeline — non-negotiable, unrecoverable after aggregation.
 - Statistical rigor gates: decision-valid stats require the verification ladder in [statistical-rigor-verification.md](statistical-rigor-verification.md).

@@ -64,10 +64,13 @@ Sorted by edit type. The Worker enforces the edit taxonomy (ADR-0003):
 **Decision-locked fields** — rejected for decision use when Experiment.status = `'running'`:
 
 - `confidenceLevel`
-- `horizon`, `targetN`, `sampleSizeLocked`
 - goal Metric membership / roles
 - Guardrail thresholds and directions
 - Primary Dimension membership / declared values
+
+`horizon`, `targetN`, and `sampleSizeLocked` are **Run-level**, not Experiment fields: they are
+frozen at Run Start and immutable for the Run's life (see [storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md)
+`runs` table). They are not patchable here at all, so they need no decision-lock on the Experiment patch.
 
 **Non-material edits** — applied in place:
 
