@@ -1,14 +1,15 @@
 # Agent Config
 
-Last updated: 2026-06-21
+Last updated: 2026-06-27
 
 Scaffold is in place. The repo is now a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
 and Worker-shaped deploy units. The code host now exists: `main` is pushed to
 `github.com/zaks-io/splitch` (private) and the `ci` workflow (secret scanning
 included) runs on every push. Shared-preview deploy, production deploy, and real backing
-resources are still not provisioned. The `splitch` Linear repo-route label still
-does not exist (blocks only remote issue-assigned delegation, not local-worktree).
+resources are still not provisioned. The Linear repo-route label
+`zaks-io/splitch` now exists and current `splitch v1` Todo issues are routed
+with it.
 
 ## Verification
 
@@ -20,19 +21,20 @@ does not exist (blocks only remote issue-assigned delegation, not local-worktree
 - Safe commands run: `pnpm typecheck`, `pnpm format:check`, `pnpm lint`,
   `pnpm build`, `pnpm test`, `pnpm depcruise`, `pnpm duplicates`, `pnpm knip`, and
   `pnpm verify:ci` passed locally on 2026-06-21.
-- Read-only tool calls: Linear `list_teams` (query "splitch"), `get_team`,
+- Linear tool calls: `list_teams` (query "splitch"), `get_team`,
   `list_issue_statuses`, `list_issue_labels` (limit 250), `list_projects`,
   `list_issues` — all against team `Splitch`
   (`eba9c622-4d28-4db2-93fe-12c43bd218b0`). Team, statuses, and labels verified
-  live; 0 projects, 0 issues (fresh team).
-- Inferred values: Linear issue key prefix (no issues exist yet to read an
-  identifier from).
+  live; current queue has project `splitch v1` with 75 `Todo` issues and no
+  active issues in In Progress, Blocked, In Review, Changes Requested, or Ready
+  to Merge.
+- Verified values: Linear issue key prefix `SPL-` from issues `SPL-1` through
+  `SPL-75`.
 - Verified hosted PR check name: `ci` (runs on push to `zaks-io/splitch`). Secret
   scanning is a step inside `ci`; the standalone `gitleaks` workflow was removed.
   See `Pull Requests`.
-- Critical unknowns: no `splitch` repo-route label exists in Linear, shared
-  preview is not provisioned, and production deployment is not wired. See
-  `Unknowns`. (The code host remote IS now configured — `zaks-io/splitch`.)
+- Critical unknowns: shared preview is not provisioned, production deployment is
+  not wired, and PR conventions remain partially unverified. See `Unknowns`.
 
 ## Repo
 
@@ -95,7 +97,7 @@ real package API boundary.
 
 - Provider: Linear
 - Provider location: team `Splitch` (dedicated team)
-- Metadata verified: 2026-06-18 via read-only Linear tool calls
+- Metadata verified: 2026-06-25 via Linear tool calls
 - Verified IDs:
   - Team `Splitch`: `eba9c622-4d28-4db2-93fe-12c43bd218b0`
   - Statuses: Triage `549d5cc4-d586-4c0a-ab31-1630e06c82d4`, Backlog
@@ -111,16 +113,17 @@ real package API boundary.
     `c78a35d2-97c6-4023-930e-0962a2de4376`
 - Query-safe names: team name `Splitch` or its UUID both resolve in Linear
   tools. Prefer the UUID for status/label/issue queries.
-- Read-only verification query: `list_issues(team=<uuid>, limit=30)` → 0 issues;
-  `list_projects(team=<uuid>)` → 0 projects (fresh team).
+- Verification query: `list_projects(team=<uuid>)` → project `splitch v1`;
+  `list_issues(team=<uuid>, state=Todo)` → 75 issues; active states queried
+  individually → 0 issues.
 - Status field name: tools use `state` (type + name); status `type` values are
   triage / backlog / unstarted / started / completed / canceled / duplicate.
 - Dependency and blocker fields: Linear native blocker relationships (verify
   exact relationship type on first use).
 - Label source of truth: live Linear team metadata (verified this setup).
 - Label docs: none separate; this config is the source of truth.
-- Project / board / milestone / roadmap: none (0 projects).
-- Issue key prefix: inferred `SPL-` — confirm from the first created issue.
+- Project: `splitch v1` `cb3094d4-a204-423d-a8f6-c5b15bb7f76d`.
+- Issue key prefix: verified `SPL-`.
 
 ### Labels (verified live, with IDs)
 
@@ -147,18 +150,19 @@ real package API boundary.
   `91bf6530-fa43-46c3-8f09-e94c753d14c7` (NOTE: kebab-case label name, not the
   `Code review passed` default; apply this exact name).
 - Worker environment: `remote-cursor` `ccb64cf0-9ac4-4cf3-a6b0-c3f54d0f6321`
-- Repo-route (group `repo`): existing routes are other repos (`zaks-io/skills`,
-  `zaks-io/otto`, `zaks-io/agent-paste`, `zaks-io/insecur`,
-  `zaks-io/trace-flow`, `zaks-io/neuron-app`, `zaks-io/time`). **No `splitch`
-  repo-route label exists yet** — see `Unknowns`.
+- Repo-route (group `repo`): `zaks-io/splitch`
+  `84bd2d20-ae8d-48aa-8dab-dea8138debc7`; other routes include
+  `zaks-io/skills`, `zaks-io/otto`, `zaks-io/agent-paste`, `zaks-io/insecur`,
+  `zaks-io/trace-flow`, `zaks-io/neuron-app`, and `zaks-io/time`.
 - Other: `placeholder-noop` `ee04a955-369d-4b66-8125-c568d6fb65db` (likely the
   bare-name publish ticket), `enhancement`, `frontend`, `research`,
   `User Submitted`.
 
 ### Tracker policy
 
-- Routing label: `remote-cursor` for the configured remote environment;
-  repo-route label required for issue-assigned delegation (missing — `Unknowns`).
+- Routing labels: `zaks-io/splitch` for the repo route; `remote-cursor` for the
+  configured remote environment. Repo-route label is required for issue-assigned
+  delegation.
 - Triage scope: Todo and active or PR-linked issues by default; Backlog only on
   explicit request.
 - Ready state: Todo. Intake states: Triage. Done state: Done.
@@ -183,22 +187,23 @@ real package API boundary.
 ## Work Coordination
 
 - Worker delegation paths: `local-worktree` is usable now. `issue-assigned`
-  (Linear-exposed agent, `remote-cursor` environment) is blocked until a
-  `splitch` repo-route label and a code host exist. See `Unknowns`.
-- Default worker path: unset (decide once repo-route + code host exist).
+  (Linear-exposed agent, `remote-cursor` environment) is no longer blocked on
+  repo-route or code host existence, but the default worker path remains unset.
+- Default worker path: unset.
 - Orchestrator recurring mechanism: none configured yet (Claude Code `/loop`,
   schedule, or wake-up timer when adopted).
-- Handoff format: `references/handoff.md` shape. PR/check fields are not
-  meaningful until a code host exists.
-- Capacity, merge-automation, and friction-intake fields are unverifiable until
-  a code host and CI exist. Active PR/preview cap defaults to 3 when adopted.
+- Handoff format: `references/handoff.md` shape. PR/check fields are meaningful
+  once a branch or PR exists.
+- Merge method, required-check enforcement, CodeRabbit behavior, capacity, and
+  friction-intake fields remain unverified. Active PR/preview cap defaults to 3
+  when adopted.
 
 ## Agent Access
 
 - Local Codex: unknown
 - Issue-assigned agents: Linear team `Splitch` exists; discover assignable agents
   live from Linear at dispatch time (do not hardcode). `remote-cursor` env label
-  is set up. Blocked on a `splitch` repo-route label + code host.
+  and `zaks-io/splitch` repo-route label are set up.
 - Claude: this repo has no Claude Code integration yet. Adapters created this
   setup: `AGENTS.md` (workflow pointer) and `CLAUDE.md` (`@AGENTS.md` import).
 - Claude Code source of truth: `AGENTS.md`, imported by `CLAUDE.md`.
@@ -228,11 +233,15 @@ real package API boundary.
   files and migrations exist.
 - Shared Preview / Production: designed, not wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
-  resources plus one Tinybird Branch. Production requires GitHub `production`
-  environment approval.
+  resources plus one Tinybird Branch. GitHub `preview` and `production`
+  environment shells exist. During build-out, production required-reviewer /
+  prevent-self-review protection is intentionally deferred until there is an
+  actual production target worth protecting.
 - Planned backing services not yet provisioned: Cloudflare Flagship, D1, KV,
   Durable Objects, Queues, Tinybird Cloud.
-- Production: explicit approval required.
+- Production: no production deploy target is active yet. Do not wire or require
+  production protection checks during build-out; re-enable the approval-gate
+  decision when production resources and deploy workflows exist.
 - Hosted checks allowed without approval: CI and Gitleaks only.
 
 ## Instruction Trust Boundaries
@@ -247,12 +256,9 @@ real package API boundary.
 
 ## Unknowns
 
-- [ ] No `splitch` repo-route label in Linear (group `repo`). Hard block on
-      issue-assigned delegation: the assigned agent can't resolve which repo to
-      clone. Verifier: create the `splitch` (or `<org>/splitch`) repo label once
-      the code host repo exists, then record its ID here.
-- [ ] Linear issue key prefix inferred as `SPL-`. Verifier: read the identifier
-      of the first created issue.
+- [x] Repo-route label configured: `zaks-io/splitch`
+      `84bd2d20-ae8d-48aa-8dab-dea8138debc7`.
+- [x] Linear issue key prefix verified as `SPL-`.
 - [x] Code host configured: `github.com/zaks-io/splitch` (private), `main` pushed,
       the `ci` workflow (secret scanning included) runs on push (confirmed 2026-06-24).
       Remaining PR conventions (merge method, required-check enforcement, CodeRabbit)
@@ -272,6 +278,12 @@ real package API boundary.
       not wired. Verifier: implement `docs/spec/platform/deployment-pipeline.md`,
       including deploy/reset workflows, D1 migrations, Durable Object migrations,
       Tinybird deploy/branch flow, and production approval rules.
+- [ ] Production environment protection is intentionally deferred. GitHub
+      `preview` and `production` environment shells exist, but required
+      reviewers and prevent-self-review should not be wired until there is an
+      actual production target worth protecting. GitHub previously rejected
+      those protection rules for this private repo with plan-support HTTP 422
+      errors, so revisit plan support or choose a different approval gate later.
 - [ ] Shared preview branch not provisioned. Verifier: create the single
       Tinybird `shared_preview` Branch and matching non-production Cloudflare
       resources when hosted preview is needed.

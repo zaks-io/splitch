@@ -27,103 +27,32 @@ The three categories:
 | #   | Item                                                        | Category              | Unblocks                             |
 | --- | ----------------------------------------------------------- | --------------------- | ------------------------------------ |
 | 1   | Seed `trusted_idps` (Anthropic / OpenAI / Cursor)           | ⏸ Waiting on external | Agent auth (ID-JAG, Door A)          |
-| 2   | WorkOS app: register, redirect URLs, publish PRM/JWKS       | 🔴 Active             | All human + panel login              |
-| 3   | Cloudflare Turnstile widget (site key + secret)             | 🔴 Active             | Safe anonymous registration (Door B) |
+| 2   | WorkOS app: register, redirect URLs, publish PRM/JWKS       | ✅ Done               | All human + panel login              |
+| 3   | Cloudflare Turnstile widget (site key + secret)             | ✅ Done               | Safe anonymous registration (Door B) |
 | 4   | Production domains + DNS (`splitch.dev`)                    | ✅ Done               | Production routes / public URLs      |
-| 5   | GitHub `production` environment: required reviewers         | 🔴 Active             | Production deploy approval gate      |
+| 5   | GitHub `production` environment: required reviewers         | 🟡 Decide later       | Production deploy approval gate      |
 | 6   | Blacksmith GitHub App                                       | ✅ Done               | CI on Blacksmith runners             |
 | 7   | Stripe billing integration                                  | 🟡 Decide later       | Paid plans / `stripe_*` columns      |
 | 8   | Compliance baseline (CCPA delete/export/opt-out at launch?) | 🟡 Decide later       | Privacy lifecycle scope              |
 | 9   | Tenant-isolation upgrade trigger (app-enforced → DB RLS)    | 🟡 Decide later       | Isolation architecture at scale      |
 | 10  | Attention-card numeric thresholds                           | 🟡 Decide later       | Panel tuning (ship-then-tune)        |
 | 11  | Provisional-Org → real-account conversion UX                | 🟡 Decide later       | Onboarding upgrade flow              |
+| 12  | Cloudflare GitHub Actions deploy tokens                     | ✅ Done               | Shared-preview / production deploys  |
 
 Everything else the spec calls "not provisioned" (Cloudflare resources, Tinybird Cloud +
 `shared_preview` branch, secret storage via `wrangler secret` / `gh secret`, Turborepo remote
 cache, Sentry/Axiom token storage) is **agent-doable with an authenticated CLI** and tracked in
 [deployment-pipeline.md](./platform/deployment-pipeline.md). It is real work; it is not a human
 blocker. The only human input those need is a **value that comes from an item above** (a WorkOS
-secret, a Turnstile secret, a vendor token).
+secret, a Turnstile secret, a vendor token). Cloudflare deploy-token minting is tracked separately
+as item 12 because the token value is created in the Cloudflare dashboard; storing it is
+agent-doable.
 
 ---
 
 ## 🔴 Active
 
-### 2. WorkOS app: register, redirect URLs, publish PRM/JWKS
-
-**Why human:** WorkOS app registration and AuthKit config are console-driven; redirect/callback
-URLs depend on your real domains; the published OAuth Protected Resource Metadata + JWKS is config
-a person sets. A CLI can store the resulting secret, not create the app relationship.
-
-**Spec sources:** [auth-doors.md:42](./control-plane/auth-doors.md),
-[monorepo-and-toolchain.md:187](./platform/monorepo-and-toolchain.md),
-[session-loader-isolation.md:95](./frontend/session-loader-isolation.md).
-Background: [ADR-0022](../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md).
-
-**Do once:**
-
-1. Create the WorkOS application (AuthKit) in the WorkOS dashboard.
-2. Add redirect/callback URLs for local, shared-preview, and production (depends on item 4).
-3. Note the issuer, JWKS URI, and client ID; generate the API key.
-4. Store the secret via CLI once you have it — agent can run:
-   `wrangler secret put WORKOS_API_KEY` (per Worker that needs it) and
-   `gh secret set WORKOS_API_KEY` (per environment).
-
-**Recorded:** _(client ID: …, issuer: …, secret stored in: …, date: …)_
-
-### 3. Cloudflare Turnstile widget (site key + secret)
-
-**Why human:** Turnstile widget creation is dashboard-side. Without it, the anonymous
-registration write surface (Door B — mints WorkOS users + D1 rows) has no bot defense.
-
-**Spec sources:** [credentials-and-keys.md:135-137](./control-plane/credentials-and-keys.md),
-[auth-doors.md:54-59](./control-plane/auth-doors.md).
-Background: [ADR-0034](../adr/0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md).
-
-**Do once:**
-
-1. Create a Turnstile widget in the Cloudflare dashboard; capture the site key (public) and
-   secret key.
-2. Store the secret: `wrangler secret put TURNSTILE_SECRET` on the Worker serving
-   `POST /agent/identity`.
-3. Wire the site key into the registration UI/SDK as a public value.
-
-**Recorded:** _(site key: …, secret stored in: …, date: …)_
-
-### 4. Production domains + DNS (`splitch.dev`)
-
-**Done.** `splitch.dev` is purchased and owned on Cloudflare, and the per-Worker hostname map is
-fixed by **[ADR-0038](../adr/0038-public-hostnames-are-a-fixed-human-owned-subdomain-map.md)**
-(human-owned; agents do not invent hostnames). What remains is agent-doable: route attachment in
-`wrangler.jsonc` per Worker, derived from the ADR table.
-
-The hostnames also feed the WorkOS redirect URLs (item 2) and the Client-Key origin allow-list —
-take them from ADR-0038, not from a guess.
-
-**Spec sources:** [deployment-pipeline.md:31](./platform/deployment-pipeline.md) (production
-"routes/domains");
-[ADR-0038](../adr/0038-public-hostnames-are-a-fixed-human-owned-subdomain-map.md) (canonical
-hostname map).
-
-**Recorded:** zone `splitch.dev` purchased on Cloudflare (confirmed 2026-06-21); hostname map
-pinned in ADR-0038.
-
-### 5. GitHub `production` environment: required reviewers
-
-**Why human:** This is _deliberately_ human. The production approval gate's entire purpose is
-that a designated person clicks approve. `gh` can create the environment; a human must be the
-reviewer and must enable prevent-self-review.
-
-**Spec sources:** [deployment-pipeline.md:219-220, 278](./platform/deployment-pipeline.md),
-[agent-verification.md:40](./platform/agent-verification.md).
-
-**Do once:**
-
-1. `gh api` / repo settings: create the `production` environment.
-2. Add required reviewers (the humans who approve releases).
-3. Enable "prevent self-review."
-
-**Recorded:** _(reviewers: …, prevent-self-review: on, date: …)_
+None.
 
 ---
 
@@ -150,6 +79,60 @@ to ✅.
 
 ## ✅ Done
 
+### 2. WorkOS app: register, redirect URLs, publish PRM/JWKS
+
+**Done.** WorkOS AuthKit is configured and repo-side GitHub environment values are present.
+
+**Spec sources:** [auth-doors.md:42](./control-plane/auth-doors.md),
+[monorepo-and-toolchain.md:187](./platform/monorepo-and-toolchain.md),
+[session-loader-isolation.md:95](./frontend/session-loader-isolation.md). Background:
+[ADR-0022](../adr/0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md).
+
+**Recorded:** AuthKit domain `soulful-path-50.authkit.app`; issuer
+`https://soulful-path-50.authkit.app`; JWKS URI
+`https://soulful-path-50.authkit.app/oauth2/jwks`; preview/staging client ID
+`client_01KW5MGQD3TANCAEE7TS6KGF95`; production client ID
+`client_01KW5MG8G9DW3H7CKFCA956WZY`; `WORKOS_CLIENT_ID`, `WORKOS_ISSUER`, and
+`WORKOS_JWKS_URI` stored as GitHub environment variables in `preview` and `production`;
+`WORKOS_API_KEY` present as a GitHub environment secret in both environments. Metadata verified
+2026-06-27 via `/.well-known/oauth-authorization-server`; JWKS endpoint returned one key. Secret
+values were not read or printed. WorkOS dashboard redirect/callback settings are human-provided and
+will be exercised by the shared-preview / production auth smoke.
+
+### 3. Cloudflare Turnstile widget (site key + secret)
+
+**Done.** Turnstile widget values are configured in GitHub environments.
+
+**Spec sources:** [credentials-and-keys.md:135-137](./control-plane/credentials-and-keys.md),
+[auth-doors.md:54-59](./control-plane/auth-doors.md). Background:
+[ADR-0034](../adr/0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md).
+
+**Recorded:** preview Turnstile site key `0x4AAAAAADsCXVP9TRrC6c6N`; production Turnstile site key
+`0x4AAAAAADsCY8JNBv2vrTFC`; `TURNSTILE_SITE_KEY` stored as a GitHub environment variable in
+`preview` and `production`; `TURNSTILE_SECRET` present as a GitHub environment secret in `preview`
+and `production`. Verified 2026-06-27 by listing GitHub environment variables and secret names.
+Secret values were not read or printed. Runtime Worker secret attachment via `wrangler secret put`
+is agent-doable once the Auth API Worker deploy target exists and will be exercised by
+shared-preview / production auth smoke.
+
+### 4. Production domains + DNS (`splitch.dev`)
+
+**Done.** `splitch.dev` is purchased and owned on Cloudflare, and the per-Worker hostname map is
+fixed by **[ADR-0038](../adr/0038-public-hostnames-are-a-fixed-human-owned-subdomain-map.md)**
+(human-owned; agents do not invent hostnames). What remains is agent-doable: route attachment in
+`wrangler.jsonc` per Worker, derived from the ADR table.
+
+The hostnames also feed the WorkOS redirect URLs (item 2) and the Client-Key origin allow-list —
+take them from ADR-0038, not from a guess.
+
+**Spec sources:** [deployment-pipeline.md:31](./platform/deployment-pipeline.md) (production
+"routes/domains");
+[ADR-0038](../adr/0038-public-hostnames-are-a-fixed-human-owned-subdomain-map.md) (canonical
+hostname map).
+
+**Recorded:** zone `splitch.dev` purchased on Cloudflare (confirmed 2026-06-21); hostname map
+pinned in ADR-0038.
+
 ### 6. Blacksmith GitHub App
 
 **Installed.** Required so `runs-on: blacksmith-*` jobs aren't adopted by another repo's runners.
@@ -157,6 +140,18 @@ to ✅.
 **Spec source:** [deployment-pipeline.md:48](./platform/deployment-pipeline.md).
 
 **Recorded:** installed on the `splitch` repo (confirmed 2026-06-21).
+
+### 12. Cloudflare GitHub Actions deploy tokens
+
+**Done.** Preview and production deploy token names are present as GitHub environment secrets.
+
+**Spec source:** [deployment-pipeline.md:176-180](./platform/deployment-pipeline.md).
+
+**Recorded:** `CLOUDFLARE_API_TOKEN` present as a GitHub environment secret in `preview` and
+`production`; `CLOUDFLARE_ACCOUNT_ID` stored as a GitHub environment variable in both environments
+with account ID `a461d640900eb3905d7b6619c8c0da91`. Verified 2026-06-27 by listing secret names and
+environment variables. Secret values were not read or printed. Token scopes are human-provided and
+will be exercised by the shared-preview / production deploy dry runs.
 
 ---
 
@@ -191,6 +186,21 @@ Ship-then-tune. — [screen-inventory.md:11-12](./frontend/screen-inventory.md)
 
 Deferred; onboarding works with provisional accounts first. —
 [screen-inventory.md:295](./frontend/screen-inventory.md)
+
+### 5. GitHub `production` environment: required reviewers
+
+Deferred while splitch is still being built out. There is no actual production Environment worth
+protecting yet, so we are intentionally not wiring production required reviewers or prevent-self-review
+until the production deploy target exists and needs a real release gate.
+
+**Spec sources:** [deployment-pipeline.md:219-220, 278](./platform/deployment-pipeline.md),
+[agent-verification.md:40](./platform/agent-verification.md).
+
+**Recorded:** preview and production environment shells created on GitHub with `gh api` on
+2026-06-25. Required reviewers and prevent-self-review are **intentionally deferred** as of
+2026-06-27. GitHub also rejected both protection rules for this private repo with HTTP 422
+plan-support errors, so finishing this later requires either GitHub plan support for private-repo
+environment protection, making the repo public, or choosing a different production-approval gate.
 
 ---
 
