@@ -61,13 +61,16 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 
 ## Health metrics object
 
-| Field                         | Type                              | Meaning                                                 |
-| ----------------------------- | --------------------------------- | ------------------------------------------------------- |
-| `multiple_rate`               | `number`                          | Fraction of Entities in `__multiple__` bucket           |
-| `activation_rates`            | `Record<variant, number> \| null` | Per-arm activation rate; null if no gate                |
-| `activation_balance_p_value`  | `number \| null`                  | Chi-square p-value for activated / not-activated by arm |
-| `activation_balance_mismatch` | `boolean \| null`                 | `true` if `activation_balance_p_value < 0.001`          |
-| `exposure_counts`             | `Record<variant, integer>`        | Raw (pre-dedup) Exposure counts per arm                 |
+| Field                         | Type                              | Meaning                                                   |
+| ----------------------------- | --------------------------------- | --------------------------------------------------------- |
+| `multiple_rate`               | `number`                          | Fraction of Entities in `__multiple__` bucket             |
+| `multiple_count`              | `integer`                         | Raw count of `__multiple__` Entities                      |
+| `activation_rates`            | `Record<variant, number> \| null` | Per-arm activation rate; null if no gate                  |
+| `activation_balance_p_value`  | `number \| null`                  | Chi-square p-value for activated / not-activated by arm   |
+| `activation_balance_mismatch` | `boolean \| null`                 | `true` if `activation_balance_p_value < 0.001`            |
+| `exposure_counts`             | `Record<variant, integer>`        | Raw (pre-dedup) Exposure counts per arm                   |
+| `deduped_counts`              | `Record<variant, integer>`        | First-touch deduped Entity counts per arm (the SRM input) |
+| `low_n_warning`               | `boolean`                         | `true` if any arm has deduped n < 100                     |
 
 Dimension result shapes (`DimensionResult`) are defined in
 [dimension-slicing.md](dimension-slicing.md).
