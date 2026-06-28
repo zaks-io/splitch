@@ -120,6 +120,7 @@ export {
   UserRoleSchema,
   userRoles,
   UserSchema,
+  VariantValueSchema,
 } from "./leaf-schemas-runtime.js";
 export type {
   APIKey,
@@ -135,4 +136,26 @@ export type {
   ResolutionReason,
   User,
   UserRole,
+  VariantValue,
 } from "./leaf-schemas-runtime.js";
+export {
+  DataPlaneEvaluateRequestSchema,
+  DataPlaneEvaluateResponseSchema,
+  PAGINATION_DEFAULT_LIMIT,
+  PAGINATION_MAX_LIMIT,
+  PaginationQuerySchema,
+  paginatedResponse,
+  RuleSelectionSchema,
+  TestEvaluationReasonSchema,
+  TestEvaluationRequestSchema,
+  TestEvaluationResponseSchema,
+} from "./wire-envelopes-core.js";
+export type {
+  DataPlaneEvaluateRequest,
+  DataPlaneEvaluateResponse,
+  PaginationQuery,
+  RuleSelection,
+  TestEvaluationReason,
+  TestEvaluationRequest,
+  TestEvaluationResponse,
+} from "./wire-envelopes-core.js";
