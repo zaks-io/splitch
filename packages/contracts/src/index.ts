@@ -139,6 +139,36 @@ export type {
   VariantValue,
 } from "./leaf-schemas-runtime.js";
 export {
+  apiKeyCacheKey,
+  assignmentKey,
+  clientKeyCacheKey,
+  flagConfigKey,
+  liveRunKey,
+  runConfigKey,
+} from "./storage-keys-kv.js";
+export {
+  AssignmentStoreEntrySchema,
+  AssignmentStoreValueSchema,
+  CredentialCacheKVSchema,
+  CredentialKindSchema,
+  credentialKinds,
+  ExperimentConfigKVSchema,
+  FlagConfigKVSchema,
+  kvEnvelope,
+  LiveRunKVSchema,
+  RunConfigKVSchema,
+} from "./storage-schemas-kv.js";
+export type {
+  AssignmentStoreEntry,
+  AssignmentStoreValue,
+  CredentialCacheKV,
+  CredentialKind,
+  ExperimentConfigKV,
+  FlagConfigKV,
+  LiveRunKV,
+  RunConfigKV,
+} from "./storage-schemas-kv.js";
+export {
   DataPlaneEvaluateRequestSchema,
   DataPlaneEvaluateResponseSchema,
   PAGINATION_DEFAULT_LIMIT,

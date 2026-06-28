@@ -32,8 +32,11 @@ physical key. The raw Targeting Key never appears in KV key names or DO names.
 - KV key: `assignment:{appId}:{idType}:{targetingKeyHash}` — the per-Entity read key (no
   `experimentId`), so one `getAll` returns every Experiment's holdover for this Entity in a
   single round-trip
-- Value: `Map<experimentId, { runId, variant, schemaVersion }>` (Zod-validated on read; see
-  [contracts-and-validation.md](./contracts-and-validation.md))
+- Value: `Map<experimentId, { runId, variant }>` carried under a KV envelope that holds the
+  single `schemaVersion` (entries themselves carry no `schemaVersion`; the version is
+  envelope-level only — see `AssignmentStoreValueSchema` / `kvEnvelope` in
+  `@splitch/contracts` and [contracts-and-validation.md](./contracts-and-validation.md);
+  Zod-validated on read)
 - Latency: ~10ms edge-local (read from nearest POP replica)
 - Consistency: eventually consistent; up to ~60s propagation lag across POPs
 - **No DO touch on the evaluate hot path.** The DO is the writer, never the reader on evaluate.
@@ -45,8 +48,9 @@ physical key. The raw Targeting Key never appears in KV key names or DO names.
 - Atomic `get → check absent → put`: the DO's input gate ensures no intervening non-storage I/O
   between get and put (use `blockConcurrencyWhile` or keep the storage access synchronous)
 - **First writer wins:** if the key already exists in the DO's storage, the new `put` is a no-op
-- **Write-through to KV on commit:** after storing, the DO merges its `{ runId, variant,
-schemaVersion }` into the Entity-keyed KV value under its `experimentId`, so subsequent
+- **Write-through to KV on commit:** after storing, the DO merges its `{ runId, variant }`
+  entry into the Entity-keyed KV value (a single envelope-level `schemaVersion`) under its
+  `experimentId`, so subsequent
   `getAll` calls on any POP are served without a DO round-trip. Read granularity (per-Entity)
   and write granularity (per-Experiment) differ by design (ADR-0008/0009)
 
