@@ -63,6 +63,27 @@ export function createHealthResponse(
 }
 
 export {
+  ExperimentSchema,
+  ExperimentStatusSchema,
+  experimentStatuses,
+  MetricKindSchema,
+  metricKinds,
+  MetricRefSchema,
+  MetricSchema,
+  RunSchema,
+  RunStatusSchema,
+  runStatuses,
+} from "./leaf-schemas-experiment.js";
+export type {
+  Experiment,
+  ExperimentStatus,
+  Metric,
+  MetricKind,
+  MetricRef,
+  Run,
+  RunStatus,
+} from "./leaf-schemas-experiment.js";
+export {
   ConditionOperatorSchema,
   ConditionSchema,
   FlagSchema,
