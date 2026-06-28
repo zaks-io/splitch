@@ -91,12 +91,14 @@ export const ResolutionReasonSchema = z.enum(resolutionReasons);
 export type ResolutionReason = z.infer<typeof ResolutionReasonSchema>;
 
 // VariantValue = boolean | string | number | JsonObject
-const VariantValueSchema = z.union([
+// Exported so wire envelopes reuse this leaf rather than redefining the union.
+export const VariantValueSchema = z.union([
   z.boolean(),
   z.string(),
   z.number(),
   z.record(z.string(), z.unknown()),
 ]);
+export type VariantValue = z.infer<typeof VariantValueSchema>;
 
 const BaseResolutionDetailsSchema = z.object({
   value: VariantValueSchema,
