@@ -61,3 +61,23 @@ export function createHealthResponse(
     service,
   });
 }
+
+export {
+  ConditionOperatorSchema,
+  ConditionSchema,
+  FlagSchema,
+  PercentageRolloutSchema,
+  SegmentSchema,
+  TargetingRuleSchema,
+  VariantSchema,
+  conditionOperators,
+} from "./leaf-schemas-flag.js";
+export type {
+  Condition,
+  ConditionOperator,
+  Flag,
+  PercentageRollout,
+  Segment,
+  TargetingRule,
+  Variant,
+} from "./leaf-schemas-flag.js";
