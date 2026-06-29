@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // Config-only wrangler file: this package ships no Worker. It exists so
+  // `wrangler d1 migrations apply DB --local` (scripts/check-d1-local.mjs) can
+  // resolve the D1 binding and migrations_dir to validate the migration set
+  // against a local Miniflare D1. The database_id is a placeholder; --local
+  // never touches a remote database.
+  "name": "splitch-db-migrations",
+  "compatibility_date": "2026-06-21",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "splitch-d1",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

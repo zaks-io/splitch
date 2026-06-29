@@ -268,9 +268,10 @@ real package API boundary.
 - [ ] Tinybird project files are absent. `pnpm tinybird:local` intentionally
       skips until `tinybird/` exists. Verifier: add Tinybird datasources, pipes,
       fixtures, and tests, then make the local script fail on validation errors.
-- [ ] Real D1 migrations are absent. `pnpm d1:migrate:local` intentionally skips
-      until migrations exist. Verifier: add the schema toolchain and committed
-      migration files, then run local migration checks in CI.
+- [x] Real D1 migrations exist (`@splitch/db`, SPL-9). `pnpm d1:migrate:local`
+      runs a real `wrangler d1 migrations apply --local` and is wired into
+      `verify:push` and `verify:ci`; a malformed/duplicate-column migration fails
+      the gate non-zero.
 - [ ] Public npm publishing workflow and credentials are unverified. `@splitch/sdk` exists as the
       public data-plane SDK scaffold, but no package has been published. Verifier: create a release
       slice with ownership, provenance, changelog, npm token/OIDC setup, and publish dry run.
