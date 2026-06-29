@@ -19,6 +19,9 @@ const oauthErrorCodes = [
   "replayed_jti", // jti already seen in the replay cache
   "invalid_grant", // bad/expired identity_assertion at /oauth2/token
   "unsupported_grant_type", // /oauth2/token grant_type not understood
+  "interaction_required", // claim email maps to an existing verified user (no merge)
+  "access_denied", // Turnstile verification failed (anon register, ADR-0034)
+  "too_many_requests", // per-IP or global anon-create rate ceiling hit (ADR-0034)
   "server_error", // genuine fault on the door
 ] as const;
 
@@ -28,6 +31,13 @@ export type OAuthErrorCode = (typeof oauthErrorCodes)[number];
 export interface OAuthErrorBody {
   error: OAuthErrorCode;
   error_description: string;
+  /**
+   * `interaction_required` carries the consent link the human must visit
+   * (auth-doors.md). Other codes leave these absent. Kept on the one body shape
+   * (not a forked type) so the whole door speaks one error wire contract.
+   */
+  consent_url?: string;
+  consent_expires_at?: string;
 }
 
 /** HTTP status for each OAuth error code (OAuth 2.0 / auth.md mapping). */
@@ -39,22 +49,30 @@ const statusByCode: Record<OAuthErrorCode, number> = {
   replayed_jti: 401,
   invalid_grant: 400,
   unsupported_grant_type: 400,
+  interaction_required: 401, // RFC 8628/OIDC: the request needs end-user interaction
+  access_denied: 403, // bot challenge (Turnstile) refused the request
+  too_many_requests: 429,
   server_error: 500,
 };
+
+/** Optional extra body fields some codes carry (e.g. the consent link). */
+type OAuthErrorExtra = Pick<OAuthErrorBody, "consent_url" | "consent_expires_at">;
 
 /** A typed door failure carrying its OAuth code + human description. */
 export class OAuthError extends Error {
   readonly code: OAuthErrorCode;
-  constructor(code: OAuthErrorCode, description: string) {
+  readonly extra: OAuthErrorExtra;
+  constructor(code: OAuthErrorCode, description: string, extra: OAuthErrorExtra = {}) {
     super(description);
     this.name = "OAuthError";
     this.code = code;
+    this.extra = extra;
   }
   get status(): number {
     return statusByCode[this.code];
   }
   toBody(): OAuthErrorBody {
-    return { error: this.code, error_description: this.message };
+    return { error: this.code, error_description: this.message, ...this.extra };
   }
 }
 

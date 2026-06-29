@@ -3,10 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
 import { makeJtiCache } from "./jti-cache.js";
 import type { Jwks } from "./jwks.js";
-import { makeTokenSigner } from "./token-exchange.js";
 import {
   type FixtureKeypair,
   type LocalBindings,
+  makeDoorBDeps,
   makeFixtureKeypair,
   makeLocalBindings,
   signIdJag,
@@ -23,7 +23,6 @@ import { makeFixtureWorkOs } from "./workos.js";
 const ORIGIN = "https://auth.splitch.test";
 const ISSUER = "https://idp.anthropic.test";
 const CLIENT_ID = "splitch-control-plane";
-const ASSERTION_SECRET = "test-assertion-secret";
 const ACCESS_SECRET = "test-access-secret";
 const CP_AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = 1_780_000_000_000;
@@ -60,6 +59,7 @@ async function seedIdp(_jwks: Jwks, enabled: boolean): Promise<void> {
 
 function buildApp(jwksOverride?: Jwks) {
   const repo = createRepository(local.d1);
+  const doorB = makeDoorBDeps(repo, () => NOW_MS);
   return createApp({
     repo,
     accessSecret: ACCESS_SECRET,
@@ -73,12 +73,9 @@ function buildApp(jwksOverride?: Jwks) {
       authApiOrigin: ORIGIN,
       now: () => NOW_MS,
     },
-    tokenSigner: makeTokenSigner({
-      assertionSecret: ASSERTION_SECRET,
-      accessSecret: ACCESS_SECRET,
-      issuer: ORIGIN,
-      controlPlaneAudience: CP_AUDIENCE,
-    }),
+    tokenSigner: doorB.tokenSigner,
+    register: doorB.register,
+    claim: doorB.claim,
   });
 }
 
