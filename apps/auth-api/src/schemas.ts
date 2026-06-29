@@ -12,6 +12,32 @@ export const AgentIdentityRequestSchema = z.object({
   requested_scopes: z.array(z.string()).optional(),
 });
 
+/**
+ * POST /agent/identity (Door B anonymous): NO `id_jag`; a Turnstile token gates
+ * the write (ADR-0034). The presence/absence of `id_jag` is what routes the
+ * request to Door A vs Door B (auth-doors.md: "with no `id_jag` field").
+ */
+export const AnonymousIdentityRequestSchema = z.object({
+  turnstile_token: z.string().min(1),
+});
+
+/**
+ * POST /agent/identity/claim (and POST /claim): the claim ceremony body.
+ *
+ * Two-step: an INITIATE call carries only {identity_assertion, email} (no otp) and
+ * triggers an OTP send to that email; a VERIFY call adds {otp, idempotency_key}.
+ * The presence of `otp` selects the step. `email` is only shape-validated here
+ * (min length); the canonical validation + normalization is single-sourced in
+ * email.ts so the same canonical string feeds the OTP binding, the collision
+ * lookup, and the verify-email write (they can never disagree).
+ */
+export const ClaimRequestSchema = z.object({
+  identity_assertion: z.string().min(1),
+  email: z.string().min(1),
+  otp: z.string().min(1).optional(),
+  idempotency_key: z.string().min(1).optional(),
+});
+
 /** POST /oauth2/token: token-exchange of an identity_assertion. */
 export const TokenExchangeRequestSchema = z.object({
   grant_type: z.string(),

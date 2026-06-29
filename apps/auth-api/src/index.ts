@@ -4,10 +4,35 @@ import { createApp } from "./app.js";
 import type { AuthApiEnv } from "./env.js";
 import { fetchJwks } from "./jwks.js";
 import { makeJtiCache } from "./jti-cache.js";
+import { makeFixtureOtp, makeIdempotencyStore } from "./otp.js";
+import { makeRateLimiter } from "./rate-limit.js";
 import { makeTokenSigner } from "./token-exchange.js";
+import { makeFixtureTurnstile } from "./turnstile.js";
 import { makeFixtureWorkOs } from "./workos.js";
 
 const service = "splitch-auth-api";
+
+/**
+ * MODULE-SCOPED fixture state, constructed ONCE per isolate (at module load), NOT
+ * per request. The two-step Door B ceremony REQUIRES this: the OTP issued at
+ * /claim initiate must still be live at the /claim verify request, the WorkOS
+ * verified-email index must persist so Door A's user is visible to a later Door B
+ * collision check, the rate ceiling must accumulate across requests, and Turnstile
+ * single-use must hold across requests. Per-request construction would reset all of
+ * it (empty index, lost OTP, reset ceiling) — defeating the controls.
+ *
+ * These persist across requests WITHIN an isolate; they are NOT shared across
+ * isolates. Cross-isolate durability is the job of the REAL adapters (shared atomic
+ * D1/KV/DO for OTP + idempotency, the WAF for the real global ceiling, WorkOS SDK,
+ * Cloudflare Turnstile siteverify) — which swap in behind these same ports without
+ * touching the door logic. The SAME WorkOS port + OTP fixture + rate limiter are
+ * shared by register + claim so both doors see one user, one code, one ceiling.
+ */
+const workos = makeFixtureWorkOs();
+const otp = makeFixtureOtp();
+const turnstile = makeFixtureTurnstile();
+const rateLimiter = makeRateLimiter();
+const idempotency = makeIdempotencyStore();
 
 /**
  * Auth API Worker entry. Builds the door app from real Cloudflare bindings and
@@ -30,24 +55,33 @@ export default {
     // Two distinct secrets: assertion vs access token cannot cross-verify.
     const assertionSecret = env.ASSERTION_SIGNING_SECRET ?? "local-dev-assertion-secret";
     const accessSecret = env.ACCESS_TOKEN_SECRET ?? "local-dev-access-secret";
+    const consentBaseUrl = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
+    const now = () => Date.now();
+    // The token signer is STATELESS (HMAC over env secrets), so deriving it per
+    // request from the env-bound secrets is correct — it carries no cross-request
+    // state, unlike the module-scoped fixtures above.
+    const tokenSigner = makeTokenSigner({
+      assertionSecret,
+      accessSecret,
+      issuer: origin,
+      controlPlaneAudience,
+    });
+
     const app = createApp({
       repo,
       accessSecret,
       controlPlaneAudience,
-      now: () => Date.now(),
+      now,
+      tokenSigner,
       idJag: {
         repo,
         jtiCache: makeJtiCache(env.JTI_CACHE),
-        workos: makeFixtureWorkOs(),
+        workos,
         fetchJwks,
         authApiOrigin: origin,
       },
-      tokenSigner: makeTokenSigner({
-        assertionSecret,
-        accessSecret,
-        issuer: origin,
-        controlPlaneAudience,
-      }),
+      register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },
+      claim: { repo, workos, otp, idempotency, tokenSigner, rateLimiter, consentBaseUrl, now },
     });
 
     return app.fetch(request, env);

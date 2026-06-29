@@ -103,9 +103,32 @@ async function verifyAndDecode(token: string, secret: string): Promise<Record<st
   return JSON.parse(new TextDecoder().decode(base64UrlToBytes(p))) as Record<string, unknown>;
 }
 
+/** The verified claims of an identity_assertion (Door B claim reads these). */
+interface AssertionIdentity {
+  userId: string;
+  scopes: string[];
+}
+
 export interface TokenSigner {
   mintIdentityAssertion(userId: string, scopes: string[], nowSeconds: number): Promise<string>;
   exchangeForAccessToken(assertion: string, nowSeconds: number): Promise<string>;
+  /**
+   * Verify a provisional identity_assertion and return its claims (the claim
+   * ceremony needs the `sub` + pre-claim `scopes`, not an access token yet).
+   * Throws `invalid_grant` on a bad/expired/non-assertion token (fail-loud).
+   */
+  verifyIdentityAssertion(assertion: string, nowSeconds: number): Promise<AssertionIdentity>;
+  /**
+   * Mint a control-plane access token directly for an already-resolved user with
+   * the given scopes + auth_door (the claim ceremony issues the upgraded token
+   * without a second assertion round-trip).
+   */
+  mintAccessToken(
+    userId: string,
+    scopes: string[],
+    authDoor: AccessTokenClaims["auth_door"],
+    nowSeconds: number,
+  ): Promise<string>;
 }
 
 /**
@@ -154,6 +177,34 @@ export function makeTokenSigner(opts: {
         exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
         scopes,
         auth_door: "id_jag",
+      };
+      return signJwt(access, opts.accessSecret);
+    },
+
+    async verifyIdentityAssertion(assertion, nowSeconds) {
+      const claims = await verifyAndDecode(assertion, opts.assertionSecret);
+      if (claims.typ !== "identity_assertion" || typeof claims.sub !== "string") {
+        throw new OAuthError("invalid_grant", "not a valid identity_assertion");
+      }
+      if (typeof claims.exp !== "number" || claims.exp < nowSeconds) {
+        throw new OAuthError("invalid_grant", "identity_assertion is missing exp or has expired");
+      }
+      return {
+        userId: claims.sub,
+        scopes: Array.isArray(claims.scopes) ? (claims.scopes as string[]) : [],
+      };
+    },
+
+    async mintAccessToken(userId, scopes, authDoor, nowSeconds) {
+      const access: AccessTokenClaims = {
+        typ: "access_token",
+        sub: userId,
+        iss: opts.issuer,
+        aud: opts.controlPlaneAudience,
+        iat: nowSeconds,
+        exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
+        scopes,
+        auth_door: authDoor,
       };
       return signJwt(access, opts.accessSecret);
     },

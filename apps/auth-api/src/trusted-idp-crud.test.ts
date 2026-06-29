@@ -3,7 +3,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
 import { makeJtiCache } from "./jti-cache.js";
 import { makeTokenSigner, type TokenSigner } from "./token-exchange.js";
-import { type LocalBindings, makeFixtureKeypair, makeLocalBindings } from "./test-fixtures.js";
+import {
+  type LocalBindings,
+  makeDoorBDeps,
+  makeFixtureKeypair,
+  makeLocalBindings,
+} from "./test-fixtures.js";
 import { makeFixtureWorkOs } from "./workos.js";
 
 /**
@@ -34,6 +39,7 @@ async function accessTokenFor(userId: string): Promise<string> {
 
 function buildApp() {
   const repo = createRepository(local.d1);
+  const doorB = makeDoorBDeps(repo, () => NOW_MS, { tokenSigner: signer });
   return createApp({
     repo,
     accessSecret: ACCESS_SECRET,
@@ -48,6 +54,8 @@ function buildApp() {
       authApiOrigin: ORIGIN,
       now: () => NOW_MS,
     },
+    register: doorB.register,
+    claim: doorB.claim,
   });
 }
 
