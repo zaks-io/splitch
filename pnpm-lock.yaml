@@ -65,6 +65,19 @@ importers:
       '@splitch/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@splitch/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      hono:
+        specifier: ^4.12.27
+        version: 4.12.27
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      miniflare:
+        specifier: ^4.20260617.0
+        version: 4.20260617.0
 
   apps/cli:
     dependencies:

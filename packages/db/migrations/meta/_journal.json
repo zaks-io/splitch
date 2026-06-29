@@ -8,6 +8,13 @@
       "when": 1782695643311,
       "tag": "0000_cynical_magneto",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1782746144914,
+      "tag": "0001_yellow_firebrand",
+      "breakpoints": true
     }
   ]
 }

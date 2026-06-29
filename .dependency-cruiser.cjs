@@ -102,9 +102,15 @@ module.exports = {
     },
     // Compiled build output is an emitted copy of source already cruised; exclude
     // it so a stale/just-built dist/ does not double-report (and so the seam's
-    // compiled client.d.ts is not mistaken for a raw-client bypass).
+    // compiled client.d.ts is not mistaken for a raw-client bypass). Also exclude
+    // node_modules: pnpm symlinks workspace packages into each app's
+    // node_modules, and the `apps/**` glob would otherwise re-cruise a package's
+    // OWN internals under a symlinked path (e.g. apps/auth-api/node_modules/
+    // @splitch/db/src/repo/*), which the seam rules — anchored on the real
+    // ^packages/db/src/ path — would mis-flag. The real source tree is the only
+    // subject; doNotFollow already stops dependency traversal into node_modules.
     exclude: {
-      path: "(^|/)dist/",
+      path: "(^|/)(dist|node_modules)/",
     },
     tsPreCompilationDeps: true,
     enhancedResolveOptions: {
