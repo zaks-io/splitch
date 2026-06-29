@@ -45,6 +45,25 @@ rules:
       - pattern-not: "return { ..., apiKey: null, ... }"
       - pattern-not: "return { ..., apiKey: undefined, ... }"
 
+  - id: splitch-no-raw-d1-client-outside-seam
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      The raw Drizzle D1 client is the tenant-isolation bypass (ADR-0018): a
+      handle on it can run an app_id-less, cross-App query. Only the single seam
+      module packages/db/src/repo/client.ts may import drizzle-orm/d1 and call
+      drizzle(); everything else must go through createRepository from
+      @splitch/db, whose methods are all scope-bound. See
+      docs/spec/control-plane/d1-and-tinybird-data-access.md.
+    patterns:
+      - pattern-either:
+          - pattern: import { drizzle } from 'drizzle-orm/d1'
+          - pattern: import { drizzle } from "drizzle-orm/d1"
+          - pattern-regex: from\s+['"]drizzle-orm/d1['"]
+    paths:
+      exclude:
+        - "**/packages/db/src/repo/client.ts"
+
   - id: splitch-tenant-scoping-required
     languages: [typescript, javascript]
     severity: WARNING
