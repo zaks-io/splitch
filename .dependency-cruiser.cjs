@@ -64,6 +64,30 @@ module.exports = {
       to: { path: "^apps/" },
     },
     {
+      name: "no-raw-d1-client-outside-db-seam",
+      severity: "error",
+      comment:
+        "The raw Drizzle D1 client is the tenant-isolation bypass (ADR-0018): a handle on it can run an app_id-less, cross-App query. Only the single seam module packages/db/src/repo/client.ts may import drizzle-orm/d1; everything else MUST go through createRepository, whose methods are all scope-bound.",
+      // Exempt the one legitimate importer (the seam) AND node_modules itself —
+      // drizzle-orm's own d1 submodules import each other, and that is not a
+      // bypass. Our source tree is the only subject of this rule.
+      from: { pathNot: ["^packages/db/src/repo/client\\.ts$", "/node_modules/"] },
+      // Match both the bare specifier (reported when the importer does not depend
+      // on drizzle-orm, e.g. another package) AND the resolved pnpm path
+      // (.../node_modules/drizzle-orm/d1/...), reported when the importer — like
+      // packages/db itself — does. Anchoring only the bare form would miss a
+      // bypass added INSIDE packages/db outside the seam.
+      to: { path: "(^|/)drizzle-orm/d1(/|$)" },
+    },
+    {
+      name: "no-internal-db-seam-imports",
+      severity: "error",
+      comment:
+        "The repo seam's internals (the raw client + scope-bound table builders) are private to packages/db. Outside code must import the public @splitch/db surface (createRepository, appScope, envScope), never reach into packages/db/src/repo/* directly — that is how the no-raw-client guarantee stays structural.",
+      from: { pathNot: "^packages/db/src/" },
+      to: { path: "^packages/db/src/repo/" },
+    },
+    {
       name: "worker-runtime-does-not-own-storage",
       severity: "error",
       comment:
@@ -75,6 +99,12 @@ module.exports = {
   options: {
     doNotFollow: {
       path: "node_modules",
+    },
+    // Compiled build output is an emitted copy of source already cruised; exclude
+    // it so a stale/just-built dist/ does not double-report (and so the seam's
+    // compiled client.d.ts is not mistaken for a raw-client bypass).
+    exclude: {
+      path: "(^|/)dist/",
     },
     tsPreCompilationDeps: true,
     enhancedResolveOptions: {
