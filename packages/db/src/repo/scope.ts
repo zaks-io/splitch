@@ -33,38 +33,37 @@ export type EnvScope = TenantScope & {
 };
 
 /**
- * Runtime authenticity marker. The brand above is compile-time only, so a
- * hand-forged `{ appId } as never` plain object would type-check as a scope and
- * silently bind whatever appId it carries. Every minted scope gets this
- * NON-ENUMERABLE marker (non-enumerable so it never leaks into a spread / an
- * INSERT values object), and `scopePredicate` asserts it — a forged scope fails
- * loud instead of silently scoping (fail-loud, ADR-0036).
+ * Runtime authenticity registry. The brand above is compile-time only, so a
+ * forged `{ appId } as never` plain object would type-check as a scope and
+ * silently bind whatever appId it carries. Membership lives in a module-private
+ * WeakSet, NOT as an own-property on the returned object, so a caller cannot lift
+ * or copy it onto a forged scope; the prior on-object symbol was liftable via
+ * `Object.getOwnPropertySymbols(realScope)` — any caller holding a legitimate
+ * scope (every repo caller holds their own tenant's) could read that symbol off
+ * and brand a forged scope for a victim tenant. A WeakSet keys by object
+ * identity: a real scope passes and a forged plain object fails even if it copied
+ * every visible property. `scopePredicate`/`scopeValues` assert membership — a
+ * forged scope fails loud instead of silently scoping (fail-loud, ADR-0036).
  */
-const SCOPE_MARKER = Symbol("splitch.scope");
+const MINTED = new WeakSet<object>();
 
 function brandScope<T extends object>(scope: T): T {
-  Object.defineProperty(scope, SCOPE_MARKER, {
-    value: true,
-    enumerable: false,
-    writable: false,
-    configurable: false,
-  });
-  // Freeze AFTER defining the marker so the data properties (appId /
-  // environmentId) are immutable too. TS `readonly` is compile-time only; a
-  // minted scope could otherwise be rebound at runtime — `(s as any).appId =
-  // "other-tenant"` — keeping the marker and redirecting every scoped read/write
-  // to another tenant. Frozen, that reassignment throws in strict mode (ESM is
-  // always strict). The non-enumerable marker survives the freeze, so
-  // assertMintedScope still sees it. The scope is tamper-proof after minting.
+  MINTED.add(scope);
+  // Freeze the scope so the data properties (appId / environmentId) are
+  // immutable. TS `readonly` is compile-time only; a minted scope could
+  // otherwise be rebound at runtime — `(s as any).appId = "other-tenant"` —
+  // and, being the same registered object, stay minted while redirecting every
+  // scoped read/write to another tenant. Frozen, that reassignment throws in
+  // strict mode (ESM is always strict). Freezing is orthogonal to forgeability
+  // (the WeakSet handles that); it independently blocks the mutation bug. The
+  // scope is tamper-proof after minting.
   Object.freeze(scope);
   return scope;
 }
 
 export function assertMintedScope(scope: TenantScope): void {
-  if (!(scope as Record<symbol, unknown>)[SCOPE_MARKER]) {
-    throw new Error(
-      "scope: value was not minted by appScope/envScope — a hand-forged scope is rejected",
-    );
+  if (!MINTED.has(scope)) {
+    throw new Error("scope: not minted by appScope/envScope — a forged scope is rejected");
   }
 }
 

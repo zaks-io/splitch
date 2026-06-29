@@ -3,12 +3,13 @@ import { appScope, createRepository, envScope, type TenantScope } from "../index
 import { createLocalD1, type LocalD1 } from "./test-d1.js";
 
 /**
- * Scope-tampering proofs for the two HIGH-severity isolation bypasses BugBot
- * found on the SPL-11 tenancy PR. D1 has no RLS, so the scope value object IS the
- * tenant boundary (ADR-0018). These prove a scope cannot be (1) hand-forged onto
- * the WRITE path or (2) mutated after minting to redirect a write to another
- * tenant. Every assertion reads the persisted app_id / environment_id by RAW SQL
- * — never through the scoped reader, which would re-apply the filter and hide a
+ * Scope-tampering proofs for the HIGH-severity isolation bypasses found on the
+ * SPL-11 tenancy PR. D1 has no RLS, so the scope value object IS the tenant
+ * boundary (ADR-0018). These prove a scope cannot be (1) hand-forged onto the
+ * WRITE path, (2) mutated after minting to redirect a write to another tenant, or
+ * (3) forged by lifting the authenticity marker off a legitimate scope. Every
+ * assertion reads the persisted app_id / environment_id by RAW SQL — never
+ * through the scoped reader, which would re-apply the filter and hide a
  * mis-stamp.
  */
 
@@ -103,7 +104,7 @@ describe("BUG 2 — a hand-forged (unminted) scope is rejected on the WRITE path
         createdAt: NOW,
         updatedAt: NOW,
       }),
-    ).rejects.toThrow(/hand-forged scope is rejected/);
+    ).rejects.toThrow(/forged scope is rejected/);
 
     // Raw read: nothing landed under B (or anywhere) for this id.
     expect(await rawFlagAppId(flagId)).toBeNull();
@@ -122,7 +123,81 @@ describe("BUG 2 — a hand-forged (unminted) scope is rejected on the WRITE path
         scopes: "[]",
         createdAt: NOW,
       }),
-    ).rejects.toThrow(/hand-forged scope is rejected/);
+    ).rejects.toThrow(/forged scope is rejected/);
+
+    expect(await rawApiKeyScope(keyId)).toBeNull();
+  });
+});
+
+describe("BUG 3 — a forged scope cannot be branded by lifting the marker off a real scope", () => {
+  it("a minted scope exposes NO liftable own-symbol marker", () => {
+    // The prior fix branded scopes with a non-enumerable own-property keyed by a
+    // module-private Symbol. Non-enumerable hides it from spreads/for..in, but
+    // Object.getOwnPropertySymbols() returns it regardless — so any caller could
+    // lift it. Membership now lives in a module-private WeakSet, so a minted
+    // scope carries no own-symbol an attacker could read off and replant.
+    const realScope = appScope(TA.appId);
+    expect(Object.getOwnPropertySymbols(realScope)).toHaveLength(0);
+  });
+
+  it("scopedTable.insert with a symbol-lift forged App scope throws and persists no row", async () => {
+    const flagId = "flag_lift_app";
+    const realScope = appScope(TA.appId); // attacker's OWN legitimate scope
+
+    // The exact exploit: lift any own-symbol off a legitimate scope and brand a
+    // forged plain object targeting the VICTIM tenant. Post-fix there is no
+    // liftable marker symbol, so this copies whatever own-symbols exist (none) —
+    // and even a forged object that copied every own key + symbol is rejected,
+    // because WeakSet membership is by object identity, not shape.
+    const forged: Record<PropertyKey, unknown> = { appId: TB.appId };
+    for (const sym of Object.getOwnPropertySymbols(realScope)) {
+      forged[sym] = (realScope as Record<PropertyKey, unknown>)[sym];
+    }
+    for (const key of Object.getOwnPropertyNames(realScope)) {
+      if (!(key in forged)) forged[key] = (realScope as Record<PropertyKey, unknown>)[key];
+    }
+    // appId must still target the victim even after copying real keys.
+    forged.appId = TB.appId;
+
+    await expect(
+      repo.flags.flags.insert(forged as unknown as TenantScope, {
+        id: flagId,
+        appId: TA.appId,
+        key: `${TB.flagKey}-lift`,
+        name: "lift-forged",
+        createdAt: NOW,
+        updatedAt: NOW,
+      }),
+    ).rejects.toThrow(/forged scope is rejected/);
+
+    // Raw read: nothing landed under the victim tenant B (or anywhere).
+    expect(await rawFlagAppId(flagId)).toBeNull();
+  });
+
+  it("scopedTable.insert with a symbol-lift forged Env scope throws and persists no api_key", async () => {
+    const keyId = "key_lift_env";
+    const realScope = envScope(TA.appId, TA.envId);
+
+    const forged: Record<PropertyKey, unknown> = { appId: TB.appId, environmentId: TB.envId };
+    for (const sym of Object.getOwnPropertySymbols(realScope)) {
+      forged[sym] = (realScope as Record<PropertyKey, unknown>)[sym];
+    }
+    for (const key of Object.getOwnPropertyNames(realScope)) {
+      if (!(key in forged)) forged[key] = (realScope as Record<PropertyKey, unknown>)[key];
+    }
+    forged.appId = TB.appId;
+    forged.environmentId = TB.envId;
+
+    await expect(
+      repo.credentials.apiKeys.insert(forged as unknown as TenantScope as never, {
+        keyId,
+        appId: TA.appId,
+        environmentId: TA.envId,
+        keyHash: "hash_lift",
+        scopes: "[]",
+        createdAt: NOW,
+      }),
+    ).rejects.toThrow(/forged scope is rejected/);
 
     expect(await rawApiKeyScope(keyId)).toBeNull();
   });
