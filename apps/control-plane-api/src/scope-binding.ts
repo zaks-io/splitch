@@ -1,5 +1,5 @@
 /**
- * Derive a Principal's App binding from control-plane token scopes.
+ * Derive a Principal's Org and App binding from control-plane token scopes.
  *
  * Scope format (access-control-matrix.md): `app:{app_id}:{role}` and
  * `org:{org_id}:{role}`, role ∈ {owner, admin, member}. A token may carry MANY
@@ -10,6 +10,11 @@
  * not bound to a single App, so the guard's co-scope step FORBIDs it from an
  * app-scoped route (it never silently picks one).
  *
+ * Org binding mirrors the App axis: `orgId` is the single Org the credential is
+ * bound to, meaningful only when the token names exactly one Org (the agent-first
+ * provisional Org). Zero or many Org scopes → `orgId` null, and the co-scope step
+ * FORBIDs the org-scoped route rather than silently picking one.
+ *
  * Environment binding: the token scope shape carries no `env:` axis (ADR-0027:
  * the control-plane token is App-scoped, Environment co-scope is enforced from
  * the path against the App membership, not a token env claim), so
@@ -18,17 +23,19 @@
  */
 
 export interface ScopeBinding {
+  orgId: string | null;
   appId: string | null;
   environmentId: string | null;
 }
 
 const APP_SCOPE = /^app:([^:]+):(owner|admin|member)$/;
+const ORG_SCOPE = /^org:([^:]+):(owner|admin|member)$/;
 
-/** The distinct App ids named across a token's app-scopes. */
-function appIdsInScopes(scopes: readonly string[]): Set<string> {
+/** The distinct ids named across the scopes matching `pattern`'s first group. */
+function idsInScopes(scopes: readonly string[], pattern: RegExp): Set<string> {
   const ids = new Set<string>();
   for (const scope of scopes) {
-    const match = APP_SCOPE.exec(scope);
+    const match = pattern.exec(scope);
     if (match) {
       ids.add(match[1] as string);
     }
@@ -36,12 +43,17 @@ function appIdsInScopes(scopes: readonly string[]): Set<string> {
   return ids;
 }
 
+/** Exactly one id named → bound to it. Zero or many → unbound (null). */
+function soleId(ids: Set<string>): string | null {
+  return ids.size === 1 ? ([...ids][0] as string) : null;
+}
+
 export function deriveBinding(scopes: readonly string[]): ScopeBinding {
-  const appIds = appIdsInScopes(scopes);
-  // Exactly one App named → bound to it. Zero (org token) or many (multi-App
-  // token) → unbound on the App axis (co-scope FORBIDs app-scoped routes).
-  const appId = appIds.size === 1 ? ([...appIds][0] as string) : null;
-  return { appId, environmentId: null };
+  return {
+    orgId: soleId(idsInScopes(scopes, ORG_SCOPE)),
+    appId: soleId(idsInScopes(scopes, APP_SCOPE)),
+    environmentId: null,
+  };
 }
 
 /**

@@ -83,6 +83,61 @@ describe("guard: scope + co-scope enforcement", () => {
     const res = await app.request("/apps/app_1/things");
     expect(res.status).toBe(200);
   });
+
+  it("returns FORBIDDEN on org co-scope mismatch", async () => {
+    const reg = createRegistrar(
+      deps({
+        authResolvers: { "control-plane-token": resolverFor(principal({ orgId: "org_a" })) },
+      }),
+    );
+    const app = new Hono();
+    reg.mount(
+      app,
+      route({ auth: "control-plane-token", method: "GET", path: "/orgs/:orgId" }),
+      okHandler,
+    );
+
+    // A token bound to org_a must not read org_b by path.
+    const res = await app.request("/orgs/org_b");
+    expect(res.status).toBe(403);
+    expect((await bodyOf(res)).code).toBe("FORBIDDEN");
+  });
+
+  it("returns FORBIDDEN when the principal is bound to no org (orgId null) on an org-scoped route", async () => {
+    const reg = createRegistrar(
+      deps({
+        authResolvers: { "control-plane-token": resolverFor(principal({ orgId: null })) },
+      }),
+    );
+    const app = new Hono();
+    reg.mount(
+      app,
+      route({ auth: "control-plane-token", method: "GET", path: "/orgs/:orgId" }),
+      okHandler,
+    );
+
+    // An org-unbound token must not reach an org-scoped resource.
+    const res = await app.request("/orgs/org_b");
+    expect(res.status).toBe(403);
+    expect((await bodyOf(res)).code).toBe("FORBIDDEN");
+  });
+
+  it("allows when org co-scope matches", async () => {
+    const reg = createRegistrar(
+      deps({
+        authResolvers: { "control-plane-token": resolverFor(principal({ orgId: "org_a" })) },
+      }),
+    );
+    const app = new Hono();
+    reg.mount(
+      app,
+      route({ auth: "control-plane-token", method: "GET", path: "/orgs/:orgId" }),
+      okHandler,
+    );
+
+    const res = await app.request("/orgs/org_a");
+    expect(res.status).toBe(200);
+  });
 });
 
 describe("guard: idempotency header validation", () => {

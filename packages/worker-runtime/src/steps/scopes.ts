@@ -2,13 +2,13 @@ import type { ErrorResponse, RouteContract } from "@splitch/contracts";
 import type { Principal } from "../principal.js";
 
 /**
- * Step 5. Enforce required scopes, then App/Environment co-scope (ADR-0027).
+ * Step 5. Enforce required scopes, then Org/App/Environment co-scope (ADR-0027).
  * Returns an ErrorResponse to reject, or null to proceed.
  *
  * Scope check first (INSUFFICIENT_SCOPES names what was required vs held), then
- * co-scope: where the path carries `appId`/`environmentId`, the principal must be
- * bound to the same value. A principal not bound to an axis the route scopes on
- * is FORBIDDEN, not a silent pass.
+ * co-scope: where the path carries `orgId`/`appId`/`environmentId`, the principal
+ * must be bound to the same value. A principal not bound to an axis the route
+ * scopes on is FORBIDDEN, not a silent pass.
  */
 export function enforceScopes(
   contract: RouteContract,
@@ -26,6 +26,18 @@ export function enforceScopes(
         heldScopes: [...principal.scopes],
       },
     };
+  }
+
+  // Org co-scope. The Org is the tenant boundary one level above the App, so a
+  // route that co-scopes on `:orgId` (every `/orgs/:orgId/*` operation) requires
+  // the principal to be bound to that Org. A null `orgId` means the credential is
+  // bound to NO single Org (it named zero or many Org scopes), which on an
+  // Org-scoped route is FORBIDDEN, not a silent pass: an org-unbound token must
+  // not read or manage an Org by path. This rejects before any repository call,
+  // so an org_id-less context never reaches the seam.
+  const pathOrgId = params.orgId;
+  if (pathOrgId !== undefined && principal.orgId !== pathOrgId) {
+    return forbidden("credential is not scoped to this organization");
   }
 
   // App co-scope. A null `appId` means the credential is bound to NO App (an
