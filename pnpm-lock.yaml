@@ -135,6 +135,8 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/privacy: {}
+
   packages/sdk: {}
 
   packages/ui: {}
