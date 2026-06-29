@@ -40,6 +40,8 @@ export { buildOpenApiDocument } from "./openapi-document.js";
 export type { OpenApiDocumentInfo } from "./openapi-document.js";
 export { deriveMcpTools, isMcpToolRoute } from "./mcp-tools.js";
 export type { McpToolDefinition } from "./mcp-tools.js";
+export { DeltaNudgeEntitySchema, deltaNudgeEntities, DeltaNudgeSchema } from "./delta-nudge.js";
+export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge.js";
 
 export const platformTargets = ["local", "pr-ci", "shared-preview", "production"] as const;
 
@@ -149,6 +151,7 @@ export {
   apiKeyCacheKey,
   assignmentKey,
   clientKeyCacheKey,
+  experimentConfigKey,
   flagConfigKey,
   liveRunKey,
   runConfigKey,
@@ -159,6 +162,7 @@ export {
   CredentialCacheKVSchema,
   CredentialKindSchema,
   credentialKinds,
+  CURRENT_KV_SCHEMA_VERSION,
   ExperimentConfigKVSchema,
   FlagConfigKVSchema,
   kvEnvelope,

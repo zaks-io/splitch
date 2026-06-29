@@ -106,6 +106,7 @@ const validExperimentConfig = {
   flagId: "flag_1",
   targetingKey: "userId",
   targetingKeyType: "user",
+  status: "running" as const,
   liveRunId: "run_1",
 };
 
@@ -113,6 +114,7 @@ describe("ExperimentConfigKVSchema", () => {
   it("parses a valid blob", () => {
     const cfg = ExperimentConfigKVSchema.parse(validExperimentConfig);
     expect(cfg.targetingKey).toBe("userId");
+    expect(cfg.status).toBe("running");
   });
 
   it("accepts liveRunId present-with-null (no Run live yet)", () => {
@@ -123,6 +125,17 @@ describe("ExperimentConfigKVSchema", () => {
   it("rejects an OMITTED liveRunId (nullable-not-absent)", () => {
     const { liveRunId: _liveRunId, ...partial } = validExperimentConfig;
     expect(ExperimentConfigKVSchema.safeParse(partial).success).toBe(false);
+  });
+
+  it("rejects an OMITTED status (the edge needs the lifecycle state)", () => {
+    const { status: _status, ...partial } = validExperimentConfig;
+    expect(ExperimentConfigKVSchema.safeParse(partial).success).toBe(false);
+  });
+
+  it("rejects an unknown status value (reuses the ExperimentStatus enum)", () => {
+    expect(
+      ExperimentConfigKVSchema.safeParse({ ...validExperimentConfig, status: "paused" }).success,
+    ).toBe(false);
   });
 });
 

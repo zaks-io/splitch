@@ -99,26 +99,29 @@ All KV blobs carry a `schemaVersion` field:
 
 ```
 KVEnvelope<T> {
-  schemaVersion: number   // monotonic integer; bumped on breaking schema change
-  data:          T        // the payload; Zod-validated against the versioned schema
+  schemaVersion: literal(CURRENT_KV_SCHEMA_VERSION)   // PINNED to the current version
+  data:          T                                    // the payload; Zod-validated
 }
 ```
 
-**On KV read:**
+The envelope `schemaVersion` is **pinned to the current version** (`z.literal`), not merely
+bounded below: a blob written at any other version — old or future — FAILS the envelope parse.
+The version is gated, so an unknown version can never be mistaken for current and flow into
+evaluation as if valid (fail-loud, ADR-0025/0036).
 
-1. Parse the raw blob as `KVEnvelope` (schemaVersion + data).
-2. If `schemaVersion` matches current → validate `data` against current Zod schema.
-3. If `schemaVersion` is unknown (old format or future format) → **fall back to D1** (one extra
-   hop; rebuilds KV from the authoritative source). Log the schema mismatch.
-4. If Zod parse fails (corruption) → fall back to D1. Log the error.
+**On a failed parse (unknown version OR corrupt payload), the recovery is the READER's, not the
+schema's** — and it differs by binding:
 
-Fallback to D1 is not silent — it is logged as a warning so operators can detect schema drift
-in production and schedule a KV backfill.
+- **Control-plane / DO readers (have a D1 binding):** fall back to D1 (one extra hop; rebuilds KV
+  from the authoritative source) and log the schema mismatch as a warning. Not silent — operators
+  can detect drift and schedule a KV backfill. This is what enables rolling upgrades: the writer
+  bumps the version, old readers rebuild from D1, no synchronized cutover.
+- **Evaluation edge reader (no D1 binding):** there is nothing to fall back TO, so it **fails loud
+  with `INTERNAL_SERVER_ERROR`** — the evaluate path returns the Default Variant with
+  `reason: ERROR` + the code and fires no Exposure (see [evaluation/provider-port.md](../evaluation/provider-port.md)).
+  A half-valid or wrong-version blob never reaches `assign()`.
 
-**On KV write:** always write with the current `schemaVersion`.
-
-This policy enables rolling upgrades: the writer can bump `schemaVersion` and old readers fall
-back to D1 gracefully, without a synchronized cutover.
+**On KV write:** always write with `CURRENT_KV_SCHEMA_VERSION`.
 
 ## Route metadata as runtime input
 
