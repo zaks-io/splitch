@@ -23,6 +23,20 @@ export function runConfigKey(appId: string, environmentId: string, runId: string
   return `app:${appId}:${environmentId}:run:${runId}`;
 }
 
+/**
+ * `app:{appId}:{environmentId}:experiment:{experimentId}` — ExperimentConfigKV
+ * read. Per-Environment (ADR-0027), mirroring the flag/run key shape; the edge
+ * evaluate path reads it to learn the Experiment's `targetingKey`, the id_type
+ * stamped on the Exposure, and the live Run pointer.
+ */
+export function experimentConfigKey(
+  appId: string,
+  environmentId: string,
+  experimentId: string,
+): string {
+  return `app:${appId}:${environmentId}:experiment:${experimentId}`;
+}
+
 /** `app:{appId}:{environmentId}:liveRun` — live Experiment Run pointer (LiveRunKV). */
 export function liveRunKey(appId: string, environmentId: string): string {
   return `app:${appId}:${environmentId}:liveRun`;

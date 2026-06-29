@@ -3,6 +3,7 @@ import {
   apiKeyCacheKey,
   assignmentKey,
   clientKeyCacheKey,
+  experimentConfigKey,
   flagConfigKey,
   liveRunKey,
   runConfigKey,
@@ -21,6 +22,12 @@ describe("config key-pattern constructors (per-Environment, ADR-0027)", () => {
 
   it("liveRunKey produces app:{appId}:{environmentId}:liveRun", () => {
     expect(liveRunKey("app_1", "env_prod")).toBe("app:app_1:env_prod:liveRun");
+  });
+
+  it("experimentConfigKey produces app:{appId}:{environmentId}:experiment:{experimentId}", () => {
+    expect(experimentConfigKey("app_1", "env_prod", "exp_5")).toBe(
+      "app:app_1:env_prod:experiment:exp_5",
+    );
   });
 });
 

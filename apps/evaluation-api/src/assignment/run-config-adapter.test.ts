@@ -23,6 +23,7 @@ const experimentKV: ExperimentConfigKV = {
   flagId: "flag-9",
   targetingKey: "userId",
   targetingKeyType: "user",
+  status: "running",
   liveRunId: "run-42",
 };
 
