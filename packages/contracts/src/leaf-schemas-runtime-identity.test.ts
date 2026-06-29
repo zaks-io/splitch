@@ -160,6 +160,12 @@ describe("ClientKey (public)", () => {
     const { keyMaterial: _, ...rest } = validClientKey;
     expect(ClientKeySchema.safeParse(rest).success).toBe(false);
   });
+
+  it("rejects an API Key's scopes under .strict() (keeps the leaf disjoint from APIKey)", () => {
+    expect(ClientKeySchema.safeParse({ ...validClientKey, scopes: ["flags:read"] }).success).toBe(
+      false,
+    );
+  });
 });
 
 describe("APIKey (secret)", () => {
