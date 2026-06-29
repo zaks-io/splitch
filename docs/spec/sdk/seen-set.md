@@ -34,12 +34,40 @@ incorrectly suppressed:
 Without `runId`, the key `(flagKey, targetingKey)` would suppress the Run N+1 Exposure,
 causing under-exposure in the new Run — a correctness error, not just an optimization gap.
 
+### Bounded optimistic suppression for a pure-HTTP client (revalidation TTL)
+
+The key above assumes the SDK already knows the **current** `runId` before it decides to
+suppress. A pure-HTTP client does not: the public data-plane response is the bare
+`{ variant }` (non-revealing, ADR-0018) and the SDK only learns the live `runId` **from** an
+evaluate call — the very call a seen-set hit is trying to skip. The `runId` is surfaced as
+non-revealing operational metadata alongside the body (an `X-Run-Id` response header), not
+inside it, so the response schema stays the closed `{ variant }` shape.
+
+This creates a circular dependency: keying on the **last-seen** `runId` and short-circuiting
+on it forever would make a long-lived instance (browser SPA, warm Worker — the normal case)
+**never** detect a new Run, re-introducing exactly the Run N+1 under-exposure above.
+
+The seen-set resolves this with a **revalidation window** (`revalidateMs`, default `60_000`,
+mirroring the ~60s KV config-propagation window the platform already tolerates):
+
+- A repeat **within** the window short-circuits to `CACHED` (no call, no Exposure) — the dedup
+  benefit is preserved for the hot repeat case.
+- A repeat **past** the window is treated as a **miss**: the SDK re-contacts the server, which
+  returns the current `runId` via `X-Run-Id`. A **new** `runId` there stores a new entry and
+  fires a fresh Exposure under the new Run.
+
+A Run boundary is therefore detected within **at most `revalidateMs`** (not "never", and not
+"immediately" — an HTTP client cannot detect it before any call). The per-instance / pipeline
+authority model (below) bounds the worst case: the pipeline dedup is always correct regardless
+of seen-set staleness, and the seen-set is a wire optimization, not the dedup authority.
+
 ## Capacity and eviction
 
 ```
 SeenSet config {
   maxSize:        number    -- LRU capacity; default 10,000 entries
   evictionPolicy: 'lru'     -- least-recently-used eviction when at capacity
+  revalidateMs:   number    -- revalidation window; default 60,000 (see above)
 }
 ```
 

@@ -145,7 +145,11 @@ importers:
         specifier: ^0.31.10
         version: 0.31.10
 
-  packages/sdk: {}
+  packages/sdk:
+    dependencies:
+      '@splitch/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/ui: {}
 
