@@ -15,6 +15,12 @@
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
   },
   "dependencies": {
-    "@splitch/contracts": "workspace:*"
+    "@splitch/contracts": "workspace:*",
+    "@splitch/db": "workspace:*",
+    "hono": "^4.12.27",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "miniflare": "^4.20260617.0"
   }
 }

@@ -1,0 +1,24 @@
+/**
+ * Auth API Worker bindings. The Worker keeps its own storage handles (D1 for the
+ * trusted-IdP allow-list + Org membership, KV for the jti replay cache) and never
+ * hands a raw client to a route — D1 access goes through @splitch/db
+ * `createRepository`, KV through the jti-cache helper.
+ */
+export interface AuthApiEnv {
+  /** D1 binding — wrapped by createRepository, never used raw. */
+  DB: D1Database;
+  /** KV namespace backing the jti replay cache (`jti:{jti}` keys). */
+  JTI_CACHE: KVNamespace;
+  /** This auth-api origin; every accepted ID-JAG `aud` must point here. */
+  AUTH_API_ORIGIN?: string;
+  /** Control-plane protected-resource origin stamped as the access token `aud`. */
+  CONTROL_PLANE_ORIGIN?: string;
+  /**
+   * HMAC secret for the short-lived identity_assertion (local fixture). DELIBERATELY
+   * distinct from ACCESS_TOKEN_SECRET so an assertion can never verify as a Bearer.
+   */
+  ASSERTION_SIGNING_SECRET?: string;
+  /** HMAC secret for the control-plane access token (local fixture; distinct from above). */
+  ACCESS_TOKEN_SECRET?: string;
+  SPLITCH_PLATFORM_TARGET?: string;
+}
