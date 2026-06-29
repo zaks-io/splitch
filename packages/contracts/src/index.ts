@@ -36,6 +36,10 @@ export type {
 export { defineApiRoute } from "./openapi-route.js";
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route.js";
 export { getRoute, operationIds, routeRegistry } from "./route-registry.js";
+export { buildOpenApiDocument } from "./openapi-document.js";
+export type { OpenApiDocumentInfo } from "./openapi-document.js";
+export { deriveMcpTools, isMcpToolRoute } from "./mcp-tools.js";
+export type { McpToolDefinition } from "./mcp-tools.js";
 
 export const platformTargets = ["local", "pr-ci", "shared-preview", "production"] as const;
 
