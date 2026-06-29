@@ -133,7 +133,7 @@ describe("a hand-forged (non-minted) scope is rejected at runtime", () => {
   it("a plain object masquerading as a scope fails loud", async () => {
     const forged = { appId: seed.b.appId } as never;
     await expect(repo.flags.getFlag(forged, seed.b.flagId)).rejects.toThrow(
-      /was not minted by appScope/,
+      /not minted by appScope/,
     );
   });
 });

@@ -79,11 +79,11 @@ function scopeColumns(table: AppScopedTable): ScopeColumns {
  * so a write lands in exactly the scope it was issued for.
  */
 function scopeValues(columns: ScopeColumns, scope: TenantScope): Record<string, string> {
-  // Gate the WRITE path on the mint marker, identically to scopePredicate on the
-  // read path. scopeValues is the single chokepoint every INSERT stamp flows
-  // through, so a hand-forged scope (`{ appId } as never`, no marker) that the
-  // type system can't catch fails loud HERE instead of stamping a victim
-  // tenant's app_id onto the new row (cross-tenant write, ADR-0018/0036).
+  // Gate the WRITE path on WeakSet membership, identically to scopePredicate on
+  // the read path. scopeValues is the single chokepoint every INSERT stamp flows
+  // through, so a forged scope (`{ appId } as never`, not in the mint registry)
+  // that the type system can't catch fails loud HERE instead of stamping a
+  // victim tenant's app_id onto the new row (cross-tenant write, ADR-0018/0036).
   assertMintedScope(scope);
   // Key by the Drizzle PROPERTY name (appIdKey / environmentIdKey), which is what
   // .values() reads — NOT column.name. Spread LAST at the call site so the
