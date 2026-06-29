@@ -49,10 +49,18 @@ function brandScope<T extends object>(scope: T): T {
     writable: false,
     configurable: false,
   });
+  // Freeze AFTER defining the marker so the data properties (appId /
+  // environmentId) are immutable too. TS `readonly` is compile-time only; a
+  // minted scope could otherwise be rebound at runtime — `(s as any).appId =
+  // "other-tenant"` — keeping the marker and redirecting every scoped read/write
+  // to another tenant. Frozen, that reassignment throws in strict mode (ESM is
+  // always strict). The non-enumerable marker survives the freeze, so
+  // assertMintedScope still sees it. The scope is tamper-proof after minting.
+  Object.freeze(scope);
   return scope;
 }
 
-function assertMintedScope(scope: TenantScope): void {
+export function assertMintedScope(scope: TenantScope): void {
   if (!(scope as Record<symbol, unknown>)[SCOPE_MARKER]) {
     throw new Error(
       "scope: value was not minted by appScope/envScope — a hand-forged scope is rejected",
