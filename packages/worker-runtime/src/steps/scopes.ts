@@ -28,11 +28,22 @@ export function enforceScopes(
     };
   }
 
+  // App co-scope. A null `appId` means the credential is bound to NO App (an
+  // org-level control-plane token, or a data-plane key not yet app-bound). The
+  // App IS the tenant boundary, so a route that co-scopes on `:appId` requires
+  // that binding: a null App axis is FORBIDDEN, not a silent pass (principal.ts:
+  // "a route that requires co-scope on a null axis is a FORBIDDEN"). This rejects
+  // before any repository call, so an app_id-less context never reaches the seam.
   const pathAppId = params.appId;
-  if (pathAppId !== undefined && principal.appId !== null && principal.appId !== pathAppId) {
+  if (pathAppId !== undefined && principal.appId !== pathAppId) {
     return forbidden("credential is not scoped to this app");
   }
 
+  // Environment co-scope. Unlike the App axis, a null `environmentId` is NOT a
+  // rejection: a control-plane token binds an App but selects the Environment by
+  // path within that App (ADR-0027), so it is legitimately env-unbound. Only a
+  // credential that IS bound to a specific Environment (a per-Environment
+  // data-plane key) is held to it; a mismatch there is FORBIDDEN.
   const pathEnvId = params.environmentId;
   if (
     pathEnvId !== undefined &&
