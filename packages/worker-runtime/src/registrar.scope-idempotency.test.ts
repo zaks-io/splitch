@@ -48,6 +48,25 @@ describe("guard: scope + co-scope enforcement", () => {
     expect((await bodyOf(res)).code).toBe("FORBIDDEN");
   });
 
+  it("returns FORBIDDEN when the principal is bound to no app (appId null) on an app-scoped route", async () => {
+    const reg = createRegistrar(
+      deps({
+        authResolvers: { "control-plane-token": resolverFor(principal({ appId: null })) },
+      }),
+    );
+    const app = new Hono();
+    reg.mount(
+      app,
+      route({ auth: "control-plane-token", method: "GET", path: "/apps/:appId/things" }),
+      okHandler,
+    );
+
+    const res = await app.request("/apps/app_1/things");
+    // An org-level (app-unbound) token must not reach an app-scoped resource.
+    expect(res.status).toBe(403);
+    expect((await bodyOf(res)).code).toBe("FORBIDDEN");
+  });
+
   it("allows when app co-scope matches", async () => {
     const reg = createRegistrar(
       deps({
