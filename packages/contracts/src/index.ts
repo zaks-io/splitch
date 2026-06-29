@@ -189,3 +189,61 @@ export type {
   TestEvaluationRequest,
   TestEvaluationResponse,
 } from "./wire-envelopes-core.js";
+export {
+  CreateFlagRequestSchema,
+  CreateVariantRequestSchema,
+  FlagResponseSchema,
+  PatchFlagRequestSchema,
+  PatchVariantRequestSchema,
+} from "./resource-envelopes-flag.js";
+export type {
+  CreateFlagRequest,
+  CreateVariantRequest,
+  FlagResponse,
+  PatchFlagRequest,
+  PatchVariantRequest,
+} from "./resource-envelopes-flag.js";
+export {
+  CreateExperimentRequestSchema,
+  ExperimentResponseSchema,
+  PatchExperimentRequestSchema,
+  PatchRunRequestSchema,
+  RunResponseSchema,
+  StartRunRequestSchema,
+} from "./resource-envelopes-experiment.js";
+export type {
+  CreateExperimentRequest,
+  ExperimentResponse,
+  PatchExperimentRequest,
+  PatchRunRequest,
+  RunResponse,
+  StartRunRequest,
+} from "./resource-envelopes-experiment.js";
+export {
+  AppResponseSchema,
+  CreateAppRequestSchema,
+  CreateAppResponseSchema,
+  CreateCredentialResponseSchema,
+  CreateMetricRequestSchema,
+  CredentialSchema,
+  ListCredentialsResponseSchema,
+  MetricResponseSchema,
+  OrganizationResponseSchema,
+  PatchAppRequestSchema,
+  PatchMetricRequestSchema,
+  PatchOrganizationRequestSchema,
+} from "./resource-envelopes-account.js";
+export type {
+  AppResponse,
+  CreateAppRequest,
+  CreateAppResponse,
+  CreateCredentialResponse,
+  CreateMetricRequest,
+  Credential,
+  ListCredentialsResponse,
+  MetricResponse,
+  OrganizationResponse,
+  PatchAppRequest,
+  PatchMetricRequest,
+  PatchOrganizationRequest,
+} from "./resource-envelopes-account.js";

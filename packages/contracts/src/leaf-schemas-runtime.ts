@@ -197,18 +197,26 @@ export type User = z.infer<typeof UserSchema>;
 // client code. `originAllowlist`: null = open to all origins (auto-provision
 // default, loudly flagged); [] = closed, serves nothing; non-empty = closed
 // except listed origins (ADR-0034 §1).
+//
+// `.strict()` (like APIKey) keeps the leaf a CLOSED shape: an unknown key —
+// notably an API Key's `scopes` — is REJECTED, not silently dropped. This makes
+// ClientKey and APIKey structurally DISJOINT, so the `Credential` union over them
+// cannot absorb an API-key-shaped object (one carrying a secret `keyMaterial`)
+// into the public ClientKey member. Fail loud, no secret leak (ADR-0018).
 // ---------------------------------------------------------------------------
 
-export const ClientKeySchema = z.object({
-  keyId: z.string(),
-  appId: z.string(),
-  environmentId: z.string(),
-  keyMaterial: z.string(),
-  originAllowlist: z.array(z.string()).nullable().optional(),
-  rateLimitRps: z.number().nullable().optional(),
-  revokedAt: z.string().nullable().optional(),
-  createdAt: z.string(),
-});
+export const ClientKeySchema = z
+  .object({
+    keyId: z.string(),
+    appId: z.string(),
+    environmentId: z.string(),
+    keyMaterial: z.string(),
+    originAllowlist: z.array(z.string()).nullable().optional(),
+    rateLimitRps: z.number().nullable().optional(),
+    revokedAt: z.string().nullable().optional(),
+    createdAt: z.string(),
+  })
+  .strict();
 export type ClientKey = z.infer<typeof ClientKeySchema>;
 
 // ---------------------------------------------------------------------------
