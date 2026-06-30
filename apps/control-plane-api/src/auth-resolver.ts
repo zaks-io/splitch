@@ -15,11 +15,11 @@ import type { SessionStore } from "./session-store.js";
  *   3. Session-validation hot read: a revoked session → CREDENTIAL_REVOKED. A KV
  *      fault throws (guard → 500), never a silent pass.
  *   4. Success → Principal: scopes pass through from the token, `id` = `sub`
- *      (audit/user_id), App/Env binding derived from the scopes.
+ *      (audit/user_id), Org/App/Env binding derived from the scopes.
  *
  * The resolver returns typed failures (it does NOT throw for the ordinary
  * unauthenticated/revoked cases); the registrar renders them through the shared
- * ErrorResponse. Scope matching + App/Env co-scope are the registrar's job
+ * ErrorResponse. Scope matching + Org/App/Env co-scope are the registrar's job
  * (steps/scopes.ts); this resolver only produces the Principal it feeds them.
  */
 
@@ -67,6 +67,7 @@ export function makeControlPlaneAuthResolver(deps: ControlPlaneAuthDeps): AuthRe
         kind: "control-plane-token",
         id: verified.sub,
         scopes: verified.scopes,
+        orgId: binding.orgId,
         appId: binding.appId,
         environmentId: binding.environmentId,
       },

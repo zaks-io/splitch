@@ -130,6 +130,15 @@ describe("control-plane auth middleware: authorized path", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ id: PAYMENTS.orgId, name: PAYMENTS.orgName });
   });
+
+  it("200s an Org read for a member-role token (any membership reads, per the matrix)", async () => {
+    // The org read gate is membership (co-scope), not owner/admin: a member of
+    // the org can read it (access-control-matrix.md step 4, read vs write).
+    const jwt = await token(h.signer, CAROL, [`org:${PAYMENTS.orgId}:member`]);
+    const res = await get(h.app, `/orgs/${PAYMENTS.orgId}`, jwt);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id: PAYMENTS.orgId });
+  });
 });
 
 describe("control-plane auth middleware: rejections", () => {
@@ -184,6 +193,25 @@ describe("control-plane auth middleware: rejections", () => {
     // App route BEFORE the repository is reached (no App row is ever queried).
     const jwt = await token(h.signer, CAROL, [`org:${PAYMENTS.orgId}:admin`]);
     const res = await get(h.app, `/apps/${PAYMENTS.appId}`, jwt);
+    expect(res.status).toBe(403);
+    expect((await bodyOf(res)).code).toBe("FORBIDDEN");
+  });
+
+  it("403 FORBIDDEN when a token bound to org A reads org B (cross-org read blocked)", async () => {
+    // Carol is admin on the payments org only; she must not read the analytics
+    // org by path. The org co-scope step FORBIDs it BEFORE the repository is
+    // reached (no Org row is ever queried). Distinct org ids, not identical seeds.
+    const jwt = await token(h.signer, CAROL, [`org:${PAYMENTS.orgId}:admin`]);
+    const res = await get(h.app, `/orgs/${ANALYTICS.orgId}`, jwt);
+    expect(res.status).toBe(403);
+    expect((await bodyOf(res)).code).toBe("FORBIDDEN");
+  });
+
+  it("403 FORBIDDEN when an App-only token (org-unbound) reads an Org", async () => {
+    // Alice's token names an App but no Org → orgId null → the org co-scope step
+    // FORBIDs the org read rather than silently allowing an org-unbound token.
+    const jwt = await token(h.signer, ALICE, [appAdminScope(PAYMENTS.appId)]);
+    const res = await get(h.app, `/orgs/${PAYMENTS.orgId}`, jwt);
     expect(res.status).toBe(403);
     expect((await bodyOf(res)).code).toBe("FORBIDDEN");
   });
