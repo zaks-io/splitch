@@ -104,6 +104,7 @@ const SCHEMA = [
 export interface LocalBindings {
   d1: D1Database;
   kv: KVNamespace;
+  sessionKv: KVNamespace;
   dispose: () => Promise<void>;
 }
 
@@ -113,14 +114,15 @@ export async function makeLocalBindings(): Promise<LocalBindings> {
     modules: true,
     script: "export default {};",
     d1Databases: { DB: ":memory:" },
-    kvNamespaces: { JTI_CACHE: "jti" },
+    kvNamespaces: { JTI_CACHE: "jti", SESSION_STORE: "sessions" },
   });
   const d1 = (await mf.getD1Database("DB")) as unknown as D1Database;
   const kv = (await mf.getKVNamespace("JTI_CACHE")) as unknown as KVNamespace;
+  const sessionKv = (await mf.getKVNamespace("SESSION_STORE")) as unknown as KVNamespace;
   for (const statement of SCHEMA) {
     await d1.exec(statement);
   }
-  return { d1, kv, dispose: () => mf.dispose() };
+  return { d1, kv, sessionKv, dispose: () => mf.dispose() };
 }
 
 /**

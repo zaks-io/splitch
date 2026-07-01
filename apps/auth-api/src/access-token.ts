@@ -19,6 +19,7 @@
 export interface VerifiedActor {
   userId: string;
   scopes: string[];
+  expiresAt: number;
 }
 
 function base64UrlToBytes(input: string): Uint8Array {
@@ -87,5 +88,6 @@ export async function verifyAccessToken(
   return {
     userId: claims.sub,
     scopes: Array.isArray(claims.scopes) ? (claims.scopes as string[]) : [],
+    expiresAt: claims.exp,
   };
 }

@@ -79,7 +79,7 @@ const workers = [
   },
 ];
 
-const args = process.argv.slice(2);
+const args = process.argv.slice(2).filter((arg) => arg !== "--");
 const selected = selectWorkers(args.length === 0 ? ["api"] : args);
 const smokeIp = process.env.SPLITCH_SMOKE_IP ?? "127.0.0.1";
 const smokeHost = process.env.SPLITCH_SMOKE_HOST ?? (smokeIp === "0.0.0.0" ? "127.0.0.1" : smokeIp);

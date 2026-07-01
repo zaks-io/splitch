@@ -1,14 +1,16 @@
 /**
  * Auth API Worker bindings. The Worker keeps its own storage handles (D1 for the
- * trusted-IdP allow-list + Org membership, KV for the jti replay cache) and never
- * hands a raw client to a route — D1 access goes through @splitch/db
- * `createRepository`, KV through the jti-cache helper.
+ * trusted-IdP allow-list + Org membership, KV for the jti replay cache and
+ * session revocation markers) and never hands a raw client to a route — D1
+ * access goes through @splitch/db `createRepository`, KV through small helpers.
  */
 export interface AuthApiEnv {
   /** D1 binding — wrapped by createRepository, never used raw. */
   DB: D1Database;
   /** KV namespace backing the jti replay cache (`jti:{jti}` keys). */
   JTI_CACHE: KVNamespace;
+  /** KV namespace shared with control-plane session validation (`revoked:{sub}`). */
+  SESSION_STORE: KVNamespace;
   /** This auth-api origin; every accepted ID-JAG `aud` must point here. */
   AUTH_API_ORIGIN?: string;
   /** Control-plane protected-resource origin stamped as the access token `aud`. */
@@ -20,5 +22,11 @@ export interface AuthApiEnv {
   ASSERTION_SIGNING_SECRET?: string;
   /** HMAC secret for the control-plane access token (local fixture; distinct from above). */
   ACCESS_TOKEN_SECRET?: string;
+  /** WorkOS client id used by the device-flow proxy. */
+  WORKOS_CLIENT_ID?: string;
+  /** WorkOS API key used for server-side refresh-token session revocation. */
+  WORKOS_API_KEY?: string;
+  /** WorkOS user-management API base URL; defaults to the public WorkOS API. */
+  WORKOS_API_BASE_URL?: string;
   SPLITCH_PLATFORM_TARGET?: string;
 }

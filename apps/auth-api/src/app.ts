@@ -2,15 +2,18 @@ import type { Repository } from "@splitch/db";
 import { Hono } from "hono";
 import { verifyAccessToken } from "./access-token.js";
 import { type ClaimDeps, initiateClaim, verifyClaim } from "./claim.js";
+import type { DeviceFlowPort } from "./device-flow.js";
+import type { DeviceRefreshSessionStore } from "./device-session-store.js";
 import { type IdJagDeps, verifyIdJag } from "./idjag-verify.js";
 import { OAuthError, renderOAuthError } from "./oauth-errors.js";
+import { mountOAuthRoutes } from "./oauth-routes.js";
 import { type RegisterDeps, registerAnonymous } from "./register.js";
+import type { RevocationStore } from "./revocation.js";
 import {
   AgentIdentityRequestSchema,
   AnonymousIdentityRequestSchema,
   ClaimRequestSchema,
   CreateTrustedIdpRequestSchema,
-  TokenExchangeRequestSchema,
 } from "./schemas.js";
 import type { TokenSigner } from "./token-exchange.js";
 import { makeTrustedIdpCrud } from "./trusted-idp-crud.js";
@@ -27,8 +30,6 @@ import { makeTrustedIdpCrud } from "./trusted-idp-crud.js";
  * own Org-owner authz in the CRUD layer (single-sourced on D1 membership).
  */
 
-const ACCESS_TOKEN_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
-
 export interface AppDeps {
   idJag: IdJagDeps;
   tokenSigner: TokenSigner;
@@ -41,6 +42,12 @@ export interface AppDeps {
   accessSecret: string;
   /** Audience the access token must bind to (control-plane protected-resource origin). */
   controlPlaneAudience: string;
+  /** Door C device-flow adapter (real WorkOS in deployed envs, fixture in tests/local). */
+  deviceFlow: DeviceFlowPort;
+  /** Maps issued device refresh tokens to provider sessions without rotating them. */
+  deviceRefreshSessions: DeviceRefreshSessionStore;
+  /** Shared revocation marker writer/reader for control-plane access tokens. */
+  revocations: RevocationStore;
   now: () => number;
 }
 
@@ -53,6 +60,8 @@ export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
   const crud = makeTrustedIdpCrud(deps.repo, deps.now);
   const nowSeconds = () => Math.floor(deps.now() / 1000);
+
+  mountOAuthRoutes(app, deps);
 
   // --- Doors A + B: /agent/identity (presence of `id_jag` selects the door) ---
   app.post("/agent/identity", async (c) => {
@@ -94,31 +103,6 @@ export function createApp(deps: AppDeps): Hono {
       assertion_present: Boolean(new URL(c.req.raw.url).searchParams.get("identity_assertion")),
     }),
   );
-
-  // --- /oauth2/token: exchange the assertion for a control-plane token --------
-  app.post("/oauth2/token", async (c) => {
-    const parsed = TokenExchangeRequestSchema.safeParse(await readJson(c.req.raw));
-    if (!parsed.success) {
-      return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/token body"));
-    }
-    if (parsed.data.grant_type !== ACCESS_TOKEN_GRANT) {
-      return renderOAuthError(
-        new OAuthError(
-          "unsupported_grant_type",
-          `grant_type "${parsed.data.grant_type}" not supported`,
-        ),
-      );
-    }
-    try {
-      const accessToken = await deps.tokenSigner.exchangeForAccessToken(
-        parsed.data.identity_assertion,
-        nowSeconds(),
-      );
-      return Response.json({ access_token: accessToken, token_type: "Bearer", expires_in: 3600 });
-    } catch (cause) {
-      return renderDoorFault(cause);
-    }
-  });
 
   // --- Trusted-IdP CRUD (Org owner only, control-plane shape) -----------------
   app.get("/orgs/:orgId/trusted-idps", async (c) =>
@@ -250,6 +234,9 @@ async function withActor(
     Math.floor(deps.now() / 1000),
   );
   if (!actor) {
+    return errorResponse(401, "UNAUTHORIZED");
+  }
+  if (await deps.revocations.isRevoked(actor.userId)) {
     return errorResponse(401, "UNAUTHORIZED");
   }
   return run(actor.userId);

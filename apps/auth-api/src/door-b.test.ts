@@ -1,7 +1,10 @@
 import { createRepository } from "@splitch/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
+import { makeFixtureDeviceFlow } from "./device-flow.js";
+import { makeKvDeviceRefreshSessionStore } from "./device-session-store.js";
 import { makeJtiCache } from "./jti-cache.js";
+import { makeKvRevocationStore } from "./revocation.js";
 import { makeTokenSigner, type TokenSigner } from "./token-exchange.js";
 import {
   type DoorBFixtures,
@@ -72,6 +75,9 @@ function build(opts?: Parameters<typeof makeDoorBDeps>[2]): {
     controlPlaneAudience: CP_AUDIENCE,
     now: () => NOW_MS,
     tokenSigner: signer,
+    deviceFlow: makeFixtureDeviceFlow(),
+    deviceRefreshSessions: makeKvDeviceRefreshSessionStore(local.sessionKv),
+    revocations: makeKvRevocationStore(local.sessionKv),
     idJag: {
       repo,
       jtiCache: makeJtiCache(local.kv),

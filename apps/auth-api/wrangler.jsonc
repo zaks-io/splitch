@@ -9,7 +9,8 @@
     "head_sampling_rate": 1
   },
   // D1 carries the trusted-IdP allow-list + Org membership (accessed only through
-  // @splitch/db createRepository). KV backs the jti replay cache (`jti:{jti}`).
+  // @splitch/db createRepository). KV backs the jti replay cache (`jti:{jti}`)
+  // and the shared control-plane session revocation markers (`revoked:{sub}`).
   "d1_databases": [
     {
       "binding": "DB",
@@ -20,6 +21,10 @@
   "kv_namespaces": [
     {
       "binding": "JTI_CACHE",
+      "id": "00000000000000000000000000000000"
+    },
+    {
+      "binding": "SESSION_STORE",
       "id": "00000000000000000000000000000000"
     }
   ],
