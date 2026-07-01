@@ -15,6 +15,19 @@ function blankEmails(value: unknown): unknown {
   return value;
 }
 
+function blankContext(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(blankContext);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [
+        k,
+        k === "context" ? "[Redacted]" : blankContext(v),
+      ]),
+    );
+  }
+  return value;
+}
+
 describe("scrubEmbeddedJson", () => {
   it("scrubs a JSON object embedded after a prose prefix", () => {
     const input = `failed for ${JSON.stringify({ email: "x@y.com", id: 1 })}`;
@@ -65,8 +78,24 @@ describe("scrubEmbeddedJson", () => {
     expect(out.includes("leak@evil.com")).toBe(false);
   });
 
+  it("scrubs over-cap stringified Evaluation Context with custom attributes", () => {
+    const plan = "enterprise-secret-plan";
+    const cohort = "holdout-cohort";
+    const payload = JSON.stringify({
+      context: { plan, cohort },
+      padding: "x".repeat(5_000),
+    });
+
+    expect(payload.length).toBeGreaterThan(4_096);
+    const out = scrubEmbeddedJson(`failed for ${payload}`, blankContext);
+
+    expect(out.includes(plan)).toBe(false);
+    expect(out.includes(cohort)).toBe(false);
+    expect(out.includes('"context":"[Redacted]"')).toBe(true);
+  });
+
   // DoS regression: a long run of unparseable braces used to be O(n²) (each brace
-  // rescanned to end-of-string). The length cap bounds the worst case.
+  // rescanned to end-of-string). The single-pass scanner bounds the worst case.
   it("scrubs an adversarial brace-run string in well under 50ms", () => {
     const adversarial = "{".repeat(80_000);
     const start = performance.now();

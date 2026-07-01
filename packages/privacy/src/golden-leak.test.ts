@@ -7,6 +7,7 @@
  *   - nested breadcrumb `data` (container + key-name redaction)
  *   - `extra` Evaluation Context
  *   - stringified-JSON exception message
+ *   - over-cap stringified Evaluation Context with custom attributes
  *   - JSON with a stray prose brace before it (embedded-json greedy-balance bug)
  *   - BARE interpolation in breadcrumb `message`, exception `value`, top-level
  *     `message` (value-pattern pass)
@@ -23,6 +24,7 @@ import { scrubSentryEvent, type SentryEventLike } from "./sentry-scrubber.js";
 const CANARY_EMAIL = "canary-leak@example.com";
 const CANARY_TARGETING_KEY = "tk-canary-targeting-key";
 const CANARY_PHONE = "555-867-5309";
+const CANARY_CUSTOM_ATTRIBUTE = "enterprise-secret-plan";
 
 // A Worker registers its Targeting Key value shape so bare interpolation is caught.
 const OPTIONS: ScrubOptions = { extraPatterns: [/tk-[a-z0-9-]+/gi] };
@@ -141,5 +143,27 @@ describe("golden-leak canary", () => {
     };
     const serialized = JSON.stringify(scrubSentryEvent(event, OPTIONS));
     expect(serialized.includes(CANARY_EMAIL)).toBe(false);
+  });
+
+  it("redacts over-cap stringified Evaluation Context custom attributes before emission", () => {
+    const cohort = "private-cohort-name";
+    const payload = JSON.stringify({
+      context: {
+        plan: CANARY_CUSTOM_ATTRIBUTE,
+        cohort,
+      },
+      padding: "x".repeat(5_000),
+    });
+    const event: SentryEventLike = {
+      exception: {
+        values: [{ type: "Error", value: `evaluate failed ${payload}` }],
+      },
+    };
+
+    expect(payload.length).toBeGreaterThan(4_096);
+    const serialized = JSON.stringify(scrubSentryEvent(event, OPTIONS));
+
+    expect(serialized.includes(CANARY_CUSTOM_ATTRIBUTE)).toBe(false);
+    expect(serialized.includes(cohort)).toBe(false);
   });
 });

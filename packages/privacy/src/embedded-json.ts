@@ -13,58 +13,33 @@
 
 type ScrubJson = (parsed: unknown) => unknown;
 
-/**
- * Above this length we SKIP the embedded-JSON scan. The balanced-brace retry is
- * O(n²) on an adversarial run of unparseable braces (`{{{{…`), which an attacker
- * who can get untrusted input into an exception message could use to pin Worker
- * CPU. The cap bounds that worst case to a few ms. A real stringified context is
- * well under 4 KB; legitimate payloads stay under the cap. Over-cap strings still
- * pass through the linear value-pattern scrubber, so PII shapes (email/phone/
- * Targeting Key) are caught regardless.
- */
-const MAX_EMBEDDED_SCAN_LEN = 4_096;
-
-interface Scan {
+interface Span {
+  start: number;
   end: number;
-  matched: boolean;
+}
+
+interface StackEntry {
+  start: number;
+  close: string;
 }
 
 interface ScanState {
-  depth: number;
+  spans: Span[];
+  stack: StackEntry[];
   inString: boolean;
   escaped: boolean;
 }
 
-/** Advance the string-aware scanner one char; returns the nesting delta (-1/0/1). */
-function step(state: ScanState, ch: string, open: string, close: string): number {
-  if (state.escaped) {
-    state.escaped = false;
-    return 0;
-  }
-  if (ch === "\\") {
-    state.escaped = true;
-    return 0;
-  }
-  if (ch === '"') {
-    state.inString = !state.inString;
-    return 0;
-  }
-  if (state.inString) return 0;
-  if (ch === open) return 1;
-  if (ch === close) return -1;
-  return 0;
+function isWhitespace(ch: string | undefined): boolean {
+  return ch === " " || ch === "\n" || ch === "\r" || ch === "\t";
 }
 
-/** Walk from an opening brace/bracket to its balanced close, honoring strings. */
-function findBalancedEnd(input: string, start: number, open: string, close: string): Scan {
-  const state: ScanState = { depth: 0, inString: false, escaped: false };
+function nextNonWhitespace(input: string, start: number): string | undefined {
   for (let i = start; i < input.length; i++) {
-    state.depth += step(state, input[i] as string, open, close);
-    if (state.depth === 0 && !state.inString && !state.escaped) {
-      return { end: i, matched: true };
-    }
+    const ch = input[i];
+    if (!isWhitespace(ch)) return ch;
   }
-  return { end: input.length, matched: false };
+  return undefined;
 }
 
 function tryScrubSpan(span: string, scrub: ScrubJson): string | undefined {
@@ -81,38 +56,103 @@ function openerFor(ch: string | undefined): string | undefined {
   return undefined;
 }
 
+function canStartJson(input: string, start: number, open: string): boolean {
+  const next = nextNonWhitespace(input, start + 1);
+  if (open === "{") {
+    return next === "}" || next === '"';
+  }
+  return (
+    next === "]" ||
+    next === "{" ||
+    next === "[" ||
+    next === '"' ||
+    next === "-" ||
+    next === "t" ||
+    next === "f" ||
+    next === "n" ||
+    (next !== undefined && next >= "0" && next <= "9")
+  );
+}
+
+function advanceString(state: ScanState, ch: string): boolean {
+  if (state.stack.length === 0 || !state.inString) return false;
+  if (state.escaped) {
+    state.escaped = false;
+  } else if (ch === "\\") {
+    state.escaped = true;
+  } else if (ch === '"') {
+    state.inString = false;
+  }
+  return true;
+}
+
+function startString(state: ScanState, ch: string): boolean {
+  if (state.stack.length === 0 || ch !== '"') return false;
+  state.inString = true;
+  return true;
+}
+
+function pushJsonOpener(state: ScanState, input: string, index: number, ch: string): boolean {
+  const close = openerFor(ch);
+  if (close === undefined || !canStartJson(input, index, ch)) return false;
+  state.stack.push({ start: index, close });
+  return true;
+}
+
+function closeTopSpan(state: ScanState, ch: string, index: number): void {
+  const top = state.stack.at(-1);
+  if (top?.close !== ch) return;
+
+  const span = state.stack.pop();
+  if (span !== undefined) {
+    state.spans.push({ start: span.start, end: index });
+  }
+  if (state.stack.length === 0) {
+    state.inString = false;
+    state.escaped = false;
+  }
+}
+
+function collectJsonSpans(input: string): Span[] {
+  const state: ScanState = { spans: [], stack: [], inString: false, escaped: false };
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i] as string;
+    if (advanceString(state, ch)) continue;
+    if (startString(state, ch)) continue;
+    if (pushJsonOpener(state, input, i, ch)) continue;
+    closeTopSpan(state, ch, i);
+  }
+
+  return state.spans.sort((a, b) => a.start - b.start || b.end - a.end);
+}
+
 /**
  * Replace every balanced JSON object/array span inside `value` with its scrubbed
  * form. `scrub` redacts the parsed structure (the package's shared scrubber).
  *
- * On a span that does NOT parse as JSON (e.g. a stray prose brace before the real
- * object: `{not json {"email":"x"}}`), we emit just the opening char and advance
- * by ONE — so the scanner re-tries from the NEXT inner opening brace and still
- * finds the real JSON. Skipping the whole balanced region would leak it.
+ * The scan is one pass over plausible JSON spans. A stray prose brace before the
+ * real object (`{not json {"email":"x"}}`) is not treated as JSON, so the inner
+ * object is still found without retrying from every brace.
  */
 export function scrubEmbeddedJson(value: string, scrub: ScrubJson): string {
-  if (value.length > MAX_EMBEDDED_SCAN_LEN) {
-    return value;
-  }
+  const spans = collectJsonSpans(value);
+  if (spans.length === 0) return value;
+
   let result = "";
-  let i = 0;
-  while (i < value.length) {
-    const ch = value[i];
-    const close = openerFor(ch);
-    if (close === undefined) {
-      result += ch;
-      i++;
-      continue;
-    }
-    const { end, matched } = findBalancedEnd(value, i, ch as string, close);
-    const scrubbed = matched ? tryScrubSpan(value.slice(i, end + 1), scrub) : undefined;
-    if (scrubbed === undefined) {
-      result += ch;
-      i++;
-      continue;
-    }
+  let cursor = 0;
+
+  for (const span of spans) {
+    if (span.start < cursor) continue;
+
+    const scrubbed = tryScrubSpan(value.slice(span.start, span.end + 1), scrub);
+    if (scrubbed === undefined) continue;
+
+    result += value.slice(cursor, span.start);
     result += scrubbed;
-    i = end + 1;
+    cursor = span.end + 1;
   }
-  return result;
+
+  if (cursor === 0) return value;
+  return result + value.slice(cursor);
 }
