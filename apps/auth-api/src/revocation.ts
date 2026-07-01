@@ -7,6 +7,7 @@
  */
 
 const REVOKED_PREFIX = "revoked:";
+const MIN_KV_EXPIRATION_TTL_SECONDS = 60;
 
 export interface RevocationStore {
   revoke(subject: string, ttlSeconds: number): Promise<void>;
@@ -20,7 +21,7 @@ function revocationKey(subject: string): string {
 export function makeKvRevocationStore(kv: KVNamespace): RevocationStore {
   return {
     async revoke(subject, ttlSeconds) {
-      const expirationTtl = Math.max(1, Math.ceil(ttlSeconds));
+      const expirationTtl = Math.max(MIN_KV_EXPIRATION_TTL_SECONDS, Math.ceil(ttlSeconds));
       await kv.put(revocationKey(subject), "1", { expirationTtl });
     },
 

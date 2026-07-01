@@ -95,15 +95,19 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
       return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/revoke body"));
     }
 
-    const actor = await verifyAccessToken(
-      `Bearer ${parsed.data.token}`,
-      { accessSecret: deps.accessSecret, controlPlaneAudience: deps.controlPlaneAudience },
-      nowSeconds(),
-    );
-    if (actor) {
-      await deps.revocations.revoke(actor.userId, actor.expiresAt - nowSeconds());
-    } else if (deps.deviceFlow.revokeProviderToken) {
-      await deps.deviceFlow.revokeProviderToken(parsed.data.token);
+    try {
+      const actor = await verifyAccessToken(
+        `Bearer ${parsed.data.token}`,
+        { accessSecret: deps.accessSecret, controlPlaneAudience: deps.controlPlaneAudience },
+        nowSeconds(),
+      );
+      if (actor) {
+        await deps.revocations.revoke(actor.userId, actor.expiresAt - nowSeconds());
+      } else {
+        await deps.deviceFlow.revokeProviderToken(parsed.data.token);
+      }
+    } catch (cause) {
+      return renderDoorFault(cause);
     }
 
     return new Response(null, { status: 200 });

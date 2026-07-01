@@ -62,6 +62,7 @@ export default {
     const deviceFlow = env.WORKOS_CLIENT_ID
       ? makeWorkOsDeviceFlow({
           clientId: env.WORKOS_CLIENT_ID,
+          apiKey: env.WORKOS_API_KEY,
           baseUrl: env.WORKOS_API_BASE_URL,
         })
       : makeFixtureDeviceFlow();

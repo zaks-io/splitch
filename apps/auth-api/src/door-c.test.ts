@@ -96,7 +96,13 @@ async function formPost(
   });
 }
 
-async function mintDeviceToken(app: ReturnType<typeof buildApp>): Promise<string> {
+interface MintedDeviceToken {
+  accessToken: string;
+  refreshToken: string;
+  deviceCode: string;
+}
+
+async function mintDeviceToken(app: ReturnType<typeof buildApp>): Promise<MintedDeviceToken> {
   const auth = await formPost(app, "/oauth2/device_authorization", { client_id: "splitch-cli" });
   expect(auth.status).toBe(200);
   const grant = (await auth.json()) as { device_code: string };
@@ -115,7 +121,11 @@ async function mintDeviceToken(app: ReturnType<typeof buildApp>): Promise<string
   expect(body.token_type).toBe("Bearer");
   expect(body.refresh_token).toBe("fixture-refresh-token");
   expect(body.access_token.split(".")).toHaveLength(3);
-  return body.access_token;
+  return {
+    accessToken: body.access_token,
+    refreshToken: body.refresh_token,
+    deviceCode: grant.device_code,
+  };
 }
 
 describe("Door C discovery and device flow", () => {
@@ -158,7 +168,7 @@ describe("Door C discovery and device flow", () => {
 
   it("revoking a token makes the protected route reject it with 401", async () => {
     const app = buildApp();
-    const accessToken = await mintDeviceToken(app);
+    const { accessToken } = await mintDeviceToken(app);
     const headers = { authorization: `Bearer ${accessToken}` };
 
     const before = await app.request(`/orgs/${ORG}/trusted-idps`, { headers });
@@ -173,5 +183,24 @@ describe("Door C discovery and device flow", () => {
     const after = await app.request(`/orgs/${ORG}/trusted-idps`, { headers });
     expect(after.status).toBe(401);
     expect((await after.json()) as { code: string }).toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("revokes refresh tokens through the provider path", async () => {
+    const app = buildApp();
+    const { deviceCode, refreshToken } = await mintDeviceToken(app);
+
+    const revoke = await formPost(app, "/oauth2/revoke", {
+      token: refreshToken,
+      token_type_hint: "refresh_token",
+    });
+    expect(revoke.status).toBe(200);
+
+    const token = await formPost(app, "/oauth2/token", {
+      grant_type: DEVICE_CODE_GRANT,
+      device_code: deviceCode,
+      client_id: "splitch-cli",
+    });
+    expect(token.status).toBe(400);
+    expect(await token.json()).toMatchObject({ error: "authorization_pending" });
   });
 });

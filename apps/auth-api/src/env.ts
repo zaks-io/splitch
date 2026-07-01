@@ -24,6 +24,8 @@ export interface AuthApiEnv {
   ACCESS_TOKEN_SECRET?: string;
   /** WorkOS client id used by the device-flow proxy. */
   WORKOS_CLIENT_ID?: string;
+  /** WorkOS API key used for server-side refresh-token session revocation. */
+  WORKOS_API_KEY?: string;
   /** WorkOS user-management API base URL; defaults to the public WorkOS API. */
   WORKOS_API_BASE_URL?: string;
   SPLITCH_PLATFORM_TARGET?: string;
