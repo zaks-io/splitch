@@ -74,6 +74,26 @@ export function makeFlagRepo(db: Db) {
       return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
     },
 
+    async updateFlagConfig(
+      scope: EnvScope,
+      flagId: string,
+      patch: Partial<
+        Pick<
+          typeof flagConfigs.$inferInsert,
+          "enabled" | "availableVariantNames" | "defaultVariantId" | "updatedAt" | "version"
+        >
+      >,
+    ): Promise<typeof flagConfigs.$inferSelect | null> {
+      const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
+      if (!current) return null;
+      const rows = await flagConfigsTable.update(
+        scope,
+        { ...patch, version: current.version + 1 },
+        eq(flagConfigs.flagId, flagId),
+      );
+      return rows[0] ?? null;
+    },
+
     listTargetingRules(scope: EnvScope, flagId: string) {
       return targetingRulesTable.findMany(scope, eq(targetingRules.flagId, flagId));
     },

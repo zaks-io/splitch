@@ -1,3 +1,5 @@
+import type { ConfigStoreDurableObjectNamespace } from "./config-store-do.js";
+
 /**
  * Control Plane API Worker bindings.
  *
@@ -13,6 +15,10 @@ export interface ControlPlaneApiEnv {
   DB: D1Database;
   /** KV namespace backing the session-validation hot read (revocation markers). */
   SESSION_STORE: KVNamespace;
+  /** KV namespace backing schema-versioned config cache reads. */
+  CONFIG_STORE: KVNamespace;
+  /** Per-App/Environment config writer and live-update nudge fan-out. */
+  CONFIG_STORE_WRITER: ConfigStoreDurableObjectNamespace;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */
   CONTROL_PLANE_ORIGIN?: string;
   /** Auth-api JWKS endpoint the control-plane token signature is verified against. */

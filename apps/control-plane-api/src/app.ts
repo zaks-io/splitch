@@ -7,6 +7,7 @@ import {
   type RegistrarDeps,
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
+import type { ConfigStoreAccess } from "./config-store-do.js";
 import { makeHandlers } from "./handlers.js";
 import { controlPlaneRoute } from "./routes.js";
 
@@ -34,6 +35,7 @@ export interface AppDeps {
   authResolver: AuthResolver;
   rateLimiter: RateLimiter;
   repo: Repository;
+  configStore?: ConfigStoreAccess;
   defaultHeaders?: Record<string, string>;
 }
 
@@ -49,11 +51,13 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
 
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
-  const handlers = makeHandlers({ repo: deps.repo });
+  const handlers = makeHandlers({ repo: deps.repo, configStore: deps.configStore });
   const registrar = controlPlaneRegistrar(deps);
 
   registrar.mount(app, controlPlaneRoute("apps_get"), handlers.getApp);
   registrar.mount(app, controlPlaneRoute("organizations_get"), handlers.getOrg);
+  registrar.mount(app, controlPlaneRoute("flag_config_get"), handlers.getFlagConfig);
+  registrar.mount(app, controlPlaneRoute("flag_config_update"), handlers.updateFlagConfig);
 
   return app;
 }

@@ -2,6 +2,7 @@ import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import { createApp } from "./app.js";
 import { makeControlPlaneAuthResolver } from "./auth-resolver.js";
+import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do.js";
 import type { ControlPlaneApiEnv } from "./env.js";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify.js";
 import { failClosedRateLimiter } from "./rate-limit.js";
@@ -40,6 +41,7 @@ export default {
       }),
       rateLimiter: failClosedRateLimiter,
       repo: createRepository(env.DB),
+      configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
     });
 
     return app.fetch(request, env);
@@ -49,3 +51,5 @@ export default {
     ctx.waitUntil(Promise.resolve(console.log(`${service}: demo reaper ${event.cron}`)));
   },
 } satisfies ExportedHandler<ControlPlaneApiEnv>;
+
+export { ConfigStoreDurableObject };
