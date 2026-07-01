@@ -10,7 +10,7 @@
  * (or our own code) adds a new field that carries PII. Scrub-by-default + a small
  * allow-list is fail-safe: a new field is redacted until someone deliberately
  * vouches for it. The operational allow-list is how the error stays reportable
- * (event_id, level, sdk, release, tags like app_id, user.id-as-operator, etc.) —
+ * (event_id, level, sdk, release, user.id-as-operator, etc.) —
  * see docs/spec/frontend/observability-pii-scrubbing.md "What is NOT scrubbed".
  */
 
@@ -37,7 +37,6 @@ const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
   "transaction",
   "transaction_info",
   "fingerprint",
-  "tags",
 ]);
 
 /**

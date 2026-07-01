@@ -23,6 +23,35 @@ describe("scrubSentryEvent allow-list traversal", () => {
     expect(scrubbed.transaction).toBe("GET /x");
   });
 
+  it("scrubs PII inside tags while preserving safe operational tags", () => {
+    const scrubbed = scrubSentryEvent(
+      {
+        tags: {
+          appId: "app_1",
+          orgId: "org_1",
+          role: "admin",
+          targetingKey: "tk-secret",
+          email: "leak@evil.com",
+          context: { plan: "enterprise-secret-plan" },
+        },
+      },
+      { extraPatterns: [/tk-secret/g] },
+    );
+
+    const tags = scrubbed.tags as Record<string, unknown>;
+    expect(tags.appId).toBe("app_1");
+    expect(tags.orgId).toBe("org_1");
+    expect(tags.role).toBe("admin");
+    expect(tags.targetingKey).toBe("[Redacted]");
+    expect(tags.email).toBe("[Redacted]");
+    expect(tags.context).toBe("[Redacted]");
+
+    const serialized = JSON.stringify(scrubbed);
+    expect(serialized.includes("tk-secret")).toBe(false);
+    expect(serialized.includes("leak@evil.com")).toBe(false);
+    expect(serialized.includes("enterprise-secret-plan")).toBe(false);
+  });
+
   it("traverses request.data, cookies, and headers", () => {
     const scrubbed = scrubSentryEvent({
       request: {
