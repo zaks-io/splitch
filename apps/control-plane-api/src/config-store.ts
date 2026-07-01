@@ -23,6 +23,7 @@ import { appScope, envScope, type EnvScope, type Repository } from "@splitch/db"
 interface FlagConfigResult {
   flagId: string;
   environmentId: string;
+  version: number;
   enabled: boolean;
   availableVariantNames: string[];
   targetingRules: TargetingRule[];
@@ -61,6 +62,7 @@ interface Snapshot {
   flag: FlagConfigKV;
   experiment: ExperimentConfigKV | null;
   run: RunConfigKV | null;
+  version: number;
 }
 
 const FlagConfigEnvelope = kvEnvelope(FlagConfigKVSchema);
@@ -210,6 +212,7 @@ async function buildSnapshotFromD1(
           startedAt: run.startedAt,
         })
       : null,
+    version: config.version,
   };
 }
 
@@ -242,6 +245,7 @@ function responseFromSnapshot(snapshot: Snapshot): FlagConfigResult {
   return {
     flagId: snapshot.flag.id,
     environmentId: snapshot.flag.environmentId,
+    version: snapshot.version,
     enabled: snapshot.flag.enabled,
     availableVariantNames: snapshot.flag.availableVariantNames,
     targetingRules: snapshot.flag.targetingRules,

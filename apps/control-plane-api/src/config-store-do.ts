@@ -5,11 +5,20 @@ import { makeConfigStore, type ConfigStoreWriter } from "./config-store.js";
 import type { ControlPlaneApiEnv } from "./env.js";
 
 export interface ConfigStoreDurableObjectNamespace {
-  getByName(name: string): unknown;
+  getByName(name: string): ConfigStoreDurableObjectStub;
+}
+
+interface ConfigStoreDurableObjectStub extends ConfigStoreWriter {
+  fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+}
+
+interface ConfigStoreLiveUpdates {
+  connect(request: Request): Promise<Response>;
 }
 
 export interface ConfigStoreAccess {
   writerFor(appId: string, environmentId: string): ConfigStoreWriter;
+  liveUpdatesFor(appId: string, environmentId: string): ConfigStoreLiveUpdates;
 }
 
 function configWriterName(appId: string, environmentId: string): string {
@@ -21,7 +30,14 @@ export function durableConfigStoreAccess(
 ): ConfigStoreAccess {
   return {
     writerFor(appId, environmentId) {
-      return namespace.getByName(configWriterName(appId, environmentId)) as ConfigStoreWriter;
+      return namespace.getByName(configWriterName(appId, environmentId));
+    },
+    liveUpdatesFor(appId, environmentId) {
+      return {
+        connect(request) {
+          return namespace.getByName(configWriterName(appId, environmentId)).fetch(request);
+        },
+      };
     },
   };
 }
@@ -42,6 +58,24 @@ export class ConfigStoreDurableObject
     return this.store().writeFlagConfig(input);
   }
 
+  override fetch(request: Request): Response {
+    if (request.method !== "GET" || request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+      return new Response("expected WebSocket upgrade", { status: 426 });
+    }
+
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
+    this.ctx.acceptWebSocket(server);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  override webSocketMessage(): void {}
+
+  override webSocketClose(): void {}
+
+  override webSocketError(): void {}
+
   private store(): ConfigStoreWriter {
     return makeConfigStore({
       repo: createRepository(this.env.DB),
@@ -53,11 +87,12 @@ export class ConfigStoreDurableObject
 
   private broadcast(nudge: DeltaNudge): void {
     const payload = JSON.stringify(nudge);
-    const state = this.ctx as DurableObjectState & {
-      getWebSockets?: () => WebSocket[];
-    };
-    for (const socket of state.getWebSockets?.() ?? []) {
-      socket.send(payload);
+    for (const socket of this.ctx.getWebSockets()) {
+      try {
+        socket.send(payload);
+      } catch (cause) {
+        console.warn("config_store_live_update_send_failed", { cause });
+      }
     }
   }
 }
