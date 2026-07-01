@@ -121,6 +121,13 @@ importers:
       '@splitch/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@splitch/privacy':
+        specifier: workspace:*
+        version: link:../../packages/privacy
+    devDependencies:
+      miniflare:
+        specifier: ^4.20260617.0
+        version: 4.20260617.0
 
   apps/event-ingest-api:
     dependencies:
