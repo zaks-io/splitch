@@ -220,8 +220,19 @@ real package API boundary.
   `Scan for secrets` steps (the `Scan` step runs `pnpm secrets:range`, scoped to
   the PR/push commit range, not the whole tree). The standalone `gitleaks`
   workflow was removed to stop running the same scan twice.
-- CodeRabbit config source: none (`.coderabbit.yaml` absent).
-- CodeRabbit auto-review: unknown (no config).
+- CodeRabbit config source: root `.coderabbit.yaml`.
+- CodeRabbit auto-review and incremental re-review: disabled. Request explicitly
+  with a top-level PR comment (`@coderabbitai review` or
+  `@coderabbitai full review`) or the PR-description marker
+  `@coderabbitai review`.
+- CodeRabbit review scope adds repo-specific ignores for cache/build output,
+  mutation reports, generated type files, skills lock state, and Drizzle
+  migration metadata snapshots. CodeRabbit's own default ignores still cover
+  dependency folders, lockfiles, binaries, generated directories, and media.
+- CodeRabbit tools explicitly enabled to match repo gates: GitHub Checks, Biome,
+  Gitleaks/Betterleaks, repo-local Semgrep, OSV Scanner, Trivy, actionlint, and
+  zizmor.
+- CodeRabbit may use Linear knowledge-base context for team key `SPL`.
 
 ## Environments
 
