@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+reviews:
+  auto_review:
+    enabled: false
+    description_keyword: "@coderabbitai review"
+    auto_incremental_review: false
+  path_filters:
+    - "!**/.turbo/**"
+    - "!**/.wrangler/**"
+    - "!**/.tinyb/**"
+    - "!**/.output/**"
+    - "!**/build/**"
+    - "!**/coverage/**"
+    - "!reports/mutation/**"
+    - "!**/.stryker-tmp/**"
+    - "!**/worker-configuration.d.ts"
+    - "!**/*.gen.ts"
+    - "!skills-lock.json"
+    - "!packages/db/migrations/meta/*_snapshot.json"
+    - "!packages/db/migrations/meta/_journal.json"
+  tools:
+    github-checks:
+      enabled: true
+    biome:
+      enabled: true
+    gitleaks:
+      enabled: true
+    semgrep:
+      enabled: true
+      config_file: ".semgrep/splitch.yml"
+    osvScanner:
+      enabled: true
+    trivy:
+      enabled: true
+    actionlint:
+      enabled: true
+    zizmor:
+      enabled: true
+
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - "CONTEXT.md"
+      - "docs/vision.md"
+      - "docs/agents/workflow/config.md"
+      - "apps/**/CONTEXT.md"
+      - "packages/**/CONTEXT.md"
+  linear:
+    usage: "enabled"
+    team_keys:
+      - SPL
