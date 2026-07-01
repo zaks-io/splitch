@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import {
   appMemberships,
   apps,
+  deviceRefreshSessions,
   environments,
   organizations,
   orgMemberships,
@@ -155,6 +156,30 @@ export function makeIdentityRepo(db: Db) {
         .where(and(eq(organizations.id, orgId), eq(organizations.isProvisional, true)))
         .returning();
       return rows.length;
+    },
+
+    rememberDeviceRefreshSession(values: typeof deviceRefreshSessions.$inferInsert) {
+      return db
+        .insert(deviceRefreshSessions)
+        .values(values)
+        .onConflictDoUpdate({
+          target: deviceRefreshSessions.refreshTokenHash,
+          set: {
+            providerSessionId: values.providerSessionId,
+            createdAt: values.createdAt,
+          },
+        });
+    },
+
+    async getDeviceRefreshSession(
+      refreshTokenHash: string,
+    ): Promise<typeof deviceRefreshSessions.$inferSelect | null> {
+      const rows = await db
+        .select()
+        .from(deviceRefreshSessions)
+        .where(eq(deviceRefreshSessions.refreshTokenHash, refreshTokenHash))
+        .limit(1);
+      return rows[0] ?? null;
     },
   };
 }

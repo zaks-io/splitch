@@ -99,6 +99,7 @@ const SCHEMA = [
   `CREATE TABLE app_memberships (app_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (app_id, user_id))`,
   `CREATE TABLE environments (id TEXT PRIMARY KEY NOT NULL, app_id TEXT NOT NULL, key TEXT NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX environments_app_key_unique ON environments (app_id, key)`,
+  `CREATE TABLE device_refresh_sessions (refresh_token_hash TEXT PRIMARY KEY NOT NULL, provider_session_id TEXT NOT NULL, created_at TEXT NOT NULL)`,
 ];
 
 export interface LocalBindings {

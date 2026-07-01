@@ -2,7 +2,7 @@ import { createRepository } from "@splitch/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
 import { DEVICE_CODE_GRANT, makeFixtureDeviceFlow } from "./device-flow.js";
-import { makeKvDeviceRefreshSessionStore } from "./device-session-store.js";
+import { makeD1DeviceRefreshSessionStore } from "./device-session-store.js";
 import { makeJtiCache } from "./jti-cache.js";
 import { makeKvRevocationStore } from "./revocation.js";
 import { makeTokenSigner, type TokenSigner } from "./token-exchange.js";
@@ -68,7 +68,10 @@ function buildApp() {
     register: doorB.register,
     claim: doorB.claim,
     deviceFlow: makeFixtureDeviceFlow(),
-    deviceRefreshSessions: makeKvDeviceRefreshSessionStore(local.sessionKv),
+    deviceRefreshSessions: makeD1DeviceRefreshSessionStore(repo, {
+      cache: local.sessionKv,
+      now: () => NOW_MS,
+    }),
     revocations: makeKvRevocationStore(local.sessionKv),
   });
 }

@@ -2,7 +2,7 @@ import { createRepository } from "@splitch/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
 import { makeFixtureDeviceFlow } from "./device-flow.js";
-import { makeKvDeviceRefreshSessionStore } from "./device-session-store.js";
+import { makeD1DeviceRefreshSessionStore } from "./device-session-store.js";
 import { makeJtiCache } from "./jti-cache.js";
 import { makeKvRevocationStore } from "./revocation.js";
 import type { Jwks } from "./jwks.js";
@@ -34,11 +34,7 @@ const GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
 let local: LocalBindings;
 let keys: FixtureKeypair;
 
-/**
- * Seed the issuer as a GLOBAL seed (org_id NULL). The ID-JAG door lookup is
- * global-seed-only by design (auth-doors.md carries no org context), so a tenant
- * row would NOT be honored here — see the cross-tenant impersonation test.
- */
+// Seed a global issuer; tenant issuer rows are covered by the cross-tenant test.
 async function seedIdp(_jwks: Jwks, enabled: boolean): Promise<void> {
   await local.d1
     .prepare("DELETE FROM trusted_idps WHERE issuer = ? AND org_id IS NULL")
@@ -80,7 +76,10 @@ function buildApp(jwksOverride?: Jwks) {
     register: doorB.register,
     claim: doorB.claim,
     deviceFlow: makeFixtureDeviceFlow(),
-    deviceRefreshSessions: makeKvDeviceRefreshSessionStore(local.sessionKv),
+    deviceRefreshSessions: makeD1DeviceRefreshSessionStore(repo, {
+      cache: local.sessionKv,
+      now: () => NOW_MS,
+    }),
     revocations: makeKvRevocationStore(local.sessionKv),
   });
 }

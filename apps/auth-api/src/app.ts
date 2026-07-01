@@ -44,7 +44,7 @@ export interface AppDeps {
   controlPlaneAudience: string;
   /** Door C device-flow adapter (real WorkOS in deployed envs, fixture in tests/local). */
   deviceFlow: DeviceFlowPort;
-  /** Maps issued device refresh tokens to provider sessions without rotating them. */
+  /** Resolves provider refresh tokens to provider session ids for fail-loud revoke. */
   deviceRefreshSessions: DeviceRefreshSessionStore;
   /** Shared revocation marker writer/reader for control-plane access tokens. */
   revocations: RevocationStore;

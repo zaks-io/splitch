@@ -252,7 +252,8 @@ export function makeWorkOsDeviceFlow(opts: WorkOsDeviceFlowOptions): DeviceFlowP
 export function makeFixtureDeviceFlow(): DeviceFlowPort {
   const approvedDeviceCode = "fixture-approved-device-code";
   const refreshToken = "fixture-refresh-token";
-  const revokedRefreshTokens = new Set<string>();
+  const providerSessionId = "fixture-device-session";
+  const revokedProviderSessions = new Set<string>();
 
   return {
     async authorizeDevice() {
@@ -267,19 +268,22 @@ export function makeFixtureDeviceFlow(): DeviceFlowPort {
     },
 
     async exchangeDeviceCode(params) {
-      if (params.deviceCode !== approvedDeviceCode || revokedRefreshTokens.has(refreshToken)) {
+      if (
+        params.deviceCode !== approvedDeviceCode ||
+        revokedProviderSessions.has(providerSessionId)
+      ) {
         throw new OAuthError("authorization_pending", "device grant is not approved");
       }
       return {
         userId: "user_device_fixture",
         refreshToken,
-        providerSessionId: "fixture-device-session",
+        providerSessionId,
         scopes: splitScopes(params.scope),
       };
     },
 
-    async revokeProviderToken({ token }) {
-      revokedRefreshTokens.add(token);
+    async revokeProviderToken({ sessionId }) {
+      revokedProviderSessions.add(sessionId);
     },
   };
 }

@@ -9,6 +9,7 @@
 export {
   apps,
   appMemberships,
+  deviceRefreshSessions,
   environments,
   organizations,
   orgMemberships,

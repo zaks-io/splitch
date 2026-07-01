@@ -113,8 +113,21 @@ describe("runs storage-only decision columns", () => {
 });
 
 describe("full table corpus", () => {
-  it("emits all 18 D1 tables", () => {
+  it("emits all 19 D1 tables", () => {
     const createCount = (migrationSql.match(/CREATE TABLE /g) ?? []).length;
-    expect(createCount).toBe(18);
+    expect(createCount).toBe(19);
+  });
+});
+
+describe("device refresh session storage", () => {
+  const block = tableBlock(migrationSql, "device_refresh_sessions");
+
+  it("stores provider session id keyed by a refresh token hash", () => {
+    expect(block).toContain("`refresh_token_hash`");
+    expect(block).toContain("`provider_session_id`");
+  });
+
+  it("does not add a raw refresh_token column", () => {
+    expect(block).not.toContain("`refresh_token`");
   });
 });
