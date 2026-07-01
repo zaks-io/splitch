@@ -40,8 +40,13 @@ function scrubObject(
 ): Record<string, Json> {
   const output: Record<string, Json> = {};
   for (const [key, value] of Object.entries(input)) {
-    output[key] =
-      isContainerKey(key) || isLeafPiiKey(key) ? REDACTED : scrubValue(value, options, depth + 1);
+    Object.defineProperty(output, key, {
+      value:
+        isContainerKey(key) || isLeafPiiKey(key) ? REDACTED : scrubValue(value, options, depth + 1),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
   return output;
 }

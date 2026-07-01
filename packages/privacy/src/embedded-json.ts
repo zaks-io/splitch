@@ -8,10 +8,14 @@
  * a string with a non-JSON prefix. We find each balanced `{...}` / `[...]` span
  * (respecting quoting/escapes so braces inside strings don't fool us), parse it,
  * hand it to the injected scrubber, and splice the redacted JSON back in. Spans
- * that don't parse are left verbatim.
+ * that don't parse are left verbatim until a bounded fail-safe cap is reached.
  */
 
+import { REDACTED } from "./redaction-rules.js";
+
 type ScrubJson = (parsed: unknown) => unknown;
+
+const MAX_FAILED_PARSE_ATTEMPTS = 32;
 
 interface Span {
   start: number;
@@ -141,12 +145,19 @@ export function scrubEmbeddedJson(value: string, scrub: ScrubJson): string {
 
   let result = "";
   let cursor = 0;
+  let failedParses = 0;
 
   for (const span of spans) {
     if (span.start < cursor) continue;
 
     const scrubbed = tryScrubSpan(value.slice(span.start, span.end + 1), scrub);
-    if (scrubbed === undefined) continue;
+    if (scrubbed === undefined) {
+      failedParses += 1;
+      if (failedParses >= MAX_FAILED_PARSE_ATTEMPTS) {
+        return REDACTED;
+      }
+      continue;
+    }
 
     result += value.slice(cursor, span.start);
     result += scrubbed;

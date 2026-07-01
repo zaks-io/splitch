@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeTargetingKeyHash, keyVersionOf } from "./hash.js";
-import type { KeyVersion, SaltStore } from "./salt-store.js";
+import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store.js";
 
 // Obvious fake test salts — NOT real secrets. Keyed per (app, version).
 const FAKE_SALTS: Record<string, Record<string, string>> = {
@@ -18,7 +18,7 @@ function fakeStore(current: Record<string, KeyVersion>): SaltStore {
     async saltFor(appId, keyVersion) {
       const salt = FAKE_SALTS[appId]?.[keyVersion];
       if (salt === undefined) throw new Error(`no salt for ${appId}/${keyVersion}`);
-      return new TextEncoder().encode(salt);
+      return new TextEncoder().encode(salt) as SaltBytes;
     },
   };
 }
@@ -71,6 +71,24 @@ describe("computeTargetingKeyHash", () => {
     expect(all.size).toBe(4);
   });
 
+  it("fails loud when idType is empty or contains the hash-message separator", async () => {
+    await expect(
+      computeTargetingKeyHash(store, { appId: "app_a", idType: "", targetingKey: "u1" }),
+    ).rejects.toThrow(/idType/);
+    await expect(
+      computeTargetingKeyHash(store, { appId: "app_a", idType: "user:email", targetingKey: "u1" }),
+    ).rejects.toThrow(/idType/);
+  });
+
+  it("allows separators inside the targetingKey without changing the idType boundary", async () => {
+    const hash = await computeTargetingKeyHash(store, {
+      appId: "app_a",
+      idType: "user",
+      targetingKey: "tenant:region:user-123",
+    });
+    expect(hash.startsWith("v2:")).toBe(true);
+  });
+
   it("recomputes the same hash for a pinned historical version (lazy rotation)", async () => {
     const input = { appId: "app_a", idType: "user", targetingKey: "u1", keyVersion: "v1" } as const;
     const first = await computeTargetingKeyHash(store, input);
@@ -96,7 +114,7 @@ describe("computeTargetingKeyHash", () => {
         return "v1";
       },
       async saltFor() {
-        return new Uint8Array();
+        return new Uint8Array() as SaltBytes;
       },
     };
     await expect(

@@ -16,6 +16,9 @@
 /** A salt version label, e.g. `"v1"`. It is the literal prefix on the hash. */
 export type KeyVersion = string;
 
+/** Raw HMAC key material backed by an ArrayBuffer, as required by WebCrypto. */
+export type SaltBytes = Uint8Array<ArrayBuffer>;
+
 /**
  * Resolves App-scoped secret salt material. Implementations back this with a
  * Worker secret / KV / DO. Async because edge secret reads are async; callers
@@ -34,5 +37,5 @@ export interface SaltStore {
    * version is unknown for the App — a wrong or empty salt silently corrupts
    * every derived hash and breaks export/delete matching.
    */
-  saltFor(appId: string, keyVersion: KeyVersion): Promise<Uint8Array>;
+  saltFor(appId: string, keyVersion: KeyVersion): Promise<SaltBytes>;
 }

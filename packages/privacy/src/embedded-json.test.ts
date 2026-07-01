@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { scrubEmbeddedJson } from "./embedded-json.js";
+import { REDACTED } from "./redaction-rules.js";
 
 // Fake scrubber: blanks out any `email` value, recursing through objects/arrays.
 function blankEmails(value: unknown): unknown {
@@ -26,6 +27,14 @@ function blankContext(value: unknown): unknown {
     );
   }
   return value;
+}
+
+function nestedTrailingCommaJson(depth: number): string {
+  let json = JSON.stringify({ email: "leak@evil.com" });
+  for (let i = 0; i < depth; i++) {
+    json = `{"nested":${json},}`;
+  }
+  return json;
 }
 
 describe("scrubEmbeddedJson", () => {
@@ -102,5 +111,15 @@ describe("scrubEmbeddedJson", () => {
     scrubEmbeddedJson(adversarial, blankEmails);
     const elapsed = performance.now() - start;
     expect(elapsed).toBeLessThan(50);
+  });
+
+  it("bounds deeply nested trailing-comma JSON parse retries", () => {
+    const adversarial = nestedTrailingCommaJson(1_000);
+    const start = performance.now();
+    const out = scrubEmbeddedJson(adversarial, blankEmails);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(50);
+    expect(out).toBe(REDACTED);
+    expect(out.includes("leak@evil.com")).toBe(false);
   });
 });

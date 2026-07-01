@@ -52,6 +52,28 @@ describe("scrubSentryEvent allow-list traversal", () => {
     expect(serialized.includes("enterprise-secret-plan")).toBe(false);
   });
 
+  it("scrubs fingerprint values instead of allowing the whole field verbatim", () => {
+    const scrubbed = scrubSentryEvent(
+      {
+        fingerprint: [
+          "{{ default }}",
+          "tk-secret",
+          { context: { plan: "enterprise-secret-plan" } },
+        ],
+      },
+      { extraPatterns: [/tk-secret/g] },
+    );
+
+    expect(scrubbed.fingerprint).toEqual([
+      "{{ default }}",
+      "[Redacted]",
+      { context: "[Redacted]" },
+    ]);
+    const serialized = JSON.stringify(scrubbed);
+    expect(serialized.includes("tk-secret")).toBe(false);
+    expect(serialized.includes("enterprise-secret-plan")).toBe(false);
+  });
+
   it("traverses request.data, cookies, and headers", () => {
     const scrubbed = scrubSentryEvent({
       request: {

@@ -18,7 +18,7 @@
  * prefix that lets export/delete recompute the right hash per active salt.
  */
 
-import type { KeyVersion, SaltStore } from "./salt-store.js";
+import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store.js";
 
 const HMAC_PARAMS = { name: "HMAC", hash: "SHA-256" } as const;
 
@@ -31,16 +31,24 @@ function toHex(buffer: ArrayBuffer): string {
   return hex;
 }
 
-async function hmacSha256Hex(salt: Uint8Array, message: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    salt as unknown as BufferSource,
-    HMAC_PARAMS,
-    false,
-    ["sign"],
-  );
+async function hmacSha256Hex(salt: SaltBytes, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", salt, HMAC_PARAMS, false, ["sign"]);
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
   return toHex(signature);
+}
+
+function validateIdType(idType: string): void {
+  if (idType.length === 0) {
+    throw new Error("privacy: idType must not be empty");
+  }
+  if (idType.includes(":")) {
+    throw new Error("privacy: idType must not contain ':'");
+  }
+}
+
+function targetingHashMessage(idType: string, targetingKey: string): string {
+  validateIdType(idType);
+  return `${idType}:${targetingKey}`;
 }
 
 export interface TargetingKeyHashInput {
@@ -69,7 +77,7 @@ export async function computeTargetingKeyHash(
   if (salt.length === 0) {
     throw new Error(`privacy: empty salt for app=${input.appId} version=${keyVersion}`);
   }
-  const digest = await hmacSha256Hex(salt, `${input.idType}:${input.targetingKey}`);
+  const digest = await hmacSha256Hex(salt, targetingHashMessage(input.idType, input.targetingKey));
   return `${keyVersion}:${digest}`;
 }
 

@@ -36,7 +36,6 @@ const ALLOWED_TOP_LEVEL_KEYS = new Set<string>([
   "sdk",
   "transaction",
   "transaction_info",
-  "fingerprint",
 ]);
 
 /**

@@ -39,6 +39,20 @@ describe("scrubValue", () => {
     expect(out.a.b.targetingKey).toBe(REDACTED);
   });
 
+  it("preserves __proto__ as an own scrubbed key without mutating the output prototype", () => {
+    const input = JSON.parse('{"__proto__":{"email":"proto@example.com"}}') as Record<
+      string,
+      unknown
+    >;
+    const out = scrubValue(input) as Record<string, unknown>;
+    const descriptor = Object.getOwnPropertyDescriptor(out, "__proto__");
+
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+    expect(descriptor?.enumerable).toBe(true);
+    expect((descriptor?.value as Record<string, unknown>).email).toBe(REDACTED);
+    expect(JSON.stringify(out).includes("proto@example.com")).toBe(false);
+  });
+
   it("recurses through arrays of objects", () => {
     const out = scrubValue({
       users: [{ email: "a@x.com" }, { email: "b@x.com", role: "admin" }],
