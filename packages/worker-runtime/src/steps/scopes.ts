@@ -2,13 +2,13 @@ import type { ErrorResponse, RouteContract } from "@splitch/contracts";
 import type { Principal } from "../principal.js";
 
 /**
- * Step 5. Enforce required scopes, then App/Environment co-scope (ADR-0027).
+ * Step 5. Enforce required scopes, then Org/App/Environment co-scope (ADR-0027).
  * Returns an ErrorResponse to reject, or null to proceed.
  *
  * Scope check first (INSUFFICIENT_SCOPES names what was required vs held), then
- * co-scope: where the path carries `appId`/`environmentId`, the principal must be
- * bound to the same value. A principal not bound to an axis the route scopes on
- * is FORBIDDEN, not a silent pass.
+ * co-scope: where the path carries `orgId`/`appId`/`environmentId`, the principal
+ * must be bound to the same value. A principal not bound to an axis the route
+ * scopes on is FORBIDDEN, not a silent pass.
  */
 export function enforceScopes(
   contract: RouteContract,
@@ -28,11 +28,34 @@ export function enforceScopes(
     };
   }
 
+  // Org co-scope. The Org is the tenant boundary one level above the App, so a
+  // route that co-scopes on `:orgId` (every `/orgs/:orgId/*` operation) requires
+  // the principal to be bound to that Org. A null `orgId` means the credential is
+  // bound to NO single Org (it named zero or many Org scopes), which on an
+  // Org-scoped route is FORBIDDEN, not a silent pass: an org-unbound token must
+  // not read or manage an Org by path. This rejects before any repository call,
+  // so an org_id-less context never reaches the seam.
+  const pathOrgId = params.orgId;
+  if (pathOrgId !== undefined && principal.orgId !== pathOrgId) {
+    return forbidden("credential is not scoped to this organization");
+  }
+
+  // App co-scope. A null `appId` means the credential is bound to NO App (an
+  // org-level control-plane token, or a data-plane key not yet app-bound). The
+  // App IS the tenant boundary, so a route that co-scopes on `:appId` requires
+  // that binding: a null App axis is FORBIDDEN, not a silent pass (principal.ts:
+  // "a route that requires co-scope on a null axis is a FORBIDDEN"). This rejects
+  // before any repository call, so an app_id-less context never reaches the seam.
   const pathAppId = params.appId;
-  if (pathAppId !== undefined && principal.appId !== null && principal.appId !== pathAppId) {
+  if (pathAppId !== undefined && principal.appId !== pathAppId) {
     return forbidden("credential is not scoped to this app");
   }
 
+  // Environment co-scope. Unlike the App axis, a null `environmentId` is NOT a
+  // rejection: a control-plane token binds an App but selects the Environment by
+  // path within that App (ADR-0027), so it is legitimately env-unbound. Only a
+  // credential that IS bound to a specific Environment (a per-Environment
+  // data-plane key) is held to it; a mismatch there is FORBIDDEN.
   const pathEnvId = params.environmentId;
   if (
     pathEnvId !== undefined &&

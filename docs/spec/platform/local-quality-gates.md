@@ -23,7 +23,7 @@ Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 > | CodeQL                                                              | `codeql.yml`               | flip triggers to `pull_request`/`push`           |
 > | OSV-Scanner / Trivy / Scorecard                                     | `security.yml`             | flip `security.yml` triggers                     |
 > | pnpm install quarantine (`minimumReleaseAge`, `blockExoticSubdeps`) | `pnpm-workspace.yaml`      | uncomment the four keys                          |
-> | smoke / depcruise / jscpd / d1 / tinybird in pre-push               | `verify:push`              | restore once apps/migrations exist               |
+> | smoke / depcruise / jscpd / tinybird in pre-push                    | `verify:push`              | restore once apps/project files exist            |
 >
 > The `security:full` script still runs the SAST + pin + audit + secret battery on demand. The rest of
 > this file describes the **target** gates; treat the table above as the current reality where they differ.
@@ -101,8 +101,9 @@ target. See [agent-verification.md](./agent-verification.md).
 
 `pre-push` mirrors CI without smoke tests:
 
-- **Build-fast phase:** `verify:push` runs the same lean set as `verify:commit` (format check, lint,
-  typecheck, Knip, Gitleaks). The fuller sequence below is the target once the app exists.
+- **Build-fast phase:** `verify:push` runs the lean static set (format check, lint, typecheck, Knip,
+  Gitleaks) plus the real local D1 migration gate (`d1:migrate:local`, SPL-9). The fuller sequence
+  below is the target once the app exists.
 - **Target sequence** (restored at lockdown / as apps and migrations land): format check, lint,
   typecheck, tests, build, local API Worker smoke, dependency-cruiser, jscpd, Knip, Gitleaks, local D1
   migrations, and Tinybird Local validation.
@@ -164,9 +165,13 @@ Gitleaks is required in commit, pre-push, and CI gates.
 ## D1 and Tinybird local policy
 
 `pnpm d1:migrate:local` and `pnpm tinybird:local` are wired into `verify:push` and `verify:ci`.
-During the scaffold they skip with an explicit message because no committed D1 migrations or
-Tinybird project files exist yet. Once those files land, these scripts must become failing validators,
-not best-effort warnings.
+
+`pnpm d1:migrate:local` is now a real failing validator (SPL-9): committed `@splitch/db` Drizzle
+migrations exist, so it runs `wrangler d1 migrations apply --local` against a fresh local Miniflare D1
+and exits non-zero on a malformed/duplicate-column migration. It is no longer a best-effort skip.
+
+`pnpm tinybird:local` still skips with an explicit message because no committed Tinybird project files
+exist yet. Once `tinybird/` lands, it must become a failing validator too, not a best-effort warning.
 
 ## Local Worker smoke policy
 
@@ -202,7 +207,9 @@ health smoke.
 - [x] Install Lefthook during setup through `prepare`.
 - [x] Wire CI to call `pnpm verify:ci` and the pre-push hook to call `pnpm verify:push`.
 - [x] Keep remote-mutating smoke/deploy steps outside commit and pre-push hooks.
-- [ ] Replace D1 and Tinybird skip guards with real validators when those project files exist.
+- [x] Replace the D1 skip guard with a real validator (SPL-9: `@splitch/db` migrations + real
+      `wrangler d1 migrations apply --local`).
+- [ ] Replace the Tinybird skip guard with a real validator when `tinybird/` project files exist.
 
 ## Sources
 

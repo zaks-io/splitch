@@ -9,16 +9,20 @@ must not expose. Every Zod-parsed surface is listed here. (ADR-0025 "reuse at th
 
 ## KV namespaces (Zod-parsed on every read)
 
-Every KV value is a JSON blob Zod-parsed on read. A malformed blob fails loud with
-`INTERNAL_SERVER_ERROR` — never a partial valid object flowing into evaluation.
+Every KV value is a JSON blob Zod-parsed on read inside a `schemaVersion` envelope whose version is
+**pinned to the current version** (`z.literal`, see `CURRENT_KV_SCHEMA_VERSION`). A malformed blob OR
+an unknown/future schema version fails loud — on the evaluation edge (no D1 binding) that is
+`INTERNAL_SERVER_ERROR`, never a partial or wrong-version object flowing into evaluation; a
+control-plane reader rebuilds from D1 instead (see [../platform/contracts-and-validation.md](../platform/contracts-and-validation.md)).
 (ADR-0025 "every KV read is Zod-parsed, including hot-path reads".)
 
-| Namespace key pattern                        | Value schema        | TTL                          | Notes                                                                        |
-| -------------------------------------------- | ------------------- | ---------------------------- | ---------------------------------------------------------------------------- |
-| `app:{appId}:{environmentId}:flag:{flagKey}` | `FlagConfigKV`      | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027)  |
-| `app:{appId}:{environmentId}:run:{runId}`    | `RunConfigKV`       | none                         | Hot-path live Experiment Run read; per-Environment (ADR-0027)                |
-| `cred:{hash}`                                | `CredentialCacheKV` | 60s                          | Credential validation cache; evicted on revoke                               |
-| `app:{appId}:{environmentId}:liveRun`        | `{ runId: string }` | none                         | Written on Start; edge reads this to know the live Experiment Run (ADR-0027) |
+| Namespace key pattern                                   | Value schema         | TTL                          | Notes                                                                        |
+| ------------------------------------------------------- | -------------------- | ---------------------------- | ---------------------------------------------------------------------------- |
+| `app:{appId}:{environmentId}:flag:{flagKey}`            | `FlagConfigKV`       | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027)  |
+| `app:{appId}:{environmentId}:run:{runId}`               | `RunConfigKV`        | none                         | Hot-path live Experiment Run read; per-Environment (ADR-0027)                |
+| `app:{appId}:{environmentId}:experiment:{experimentId}` | `ExperimentConfigKV` | none (invalidated on change) | Edge `getExperiment` read; per-Environment (ADR-0027)                        |
+| `cred:{hash}`                                           | `CredentialCacheKV`  | 60s                          | Credential validation cache; evicted on revoke                               |
+| `app:{appId}:{environmentId}:liveRun`                   | `{ runId: string }`  | none                         | Written on Start; edge reads this to know the live Experiment Run (ADR-0027) |
 
 ### FlagConfigKV
 
@@ -81,9 +85,14 @@ control plane. Edge evaluate path reads it from `ExperimentConfigKV` (see below)
   flagId:           string
   targetingKey:     string         // Evaluation Context field name to bucket on (e.g. "userId")
   targetingKeyType: string         // Entity type label stamped as id_type on Exposure (e.g. "user")
+  status:           'draft' | 'running' | 'ended'   // lifecycle state; reuses the Experiment leaf's ExperimentStatus
   liveRunId:        string | null
 }
 ```
+
+`status` is carried so the resolved `ExperimentConfig` view (provider-port.md marks it Required) is
+hydrated in the one `getExperiment` read — the edge never needs a second resolution to learn whether
+the Experiment is live. It reuses the Experiment-leaf `ExperimentStatus` enum, never a redefined set.
 
 ### CredentialCacheKV
 

@@ -1,0 +1,31 @@
+{
+  "name": "@splitch/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist coverage",
+    "db:generate": "drizzle-kit generate",
+    "lint": "biome lint src",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10",
+    "miniflare": "^4.20260617.0"
+  }
+}

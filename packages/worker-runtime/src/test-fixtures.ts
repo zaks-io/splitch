@@ -44,6 +44,7 @@ export function principal(overrides: Partial<Principal> = {}): Principal {
     kind: "control-plane-token",
     id: "actor_1",
     scopes: [],
+    orgId: null,
     appId: null,
     environmentId: null,
     ...overrides,

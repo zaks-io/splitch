@@ -1,5 +1,15 @@
 import { z } from "zod";
+import { ExperimentStatusSchema } from "./leaf-schemas-experiment.js";
 import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag.js";
+
+/**
+ * The one schema version every KV blob is written and read at. The envelope below
+ * pins `schemaVersion` to this literal, so a blob written at any OTHER version
+ * (old or future) FAILS the parse loudly rather than being mistaken for current
+ * (fail-loud, ADR-0025/0036). Bumping the on-disk shape is a deliberate edit to
+ * this constant plus a writer/reader rollout, never a silently-tolerated drift.
+ */
+export const CURRENT_KV_SCHEMA_VERSION = 1;
 
 /**
  * Canonical Zod schemas for every KV value blob plus the schemaVersion envelope.
@@ -80,7 +90,10 @@ export type RunConfigKV = z.infer<typeof RunConfigKVSchema>;
 //
 // The Experiment-level fields the edge evaluate path needs that are NOT on the
 // Run: which Evaluation Context field to bucket on, the id_type label stamped on
-// the Exposure, and the live Run pointer (present-with-null before first Start).
+// the Exposure, the lifecycle `status` the resolved ExperimentConfig view
+// surfaces (provider-port.md marks it Required), and the live Run pointer
+// (present-with-null before first Start). `status` reuses the Experiment leaf's
+// ExperimentStatus enum so the edge never redefines the lifecycle states.
 // ---------------------------------------------------------------------------
 
 export const ExperimentConfigKVSchema = z
@@ -90,6 +103,7 @@ export const ExperimentConfigKVSchema = z
     flagId: z.string(),
     targetingKey: z.string(),
     targetingKeyType: z.string(),
+    status: ExperimentStatusSchema,
     liveRunId: z.string().nullable(),
   })
   .strict();
@@ -163,16 +177,21 @@ export type AssignmentStoreValue = z.infer<typeof AssignmentStoreValueSchema>;
 // KVEnvelope<T> (schema-version envelope, contracts-and-validation.md)
 //
 // schemaVersion is carried ONLY at this envelope level — never on the payload or
-// on per-entry records. The reader parses the envelope first; an unknown
-// version or a payload that fails the inner schema falls back to D1 (logged, not
-// silent). A factory keeps the wrapper generic while preserving the payload
-// schema's inferred type.
+// on per-entry records. The reader parses the envelope first; the version is
+// pinned to CURRENT_KV_SCHEMA_VERSION, so an UNKNOWN version (old or future)
+// fails the parse — the version is gated, not merely bounded below.
+//
+// What happens on that failure is the READER's choice, not the schema's: the
+// control plane (which has a D1 binding) may rebuild from D1 and log; the
+// evaluation edge (no D1 binding) fails loud with INTERNAL_SERVER_ERROR. Either
+// way an unknown version never flows into evaluation as if current. A factory
+// keeps the wrapper generic while preserving the payload schema's inferred type.
 // ---------------------------------------------------------------------------
 
 export function kvEnvelope<DataSchema extends z.ZodTypeAny>(dataSchema: DataSchema) {
   return z
     .object({
-      schemaVersion: z.number().int().min(1),
+      schemaVersion: z.literal(CURRENT_KV_SCHEMA_VERSION),
       data: dataSchema,
     })
     .strict();

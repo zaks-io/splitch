@@ -1,0 +1,67 @@
+import { ResolutionDetailsSchema } from "@splitch/contracts";
+import { describe, expect, it } from "vitest";
+import { errorCodeForStatus, synthesizeDetails } from "./resolution.js";
+import type { TransportResult } from "./transport.js";
+
+const DEFAULT_VALUE = "control";
+
+function result(partial: Partial<TransportResult>): TransportResult {
+  return { status: 200, variant: null, runId: "run-1", ...partial };
+}
+
+describe("synthesizeDetails: 200 success rows", () => {
+  it("200 with a resolved variant -> SPLIT + unwrapped variant", () => {
+    const details = synthesizeDetails(result({ variant: "treatment" }), DEFAULT_VALUE);
+    expect(details.reason).toBe("SPLIT");
+    expect(details.value).toBe("treatment");
+    expect(details.errorCode).toBeUndefined();
+    expect(ResolutionDetailsSchema.safeParse(details).success).toBe(true);
+  });
+
+  it("200 with no matched variant (null) -> DEFAULT + Default Variant value", () => {
+    const details = synthesizeDetails(result({ variant: null }), DEFAULT_VALUE);
+    expect(details.reason).toBe("DEFAULT");
+    expect(details.value).toBe(DEFAULT_VALUE);
+    expect(details.errorCode).toBeUndefined();
+  });
+
+  it("unwraps a JsonObject variant value as-is", () => {
+    const obj = { color: "blue", count: 3 };
+    const details = synthesizeDetails(result({ variant: obj }), DEFAULT_VALUE);
+    expect(details.reason).toBe("SPLIT");
+    expect(details.value).toEqual(obj);
+  });
+});
+
+describe("synthesizeDetails: canonical HTTP-status -> reason/errorCode mapping", () => {
+  // Each row maps an HTTP status to the WIRE ErrorCode the contract validates
+  // (public-evaluate-endpoint.md §"Error responses"; see resolution.ts for the
+  // OpenFeature-vs-wire drift note).
+  const rows: { status: number | null; errorCode: string }[] = [
+    { status: 401, errorCode: "UNAUTHORIZED" },
+    { status: 403, errorCode: "FORBIDDEN" },
+    { status: 404, errorCode: "FLAG_NOT_FOUND" },
+    { status: 400, errorCode: "VALIDATION_ERROR" },
+    { status: 429, errorCode: "RATE_LIMITED" },
+    { status: 503, errorCode: "SERVICE_UNAVAILABLE" },
+    { status: null, errorCode: "SERVICE_UNAVAILABLE" }, // network / timeout / parse
+  ];
+
+  for (const row of rows) {
+    it(`status ${row.status} -> ERROR + Default Variant + errorCode ${row.errorCode}`, () => {
+      const details = synthesizeDetails(result({ status: row.status }), DEFAULT_VALUE);
+      expect(details.reason).toBe("ERROR");
+      expect(details.value).toBe(DEFAULT_VALUE);
+      expect(details.errorCode).toBe(row.errorCode);
+      expect(details.errorMessage).toBeTypeOf("string");
+      expect(errorCodeForStatus(row.status)).toBe(row.errorCode);
+      // The synthesized shape must satisfy the merged contract (fail-loud: an
+      // errorCode the contract rejects would throw here).
+      expect(ResolutionDetailsSchema.safeParse(details).success).toBe(true);
+    });
+  }
+
+  it("an unexpected status (e.g. 500) folds to SERVICE_UNAVAILABLE", () => {
+    expect(errorCodeForStatus(500)).toBe("SERVICE_UNAVAILABLE");
+  });
+});

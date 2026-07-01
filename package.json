@@ -32,9 +32,9 @@
     "test:mutation": "turbo run test:mutation",
     "tinybird:local": "node scripts/check-tinybird-local.mjs",
     "typecheck": "turbo run typecheck",
-    "verify:ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm test && pnpm build",
+    "verify:ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm test && pnpm build && pnpm d1:migrate:local",
     "verify:commit": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:staged",
-    "verify:push": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:range"
+    "verify:push": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:range && pnpm d1:migrate:local"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",

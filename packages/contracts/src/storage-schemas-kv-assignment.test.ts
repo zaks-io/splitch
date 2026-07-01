@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AssignmentStoreEntrySchema,
   AssignmentStoreValueSchema,
+  CURRENT_KV_SCHEMA_VERSION,
   FlagConfigKVSchema,
   kvEnvelope,
   LiveRunKVSchema,
@@ -68,7 +69,7 @@ describe("kvEnvelope", () => {
   it("round-trips schemaVersion + data for a FlagConfigKV payload", () => {
     const FlagConfigEnvelope = kvEnvelope(FlagConfigKVSchema);
     const raw = {
-      schemaVersion: 3,
+      schemaVersion: 1,
       data: {
         id: "flag_1",
         key: "checkout-redesign",
@@ -83,7 +84,7 @@ describe("kvEnvelope", () => {
       },
     };
     const parsed = FlagConfigEnvelope.parse(raw);
-    expect(parsed.schemaVersion).toBe(3);
+    expect(parsed.schemaVersion).toBe(1);
     expect(parsed.data.experimentId).toBeNull();
     expect(parsed).toEqual(raw);
   });
@@ -105,9 +106,27 @@ describe("kvEnvelope", () => {
     );
   });
 
-  it("rejects schemaVersion below 1", () => {
+  it("rejects schemaVersion below the current version", () => {
     const envelope = kvEnvelope(LiveRunKVSchema);
     expect(envelope.safeParse({ schemaVersion: 0, data: { runId: "run_1" } }).success).toBe(false);
+  });
+
+  it("rejects an UNKNOWN (future) version even with a valid payload — version is gated, not just bounded", () => {
+    const envelope = kvEnvelope(LiveRunKVSchema);
+    // A blob whose payload satisfies today's inner schema but whose version is not
+    // the current one must NOT be mistaken for current — it fails loud.
+    expect(envelope.safeParse({ schemaVersion: 2, data: { runId: "run_1" } }).success).toBe(false);
+    expect(envelope.safeParse({ schemaVersion: 999, data: { runId: "run_1" } }).success).toBe(
+      false,
+    );
+  });
+
+  it("accepts the current version", () => {
+    const envelope = kvEnvelope(LiveRunKVSchema);
+    expect(
+      envelope.safeParse({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: { runId: "run_1" } })
+        .success,
+    ).toBe(true);
   });
 
   it("rejects an envelope missing schemaVersion (every KV blob is versioned)", () => {

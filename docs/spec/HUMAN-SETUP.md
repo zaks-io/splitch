@@ -9,12 +9,14 @@ A blocker lands here only if a human must act. If an authenticated CLI clears it
 [deployment-pipeline.md](./platform/deployment-pipeline.md), not here. The line is:
 _can a CLI you've already logged into finish this?_ If yes, it's not a human blocker.
 
-The three categories:
+The categories:
 
 - **🔴 Active** — needed now, blocks the spine, and no CLI clears it.
 - **⏸ Waiting on external** — blocked on a third party, not on us. Parked, not forgotten.
 - **🟡 Decide later** — an open product/policy choice with no command to run. Deferred on purpose.
 - **✅ Done** — recorded so we don't re-litigate it.
+
+Backlog work is intentionally not listed here. Check Linear Backlog only when explicitly asked.
 
 > **How to use this doc:** when you clear an item, change its status, fill in the **Recorded**
 > block (IDs, dates, where the secret lives — never the secret value), and move on. Convert
@@ -24,29 +26,27 @@ The three categories:
 
 ## Status board
 
-| #   | Item                                                        | Category              | Unblocks                             |
-| --- | ----------------------------------------------------------- | --------------------- | ------------------------------------ |
-| 1   | Seed `trusted_idps` (Anthropic / OpenAI / Cursor)           | ⏸ Waiting on external | Agent auth (ID-JAG, Door A)          |
-| 2   | WorkOS app: register, redirect URLs, publish PRM/JWKS       | ✅ Done               | All human + panel login              |
-| 3   | Cloudflare Turnstile widget (site key + secret)             | ✅ Done               | Safe anonymous registration (Door B) |
-| 4   | Production domains + DNS (`splitch.dev`)                    | ✅ Done               | Production routes / public URLs      |
-| 5   | GitHub `production` environment: required reviewers         | 🟡 Decide later       | Production deploy approval gate      |
-| 6   | Blacksmith GitHub App                                       | ✅ Done               | CI on Blacksmith runners             |
-| 7   | Stripe billing integration                                  | 🟡 Decide later       | Paid plans / `stripe_*` columns      |
-| 8   | Compliance baseline (CCPA delete/export/opt-out at launch?) | 🟡 Decide later       | Privacy lifecycle scope              |
-| 9   | Tenant-isolation upgrade trigger (app-enforced → DB RLS)    | 🟡 Decide later       | Isolation architecture at scale      |
-| 10  | Attention-card numeric thresholds                           | 🟡 Decide later       | Panel tuning (ship-then-tune)        |
-| 11  | Provisional-Org → real-account conversion UX                | 🟡 Decide later       | Onboarding upgrade flow              |
-| 12  | Cloudflare GitHub Actions deploy tokens                     | ✅ Done               | Shared-preview / production deploys  |
+| #   | Item                                                        | Category        | Unblocks                             |
+| --- | ----------------------------------------------------------- | --------------- | ------------------------------------ |
+| 1   | WorkOS app: register, redirect URLs, publish PRM/JWKS       | ✅ Done         | All human + panel login              |
+| 2   | Cloudflare Turnstile widget (site key + secret)             | ✅ Done         | Safe anonymous registration (Door B) |
+| 3   | Production domains + DNS (`splitch.dev`)                    | ✅ Done         | Production routes / public URLs      |
+| 4   | Cloudflare GitHub Actions deploy tokens                     | ✅ Done         | Shared-preview / production deploys  |
+| 5   | Blacksmith GitHub App                                       | ✅ Done         | CI on Blacksmith runners             |
+| 6   | GitHub `production` environment: required reviewers         | 🟡 Decide later | Production deploy approval gate      |
+| 7   | Stripe billing integration                                  | 🟡 Decide later | Paid plans / `stripe_*` columns      |
+| 8   | Compliance baseline (CCPA delete/export/opt-out at launch?) | 🟡 Decide later | Privacy lifecycle scope              |
+| 9   | Tenant-isolation upgrade trigger (app-enforced → DB RLS)    | 🟡 Decide later | Isolation architecture at scale      |
+| 10  | Attention-card numeric thresholds                           | 🟡 Decide later | Panel tuning (ship-then-tune)        |
+| 11  | Provisional-Org → real-account conversion UX                | 🟡 Decide later | Onboarding upgrade flow              |
 
 Everything else the spec calls "not provisioned" (Cloudflare resources, Tinybird Cloud +
 `shared_preview` branch, secret storage via `wrangler secret` / `gh secret`, Turborepo remote
-cache, Sentry/Axiom token storage) is **agent-doable with an authenticated CLI** and tracked in
+cache) is **agent-doable with an authenticated CLI** and tracked in
 [deployment-pipeline.md](./platform/deployment-pipeline.md). It is real work; it is not a human
-blocker. The only human input those need is a **value that comes from an item above** (a WorkOS
-secret, a Turnstile secret, a vendor token). Cloudflare deploy-token minting is tracked separately
-as item 12 because the token value is created in the Cloudflare dashboard; storing it is
-agent-doable.
+blocker. The only human input those need is a value that comes from an item above, or a
+slice-local vendor token requested by the issue that consumes it. Do not turn parked Backlog work
+into current setup.
 
 ---
 
@@ -58,28 +58,13 @@ None.
 
 ## ⏸ Waiting on external
 
-### 1. Seed `trusted_idps` (Anthropic / OpenAI / Cursor)
-
-**Status: PAUSED — blocked on external `client_id`s.** ID-JAG (Door A, the agent-identity root)
-cannot validate any agent assertion until the `trusted_idps` table holds each IdP's issuer URI,
-JWKS URI, and client ID. The `client_id`s are gated by steps outside our control. Park here;
-resume when they arrive.
-
-**Spec sources:** [access-control-matrix.md:51](./control-plane/access-control-matrix.md)
-("Seed rows: Anthropic, OpenAI, Cursor"),
-[auth-doors.md:35-43](./control-plane/auth-doors.md) (validation reads `iss` → `trusted_idps`).
-
-**When unblocked, do once:** insert one row per IdP (`iss`, `jwks_uri`, `client_id`) into the D1
-`trusted_idps` table via the control-plane (Org-owner CRUD) or a seed migration. Then move this
-to ✅.
-
-**Recorded:** _(blocked since: 2026-06-21; waiting on: external client_id issuance; owner per IdP: …)_
+None.
 
 ---
 
 ## ✅ Done
 
-### 2. WorkOS app: register, redirect URLs, publish PRM/JWKS
+### 1. WorkOS app: register, redirect URLs, publish PRM/JWKS
 
 **Done.** WorkOS AuthKit is configured and repo-side GitHub environment values are present.
 
@@ -99,7 +84,7 @@ to ✅.
 values were not read or printed. WorkOS dashboard redirect/callback settings are human-provided and
 will be exercised by the shared-preview / production auth smoke.
 
-### 3. Cloudflare Turnstile widget (site key + secret)
+### 2. Cloudflare Turnstile widget (site key + secret)
 
 **Done.** Turnstile widget values are configured in GitHub environments.
 
@@ -115,14 +100,14 @@ Secret values were not read or printed. Runtime Worker secret attachment via `wr
 is agent-doable once the Auth API Worker deploy target exists and will be exercised by
 shared-preview / production auth smoke.
 
-### 4. Production domains + DNS (`splitch.dev`)
+### 3. Production domains + DNS (`splitch.dev`)
 
 **Done.** `splitch.dev` is purchased and owned on Cloudflare, and the per-Worker hostname map is
 fixed by **[ADR-0038](../adr/0038-public-hostnames-are-a-fixed-human-owned-subdomain-map.md)**
 (human-owned; agents do not invent hostnames). What remains is agent-doable: route attachment in
 `wrangler.jsonc` per Worker, derived from the ADR table.
 
-The hostnames also feed the WorkOS redirect URLs (item 2) and the Client-Key origin allow-list —
+The hostnames also feed the WorkOS redirect URLs (item 1) and the Client-Key origin allow-list —
 take them from ADR-0038, not from a guess.
 
 **Spec sources:** [deployment-pipeline.md:31](./platform/deployment-pipeline.md) (production
@@ -133,15 +118,7 @@ hostname map).
 **Recorded:** zone `splitch.dev` purchased on Cloudflare (confirmed 2026-06-21); hostname map
 pinned in ADR-0038.
 
-### 6. Blacksmith GitHub App
-
-**Installed.** Required so `runs-on: blacksmith-*` jobs aren't adopted by another repo's runners.
-
-**Spec source:** [deployment-pipeline.md:48](./platform/deployment-pipeline.md).
-
-**Recorded:** installed on the `splitch` repo (confirmed 2026-06-21).
-
-### 12. Cloudflare GitHub Actions deploy tokens
+### 4. Cloudflare GitHub Actions deploy tokens
 
 **Done.** Preview and production deploy token names are present as GitHub environment secrets.
 
@@ -153,12 +130,35 @@ with account ID `a461d640900eb3905d7b6619c8c0da91`. Verified 2026-06-27 by listi
 environment variables. Secret values were not read or printed. Token scopes are human-provided and
 will be exercised by the shared-preview / production deploy dry runs.
 
+### 5. Blacksmith GitHub App
+
+**Installed.** Required so `runs-on: blacksmith-*` jobs aren't adopted by another repo's runners.
+
+**Spec source:** [deployment-pipeline.md:48](./platform/deployment-pipeline.md).
+
+**Recorded:** installed on the `splitch` repo (confirmed 2026-06-21).
+
 ---
 
 ## 🟡 Decide later
 
 These have no command to run — someone has to make a call. The spec leaves each open on purpose;
 none blocks the spine.
+
+### 6. GitHub `production` environment: required reviewers
+
+Deferred while splitch is still being built out. There is no actual production Environment worth
+protecting yet, so we are intentionally not wiring production required reviewers or prevent-self-review
+until the production deploy target exists and needs a real release gate.
+
+**Spec sources:** [deployment-pipeline.md:219-220, 278](./platform/deployment-pipeline.md),
+[agent-verification.md:40](./platform/agent-verification.md).
+
+**Recorded:** preview and production environment shells created on GitHub with `gh api` on
+2026-06-25. Required reviewers and prevent-self-review are **intentionally deferred** as of
+2026-06-27. GitHub also rejected both protection rules for this private repo with HTTP 422
+plan-support errors, so finishing this later requires either GitHub plan support for private-repo
+environment protection, making the repo public, or choosing a different production-approval gate.
 
 ### 7. Stripe billing integration
 
@@ -186,21 +186,6 @@ Ship-then-tune. — [screen-inventory.md:11-12](./frontend/screen-inventory.md)
 
 Deferred; onboarding works with provisional accounts first. —
 [screen-inventory.md:295](./frontend/screen-inventory.md)
-
-### 5. GitHub `production` environment: required reviewers
-
-Deferred while splitch is still being built out. There is no actual production Environment worth
-protecting yet, so we are intentionally not wiring production required reviewers or prevent-self-review
-until the production deploy target exists and needs a real release gate.
-
-**Spec sources:** [deployment-pipeline.md:219-220, 278](./platform/deployment-pipeline.md),
-[agent-verification.md:40](./platform/agent-verification.md).
-
-**Recorded:** preview and production environment shells created on GitHub with `gh api` on
-2026-06-25. Required reviewers and prevent-self-review are **intentionally deferred** as of
-2026-06-27. GitHub also rejected both protection rules for this private repo with HTTP 422
-plan-support errors, so finishing this later requires either GitHub plan support for private-repo
-environment protection, making the repo public, or choosing a different production-approval gate.
 
 ---
 
