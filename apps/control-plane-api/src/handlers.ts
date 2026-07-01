@@ -1,6 +1,9 @@
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
+import type { ConfigStoreWriter } from "./config-store.js";
+import type { ConfigStoreAccess } from "./config-store-do.js";
+import { appAdminScope } from "./scope-binding.js";
 
 /**
  * Minimal-but-real control-plane handlers for the mounted routes. They run AFTER
@@ -22,6 +25,7 @@ import { renderError } from "@splitch/worker-runtime";
 
 interface HandlerDeps {
   repo: Repository;
+  configStore?: ConfigStoreAccess;
 }
 
 function pathParam(input: unknown, key: string): string {
@@ -31,6 +35,14 @@ function pathParam(input: unknown, key: string): string {
     throw new Error(`control-plane-api: validated input is missing path param "${key}"`);
   }
   return value;
+}
+
+function body(input: unknown): Record<string, unknown> {
+  const value = (input as { body?: unknown } | null)?.body;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("control-plane-api: validated input is missing object body");
+  }
+  return value as Record<string, unknown>;
 }
 
 export function makeHandlers(deps: HandlerDeps) {
@@ -70,5 +82,118 @@ export function makeHandlers(deps: HandlerDeps) {
         updatedAt: org.updatedAt,
       });
     },
+
+    async getFlagConfig({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {
+      if (!deps.configStore) return configStoreUnavailable(requestId);
+
+      const appId = pathParam(input, "appId");
+      const environmentId = pathParam(input, "environmentId");
+      const flagId = pathParam(input, "flagId");
+      const result = await deps.configStore
+        .writerFor(appId, environmentId)
+        .readFlagConfig({ appId, environmentId, flagId });
+
+      if (!result.ok) {
+        return renderError(
+          { code: "FLAG_NOT_FOUND", message: "flag configuration not found", details: {} },
+          { requestId },
+        );
+      }
+      return Response.json(result.config);
+    },
+
+    async updateFlagConfig({
+      input,
+      principal,
+      requestId,
+    }: HandlerArgs<unknown>): Promise<Response> {
+      if (!deps.configStore) return configStoreUnavailable(requestId);
+
+      const appId = pathParam(input, "appId");
+      const environmentId = pathParam(input, "environmentId");
+      const flagId = pathParam(input, "flagId");
+      const adminError = requireAppAdmin(appId, principal.scopes, requestId);
+      if (adminError) return adminError;
+
+      const result = await deps.configStore
+        .writerFor(appId, environmentId)
+        .writeFlagConfig(flagConfigPatchInput(appId, environmentId, flagId, body(input)));
+      return renderFlagConfigWriteResult(result, flagId, environmentId, requestId);
+    },
   };
+}
+
+type FlagConfigWriteResult = Awaited<ReturnType<ConfigStoreWriter["writeFlagConfig"]>>;
+
+function flagConfigPatchInput(
+  appId: string,
+  environmentId: string,
+  flagId: string,
+  payload: Record<string, unknown>,
+): Parameters<ConfigStoreWriter["writeFlagConfig"]>[0] {
+  return {
+    appId,
+    environmentId,
+    flagId,
+    ...(payload.enabled !== undefined ? { enabled: payload.enabled as boolean } : {}),
+    ...(payload.availableVariantNames
+      ? { availableVariantNames: payload.availableVariantNames as string[] }
+      : {}),
+  };
+}
+
+function renderFlagConfigWriteResult(
+  result: FlagConfigWriteResult,
+  flagId: string,
+  environmentId: string,
+  requestId: string,
+): Response {
+  if (result.ok) return Response.json(result.config);
+  if (result.reason === "VARIANT_NOT_AVAILABLE") {
+    return renderError(
+      {
+        code: "VARIANT_NOT_AVAILABLE",
+        message: "requested variants are not in the Flag catalog",
+        details: {
+          flagId,
+          environmentId,
+          missingVariants: result.missingVariants,
+          recommendedAction: "ADD_VARIANT_TO_ENV",
+        },
+      },
+      { requestId },
+    );
+  }
+  return renderError(
+    { code: "FLAG_NOT_FOUND", message: "flag configuration not found", details: {} },
+    { requestId },
+  );
+}
+
+function configStoreUnavailable(requestId: string): Response {
+  return renderError(
+    {
+      code: "SERVICE_UNAVAILABLE",
+      message: "config store is not configured",
+      details: { retryAfterMs: 1000 },
+    },
+    { requestId },
+  );
+}
+
+function requireAppAdmin(
+  appId: string,
+  heldScopes: readonly string[],
+  requestId: string,
+): Response | null {
+  const requiredScope = appAdminScope(appId);
+  if (heldScopes.includes(requiredScope)) return null;
+  return renderError(
+    {
+      code: "INSUFFICIENT_SCOPES",
+      message: "credential lacks required scopes",
+      details: { requiredScopes: [requiredScope], heldScopes: [...heldScopes] },
+    },
+    { requestId },
+  );
 }

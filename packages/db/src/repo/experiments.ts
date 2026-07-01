@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index.js";
 import type { Db } from "./client.js";
 import type { EnvScope, TenantScope } from "./scope.js";
@@ -25,6 +25,17 @@ export function makeExperimentRepo(db: Db) {
 
     getExperiment(scope: EnvScope, experimentId: string) {
       return experimentsTable.findOne(scope, eq(experiments.id, experimentId));
+    },
+
+    async findRunningExperimentForFlag(scope: EnvScope, flagId: string) {
+      const rows = await experimentsTable.findMany(
+        scope,
+        and(eq(experiments.flagId, flagId), eq(experiments.status, "running")),
+      );
+      if (rows.length > 1) {
+        throw new Error("findRunningExperimentForFlag: multiple running Experiments for one Flag");
+      }
+      return rows[0] ?? null;
     },
 
     listRunsForExperiment(scope: EnvScope, experimentId: string) {
