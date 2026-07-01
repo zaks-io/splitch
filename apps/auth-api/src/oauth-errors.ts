@@ -19,6 +19,9 @@ const oauthErrorCodes = [
   "replayed_jti", // jti already seen in the replay cache
   "invalid_grant", // bad/expired identity_assertion at /oauth2/token
   "unsupported_grant_type", // /oauth2/token grant_type not understood
+  "authorization_pending", // device-code poll before the user has approved
+  "slow_down", // device-code client is polling faster than allowed
+  "expired_token", // device_code/user_code expired before approval
   "interaction_required", // claim email maps to an existing verified user (no merge)
   "access_denied", // Turnstile verification failed (anon register, ADR-0034)
   "too_many_requests", // per-IP or global anon-create rate ceiling hit (ADR-0034)
@@ -49,6 +52,9 @@ const statusByCode: Record<OAuthErrorCode, number> = {
   replayed_jti: 401,
   invalid_grant: 400,
   unsupported_grant_type: 400,
+  authorization_pending: 400,
+  slow_down: 400,
+  expired_token: 400,
   interaction_required: 401, // RFC 8628/OIDC: the request needs end-user interaction
   access_denied: 403, // bot challenge (Turnstile) refused the request
   too_many_requests: 429,

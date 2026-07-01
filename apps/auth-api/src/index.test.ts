@@ -28,6 +28,7 @@ beforeAll(async () => {
   env = {
     DB: local.d1,
     JTI_CACHE: local.kv,
+    SESSION_STORE: local.sessionKv,
     AUTH_API_ORIGIN: "https://auth.splitch.test",
     CONTROL_PLANE_ORIGIN: "https://cp.splitch.test",
     ASSERTION_SIGNING_SECRET: "test-assertion-secret",

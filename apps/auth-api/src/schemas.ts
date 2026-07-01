@@ -44,6 +44,26 @@ export const TokenExchangeRequestSchema = z.object({
   identity_assertion: z.string().min(1),
 });
 
+/** POST /oauth2/device_authorization: starts Door C's device-code flow. */
+export const DeviceAuthorizationRequestSchema = z.object({
+  client_id: z.string().min(1).optional(),
+  scope: z.string().min(1).optional(),
+});
+
+/** POST /oauth2/token: Door C device-code polling grant. */
+export const DeviceTokenRequestSchema = z.object({
+  grant_type: z.string(),
+  device_code: z.string().min(1),
+  client_id: z.string().min(1).optional(),
+  scope: z.string().min(1).optional(),
+});
+
+/** POST /oauth2/revoke: RFC 7009 token revocation. */
+export const RevokeTokenRequestSchema = z.object({
+  token: z.string().min(1),
+  token_type_hint: z.string().min(1).optional(),
+});
+
 /** POST /orgs/:orgId/trusted-idps body (Org-owner CRUD). */
 export const CreateTrustedIdpRequestSchema = z.object({
   issuer: z.string().min(1),

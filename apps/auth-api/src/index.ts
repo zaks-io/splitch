@@ -1,11 +1,13 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import { createApp } from "./app.js";
+import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow.js";
 import type { AuthApiEnv } from "./env.js";
 import { fetchJwks } from "./jwks.js";
 import { makeJtiCache } from "./jti-cache.js";
 import { makeFixtureOtp, makeIdempotencyStore } from "./otp.js";
 import { makeRateLimiter } from "./rate-limit.js";
+import { makeKvRevocationStore } from "./revocation.js";
 import { makeTokenSigner } from "./token-exchange.js";
 import { makeFixtureTurnstile } from "./turnstile.js";
 import { makeFixtureWorkOs } from "./workos.js";
@@ -57,6 +59,12 @@ export default {
     const accessSecret = env.ACCESS_TOKEN_SECRET ?? "local-dev-access-secret";
     const consentBaseUrl = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
     const now = () => Date.now();
+    const deviceFlow = env.WORKOS_CLIENT_ID
+      ? makeWorkOsDeviceFlow({
+          clientId: env.WORKOS_CLIENT_ID,
+          baseUrl: env.WORKOS_API_BASE_URL,
+        })
+      : makeFixtureDeviceFlow();
     // The token signer is STATELESS (HMAC over env secrets), so deriving it per
     // request from the env-bound secrets is correct — it carries no cross-request
     // state, unlike the module-scoped fixtures above.
@@ -82,6 +90,8 @@ export default {
       },
       register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },
       claim: { repo, workos, otp, idempotency, tokenSigner, rateLimiter, consentBaseUrl, now },
+      deviceFlow,
+      revocations: makeKvRevocationStore(env.SESSION_STORE),
     });
 
     return app.fetch(request, env);

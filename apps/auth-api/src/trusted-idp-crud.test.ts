@@ -1,7 +1,9 @@
 import { createRepository } from "@splitch/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
+import { makeFixtureDeviceFlow } from "./device-flow.js";
 import { makeJtiCache } from "./jti-cache.js";
+import { makeKvRevocationStore } from "./revocation.js";
 import { makeTokenSigner, type TokenSigner } from "./token-exchange.js";
 import {
   type LocalBindings,
@@ -56,6 +58,8 @@ function buildApp() {
     },
     register: doorB.register,
     claim: doorB.claim,
+    deviceFlow: makeFixtureDeviceFlow(),
+    revocations: makeKvRevocationStore(local.sessionKv),
   });
 }
 
