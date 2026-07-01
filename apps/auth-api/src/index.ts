@@ -2,6 +2,7 @@ import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import { createApp } from "./app.js";
 import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow.js";
+import { makeKvDeviceRefreshSessionStore } from "./device-session-store.js";
 import type { AuthApiEnv } from "./env.js";
 import { fetchJwks } from "./jwks.js";
 import { makeJtiCache } from "./jti-cache.js";
@@ -92,6 +93,7 @@ export default {
       register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },
       claim: { repo, workos, otp, idempotency, tokenSigner, rateLimiter, consentBaseUrl, now },
       deviceFlow,
+      deviceRefreshSessions: makeKvDeviceRefreshSessionStore(env.SESSION_STORE),
       revocations: makeKvRevocationStore(env.SESSION_STORE),
     });
 

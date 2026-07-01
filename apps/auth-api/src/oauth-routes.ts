@@ -1,5 +1,6 @@
 import type { Hono } from "hono";
 import { DEVICE_CODE_GRANT, type DeviceFlowPort } from "./device-flow.js";
+import type { DeviceRefreshSessionStore } from "./device-session-store.js";
 import { OAuthError, renderOAuthError } from "./oauth-errors.js";
 import type { RevocationStore } from "./revocation.js";
 import {
@@ -16,6 +17,7 @@ const ACCESS_TOKEN_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
 export interface OAuthRouteDeps {
   tokenSigner: TokenSigner;
   deviceFlow: DeviceFlowPort;
+  deviceRefreshSessions: DeviceRefreshSessionStore;
   revocations: RevocationStore;
   accessSecret: string;
   controlPlaneAudience: string;
@@ -104,7 +106,11 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
       if (actor) {
         await deps.revocations.revoke(actor.userId, actor.expiresAt - nowSeconds());
       } else {
-        await deps.deviceFlow.revokeProviderToken(parsed.data.token);
+        const sessionId = await deps.deviceRefreshSessions.lookup(parsed.data.token);
+        if (!sessionId) {
+          throw new OAuthError("invalid_grant", "refresh token session is unknown");
+        }
+        await deps.deviceFlow.revokeProviderToken({ token: parsed.data.token, sessionId });
       }
     } catch (cause) {
       return renderDoorFault(cause);
@@ -149,6 +155,15 @@ async function exchangeDeviceCode(
       deviceCode: parsed.data.device_code,
       scope: parsed.data.scope,
     });
+    if (deviceToken.refreshToken) {
+      if (!deviceToken.providerSessionId) {
+        throw new OAuthError("server_error", "device refresh token missing session id");
+      }
+      await deps.deviceRefreshSessions.remember(
+        deviceToken.refreshToken,
+        deviceToken.providerSessionId,
+      );
+    }
     const accessToken = await deps.tokenSigner.mintAccessToken(
       deviceToken.userId,
       deviceToken.scopes,

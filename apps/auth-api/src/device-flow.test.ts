@@ -22,7 +22,7 @@ function expectCall(call: { url: string; init: RequestInit } | undefined): {
 }
 
 describe("WorkOS device flow adapter", () => {
-  it("revokes refresh tokens by resolving the WorkOS session and calling session revoke", async () => {
+  it("returns the WorkOS session id from the device-token response", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const fetcher: typeof fetch = async (input, init) => {
       const url = String(input);
@@ -31,9 +31,44 @@ describe("WorkOS device flow adapter", () => {
         return Response.json({
           user: { id: "user_workos" },
           access_token: jwtWithClaims({ sub: "user_workos", sid: "session_workos" }),
-          refresh_token: "refresh_rotated",
+          refresh_token: "refresh_original",
         });
       }
+      return Response.json({ error: "invalid_request" }, { status: 400 });
+    };
+    const flow = makeWorkOsDeviceFlow({
+      clientId: "client_123",
+      baseUrl: "https://api.workos.test/user_management",
+      fetcher,
+    });
+
+    const token = await flow.exchangeDeviceCode({
+      deviceCode: "device_123",
+      clientId: "client_123",
+    });
+
+    expect(token).toMatchObject({
+      userId: "user_workos",
+      refreshToken: "refresh_original",
+      providerSessionId: "session_workos",
+    });
+    expect(calls).toHaveLength(1);
+    const authenticateCall = expectCall(calls[0]);
+    expect(authenticateCall.url).toBe("https://api.workos.test/user_management/authenticate");
+    expect(authenticateCall.init.method).toBe("POST");
+    expect(authenticateCall.init.headers).toMatchObject({
+      "content-type": "application/x-www-form-urlencoded",
+    });
+    expect(String(authenticateCall.init.body)).toContain(
+      "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code",
+    );
+  });
+
+  it("revokes refresh tokens by calling session revoke without rotating the token first", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetcher: typeof fetch = async (input, init) => {
+      const url = String(input);
+      calls.push({ url, init: init ?? {} });
       if (url.endsWith("/sessions/revoke")) {
         return Response.json({});
       }
@@ -46,21 +81,14 @@ describe("WorkOS device flow adapter", () => {
       fetcher,
     });
 
-    await flow.revokeProviderToken("refresh_original");
-
-    expect(calls).toHaveLength(2);
-    const authenticateCall = expectCall(calls[0]);
-    expect(authenticateCall.url).toBe("https://api.workos.test/user_management/authenticate");
-    expect(authenticateCall.init.method).toBe("POST");
-    expect(authenticateCall.init.headers).toMatchObject({ "content-type": "application/json" });
-    expect(JSON.parse(String(authenticateCall.init.body))).toMatchObject({
-      client_id: "client_123",
-      client_secret: "sk_test_123",
-      grant_type: "refresh_token",
-      refresh_token: "refresh_original",
+    await flow.revokeProviderToken({
+      token: "refresh_original",
+      sessionId: "session_workos",
     });
 
-    const revokeCall = expectCall(calls[1]);
+    expect(calls).toHaveLength(1);
+
+    const revokeCall = expectCall(calls[0]);
     expect(revokeCall.url).toBe("https://api.workos.test/user_management/sessions/revoke");
     expect(revokeCall.init.method).toBe("POST");
     expect(revokeCall.init.headers).toMatchObject({
@@ -76,12 +104,14 @@ describe("WorkOS device flow adapter", () => {
       fetcher: async () => Response.json({}),
     });
 
-    await expect(flow.revokeProviderToken("refresh_original")).rejects.toMatchObject({
+    await expect(
+      flow.revokeProviderToken({ token: "refresh_original", sessionId: "session_workos" }),
+    ).rejects.toMatchObject({
       code: "server_error",
     });
   });
 
-  it("fails loudly when WorkOS cannot identify the session behind the refresh token", async () => {
+  it("fails device-token exchange when WorkOS cannot identify the refresh-token session", async () => {
     const flow = makeWorkOsDeviceFlow({
       clientId: "client_123",
       apiKey: "sk_test_123",
@@ -93,8 +123,38 @@ describe("WorkOS device flow adapter", () => {
         }),
     });
 
-    await expect(flow.revokeProviderToken("refresh_original")).rejects.toMatchObject({
+    await expect(
+      flow.exchangeDeviceCode({
+        deviceCode: "device_123",
+        clientId: "client_123",
+      }),
+    ).rejects.toMatchObject({
       code: "server_error",
     });
+  });
+
+  it("does not rotate the refresh token before surfacing a failed session revoke", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetcher: typeof fetch = async (input, init) => {
+      const url = String(input);
+      calls.push({ url, init: init ?? {} });
+      if (url.endsWith("/sessions/revoke")) {
+        return Response.json({ error: "server_error" }, { status: 500 });
+      }
+      return Response.json({ error: "invalid_request" }, { status: 400 });
+    };
+    const flow = makeWorkOsDeviceFlow({
+      clientId: "client_123",
+      apiKey: "sk_test_123",
+      baseUrl: "https://api.workos.test/user_management",
+      fetcher,
+    });
+
+    await expect(
+      flow.revokeProviderToken({ token: "refresh_original", sessionId: "session_workos" }),
+    ).rejects.toMatchObject({ code: "server_error" });
+
+    expect(calls).toHaveLength(1);
+    expect(calls.some((call) => call.url.endsWith("/authenticate"))).toBe(false);
   });
 });

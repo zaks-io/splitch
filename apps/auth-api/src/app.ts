@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { verifyAccessToken } from "./access-token.js";
 import { type ClaimDeps, initiateClaim, verifyClaim } from "./claim.js";
 import type { DeviceFlowPort } from "./device-flow.js";
+import type { DeviceRefreshSessionStore } from "./device-session-store.js";
 import { type IdJagDeps, verifyIdJag } from "./idjag-verify.js";
 import { OAuthError, renderOAuthError } from "./oauth-errors.js";
 import { mountOAuthRoutes } from "./oauth-routes.js";
@@ -43,6 +44,8 @@ export interface AppDeps {
   controlPlaneAudience: string;
   /** Door C device-flow adapter (real WorkOS in deployed envs, fixture in tests/local). */
   deviceFlow: DeviceFlowPort;
+  /** Maps issued device refresh tokens to provider sessions without rotating them. */
+  deviceRefreshSessions: DeviceRefreshSessionStore;
   /** Shared revocation marker writer/reader for control-plane access tokens. */
   revocations: RevocationStore;
   now: () => number;

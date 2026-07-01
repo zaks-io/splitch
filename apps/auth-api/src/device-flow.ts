@@ -25,13 +25,19 @@ interface DeviceTokenParams {
 interface DeviceTokenResult {
   userId: string;
   refreshToken?: string;
+  providerSessionId?: string;
   scopes: string[];
+}
+
+interface RevokeProviderTokenParams {
+  token: string;
+  sessionId: string;
 }
 
 export interface DeviceFlowPort {
   authorizeDevice(params: DeviceAuthorizationParams): Promise<DeviceAuthorizationResult>;
   exchangeDeviceCode(params: DeviceTokenParams): Promise<DeviceTokenResult>;
-  revokeProviderToken(token: string): Promise<void>;
+  revokeProviderToken(params: RevokeProviderTokenParams): Promise<void>;
 }
 
 interface WorkOsDeviceFlowOptions {
@@ -134,6 +140,26 @@ function deviceAuthorizationResult(json: Record<string, unknown>): DeviceAuthori
   };
 }
 
+function deviceTokenResult(
+  json: WorkOsDeviceTokenBody,
+  scope: string | undefined,
+): DeviceTokenResult {
+  if (!json.user || typeof json.user.id !== "string") {
+    throw new OAuthError("invalid_grant", "device token response missing user");
+  }
+  const refreshToken = typeof json.refresh_token === "string" ? json.refresh_token : undefined;
+  const providerSessionId = refreshToken ? sessionIdFromTokenBody(json) : undefined;
+  if (refreshToken && !providerSessionId) {
+    throw new OAuthError("server_error", "device token response missing session id");
+  }
+  return {
+    userId: json.user.id,
+    refreshToken,
+    providerSessionId,
+    scopes: scopeList(json, scope),
+  };
+}
+
 async function expectJson(
   res: Response,
   fallbackCode: OAuthErrorCode = "invalid_grant",
@@ -165,26 +191,6 @@ function deviceErrorCode(value: unknown, fallbackCode: OAuthErrorCode): OAuthErr
 export function makeWorkOsDeviceFlow(opts: WorkOsDeviceFlowOptions): DeviceFlowPort {
   const fetcher = opts.fetcher ?? fetch;
   const baseUrl = cleanBaseUrl(opts.baseUrl ?? DEFAULT_WORKOS_BASE_URL);
-
-  async function authenticateWithRefreshToken(
-    refreshToken: string,
-  ): Promise<WorkOsDeviceTokenBody> {
-    if (!opts.apiKey) {
-      throw new OAuthError("server_error", "WorkOS API key missing for refresh token revoke");
-    }
-    return (await expectJson(
-      await fetcher(`${baseUrl}/authenticate`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          client_id: opts.clientId,
-          client_secret: opts.apiKey,
-          grant_type: "refresh_token",
-          refresh_token: refreshToken,
-        }),
-      }),
-    )) as WorkOsDeviceTokenBody;
-  }
 
   async function revokeSession(sessionId: string): Promise<void> {
     if (!opts.apiKey) {
@@ -234,22 +240,10 @@ export function makeWorkOsDeviceFlow(opts: WorkOsDeviceFlowOptions): DeviceFlowP
         }),
       )) as WorkOsDeviceTokenBody;
 
-      if (!json.user || typeof json.user.id !== "string") {
-        throw new OAuthError("invalid_grant", "device token response missing user");
-      }
-      return {
-        userId: json.user.id,
-        refreshToken: typeof json.refresh_token === "string" ? json.refresh_token : undefined,
-        scopes: scopeList(json, params.scope),
-      };
+      return deviceTokenResult(json, params.scope);
     },
 
-    async revokeProviderToken(token) {
-      const json = await authenticateWithRefreshToken(token);
-      const sessionId = sessionIdFromTokenBody(json);
-      if (!sessionId) {
-        throw new OAuthError("server_error", "refresh token response missing session id");
-      }
+    async revokeProviderToken({ sessionId }) {
       await revokeSession(sessionId);
     },
   };
@@ -279,11 +273,12 @@ export function makeFixtureDeviceFlow(): DeviceFlowPort {
       return {
         userId: "user_device_fixture",
         refreshToken,
+        providerSessionId: "fixture-device-session",
         scopes: splitScopes(params.scope),
       };
     },
 
-    async revokeProviderToken(token) {
+    async revokeProviderToken({ token }) {
       revokedRefreshTokens.add(token);
     },
   };
