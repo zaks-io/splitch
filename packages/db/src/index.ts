@@ -30,6 +30,7 @@ export {
   appMemberships,
   apps,
   clientKeys,
+  deviceRefreshSessions,
   entityDeletions,
   environments,
   experiments,

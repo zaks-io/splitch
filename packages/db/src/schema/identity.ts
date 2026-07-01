@@ -90,6 +90,12 @@ export const environments = sqliteTable(
   (t) => [uniqueIndex("environments_app_key_unique").on(t.appId, t.key)],
 );
 
+export const deviceRefreshSessions = sqliteTable("device_refresh_sessions", {
+  refreshTokenHash: text("refresh_token_hash").primaryKey(),
+  providerSessionId: text("provider_session_id").notNull(),
+  createdAt: createdAt(),
+});
+
 /**
  * Trusted IdP allow-list for ID-JAG validation (access-control-matrix.md). Org
  * owner CRUD only; unknown `issuer` fails loud as `unknown_issuer`. `enabled = 0`
