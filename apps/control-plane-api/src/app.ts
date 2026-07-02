@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do.js";
 import { makeHandlers } from "./handlers.js";
 import { mountLiveUpdateRoute } from "./live-updates.js";
+import type { MemberProfileResolver } from "./org-handlers.js";
 import { controlPlaneRoute } from "./routes.js";
 
 /**
@@ -37,6 +38,8 @@ export interface AppDeps {
   rateLimiter: RateLimiter;
   repo: Repository;
   configStore?: ConfigStoreAccess;
+  memberProfileResolver?: MemberProfileResolver;
+  nowIso?: () => string;
   defaultHeaders?: Record<string, string>;
 }
 
@@ -52,7 +55,12 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
 
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
-  const handlers = makeHandlers({ repo: deps.repo, configStore: deps.configStore });
+  const handlers = makeHandlers({
+    repo: deps.repo,
+    configStore: deps.configStore,
+    memberProfileResolver: deps.memberProfileResolver,
+    nowIso: deps.nowIso,
+  });
   const registrar = controlPlaneRegistrar(deps);
 
   mountLiveUpdateRoute(app, {
@@ -65,6 +73,11 @@ export function createApp(deps: AppDeps): Hono {
 
   registrar.mount(app, controlPlaneRoute("apps_get"), handlers.getApp);
   registrar.mount(app, controlPlaneRoute("organizations_get"), handlers.getOrg);
+  registrar.mount(app, controlPlaneRoute("organizations_update"), handlers.updateOrg);
+  registrar.mount(app, controlPlaneRoute("organization_members_list"), handlers.listMembers);
+  registrar.mount(app, controlPlaneRoute("organization_members_add"), handlers.addMember);
+  registrar.mount(app, controlPlaneRoute("organization_members_update"), handlers.updateMember);
+  registrar.mount(app, controlPlaneRoute("organization_members_remove"), handlers.removeMember);
   registrar.mount(app, controlPlaneRoute("flag_config_get"), handlers.getFlagConfig);
   registrar.mount(app, controlPlaneRoute("flag_config_update"), handlers.updateFlagConfig);
 
