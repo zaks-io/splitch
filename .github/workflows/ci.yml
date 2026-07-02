@@ -49,6 +49,13 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Install Tinybird CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://tinybird.co | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
       - name: Verify
         run: pnpm verify:ci
 

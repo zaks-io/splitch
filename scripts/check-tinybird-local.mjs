@@ -10,6 +10,8 @@ if (!existsSync(projectDir)) {
 }
 
 validateSplitchDatasourceContracts(projectDir);
+await requireTinybirdCli(projectDir);
+await ensureTinybirdLocal(projectDir);
 await run("tb", ["--no-version-warning", "--local", "build"], projectDir);
 await run("tb", ["--no-version-warning", "--local", "test", "run"], projectDir);
 
@@ -112,5 +114,43 @@ async function run(command, args, cwd) {
   }).catch((error) => {
     console.error(`tinybird:local: ${error.message}`);
     process.exit(1);
+  });
+}
+
+async function requireTinybirdCli(cwd) {
+  const code = await quietExitCode("tb", ["--no-version-warning", "--version"], cwd);
+  if (code !== 0) {
+    fail("Tinybird CLI command `tb` is required. Install it with `curl https://tinybird.co | sh`.");
+  }
+}
+
+async function ensureTinybirdLocal(cwd) {
+  const ready = await quietExitCode("tb", ["--no-version-warning", "local", "status"], cwd);
+  if (ready === 0) return;
+
+  const started = await quietExitCode(
+    "tb",
+    ["--no-version-warning", "local", "start", "--daemon", "--skip-new-version"],
+    cwd,
+  );
+  if (started !== 0) {
+    fail("Tinybird Local is not ready and could not be started.");
+  }
+}
+
+async function quietExitCode(command, args, cwd) {
+  return await new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        TB_CLI_TELEMETRY_OPTOUT: "1",
+        TB_VERSION_WARNING: "0",
+      },
+      stdio: "ignore",
+    });
+
+    child.on("error", () => resolve(127));
+    child.on("exit", (code) => resolve(code ?? 1));
   });
 }

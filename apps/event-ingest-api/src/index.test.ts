@@ -8,12 +8,10 @@ const environmentId = "env_prod";
 const experimentId = "exp_checkout";
 const liveRunId = "run_live";
 const fixedNow = "2026-07-01T12:34:56.789Z";
-
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-
 describe("Event Ingest Worker", () => {
   it("appends a validated raw_events row through waitUntil", async () => {
     const calls = await postExposure();
@@ -38,6 +36,24 @@ describe("Event Ingest Worker", () => {
       sdk_version: "sdk-test",
     });
     expect(String(row.dedup_key)).toMatch(/^sha256:[a-f0-9]{64}$/);
+  });
+
+  it("logs Tinybird waitUntil append failures for Worker observability", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const calls = await postExposure({ tinybirdStatus: 500, awaitWaits: false });
+
+    expect(calls.response.status).toBe(202);
+    await expect(Promise.all(calls.ctx.waits)).rejects.toThrow(
+      "Tinybird append failed with HTTP 500",
+    );
+    expect(error).toHaveBeenCalledWith(
+      "event-ingest-api Tinybird append failed",
+      expect.objectContaining({
+        appId,
+        eventId: "evt_retry_1",
+        errorMessage: "Tinybird append failed with HTTP 500",
+      }),
+    );
   });
 
   it("rejects an idType mismatch before Tinybird append", async () => {
@@ -120,9 +136,15 @@ describe("Event Ingest Worker", () => {
   });
 });
 
-async function postExposure(options: { payload?: Partial<ExposurePayload> } = {}) {
+async function postExposure(
+  options: {
+    payload?: Partial<ExposurePayload>;
+    tinybirdStatus?: number;
+    awaitWaits?: boolean;
+  } = {},
+) {
   vi.spyOn(Date, "now").mockReturnValue(new Date(fixedNow).getTime());
-  const fetch = mockTinybirdFetch();
+  const fetch = mockTinybirdFetch(options.tinybirdStatus);
   const ctx = new TestExecutionContext();
   const response = await worker.fetch(
     workerRequest("https://event-ingest.test/api/internal/exposures", {
@@ -139,7 +161,7 @@ async function postExposure(options: { payload?: Partial<ExposurePayload> } = {}
     ctx,
   );
 
-  await Promise.all(ctx.waits);
+  if (options.awaitWaits !== false) await Promise.all(ctx.waits);
 
   return {
     ctx,
@@ -218,8 +240,8 @@ function envelope(data: unknown) {
   return JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data });
 }
 
-function mockTinybirdFetch() {
-  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status: 202 }));
+function mockTinybirdFetch(status = 202) {
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status }));
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }

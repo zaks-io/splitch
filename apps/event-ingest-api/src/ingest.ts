@@ -29,7 +29,20 @@ export async function handleIngest(
   const delivery = tinybirdDelivery(env);
   if (!delivery.ok) return renderError(delivery.error);
 
-  ctx.waitUntil(appendRawEvent(toTinybirdRow(event.value, payload.value), delivery.value));
+  ctx.waitUntil(
+    appendRawEvent(toTinybirdRow(event.value, payload.value), delivery.value).catch((error) => {
+      console.error("event-ingest-api Tinybird append failed", {
+        appId: event.value.appId,
+        environmentId: event.value.environmentId,
+        experimentId: event.value.experimentId,
+        runId: event.value.runId,
+        eventId: event.value.eventId,
+        type: event.value.type,
+        errorMessage: error instanceof Error ? error.message : "non-error rejection",
+      });
+      throw error;
+    }),
+  );
 
   return Response.json(
     { ok: true, eventId: event.value.eventId, runId: event.value.runId },
