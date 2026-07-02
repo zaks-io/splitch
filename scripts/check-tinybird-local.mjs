@@ -125,9 +125,6 @@ async function requireTinybirdCli(cwd) {
 }
 
 async function ensureTinybirdLocal(cwd) {
-  const ready = await quietExitCode("tb", ["--no-version-warning", "local", "status"], cwd);
-  if (ready === 0) return;
-
   const started = await quietExitCode(
     "tb",
     ["--no-version-warning", "local", "start", "--daemon", "--skip-new-version"],
