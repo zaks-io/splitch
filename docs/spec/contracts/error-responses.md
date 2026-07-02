@@ -40,6 +40,7 @@ ErrorCode =
   | 'EXPERIMENT_RUNNING'         // operation (e.g. delete) blocked while the Experiment has a running Run
   | 'EXPERIMENT_NO_DRAFT'        // Start attempted when the draft has no changes from the current Run
   | 'VARIANT_NOT_AVAILABLE'      // a referenced Variant is not in the Flag's available set for this Environment (ADR-0028)
+  | 'RESOURCE_NOT_EMPTY'         // destructive delete blocked because non-cascaded child resources remain
 
   // Not found
   | 'EXPERIMENT_NOT_FOUND'
@@ -62,6 +63,7 @@ ErrorCode =
   | 'ORIGIN_NOT_ALLOWED'         // valid Client Key, request origin not on the key's allow-list (ADR-0034)
   | 'APP_MISMATCH'               // Client Key does not belong to the requested appId (ADR-0018)
   | 'LAST_OWNER_REQUIRED'         // deletion would leave a shared Org without an owner
+  | 'LAST_ENVIRONMENT_REQUIRED'   // deletion would leave an App without an Environment
   | 'PRIVACY_CONFIRMATION_REQUIRED' // destructive privacy job lacks confirmation
   | 'CONFIRMATION_REQUIRED'       // Environment Policy gates this change type; resend with confirm: true (ADR-0029)
 
@@ -94,8 +96,10 @@ ErrorCode =
 | `EXPERIMENT_RUNNING`            | `{ experimentId: string, runningRunId: string, attemptedOp: string, recommendedAction: RecommendedAction }`                                                                                                                                               |
 | `EXPERIMENT_NO_DRAFT`           | `{ experimentId: string, currentRunId: string \| null, recommendedAction: RecommendedAction }`                                                                                                                                                            |
 | `VARIANT_NOT_AVAILABLE`         | `{ flagId: string, environmentId: string, missingVariants: string[], recommendedAction: RecommendedAction }`                                                                                                                                              |
+| `RESOURCE_NOT_EMPTY`            | `{ resourceType: 'app' \| 'environment', resourceId: string, childType: string, childCount: number, attemptedOp: string }`                                                                                                                                |
 | `INSUFFICIENT_SCOPES`           | `{ requiredScopes: string[], heldScopes: string[] }`                                                                                                                                                                                                      |
 | `LAST_OWNER_REQUIRED`           | `{ orgId: string }`                                                                                                                                                                                                                                       |
+| `LAST_ENVIRONMENT_REQUIRED`     | `{ appId: string }`                                                                                                                                                                                                                                       |
 | `PRIVACY_CONFIRMATION_REQUIRED` | `{ confirmationRequired: true, confirmationExpiresAt: string }`                                                                                                                                                                                           |
 | `CONFIRMATION_REQUIRED`         | `{ gate: PolicyChangeType, environmentId: string, attemptedOp: string, recommendedAction: 'RETRY_WITH_CONFIRMATION' }` — `gate` names the Environment-Policy change type that requires confirmation (ADR-0029); resend the same call with `confirm: true` |
 | `PRIVACY_JOB_FAILED`            | `{ requestId: string, failedStores: string[] }`                                                                                                                                                                                                           |
@@ -280,16 +284,16 @@ under an API Key `verify` returns the full reason (ADR-0037). The mapping from H
 
 ## HTTP status mapping
 
-| code group                                                                                                                                                                                                                                                       | HTTP status |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `VALIDATION_ERROR`, `ALLOCATION_INVALID`, `ACTIVATION_TIMESTAMP_INVALID`, `INVALID_*`                                                                                                                                                                            | 400         |
-| `UNAUTHORIZED`                                                                                                                                                                                                                                                   | 401         |
-| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`, `ORIGIN_NOT_ALLOWED`, `APP_MISMATCH`                                                                                                                                                                   | 403         |
-| `*_NOT_FOUND`                                                                                                                                                                                                                                                    | 404         |
-| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `RUN_NOT_RUNNING`, `EXPERIMENT_RUNNING`, `EXPERIMENT_NO_DRAFT`, `VARIANT_NOT_AVAILABLE`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED`, `CONFIRMATION_REQUIRED` | 409         |
-| `RATE_LIMITED`                                                                                                                                                                                                                                                   | 429         |
-| `PRIVACY_JOB_FAILED`, `INTERNAL_SERVER_ERROR`                                                                                                                                                                                                                    | 500         |
-| `SERVICE_UNAVAILABLE`                                                                                                                                                                                                                                            | 503         |
+| code group                                                                                                                                                                                                                                                                                                          | HTTP status |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `VALIDATION_ERROR`, `ALLOCATION_INVALID`, `ACTIVATION_TIMESTAMP_INVALID`, `INVALID_*`                                                                                                                                                                                                                               | 400         |
+| `UNAUTHORIZED`                                                                                                                                                                                                                                                                                                      | 401         |
+| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`, `ORIGIN_NOT_ALLOWED`, `APP_MISMATCH`                                                                                                                                                                                                                      | 403         |
+| `*_NOT_FOUND`                                                                                                                                                                                                                                                                                                       | 404         |
+| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `RUN_NOT_RUNNING`, `EXPERIMENT_RUNNING`, `EXPERIMENT_NO_DRAFT`, `VARIANT_NOT_AVAILABLE`, `RESOURCE_NOT_EMPTY`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `LAST_ENVIRONMENT_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED`, `CONFIRMATION_REQUIRED` | 409         |
+| `RATE_LIMITED`                                                                                                                                                                                                                                                                                                      | 429         |
+| `PRIVACY_JOB_FAILED`, `INTERNAL_SERVER_ERROR`                                                                                                                                                                                                                                                                       | 500         |
+| `SERVICE_UNAVAILABLE`                                                                                                                                                                                                                                                                                               | 503         |
 
 ## Sources
 

@@ -74,15 +74,16 @@ Privacy request tables live in [storage-schemas-d1-privacy.md](./storage-schemas
 A first-class axis under App (ADR-0027). Experiments, Experiment Runs, Exposures, SDK credentials,
 and Flag CONFIGURATION are scoped to one Environment.
 
-| Column       | Type        | Constraints                                                        |
-| ------------ | ----------- | ------------------------------------------------------------------ |
-| `id`         | text        | PK                                                                 |
-| `app_id`     | text        | FK → apps, not null                                                |
-| `key`        | text        | not null, unique per `(app_id)` (e.g. `'production'`, `'staging'`) |
-| `name`       | text        | not null                                                           |
-| `created_at` | timestamptz | not null                                                           |
-| `updated_at` | timestamptz | not null                                                           |
-| `created_by` | text        | WorkOS user ID or deleted-user tombstone                           |
+| Column       | Type        | Constraints                                                           |
+| ------------ | ----------- | --------------------------------------------------------------------- |
+| `id`         | text        | PK                                                                    |
+| `app_id`     | text        | FK → apps, not null                                                   |
+| `key`        | text        | not null, unique per `(app_id)` (e.g. `'production'`, `'staging'`)    |
+| `name`       | text        | not null                                                              |
+| `policy`     | text        | not null JSON Environment Policy (`allow \| confirm` per change type) |
+| `created_at` | timestamptz | not null                                                              |
+| `updated_at` | timestamptz | not null                                                              |
+| `created_by` | text        | WorkOS user ID or deleted-user tombstone                              |
 
 ### `flags` (DEFINITION — App-level)
 

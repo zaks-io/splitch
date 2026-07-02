@@ -50,7 +50,8 @@ Auth: Org member (any role).
 ### `POST /orgs/{org_id}/apps`
 
 Body: `{ name: string, slug?: string }` (slug auto-derived from name if omitted; unique within Org)
-Returns: `{ app_id, org_id, name, slug, created_at }`
+Returns: `{ app, environments, client_keys }` with the two default Environments and their public
+Client Keys.
 Auth: Org `owner` or `admin`.
 On create, **two Environments are provisioned by default: `dev` and `prod`**. `dev` ships with an
 all-`allow` Environment Policy (no confirmation gates) so the first flag/experiment lands in a
@@ -79,6 +80,8 @@ Auth: App `owner` or `admin`.
 ### `DELETE /apps/{app_id}`
 
 Blocked if any Experiment has `status = running` in any Environment. Returns `EXPERIMENT_RUNNING`.
+Also blocked with `RESOURCE_NOT_EMPTY` while non-credential child resources remain, until a full
+cascade/tombstone delete path is implemented.
 Auth: App `owner`.
 Account-closure privacy deletion is the only exception; see
 [endpoints-privacy-data.md](endpoints-privacy-data.md).
@@ -115,7 +118,8 @@ Auth: App `owner` or `admin`.
 
 ### `DELETE /apps/{app_id}/envs/{environment_id}`
 
-Blocked if any Experiment is `running` in this Environment, or if it is the last Environment.
+Blocked if any Experiment is `running` in this Environment, if it is the last Environment, or if
+non-credential child resources remain.
 Auth: App `owner`.
 
 ## Sources

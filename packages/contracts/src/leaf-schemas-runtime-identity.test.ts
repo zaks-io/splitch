@@ -5,6 +5,7 @@ import {
   AppSchema,
   ClientKeySchema,
   EnvironmentSchema,
+  EnvironmentPolicySchema,
   OrganizationSchema,
   OrgPlanSchema,
   orgPlans,
@@ -69,11 +70,19 @@ describe("App", () => {
 });
 
 describe("Environment", () => {
+  const allowPolicy = {
+    variantAvailability: "allow",
+    targetingRolloutValue: "allow",
+    enabledState: "allow",
+    startExperimentRun: "allow",
+  } as const;
+
   const validEnv = {
     id: "env_1",
     appId: "app_1",
     key: "production",
     name: "Production",
+    policy: allowPolicy,
     createdAt: "2024-01-01T00:00:00Z",
     updatedAt: "2024-01-01T00:00:00Z",
   };
@@ -84,6 +93,18 @@ describe("Environment", () => {
 
   it("rejects a missing appId (owning App)", () => {
     const { appId: _, ...rest } = validEnv;
+    expect(EnvironmentSchema.safeParse(rest).success).toBe(false);
+  });
+
+  it("parses the inline Environment Policy", () => {
+    expect(EnvironmentPolicySchema.parse(allowPolicy).enabledState).toBe("allow");
+    expect(
+      EnvironmentPolicySchema.safeParse({ ...allowPolicy, enabledState: "approve" }).success,
+    ).toBe(false);
+  });
+
+  it("rejects an Environment without policy", () => {
+    const { policy: _, ...rest } = validEnv;
     expect(EnvironmentSchema.safeParse(rest).success).toBe(false);
   });
 });

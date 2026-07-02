@@ -158,11 +158,27 @@ export type App = z.infer<typeof AppSchema>;
 // Environment (first-class axis under App, ADR-0027)
 // ---------------------------------------------------------------------------
 
+export const environmentPolicyLevels = ["allow", "confirm"] as const;
+
+export const EnvironmentPolicyLevelSchema = z.enum(environmentPolicyLevels);
+export type EnvironmentPolicyLevel = z.infer<typeof EnvironmentPolicyLevelSchema>;
+
+export const EnvironmentPolicySchema = z
+  .object({
+    variantAvailability: EnvironmentPolicyLevelSchema,
+    targetingRolloutValue: EnvironmentPolicyLevelSchema,
+    enabledState: EnvironmentPolicyLevelSchema,
+    startExperimentRun: EnvironmentPolicyLevelSchema,
+  })
+  .strict();
+export type EnvironmentPolicy = z.infer<typeof EnvironmentPolicySchema>;
+
 export const EnvironmentSchema = z.object({
   id: z.string(),
   appId: z.string(),
   key: z.string(),
   name: z.string(),
+  policy: EnvironmentPolicySchema,
   createdAt: z.string(),
   updatedAt: z.string(),
 });

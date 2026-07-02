@@ -35,25 +35,6 @@ export function makeHandlers(deps: HandlerDeps) {
   return {
     ...makeOrgHandlers(deps),
 
-    async getApp({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const app = await deps.repo.identity.getApp(pathParam(input, "appId"));
-      if (!app) {
-        return renderError(
-          { code: "APP_NOT_FOUND", message: "app not found", details: {} },
-          { requestId },
-        );
-      }
-      return Response.json({
-        id: app.id,
-        organizationId: app.organizationId,
-        name: app.name,
-        key: app.key,
-        ...(app.description ? { description: app.description } : {}),
-        createdAt: app.createdAt,
-        updatedAt: app.updatedAt,
-      });
-    },
-
     async getFlagConfig({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {
       if (!deps.configStore) return configStoreUnavailable(requestId);
 

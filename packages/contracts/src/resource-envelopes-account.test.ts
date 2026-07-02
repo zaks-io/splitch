@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   AppResponseSchema,
   CreateAppRequestSchema,
-  CreateAppResponseSchema,
   CreateCredentialResponseSchema,
   CreateMetricRequestSchema,
   CredentialSchema,
@@ -107,43 +106,6 @@ describe("CreateAppRequestSchema / PatchAppRequestSchema", () => {
     expect(PatchAppRequestSchema.safeParse({ key: "new" }).success).toBe(false);
     expect(PatchAppRequestSchema.safeParse({ organizationId: "org_2" }).success).toBe(false);
     expect(PatchAppRequestSchema.safeParse({ name: "Renamed" }).success).toBe(true);
-  });
-});
-
-describe("CreateAppResponseSchema (API Key raw value, once only)", () => {
-  it("surfaces the raw apiKey + clientKey values for the seeded Environment", () => {
-    const res = CreateAppResponseSchema.parse({
-      app: {
-        id: "app_1",
-        organizationId: "org_1",
-        name: "Checkout",
-        key: "checkout",
-        createdAt: "2026-06-28T00:00:00.000Z",
-        updatedAt: "2026-06-28T00:00:00.000Z",
-      },
-      environmentId: "env_dev",
-      apiKey: { id: "ak_1", value: "sk_raw_secret" },
-      clientKey: { id: "ck_1", value: "pk_public" },
-    });
-    expect(res.apiKey.value).toBe("sk_raw_secret");
-    expect(res.environmentId).toBe("env_dev");
-  });
-
-  it("rejects a response missing the apiKey raw pair", () => {
-    expect(
-      CreateAppResponseSchema.safeParse({
-        app: {
-          id: "app_1",
-          organizationId: "org_1",
-          name: "Checkout",
-          key: "checkout",
-          createdAt: "2026-06-28T00:00:00.000Z",
-          updatedAt: "2026-06-28T00:00:00.000Z",
-        },
-        environmentId: "env_dev",
-        clientKey: { id: "ck_1", value: "pk_public" },
-      }).success,
-    ).toBe(false);
   });
 });
 

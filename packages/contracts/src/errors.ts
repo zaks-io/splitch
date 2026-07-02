@@ -23,6 +23,7 @@ export const errorCodes = [
   "EXPERIMENT_RUNNING",
   "EXPERIMENT_NO_DRAFT",
   "VARIANT_NOT_AVAILABLE",
+  "RESOURCE_NOT_EMPTY",
 
   // Not found
   "EXPERIMENT_NOT_FOUND",
@@ -45,6 +46,7 @@ export const errorCodes = [
   "ORIGIN_NOT_ALLOWED",
   "APP_MISMATCH",
   "LAST_OWNER_REQUIRED",
+  "LAST_ENVIRONMENT_REQUIRED",
   "PRIVACY_CONFIRMATION_REQUIRED",
   "CONFIRMATION_REQUIRED",
 
@@ -191,6 +193,16 @@ const errorMembers = [
       recommendedAction: RecommendedActionSchema,
     }),
   ),
+  member(
+    "RESOURCE_NOT_EMPTY",
+    z.object({
+      resourceType: z.enum(["app", "environment"]),
+      resourceId: z.string(),
+      childType: z.string(),
+      childCount: z.number(),
+      attemptedOp: z.string(),
+    }),
+  ),
 
   member("EXPERIMENT_NOT_FOUND", EmptyDetails),
   member("RUN_NOT_FOUND", EmptyDetails),
@@ -214,6 +226,7 @@ const errorMembers = [
   member("ORIGIN_NOT_ALLOWED", z.object({ origin: z.string(), hint: z.string() })),
   member("APP_MISMATCH", EmptyDetails),
   member("LAST_OWNER_REQUIRED", z.object({ orgId: z.string() })),
+  member("LAST_ENVIRONMENT_REQUIRED", z.object({ appId: z.string() })),
   member(
     "PRIVACY_CONFIRMATION_REQUIRED",
     z.object({ confirmationRequired: z.literal(true), confirmationExpiresAt: z.string() }),

@@ -56,12 +56,7 @@ export function deriveBinding(scopes: readonly string[]): ScopeBinding {
   };
 }
 
-/**
- * Required scope to WRITE an App (access-control-matrix.md: an App mutation needs
- * the `admin` role on that App). The single authoring point for the App-write
- * role gate; the owning Worker layers it onto the write route's `scopes` so the
- * registrar's generic scope step enforces it.
- */
+/** Build the exact App admin scope string used by admin-only route gates. */
 export function appAdminScope(appId: string): string {
   return `app:${appId}:admin`;
 }
