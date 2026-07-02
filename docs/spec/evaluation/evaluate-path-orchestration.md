@@ -128,9 +128,8 @@ All Conditions must match (AND semantics). For `segment_in` / `segment_not_in` o
 membership = Entity matches the Segment's own Conditions (recursively evaluated;
 Segments are Conditions, not a separate authorization layer).
 
-Missing context attribute: treated as null; operators that require the attribute to be
-present (`eq`, `gt`, etc.) return false. Operators on null: fail-loud (log a warning; do
-not silently pass).
+Missing context attribute: treated as null. Operators on missing or null attributes fail
+loud: log a warning and return the evaluate-path error/default result with no Exposure.
 
 ## Fractional Evaluation
 

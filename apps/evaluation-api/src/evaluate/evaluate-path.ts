@@ -3,7 +3,7 @@ import { assign } from "../assignment/assign.js";
 import { fractionalEval } from "../assignment/fractional-eval.js";
 import type { RunConfig } from "../assignment/run-config.js";
 import { type ExperimentConfig, type FlagConfig, ProviderError } from "../provider/provider.js";
-import { matchesConditions } from "./conditions.js";
+import { ConditionMatchError, matchesConditions } from "./conditions.js";
 import type {
   ErrorEvaluateResult,
   EvaluatePathDeps,
@@ -72,7 +72,13 @@ export async function evaluatePath(
       return defaultResult("no_live_run", flag.defaultVariant);
     }
 
-    return evaluateLiveRun(validatedInput, flag, flag.experimentId, experiment.liveRun);
+    return evaluateLiveRun(
+      validatedInput,
+      flag,
+      flag.experimentId,
+      experiment.liveRun,
+      deps.logger,
+    );
   } catch (cause) {
     return errorResult(defaultVariant, cause, deps.logger);
   }
@@ -130,6 +136,7 @@ function evaluateLiveRun(
   flag: FlagConfig,
   experimentId: string,
   run: RunConfig,
+  logger: EvaluatePathDeps["logger"],
 ): FreshAssignmentEvaluateResult | RuleMatchEvaluateResult | NoMatchEvaluateResult {
   const rules = [...run.targetingRules].sort((a, b) => a.priority - b.priority);
   if (rules.length === 0) {
@@ -145,7 +152,7 @@ function evaluateLiveRun(
   }
 
   for (const rule of rules) {
-    const match = evaluateTargetingRule(input, flag, experimentId, run, rule);
+    const match = evaluateTargetingRule(input, flag, experimentId, run, rule, logger);
     if (match !== null) return match;
   }
 
@@ -165,8 +172,9 @@ function evaluateTargetingRule(
   experimentId: string,
   run: RunConfig,
   rule: TargetingRule,
+  logger: EvaluatePathDeps["logger"],
 ): RuleMatchEvaluateResult | null {
-  if (!matchesConditions(rule.conditions, input.evaluationContext)) {
+  if (!matchesConditions(rule.conditions, input.evaluationContext, { logger, ruleId: rule.id })) {
     return null;
   }
 
@@ -261,7 +269,11 @@ function errorResult(
 }
 
 function errorCodeFor(cause: unknown): ErrorCode {
-  if (cause instanceof ProviderError || cause instanceof EvaluatePathError) {
+  if (
+    cause instanceof ProviderError ||
+    cause instanceof EvaluatePathError ||
+    cause instanceof ConditionMatchError
+  ) {
     return cause.errorCode;
   }
   return "INTERNAL_SERVER_ERROR";

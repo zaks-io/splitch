@@ -1,56 +1,92 @@
-import type { Condition, EvaluationContext, TargetingRule } from "@splitch/contracts";
+import type { Condition, ErrorCode, EvaluationContext, TargetingRule } from "@splitch/contracts";
 
-class ConditionMatchError extends Error {}
+export class ConditionMatchError extends Error {
+  readonly errorCode: ErrorCode;
+
+  constructor(
+    message: string,
+    errorCode: ErrorCode = "INTERNAL_SERVER_ERROR",
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = "ConditionMatchError";
+    this.errorCode = errorCode;
+  }
+}
+
+export interface ConditionMatchOptions {
+  logger?: Pick<Console, "warn">;
+  ruleId?: string;
+}
 
 export function matchesConditions(
   conditions: TargetingRule["conditions"],
   context: EvaluationContext,
+  options: ConditionMatchOptions = {},
 ) {
-  return conditions.every((condition) => matchesCondition(condition, context));
+  return conditions.every((condition) => matchesCondition(condition, context, options));
 }
 
-function matchesCondition(condition: Condition, context: EvaluationContext): boolean {
+function matchesCondition(
+  condition: Condition,
+  context: EvaluationContext,
+  options: ConditionMatchOptions,
+): boolean {
   const actual = contextValue(context, condition.attribute);
-  if (actual === null || actual === undefined) {
-    return false;
+  if (actual.value === null || actual.value === undefined) {
+    options.logger?.warn("condition_attribute_null", {
+      attribute: condition.attribute,
+      hasAttribute: actual.hasAttribute,
+      operator: condition.operator,
+      ruleId: options.ruleId ?? null,
+    });
+    throw new ConditionMatchError(
+      `Targeting condition attribute "${condition.attribute}" is missing or null`,
+      "VALIDATION_ERROR",
+    );
   }
 
   switch (condition.operator) {
     case "eq":
-      return Object.is(actual, condition.value);
+      return Object.is(actual.value, condition.value);
     case "neq":
-      return !Object.is(actual, condition.value);
+      return !Object.is(actual.value, condition.value);
     case "gt":
-      return compareNumbers(actual, condition.value, (a, b) => a > b);
+      return compareNumbers(actual.value, condition.value, (a, b) => a > b);
     case "lt":
-      return compareNumbers(actual, condition.value, (a, b) => a < b);
+      return compareNumbers(actual.value, condition.value, (a, b) => a < b);
     case "gte":
-      return compareNumbers(actual, condition.value, (a, b) => a >= b);
+      return compareNumbers(actual.value, condition.value, (a, b) => a >= b);
     case "lte":
-      return compareNumbers(actual, condition.value, (a, b) => a <= b);
+      return compareNumbers(actual.value, condition.value, (a, b) => a <= b);
     case "in":
       return (
-        Array.isArray(condition.value) && condition.value.some((value) => Object.is(value, actual))
+        Array.isArray(condition.value) &&
+        condition.value.some((value) => Object.is(value, actual.value))
       );
     case "not_in":
       return (
-        Array.isArray(condition.value) && !condition.value.some((value) => Object.is(value, actual))
+        Array.isArray(condition.value) &&
+        !condition.value.some((value) => Object.is(value, actual.value))
       );
     case "matches":
-      return matchesRegex(actual, condition.value);
+      return matchesRegex(actual.value, condition.value);
     case "not_matches":
-      return !matchesRegex(actual, condition.value);
+      return !matchesRegex(actual.value, condition.value);
   }
 }
 
 function contextValue(context: EvaluationContext, attribute: string) {
   if (attribute === "targetingKey") {
-    return context.targetingKey;
+    return { hasAttribute: true, value: context.targetingKey };
   }
   if (attribute === "idType") {
-    return context.idType;
+    return { hasAttribute: true, value: context.idType };
   }
-  return context.attributes[attribute] ?? null;
+  return {
+    hasAttribute: Object.hasOwn(context.attributes, attribute),
+    value: context.attributes[attribute] ?? null,
+  };
 }
 
 function compareNumbers(
@@ -68,6 +104,12 @@ function matchesRegex(actual: unknown, expected: unknown) {
   try {
     return new RegExp(expected).test(actual);
   } catch (cause) {
-    throw new ConditionMatchError(`Invalid regex condition "${expected}"`, { cause });
+    throw new ConditionMatchError(
+      `Invalid regex condition "${expected}"`,
+      "INTERNAL_SERVER_ERROR",
+      {
+        cause,
+      },
+    );
   }
 }
