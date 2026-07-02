@@ -11,6 +11,12 @@
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local"
   },
+  "kv_namespaces": [
+    {
+      "binding": "CONFIG_STORE",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
   "env": {
     "shared-preview": {
       "name": "splitch-event-ingest-api-shared-preview",

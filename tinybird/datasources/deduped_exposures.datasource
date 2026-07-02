@@ -1,0 +1,14 @@
+SCHEMA >
+    `app_id` String `json:$.app_id`,
+    `environment_id` String `json:$.environment_id`,
+    `experiment_id` String `json:$.experiment_id`,
+    `run_id` String `json:$.run_id`,
+    `id_type` String `json:$.id_type`,
+    `targeting_key_hash` String `json:$.targeting_key_hash`,
+    `variant` String `json:$.variant`,
+    `first_exposure_ts` DateTime64(3) `json:$.first_exposure_ts`,
+    `snapshot_ts` DateTime64(3) `json:$.snapshot_ts`,
+    `watermark_ts` DateTime64(3) `json:$.watermark_ts`
+
+ENGINE "MergeTree"
+ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, run_id, variant, targeting_key_hash"
