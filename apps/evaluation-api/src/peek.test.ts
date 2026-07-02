@@ -57,6 +57,25 @@ describe("POST /api/sdk/peek", () => {
     expect(assignmentStore.putCalls).toEqual([]);
   });
 
+  it.each([
+    ["disabled Flag", { flagOverrides: { enabled: false } }],
+    ["no Targeting Rule match", { flagOverrides: { targetingRules: [] } }],
+  ])("rejects a Default Variant fallback for %s", async (_caseName, options) => {
+    const { app, assignmentStore } = await makeSdkRouteHarness(options);
+
+    const res = await app.request(PATH, sdkRouteInit(API_KEY));
+    const body = (await res.json()) as ErrorResponse;
+
+    expect(res.status).toBe(400);
+    expect(body).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [] },
+    });
+    expect(body.message).toContain("Default Variant fallback");
+    expect(body).not.toHaveProperty("variant");
+    expect(assignmentStore.putCalls).toEqual([]);
+  });
+
   it("is repeatable without Exposure payloads or Assignment Store writes", async () => {
     const { app, assignmentStore } = await makeSdkRouteHarness({ liveRun: true });
 

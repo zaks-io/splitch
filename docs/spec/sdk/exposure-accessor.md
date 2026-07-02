@@ -100,11 +100,12 @@ A Client Key presented to this endpoint is rejected `403 INSUFFICIENT_SCOPES` (t
 structurally lacks the peek scope; a missing/invalid credential is `401 UNAUTHORIZED`). The Worker
 gates peek on an API Key's `data-plane:evaluate` scope, the same credential the server-side SDK holds.
 
-All other error responses (`404 NOT_FOUND` for an unknown Flag, `429 RATE_LIMITED`, `503` on an
-unreachable Provider) follow the canonical error contract in
+All other error responses (`400 VALIDATION_ERROR`, `404 NOT_FOUND` for an unknown Flag,
+`429 RATE_LIMITED`, `503` on an unreachable Provider) follow the canonical error contract in
 [contracts/error-responses.md](../contracts/error-responses.md) — peek does not define its own. Unlike
-`evaluate`, peek has no Default-Variant fallback: it fails loud with the error envelope (peek is a
-server-side authoring/diagnostic call, never a hot-path resolution).
+`evaluate`, peek has no Default-Variant fallback: disabled, no-live-Run, null-Experiment, and
+no-match-default resolutions fail loud with the error envelope (peek is a server-side
+authoring/diagnostic call, never a hot-path resolution).
 
 Request: same as `EvaluateRequest` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
 
@@ -184,9 +185,11 @@ at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/
 - **Port (verify):** `verify(flagKey, context) -> ResolutionDetails` — no side effect (all tiers, ADR-0037)
 - **Left side:** SDK consumer (application code)
 - **Right side:** Cloudflare Worker (calls Provider, Assignment Store, fires Exposure)
-- **Failure contract (fail-loud, ADR-0036):** network or server failure → Default Variant
-  returned with `reason: ERROR` + `errorCode`, no Exposure fired, loud error log/hook. Never a
-  silent default. Disabled/no-config/no-match → Default Variant with `reason: DISABLED`/`DEFAULT`.
+- **Failure contract (fail-loud, ADR-0036):** for `evaluate` and `verify`, network or server
+  failure returns the Default Variant with `reason: ERROR` + `errorCode`, fires no Exposure, and
+  emits a loud error log/hook. Never a silent default. Disabled/no-config/no-match returns the
+  Default Variant with `reason: DISABLED`/`DEFAULT`. Peek is stricter: failures and Default Variant
+  fallbacks return the canonical error envelope instead of a Variant value.
 - **No manual exposure():** there is no `fireExposure(flagKey, variant)` call. Exposure is
   structural (fires on `evaluate`), not imperative. This is intentional (ADR-0004).
 - **Deletion test:** both `evaluate` and `peekVariant` are real adapters on the

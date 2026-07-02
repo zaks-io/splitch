@@ -5,6 +5,9 @@ import {
   experimentConfigKey,
   flagConfigKey,
   runConfigKey,
+  type ExperimentConfigKV,
+  type FlagConfigKV,
+  type RunConfigKV,
 } from "@splitch/contracts";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
 import { createApp } from "./app.js";
@@ -35,6 +38,9 @@ const controlPlaneAuthResolver: AuthResolver = () => ({ ok: false, reason: "UNAU
 
 interface SdkRouteHarnessOptions {
   readonly liveRun?: boolean;
+  readonly experimentOverrides?: Partial<ExperimentConfigKV>;
+  readonly flagOverrides?: Partial<FlagConfigKV>;
+  readonly runOverrides?: Partial<RunConfigKV>;
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -44,17 +50,18 @@ function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
       flagConfigKV({
         experimentId: EXPERIMENT_ID,
         targetingRules: [targetingRule({ id: "rule-enterprise" })],
+        ...options.flagOverrides,
       }),
     )
     .put(
       experimentConfigKey(APP_ID, ENVIRONMENT_ID, EXPERIMENT_ID),
       options.liveRun
-        ? experimentConfigKV()
-        : experimentConfigKV({ liveRunId: null, status: "draft" }),
+        ? experimentConfigKV(options.experimentOverrides)
+        : experimentConfigKV({ liveRunId: null, status: "draft", ...options.experimentOverrides }),
     );
 
   return options.liveRun
-    ? kv.put(runConfigKey(APP_ID, ENVIRONMENT_ID, "run-42"), runConfigKV())
+    ? kv.put(runConfigKey(APP_ID, ENVIRONMENT_ID, "run-42"), runConfigKV(options.runOverrides))
     : kv;
 }
 

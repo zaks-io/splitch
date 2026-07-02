@@ -10,6 +10,12 @@ import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-pa
 import type { EvaluateResult } from "./evaluate/evaluate-path.js";
 import type { FlagConfig, Provider } from "./provider/provider.js";
 
+type ResolvedEvaluateResult = Exclude<EvaluateResult, { kind: "error" }>;
+type PeekDefaultFallbackKind = Extract<
+  ResolvedEvaluateResult["kind"],
+  "disabled" | "no_live_run" | "null_experiment" | "no_match_default"
+>;
+
 type PeekInput = {
   body: {
     flagKey: string;
@@ -46,10 +52,9 @@ export function makePeekHandler(deps: EvaluatePathDeps) {
       { ...deps, provider },
     );
 
-    if (output.result.kind === "error") {
-      return renderError(errorResponse(output.result.errorCode, output.result.errorMessage), {
-        requestId,
-      });
+    const resolved = resolvePeekResult(output.result);
+    if (!resolved.ok) {
+      return renderError(resolved.error, { requestId });
     }
     if (provider.flag === null) {
       return renderError(errorResponse("INTERNAL_SERVER_ERROR", "flag config was not resolved"), {
@@ -57,7 +62,7 @@ export function makePeekHandler(deps: EvaluatePathDeps) {
       });
     }
 
-    const value = valueForVariant(provider.flag.variants, output.result);
+    const value = valueForVariant(provider.flag.variants, resolved.result);
     if (!value.ok) {
       return renderError(
         errorResponse("INTERNAL_SERVER_ERROR", `Variant "${value.variantName}" has no value`),
@@ -67,6 +72,35 @@ export function makePeekHandler(deps: EvaluatePathDeps) {
 
     return Response.json(PeekEvaluateResponseSchema.parse({ variant: value.value }));
   };
+}
+
+function resolvePeekResult(
+  result: EvaluateResult,
+): { ok: true; result: ResolvedEvaluateResult } | { ok: false; error: ErrorResponse } {
+  if (result.kind === "error") {
+    return { ok: false, error: errorResponse(result.errorCode, result.errorMessage) };
+  }
+  if (isPeekDefaultFallback(result)) {
+    return {
+      ok: false,
+      error: errorResponse(
+        "VALIDATION_ERROR",
+        `peek cannot return a Default Variant fallback (${result.kind})`,
+      ),
+    };
+  }
+  return { ok: true, result };
+}
+
+function isPeekDefaultFallback(
+  result: ResolvedEvaluateResult,
+): result is Extract<ResolvedEvaluateResult, { kind: PeekDefaultFallbackKind }> {
+  return (
+    result.kind === "disabled" ||
+    result.kind === "no_live_run" ||
+    result.kind === "null_experiment" ||
+    result.kind === "no_match_default"
+  );
 }
 
 function peekInput(input: unknown): PeekInput {

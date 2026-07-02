@@ -277,8 +277,8 @@ under an API Key `verify` returns the full reason (ADR-0037). The mapping from H
 
 **POST /api/sdk/peek** (data-plane diagnostic, API Key only — ADR-0034)
 
-- `APP_NOT_FOUND` / `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `INSUFFICIENT_SCOPES` / `RATE_LIMITED`
-  — Note: never fires an Exposure and never writes the Assignment Store. A valid Client Key is rejected with `INSUFFICIENT_SCOPES`; missing or invalid credentials are `UNAUTHORIZED`.
+- `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `INSUFFICIENT_SCOPES` / `APP_MISMATCH` / `VALIDATION_ERROR` / `RATE_LIMITED` / `SERVICE_UNAVAILABLE`
+  — Note: never fires an Exposure and never writes the Assignment Store. A valid Client Key is rejected with `INSUFFICIENT_SCOPES`; missing or invalid credentials are `UNAUTHORIZED`. A Default Variant fallback (`disabled`, no live Run, null Experiment, or no Targeting Rule match) is `VALIDATION_ERROR`, never `200 { variant: <default> }`.
 
 **POST /api/sdk/verify** (data-plane setup confirmation, Client Key or API Key — ADR-0037)
 

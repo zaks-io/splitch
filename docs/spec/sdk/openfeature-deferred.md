@@ -12,7 +12,7 @@ This file pins exactly what is deferred so implementing agents do not guess.
 - `sdk.verify(flagKey, context) -> Promise<ResolutionDetails>` — no Exposure; setup confirmation, all tiers (ADR-0037)
 - `idType` defaults to `'user'` in the SDK; overridable per call (ADR-0036)
 - Lazy-fetch-on-first-evaluate init
-- **Fail-loud** Default Variant fallback on failure: returned with `reason: ERROR` + `errorCode`, loud log/hook, never silent (ADR-0036)
+- **Fail-loud** fallback behavior: `evaluate`/`verify` failure fallbacks return the Default Variant with `reason: ERROR` + `errorCode`; peek failures and Default Variant fallbacks return the canonical error envelope instead (ADR-0036).
 - Single-flag-per-call; batch evaluation is deferred
 - In-memory seen-set (LRU, per-instance)
 - Client Key / API Key auth (runtime-appropriate)
