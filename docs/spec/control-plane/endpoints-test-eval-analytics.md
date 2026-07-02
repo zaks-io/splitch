@@ -55,6 +55,7 @@ endpoint must never reveal.
         selection: "direct" | "percentage_rollout",
         rollout?: { variantWeights: { variantName: string, weight: number }[] }
       }
+    | { type: "fresh_assignment" }
     | { type: "default_disabled" }
     | { type: "no_match_default" }
 }
@@ -64,8 +65,9 @@ The canonical request and response envelopes live in
 [../contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md).
 Reason shape is a Zod discriminated union on `type`. `rule_matched` carries enough info for a human
 or agent to identify which Targeting Rule fired. Percentage Rollout outcome is implied by the
-`selection` field; the bucket and salt are not exposed in the response. `holdover_replay` names the
-prior Run that owns the sticky experience.
+`selection` field; the bucket and salt are not exposed in the response. `fresh_assignment` means the
+live Run assignment determined the Variant. `holdover_replay` names the prior Run that owns the
+sticky experience.
 
 **Invariant:** wired to no write path — no Exposure log row, no Assignment Store `put()`, by
 construction (ADR-0026).

@@ -117,6 +117,7 @@ export const TestEvaluationReasonSchema = z.discriminatedUnion("type", [
     // Present-with-null: the weight set on a percentage_rollout, null otherwise.
     rollout: z.object({ variantWeights: z.array(RolloutWeightSchema) }).nullable(),
   }),
+  z.object({ type: z.literal("fresh_assignment") }),
   z.object({ type: z.literal("default_disabled") }),
   z.object({ type: z.literal("no_match_default") }),
 ]);

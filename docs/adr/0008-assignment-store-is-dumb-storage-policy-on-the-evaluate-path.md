@@ -26,7 +26,8 @@ occurred (replayed / freshly assigned / stamped). It is a superposition you have
 to collapse. Dumb get/put keeps the evaluate path a readable straight line where every branch is visible:
 
 ```
-held = AssignmentStore.getAll(experiment, idType, targetingKey)   # one edge-local read
+validatedIdType = assertMatchesExperiment(idType, experiment.targetingKeyType)
+held = AssignmentStore.getAll(experiment, validatedIdType, targetingKey)   # one edge-local read
 for flag in flags:
     if held[exp] present:            # holdover: returning, already exposed
         variant = held[exp].variant  #   replay (ADR-0006); no write, no new Exposure

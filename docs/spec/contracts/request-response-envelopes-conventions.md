@@ -130,6 +130,7 @@ TestEvaluationReason =
       selection: 'direct' | 'percentage_rollout'
       rollout?: { variantWeights: { variantName: string; weight: number }[] }
     }
+  | { type: 'fresh_assignment' } // empty Run targetingRules; assign(Run, Targeting Key) served
   | { type: 'default_disabled' } // Flag.enabled = false
   | { type: 'no_match_default' } // no rule matched; Default Variant served
 ```

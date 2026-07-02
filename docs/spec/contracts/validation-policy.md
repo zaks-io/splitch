@@ -13,7 +13,7 @@ trusts are not optional. Each rule here is non-negotiable; the reasoning is in t
 | KV reads (all, including hot path) | JSON blobs                                      | **Always**          | `ErrorResponse { code: 'INTERNAL_SERVER_ERROR' }` + loud log — blob is corrupted cache, not user error         |
 | D1 reads                           | Drizzle ORM rows                                | **Never** (trusted) | — column schema enforced by Drizzle migrations; structurally sound by construction                             |
 | Tinybird reads                     | Raw event rows                                  | **Never**           | Query-time filtering is on values; append-only log corruption is a platform incident, not app-boundary concern |
-| Assignment Store KV                | `AssignmentStoreValue` blobs                    | **Always**          | `INTERNAL_SERVER_ERROR` + miss-and-recompute (self-healing)                                                    |
+| Assignment Store KV                | `AssignmentStoreValue` blobs                    | **Always**          | `INTERNAL_SERVER_ERROR` + loud log — present-but-corrupt blob is never treated as a miss                       |
 
 ---
 

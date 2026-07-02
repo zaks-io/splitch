@@ -65,7 +65,8 @@ When Run N ends and Run N+1 opens, a returning Entity already **exposed** under 
 
 ```
 on evaluate(flag, targetingKey, idType):
-  held = AssignmentStore.getAll(appId, environmentId, idType, targetingKey)
+  validatedIdType = assertMatchesExperiment(idType, experiment.targetingKeyType)
+  held = AssignmentStore.getAll(appId, environmentId, validatedIdType, targetingKey)
   if held[experiment] present:           # holdover: exposed under a prior Run
       show held[experiment].variant      # sticky experience — no jarring flip
       do NOT fire a new Exposure         # already counted, attached to the old Run
