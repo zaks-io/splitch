@@ -120,16 +120,6 @@ export async function runningExperimentError(
   );
 }
 
-export async function deleteEnvironmentChildren(
-  deps: AppEnvironmentDeps,
-  appId: string,
-  environmentId: string,
-): Promise<void> {
-  const scope = envScope(appId, environmentId);
-  await deps.repo.credentials.apiKeys.remove(scope);
-  await deps.repo.credentials.clientKeys.remove(scope);
-}
-
 export async function deleteAppBlockedByChildren(
   deps: AppEnvironmentDeps,
   app: AppRow,

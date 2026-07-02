@@ -2,13 +2,13 @@ import type { EnvironmentPolicy } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz.js";
+import { deleteEnvironmentCredentials } from "./app-environment-credentials.js";
 import {
   ALLOW_POLICY,
   type AppEnvironmentDeps,
   appNotFound,
   createEnvironmentRecord,
   deleteEnvironmentBlockedByChildren,
-  deleteEnvironmentChildren,
   environmentResponse,
   lastEnvironmentRequired,
   nowIso,
@@ -126,7 +126,7 @@ async function deleteEnvironmentAfterAuth(
   );
   if (blocker) return blocker;
 
-  await deleteEnvironmentChildren(deps, appId, environmentId);
+  await deleteEnvironmentCredentials(deps, appId, environmentId);
   await deps.repo.identity.deleteEnvironment(scope, environmentId);
   return Response.json({ deleted: true });
 }

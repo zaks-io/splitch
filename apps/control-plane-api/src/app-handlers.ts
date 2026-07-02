@@ -2,14 +2,19 @@ import { appScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz.js";
 import {
+  deleteEnvironmentCredentialRows,
+  revokeEnvironmentCredentialCaches,
+} from "./app-environment-credentials.js";
+import {
   ALLOW_POLICY,
   CONFIRM_POLICY,
   type AppEnvironmentDeps,
+  type AppRow,
+  type EnvironmentRow,
   appNotFound,
   appResponse,
   createEnvironmentRecord,
   deleteAppBlockedByChildren,
-  deleteEnvironmentChildren,
   environmentResponse,
   firstRunningExperiment,
   nowIso,
@@ -124,26 +129,57 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
       const deleteError = await requireAppDelete(deps, appId, principal.id, requestId);
       if (deleteError) return deleteError;
 
-      const environments = await deps.repo.identity.listEnvironments(appScope(appId));
-      const running = await firstRunningExperiment(
-        deps,
-        appId,
-        environments,
-        "DELETE_APP",
-        requestId,
-      );
-      if (running) return running;
-
-      const childBlocker = await deleteAppBlockedByChildren(deps, app, environments, requestId);
-      if (childBlocker) return childBlocker;
-
-      for (const env of environments) {
-        await deleteEnvironmentChildren(deps, appId, env.id);
-        await deps.repo.identity.deleteEnvironment(appScope(appId), env.id);
-      }
-      await deps.repo.identity.deleteAppMemberships(appScope(appId));
-      await deps.repo.identity.deleteApp(appId);
-      return Response.json({ deleted: true });
+      return deleteAppAfterAuth(deps, app, requestId);
     },
   };
+}
+
+async function deleteAppAfterAuth(
+  deps: AppEnvironmentDeps,
+  app: AppRow,
+  requestId: string,
+): Promise<Response> {
+  const environments = await deps.repo.identity.listEnvironments(appScope(app.id));
+  const blocker = await appDeleteBlocker(deps, app, environments, requestId);
+  if (blocker) return blocker;
+
+  await revokeAppCredentialCaches(deps, app.id, environments);
+  await deleteAppRows(deps, app.id, environments);
+  return Response.json({ deleted: true });
+}
+
+async function appDeleteBlocker(
+  deps: AppEnvironmentDeps,
+  app: AppRow,
+  environments: readonly EnvironmentRow[],
+  requestId: string,
+): Promise<Response | null> {
+  return (
+    (await firstRunningExperiment(deps, app.id, environments, "DELETE_APP", requestId)) ??
+    (await deleteAppBlockedByChildren(deps, app, environments, requestId))
+  );
+}
+
+async function revokeAppCredentialCaches(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  environments: readonly EnvironmentRow[],
+): Promise<void> {
+  for (const env of environments) {
+    await revokeEnvironmentCredentialCaches(deps, appId, env.id);
+  }
+}
+
+async function deleteAppRows(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  environments: readonly EnvironmentRow[],
+): Promise<void> {
+  const scope = appScope(appId);
+  for (const env of environments) {
+    await deleteEnvironmentCredentialRows(deps, appId, env.id);
+    await deps.repo.identity.deleteEnvironment(scope, env.id);
+  }
+  await deps.repo.identity.deleteAppMemberships(scope);
+  await deps.repo.identity.deleteApp(appId);
 }
