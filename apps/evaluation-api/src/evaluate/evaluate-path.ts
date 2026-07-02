@@ -1,5 +1,6 @@
 import type { ErrorCode, PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { assign } from "../assignment/assign.js";
+import { AssignmentStoreError } from "../assignment/assignment-store.js";
 import { fractionalEval } from "../assignment/fractional-eval.js";
 import type { RunConfig } from "../assignment/run-config.js";
 import { type ExperimentConfig, type FlagConfig, ProviderError } from "../provider/provider.js";
@@ -113,6 +114,9 @@ async function preloadHoldovers(
       targetingKey: input.evaluationContext.targetingKey,
     });
   } catch (cause) {
+    if (cause instanceof AssignmentStoreError) {
+      throw cause;
+    }
     deps.logger?.warn("assignment_store_get_all_failed", { cause });
     return new Map();
   }
@@ -272,6 +276,7 @@ function errorCodeFor(cause: unknown): ErrorCode {
   if (
     cause instanceof ProviderError ||
     cause instanceof EvaluatePathError ||
+    cause instanceof AssignmentStoreError ||
     cause instanceof ConditionMatchError
   ) {
     return cause.errorCode;

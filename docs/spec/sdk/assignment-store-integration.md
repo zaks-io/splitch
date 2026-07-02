@@ -77,12 +77,16 @@ provided; the Worker validates it matches the Experiment's pinned idType and ret
 
 ## Fallback: Assignment Store read failure
 
-`getAll` reads Workers KV, which is edge-local and fast. If the KV read fails (transient
-error), the evaluate path falls through to `assign()` as if there were no holdover. This
-may briefly break sticky experience for a returning Entity but is self-healing on the next
-request. It MUST NOT fire an Exposure if the Entity is actually a holdover — but without
-the KV data, the Worker cannot distinguish holdover from new. Acceptable trade: a transient
-KV failure causes at most one mismatched experience, which converges.
+`getAll` reads Workers KV, which is edge-local and fast. If the KV read fails before a blob
+is returned (transient platform error), the evaluate path falls through to `assign()` as if
+there were no holdover. This may briefly break sticky experience for a returning Entity but
+is self-healing on the next request. Without the KV data, the Worker cannot distinguish a
+holdover from a new Entity. Acceptable trade: a transient KV failure causes at most one
+mismatched experience, which converges.
+
+A present-but-malformed Assignment Store blob is different: schema or JSON corruption fails
+loud with `INTERNAL_SERVER_ERROR`, logs the parse failure, and produces no Exposure decision.
+Corruption is never treated as an empty holdover map.
 
 On KV miss (not failure — the Entity has no prior entry), `assign()` runs normally and the
 Exposure pipeline creates the first-touch Assignment Store entry.

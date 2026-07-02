@@ -1,4 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { hashedAssignmentIdentity } from "../assignment/assignment-store.js";
+import {
+  RecordingKv,
+  RecordingWriterNamespace,
+  StaticSaltStore,
+} from "../assignment/assignment-store-test-fixtures.js";
+import { KvAssignmentStore } from "../assignment/kv-assignment-store.js";
 import { ProviderError } from "../provider/provider.js";
 import { evaluatePath } from "./evaluate-path.js";
 import {
@@ -130,6 +137,50 @@ describe("evaluatePath no-exposure paths", () => {
 });
 
 describe("evaluatePath failure path", () => {
+  it("a corrupt Assignment Store read yields ERROR with no Exposure and no Assignment Store put", async () => {
+    const input = baseInput();
+    const saltStore = new StaticSaltStore();
+    const kv = new RecordingKv();
+    const namespace = new RecordingWriterNamespace();
+    const { entityKey } = await hashedAssignmentIdentity(saltStore, {
+      appId: input.appId,
+      idType: input.evaluationContext.idType,
+      targetingKey: input.evaluationContext.targetingKey,
+    });
+    kv.putRaw(
+      entityKey,
+      JSON.stringify({
+        schemaVersion: 1,
+        data: { [EXPERIMENT_ID]: { runId: "run-prior", variant: 42 } },
+      }),
+    );
+    const store = new KvAssignmentStore(kv, namespace, saltStore);
+    const provider = new RecordingProvider({
+      experiment: experimentConfig({
+        liveRun: runConfig({
+          allocation: { control: 0, treatment: 100 },
+          targetingRules: [],
+        }),
+      }),
+    });
+    const logger = new RecordingLogger();
+
+    const result = await evaluatePath(input, { assignmentStore: store, provider, logger });
+
+    expect(result).toMatchObject({
+      kind: "error",
+      variant: "control",
+      reason: "ERROR",
+      errorCode: "INTERNAL_SERVER_ERROR",
+      liveRunId: null,
+      exposure: null,
+    });
+    expect(kv.getCalls).toEqual([entityKey]);
+    expect(namespace.names).toEqual([]);
+    expect(logger.warnings).toEqual([]);
+    expect(logger.errors).toHaveLength(1);
+  });
+
   it("a Provider throw yields reason ERROR with no Exposure and no Assignment Store put", async () => {
     const store = new RecordingAssignmentStore();
     const provider = new RecordingProvider({
