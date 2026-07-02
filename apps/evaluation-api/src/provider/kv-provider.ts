@@ -80,7 +80,7 @@ export class KvProvider implements Provider {
 
     // ONE read: experimentId is denormalized on the flag blob, so flag ->
     // experiment never needs a second KV get here.
-    const blob = await this.readBlob(key, parseFlagConfig, `flag ${flagKey}`);
+    const blob = await this.readBlob(key, parseFlagConfig, `flag ${flagKey}`, "FLAG_NOT_FOUND");
     const config = flagConfigFromKV(appId, blob);
     this.cache.set(key, config);
     return config;
@@ -137,10 +137,15 @@ export class KvProvider implements Provider {
    * version, or schema violation throws a ProviderError — a partial/half-valid
    * object must never escape this boundary.
    */
-  private async readBlob<T>(key: string, parse: BlobParse<T>, label: string): Promise<T> {
+  private async readBlob<T>(
+    key: string,
+    parse: BlobParse<T>,
+    label: string,
+    missCode: ProviderError["errorCode"] = "INTERNAL_SERVER_ERROR",
+  ): Promise<T> {
     const raw = await this.kv.get(key);
     if (raw === null) {
-      throw new ProviderError(`KV miss for ${label} (key "${key}")`);
+      throw new ProviderError(`KV miss for ${label} (key "${key}")`, { errorCode: missCode });
     }
 
     let json: unknown;

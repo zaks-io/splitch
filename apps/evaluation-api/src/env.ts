@@ -1,0 +1,12 @@
+import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store.js";
+
+export interface EvaluationApiEnv {
+  ASSIGNMENTS_KV: KVNamespace;
+  ASSIGNMENT_STORE_WRITER: AssignmentWriterNamespace;
+  CONFIG_STORE: KVNamespace;
+  SESSION_STORE: KVNamespace;
+  AUTH_JWKS_URI?: string;
+  CONTROL_PLANE_ORIGIN?: string;
+  EVALUATION_PRIVACY_SALT?: string;
+  SPLITCH_PLATFORM_TARGET?: string;
+}

@@ -32,23 +32,51 @@ describe("evaluatePath orchestration", () => {
 });
 
 describe("evaluatePath no-exposure paths", () => {
-  it.each([
-    ["disabled", { enabled: false }],
-    ["null_experiment", { experimentId: null }],
-  ] as const)("%s returns a structurally distinct no-exposure result", async (kind, flagPatch) => {
+  it("disabled returns a structurally distinct no-exposure result", async () => {
     const store = new RecordingAssignmentStore();
-    const provider = new RecordingProvider({ flag: flagConfig(flagPatch) });
+    const provider = new RecordingProvider({ flag: flagConfig({ enabled: false }) });
 
     const result = await evaluatePath(baseInput(), { assignmentStore: store, provider });
 
     expect(result).toMatchObject({
-      kind,
+      kind: "disabled",
       variant: "control",
       reason: { type: "default_disabled" },
       liveRunId: null,
       exposure: null,
     });
     expect(provider.experimentCalls).toEqual([]);
+    expect(store.putCalls).toEqual([]);
+  });
+
+  it("a flag with no Experiment uses flag-only Targeting Rules and fires no Exposure", async () => {
+    const store = new RecordingAssignmentStore();
+    const provider = new RecordingProvider({
+      flag: flagConfig({
+        experimentId: null,
+        targetingRules: [
+          {
+            id: "rule-flag-only",
+            flagId: "flag-1",
+            priority: 0,
+            conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
+            variantId: "v-treatment",
+          },
+        ],
+      }),
+    });
+
+    const result = await evaluatePath(baseInput(), { assignmentStore: store, provider });
+
+    expect(result).toMatchObject({
+      kind: "rule_match_direct",
+      variant: "treatment",
+      reason: { type: "rule_matched", ruleId: "rule-flag-only" },
+      liveRunId: null,
+      exposure: null,
+    });
+    expect(provider.experimentCalls).toEqual([]);
+    expect(store.getAllCalls).toEqual([]);
     expect(store.putCalls).toEqual([]);
   });
 
@@ -112,7 +140,7 @@ describe("evaluatePath no-exposure paths", () => {
 
     const result = await evaluatePath(baseInput(), { assignmentStore: store, provider });
 
-    expect(result.kind).toBe("no_live_run");
+    expect(result.kind).toBe("no_match_default");
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain("exp-other");
     expect(serialized).not.toContain("run-secret");
@@ -126,9 +154,9 @@ describe("evaluatePath no-exposure paths", () => {
     const result = await evaluatePath(baseInput(), { assignmentStore: store, provider });
 
     expect(result).toMatchObject({
-      kind: "no_live_run",
+      kind: "no_match_default",
       variant: "control",
-      reason: { type: "default_disabled" },
+      reason: { type: "no_match_default" },
       liveRunId: null,
       exposure: null,
     });

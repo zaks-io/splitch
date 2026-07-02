@@ -1,12 +1,12 @@
-import type { ErrorCode, PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
+import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { assign } from "../assignment/assign.js";
 import { AssignmentStoreError } from "../assignment/assignment-store.js";
 import { fractionalEval } from "../assignment/fractional-eval.js";
 import type { RunConfig } from "../assignment/run-config.js";
-import { type ExperimentConfig, type FlagConfig, ProviderError } from "../provider/provider.js";
-import { ConditionMatchError, matchesConditions } from "./conditions.js";
+import type { ExperimentConfig, FlagConfig } from "../provider/provider.js";
+import { matchesConditions } from "./conditions.js";
+import { EvaluatePathError, errorResult } from "./evaluate-errors.js";
 import type {
-  ErrorEvaluateResult,
   EvaluatePathDeps,
   EvaluatePathInput,
   EvaluateResult,
@@ -18,20 +18,6 @@ import type {
 } from "./evaluate-path-types.js";
 
 export type { EvaluatePathDeps, EvaluatePathInput, EvaluateResult } from "./evaluate-path-types.js";
-
-class EvaluatePathError extends Error {
-  readonly errorCode: ErrorCode;
-
-  constructor(
-    message: string,
-    errorCode: ErrorCode = "INTERNAL_SERVER_ERROR",
-    options?: { cause?: unknown },
-  ) {
-    super(message, options);
-    this.name = "EvaluatePathError";
-    this.errorCode = errorCode;
-  }
-}
 
 export async function evaluatePath(
   input: EvaluatePathInput,
@@ -49,7 +35,7 @@ export async function evaluatePath(
     }
 
     if (flag.experimentId === null) {
-      return defaultResult("null_experiment", flag.defaultVariant);
+      return evaluateFlagOnly(input, flag, null, deps.logger);
     }
 
     const experiment = await deps.provider.getExperiment(appId, environmentId, flag.experimentId);
@@ -70,7 +56,7 @@ export async function evaluatePath(
     }
 
     if (experiment.liveRun === null) {
-      return defaultResult("no_live_run", flag.defaultVariant);
+      return evaluateFlagOnly(input, flag, flag.experimentId, deps.logger);
     }
 
     return evaluateLiveRun(
@@ -83,6 +69,28 @@ export async function evaluatePath(
   } catch (cause) {
     return errorResult(defaultVariant, cause, deps.logger);
   }
+}
+
+function evaluateFlagOnly(
+  input: EvaluatePathInput,
+  flag: FlagConfig,
+  experimentId: string | null,
+  logger: EvaluatePathDeps["logger"],
+): RuleMatchEvaluateResult | NoMatchEvaluateResult {
+  const rules = [...flag.targetingRules].sort((a, b) => a.priority - b.priority);
+  for (const rule of rules) {
+    const match = evaluateTargetingRule(input, flag, experimentId, null, rule, logger);
+    if (match !== null) return match;
+  }
+
+  return {
+    kind: "no_match_default",
+    variant: flag.defaultVariant,
+    reason: { type: "no_match_default" },
+    ...(experimentId === null ? {} : { experimentId }),
+    liveRunId: null,
+    exposure: null,
+  };
 }
 
 function withValidatedIdType(
@@ -173,8 +181,8 @@ function evaluateLiveRun(
 function evaluateTargetingRule(
   input: EvaluatePathInput,
   flag: FlagConfig,
-  experimentId: string,
-  run: RunConfig,
+  experimentId: string | null,
+  run: RunConfig | null,
   rule: TargetingRule,
   logger: EvaluatePathDeps["logger"],
 ): RuleMatchEvaluateResult | null {
@@ -198,9 +206,12 @@ function evaluateTargetingRule(
       selection,
       rollout: rolloutReason(directVariant, rollout),
     },
-    experimentId,
-    liveRunId: run.runId,
-    exposure: exposureDecision(input, experimentId, run.runId, variant),
+    ...(experimentId === null ? {} : { experimentId }),
+    liveRunId: run?.runId ?? null,
+    exposure:
+      experimentId === null || run === null
+        ? null
+        : exposureDecision(input, experimentId, run.runId, variant),
   };
 }
 
@@ -250,36 +261,4 @@ function variantNameForId(variants: Variant[], variantId: string): string {
     throw new EvaluatePathError(`Targeting Rule variantId "${variantId}" names no Variant`);
   }
   return variant.name;
-}
-
-function errorResult(
-  defaultVariant: string | null,
-  cause: unknown,
-  logger: EvaluatePathDeps["logger"],
-): ErrorEvaluateResult {
-  const errorCode = errorCodeFor(cause);
-  const errorMessage = cause instanceof Error ? cause.message : "Evaluation failed";
-  logger?.error("evaluate_path_failed", { cause, errorCode });
-
-  return {
-    kind: "error",
-    variant: defaultVariant,
-    reason: "ERROR",
-    errorCode,
-    errorMessage,
-    liveRunId: null,
-    exposure: null,
-  };
-}
-
-function errorCodeFor(cause: unknown): ErrorCode {
-  if (
-    cause instanceof ProviderError ||
-    cause instanceof EvaluatePathError ||
-    cause instanceof AssignmentStoreError ||
-    cause instanceof ConditionMatchError
-  ) {
-    return cause.errorCode;
-  }
-  return "INTERNAL_SERVER_ERROR";
 }

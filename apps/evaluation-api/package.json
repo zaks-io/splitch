@@ -16,7 +16,9 @@
   },
   "dependencies": {
     "@splitch/contracts": "workspace:*",
-    "@splitch/privacy": "workspace:*"
+    "@splitch/privacy": "workspace:*",
+    "@splitch/worker-runtime": "workspace:*",
+    "hono": "^4.12.27"
   },
   "devDependencies": {
     "miniflare": "^4.20260617.0"
