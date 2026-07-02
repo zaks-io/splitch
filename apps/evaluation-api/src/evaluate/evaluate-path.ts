@@ -2,7 +2,7 @@ import type { ErrorCode, PercentageRollout, TargetingRule, Variant } from "@spli
 import { assign } from "../assignment/assign.js";
 import { fractionalEval } from "../assignment/fractional-eval.js";
 import type { RunConfig } from "../assignment/run-config.js";
-import { type FlagConfig, ProviderError } from "../provider/provider.js";
+import { type ExperimentConfig, type FlagConfig, ProviderError } from "../provider/provider.js";
 import { matchesConditions } from "./conditions.js";
 import type {
   ErrorEvaluateResult,
@@ -19,7 +19,17 @@ import type {
 export type { EvaluatePathDeps, EvaluatePathInput, EvaluateResult } from "./evaluate-path-types.js";
 
 class EvaluatePathError extends Error {
-  readonly errorCode: ErrorCode = "INTERNAL_SERVER_ERROR";
+  readonly errorCode: ErrorCode;
+
+  constructor(
+    message: string,
+    errorCode: ErrorCode = "INTERNAL_SERVER_ERROR",
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = "EvaluatePathError";
+    this.errorCode = errorCode;
+  }
 }
 
 export async function evaluatePath(
@@ -27,7 +37,6 @@ export async function evaluatePath(
   deps: EvaluatePathDeps,
 ): Promise<EvaluateResult> {
   const { appId, environmentId, flagKey } = input;
-  const held = await preloadHoldovers(input, deps);
   let defaultVariant: string | null = null;
 
   try {
@@ -42,6 +51,10 @@ export async function evaluatePath(
       return defaultResult("null_experiment", flag.defaultVariant);
     }
 
+    const experiment = await deps.provider.getExperiment(appId, environmentId, flag.experimentId);
+    const validatedInput = withValidatedIdType(input, experiment);
+    const held = await preloadHoldovers(validatedInput, deps);
+
     const holdover = held.get(flag.experimentId);
     if (holdover !== undefined) {
       return {
@@ -55,15 +68,32 @@ export async function evaluatePath(
       };
     }
 
-    const experiment = await deps.provider.getExperiment(appId, environmentId, flag.experimentId);
     if (experiment.liveRun === null) {
       return defaultResult("no_live_run", flag.defaultVariant);
     }
 
-    return evaluateLiveRun(input, flag, flag.experimentId, experiment.liveRun);
+    return evaluateLiveRun(validatedInput, flag, flag.experimentId, experiment.liveRun);
   } catch (cause) {
     return errorResult(defaultVariant, cause, deps.logger);
   }
+}
+
+function withValidatedIdType(
+  input: EvaluatePathInput,
+  experiment: ExperimentConfig,
+): EvaluatePathInput {
+  const validatedIdType = experiment.targetingKeyType;
+  if (input.evaluationContext.idType !== validatedIdType) {
+    throw new EvaluatePathError(
+      `Evaluation idType "${input.evaluationContext.idType}" does not match Experiment targetingKeyType "${validatedIdType}"`,
+      "VALIDATION_ERROR",
+    );
+  }
+
+  return {
+    ...input,
+    evaluationContext: { ...input.evaluationContext, idType: validatedIdType },
+  };
 }
 
 async function preloadHoldovers(

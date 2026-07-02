@@ -13,42 +13,45 @@ function evaluate(appId, environmentId, flagKey, evalContext):
   // The request carries flagKey, NOT experimentId — flag -> experiment is resolved below from the
   // flag config the Provider already reads (no separate lookup).
 
-  // 1. Eager pre-load: one edge-local KV read, all Experiments for this Entity.
-  held = AssignmentStore.getAll(appId, evalContext.idType, evalContext.targetingKey)
-  //    held: Map<experimentId, { runId, variant }>
-
-  // 2. Provider resolves live flag config (stateless, cached). flagConfig.experimentId is the
+  // 1. Provider resolves live flag config (stateless, cached). flagConfig.experimentId is the
   //    controlling Experiment (nullable) — denormalized onto the flag config, read in this same call.
   flagConfig = Provider.getFlag(appId, environmentId, flagKey)
   experimentId = flagConfig.experimentId               // string | null; null = no Experiment controls this Flag
 
-  // 3. Flag disabled → Default Variant, no Exposure.
+  // 2. Flag disabled → Default Variant, no Exposure.
   if not flagConfig.enabled:
     return { variant: flagConfig.defaultVariant, reason: { type: 'default_disabled' } }
 
-  // 3b. No Experiment controls this Flag → plain flag resolution, no Run, no Exposure.
+  // 3. No Experiment controls this Flag → plain flag resolution, no Run, no Exposure.
   if experimentId is null:
     return { variant: flagConfig.defaultVariant, reason: { type: 'default_disabled' } }
 
+  // 4. Resolve the Experiment so the request idType can be validated against the pinned Entity type.
   experiment = Provider.getExperiment(appId, environmentId, experimentId)
+  if evalContext.idType != experiment.targetingKeyType:
+    return { variant: flagConfig.defaultVariant, reason: 'ERROR', errorCode: 'VALIDATION_ERROR' }
 
-  // 4. Holdover check: has this Entity been exposed under any prior Run of this Experiment?
+  // 5. One edge-local KV read, all Experiments for this validated Entity.
+  held = AssignmentStore.getAll(appId, experiment.targetingKeyType, evalContext.targetingKey)
+  //    held: Map<experimentId, { runId, variant }>
+
+  // 6. Holdover check: has this Entity been exposed under any prior Run of this Experiment?
   if held.has(experimentId):                          // ADR-0006: sticky experience
     holdover = held.get(experimentId)
     return { variant: holdover.variant, isHoldover: true, priorRunId: holdover.runId }
     // No new Exposure fired. No Assignment Store write.
 
-  // 5. No holdover → new or never-exposed Entity. Must be a live Run.
+  // 7. No holdover → new or never-exposed Entity. Must be a live Run.
   liveRun = experiment.liveRun
   if liveRun is null:
     return { variant: flagConfig.defaultVariant, reason: { type: 'default_disabled' } }
 
-  // 6. Targeting: empty Run targetingRules means all Entities are eligible.
+  // 8. Targeting: empty Run targetingRules means all Entities are eligible.
   if liveRun.targetingRules is empty:
     variant = assign(liveRun, evalContext.targetingKey)
     return { variant, reason: { type: 'fresh_assignment' }, liveRunId: liveRun.runId }
 
-  // 7. Targeting Rules: iterate rules in priority order, first match wins.
+  // 9. Targeting Rules: iterate rules in priority order, first match wins.
   for rule in sorted(liveRun.targetingRules, by: priority ascending):
     if matchesConditions(rule.conditions, evalContext):
       if rule.percentageRollout is not null:
@@ -59,7 +62,7 @@ function evaluate(appId, environmentId, flagKey, evalContext):
         selection = 'direct'
       return { variant, reason: { type: 'rule_matched', ruleId: rule.ruleId, ruleName: rule.ruleName, priority: rule.priority, selection }, liveRunId: liveRun.runId }
 
-  // 8. No rule matched → Default Variant.
+  // 10. No rule matched → Default Variant.
   return { variant: flagConfig.defaultVariant, reason: { type: 'no_match_default' }, liveRunId: liveRun.runId }
 ```
 
@@ -95,7 +98,7 @@ flag → experiment resolution is part of the single `getFlag` read — the eval
 issues a second lookup to discover which Experiment controls a Flag, and the two can never be
 read out of sync. Returns the full rule set. Does not iterate rules, does not match conditions.
 
-**Assignment Store** (dumb storage): `getAll()` returns the pre-loaded holdover map.
+**Assignment Store** (dumb storage): `getAll()` returns the holdover map for the validated Entity.
 Returns facts only; never branches, never calls `assign()`.
 
 **Cross-experiment read discard (isolation invariant).** `getAll()` returns _every_ Experiment's

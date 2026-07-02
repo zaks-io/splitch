@@ -14,6 +14,34 @@ import {
   targetingRule,
 } from "./evaluate-path-test-fixtures.js";
 
+describe("evaluatePath idType validation", () => {
+  it("idType mismatch fails loud before fresh assignment or Exposure", async () => {
+    const store = new RecordingAssignmentStore();
+    const provider = new RecordingProvider({
+      experiment: experimentConfig({
+        targetingKeyType: "workspace",
+        liveRun: runConfig({
+          allocation: { control: 0, treatment: 100 },
+          targetingRules: [],
+        }),
+      }),
+    });
+
+    const result = await evaluatePath(baseInput(), { assignmentStore: store, provider });
+
+    expect(result).toMatchObject({
+      kind: "error",
+      variant: "control",
+      reason: "ERROR",
+      errorCode: "VALIDATION_ERROR",
+      liveRunId: null,
+      exposure: null,
+    });
+    expect(store.getAllCalls).toEqual([]);
+    expect(store.putCalls).toEqual([]);
+  });
+});
+
 describe("evaluatePath live Run paths", () => {
   it("an empty Targeting Rule snapshot treats all Entities as eligible and uses Assignment", async () => {
     const provider = new RecordingProvider({

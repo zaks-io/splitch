@@ -33,15 +33,16 @@ The Worker executes in this order for every `evaluate` call:
 1. Validate credential (Client Key via KV)
 2. Load Provider flag config for flagKey (KV cache; ~60s propagation window)
 3. Determine if flagKey is controlled by a live Experiment; get experimentId and liveRunId
-4. held = AssignmentStore.getAll(appId, idType, targetingKey)   [KV read, edge-local, all experiments]
+4. Validate request idType against the Experiment's pinned idType
+5. held = AssignmentStore.getAll(appId, validatedIdType, targetingKey)   [KV read, edge-local, all experiments]
 
-5. if experimentId in held:
+6. if experimentId in held:
      variant = held[experimentId].variantName      // holdover: replay prior Variant
      // no Exposure fires, no Assignment Store write: already counted under held[experimentId].runId
    else:
      variant = assign(liveRun, targetingKey)        // pure hash (ADR-0001)
      // Exposure fires → pipeline → DO.putIfAbsent → KV write-through
-6. Return VariantValue for resolved variantName
+7. Return VariantValue for resolved variantName
 ```
 
 Each step has exactly one outcome — no superposition. The holdover branch returns the prior

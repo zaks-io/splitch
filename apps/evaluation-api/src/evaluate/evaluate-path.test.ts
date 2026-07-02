@@ -13,14 +13,14 @@ import {
 } from "./evaluate-path-test-fixtures.js";
 
 describe("evaluatePath orchestration", () => {
-  it("preloads holdovers before resolving the Flag", async () => {
+  it("resolves the Experiment before reading holdovers so idType can be validated", async () => {
     const calls: string[] = [];
     const store = new RecordingAssignmentStore({ calls });
     const provider = new RecordingProvider({ calls });
 
     await evaluatePath(baseInput(), { assignmentStore: store, provider });
 
-    expect(calls.slice(0, 2)).toEqual(["getAll", "getFlag"]);
+    expect(calls.slice(0, 3)).toEqual(["getFlag", "getExperiment", "getAll"]);
   });
 });
 
@@ -43,6 +43,31 @@ describe("evaluatePath no-exposure paths", () => {
     });
     expect(provider.experimentCalls).toEqual([]);
     expect(store.putCalls).toEqual([]);
+  });
+
+  it("idType mismatch fails loud before holdover replay or Assignment Store read", async () => {
+    const store = new RecordingAssignmentStore({
+      holdovers: new Map([[EXPERIMENT_ID, { runId: "run-prior", variant: "treatment" }]]),
+    });
+    const provider = new RecordingProvider({
+      experiment: experimentConfig({ targetingKeyType: "workspace" }),
+    });
+    const logger = new RecordingLogger();
+
+    const result = await evaluatePath(baseInput(), { assignmentStore: store, provider, logger });
+
+    expect(result).toMatchObject({
+      kind: "error",
+      variant: "control",
+      reason: "ERROR",
+      errorCode: "VALIDATION_ERROR",
+      liveRunId: null,
+      exposure: null,
+    });
+    expect(provider.experimentCalls).toEqual([EXPERIMENT_ID]);
+    expect(store.getAllCalls).toEqual([]);
+    expect(store.putCalls).toEqual([]);
+    expect(logger.errors).toHaveLength(1);
   });
 
   it("holdover replay returns the prior Variant, fires no Exposure, and triggers no Assignment Store put", async () => {
@@ -68,7 +93,7 @@ describe("evaluatePath no-exposure paths", () => {
       liveRunId: null,
       exposure: null,
     });
-    expect(provider.experimentCalls).toEqual([]);
+    expect(provider.experimentCalls).toEqual([EXPERIMENT_ID]);
     expect(store.putCalls).toEqual([]);
   });
 
