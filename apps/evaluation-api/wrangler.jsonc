@@ -11,6 +11,27 @@
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local"
   },
+  "kv_namespaces": [
+    {
+      "binding": "ASSIGNMENTS_KV",
+      "id": "local-assignments-kv",
+      "preview_id": "local-assignments-kv"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ASSIGNMENT_STORE_WRITER",
+        "class_name": "AssignmentStoreDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["AssignmentStoreDurableObject"]
+    }
+  ],
   "env": {
     "shared-preview": {
       "name": "splitch-evaluation-api-shared-preview",

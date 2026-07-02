@@ -1,0 +1,127 @@
+import {
+  assignmentKey,
+  type AssignmentStoreEntry,
+  type AssignmentStoreValue,
+  AssignmentStoreValueSchema,
+  CURRENT_KV_SCHEMA_VERSION,
+  kvEnvelope,
+} from "@splitch/contracts";
+import { computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
+
+export type { AssignmentStoreEntry } from "@splitch/contracts";
+
+export interface AssignmentIdentity {
+  appId: string;
+  idType: string;
+  targetingKey: string;
+}
+
+export interface AssignmentPutInput extends AssignmentIdentity {
+  experimentId: string;
+  runId: string;
+  variant: string;
+}
+
+export interface HashedAssignmentPutInput {
+  appId: string;
+  experimentId: string;
+  idType: string;
+  targetingKeyHash: string;
+  runId: string;
+  variant: string;
+}
+
+export interface AssignmentStore {
+  getAll(input: AssignmentIdentity): Promise<Map<string, AssignmentStoreEntry>>;
+  put(input: AssignmentPutInput): Promise<AssignmentStorePutResult>;
+}
+
+export interface AssignmentStorePutResult {
+  status: "stored" | "existing";
+  assignment: AssignmentStoreEntry;
+}
+
+export interface AssignmentKv {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+}
+
+export class AssignmentStoreError extends Error {
+  readonly errorCode = "INTERNAL_SERVER_ERROR";
+
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "AssignmentStoreError";
+  }
+}
+
+type SafeParse<T> =
+  | { success: true; data: { data: T } }
+  | { success: false; error: { message: string } };
+
+const parseAssignmentEnvelope = kvEnvelope(AssignmentStoreValueSchema) as {
+  safeParse(json: unknown): SafeParse<AssignmentStoreValue>;
+};
+
+export async function hashedAssignmentIdentity(
+  saltStore: SaltStore,
+  input: AssignmentIdentity,
+): Promise<{ entityKey: string; targetingKeyHash: string }> {
+  const targetingKeyHash = await computeTargetingKeyHash(saltStore, input);
+  return {
+    entityKey: assignmentKey(input.appId, input.idType, targetingKeyHash),
+    targetingKeyHash,
+  };
+}
+
+export function assignmentWriterName(input: HashedAssignmentPutInput): string {
+  return `${input.appId}:${input.experimentId}:${input.idType}:${input.targetingKeyHash}`;
+}
+
+export function assignmentValueToMap(
+  value: AssignmentStoreValue,
+): Map<string, AssignmentStoreEntry> {
+  return new Map(Object.entries(value));
+}
+
+export function mergeAssignmentValue(
+  value: AssignmentStoreValue,
+  input: Pick<HashedAssignmentPutInput, "experimentId" | "runId" | "variant">,
+): AssignmentStoreValue {
+  if (value[input.experimentId] !== undefined) {
+    return value;
+  }
+  return {
+    ...value,
+    [input.experimentId]: { runId: input.runId, variant: input.variant },
+  };
+}
+
+export function serializeAssignmentValue(value: AssignmentStoreValue): string {
+  return JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: value });
+}
+
+function parseAssignmentValue(raw: string, key: string): AssignmentStoreValue {
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch (cause) {
+    throw new AssignmentStoreError(`Malformed assignment KV JSON for key "${key}"`, { cause });
+  }
+
+  const parsed = parseAssignmentEnvelope.safeParse(json);
+  if (!parsed.success) {
+    throw new AssignmentStoreError(
+      `Invalid assignment KV blob for key "${key}": ${parsed.error.message}`,
+    );
+  }
+  return parsed.data.data;
+}
+
+export async function readAssignmentValue(
+  kv: Pick<AssignmentKv, "get">,
+  key: string,
+): Promise<AssignmentStoreValue> {
+  const raw = await kv.get(key);
+  return raw === null ? {} : parseAssignmentValue(raw, key);
+}
