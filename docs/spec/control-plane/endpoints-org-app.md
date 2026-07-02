@@ -50,7 +50,8 @@ Auth: Org member (any role).
 ### `POST /orgs/{org_id}/apps`
 
 Body: `{ name: string, slug?: string }` (slug auto-derived from name if omitted; unique within Org)
-Returns: `{ app_id, org_id, name, slug, created_at }`
+Returns: `{ app, environments, client_keys }` with the two default Environments and their public
+Client Keys.
 Auth: Org `owner` or `admin`.
 On create, **two Environments are provisioned by default: `dev` and `prod`**. `dev` ships with an
 all-`allow` Environment Policy (no confirmation gates) so the first flag/experiment lands in a

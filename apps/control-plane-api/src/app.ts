@@ -8,6 +8,7 @@ import {
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do.js";
+import { makeAppEnvironmentHandlers } from "./app-environment-handlers.js";
 import { makeCredentialHandlers } from "./credential-handlers.js";
 import { makeHandlers } from "./handlers.js";
 import { mountLiveUpdateRoute } from "./live-updates.js";
@@ -65,6 +66,11 @@ export function createApp(deps: AppDeps): Hono {
     credentialStore: deps.credentialStore,
     nowIso: deps.nowIso,
   });
+  const appEnvironmentHandlers = makeAppEnvironmentHandlers({
+    repo: deps.repo,
+    credentialStore: deps.credentialStore,
+    nowIso: deps.nowIso,
+  });
   const registrar = controlPlaneRegistrar(deps);
 
   mountLiveUpdateRoute(app, {
@@ -75,7 +81,36 @@ export function createApp(deps: AppDeps): Hono {
     defaultHeaders: deps.defaultHeaders,
   });
 
-  registrar.mount(app, controlPlaneRoute("apps_get"), handlers.getApp);
+  registrar.mount(app, controlPlaneRoute("apps_list"), appEnvironmentHandlers.listApps);
+  registrar.mount(app, controlPlaneRoute("apps_create"), appEnvironmentHandlers.createApp);
+  registrar.mount(app, controlPlaneRoute("apps_get"), appEnvironmentHandlers.getApp);
+  registrar.mount(app, controlPlaneRoute("apps_update"), appEnvironmentHandlers.updateApp);
+  registrar.mount(app, controlPlaneRoute("apps_delete"), appEnvironmentHandlers.deleteApp);
+  registrar.mount(
+    app,
+    controlPlaneRoute("environments_list"),
+    appEnvironmentHandlers.listEnvironments,
+  );
+  registrar.mount(
+    app,
+    controlPlaneRoute("environments_create"),
+    appEnvironmentHandlers.createEnvironment,
+  );
+  registrar.mount(
+    app,
+    controlPlaneRoute("environments_get"),
+    appEnvironmentHandlers.getEnvironment,
+  );
+  registrar.mount(
+    app,
+    controlPlaneRoute("environments_update"),
+    appEnvironmentHandlers.updateEnvironment,
+  );
+  registrar.mount(
+    app,
+    controlPlaneRoute("environments_delete"),
+    appEnvironmentHandlers.deleteEnvironment,
+  );
   registrar.mount(app, controlPlaneRoute("organizations_get"), handlers.getOrg);
   registrar.mount(app, controlPlaneRoute("organizations_update"), handlers.updateOrg);
   registrar.mount(app, controlPlaneRoute("organization_members_list"), handlers.listMembers);

@@ -55,17 +55,14 @@ the existing Run (ADR-0003). Never returns `RUN_FROZEN`.
 
 ### CreateAppResponse
 
-Surfaces the API Key raw value **once only**. The Client Key value is public and remains retrievable.
-A new App is seeded with a default Environment; the returned credentials belong to that Environment
-(ADR-0027). Per-Environment credentials are minted via the
-`/apps/{app_id}/envs/{environment_id}/client-key | api-keys` endpoints.
+Surfaces the App plus the two default Environments (`dev`, `prod`) and their public Client Keys. API
+Keys are not auto-provisioned here; they are minted through the per-Environment API Key endpoint.
 
 ```
 {
-  app:           App                  // full App leaf
-  environmentId: string               // the seeded default Environment the keys belong to
-  apiKey:        { id, value: string } // raw value; store it now
-  clientKey:     { id, value: string } // raw value; safe to embed client-side
+  app:          App
+  environments: [Environment, Environment]
+  clientKeys:   [ClientKey, ClientKey] // public Client Keys, safe to embed client-side
 }
 ```
 

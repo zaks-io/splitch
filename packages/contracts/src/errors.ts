@@ -45,6 +45,7 @@ export const errorCodes = [
   "ORIGIN_NOT_ALLOWED",
   "APP_MISMATCH",
   "LAST_OWNER_REQUIRED",
+  "LAST_ENVIRONMENT_REQUIRED",
   "PRIVACY_CONFIRMATION_REQUIRED",
   "CONFIRMATION_REQUIRED",
 
@@ -214,6 +215,7 @@ const errorMembers = [
   member("ORIGIN_NOT_ALLOWED", z.object({ origin: z.string(), hint: z.string() })),
   member("APP_MISMATCH", EmptyDetails),
   member("LAST_OWNER_REQUIRED", z.object({ orgId: z.string() })),
+  member("LAST_ENVIRONMENT_REQUIRED", z.object({ appId: z.string() })),
   member(
     "PRIVACY_CONFIRMATION_REQUIRED",
     z.object({ confirmationRequired: z.literal(true), confirmationExpiresAt: z.string() }),

@@ -70,6 +70,10 @@ describe("D1 co-scoping columns", () => {
   it("variants stays App-level (flag-scoped, no environment_id)", () => {
     expect(tableBlock(migrationSql, "variants")).not.toContain("`environment_id`");
   });
+
+  it("environments carries inline Environment Policy storage", () => {
+    expect(migrationSql).toContain("ALTER TABLE `environments` ADD `policy` text");
+  });
 });
 
 describe("runs storage-only decision columns", () => {

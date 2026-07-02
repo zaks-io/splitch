@@ -1,6 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import { ConditionSchema, TargetingRuleSchema } from "../leaf-schemas-flag.js";
-import { UserRoleSchema } from "../leaf-schemas-runtime.js";
+import { EnvironmentPolicySchema, UserRoleSchema } from "../leaf-schemas-runtime.js";
 
 /**
  * Path-param and route-local request/response shapes that have NO dedicated
@@ -67,14 +67,6 @@ export const PrivacyRequestParams = z.object({ requestId: z.string() });
 // Environment Policy (ADR-0029) — per-change-type allow/confirm map, inline on
 // environments_get / environments_update (no separate policy endpoint).
 // ---------------------------------------------------------------------------
-
-const PolicyLevel = z.enum(["allow", "confirm"]);
-const EnvironmentPolicySchema = z.object({
-  variantAvailability: PolicyLevel,
-  targetingRolloutValue: PolicyLevel,
-  enabledState: PolicyLevel,
-  startExperimentRun: PolicyLevel,
-});
 
 export const CreateEnvironmentRequestSchema = z.object({
   key: z.string(),

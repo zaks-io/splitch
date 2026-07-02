@@ -14,6 +14,13 @@ import { createdAt, updatedAt, userRef } from "./columns.js";
  * seam can always filter on them.
  */
 
+const DEFAULT_ENVIRONMENT_POLICY = JSON.stringify({
+  variantAvailability: "allow",
+  targetingRolloutValue: "allow",
+  enabledState: "allow",
+  startExperimentRun: "allow",
+});
+
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -83,6 +90,7 @@ export const environments = sqliteTable(
       .references(() => apps.id),
     key: text("key").notNull(),
     name: text("name").notNull(),
+    policy: text("policy").notNull().default(DEFAULT_ENVIRONMENT_POLICY),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     createdBy: userRef("created_by"),

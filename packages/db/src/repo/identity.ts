@@ -49,6 +49,20 @@ export function makeIdentityRepo(db: Db) {
       return environmentsTable.findOne(scope, eq(environments.id, environmentId));
     },
 
+    updateEnvironment(
+      scope: TenantScope,
+      environmentId: string,
+      values: Partial<Pick<typeof environments.$inferInsert, "name" | "policy" | "updatedAt">>,
+    ) {
+      return environmentsTable
+        .update(scope, values, eq(environments.id, environmentId))
+        .then((rows) => rows[0] ?? null);
+    },
+
+    deleteEnvironment(scope: TenantScope, environmentId: string) {
+      return environmentsTable.remove(scope, eq(environments.id, environmentId));
+    },
+
     listAppMembers(scope: TenantScope) {
       return appMembershipsTable.findMany(scope);
     },
@@ -133,6 +147,19 @@ export function makeIdentityRepo(db: Db) {
       return inserted;
     },
 
+    async updateApp(
+      appId: string,
+      values: Partial<Pick<typeof apps.$inferInsert, "name" | "description" | "updatedAt">>,
+    ): Promise<typeof apps.$inferSelect | null> {
+      const rows = await db.update(apps).set(values).where(eq(apps.id, appId)).returning();
+      return rows[0] ?? null;
+    },
+
+    async deleteApp(appId: string): Promise<number> {
+      const rows = await db.delete(apps).where(eq(apps.id, appId)).returning();
+      return rows.length;
+    },
+
     async createAppMembership(
       values: typeof appMemberships.$inferInsert,
     ): Promise<typeof appMemberships.$inferSelect> {
@@ -142,6 +169,10 @@ export function makeIdentityRepo(db: Db) {
         throw new Error("createAppMembership: no row returned");
       }
       return inserted;
+    },
+
+    deleteAppMemberships(scope: TenantScope) {
+      return appMembershipsTable.remove(scope);
     },
 
     /**

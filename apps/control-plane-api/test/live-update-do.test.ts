@@ -4,6 +4,8 @@ import { describe, expect, it, beforeAll } from "vitest";
 import migration0 from "../../../packages/db/migrations/0000_cynical_magneto.sql?raw";
 import migration1 from "../../../packages/db/migrations/0001_yellow_firebrand.sql?raw";
 import migration2 from "../../../packages/db/migrations/0002_ordinary_peter_parker.sql?raw";
+import migration3 from "../../../packages/db/migrations/0003_single_active_client_key.sql?raw";
+import migration4 from "../../../packages/db/migrations/0004_environment_policy.sql?raw";
 import { createApp } from "../src/app.js";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver.js";
 import { ids, NOW_MS, seedConfigGraph } from "../src/config-store-fixture-data.js";
@@ -102,7 +104,7 @@ async function token(scopes: string[]): Promise<string> {
 }
 
 async function applyMigrations(d1: D1Database): Promise<void> {
-  for (const sql of [migration0, migration1, migration2]) {
+  for (const sql of [migration0, migration1, migration2, migration3, migration4]) {
     for (const statement of statements(sql)) {
       await d1.exec(statement);
     }

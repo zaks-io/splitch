@@ -275,6 +275,6 @@ export const accountRoutes: readonly ApiRouteContract[] = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING"],
+    errors: ["APP_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING", "LAST_ENVIRONMENT_REQUIRED"],
   }),
 ];

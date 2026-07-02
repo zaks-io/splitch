@@ -38,12 +38,28 @@ export function makeExperimentRepo(db: Db) {
       return rows[0] ?? null;
     },
 
+    async findRunningExperiment(scope: EnvScope) {
+      const rows = await experimentsTable.findMany(scope, eq(experiments.status, "running"));
+      return rows[0] ?? null;
+    },
+
     listRunsForExperiment(scope: EnvScope, experimentId: string) {
       return runsTable.findMany(scope, eq(runs.experimentId, experimentId));
     },
 
     getRun(scope: EnvScope, runId: string) {
       return runsTable.findOne(scope, eq(runs.id, runId));
+    },
+
+    async findRunningRunForExperiment(scope: EnvScope, experimentId: string) {
+      const rows = await runsTable.findMany(
+        scope,
+        and(eq(runs.experimentId, experimentId), eq(runs.status, "running")),
+      );
+      if (rows.length > 1) {
+        throw new Error("findRunningRunForExperiment: multiple running Runs for one Experiment");
+      }
+      return rows[0] ?? null;
     },
 
     getMetric(scope: TenantScope, metricId: string) {

@@ -4,6 +4,7 @@ import {
   APIKeySchema,
   AppSchema,
   ClientKeySchema,
+  EnvironmentSchema,
   OrganizationSchema,
 } from "./leaf-schemas-runtime.js";
 
@@ -69,9 +70,8 @@ export type MetricResponse = z.infer<typeof MetricResponseSchema>;
 // ---------------------------------------------------------------------------
 // App endpoints
 //
-// `idempotency_key` guards a retried `apps_create`. `CreateAppResponse` surfaces
-// the API Key raw value ONCE (creation-only) alongside the public Client Key
-// value; both belong to the seeded default Environment (ADR-0027).
+// `idempotency_key` guards a retried `apps_create`. The response surfaces the
+// App plus the default Environments and public Client Keys created with it.
 // ---------------------------------------------------------------------------
 
 export const CreateAppRequestSchema = z.object({
@@ -92,16 +92,10 @@ export const PatchAppRequestSchema = z
   .strict();
 export type PatchAppRequest = z.infer<typeof PatchAppRequestSchema>;
 
-// The once-only raw secret value pairs ride this creation response only.
-const RawSecretPairSchema = z.object({ id: z.string(), value: z.string() });
-
 export const CreateAppResponseSchema = z.object({
   app: AppSchema,
-  environmentId: z.string(),
-  // Raw value, surfaced ONCE — store it now.
-  apiKey: RawSecretPairSchema,
-  // Raw value, safe to embed client-side.
-  clientKey: RawSecretPairSchema,
+  environments: z.tuple([EnvironmentSchema, EnvironmentSchema]),
+  clientKeys: z.tuple([ClientKeySchema, ClientKeySchema]),
 });
 export type CreateAppResponse = z.infer<typeof CreateAppResponseSchema>;
 

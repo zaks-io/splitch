@@ -1,8 +1,15 @@
-import type { APIKey, ClientKey } from "@splitch/contracts";
+import type { APIKey } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz.js";
+import {
+  type ClientKeyRow,
+  clientKeyResponse,
+  createClientKey,
+  ensureActiveClientKey,
+  provisionClientKey,
+} from "./client-key-provisioning.js";
 import { randomHex, sha256Hex, writeApiKeyCache, writeClientKeyCache } from "./credential-cache.js";
 import { objectBody, pathParam } from "./handler-input.js";
 
@@ -13,7 +20,6 @@ interface CredentialHandlerDeps {
 }
 
 type ApiKeyRow = Awaited<ReturnType<Repository["credentials"]["listApiKeys"]>>[number];
-type ClientKeyRow = Awaited<ReturnType<Repository["credentials"]["listClientKeys"]>>[number];
 
 export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
   return {
@@ -23,8 +29,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
 
-      const key = await ensureActiveClientKey(deps, ctx);
-      await writeClientKeyCache(deps, key, false);
+      const key = await provisionClientKey(deps, ctx);
       return Response.json(clientKeyResponse(key));
     },
 
@@ -38,7 +43,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
 
-      const current = await ensureActiveClientKey(deps, ctx);
+      const current = await provisionClientKey(deps, ctx);
       const updates = clientKeyPatchValues(objectBody(input));
       const updated =
         (await deps.repo.credentials.updateClientKey(ctx.scope, current.keyId, updates)) ?? current;
@@ -159,50 +164,6 @@ async function credentialContext(
   return { appId, environmentId, scope: envScope(appId, environmentId) };
 }
 
-async function ensureActiveClientKey(
-  deps: CredentialHandlerDeps,
-  ctx: { appId: string; environmentId: string; scope: ReturnType<typeof envScope> },
-): Promise<ClientKeyRow> {
-  const active = await findActiveClientKey(deps, ctx);
-  if (active) return active;
-
-  try {
-    return await createClientKey(deps, ctx);
-  } catch (error) {
-    const winner = await findActiveClientKey(deps, ctx);
-    if (winner) return winner;
-    throw error;
-  }
-}
-
-async function findActiveClientKey(
-  deps: CredentialHandlerDeps,
-  ctx: { scope: ReturnType<typeof envScope> },
-): Promise<ClientKeyRow | null> {
-  const active = (await deps.repo.credentials.listClientKeys(ctx.scope)).filter(
-    (k) => !k.revokedAt,
-  );
-  if (active.length > 1) {
-    throw new Error("credential invariant failed: multiple active Client Keys in one Environment");
-  }
-  return active[0] ?? null;
-}
-
-async function createClientKey(
-  deps: CredentialHandlerDeps,
-  ctx: { appId: string; environmentId: string; scope: ReturnType<typeof envScope> },
-): Promise<ClientKeyRow> {
-  return deps.repo.credentials.clientKeys.insert(ctx.scope, {
-    keyId: `ck_${randomHex(16)}`,
-    appId: ctx.appId,
-    environmentId: ctx.environmentId,
-    keyMaterial: `pk_${randomHex(32)}`,
-    originAllowlist: null,
-    rateLimitRps: null,
-    createdAt: nowIso(deps),
-  });
-}
-
 async function revokeActiveApiKey(
   deps: CredentialHandlerDeps,
   ctx: { scope: ReturnType<typeof envScope> },
@@ -216,21 +177,6 @@ async function revokeActiveApiKey(
       lastRotatedAt: revokedAt,
     }
   );
-}
-
-function clientKeyResponse(row: ClientKeyRow): ClientKey {
-  const originAllowlist = parseOriginAllowlist(row.originAllowlist);
-  return {
-    keyId: row.keyId,
-    appId: row.appId,
-    environmentId: row.environmentId,
-    keyMaterial: row.keyMaterial,
-    originAllowlist,
-    isOriginOpen: originAllowlist === null,
-    rateLimitRps: row.rateLimitRps,
-    revokedAt: row.revokedAt,
-    createdAt: row.createdAt,
-  };
 }
 
 function apiKeyResponse(row: ApiKeyRow): APIKey {
@@ -254,10 +200,6 @@ function clientKeyPatchValues(body: Record<string, unknown>): Partial<ClientKeyR
     updates.rateLimitRps = body.rateLimitRps as number;
   }
   return updates;
-}
-
-function parseOriginAllowlist(value: string | null): string[] | null {
-  return value === null ? null : (JSON.parse(value) as string[]);
 }
 
 function nowIso(deps?: CredentialHandlerDeps): string {
