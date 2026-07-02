@@ -26,6 +26,7 @@ const ORG = {
   appKey: "existing-authz",
 };
 const OWNER = "user_app_env_authz_owner";
+type AppRole = "owner" | "admin" | "member";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 const nowSeconds = () => Math.floor(NOW_MS / 1000);
@@ -82,7 +83,7 @@ function orgToken(): Promise<string> {
   });
 }
 
-function appToken(appId: string, role: "owner" | "admin" | "member"): Promise<string> {
+function appToken(appId: string, role: AppRole): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
     iss: "https://auth.splitch.test",
@@ -122,6 +123,15 @@ async function createDefaultApp(key = "checkout") {
   };
 }
 
+async function appTokenFromCreatedMembership(appId: string): Promise<string> {
+  const row = await h.bindings.d1
+    .prepare("SELECT role FROM app_memberships WHERE app_id = ? AND user_id = ?")
+    .bind(appId, OWNER)
+    .first<{ role: AppRole }>();
+  expect(row?.role).toBe("owner");
+  return appToken(appId, row?.role ?? "member");
+}
+
 async function errorBody(res: Response): Promise<ErrorResponse> {
   return (await res.json()) as ErrorResponse;
 }
@@ -129,7 +139,7 @@ async function errorBody(res: Response): Promise<ErrorResponse> {
 describe("control-plane App and Environment role gates", () => {
   it("enforces App owner/admin writes and owner-only deletes", async () => {
     const created = await createDefaultApp();
-    const ownerJwt = await appToken(created.app.id, "owner");
+    const ownerJwt = await appTokenFromCreatedMembership(created.app.id);
     const adminJwt = await appToken(created.app.id, "admin");
     const prod = created.environments.find((env) => env.key === "prod");
     expect(prod).toBeDefined();
@@ -179,7 +189,7 @@ describe("control-plane App and Environment role gates", () => {
     expect((await errorBody(adminDeleteApp)).code).toBe("INSUFFICIENT_SCOPES");
 
     const deleteCreated = await createDefaultApp("delete-target");
-    const deleteOwnerJwt = await appToken(deleteCreated.app.id, "owner");
+    const deleteOwnerJwt = await appTokenFromCreatedMembership(deleteCreated.app.id);
     const ownerDeleteApp = await request("DELETE", `/apps/${deleteCreated.app.id}`, deleteOwnerJwt);
     expect(ownerDeleteApp.status).toBe(200);
   });

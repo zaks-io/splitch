@@ -66,7 +66,7 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
       await deps.repo.identity.createAppMembership({
         appId: app.id,
         userId: principal.id,
-        role: "admin",
+        role: "owner",
         createdAt: now,
       });
 
