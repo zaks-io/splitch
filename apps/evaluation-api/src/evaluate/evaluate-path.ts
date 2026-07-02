@@ -1,110 +1,22 @@
-import type {
-  ErrorCode,
-  EvaluationContext,
-  PercentageRollout,
-  TestEvaluationReason,
-  Variant,
-} from "@splitch/contracts";
-import type { AssignmentStore } from "../assignment/assignment-store.js";
+import type { ErrorCode, PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
+import { assign } from "../assignment/assign.js";
 import { fractionalEval } from "../assignment/fractional-eval.js";
 import type { RunConfig } from "../assignment/run-config.js";
-import { type FlagConfig, type Provider, ProviderError } from "../provider/provider.js";
+import { type FlagConfig, ProviderError } from "../provider/provider.js";
 import { matchesConditions } from "./conditions.js";
+import type {
+  ErrorEvaluateResult,
+  EvaluatePathDeps,
+  EvaluatePathInput,
+  EvaluateResult,
+  ExposureDecision,
+  FreshAssignmentEvaluateResult,
+  NoMatchEvaluateResult,
+  NonExposingEvaluateResult,
+  RuleMatchEvaluateResult,
+} from "./evaluate-path-types.js";
 
-type EvaluateKind =
-  | "disabled"
-  | "null_experiment"
-  | "holdover_replay"
-  | "no_live_run"
-  | "rule_match_direct"
-  | "rule_match_percentage"
-  | "no_match_default"
-  | "error";
-
-type VariantName = string;
-
-export interface EvaluatePathInput {
-  appId: string;
-  environmentId: string;
-  flagKey: string;
-  evaluationContext: EvaluationContext;
-}
-
-export interface EvaluatePathDeps {
-  assignmentStore: AssignmentStore;
-  provider: Provider;
-  logger?: Pick<Console, "error" | "warn">;
-}
-
-interface ExposureDecision {
-  appId: string;
-  environmentId: string;
-  experimentId: string;
-  flagKey: string;
-  idType: string;
-  liveRunId: string;
-  targetingKey: string;
-  variant: VariantName;
-}
-
-interface BaseEvaluateResult {
-  kind: EvaluateKind;
-  variant: VariantName | null;
-  reason: TestEvaluationReason | "ERROR";
-  exposure: ExposureDecision | null;
-}
-
-interface NonExposingEvaluateResult extends BaseEvaluateResult {
-  kind: "disabled" | "null_experiment" | "no_live_run";
-  exposure: null;
-  liveRunId: null;
-  reason: { type: "default_disabled" };
-  variant: VariantName;
-}
-
-interface HoldoverEvaluateResult extends BaseEvaluateResult {
-  kind: "holdover_replay";
-  exposure: null;
-  isHoldover: true;
-  liveRunId: null;
-  priorRunId: string;
-  reason: { type: "holdover_replay"; priorRunId: string };
-  variant: VariantName;
-}
-
-interface RuleMatchEvaluateResult extends BaseEvaluateResult {
-  kind: "rule_match_direct" | "rule_match_percentage";
-  exposure: ExposureDecision;
-  experimentId: string;
-  liveRunId: string;
-  reason: Extract<TestEvaluationReason, { type: "rule_matched" }>;
-  variant: VariantName;
-}
-
-interface NoMatchEvaluateResult extends BaseEvaluateResult {
-  kind: "no_match_default";
-  exposure: ExposureDecision;
-  experimentId: string;
-  liveRunId: string;
-  reason: { type: "no_match_default" };
-  variant: VariantName;
-}
-
-interface ErrorEvaluateResult extends BaseEvaluateResult {
-  kind: "error";
-  errorCode: ErrorCode;
-  errorMessage: string;
-  exposure: null;
-  liveRunId: null;
-  reason: "ERROR";
-}
-
-export type EvaluateResult =
-  | NonExposingEvaluateResult
-  | HoldoverEvaluateResult
-  | RuleMatchEvaluateResult
-  | NoMatchEvaluateResult
-  | ErrorEvaluateResult;
+export type { EvaluatePathDeps, EvaluatePathInput, EvaluateResult } from "./evaluate-path-types.js";
 
 class EvaluatePathError extends Error {
   readonly errorCode: ErrorCode = "INTERNAL_SERVER_ERROR";
@@ -157,7 +69,7 @@ export async function evaluatePath(
 async function preloadHoldovers(
   input: EvaluatePathInput,
   deps: EvaluatePathDeps,
-): Promise<Awaited<ReturnType<AssignmentStore["getAll"]>>> {
+): Promise<Awaited<ReturnType<EvaluatePathDeps["assignmentStore"]["getAll"]>>> {
   try {
     return await deps.assignmentStore.getAll({
       appId: input.appId,
@@ -188,39 +100,23 @@ function evaluateLiveRun(
   flag: FlagConfig,
   experimentId: string,
   run: RunConfig,
-): RuleMatchEvaluateResult | NoMatchEvaluateResult {
+): FreshAssignmentEvaluateResult | RuleMatchEvaluateResult | NoMatchEvaluateResult {
   const rules = [...run.targetingRules].sort((a, b) => a.priority - b.priority);
-  for (const rule of rules) {
-    if (!matchesConditions(rule.conditions, input.evaluationContext)) {
-      continue;
-    }
-
-    const directVariant = variantNameForId(flag.variants, rule.variantId);
-    const rollout = rule.percentageRollout ?? null;
-    const selection = rollout === null ? "direct" : "percentage_rollout";
-    const variant =
-      rollout === null
-        ? directVariant
-        : fractionalEval(rollout.salt, input.evaluationContext.targetingKey, [
-            { variantName: directVariant, weight: rollout.percentage },
-            { variantName: flag.defaultVariant, weight: 100 - rollout.percentage },
-          ]);
-
+  if (rules.length === 0) {
+    const variant = assign(run, input.evaluationContext.targetingKey);
     return {
-      kind: rollout === null ? "rule_match_direct" : "rule_match_percentage",
+      kind: "fresh_assignment",
       variant,
-      reason: {
-        type: "rule_matched",
-        ruleId: rule.id,
-        ruleName: null,
-        priority: rule.priority,
-        selection,
-        rollout: rolloutReason(directVariant, rollout),
-      },
+      reason: { type: "fresh_assignment" },
       experimentId,
       liveRunId: run.runId,
       exposure: exposureDecision(input, experimentId, run.runId, variant),
     };
+  }
+
+  for (const rule of rules) {
+    const match = evaluateTargetingRule(input, flag, experimentId, run, rule);
+    if (match !== null) return match;
   }
 
   return {
@@ -231,6 +127,54 @@ function evaluateLiveRun(
     liveRunId: run.runId,
     exposure: exposureDecision(input, experimentId, run.runId, flag.defaultVariant),
   };
+}
+
+function evaluateTargetingRule(
+  input: EvaluatePathInput,
+  flag: FlagConfig,
+  experimentId: string,
+  run: RunConfig,
+  rule: TargetingRule,
+): RuleMatchEvaluateResult | null {
+  if (!matchesConditions(rule.conditions, input.evaluationContext)) {
+    return null;
+  }
+
+  const directVariant = variantNameForId(flag.variants, rule.variantId);
+  const rollout = rule.percentageRollout ?? null;
+  const selection = rollout === null ? "direct" : "percentage_rollout";
+  const variant = variantForTargetingRule(input, flag.defaultVariant, directVariant, rollout);
+
+  return {
+    kind: rollout === null ? "rule_match_direct" : "rule_match_percentage",
+    variant,
+    reason: {
+      type: "rule_matched",
+      ruleId: rule.id,
+      ruleName: null,
+      priority: rule.priority,
+      selection,
+      rollout: rolloutReason(directVariant, rollout),
+    },
+    experimentId,
+    liveRunId: run.runId,
+    exposure: exposureDecision(input, experimentId, run.runId, variant),
+  };
+}
+
+function variantForTargetingRule(
+  input: EvaluatePathInput,
+  defaultVariant: string,
+  directVariant: string,
+  rollout: PercentageRollout | null,
+) {
+  if (rollout === null) {
+    return directVariant;
+  }
+  return fractionalEval(rollout.salt, input.evaluationContext.targetingKey, [
+    { variantName: directVariant, weight: rollout.percentage },
+    { variantName: defaultVariant, weight: 100 - rollout.percentage },
+  ]);
 }
 
 function exposureDecision(

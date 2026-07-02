@@ -78,6 +78,7 @@ EvaluationReason =
       selection: 'direct' | 'percentage_rollout'
       rollout?: { variantWeights: { variantName: string; weight: number }[] }
     }
+  | { type: 'fresh_assignment' }     -- Empty Run targetingRules; assign(Run, Targeting Key) served
   | { type: 'default_disabled' }    -- Flag is disabled; Default Variant returned
   | { type: 'no_match_default' }    -- No Targeting Rule matched; Default Variant returned
 ```
@@ -85,6 +86,7 @@ EvaluationReason =
 `reason` is a Zod discriminated union. The cases are exhaustive —
 every evaluation produces exactly one. Rule details (`ruleId`, `ruleName`, `priority`,
 `selection`) identify which Targeting Rule matched without exposing hash bucket or salt.
+`fresh_assignment` tells the agent that the live Run assignment determined the Variant.
 `holdover_replay` tells the agent that prior Run sticky experience determined the Variant.
 
 ## What it NEVER does

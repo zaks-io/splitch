@@ -43,7 +43,12 @@ function evaluate(appId, environmentId, flagKey, evalContext):
   if liveRun is null:
     return { variant: flagConfig.defaultVariant, reason: { type: 'default_disabled' } }
 
-  // 6. Targeting: iterate rules in priority order, first match wins.
+  // 6. Targeting: empty Run targetingRules means all Entities are eligible.
+  if liveRun.targetingRules is empty:
+    variant = assign(liveRun, evalContext.targetingKey)
+    return { variant, reason: { type: 'fresh_assignment' }, liveRunId: liveRun.runId }
+
+  // 7. Targeting Rules: iterate rules in priority order, first match wins.
   for rule in sorted(liveRun.targetingRules, by: priority ascending):
     if matchesConditions(rule.conditions, evalContext):
       if rule.percentageRollout is not null:
@@ -54,7 +59,7 @@ function evaluate(appId, environmentId, flagKey, evalContext):
         selection = 'direct'
       return { variant, reason: { type: 'rule_matched', ruleId: rule.ruleId, ruleName: rule.ruleName, priority: rule.priority, selection }, liveRunId: liveRun.runId }
 
-  // 7. No rule matched → Default Variant.
+  // 8. No rule matched → Default Variant.
   return { variant: flagConfig.defaultVariant, reason: { type: 'no_match_default' }, liveRunId: liveRun.runId }
 ```
 

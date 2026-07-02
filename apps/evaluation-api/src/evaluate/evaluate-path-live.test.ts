@@ -15,6 +15,38 @@ import {
 } from "./evaluate-path-test-fixtures.js";
 
 describe("evaluatePath live Run paths", () => {
+  it("an empty Targeting Rule snapshot treats all Entities as eligible and uses Assignment", async () => {
+    const provider = new RecordingProvider({
+      experiment: experimentConfig({
+        liveRun: runConfig({
+          salt: "run-salt-xyz",
+          allocation: { control: 50, treatment: 50 },
+          targetingRules: [],
+        }),
+      }),
+    });
+
+    const result = await evaluatePath(
+      baseInput({
+        evaluationContext: {
+          targetingKey: "user-0",
+          idType: "user",
+          attributes: { plan: "enterprise" },
+        },
+      }),
+      { assignmentStore: new RecordingAssignmentStore(), provider },
+    );
+
+    expect(result).toMatchObject({
+      kind: "fresh_assignment",
+      variant: "treatment",
+      reason: { type: "fresh_assignment" },
+      experimentId: EXPERIMENT_ID,
+      liveRunId: LIVE_RUN_ID,
+      exposure: { variant: "treatment", liveRunId: LIVE_RUN_ID, targetingKey: "user-0" },
+    });
+  });
+
   it("a direct Targeting Rule match returns the rule Variant and an Exposure decision", async () => {
     const rule = targetingRule({ id: "rule-direct", variantId: "v-treatment" });
     const store = new RecordingAssignmentStore();

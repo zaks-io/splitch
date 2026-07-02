@@ -135,7 +135,10 @@ describe("TestEvaluationReasonSchema (discriminated union narrows on type)", () 
     }
   });
 
-  it("parses default_disabled and no_match_default", () => {
+  it("parses fresh_assignment, default_disabled, and no_match_default", () => {
+    expect(TestEvaluationReasonSchema.parse({ type: "fresh_assignment" }).type).toBe(
+      "fresh_assignment",
+    );
     expect(TestEvaluationReasonSchema.parse({ type: "default_disabled" }).type).toBe(
       "default_disabled",
     );
