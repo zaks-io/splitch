@@ -5,7 +5,8 @@ import { makeControlPlaneAuthResolver } from "./auth-resolver.js";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do.js";
 import type { ControlPlaneApiEnv } from "./env.js";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify.js";
-import { failClosedRateLimiter } from "./rate-limit.js";
+import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache.js";
+import { rateLimiterForTarget } from "./rate-limit.js";
 import { makeSessionStore } from "./session-store.js";
 
 const service = "splitch-control-plane-api";
@@ -39,9 +40,10 @@ export default {
         verifier,
         sessions: makeSessionStore(env.SESSION_STORE),
       }),
-      rateLimiter: failClosedRateLimiter,
+      rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET),
       repo: createRepository(env.DB),
       configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
+      memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
     });
 
     return app.fetch(request, env);

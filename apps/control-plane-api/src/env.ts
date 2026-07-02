@@ -13,7 +13,7 @@ import type { ConfigStoreDurableObjectNamespace } from "./config-store-do.js";
 export interface ControlPlaneApiEnv {
   /** D1 binding — wrapped by createRepository, never used raw. */
   DB: D1Database;
-  /** KV namespace backing the session-validation hot read (revocation markers). */
+  /** KV namespace backing session-validation revocation markers and session identity profiles. */
   SESSION_STORE: KVNamespace;
   /** KV namespace backing schema-versioned config cache reads. */
   CONFIG_STORE: KVNamespace;

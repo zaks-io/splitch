@@ -100,7 +100,7 @@ export const accountRoutes: readonly ApiRouteContract[] = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN"],
+    errors: ["ORGANIZATION_NOT_FOUND", "USER_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
     operationId: "organization_members_add",
@@ -126,7 +126,13 @@ export const accountRoutes: readonly ApiRouteContract[] = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["ORGANIZATION_NOT_FOUND", "USER_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
+    errors: [
+      "ORGANIZATION_NOT_FOUND",
+      "USER_NOT_FOUND",
+      "FORBIDDEN",
+      "LAST_OWNER_REQUIRED",
+      "VALIDATION_ERROR",
+    ],
   }),
   defineApiRoute({
     operationId: "organization_members_remove",

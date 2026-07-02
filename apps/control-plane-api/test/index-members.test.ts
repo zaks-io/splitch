@@ -1,0 +1,139 @@
+import { env } from "cloudflare:workers";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { ControlPlaneApiEnv } from "../src/env.js";
+import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
+import worker from "../src/index.js";
+import { memberProfileCacheKey } from "../src/member-profile-cache.js";
+
+const AUDIENCE = "https://cp.splitch.test";
+const JWKS_URI = "https://auth.splitch.test/.well-known/jwks.json";
+const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);
+
+const ORG = {
+  orgId: "org_index_members_241b",
+  orgName: "Index Members",
+  appId: "app_index_members_241b",
+  appName: "Index Members App",
+  appKey: "index-members",
+};
+
+const OWNER = "user_index_owner_1c91";
+const NEW_MEMBER = "user_index_new_5b72";
+
+let signer: FixtureSigner;
+let testEnv: ControlPlaneApiEnv;
+
+beforeAll(async () => {
+  await ensureIdentitySchema(env.DB);
+  await seedOrgApp(env.DB, ORG);
+  await seedOrgMember(env.DB, { orgId: ORG.orgId, userId: OWNER, role: "owner" });
+  await cacheMemberProfile(OWNER, "owner@index.test");
+  await cacheMemberProfile(NEW_MEMBER, "new@index.test");
+
+  signer = await makeFixtureSigner();
+  const realFetch = globalThis.fetch.bind(globalThis);
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === JWKS_URI) return Response.json(signer.jwks);
+    return realFetch(input, init);
+  });
+
+  testEnv = {
+    ...env,
+    CONTROL_PLANE_ORIGIN: AUDIENCE,
+    AUTH_JWKS_URI: JWKS_URI,
+  } as ControlPlaneApiEnv;
+});
+
+afterAll(() => vi.unstubAllGlobals());
+
+describe("index.ts: member endpoints use the live session-cache profile resolver", () => {
+  it("round-trips member list and add through the default Worker export", async () => {
+    const jwt = await token(OWNER, [`org:${ORG.orgId}:owner`]);
+
+    const list = await call("GET", `/orgs/${ORG.orgId}/members`, jwt);
+    expect(list.status).toBe(200);
+    expect(await list.json()).toMatchObject({
+      items: [expect.objectContaining({ id: OWNER, email: "owner@index.test", role: "owner" })],
+    });
+
+    const add = await call("POST", `/orgs/${ORG.orgId}/members`, jwt, {
+      userId: NEW_MEMBER,
+      role: "member",
+    });
+    expect(add.status).toBe(200);
+    expect(await add.json()).toMatchObject({
+      id: NEW_MEMBER,
+      email: "new@index.test",
+      organizationId: ORG.orgId,
+      role: "member",
+    });
+  });
+});
+
+async function token(sub: string, scopes: string[]): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  return signer.sign({
+    sub,
+    iss: "https://auth.splitch.test",
+    aud: AUDIENCE,
+    iat: now,
+    exp: now + 3600,
+    scopes,
+  });
+}
+
+function call(method: string, path: string, jwt: string, body?: unknown): Promise<Response> {
+  return worker.fetch(
+    new Request(`${AUDIENCE}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        ...(body ? { "content-type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    }) as unknown as Parameters<typeof worker.fetch>[0],
+    testEnv,
+  );
+}
+
+async function cacheMemberProfile(userId: string, email: string): Promise<void> {
+  await env.SESSION_STORE.put(memberProfileCacheKey(userId), JSON.stringify({ email }));
+}
+
+async function ensureIdentitySchema(d1: D1Database): Promise<void> {
+  const schema = [
+    `CREATE TABLE IF NOT EXISTS organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
+    `CREATE TABLE IF NOT EXISTS apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS apps_org_key_unique ON apps (organization_id, key)`,
+  ];
+  for (const statement of schema) await d1.exec(statement);
+}
+
+async function seedOrgApp(d1: D1Database, row: typeof ORG): Promise<void> {
+  const now = new Date(NOW_MS).toISOString();
+  await d1
+    .prepare(
+      "INSERT OR IGNORE INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
+    )
+    .bind(row.orgId, row.orgName, "free", now, now)
+    .run();
+  await d1
+    .prepare(
+      "INSERT OR IGNORE INTO apps (id, organization_id, name, key, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+    )
+    .bind(row.appId, row.orgId, row.appName, row.appKey, now, now)
+    .run();
+}
+
+async function seedOrgMember(
+  d1: D1Database,
+  row: { orgId: string; userId: string; role: "owner" | "admin" | "member" },
+): Promise<void> {
+  await d1
+    .prepare(
+      "INSERT OR IGNORE INTO org_memberships (org_id, user_id, role, created_at) VALUES (?,?,?,?)",
+    )
+    .bind(row.orgId, row.userId, row.role, new Date(NOW_MS).toISOString())
+    .run();
+}
