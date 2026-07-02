@@ -1,4 +1,5 @@
-import { integer, sqliteTable, text, index } from "drizzle-orm/sqlite-core";
+import { isNull } from "drizzle-orm";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { createdAt, userRef } from "./columns.js";
 import { apps, environments } from "./identity.js";
 
@@ -11,26 +12,34 @@ import { apps, environments } from "./identity.js";
  * credentials are scoped to exactly one Environment.
  */
 
-export const clientKeys = sqliteTable("client_keys", {
-  keyId: text("key_id").primaryKey(),
-  appId: text("app_id")
-    .notNull()
-    .references(() => apps.id),
-  // Co-scoped with app_id (ADR-0027).
-  environmentId: text("environment_id")
-    .notNull()
-    .references(() => environments.id),
-  // Public value shipped to client code.
-  keyMaterial: text("key_material").notNull(),
-  // JSON array (nullable): null = open to all origins (auto-provision default,
-  // loudly flagged); [] = closed, serves nothing; non-empty = closed except
-  // listed origins (ADR-0034 §1).
-  originAllowlist: text("origin_allowlist"),
-  rateLimitRps: integer("rate_limit_rps"),
-  revokedAt: text("revoked_at"),
-  createdAt: createdAt(),
-  createdBy: userRef("created_by"),
-});
+export const clientKeys = sqliteTable(
+  "client_keys",
+  {
+    keyId: text("key_id").primaryKey(),
+    appId: text("app_id")
+      .notNull()
+      .references(() => apps.id),
+    // Co-scoped with app_id (ADR-0027).
+    environmentId: text("environment_id")
+      .notNull()
+      .references(() => environments.id),
+    // Public value shipped to client code.
+    keyMaterial: text("key_material").notNull(),
+    // JSON array (nullable): null = open to all origins (auto-provision default,
+    // loudly flagged); [] = closed, serves nothing; non-empty = closed except
+    // listed origins (ADR-0034 §1).
+    originAllowlist: text("origin_allowlist"),
+    rateLimitRps: integer("rate_limit_rps"),
+    revokedAt: text("revoked_at"),
+    createdAt: createdAt(),
+    createdBy: userRef("created_by"),
+  },
+  (t) => [
+    uniqueIndex("client_keys_active_env_unique")
+      .on(t.appId, t.environmentId)
+      .where(isNull(t.revokedAt)),
+  ],
+);
 
 export const apiKeys = sqliteTable(
   "api_keys",

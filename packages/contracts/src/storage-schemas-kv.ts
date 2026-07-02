@@ -114,7 +114,8 @@ export type ExperimentConfigKV = z.infer<typeof ExperimentConfigKVSchema>;
 //
 // Short-TTL credential validation cache, per-Environment (ADR-0027), evicted on
 // revoke. `revoked` is carried so an in-window read still fails loud after a
-// revoke writes through.
+// revoke writes through. Client Key entries also carry the edge abuse controls
+// needed by the hot path; API Key entries omit those fields.
 // ---------------------------------------------------------------------------
 
 export const credentialKinds = ["api_key", "client_key"] as const;
@@ -128,6 +129,8 @@ export const CredentialCacheKVSchema = z
     environmentId: z.string(),
     kind: CredentialKindSchema,
     scopes: z.array(z.string()),
+    originAllowlist: z.array(z.string()).nullable().optional(),
+    rateLimitRps: z.number().nullable().optional(),
     revoked: z.boolean(),
     cachedAt: z.string(),
   })

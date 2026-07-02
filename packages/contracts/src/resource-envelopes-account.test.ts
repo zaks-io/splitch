@@ -183,6 +183,7 @@ const clientKeyLeaf = {
   appId: "app_1",
   environmentId: "env_dev",
   keyMaterial: "pk_public",
+  isOriginOpen: true,
   createdAt: "2026-06-28T00:00:00.000Z",
 };
 

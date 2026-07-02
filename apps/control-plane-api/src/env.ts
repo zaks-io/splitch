@@ -17,6 +17,8 @@ export interface ControlPlaneApiEnv {
   SESSION_STORE: KVNamespace;
   /** KV namespace backing schema-versioned config cache reads. */
   CONFIG_STORE: KVNamespace;
+  /** KV namespace backing SDK credential hot-validation cache entries. */
+  CREDENTIAL_STORE: KVNamespace;
   /** Per-App/Environment config writer and live-update nudge fan-out. */
   CONFIG_STORE_WRITER: ConfigStoreDurableObjectNamespace;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */

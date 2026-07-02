@@ -4,9 +4,10 @@ import { Miniflare } from "miniflare";
  * Local fixture substrate for the control-plane auth-middleware tests.
  *
  * A Miniflare local D1 carries only the roots the mounted handlers read/write
- * (organizations, org_memberships, apps); the full migration set is gated by
- * @splitch/db's own suite, so this test stays self-contained. A Miniflare local
- * KV backs the session-validation hot read. No real WorkOS, no network.
+ * (organizations, org_memberships, apps, environments, credentials); the full
+ * migration set is gated by @splitch/db's own suite, so this test stays
+ * self-contained. Miniflare local KV backs session-validation and credential
+ * cache reads. No real WorkOS, no network.
  */
 
 const SCHEMA = [
@@ -14,11 +15,18 @@ const SCHEMA = [
   `CREATE TABLE org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
   `CREATE TABLE apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX apps_org_key_unique ON apps (organization_id, key)`,
+  `CREATE TABLE environments (id TEXT PRIMARY KEY NOT NULL, app_id TEXT NOT NULL, key TEXT NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
+  `CREATE UNIQUE INDEX environments_app_key_unique ON environments (app_id, key)`,
+  `CREATE TABLE client_keys (key_id TEXT PRIMARY KEY NOT NULL, app_id TEXT NOT NULL, environment_id TEXT NOT NULL, key_material TEXT NOT NULL, origin_allowlist TEXT, rate_limit_rps INTEGER, revoked_at TEXT, created_at TEXT NOT NULL, created_by TEXT)`,
+  `CREATE UNIQUE INDEX client_keys_active_env_unique ON client_keys (app_id, environment_id) WHERE revoked_at IS NULL`,
+  `CREATE TABLE api_keys (key_id TEXT PRIMARY KEY NOT NULL, app_id TEXT NOT NULL, environment_id TEXT NOT NULL, key_hash TEXT NOT NULL, scopes TEXT NOT NULL, revoked_at TEXT, last_rotated_at TEXT, created_at TEXT NOT NULL, created_by TEXT)`,
+  `CREATE INDEX api_keys_key_hash_idx ON api_keys (key_hash)`,
 ];
 
 export interface LocalBindings {
   d1: D1Database;
   kv: KVNamespace;
+  credentialKv: KVNamespace;
   dispose: () => Promise<void>;
 }
 
@@ -27,14 +35,15 @@ export async function makeLocalBindings(): Promise<LocalBindings> {
     modules: true,
     script: "export default {};",
     d1Databases: { DB: ":memory:" },
-    kvNamespaces: { SESSION_STORE: "sessions" },
+    kvNamespaces: { SESSION_STORE: "sessions", CREDENTIAL_STORE: "credentials" },
   });
   const d1 = (await mf.getD1Database("DB")) as unknown as D1Database;
   const kv = (await mf.getKVNamespace("SESSION_STORE")) as unknown as KVNamespace;
+  const credentialKv = (await mf.getKVNamespace("CREDENTIAL_STORE")) as unknown as KVNamespace;
   for (const statement of SCHEMA) {
     await d1.exec(statement);
   }
-  return { d1, kv, dispose: () => mf.dispose() };
+  return { d1, kv, credentialKv, dispose: () => mf.dispose() };
 }
 
 export interface SeedRow {
@@ -74,5 +83,21 @@ export async function seedOrgMember(d1: D1Database, row: SeedOrgMember): Promise
   await d1
     .prepare("INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES (?,?,?,?)")
     .bind(row.orgId, row.userId, row.role, row.createdAt ?? NOW)
+    .run();
+}
+
+export interface SeedEnvironment {
+  appId: string;
+  environmentId: string;
+  key: string;
+  name?: string;
+}
+
+export async function seedEnvironment(d1: D1Database, row: SeedEnvironment): Promise<void> {
+  await d1
+    .prepare(
+      "INSERT INTO environments (id, app_id, key, name, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+    )
+    .bind(row.environmentId, row.appId, row.key, row.name ?? row.key, NOW, NOW)
     .run();
 }

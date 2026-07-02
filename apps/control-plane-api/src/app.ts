@@ -8,6 +8,7 @@ import {
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do.js";
+import { makeCredentialHandlers } from "./credential-handlers.js";
 import { makeHandlers } from "./handlers.js";
 import { mountLiveUpdateRoute } from "./live-updates.js";
 import type { MemberProfileResolver } from "./org-handlers.js";
@@ -34,6 +35,7 @@ export interface AppDeps {
   authResolver: AuthResolver;
   rateLimiter: RateLimiter;
   repo: Repository;
+  credentialStore?: KVNamespace;
   configStore?: ConfigStoreAccess;
   memberProfileResolver?: MemberProfileResolver;
   nowIso?: () => string;
@@ -58,6 +60,11 @@ export function createApp(deps: AppDeps): Hono {
     memberProfileResolver: deps.memberProfileResolver,
     nowIso: deps.nowIso,
   });
+  const credentialHandlers = makeCredentialHandlers({
+    repo: deps.repo,
+    credentialStore: deps.credentialStore,
+    nowIso: deps.nowIso,
+  });
   const registrar = controlPlaneRegistrar(deps);
 
   mountLiveUpdateRoute(app, {
@@ -77,6 +84,12 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("organization_members_remove"), handlers.removeMember);
   registrar.mount(app, controlPlaneRoute("flag_config_get"), handlers.getFlagConfig);
   registrar.mount(app, controlPlaneRoute("flag_config_update"), handlers.updateFlagConfig);
+  registrar.mount(app, controlPlaneRoute("client_key_get"), credentialHandlers.getClientKey);
+  registrar.mount(app, controlPlaneRoute("client_key_update"), credentialHandlers.updateClientKey);
+  registrar.mount(app, controlPlaneRoute("client_key_rotate"), credentialHandlers.rotateClientKey);
+  registrar.mount(app, controlPlaneRoute("api_keys_list"), credentialHandlers.listApiKeys);
+  registrar.mount(app, controlPlaneRoute("api_keys_create"), credentialHandlers.createApiKey);
+  registrar.mount(app, controlPlaneRoute("api_keys_revoke"), credentialHandlers.revokeApiKey);
 
   return app;
 }

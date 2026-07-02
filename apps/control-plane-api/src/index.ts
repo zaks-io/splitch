@@ -15,9 +15,9 @@ const service = "splitch-control-plane-api";
  * Control Plane API Worker entry. Health is served directly; everything else
  * mounts through the worker-runtime registrar behind the control-plane-token
  * resolver. D1 access is ALWAYS through createRepository (the tenant-isolation
- * seam, ADR-0018); KV is the session-validation hot read. The JWKS verifier is
- * injected so the real WorkOS/auth-api JWKS (HUMAN-SETUP S41) swaps in behind the
- * same port without touching the resolver.
+ * seam, ADR-0018); KV handles session validation plus credential hot-validation
+ * write-through. The JWKS verifier is injected so the real WorkOS/auth-api JWKS
+ * (HUMAN-SETUP S41) swaps in behind the same port without touching the resolver.
  */
 export default {
   async fetch(request, env): Promise<Response> {
@@ -42,6 +42,7 @@ export default {
       }),
       rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET),
       repo: createRepository(env.DB),
+      credentialStore: env.CREDENTIAL_STORE,
       configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
       memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
     });
