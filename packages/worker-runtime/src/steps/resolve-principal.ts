@@ -30,6 +30,9 @@ export async function resolvePrincipal(
   if (result.ok) {
     return { ok: true, principal: result.principal };
   }
+  if (result.error !== undefined) {
+    return { ok: false, error: result.error };
+  }
 
   return {
     ok: false,

@@ -9,6 +9,7 @@ import {
   makeJwksVerifier,
   makeSessionStore,
 } from "./control-plane-auth.js";
+import { makeDataPlaneAuthResolver } from "./data-plane-auth.js";
 import type { EvaluationApiEnv } from "./env.js";
 import { makeEnvSaltStore } from "./local-salt-store.js";
 import { KvProvider } from "./provider/kv-provider.js";
@@ -36,6 +37,7 @@ export default {
         }),
         sessions: makeSessionStore(env.SESSION_STORE),
       }),
+      dataPlaneAuthResolver: makeDataPlaneAuthResolver(env.CREDENTIAL_STORE),
       rateLimiter: allowLimiter,
       provider: new KvProvider(env.CONFIG_STORE),
       assignmentStore: new KvAssignmentStore(

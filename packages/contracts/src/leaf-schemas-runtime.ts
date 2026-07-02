@@ -80,6 +80,7 @@ export type ExposureEvent = z.infer<typeof ExposureEventSchema>;
 
 export const resolutionReasons = [
   "SPLIT",
+  "TARGETING_MATCH",
   "DEFAULT",
   "DISABLED",
   "CACHED",
@@ -104,22 +105,32 @@ const BaseResolutionDetailsSchema = z.object({
   value: VariantValueSchema,
   variantName: z.string().nullable(),
   reason: ResolutionReasonSchema,
+  ruleId: z.string().optional(),
   errorCode: ErrorCodeSchema.optional(),
   errorMessage: z.string().optional(),
 });
 
-export const ResolutionDetailsSchema = BaseResolutionDetailsSchema.refine(
-  (d) => {
-    if (d.reason === "ERROR") {
-      // A failure-fallback ALWAYS carries an errorCode (ADR-0036).
-      return d.errorCode != null;
-    }
-    // Non-ERROR reasons must not carry error fields.
-    return d.errorCode == null && d.errorMessage == null;
-  },
-  { message: "errorCode/errorMessage are present iff reason === 'ERROR'" },
-);
+export const ResolutionDetailsSchema = BaseResolutionDetailsSchema.refine(hasValidErrorFields, {
+  message: "errorCode/errorMessage are present iff reason === 'ERROR'",
+}).refine(hasValidRuleId, {
+  message: "ruleId is required iff reason === 'TARGETING_MATCH'",
+});
 export type ResolutionDetails = z.infer<typeof ResolutionDetailsSchema>;
+
+function hasValidErrorFields(d: z.infer<typeof BaseResolutionDetailsSchema>): boolean {
+  if (d.reason === "ERROR") {
+    // A failure-fallback ALWAYS carries an errorCode (ADR-0036).
+    return d.errorCode != null;
+  }
+  return d.errorCode == null && d.errorMessage == null;
+}
+
+function hasValidRuleId(d: z.infer<typeof BaseResolutionDetailsSchema>): boolean {
+  if (d.reason === "TARGETING_MATCH") {
+    return d.ruleId != null;
+  }
+  return d.ruleId == null;
+}
 
 // ---------------------------------------------------------------------------
 // Organization

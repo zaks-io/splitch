@@ -4,9 +4,11 @@ import { Hono } from "hono";
 import type { EvaluatePathDeps } from "./evaluate/evaluate-path.js";
 import { makeTestEvaluationHandler } from "./test-evaluation.js";
 import { evaluationRoute } from "./routes.js";
+import { makeVerifyHandler } from "./verify.js";
 
 export interface AppDeps extends EvaluatePathDeps {
   authResolver: AuthResolver;
+  dataPlaneAuthResolver: AuthResolver;
   rateLimiter: RateLimiter;
   defaultHeaders?: Record<string, string>;
 }
@@ -14,11 +16,15 @@ export interface AppDeps extends EvaluatePathDeps {
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
   const registrar = createRegistrar({
-    authResolvers: { "control-plane-token": deps.authResolver },
+    authResolvers: {
+      "control-plane-token": deps.authResolver,
+      "data-plane-key": deps.dataPlaneAuthResolver,
+    },
     rateLimiter: deps.rateLimiter,
     defaultHeaders: deps.defaultHeaders,
   });
 
+  registrar.mount(app, evaluationRoute("sdk_verify"), makeVerifyHandler(deps));
   registrar.mount(app, evaluationRoute("flags_test_eval"), makeTestEvaluationHandler(deps));
   return app;
 }

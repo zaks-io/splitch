@@ -140,6 +140,14 @@ describe("route registry: per-route invariants", () => {
     }
   });
 
+  it("routes with guard scopes document the scope failure emitted by the runtime guard", () => {
+    for (const route of routeRegistry) {
+      if (route.scopes.length > 0) {
+        expect(route.errors).toContain("INSUFFICIENT_SCOPES");
+      }
+    }
+  });
+
   it("every auth/rateLimit/idempotency/method is a valid enum member", () => {
     const auths = new Set<string>(authKinds);
     const rates = new Set<string>(rateLimitClasses);
