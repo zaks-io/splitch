@@ -23,6 +23,11 @@
       "preview_id": "local-config-store"
     },
     {
+      "binding": "CREDENTIAL_STORE",
+      "id": "local-credential-store",
+      "preview_id": "local-credential-store"
+    },
+    {
       "binding": "SESSION_STORE",
       "id": "local-session-store",
       "preview_id": "local-session-store"

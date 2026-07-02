@@ -28,6 +28,17 @@ describe("ResolutionDetailsSchema", () => {
     expect(d.variantName).toBe("treatment");
   });
 
+  it("parses an API-key TARGETING_MATCH result with ruleId", () => {
+    const d = ResolutionDetailsSchema.parse({
+      value: "on",
+      variantName: "treatment",
+      reason: "TARGETING_MATCH",
+      ruleId: "rule-enterprise",
+    });
+    expect(d.reason).toBe("TARGETING_MATCH");
+    expect(d.ruleId).toBe("rule-enterprise");
+  });
+
   it("parses a JsonObject value", () => {
     const d = ResolutionDetailsSchema.parse({
       value: { color: "blue", count: 3 },
@@ -96,6 +107,27 @@ describe("ResolutionDetailsSchema", () => {
         variantName: "treatment",
         reason: "DEFAULT",
         errorMessage: "stray message",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires ruleId on TARGETING_MATCH", () => {
+    expect(
+      ResolutionDetailsSchema.safeParse({
+        value: "on",
+        variantName: "treatment",
+        reason: "TARGETING_MATCH",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects ruleId on non-TARGETING_MATCH reasons", () => {
+    expect(
+      ResolutionDetailsSchema.safeParse({
+        value: "on",
+        variantName: "treatment",
+        reason: "SPLIT",
+        ruleId: "rule-enterprise",
       }).success,
     ).toBe(false);
   });

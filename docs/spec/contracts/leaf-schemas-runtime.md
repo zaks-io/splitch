@@ -51,22 +51,24 @@ resolved by `MIN(serverReceivedAt)` — the earliest wins. Distinct from the wir
 
 ## ResolutionDetails (OpenFeature SDK return shape)
 
-The shape every SDK accessor returns (`evaluate`, `evaluateDetails`, `peekVariant`, `verify`). It is
-**not a wire schema** — the data-plane wire response is `DataPlaneEvaluateResponse = { variant }`
-(see [request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md)). The
-SDK synthesizes `ResolutionDetails` from that wire value plus the HTTP status, so the caller always
-gets a structured, fail-loud result (ADR-0036). It is the same OpenFeature `ResolutionDetails` shape
-the verify and error contracts reference; defined here once.
+The shape every SDK accessor returns (`evaluate`, `evaluateDetails`, `peekVariant`, `verify`). For
+`POST /api/sdk/verify` it is also the wire response because the endpoint is explicitly a
+non-exposing setup-confirmation path. For exposing `evaluate`, the SDK may still synthesize
+`ResolutionDetails` from the data-plane value plus the HTTP status. Either path gives the caller a
+structured, fail-loud result (ADR-0036). It is the same OpenFeature `ResolutionDetails` shape the
+verify and error contracts reference; defined here once.
 
 | Field          | Type               | Required | Meaning                                                                                                       |
 | -------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------- |
 | `value`        | `VariantValue`     | yes      | The resolved Variant value; the Default Variant value on a failure-fallback                                   |
 | `variantName`  | `string \| null`   | yes      | The Variant name served; `null` when no Variant resolved (error / disabled with no Default)                   |
 | `reason`       | `ResolutionReason` | yes      | Why this value was returned (enum below)                                                                      |
+| `ruleId`       | `string`           | no       | Present iff `reason === 'TARGETING_MATCH'`; API-Key/control-plane only                                        |
 | `errorCode`    | `ErrorCode`        | no       | Present iff `reason === 'ERROR'`; the canonical `ErrorCode` enum ([error-responses.md](./error-responses.md)) |
 | `errorMessage` | `string`           | no       | Human-readable; present iff `reason === 'ERROR'`                                                              |
 
-`ResolutionReason` enum: `'SPLIT' | 'DEFAULT' | 'DISABLED' | 'CACHED' | 'STALE' | 'ERROR'`.
+`ResolutionReason` enum:
+`'SPLIT' | 'TARGETING_MATCH' | 'DEFAULT' | 'DISABLED' | 'CACHED' | 'STALE' | 'ERROR'`.
 `VariantValue = boolean | string | number | JsonObject`.
 
 A failure-fallback **always** carries `reason: 'ERROR'` + `errorCode`, never a silent default

@@ -2,6 +2,7 @@ import {
   DataPlaneEvaluateRequestSchema,
   DataPlaneEvaluateResponseSchema,
 } from "../wire-envelopes-core.js";
+import { ResolutionDetailsSchema } from "../leaf-schemas-runtime.js";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
 
 /**
@@ -11,8 +12,8 @@ import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
  *
  * - evaluate: Client Key only; fires an Exposure as a structural side effect.
  * - verify:   mixed Client Key | API Key (data-plane-key, ADR-0037); fires no
- *             Exposure; reuses the evaluate request + bare wire response shape
- *             (the SDK synthesizes ResolutionDetails from it).
+ *             Exposure; reuses the evaluate request and returns tiered
+ *             ResolutionDetails.
  *
  * Endpoint canon: docs/spec/sdk/public-evaluate-endpoint.md, verify-endpoint.md.
  */
@@ -49,13 +50,15 @@ export const dataPlaneRoutes: readonly ApiRouteContract[] = [
     path: "/api/sdk/verify",
     summary: "Verify setup under a Client Key or API Key (no Exposure; tiered reason).",
     request: { body: DataPlaneEvaluateRequestSchema },
-    response: DataPlaneEvaluateResponseSchema,
+    response: ResolutionDetailsSchema,
     auth: "data-plane-key",
+    scopes: ["data-plane:evaluate"],
     rateLimit: "client-key",
     idempotency: "none",
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",
+      "INSUFFICIENT_SCOPES",
       "APP_MISMATCH",
       "ORIGIN_NOT_ALLOWED",
       "FLAG_NOT_FOUND",

@@ -41,6 +41,8 @@ const authResolver: AuthResolver = (request) => {
   return { ok: false, reason: "UNAUTHORIZED" };
 };
 
+const dataPlaneAuthResolver: AuthResolver = () => ({ ok: false, reason: "UNAUTHORIZED" });
+
 function seededKv(): FakeKv {
   return new FakeKv()
     .put(
@@ -61,6 +63,7 @@ function makeHarness() {
   const assignmentStore = new RecordingAssignmentStore();
   const app = createApp({
     authResolver,
+    dataPlaneAuthResolver,
     rateLimiter: allowLimiter,
     provider: new KvProvider(configKv),
     assignmentStore,

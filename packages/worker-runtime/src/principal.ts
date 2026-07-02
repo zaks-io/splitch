@@ -1,4 +1,4 @@
-import type { AuthKind } from "@splitch/contracts";
+import type { AuthKind, ErrorResponse } from "@splitch/contracts";
 
 /**
  * The resolved caller. Produced by a Worker-provided AuthResolver, consumed by
@@ -33,7 +33,7 @@ export interface Principal {
  */
 export type AuthResult =
   | { ok: true; principal: Principal }
-  | { ok: false; reason: "UNAUTHORIZED" | "CREDENTIAL_REVOKED" };
+  | { ok: false; reason: "UNAUTHORIZED" | "CREDENTIAL_REVOKED"; error?: ErrorResponse };
 
 /**
  * Port a Worker implements per auth kind it mounts. The guard dispatches on the
