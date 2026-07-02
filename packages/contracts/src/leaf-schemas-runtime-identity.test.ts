@@ -129,6 +129,7 @@ describe("ClientKey (public)", () => {
     appId: "app_1",
     environmentId: "env_1",
     keyMaterial: "pk_live_public",
+    isOriginOpen: true,
     createdAt: "2024-01-01T00:00:00Z",
   };
 
@@ -137,9 +138,9 @@ describe("ClientKey (public)", () => {
   });
 
   it("accepts a null originAllowlist (open to all origins)", () => {
-    expect(
-      ClientKeySchema.parse({ ...validClientKey, originAllowlist: null }).originAllowlist,
-    ).toBeNull();
+    const ck = ClientKeySchema.parse({ ...validClientKey, originAllowlist: null });
+    expect(ck.originAllowlist).toBeNull();
+    expect(ck.isOriginOpen).toBe(true);
   });
 
   it("accepts an empty originAllowlist (closed, serves nothing)", () => {

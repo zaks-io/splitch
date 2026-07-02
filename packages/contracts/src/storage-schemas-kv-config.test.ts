@@ -156,8 +156,15 @@ describe("CredentialCacheKVSchema", () => {
   });
 
   it("parses a client_key cache entry", () => {
-    const c = CredentialCacheKVSchema.parse({ ...validCredentialCache, kind: "client_key" });
+    const c = CredentialCacheKVSchema.parse({
+      ...validCredentialCache,
+      kind: "client_key",
+      originAllowlist: ["https://app.example.test"],
+      rateLimitRps: 25,
+    });
     expect(c.kind).toBe("client_key");
+    expect(c.originAllowlist).toEqual(["https://app.example.test"]);
+    expect(c.rateLimitRps).toBe(25);
   });
 
   it("rejects an unknown credential kind", () => {

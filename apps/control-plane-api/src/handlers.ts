@@ -3,9 +3,9 @@ import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import type { ConfigStoreWriter } from "./config-store.js";
 import type { ConfigStoreAccess } from "./config-store-do.js";
+import { requireAppAdmin } from "./app-authz.js";
 import { objectBody, pathParam } from "./handler-input.js";
 import { makeOrgHandlers, type MemberProfileResolver } from "./org-handlers.js";
-import { appAdminScope } from "./scope-binding.js";
 
 /**
  * Minimal-but-real control-plane handlers for the mounted routes. They run AFTER
@@ -147,23 +147,6 @@ function configStoreUnavailable(requestId: string): Response {
       code: "SERVICE_UNAVAILABLE",
       message: "config store is not configured",
       details: { retryAfterMs: 1000 },
-    },
-    { requestId },
-  );
-}
-
-function requireAppAdmin(
-  appId: string,
-  heldScopes: readonly string[],
-  requestId: string,
-): Response | null {
-  const requiredScope = appAdminScope(appId);
-  if (heldScopes.includes(requiredScope)) return null;
-  return renderError(
-    {
-      code: "INSUFFICIENT_SCOPES",
-      message: "credential lacks required scopes",
-      details: { requiredScopes: [requiredScope], heldScopes: [...heldScopes] },
     },
     { requestId },
   );

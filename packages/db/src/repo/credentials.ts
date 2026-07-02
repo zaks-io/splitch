@@ -30,12 +30,30 @@ export function makeCredentialRepo(db: Db) {
       return apiKeysTable.findOne(scope, eq(apiKeys.keyId, keyId));
     },
 
+    async revokeApiKey(scope: EnvScope, keyId: string, revokedAt: string) {
+      const rows = await apiKeysTable.update(
+        scope,
+        { revokedAt, lastRotatedAt: revokedAt },
+        eq(apiKeys.keyId, keyId),
+      );
+      return rows[0] ?? null;
+    },
+
     listClientKeys(scope: EnvScope) {
       return clientKeysTable.findMany(scope);
     },
 
     getClientKey(scope: EnvScope, keyId: string) {
       return clientKeysTable.findOne(scope, eq(clientKeys.keyId, keyId));
+    },
+
+    async updateClientKey(
+      scope: EnvScope,
+      keyId: string,
+      values: Partial<typeof clientKeys.$inferInsert>,
+    ) {
+      const rows = await clientKeysTable.update(scope, values, eq(clientKeys.keyId, keyId));
+      return rows[0] ?? null;
     },
   };
 }

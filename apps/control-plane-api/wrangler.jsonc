@@ -26,6 +26,10 @@
     {
       "binding": "CONFIG_STORE",
       "id": "00000000000000000000000000000000"
+    },
+    {
+      "binding": "CREDENTIAL_STORE",
+      "id": "00000000000000000000000000000000"
     }
   ],
   "durable_objects": {

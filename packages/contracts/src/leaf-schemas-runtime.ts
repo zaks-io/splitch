@@ -196,7 +196,8 @@ export type User = z.infer<typeof UserSchema>;
 // `keyMaterial` is intentionally present — Client Keys are safe to embed in
 // client code. `originAllowlist`: null = open to all origins (auto-provision
 // default, loudly flagged); [] = closed, serves nothing; non-empty = closed
-// except listed origins (ADR-0034 §1).
+// except listed origins (ADR-0034 §1). `isOriginOpen` is the explicit UI/agent
+// warning bit derived from `originAllowlist === null`.
 //
 // `.strict()` (like APIKey) keeps the leaf a CLOSED shape: an unknown key —
 // notably an API Key's `scopes` — is REJECTED, not silently dropped. This makes
@@ -212,6 +213,7 @@ export const ClientKeySchema = z
     environmentId: z.string(),
     keyMaterial: z.string(),
     originAllowlist: z.array(z.string()).nullable().optional(),
+    isOriginOpen: z.boolean(),
     rateLimitRps: z.number().nullable().optional(),
     revokedAt: z.string().nullable().optional(),
     createdAt: z.string(),

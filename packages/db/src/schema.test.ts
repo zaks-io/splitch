@@ -112,6 +112,15 @@ describe("runs storage-only decision columns", () => {
   });
 });
 
+describe("credential invariants", () => {
+  it("enforces one active Client Key per Environment", () => {
+    expect(migrationSql).toContain("`client_keys_active_env_unique`");
+    expect(migrationSql).toContain(
+      "CREATE UNIQUE INDEX `client_keys_active_env_unique` ON `client_keys` (`app_id`,`environment_id`) WHERE revoked_at IS NULL",
+    );
+  });
+});
+
 describe("full table corpus", () => {
   it("emits all 19 D1 tables", () => {
     const createCount = (migrationSql.match(/CREATE TABLE /g) ?? []).length;
