@@ -8,6 +8,7 @@ import {
   appNotFound,
   appResponse,
   createEnvironmentRecord,
+  deleteAppBlockedByChildren,
   deleteEnvironmentChildren,
   environmentResponse,
   firstRunningExperiment,
@@ -99,7 +100,10 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
 
     async updateApp({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const appId = pathParam(input, "appId");
-      const writeError = requireAppWrite(appId, principal.scopes, requestId);
+      const app = await deps.repo.identity.getApp(appId);
+      if (!app) return appNotFound(requestId);
+
+      const writeError = await requireAppWrite(deps, appId, principal.id, requestId);
       if (writeError) return writeError;
 
       const body = objectBody(input);
@@ -114,11 +118,11 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
 
     async deleteApp({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const appId = pathParam(input, "appId");
-      const deleteError = requireAppDelete(appId, principal.scopes, requestId);
-      if (deleteError) return deleteError;
-
       const app = await deps.repo.identity.getApp(appId);
       if (!app) return appNotFound(requestId);
+
+      const deleteError = await requireAppDelete(deps, appId, principal.id, requestId);
+      if (deleteError) return deleteError;
 
       const environments = await deps.repo.identity.listEnvironments(appScope(appId));
       const running = await firstRunningExperiment(
@@ -129,6 +133,9 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
         requestId,
       );
       if (running) return running;
+
+      const childBlocker = await deleteAppBlockedByChildren(deps, app, environments, requestId);
+      if (childBlocker) return childBlocker;
 
       for (const env of environments) {
         await deleteEnvironmentChildren(deps, appId, env.id);

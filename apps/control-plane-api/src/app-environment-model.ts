@@ -5,7 +5,7 @@ import {
   type Environment,
   type EnvironmentPolicy,
 } from "@splitch/contracts";
-import { type appScope, envScope, type Repository } from "@splitch/db";
+import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning.js";
 import { randomHex } from "./credential-cache.js";
@@ -130,6 +130,70 @@ export async function deleteEnvironmentChildren(
   await deps.repo.credentials.clientKeys.remove(scope);
 }
 
+export async function deleteAppBlockedByChildren(
+  deps: AppEnvironmentDeps,
+  app: AppRow,
+  environments: readonly EnvironmentRow[],
+  requestId: string,
+): Promise<Response | null> {
+  const scope = appScope(app.id);
+  for (const env of environments) {
+    const blocker = await deleteEnvironmentBlockedByChildren(
+      deps,
+      app.id,
+      env.id,
+      "DELETE_APP",
+      requestId,
+    );
+    if (blocker) return blocker;
+  }
+
+  for (const check of [
+    ["flags", deps.repo.flags.flags.findMany(scope)],
+    ["segments", deps.repo.flags.segments.findMany(scope)],
+    ["metrics", deps.repo.experiments.metrics.findMany(scope)],
+    ["entity_deletions", deps.repo.privacy.listEntityDeletions(scope)],
+    ["privacy_requests", deps.repo.privacy.listPrivacyRequestsForApp(app.organizationId, app.id)],
+  ] as const) {
+    const [childType, rows] = check;
+    const childCount = (await rows).length;
+    if (childCount > 0) {
+      return resourceNotEmpty("app", app.id, childType, childCount, "DELETE_APP", requestId);
+    }
+  }
+  return null;
+}
+
+export async function deleteEnvironmentBlockedByChildren(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  environmentId: string,
+  attemptedOp: string,
+  requestId: string,
+): Promise<Response | null> {
+  const scope = envScope(appId, environmentId);
+  for (const check of [
+    ["flag_configs", deps.repo.flags.flagConfigs.findMany(scope)],
+    ["targeting_rules", deps.repo.flags.targetingRules.findMany(scope)],
+    ["experiments", deps.repo.experiments.experiments.findMany(scope)],
+    ["runs", deps.repo.experiments.runs.findMany(scope)],
+  ] as const) {
+    const [childType, rows] = check;
+    const childCount = (await rows).length;
+    if (childCount > 0) {
+      return resourceNotEmpty(
+        "environment",
+        environmentId,
+        childType,
+        childCount,
+        attemptedOp,
+        requestId,
+      );
+    }
+  }
+  return null;
+}
+
 export function appResponse(row: AppRow): App {
   return {
     id: row.id,
@@ -174,6 +238,24 @@ export function lastEnvironmentRequired(appId: string, requestId: string): Respo
       code: "LAST_ENVIRONMENT_REQUIRED",
       message: "app must retain at least one Environment",
       details: { appId },
+    },
+    { requestId },
+  );
+}
+
+function resourceNotEmpty(
+  resourceType: "app" | "environment",
+  resourceId: string,
+  childType: string,
+  childCount: number,
+  attemptedOp: string,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "RESOURCE_NOT_EMPTY",
+      message: "resource has children that must be deleted before this operation can continue",
+      details: { resourceType, resourceId, childType, childCount, attemptedOp },
     },
     { requestId },
   );

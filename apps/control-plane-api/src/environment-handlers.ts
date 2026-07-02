@@ -7,6 +7,7 @@ import {
   type AppEnvironmentDeps,
   appNotFound,
   createEnvironmentRecord,
+  deleteEnvironmentBlockedByChildren,
   deleteEnvironmentChildren,
   environmentResponse,
   lastEnvironmentRequired,
@@ -33,11 +34,11 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       requestId,
     }: HandlerArgs<unknown>): Promise<Response> {
       const appId = pathParam(input, "appId");
-      const writeError = requireAppWrite(appId, principal.scopes, requestId);
-      if (writeError) return writeError;
-
       const app = await deps.repo.identity.getApp(appId);
       if (!app) return appNotFound(requestId);
+
+      const writeError = await requireAppWrite(deps, appId, principal.id, requestId);
+      if (writeError) return writeError;
 
       const body = objectBody(input);
       const environment = await createEnvironmentRecord(deps, appScope(appId), appId, {
@@ -69,7 +70,10 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
     }: HandlerArgs<unknown>): Promise<Response> {
       const appId = pathParam(input, "appId");
       const environmentId = pathParam(input, "environmentId");
-      const writeError = requireAppWrite(appId, principal.scopes, requestId);
+      const app = await deps.repo.identity.getApp(appId);
+      if (!app) return appNotFound(requestId);
+
+      const writeError = await requireAppWrite(deps, appId, principal.id, requestId);
       if (writeError) return writeError;
 
       const body = objectBody(input);
@@ -91,27 +95,68 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
     }: HandlerArgs<unknown>): Promise<Response> {
       const appId = pathParam(input, "appId");
       const environmentId = pathParam(input, "environmentId");
-      const deleteError = requireAppDelete(appId, principal.scopes, requestId);
+      const app = await deps.repo.identity.getApp(appId);
+      if (!app) return appNotFound(requestId);
+
+      const deleteError = await requireAppDelete(deps, appId, principal.id, requestId);
       if (deleteError) return deleteError;
 
-      const scope = appScope(appId);
-      const environments = await deps.repo.identity.listEnvironments(scope);
-      const environment = environments.find((env) => env.id === environmentId);
-      if (!environment) return appNotFound(requestId);
-
-      const running = await runningExperimentError(
-        deps,
-        appId,
-        environment,
-        "DELETE_ENVIRONMENT",
-        requestId,
-      );
-      if (running) return running;
-      if (environments.length <= 1) return lastEnvironmentRequired(appId, requestId);
-
-      await deleteEnvironmentChildren(deps, appId, environmentId);
-      await deps.repo.identity.deleteEnvironment(scope, environmentId);
-      return Response.json({ deleted: true });
+      return deleteEnvironmentAfterAuth(deps, appId, environmentId, requestId);
     },
   };
+}
+
+async function deleteEnvironmentAfterAuth(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  environmentId: string,
+  requestId: string,
+): Promise<Response> {
+  const scope = appScope(appId);
+  const environments = await deps.repo.identity.listEnvironments(scope);
+  const environment = environments.find((env) => env.id === environmentId);
+  if (!environment) return appNotFound(requestId);
+
+  const blocker = await environmentDeleteBlocker(
+    deps,
+    appId,
+    environmentId,
+    environment,
+    requestId,
+  );
+  if (blocker) return blocker;
+
+  await deleteEnvironmentChildren(deps, appId, environmentId);
+  await deps.repo.identity.deleteEnvironment(scope, environmentId);
+  return Response.json({ deleted: true });
+}
+
+async function environmentDeleteBlocker(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  environmentId: string,
+  environment: Awaited<
+    ReturnType<AppEnvironmentDeps["repo"]["identity"]["listEnvironments"]>
+  >[number],
+  requestId: string,
+): Promise<Response | null> {
+  const running = await runningExperimentError(
+    deps,
+    appId,
+    environment,
+    "DELETE_ENVIRONMENT",
+    requestId,
+  );
+  if (running) return running;
+
+  const environments = await deps.repo.identity.listEnvironments(appScope(appId));
+  if (environments.length <= 1) return lastEnvironmentRequired(appId, requestId);
+
+  return deleteEnvironmentBlockedByChildren(
+    deps,
+    appId,
+    environmentId,
+    "DELETE_ENVIRONMENT",
+    requestId,
+  );
 }

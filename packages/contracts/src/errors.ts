@@ -23,6 +23,7 @@ export const errorCodes = [
   "EXPERIMENT_RUNNING",
   "EXPERIMENT_NO_DRAFT",
   "VARIANT_NOT_AVAILABLE",
+  "RESOURCE_NOT_EMPTY",
 
   // Not found
   "EXPERIMENT_NOT_FOUND",
@@ -190,6 +191,16 @@ const errorMembers = [
       environmentId: z.string(),
       missingVariants: z.array(z.string()),
       recommendedAction: RecommendedActionSchema,
+    }),
+  ),
+  member(
+    "RESOURCE_NOT_EMPTY",
+    z.object({
+      resourceType: z.enum(["app", "environment"]),
+      resourceId: z.string(),
+      childType: z.string(),
+      childCount: z.number(),
+      attemptedOp: z.string(),
     }),
   ),
 

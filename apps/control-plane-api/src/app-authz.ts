@@ -1,48 +1,82 @@
+import { appScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import { appAdminScope } from "./scope-binding.js";
 
 const APP_WRITE_ROLES = ["owner", "admin"] as const;
 const APP_DELETE_ROLES = ["owner"] as const;
 
+type AppRole = "owner" | "admin" | "member";
+type AppAuthzDeps = { repo: Pick<Repository, "identity"> };
+
 export function requireAppAdmin(
   appId: string,
   heldScopes: readonly string[],
   requestId: string,
 ): Response | null {
-  return requireAppRole(appId, heldScopes, ["admin"], requestId);
+  return requireAppRoleFromScopes(appId, heldScopes, ["admin"], requestId);
 }
 
-export function requireAppWrite(
+export async function requireAppWrite(
+  deps: AppAuthzDeps,
   appId: string,
-  heldScopes: readonly string[],
+  userId: string,
   requestId: string,
-): Response | null {
-  return requireAppRole(appId, heldScopes, APP_WRITE_ROLES, requestId);
+): Promise<Response | null> {
+  return requireAppRoleFromMembership(deps, appId, userId, APP_WRITE_ROLES, requestId);
 }
 
-export function requireAppDelete(
+export async function requireAppDelete(
+  deps: AppAuthzDeps,
   appId: string,
-  heldScopes: readonly string[],
+  userId: string,
   requestId: string,
-): Response | null {
-  return requireAppRole(appId, heldScopes, APP_DELETE_ROLES, requestId);
+): Promise<Response | null> {
+  return requireAppRoleFromMembership(deps, appId, userId, APP_DELETE_ROLES, requestId);
 }
 
-function requireAppRole(
+async function requireAppRoleFromMembership(
+  deps: AppAuthzDeps,
   appId: string,
-  heldScopes: readonly string[],
-  allowedRoles: readonly ("owner" | "admin" | "member")[],
+  userId: string,
+  allowedRoles: readonly AppRole[],
   requestId: string,
-): Response | null {
-  const requiredScopes = allowedRoles.map((role) =>
-    role === "admin" ? appAdminScope(appId) : `app:${appId}:${role}`,
+): Promise<Response | null> {
+  const membership = await deps.repo.identity.getAppMembership(appScope(appId), userId);
+  if (membership && allowedRoles.includes(membership.role as AppRole)) return null;
+  return insufficientAppRole(
+    appId,
+    allowedRoles,
+    membership ? [`app:${appId}:${membership.role}`] : [],
+    requestId,
   );
+}
+
+function requireAppRoleFromScopes(
+  appId: string,
+  heldScopes: readonly string[],
+  allowedRoles: readonly AppRole[],
+  requestId: string,
+): Response | null {
+  const requiredScopes = scopesForRoles(appId, allowedRoles);
   if (requiredScopes.some((scope) => heldScopes.includes(scope))) return null;
+  return insufficientAppRole(appId, allowedRoles, heldScopes, requestId);
+}
+
+function scopesForRoles(appId: string, roles: readonly AppRole[]): string[] {
+  return roles.map((role) => (role === "admin" ? appAdminScope(appId) : `app:${appId}:${role}`));
+}
+
+function insufficientAppRole(
+  appId: string,
+  allowedRoles: readonly AppRole[],
+  heldScopes: readonly string[],
+  requestId: string,
+): Response {
   return renderError(
     {
       code: "INSUFFICIENT_SCOPES",
-      message: "credential lacks required scopes",
-      details: { requiredScopes, heldScopes: [...heldScopes] },
+      message: "principal lacks required App role",
+      details: { requiredScopes: scopesForRoles(appId, allowedRoles), heldScopes: [...heldScopes] },
     },
     { requestId },
   );

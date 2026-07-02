@@ -26,6 +26,8 @@ const ORG = {
   appKey: "existing-authz",
 };
 const OWNER = "user_app_env_authz_owner";
+const ADMIN = "user_app_env_authz_admin";
+const NON_MEMBER = "user_app_env_authz_non_member";
 type AppRole = "owner" | "admin" | "member";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
@@ -83,9 +85,9 @@ function orgToken(): Promise<string> {
   });
 }
 
-function appToken(appId: string, role: AppRole): Promise<string> {
+function appToken(userId: string, appId: string, role: AppRole): Promise<string> {
   return h.signer.sign({
-    sub: OWNER,
+    sub: userId,
     iss: "https://auth.splitch.test",
     aud: AUDIENCE,
     iat: nowSeconds(),
@@ -123,13 +125,20 @@ async function createDefaultApp(key = "checkout") {
   };
 }
 
+async function seedAppMember(appId: string, userId: string, role: AppRole): Promise<void> {
+  await h.bindings.d1
+    .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
+    .bind(appId, userId, role, NOW_ISO)
+    .run();
+}
+
 async function appTokenFromCreatedMembership(appId: string): Promise<string> {
   const row = await h.bindings.d1
     .prepare("SELECT role FROM app_memberships WHERE app_id = ? AND user_id = ?")
     .bind(appId, OWNER)
     .first<{ role: AppRole }>();
   expect(row?.role).toBe("owner");
-  return appToken(appId, row?.role ?? "member");
+  return appToken(OWNER, appId, row?.role ?? "member");
 }
 
 async function errorBody(res: Response): Promise<ErrorResponse> {
@@ -140,7 +149,8 @@ describe("control-plane App and Environment role gates", () => {
   it("enforces App owner/admin writes and owner-only deletes", async () => {
     const created = await createDefaultApp();
     const ownerJwt = await appTokenFromCreatedMembership(created.app.id);
-    const adminJwt = await appToken(created.app.id, "admin");
+    await seedAppMember(created.app.id, ADMIN, "admin");
+    const adminJwt = await appToken(ADMIN, created.app.id, "admin");
     const prod = created.environments.find((env) => env.key === "prod");
     expect(prod).toBeDefined();
 
@@ -192,5 +202,39 @@ describe("control-plane App and Environment role gates", () => {
     const deleteOwnerJwt = await appTokenFromCreatedMembership(deleteCreated.app.id);
     const ownerDeleteApp = await request("DELETE", `/apps/${deleteCreated.app.id}`, deleteOwnerJwt);
     expect(ownerDeleteApp.status).toBe(200);
+  });
+
+  it("denies requested App scopes that are not backed by D1 membership", async () => {
+    const created = await createDefaultApp("forged-scope");
+    const forgedOwnerJwt = await appToken(NON_MEMBER, created.app.id, "owner");
+    const prod = created.environments.find((env) => env.key === "prod");
+    expect(prod).toBeDefined();
+
+    const patchApp = await request("PATCH", `/apps/${created.app.id}`, forgedOwnerJwt, {
+      name: "Forged Owner",
+    });
+    expect(patchApp.status).toBe(403);
+    expect((await errorBody(patchApp)).code).toBe("INSUFFICIENT_SCOPES");
+
+    const patchEnv = await request(
+      "PATCH",
+      `/apps/${created.app.id}/envs/${prod?.id}`,
+      forgedOwnerJwt,
+      { name: "Forged Prod" },
+    );
+    expect(patchEnv.status).toBe(403);
+    expect((await errorBody(patchEnv)).code).toBe("INSUFFICIENT_SCOPES");
+
+    const deleteEnv = await request(
+      "DELETE",
+      `/apps/${created.app.id}/envs/${prod?.id}`,
+      forgedOwnerJwt,
+    );
+    expect(deleteEnv.status).toBe(403);
+    expect((await errorBody(deleteEnv)).code).toBe("INSUFFICIENT_SCOPES");
+
+    const deleteApp = await request("DELETE", `/apps/${created.app.id}`, forgedOwnerJwt);
+    expect(deleteApp.status).toBe(403);
+    expect((await errorBody(deleteApp)).code).toBe("INSUFFICIENT_SCOPES");
   });
 });

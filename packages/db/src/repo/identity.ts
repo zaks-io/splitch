@@ -67,6 +67,10 @@ export function makeIdentityRepo(db: Db) {
       return appMembershipsTable.findMany(scope);
     },
 
+    getAppMembership(scope: TenantScope, userId: string) {
+      return appMembershipsTable.findOne(scope, eq(appMemberships.userId, userId));
+    },
+
     // --- Org-or-identity scoped (NOT app-scoped) -------------------------------
 
     async getOrg(orgId: string): Promise<typeof organizations.$inferSelect | null> {

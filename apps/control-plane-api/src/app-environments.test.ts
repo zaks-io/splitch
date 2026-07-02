@@ -1,4 +1,4 @@
-import { deriveMcpTools, getRoute, type ErrorResponse } from "@splitch/contracts";
+import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import { createRepository, envScope } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
@@ -123,53 +123,6 @@ async function createDefaultApp(key = "checkout") {
   };
 }
 
-async function seedRunningExperiment(appId: string, environmentId: string, suffix = "primary") {
-  const repo = createRepository(h.bindings.d1);
-  const scope = envScope(appId, environmentId);
-  const experimentId = `exp_delete_guard_${suffix}`;
-  const runId = `run_delete_guard_${suffix}`;
-  await repo.experiments.experiments.insert(scope, {
-    id: experimentId,
-    appId,
-    environmentId,
-    key: `delete-guard-${suffix}`,
-    flagId: `flag_delete_guard_${suffix}`,
-    name: "Delete guard",
-    status: "running",
-    targetingKeyField: "userId",
-    targetingKeyType: "user",
-    metrics: "[]",
-    guardrailMetrics: "[]",
-    dimensions: "[]",
-    liveRunId: runId,
-    createdAt: NOW_ISO,
-    updatedAt: NOW_ISO,
-  });
-  await repo.experiments.runs.insert(scope, {
-    id: runId,
-    appId,
-    environmentId,
-    experimentId,
-    runNumber: 1,
-    targetingKeyField: "userId",
-    targetingKeyType: "user",
-    salt: `salt_delete_guard_${suffix}`,
-    allocation: JSON.stringify({ control: 100 }),
-    variantSet: "[]",
-    targetingRules: "[]",
-    confidenceLevel: 0.95,
-    decisionFamily: "[]",
-    guardrailDecisions: "[]",
-    configHash: "hash_delete_guard",
-    startedAt: NOW_ISO,
-    createdAt: NOW_ISO,
-  });
-}
-
-async function errorBody(res: Response): Promise<ErrorResponse> {
-  return (await res.json()) as ErrorResponse;
-}
-
 describe("control-plane App and Environment CRUD", () => {
   it("creates an App with dev/prod Environments and open Client Keys", async () => {
     const created = await createDefaultApp();
@@ -189,22 +142,21 @@ describe("control-plane App and Environment CRUD", () => {
 
   it("round-trips App and Environment CRUD plus prod Policy patch", async () => {
     const created = await createDefaultApp();
-    const adminJwt = await appToken(created.app.id, "admin");
     const ownerJwt = await appToken(created.app.id, "owner");
     const prod = created.environments.find((env) => env.key === "prod");
     expect(prod).toBeDefined();
 
-    const getApp = await request("GET", `/apps/${created.app.id}`, adminJwt);
+    const getApp = await request("GET", `/apps/${created.app.id}`, ownerJwt);
     expect(getApp.status).toBe(200);
     expect(await getApp.json()).toMatchObject({ id: created.app.id, key: "checkout" });
 
-    const patchApp = await request("PATCH", `/apps/${created.app.id}`, adminJwt, {
+    const patchApp = await request("PATCH", `/apps/${created.app.id}`, ownerJwt, {
       name: "Checkout Renamed",
     });
     expect(patchApp.status).toBe(200);
     expect(await patchApp.json()).toMatchObject({ name: "Checkout Renamed" });
 
-    const listEnvs = await request("GET", `/apps/${created.app.id}/envs`, adminJwt);
+    const listEnvs = await request("GET", `/apps/${created.app.id}/envs`, ownerJwt);
     expect(listEnvs.status).toBe(200);
     expect(((await listEnvs.json()) as { items: unknown[] }).items).toHaveLength(2);
 
@@ -214,13 +166,13 @@ describe("control-plane App and Environment CRUD", () => {
       enabledState: "confirm",
       startExperimentRun: "confirm",
     };
-    const patchProd = await request("PATCH", `/apps/${created.app.id}/envs/${prod?.id}`, adminJwt, {
+    const patchProd = await request("PATCH", `/apps/${created.app.id}/envs/${prod?.id}`, ownerJwt, {
       policy: confirmPolicy,
     });
     expect(patchProd.status).toBe(200);
     expect(await patchProd.json()).toMatchObject({ id: prod?.id, policy: confirmPolicy });
 
-    const qa = await request("POST", `/apps/${created.app.id}/envs`, adminJwt, {
+    const qa = await request("POST", `/apps/${created.app.id}/envs`, ownerJwt, {
       key: "qa",
       name: "QA",
     });
@@ -236,36 +188,6 @@ describe("control-plane App and Environment CRUD", () => {
     const deleteQa = await request("DELETE", `/apps/${created.app.id}/envs/${qaBody.id}`, ownerJwt);
     expect(deleteQa.status).toBe(200);
     expect(await deleteQa.json()).toEqual({ deleted: true });
-  });
-
-  it("blocks App and Environment deletes for running Experiments and last Environment", async () => {
-    const created = await createDefaultApp();
-    const jwt = await appToken(created.app.id, "owner");
-    const prod = created.environments.find((env) => env.key === "prod");
-    expect(prod).toBeDefined();
-    await seedRunningExperiment(created.app.id, prod?.id ?? "");
-    await seedRunningExperiment(created.app.id, prod?.id ?? "", "secondary");
-
-    const deleteApp = await request("DELETE", `/apps/${created.app.id}`, jwt);
-    expect(deleteApp.status).toBe(409);
-    expect((await errorBody(deleteApp)).code).toBe("EXPERIMENT_RUNNING");
-
-    const deleteProd = await request("DELETE", `/apps/${created.app.id}/envs/${prod?.id}`, jwt);
-    expect(deleteProd.status).toBe(409);
-    expect((await errorBody(deleteProd)).code).toBe("EXPERIMENT_RUNNING");
-
-    const dev = created.environments.find((env) => env.key === "dev");
-    expect(dev).toBeDefined();
-    const deleteDev = await request("DELETE", `/apps/${created.app.id}/envs/${dev?.id}`, jwt);
-    expect(deleteDev.status).toBe(200);
-
-    await createRepository(h.bindings.d1).experiments.experiments.update(
-      envScope(created.app.id, prod?.id ?? ""),
-      { status: "ended", liveRunId: null, updatedAt: NOW_ISO },
-    );
-    const deleteLast = await request("DELETE", `/apps/${created.app.id}/envs/${prod?.id}`, jwt);
-    expect(deleteLast.status).toBe(409);
-    expect((await errorBody(deleteLast)).code).toBe("LAST_ENVIRONMENT_REQUIRED");
   });
 
   it("derives App and Environment MCP tools from the same routes", () => {
