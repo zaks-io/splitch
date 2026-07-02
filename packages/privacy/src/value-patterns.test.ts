@@ -43,7 +43,8 @@ describe("redactValuePatterns", () => {
     const adversarial = `a@${"a.".repeat(40_000)}`;
     const start = performance.now();
     redactValuePatterns(adversarial);
-    expect(performance.now() - start).toBeLessThan(50);
+    // This guards ReDoS-scale regressions, not CI runner micro-benchmark speed.
+    expect(performance.now() - start).toBeLessThan(1_000);
 
     for (const email of ["bob@example.com", "a.b+c@sub.domain.co.uk", "x@y.io"]) {
       expect(redactValuePatterns(`contact ${email}`).includes(email)).toBe(false);

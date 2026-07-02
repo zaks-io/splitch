@@ -109,8 +109,9 @@ target. See [agent-verification.md](./agent-verification.md).
   migrations, and Tinybird Local validation.
 - Skip only hosted smoke checks, shared-preview deploy/reset, production deploy, rollback, and other
   remote-state mutations.
-- Use Turborepo remote cache when `TURBO_TOKEN` and `TURBO_TEAM` are available; local cache is still
-  valid when those values are absent.
+- Use Turborepo remote cache when `TURBO_TOKEN`, `TURBO_TEAM`, and
+  `TURBO_REMOTE_CACHE_SIGNATURE_KEY` are available. Remote cache artifact signing is enabled, and
+  local cache is still valid when those values are absent.
 
 Agents should treat a CI failure as a local reproduction task first. Pull the failing check name,
 run the matching root script locally, fix the failure, and rerun `verify:push` before handing work back.
@@ -170,8 +171,11 @@ Gitleaks is required in commit, pre-push, and CI gates.
 migrations exist, so it runs `wrangler d1 migrations apply --local` against a fresh local Miniflare D1
 and exits non-zero on a malformed/duplicate-column migration. It is no longer a best-effort skip.
 
-`pnpm tinybird:local` still skips with an explicit message because no committed Tinybird project files
-exist yet. Once `tinybird/` lands, it must become a failing validator too, not a best-effort warning.
+`pnpm tinybird:local` is a real failing validator for committed Tinybird project files under
+`infra/tinybird`. It generates throwaway Tinybird Local user/workspace tokens, starts a disposable
+Local container with those tokens, runs `tb build` using `tinybird.config.json` (`dev_mode=local`),
+runs Tinybird tests when test files exist, and removes the Local container in cleanup. This avoids
+the shared default Tinybird Local user accumulating workspaces across agent runs.
 
 ## Local Worker smoke policy
 
@@ -209,7 +213,7 @@ health smoke.
 - [x] Keep remote-mutating smoke/deploy steps outside commit and pre-push hooks.
 - [x] Replace the D1 skip guard with a real validator (SPL-9: `@splitch/db` migrations + real
       `wrangler d1 migrations apply --local`).
-- [ ] Replace the Tinybird skip guard with a real validator when `tinybird/` project files exist.
+- [x] Replace the Tinybird skip guard with a real validator for `infra/tinybird` project files.
 
 ## Sources
 

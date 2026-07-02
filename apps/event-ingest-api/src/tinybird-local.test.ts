@@ -11,8 +11,15 @@ describe("Tinybird local validator", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "splitch-tinybird-bad-"));
 
     try {
-      cpSync(join(repoRoot, "tinybird"), join(tempRoot, "tinybird"), { recursive: true });
-      const datasourcePath = join(tempRoot, "tinybird", "datasources", "raw_events.datasource");
+      cpSync(join(repoRoot, "tinybird.config.json"), join(tempRoot, "tinybird.config.json"));
+      cpSync(join(repoRoot, "infra"), join(tempRoot, "infra"), { recursive: true });
+      const datasourcePath = join(
+        tempRoot,
+        "infra",
+        "tinybird",
+        "datasources",
+        "raw_events.datasource",
+      );
       writeFileSync(
         datasourcePath,
         readFileSync(datasourcePath, "utf8").replace("# DEDUP_KEY=dedup_key", ""),

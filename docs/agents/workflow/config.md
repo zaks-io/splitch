@@ -6,8 +6,8 @@ Scaffold is in place. The repo is now a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
 and Worker-shaped deploy units. The code host now exists: `main` is pushed to
 `github.com/zaks-io/splitch` (private) and the `ci` workflow (secret scanning
-included) runs on every push. Shared-preview deploy, production deploy, and real backing
-resources are still not provisioned. The Linear repo-route label
+included) runs on every push. Shared-preview deploy, Cloudflare production deploy, and most real
+backing resources are still not provisioned. The Linear repo-route label
 `zaks-io/splitch` now exists and current `splitch v1` Todo issues are routed
 with it.
 
@@ -16,7 +16,7 @@ with it.
 - Scope: scaffold pass over the repo root.
 - Evidence sources: root `package.json`, `pnpm-workspace.yaml`, `README.md`,
   `turbo.json`, `lefthook.yml`, `.github/workflows/*`, workspace
-  `package.json` files, Worker `wrangler.jsonc` files, `tinybird/`, filesystem
+  `package.json` files, Worker `wrangler.jsonc` files, `infra/tinybird/`, filesystem
   listing.
 - Safe commands run: `pnpm typecheck`, `pnpm format:check`, `pnpm lint`,
   `pnpm build`, `pnpm test`, `pnpm depcruise`, `pnpm duplicates`, `pnpm knip`, and
@@ -33,8 +33,9 @@ with it.
 - Verified hosted PR check name: `ci` (runs on push to `zaks-io/splitch`). Secret
   scanning is a step inside `ci`; the standalone `gitleaks` workflow was removed.
   See `Pull Requests`.
-- Critical unknowns: shared preview is not provisioned, production deployment is
-  not wired, and friction-intake fields remain unverified. See `Unknowns`.
+- Critical unknowns: shared preview is not provisioned, only the Tinybird leg of
+  production deployment is wired, and friction-intake fields remain unverified.
+  See `Unknowns`.
 
 ## Repo
 
@@ -62,8 +63,8 @@ with it.
   a range-scoped Gitleaks secret scan.
 - Shared preview checks: designed, not wired. See
   `docs/spec/platform/deployment-pipeline.md`.
-- Production deploy path: designed, not wired. See
-  `docs/spec/platform/deployment-pipeline.md`.
+- Production deploy path: Tinybird leg wired; Cloudflare/D1 production deploy
+  legs remain designed, not wired. See `docs/spec/platform/deployment-pipeline.md`.
 - Merge authority: Orchestrator may merge low/normal-risk PRs when the automation
   merge gate in `Pull Requests` passes. Human approval is required for the high-risk
   set named in `Pull Requests`, production deploys, and any PR with blocking review
@@ -92,7 +93,7 @@ real package API boundary.
 | `packages/control-plane-sdk` | `@splitch/control-plane-sdk` | shared Control Plane SDK transport scaffold |
 | `packages/sdk`               | `@splitch/sdk`               | public JS/TS data-plane SDK scaffold        |
 | `packages/ui`                | `@splitch/ui`                | shared UI primitive scaffold                |
-| `tinybird/`                  | (not present)                | analytics project files planned             |
+| `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files            |
 
 - All workspace packages are `version: 0.0.0`.
 - Apps and internal packages are private. `@splitch/sdk` is a public package scaffold with
@@ -297,19 +298,25 @@ real package API boundary.
 - Git hooks: wired with Lefthook. `pre-commit` runs `pnpm verify:commit`;
   `pre-push` runs `pnpm verify:push`.
 - PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
-  Blacksmith. Tinybird Local and D1 local checks currently skip until project
-  files and migrations exist.
-- Shared Preview / Production: designed, not wired. Shared Preview is one
+  Blacksmith. Tinybird Local and D1 local checks run local backing-resource
+  validators.
+- Shared Preview / Production: partially wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
-  resources plus one Tinybird Branch. GitHub `preview` and `production`
-  environment shells exist. During build-out, production required-reviewer /
-  prevent-self-review protection is intentionally deferred until there is an
-  actual production target worth protecting.
+  resources plus one Tinybird Branch. Production has a manual
+  `deploy-production` workflow that validates with `verify:ci` before the
+  production gate, then deploys Tinybird through the GitHub `production`
+  environment. Cloudflare/D1 production deploy legs remain designed but not
+  wired. During build-out, production
+  required-reviewer / prevent-self-review protection is intentionally deferred
+  until there is an actual full production target worth protecting.
 - Planned backing services not yet provisioned: Cloudflare Flagship, D1, KV,
-  Durable Objects, Queues, Tinybird Cloud.
-- Production: no production deploy target is active yet. Do not wire or require
-  production protection checks during build-out; re-enable the approval-gate
-  decision when production resources and deploy workflows exist.
+  Durable Objects, and Queues. Tinybird Cloud workspaces `splitch_dev` and
+  `splitch_prod` exist; both have the committed datasources deployed, and
+  production Tinybird deploy is wired through GitHub Actions.
+- Production: Tinybird production deploy is active as a manual GitHub workflow.
+  Do not wire or require full production protection checks during build-out;
+  re-enable the approval-gate decision when Cloudflare production resources and
+  deploy workflows exist.
 - Hosted checks allowed without approval: CI and Gitleaks only.
 
 ## Instruction Trust Boundaries
@@ -334,9 +341,9 @@ real package API boundary.
       in `Pull Requests`.
 - [x] Hosted CI check name verified: `ci` (secret scanning is a step inside it;
       the standalone `gitleaks` workflow was removed). See `Pull Requests`.
-- [ ] Tinybird project files are absent. `pnpm tinybird:local` intentionally
-      skips until `tinybird/` exists. Verifier: add Tinybird datasources, pipes,
-      fixtures, and tests, then make the local script fail on validation errors.
+- [x] Tinybird datasource project files exist under `infra/tinybird`.
+      `pnpm tinybird:local` validates datasource contracts and builds against
+      Tinybird Local. Pipes, fixtures, and endpoint tests remain future work.
 - [x] Real D1 migrations exist (`@splitch/db`, SPL-9). `pnpm d1:migrate:local`
       runs a real `wrangler d1 migrations apply --local` and is wired into
       `verify:push` and `verify:ci`; a malformed/duplicate-column migration fails
@@ -344,10 +351,10 @@ real package API boundary.
 - [ ] Public npm publishing workflow and credentials are unverified. `@splitch/sdk` exists as the
       public data-plane SDK scaffold, but no package has been published. Verifier: create a release
       slice with ownership, provenance, changelog, npm token/OIDC setup, and publish dry run.
-- [ ] Shared-preview, production deploy, and rollback workflows are designed but
-      not wired. Verifier: implement `docs/spec/platform/deployment-pipeline.md`,
+- [ ] Shared-preview, Cloudflare production deploy, and rollback workflows are
+      designed but not wired. Verifier: implement `docs/spec/platform/deployment-pipeline.md`,
       including deploy/reset workflows, D1 migrations, Durable Object migrations,
-      Tinybird deploy/branch flow, and production approval rules.
+      Tinybird branch flow, and production approval rules.
 - [ ] Production environment protection is intentionally deferred. GitHub
       `preview` and `production` environment shells exist, but required
       reviewers and prevent-self-review should not be wired until there is an

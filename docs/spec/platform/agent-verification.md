@@ -33,7 +33,7 @@ If a slice cannot meet this shape, it is not ready for agent implementation.
 | Full local gate      | Before push or PR handoff                     | `pnpm verify:push`                                                              |
 | API Worker smoke     | Any API Worker, SDK, runtime, or contract hit | `pnpm smoke:local:api` or `pnpm smoke:local -- <worker>`                        |
 | Local D1 migration   | Any D1 schema/data-access slice               | `pnpm d1:migrate:local` must fail on bad migrations once migrations exist       |
-| Tinybird Local       | Any pipeline/stats/analytics slice            | `pnpm tinybird:local` must fail on bad project files once `tinybird/` exists    |
+| Tinybird Local       | Any pipeline/stats/analytics slice            | `pnpm tinybird:local` must fail on bad project files under `infra/tinybird`     |
 | Route contract smoke | Any new HTTP route                            | Slice adds fixture plus a local Worker smoke or integration test for that route |
 | CLI/MCP parity       | Any control-plane operation                   | Same operation proven through SDK contract plus CLI/MCP schema derivation test  |
 | Shared-preview smoke | Hosted integration, real bindings, URLs       | Maintainer-triggered `shared-preview` deploy and smoke, never default PR CI     |
