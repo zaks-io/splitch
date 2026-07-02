@@ -66,9 +66,9 @@ interface HoldoverEvaluateResult extends BaseEvaluateResult {
 
 export interface RuleMatchEvaluateResult extends BaseEvaluateResult {
   kind: "rule_match_direct" | "rule_match_percentage";
-  exposure: ExposureDecision;
-  experimentId: string;
-  liveRunId: string;
+  exposure: ExposureDecision | null;
+  experimentId?: string;
+  liveRunId: string | null;
   reason: Extract<TestEvaluationReason, { type: "rule_matched" }>;
   variant: VariantName;
 }
@@ -84,9 +84,9 @@ export interface FreshAssignmentEvaluateResult extends BaseEvaluateResult {
 
 export interface NoMatchEvaluateResult extends BaseEvaluateResult {
   kind: "no_match_default";
-  exposure: ExposureDecision;
-  experimentId: string;
-  liveRunId: string;
+  exposure: ExposureDecision | null;
+  experimentId?: string;
+  liveRunId: string | null;
   reason: { type: "no_match_default" };
   variant: VariantName;
 }

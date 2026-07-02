@@ -127,6 +127,12 @@ importers:
       '@splitch/privacy':
         specifier: workspace:*
         version: link:../../packages/privacy
+      '@splitch/worker-runtime':
+        specifier: workspace:*
+        version: link:../../packages/worker-runtime
+      hono:
+        specifier: ^4.12.27
+        version: 4.12.27
     devDependencies:
       miniflare:
         specifier: ^4.20260617.0

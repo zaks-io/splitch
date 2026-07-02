@@ -16,6 +16,16 @@
       "binding": "ASSIGNMENTS_KV",
       "id": "local-assignments-kv",
       "preview_id": "local-assignments-kv"
+    },
+    {
+      "binding": "CONFIG_STORE",
+      "id": "local-config-store",
+      "preview_id": "local-config-store"
+    },
+    {
+      "binding": "SESSION_STORE",
+      "id": "local-session-store",
+      "preview_id": "local-session-store"
     }
   ],
   "durable_objects": {

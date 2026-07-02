@@ -10,6 +10,9 @@ export default defineConfig({
       "@splitch/privacy": fileURLToPath(
         new URL("../../packages/privacy/src/index.ts", import.meta.url),
       ),
+      "@splitch/worker-runtime": fileURLToPath(
+        new URL("../../packages/worker-runtime/src/index.ts", import.meta.url),
+      ),
     },
   },
   test: {

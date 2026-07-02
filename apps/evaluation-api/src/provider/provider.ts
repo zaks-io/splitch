@@ -89,9 +89,9 @@ export interface ExperimentConfig {
 export class ProviderError extends Error {
   readonly errorCode: ErrorCode;
 
-  constructor(message: string, options?: { cause?: unknown }) {
+  constructor(message: string, options: { cause?: unknown; errorCode?: ErrorCode } = {}) {
     super(message, options);
     this.name = "ProviderError";
-    this.errorCode = "INTERNAL_SERVER_ERROR";
+    this.errorCode = options.errorCode ?? "INTERNAL_SERVER_ERROR";
   }
 }
