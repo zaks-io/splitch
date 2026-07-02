@@ -78,6 +78,13 @@ export const DataPlaneEvaluateResponseSchema = z
   .strict();
 export type DataPlaneEvaluateResponse = z.infer<typeof DataPlaneEvaluateResponseSchema>;
 
+export const PeekEvaluateResponseSchema = z
+  .object({
+    variant: VariantValueSchema,
+  })
+  .strict();
+export type PeekEvaluateResponse = z.infer<typeof PeekEvaluateResponseSchema>;
+
 // ---------------------------------------------------------------------------
 // Test-evaluation (dry-run, control-plane token)
 //

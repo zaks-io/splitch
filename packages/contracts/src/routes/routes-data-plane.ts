@@ -1,6 +1,7 @@
 import {
   DataPlaneEvaluateRequestSchema,
   DataPlaneEvaluateResponseSchema,
+  PeekEvaluateResponseSchema,
 } from "../wire-envelopes-core.js";
 import { ResolutionDetailsSchema } from "../leaf-schemas-runtime.js";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
@@ -11,11 +12,13 @@ import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
  * tenant-crossing footgun is absent at the route level. They are NOT MCP tools.
  *
  * - evaluate: Client Key only; fires an Exposure as a structural side effect.
+ * - peek:     API Key only; fires no Exposure and writes no Assignment Store row.
  * - verify:   mixed Client Key | API Key (data-plane-key, ADR-0037); fires no
  *             Exposure; reuses the evaluate request and returns tiered
  *             ResolutionDetails.
  *
- * Endpoint canon: docs/spec/sdk/public-evaluate-endpoint.md, verify-endpoint.md.
+ * Endpoint canon: docs/spec/sdk/public-evaluate-endpoint.md,
+ * exposure-accessor.md, verify-endpoint.md.
  */
 
 const OWNER = "evaluation-api" as const;
@@ -37,6 +40,29 @@ export const dataPlaneRoutes: readonly ApiRouteContract[] = [
       "CREDENTIAL_REVOKED",
       "APP_MISMATCH",
       "ORIGIN_NOT_ALLOWED",
+      "FLAG_NOT_FOUND",
+      "VALIDATION_ERROR",
+      "RATE_LIMITED",
+      "SERVICE_UNAVAILABLE",
+    ],
+  }),
+  defineApiRoute({
+    operationId: "sdk_peek",
+    owner: OWNER,
+    method: "POST",
+    path: "/api/sdk/peek",
+    summary: "Resolve a Flag under an API Key without firing an Exposure.",
+    request: { body: DataPlaneEvaluateRequestSchema },
+    response: PeekEvaluateResponseSchema,
+    auth: "api-key",
+    scopes: ["data-plane:evaluate"],
+    rateLimit: "api-key",
+    idempotency: "none",
+    errors: [
+      "UNAUTHORIZED",
+      "CREDENTIAL_REVOKED",
+      "INSUFFICIENT_SCOPES",
+      "APP_MISMATCH",
       "FLAG_NOT_FOUND",
       "VALIDATION_ERROR",
       "RATE_LIMITED",

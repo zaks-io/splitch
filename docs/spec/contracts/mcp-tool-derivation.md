@@ -174,11 +174,11 @@ Targeting Rule CRUD is intentionally not exposed until there is a separate endpo
 Input: `TestEvaluationRequest` body. Output: `TestEvaluationResponse`.
 Auth: control-plane token (not Client Key). Writes nothing; zero Exposures. (ADR-0026.)
 
-`flags_test_eval` is the agent's verify step — the control-plane, full-reason tier. The
-data-plane `POST /api/sdk/verify` (ADR-0037, Client Key / API Key) is **not** an MCP tool, for the
-same reason `POST /api/sdk/evaluate` is not (see Authorization below): it is a data-plane endpoint
-called by SDK clients with an SDK credential, surfaced in the CLI as `splitch flags verify` for
-developers testing with the credential their code holds.
+`flags_test_eval` is the agent's verify step — the control-plane, full-reason tier. Data-plane
+`POST /api/sdk/evaluate`, `POST /api/sdk/peek` (ADR-0034), and `POST /api/sdk/verify` (ADR-0037)
+are **not** MCP tools: they are data-plane endpoints called by SDK clients with an SDK credential.
+The verify endpoint is surfaced in the CLI as `splitch flags verify` for developers testing with
+the credential their code holds.
 
 ### Analytics
 
@@ -252,9 +252,10 @@ The Worker validates the token and enforces scopes — MCP tool schemas do NOT e
 fails, the Worker returns `UNAUTHORIZED`; if scopes insufficient, `INSUFFICIENT_SCOPES`. The agent
 never needs to know "this tool requires role X" — the Worker says so via the error code.
 
-Data-plane evaluate (`POST /api/sdk/evaluate`) and verify (`POST /api/sdk/verify`, ADR-0037) are NOT
-MCP tools — they are data-plane endpoints called directly by SDK clients using an SDK credential
-(Client Key / API Key). The agent's verification path is the control-plane `flags_test_eval`.
+Data-plane evaluate (`POST /api/sdk/evaluate`), peek (`POST /api/sdk/peek`, ADR-0034), and verify
+(`POST /api/sdk/verify`, ADR-0037) are NOT MCP tools — they are data-plane endpoints called
+directly by SDK clients using an SDK credential (Client Key / API Key). The agent's verification
+path is the control-plane `flags_test_eval`.
 
 Active-context selection (`splitch use` / MCP `context_use`) is a skin-local convenience, not a
 control-plane endpoint, so it derives no tool from a Zod route — the MCP server carries active

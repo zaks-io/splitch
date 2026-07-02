@@ -36,6 +36,27 @@ export function makeDataPlaneAuthResolver(credentialStore: CredentialReader): Au
   };
 }
 
+export function makeApiKeyOnlyAuthResolver(dataPlaneAuthResolver: AuthResolver): AuthResolver {
+  return async (request) => {
+    const result = await dataPlaneAuthResolver(request);
+    if (!result.ok) return result;
+    if (result.principal.kind === "api-key") return result;
+
+    return {
+      ok: false,
+      reason: "UNAUTHORIZED",
+      error: {
+        code: "INSUFFICIENT_SCOPES",
+        message: "API Key required for this route",
+        details: {
+          requiredScopes: ["data-plane:evaluate"],
+          heldScopes: [...result.principal.scopes],
+        },
+      },
+    };
+  };
+}
+
 function credentialFailure(request: Request, cached: CredentialCache): AuthResult | null {
   if (cached.revoked) {
     return { ok: false, reason: "CREDENTIAL_REVOKED" };

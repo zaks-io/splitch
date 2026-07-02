@@ -275,6 +275,11 @@ under an API Key `verify` returns the full reason (ADR-0037). The mapping from H
 - `APP_NOT_FOUND` / `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `APP_MISMATCH` / `ORIGIN_NOT_ALLOWED` / `RATE_LIMITED`
   — Note: no `RUN_FROZEN`, no `INSUFFICIENT_SCOPES` (Client Key holds only `evaluate`, enforced structurally). Response is the OpenFeature `ResolutionDetails` shape (`value`, `variantName`, `reason`, `errorCode?`, `errorMessage?`) — the `reason` is the **non-revealing** set under a Client Key and never names the matched rule (ADR-0018, ADR-0036). A failure-fallback carries `reason: ERROR` + `errorCode`, never silent.
 
+**POST /api/sdk/peek** (data-plane diagnostic, API Key only — ADR-0034)
+
+- `APP_NOT_FOUND` / `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `INSUFFICIENT_SCOPES` / `RATE_LIMITED`
+  — Note: never fires an Exposure and never writes the Assignment Store. A valid Client Key is rejected with `INSUFFICIENT_SCOPES`; missing or invalid credentials are `UNAUTHORIZED`.
+
 **POST /api/sdk/verify** (data-plane setup confirmation, Client Key or API Key — ADR-0037)
 
 - `APP_NOT_FOUND` / `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `APP_MISMATCH` / `ORIGIN_NOT_ALLOWED` / `RATE_LIMITED`

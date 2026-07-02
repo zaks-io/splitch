@@ -13,14 +13,20 @@ import { getRoute, routeRegistry } from "./route-registry.js";
 const tools = deriveMcpTools();
 const toolNames = new Set(tools.map((tool) => tool.name));
 
-// Routes that MUST NOT become MCP tools: the two data-plane SDK endpoints and the
+// Routes that MUST NOT become MCP tools: the data-plane SDK endpoints and the
 // public OpenAPI discovery doc. Listed explicitly so a future data-plane route
 // leaking into the tool set fails loudly here.
-const NON_TOOL_OPERATION_IDS = ["sdk_evaluate", "sdk_verify", "openapi_document_get"] as const;
+const NON_TOOL_OPERATION_IDS = [
+  "sdk_evaluate",
+  "sdk_peek",
+  "sdk_verify",
+  "openapi_document_get",
+] as const;
 
 describe("mcp tools: surface isolation (CRITICAL)", () => {
-  it("derives NO tool for the data-plane evaluate/verify endpoints", () => {
+  it("derives NO tool for the data-plane evaluate/peek/verify endpoints", () => {
     expect(toolNames.has("sdk_evaluate")).toBe(false);
+    expect(toolNames.has("sdk_peek")).toBe(false);
     expect(toolNames.has("sdk_verify")).toBe(false);
   });
 
@@ -30,8 +36,12 @@ describe("mcp tools: surface isolation (CRITICAL)", () => {
 
   it("every excluded route is genuinely in the registry but not a tool", () => {
     for (const id of NON_TOOL_OPERATION_IDS) {
-      expect(getRoute(id)).toBeDefined();
-      expect(isMcpToolRoute(getRoute(id)!)).toBe(false);
+      const route = getRoute(id);
+      expect(route).toBeDefined();
+      if (route === undefined) {
+        throw new Error(`missing route ${id}`);
+      }
+      expect(isMcpToolRoute(route)).toBe(false);
       expect(toolNames.has(id)).toBe(false);
     }
   });
@@ -54,7 +64,11 @@ describe("mcp tools: surface isolation (CRITICAL)", () => {
     for (const tool of tools) {
       const keys = Object.keys(tool);
       expect(keys).toEqual(["name", "description", "inputSchema", "outputSchema", "errorSchema"]);
-      const route = getRoute(tool.name)!;
+      const route = getRoute(tool.name);
+      expect(route).toBeDefined();
+      if (route === undefined) {
+        throw new Error(`missing route ${tool.name}`);
+      }
       const asRecord = tool as unknown as Record<string, unknown>;
       expect(asRecord.auth).toBeUndefined();
       expect(asRecord.scopes).toBeUndefined();
@@ -71,7 +85,7 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
     expect(tools.length).toBe(controlPlaneIds.length);
   });
 
-  it("covers a non-trivial number of tools (N > 0) and excludes the 3 non-tools", () => {
+  it("covers a non-trivial number of tools (N > 0) and excludes the 4 non-tools", () => {
     expect(tools.length).toBeGreaterThan(0);
     expect(tools.length).toBe(routeRegistry.length - NON_TOOL_OPERATION_IDS.length);
   });
