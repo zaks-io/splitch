@@ -34,7 +34,7 @@ with it.
   scanning is a step inside `ci`; the standalone `gitleaks` workflow was removed.
   See `Pull Requests`.
 - Critical unknowns: shared preview is not provisioned, production deployment is
-  not wired, and PR conventions remain partially unverified. See `Unknowns`.
+  not wired, and friction-intake fields remain unverified. See `Unknowns`.
 
 ## Repo
 
@@ -64,7 +64,12 @@ with it.
   `docs/spec/platform/deployment-pipeline.md`.
 - Production deploy path: designed, not wired. See
   `docs/spec/platform/deployment-pipeline.md`.
-- Production approval required: yes
+- Merge authority: Orchestrator may merge low/normal-risk PRs when the automation
+  merge gate in `Pull Requests` passes. Human approval is required for the high-risk
+  set named in `Pull Requests`, production deploys, and any PR with blocking review
+  findings.
+- Production approval required: yes. Automation merge authority never includes
+  production deploys or production resource mutation.
 
 ## Workspaces
 
@@ -176,6 +181,13 @@ real package API boundary.
   the code review gate; apply only with PR URL + reviewed head SHA; remove when
   PR head changes, blocking findings appear, linked PR changes, or evidence is
   missing.
+- Human-review policy: use `ready-for-human` only when the next step is real
+  human judgment or approval: the PR is in the high-risk set below, a reviewer
+  reports blocking findings, deploy/provider credentials are needed, production
+  or shared-preview resources would be mutated, or product/security/ADR judgment
+  is unresolved. Do not mark a normal-risk PR `ready-for-human` merely because a
+  first-pass reviewer says "needs human review" while also reporting no blocking
+  findings and the automation merge gate passes.
 - Readiness-label queries (`ready-for-agent` / `ready-for-human`) exclude Done.
 - Startable work criteria: `kind-slice` + Todo + `ready-for-agent` + complete
   body + repo-route label (when issue-assigned) + no active blockers + no active
@@ -194,9 +206,14 @@ real package API boundary.
   schedule, or wake-up timer when adopted).
 - Handoff format: `references/handoff.md` shape. PR/check fields are meaningful
   once a branch or PR exists.
-- Merge method, required-check enforcement, CodeRabbit behavior, capacity, and
-  friction-intake fields remain unverified. Active PR/preview cap defaults to 3
-  when adopted.
+- Merge method: use GitHub squash merge through `gh pr merge --squash` with
+  `--match-head-commit <sha>` after refreshing PR head, base, checks, reviews,
+  Linear state, and local refs. Do not use merge commits.
+- Required-check enforcement: require the hosted `Verify` check from the `ci`
+  workflow to pass on the current PR head. Also require any package-specific
+  checks named in the issue handoff and a clean exact-head `ziw-code-review`
+  verdict recorded as `code-review-passed`.
+- Active PR/preview cap defaults to 3. Friction-intake fields remain unverified.
 
 ## Agent Access
 
@@ -233,6 +250,46 @@ real package API boundary.
   Gitleaks/Betterleaks, repo-local Semgrep, OSV Scanner, Trivy, actionlint, and
   zizmor.
 - CodeRabbit may use Linear knowledge-base context for team key `SPL`.
+- CodeRabbit is optional unless direct user instruction requires it. If the user
+  says CodeRabbit is rate limited or not to use it, do not request CodeRabbit and
+  treat its automatic skipped status as non-blocking.
+- Cursor first-pass review is advisory. Blocking Cursor findings block the PR and
+  route fixes to the worker. A Cursor "needs human review" decision with no
+  blocking findings does not by itself block automation merge for a low/normal-risk
+  PR that otherwise passes the automation merge gate.
+- Automation merge gate for low/normal-risk PRs:
+  1. PR is open, non-draft, mergeable/clean, and based on current `origin/main`.
+  2. Current PR head matches the reviewed head SHA recorded in Linear.
+  3. Hosted `Verify` passes on the current PR head.
+  4. Worker-required local checks passed and are recorded in the handoff.
+  5. Exact-head `ziw-code-review` is clean and `code-review-passed` is applied
+     with PR URL plus reviewed head SHA.
+  6. Cursor, GitHub, or other hosted review has no blocking findings on the
+     current PR head.
+  7. No unresolved blocking review threads remain.
+  8. PR does not touch the high-risk set below.
+
+  When all eight hold, Orchestrator may merge with
+  `gh pr merge --squash --match-head-commit <sha>`, then fast-forward local
+  `main`, run the configured post-merge verification, move the issue to `Done`,
+  and remove stale readiness labels. Branch cleanup is handled by the code host.
+
+- Human-gated high-risk set:
+  - `risk-security-sensitive`
+  - auth/OAuth/session/token validation and revocation
+  - PII, privacy, HMAC/cryptography, secret or salt handling
+  - tenant isolation, cross-Organization/App/Environment access boundaries
+  - migrations or durable schema changes for D1, Durable Objects, KV, Queues, or
+    Tinybird
+  - production or shared-preview resource provisioning, deploy, rollback, route,
+    DNS, secret, or environment binding changes
+  - supply-chain/security gate changes
+  - any PR where Cursor, `ziw-code-review`, GitHub review, or CI reports a
+    blocking finding
+
+  For this set, Orchestrator may prepare the PR, preserve `code-review-passed`
+  when the review gate is clean, and mark `ready-for-human`; it must not merge
+  until human approval is explicit.
 
 ## Environments
 
@@ -272,8 +329,9 @@ real package API boundary.
 - [x] Linear issue key prefix verified as `SPL-`.
 - [x] Code host configured: `github.com/zaks-io/splitch` (private), `main` pushed,
       the `ci` workflow (secret scanning included) runs on push (confirmed 2026-06-24).
-      Remaining PR conventions (merge method, required-check enforcement, CodeRabbit)
-      still to set.
+      Low/normal-risk automation merge authority, squash merge method, hosted
+      required-check enforcement, and CodeRabbit-on-demand behavior are now set
+      in `Pull Requests`.
 - [x] Hosted CI check name verified: `ci` (secret scanning is a step inside it;
       the standalone `gitleaks` workflow was removed). See `Pull Requests`.
 - [ ] Tinybird project files are absent. `pnpm tinybird:local` intentionally
