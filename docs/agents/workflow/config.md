@@ -6,8 +6,8 @@ Scaffold is in place. The repo is now a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
 and Worker-shaped deploy units. The code host now exists: `main` is pushed to
 `github.com/zaks-io/splitch` (private) and the `ci` workflow (secret scanning
-included) runs on every push. Shared-preview deploy, production deploy, and real backing
-resources are still not provisioned. The Linear repo-route label
+included) runs on every push. Shared-preview deploy, Cloudflare production deploy, and most real
+backing resources are still not provisioned. The Linear repo-route label
 `zaks-io/splitch` now exists and current `splitch v1` Todo issues are routed
 with it.
 
@@ -33,8 +33,9 @@ with it.
 - Verified hosted PR check name: `ci` (runs on push to `zaks-io/splitch`). Secret
   scanning is a step inside `ci`; the standalone `gitleaks` workflow was removed.
   See `Pull Requests`.
-- Critical unknowns: shared preview is not provisioned, production deployment is
-  not wired, and friction-intake fields remain unverified. See `Unknowns`.
+- Critical unknowns: shared preview is not provisioned, only the Tinybird leg of
+  production deployment is wired, and friction-intake fields remain unverified.
+  See `Unknowns`.
 
 ## Repo
 
@@ -62,8 +63,8 @@ with it.
   a range-scoped Gitleaks secret scan.
 - Shared preview checks: designed, not wired. See
   `docs/spec/platform/deployment-pipeline.md`.
-- Production deploy path: designed, not wired. See
-  `docs/spec/platform/deployment-pipeline.md`.
+- Production deploy path: Tinybird leg wired; Cloudflare/D1 production deploy
+  legs remain designed, not wired. See `docs/spec/platform/deployment-pipeline.md`.
 - Merge authority: Orchestrator may merge low/normal-risk PRs when the automation
   merge gate in `Pull Requests` passes. Human approval is required for the high-risk
   set named in `Pull Requests`, production deploys, and any PR with blocking review
@@ -302,9 +303,10 @@ real package API boundary.
 - Shared Preview / Production: partially wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
   resources plus one Tinybird Branch. Production has a manual
-  `deploy-production` workflow that runs `verify:ci` and deploys Tinybird
-  through the GitHub `production` environment. Cloudflare/D1 production deploy
-  legs remain designed but not wired. During build-out, production
+  `deploy-production` workflow that validates with `verify:ci` before the
+  production gate, then deploys Tinybird through the GitHub `production`
+  environment. Cloudflare/D1 production deploy legs remain designed but not
+  wired. During build-out, production
   required-reviewer / prevent-self-review protection is intentionally deferred
   until there is an actual full production target worth protecting.
 - Planned backing services not yet provisioned: Cloudflare Flagship, D1, KV,
@@ -349,10 +351,10 @@ real package API boundary.
 - [ ] Public npm publishing workflow and credentials are unverified. `@splitch/sdk` exists as the
       public data-plane SDK scaffold, but no package has been published. Verifier: create a release
       slice with ownership, provenance, changelog, npm token/OIDC setup, and publish dry run.
-- [ ] Shared-preview, production deploy, and rollback workflows are designed but
-      not wired. Verifier: implement `docs/spec/platform/deployment-pipeline.md`,
+- [ ] Shared-preview, Cloudflare production deploy, and rollback workflows are
+      designed but not wired. Verifier: implement `docs/spec/platform/deployment-pipeline.md`,
       including deploy/reset workflows, D1 migrations, Durable Object migrations,
-      Tinybird deploy/branch flow, and production approval rules.
+      Tinybird branch flow, and production approval rules.
 - [ ] Production environment protection is intentionally deferred. GitHub
       `preview` and `production` environment shells exist, but required
       reviewers and prevent-self-review should not be wired until there is an

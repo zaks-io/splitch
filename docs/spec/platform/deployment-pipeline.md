@@ -78,14 +78,14 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 
 ## Required GitHub workflows
 
-| Workflow                | Trigger                                              | Concurrency                      | Required result                                                                                                               |
-| ----------------------- | ---------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `ci`                    | PR and push to main                                  | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks |
-| `gitleaks`              | PR and push                                          | none                             | wired: full git secret scan                                                                                                   |
-| `deploy-shared-preview` | manual dispatch, or trusted maintainer label/comment | `shared-preview-deploy`, queued  | not wired: deploy selected ref to the one hosted preview target                                                               |
-| `reset-shared-preview`  | manual dispatch                                      | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                 |
-| `deploy-production`     | manual dispatch from main                            | `production-deploy`, queued      | wired for Tinybird: `verify:ci`, `tb deploy --check`, then `tb deploy --wait`; Cloudflare/D1/smoke legs remain pending        |
-| `rollback-production`   | manual dispatch                                      | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                  |
+| Workflow                | Trigger                                              | Concurrency                      | Required result                                                                                                                                      |
+| ----------------------- | ---------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci`                    | PR and push to main                                  | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks                        |
+| `gitleaks`              | PR and push                                          | none                             | wired: full git secret scan                                                                                                                          |
+| `deploy-shared-preview` | manual dispatch, or trusted maintainer label/comment | `shared-preview-deploy`, queued  | not wired: deploy selected ref to the one hosted preview target                                                                                      |
+| `reset-shared-preview`  | manual dispatch                                      | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                                        |
+| `deploy-production`     | manual dispatch from main                            | `production-deploy`, queued      | wired for Tinybird: `verify:ci` before the production gate, then `tb deploy --check` and `tb deploy --wait`; Cloudflare/D1/smoke legs remain pending |
+| `rollback-production`   | manual dispatch                                      | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                         |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
@@ -210,8 +210,10 @@ Tinybird flow:
    cloud credentials are available.
 2. Shared preview creates or updates `shared_preview --last-partition`, then runs `tb --branch=shared_preview build`
    and endpoint smoke tests against that branch.
-3. Production release runs `pnpm deploy:production`, which includes `verify:ci`, `tb deploy --check`,
-   and `tb deploy --wait` through the production GitHub environment `TB_TOKEN` and `TB_HOST`.
+3. Production release runs the manual `deploy-production` workflow. Its validation job runs
+   `verify:ci` before the production gate. Its deployment job waits for the GitHub `production`
+   environment, then runs `tb deploy --check` and `tb deploy --wait` through environment-scoped
+   `TB_TOKEN` and `TB_HOST`.
 4. Destructive Tinybird deploys require explicit human approval and `--allow-destructive-operations`.
    They are not allowed in the default production deploy workflow.
 
@@ -227,13 +229,15 @@ demand for smoke tests only; it does not schedule its own hourly snapshot job by
 ## Production deploy order
 
 Production deployments run from the default branch only. The current `deploy-production` workflow is
-manual-only and uses the GitHub `production` environment. It wires Tinybird first so datafiles cannot
-drift from the release path while the Cloudflare/D1 production legs are still being built.
+manual-only. It runs `verify:ci` before the GitHub `production` environment gate, then uses the gated
+job's environment-scoped Tinybird token for `tb deploy --check` and `tb deploy --wait`. It wires
+Tinybird first so datafiles cannot drift from the release path while the Cloudflare/D1 production legs
+are still being built.
 
 1. Install dependencies and run `verify:ci`.
 2. Wait for GitHub `production` environment approval. Required reviewers and prevent-self-review should
    be enabled.
-3. Run Tinybird deployment check.
+3. Run Tinybird deployment check with the environment-scoped production Tinybird token.
 4. Deploy Tinybird to Cloud main.
 5. Apply D1 migrations to production.
 6. Deploy stateful/internal Workers first: Event Ingest, Analysis, Control Plane API, Auth API.
