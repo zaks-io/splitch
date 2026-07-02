@@ -10,7 +10,12 @@ import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer.js";
 import { makeJwksVerifier } from "./jwks-verify.js";
 import { withRequiredScopes, controlPlaneRoute } from "./routes.js";
 import { makeSessionStore, revocationKey } from "./session-store.js";
-import { type LocalBindings, makeLocalBindings, seedOrgApp } from "./test-fixtures.js";
+import {
+  type LocalBindings,
+  makeLocalBindings,
+  seedOrgApp,
+  seedOrgMember,
+} from "./test-fixtures.js";
 
 /**
  * End-to-end auth-middleware proofs against the REAL mounted Worker: the
@@ -67,6 +72,7 @@ beforeEach(async () => {
   const bindings = await makeLocalBindings();
   await seedOrgApp(bindings.d1, PAYMENTS);
   await seedOrgApp(bindings.d1, ANALYTICS);
+  await seedOrgMember(bindings.d1, { orgId: PAYMENTS.orgId, userId: CAROL, role: "member" });
 
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({

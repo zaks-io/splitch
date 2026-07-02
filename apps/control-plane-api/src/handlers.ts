@@ -54,23 +54,6 @@ export function makeHandlers(deps: HandlerDeps) {
       });
     },
 
-    async getOrg({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const org = await deps.repo.identity.getOrg(pathParam(input, "orgId"));
-      if (!org) {
-        return renderError(
-          { code: "ORGANIZATION_NOT_FOUND", message: "organization not found", details: {} },
-          { requestId },
-        );
-      }
-      return Response.json({
-        id: org.id,
-        name: org.name,
-        plan: org.plan,
-        createdAt: org.createdAt,
-        updatedAt: org.updatedAt,
-      });
-    },
-
     async getFlagConfig({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {
       if (!deps.configStore) return configStoreUnavailable(requestId);
 

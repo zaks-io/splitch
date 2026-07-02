@@ -3,6 +3,7 @@ import type { Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { objectBody, pathParam } from "./handler-input.js";
+import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, ORG_OWNER_ROLES, requireOrgRole } from "./org-authz.js";
 
 export interface MemberProfile {
   email: string;
@@ -22,17 +23,29 @@ interface OrgHandlerDeps {
 
 type OrgMembership = NonNullable<Awaited<ReturnType<Repository["identity"]["getOrgMembership"]>>>;
 
-const ORG_SCOPE = /^org:([^:]+):(owner|admin|member)$/;
-const ORG_ADMIN_ROLES = ["owner", "admin"] as const;
-const ORG_OWNER_ROLES = ["owner"] as const;
-
 export function makeOrgHandlers(deps: OrgHandlerDeps) {
   const now = () => deps.nowIso?.() ?? new Date().toISOString();
 
   return {
+    async getOrg({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
+      const orgId = pathParam(input, "orgId");
+      const forbidden = await requireOrgRole(
+        deps,
+        orgId,
+        principal.id,
+        ORG_MEMBER_ROLES,
+        requestId,
+      );
+      if (forbidden) return forbidden;
+
+      const org = await deps.repo.identity.getOrg(orgId);
+      if (!org) return organizationNotFound(requestId);
+      return Response.json(orgResponse(org));
+    },
+
     async updateOrg({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const orgId = pathParam(input, "orgId");
-      const forbidden = requireOrgRole(orgId, principal.scopes, ORG_OWNER_ROLES, requestId);
+      const forbidden = await requireOrgRole(deps, orgId, principal.id, ORG_OWNER_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const payload = objectBody(input);
@@ -49,7 +62,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
 
     async listMembers({ input, request, principal, requestId }: HandlerArgs<unknown>) {
       const orgId = pathParam(input, "orgId");
-      const forbidden = requireOrgRole(orgId, principal.scopes, ORG_ADMIN_ROLES, requestId);
+      const forbidden = await requireOrgRole(deps, orgId, principal.id, ORG_ADMIN_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const org = await deps.repo.identity.getOrg(orgId);
@@ -67,7 +80,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
 
     async addMember({ input, request, principal, requestId }: HandlerArgs<unknown>) {
       const orgId = pathParam(input, "orgId");
-      const forbidden = requireOrgRole(orgId, principal.scopes, ORG_ADMIN_ROLES, requestId);
+      const forbidden = await requireOrgRole(deps, orgId, principal.id, ORG_ADMIN_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const org = await deps.repo.identity.getOrg(orgId);
@@ -94,7 +107,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
     async updateMember({ input, request, principal, requestId }: HandlerArgs<unknown>) {
       const orgId = pathParam(input, "orgId");
       const userId = pathParam(input, "userId");
-      const forbidden = requireOrgRole(orgId, principal.scopes, ORG_OWNER_ROLES, requestId);
+      const forbidden = await requireOrgRole(deps, orgId, principal.id, ORG_OWNER_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const current = await existingMember(deps, orgId, userId, requestId);
@@ -115,7 +128,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
     async removeMember({ input, principal, requestId }: HandlerArgs<unknown>) {
       const orgId = pathParam(input, "orgId");
       const userId = pathParam(input, "userId");
-      const forbidden = requireOrgRole(orgId, principal.scopes, ORG_OWNER_ROLES, requestId);
+      const forbidden = await requireOrgRole(deps, orgId, principal.id, ORG_OWNER_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const current = await existingMember(deps, orgId, userId, requestId);
@@ -170,29 +183,6 @@ function orgResponse(org: NonNullable<Awaited<ReturnType<Repository["identity"][
     createdAt: org.createdAt,
     updatedAt: org.updatedAt,
   };
-}
-
-function requireOrgRole(
-  orgId: string,
-  scopes: readonly string[],
-  allowed: readonly UserRole[],
-  requestId: string,
-): Response | null {
-  const role = roleForOrg(orgId, scopes);
-  if (role && allowed.includes(role)) return null;
-  return renderError(
-    { code: "FORBIDDEN", message: "credential is not allowed for this organization", details: {} },
-    { requestId },
-  );
-}
-
-function roleForOrg(orgId: string, scopes: readonly string[]): UserRole | null {
-  for (const scope of scopes) {
-    const match = ORG_SCOPE.exec(scope);
-    if (!match) continue;
-    if (match[1] === orgId) return UserRoleSchema.parse(match[2]);
-  }
-  return null;
 }
 
 async function memberResponse(

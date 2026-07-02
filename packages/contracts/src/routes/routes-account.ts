@@ -61,7 +61,7 @@ export const accountRoutes: readonly ApiRouteContract[] = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["ORGANIZATION_NOT_FOUND"],
+    errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN"],
   }),
   defineApiRoute({
     operationId: "organizations_update",

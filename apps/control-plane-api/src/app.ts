@@ -23,13 +23,10 @@ import { controlPlaneRoute } from "./routes.js";
  * control-plane-token resolver under its AuthKind and mounts the routes; the
  * guard does the rest.
  *
- * Authorization for these App/Org reads is the token's App/Org co-scope binding:
- * the guard rejects a principal not bound to the path's App with FORBIDDEN BEFORE
- * the handler (and thus before any repository call). Role-gating via static
- * scopes (INSUFFICIENT_SCOPES) is the same generic guard step; the account
- * routes ship with `scopes: []` because App authorization is co-scope + D1
- * membership (ADR-0022), so the role gate is layered by the owning Worker as the
- * CRUD surface lands.
+ * Authorization for App reads is the token's App co-scope binding: the guard
+ * rejects a principal not bound to the path's App with FORBIDDEN BEFORE the
+ * handler (and thus before any repository call). Org routes layer live D1
+ * membership checks in their owning handler module (ADR-0022).
  */
 
 export interface AppDeps {
