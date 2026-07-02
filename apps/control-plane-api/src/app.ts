@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do.js";
 import { makeHandlers } from "./handlers.js";
 import { mountLiveUpdateRoute } from "./live-updates.js";
+import type { MemberProfileResolver } from "./org-handlers.js";
 import { controlPlaneRoute } from "./routes.js";
 
 /**
@@ -22,13 +23,10 @@ import { controlPlaneRoute } from "./routes.js";
  * control-plane-token resolver under its AuthKind and mounts the routes; the
  * guard does the rest.
  *
- * Authorization for these App/Org reads is the token's App/Org co-scope binding:
- * the guard rejects a principal not bound to the path's App with FORBIDDEN BEFORE
- * the handler (and thus before any repository call). Role-gating via static
- * scopes (INSUFFICIENT_SCOPES) is the same generic guard step; the account
- * routes ship with `scopes: []` because App authorization is co-scope + D1
- * membership (ADR-0022), so the role gate is layered by the owning Worker as the
- * CRUD surface lands.
+ * Authorization for App reads is the token's App co-scope binding: the guard
+ * rejects a principal not bound to the path's App with FORBIDDEN BEFORE the
+ * handler (and thus before any repository call). Org routes layer live D1
+ * membership checks in their owning handler module (ADR-0022).
  */
 
 export interface AppDeps {
@@ -37,6 +35,8 @@ export interface AppDeps {
   rateLimiter: RateLimiter;
   repo: Repository;
   configStore?: ConfigStoreAccess;
+  memberProfileResolver?: MemberProfileResolver;
+  nowIso?: () => string;
   defaultHeaders?: Record<string, string>;
 }
 
@@ -52,7 +52,12 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
 
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
-  const handlers = makeHandlers({ repo: deps.repo, configStore: deps.configStore });
+  const handlers = makeHandlers({
+    repo: deps.repo,
+    configStore: deps.configStore,
+    memberProfileResolver: deps.memberProfileResolver,
+    nowIso: deps.nowIso,
+  });
   const registrar = controlPlaneRegistrar(deps);
 
   mountLiveUpdateRoute(app, {
@@ -65,6 +70,11 @@ export function createApp(deps: AppDeps): Hono {
 
   registrar.mount(app, controlPlaneRoute("apps_get"), handlers.getApp);
   registrar.mount(app, controlPlaneRoute("organizations_get"), handlers.getOrg);
+  registrar.mount(app, controlPlaneRoute("organizations_update"), handlers.updateOrg);
+  registrar.mount(app, controlPlaneRoute("organization_members_list"), handlers.listMembers);
+  registrar.mount(app, controlPlaneRoute("organization_members_add"), handlers.addMember);
+  registrar.mount(app, controlPlaneRoute("organization_members_update"), handlers.updateMember);
+  registrar.mount(app, controlPlaneRoute("organization_members_remove"), handlers.removeMember);
   registrar.mount(app, controlPlaneRoute("flag_config_get"), handlers.getFlagConfig);
   registrar.mount(app, controlPlaneRoute("flag_config_update"), handlers.updateFlagConfig);
 

@@ -3,6 +3,8 @@ import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import type { ConfigStoreWriter } from "./config-store.js";
 import type { ConfigStoreAccess } from "./config-store-do.js";
+import { objectBody, pathParam } from "./handler-input.js";
+import { makeOrgHandlers, type MemberProfileResolver } from "./org-handlers.js";
 import { appAdminScope } from "./scope-binding.js";
 
 /**
@@ -13,9 +15,8 @@ import { appAdminScope } from "./scope-binding.js";
  * repository call (steps/scopes.ts). The handler reads through the @splitch/db
  * repository seam (the only D1 entry, ADR-0018), never a raw client.
  *
- * Domain breadth is intentionally narrow (read one App, read one Org): this slice
- * is the auth middleware, not the full Org/App CRUD surface. The handlers exist
- * to exercise the authorized path end to end.
+ * Domain breadth is intentionally incremental: Org/member handlers live in their
+ * own module, while App and Flag Configuration handlers stay here.
  *
  * The registry erases the route's Zod generics to `unknown` at the registrar
  * boundary, so each handler re-reads the single path param it needs from the
@@ -26,27 +27,14 @@ import { appAdminScope } from "./scope-binding.js";
 interface HandlerDeps {
   repo: Repository;
   configStore?: ConfigStoreAccess;
-}
-
-function pathParam(input: unknown, key: string): string {
-  const params = (input as { params?: Record<string, unknown> } | null)?.params;
-  const value = params?.[key];
-  if (typeof value !== "string") {
-    throw new Error(`control-plane-api: validated input is missing path param "${key}"`);
-  }
-  return value;
-}
-
-function body(input: unknown): Record<string, unknown> {
-  const value = (input as { body?: unknown } | null)?.body;
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("control-plane-api: validated input is missing object body");
-  }
-  return value as Record<string, unknown>;
+  memberProfileResolver?: MemberProfileResolver;
+  nowIso?: () => string;
 }
 
 export function makeHandlers(deps: HandlerDeps) {
   return {
+    ...makeOrgHandlers(deps),
+
     async getApp({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const app = await deps.repo.identity.getApp(pathParam(input, "appId"));
       if (!app) {
@@ -63,23 +51,6 @@ export function makeHandlers(deps: HandlerDeps) {
         ...(app.description ? { description: app.description } : {}),
         createdAt: app.createdAt,
         updatedAt: app.updatedAt,
-      });
-    },
-
-    async getOrg({ input, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const org = await deps.repo.identity.getOrg(pathParam(input, "orgId"));
-      if (!org) {
-        return renderError(
-          { code: "ORGANIZATION_NOT_FOUND", message: "organization not found", details: {} },
-          { requestId },
-        );
-      }
-      return Response.json({
-        id: org.id,
-        name: org.name,
-        plan: org.plan,
-        createdAt: org.createdAt,
-        updatedAt: org.updatedAt,
       });
     },
 
@@ -117,7 +88,7 @@ export function makeHandlers(deps: HandlerDeps) {
 
       const result = await deps.configStore
         .writerFor(appId, environmentId)
-        .writeFlagConfig(flagConfigPatchInput(appId, environmentId, flagId, body(input)));
+        .writeFlagConfig(flagConfigPatchInput(appId, environmentId, flagId, objectBody(input)));
       return renderFlagConfigWriteResult(result, flagId, environmentId, requestId);
     },
   };
