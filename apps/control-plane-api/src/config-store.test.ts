@@ -37,6 +37,7 @@ describe("config store write path", () => {
     expect(await res.json()).toMatchObject({
       flagId: ids.flagId,
       environmentId: ids.environmentId,
+      version: 2,
       enabled: true,
       availableVariantNames: ["control"],
     });
@@ -140,6 +141,7 @@ describe("config store write path", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
+      version: 1,
       enabled: false,
       availableVariantNames: ["control", "treatment"],
     });

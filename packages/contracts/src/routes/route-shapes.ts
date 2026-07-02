@@ -107,6 +107,7 @@ export const UpdateMemberRequestSchema = z.object({ role: UserRoleSchema }).stri
 export const FlagConfigResponseSchema = z.object({
   flagId: z.string(),
   environmentId: z.string(),
+  version: z.number().int().min(0),
   enabled: z.boolean(),
   availableVariantNames: z.array(z.string()),
   targetingRules: z.array(TargetingRuleSchema),

@@ -1,6 +1,8 @@
+import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  plugins: [cloudflareTest({ wrangler: { configPath: "./wrangler.jsonc" } })],
   resolve: {
     alias: {
       "@splitch/contracts": new URL("../../packages/contracts/src/index.ts", import.meta.url)
@@ -13,8 +15,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["src/**/*.{test,spec}.ts"],
-    exclude: ["test/**/*.{test,spec}.ts"],
+    include: ["test/**/*.{test,spec}.ts"],
     passWithNoTests: true,
   },
 });

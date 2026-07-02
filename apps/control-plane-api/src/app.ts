@@ -9,6 +9,7 @@ import {
 import { Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do.js";
 import { makeHandlers } from "./handlers.js";
+import { mountLiveUpdateRoute } from "./live-updates.js";
 import { controlPlaneRoute } from "./routes.js";
 
 /**
@@ -53,6 +54,14 @@ export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
   const handlers = makeHandlers({ repo: deps.repo, configStore: deps.configStore });
   const registrar = controlPlaneRegistrar(deps);
+
+  mountLiveUpdateRoute(app, {
+    authResolver: deps.authResolver,
+    rateLimiter: deps.rateLimiter,
+    repo: deps.repo,
+    configStore: deps.configStore,
+    defaultHeaders: deps.defaultHeaders,
+  });
 
   registrar.mount(app, controlPlaneRoute("apps_get"), handlers.getApp);
   registrar.mount(app, controlPlaneRoute("organizations_get"), handlers.getOrg);
