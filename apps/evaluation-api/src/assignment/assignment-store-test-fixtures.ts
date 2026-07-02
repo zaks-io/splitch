@@ -1,5 +1,9 @@
 import type { SaltStore } from "@splitch/privacy";
-import type { AssignmentKv, AssignmentPutInput } from "./assignment-store.js";
+import type {
+  AssignmentKv,
+  AssignmentPutInput,
+  AssignmentStoreLogger,
+} from "./assignment-store.js";
 import type { AssignmentWriterStorage } from "./assignment-store-writer.js";
 import type { AssignmentWriterNamespace } from "./kv-assignment-store.js";
 
@@ -99,6 +103,14 @@ export class MapStorage implements AssignmentWriterStorage {
   put<T>(key: string, value: T): Promise<void> {
     this.values.set(key, value);
     return Promise.resolve();
+  }
+}
+
+export class RecordingAssignmentLogger implements AssignmentStoreLogger {
+  readonly errors: { message: string; detail: unknown }[] = [];
+
+  error(message: string, detail: unknown): void {
+    this.errors.push({ message, detail });
   }
 }
 

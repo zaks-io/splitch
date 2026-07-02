@@ -1,3 +1,4 @@
+import { AssignmentStoreValueSchema } from "@splitch/contracts";
 import { Miniflare } from "miniflare";
 import { describe, expect, it } from "vitest";
 import {
@@ -8,13 +9,74 @@ import {
 import {
   basePut,
   RAW_TARGETING_KEY,
+  RecordingAssignmentLogger,
   RecordingKv,
   RecordingWriterNamespace,
   StaticSaltStore,
 } from "./assignment-store-test-fixtures.js";
+import type { AssignmentWriterNamespace } from "./kv-assignment-store.js";
 import { KvAssignmentStore } from "./kv-assignment-store.js";
 
+const MINIFLARE_ASSIGNMENT_STORE_DO = `
+import { DurableObject } from "cloudflare:workers";
+
+const STORAGE_KEY = "assignment";
+const CURRENT_KV_SCHEMA_VERSION = 1;
+
+export class AssignmentStoreDurableObject extends DurableObject {
+  async fetch(request) {
+    if (request.method !== "POST" || new URL(request.url).pathname !== "/put") {
+      return Response.json({ error: "not found" }, { status: 404 });
+    }
+
+    const input = await request.json();
+    const result = await this.ctx.blockConcurrencyWhile(async () => {
+      const existing = await this.ctx.storage.get(STORAGE_KEY);
+      if (existing !== undefined) {
+        return { status: "existing", assignment: entryFrom(existing) };
+      }
+
+      await this.ctx.storage.put(STORAGE_KEY, input);
+      this.ctx.waitUntil(writeThrough(this.env.ASSIGNMENTS_KV, input));
+      return { status: "stored", assignment: entryFrom(input) };
+    });
+    return Response.json(result);
+  }
+}
+
+async function writeThrough(kv, input) {
+  const key = assignmentKey(input.appId, input.idType, input.targetingKeyHash);
+  const raw = await kv.get(key);
+  const current = raw === null ? {} : JSON.parse(raw).data;
+  const next =
+    current[input.experimentId] === undefined
+      ? { ...current, [input.experimentId]: entryFrom(input) }
+      : current;
+  await kv.put(key, JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: next }));
+}
+
+function assignmentKey(appId, idType, targetingKeyHash) {
+  return \`assignment:\${appId}:\${idType}:\${targetingKeyHash}\`;
+}
+
+function entryFrom(input) {
+  return { runId: input.runId, variant: input.variant };
+}
+`;
+
 describe("KvAssignmentStore", () => {
+  it("getAll returns an empty map for a never-seen Entity", async () => {
+    const store = new KvAssignmentStore(
+      new RecordingKv(),
+      new RecordingWriterNamespace(),
+      new StaticSaltStore(),
+    );
+
+    const holdovers = await store.getAll(basePut);
+
+    expect(holdovers).toEqual(new Map());
+  });
+
   it("getAll returns all holdovers in one KV read and touches no DO", async () => {
     const saltStore = new StaticSaltStore();
     const kv = new RecordingKv();
@@ -62,7 +124,9 @@ describe("KvAssignmentStore", () => {
       await mf.dispose();
     }
   });
+});
 
+describe("KvAssignmentStore.put", () => {
   it("put routes to a hashed per-assignment DO name without exposing the raw Targeting Key", async () => {
     const saltStore = new StaticSaltStore();
     const namespace = new RecordingWriterNamespace({
@@ -82,6 +146,39 @@ describe("KvAssignmentStore", () => {
     expect(JSON.stringify(namespace.bodies)).not.toContain(RAW_TARGETING_KEY);
   });
 
+  it("serializes concurrent put calls through a Miniflare Durable Object", async () => {
+    const mf = new Miniflare({
+      modules: true,
+      script: MINIFLARE_ASSIGNMENT_STORE_DO,
+      compatibilityDate: "2026-06-21",
+      compatibilityFlags: ["nodejs_compat"],
+      kvNamespaces: { ASSIGNMENTS_KV: "assignments" },
+      durableObjects: {
+        ASSIGNMENT_STORE_WRITER: { className: "AssignmentStoreDurableObject" },
+      },
+    });
+
+    try {
+      const kv = (await mf.getKVNamespace("ASSIGNMENTS_KV")) as unknown as KVNamespace;
+      const namespace = (await mf.getDurableObjectNamespace(
+        "ASSIGNMENT_STORE_WRITER",
+      )) as unknown as AssignmentWriterNamespace;
+      const store = new KvAssignmentStore(kv, namespace, new StaticSaltStore());
+
+      const results = await Promise.all([
+        store.put({ ...basePut, runId: "run-a", variant: "control" }),
+        store.put({ ...basePut, runId: "run-b", variant: "treatment" }),
+      ]);
+
+      expect(results.map((result) => result.status).sort()).toEqual(["existing", "stored"]);
+      expect(new Set(results.map((result) => result.assignment.runId)).size).toBe(1);
+    } finally {
+      await mf.dispose();
+    }
+  });
+});
+
+describe("KvAssignmentStore isolation and validation", () => {
   it("does not let App B read App A's Entity assignment key", async () => {
     const saltStore = new StaticSaltStore();
     const kv = new RecordingKv();
@@ -100,9 +197,10 @@ describe("KvAssignmentStore", () => {
     expect(appB.entityKey).not.toBe(appA.entityKey);
   });
 
-  it("fails loud when a KV entry carries per-entry schemaVersion", async () => {
+  it("fails loud and logs when a KV entry carries per-entry schemaVersion", async () => {
     const saltStore = new StaticSaltStore();
     const kv = new RecordingKv();
+    const logger = new RecordingAssignmentLogger();
     const { entityKey } = await hashedAssignmentIdentity(saltStore, basePut);
     kv.putRaw(
       entityKey,
@@ -112,9 +210,25 @@ describe("KvAssignmentStore", () => {
       }),
     );
 
-    const store = new KvAssignmentStore(kv, new RecordingWriterNamespace(), saltStore);
+    const store = new KvAssignmentStore(kv, new RecordingWriterNamespace(), saltStore, logger);
 
-    await expect(store.getAll(basePut)).rejects.toBeInstanceOf(AssignmentStoreError);
+    await expect(store.getAll(basePut)).rejects.toMatchObject({
+      name: AssignmentStoreError.name,
+      errorCode: "INTERNAL_SERVER_ERROR",
+    });
+    expect(logger.errors).toHaveLength(1);
+    expect(logger.errors[0]).toMatchObject({
+      message: "assignment_store_kv_parse_failed",
+      detail: { key: entityKey },
+    });
+  });
+
+  it("AssignmentStoreValue Zod parse rejects a malformed blob", () => {
+    expect(
+      AssignmentStoreValueSchema.safeParse({
+        "exp-checkout": { runId: "run-1", variant: 42 },
+      }).success,
+    ).toBe(false);
   });
 
   it("raw Targeting Key is absent from every KV key and DO name the store builds", async () => {
