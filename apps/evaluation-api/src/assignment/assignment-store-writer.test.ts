@@ -26,6 +26,7 @@ describe("InMemoryAssignmentStore", () => {
     expect(["control", "treatment"]).toContain(holdovers.get("exp-checkout")?.variant);
     expect(store.entityKeyNames.join("|")).not.toContain(RAW_TARGETING_KEY);
     expect(store.writerObjectNames.join("|")).not.toContain(RAW_TARGETING_KEY);
+    expect(store.policyCalls).toEqual([]);
   });
 
   it("makes a second put for an existing key a no-op", async () => {
@@ -40,6 +41,20 @@ describe("InMemoryAssignmentStore", () => {
       assignment: { runId: "run-1", variant: "control" },
     });
     expect(holdovers.get("exp-checkout")).toEqual({ runId: "run-1", variant: "control" });
+    expect(store.policyCalls).toEqual([]);
+  });
+
+  it("does not inspect runId or variant to decide whether a key exists", async () => {
+    const store = new InMemoryAssignmentStore(new StaticSaltStore());
+
+    await store.put(basePut);
+    const second = await store.put({ ...basePut, runId: "run-new", variant: "treatment" });
+
+    expect(second).toEqual({
+      status: "existing",
+      assignment: { runId: "run-1", variant: "control" },
+    });
+    expect(store.policyCalls).toEqual([]);
   });
 });
 

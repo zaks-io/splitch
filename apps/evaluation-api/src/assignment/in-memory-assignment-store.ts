@@ -16,6 +16,7 @@ export class InMemoryAssignmentStore implements AssignmentStore {
   private readonly locks = new Map<string, Promise<void>>();
   readonly entityKeyNames: string[] = [];
   readonly writerObjectNames: string[] = [];
+  readonly policyCalls: string[] = [];
 
   constructor(private readonly saltStore: SaltStore) {}
 

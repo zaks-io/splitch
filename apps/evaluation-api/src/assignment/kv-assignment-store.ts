@@ -8,6 +8,7 @@ import {
   type AssignmentPutInput,
   type AssignmentStore,
   AssignmentStoreError,
+  type AssignmentStoreLogger,
   type AssignmentStorePutResult,
   hashedAssignmentIdentity,
   readAssignmentValue,
@@ -27,11 +28,12 @@ export class KvAssignmentStore implements AssignmentStore {
     private readonly kv: AssignmentKv,
     private readonly writerNamespace: AssignmentWriterNamespace,
     private readonly saltStore: SaltStore,
+    private readonly logger?: AssignmentStoreLogger,
   ) {}
 
   async getAll(input: AssignmentIdentity): Promise<Map<string, AssignmentStoreEntry>> {
     const { entityKey } = await hashedAssignmentIdentity(this.saltStore, input);
-    return assignmentValueToMap(await readAssignmentValue(this.kv, entityKey));
+    return assignmentValueToMap(await readAssignmentValue(this.kv, entityKey, this.logger));
   }
 
   async put(input: AssignmentPutInput): Promise<AssignmentStorePutResult> {

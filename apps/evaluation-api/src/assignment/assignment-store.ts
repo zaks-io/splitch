@@ -46,6 +46,10 @@ export interface AssignmentKv {
   put(key: string, value: string): Promise<void>;
 }
 
+export interface AssignmentStoreLogger {
+  error(message: string, detail: unknown): void;
+}
+
 export class AssignmentStoreError extends Error {
   readonly errorCode = "INTERNAL_SERVER_ERROR";
 
@@ -121,7 +125,17 @@ function parseAssignmentValue(raw: string, key: string): AssignmentStoreValue {
 export async function readAssignmentValue(
   kv: Pick<AssignmentKv, "get">,
   key: string,
+  logger?: AssignmentStoreLogger,
 ): Promise<AssignmentStoreValue> {
   const raw = await kv.get(key);
-  return raw === null ? {} : parseAssignmentValue(raw, key);
+  if (raw === null) {
+    return {};
+  }
+
+  try {
+    return parseAssignmentValue(raw, key);
+  } catch (cause) {
+    logger?.error("assignment_store_kv_parse_failed", { key, cause });
+    throw cause;
+  }
 }
