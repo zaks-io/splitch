@@ -1,19 +1,35 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 
-const projectDir = "tinybird";
+const projectDir = ".";
+const projectConfigPath = "tinybird.config.json";
+const tinybirdRoot = "infra/tinybird";
+const testsDir = join(tinybirdRoot, "tests");
 
-if (!existsSync(projectDir)) {
-  console.error("tinybird:local: tinybird/ project directory is required.");
+if (!existsSync(projectConfigPath)) {
+  console.error("tinybird:local: tinybird.config.json is required.");
   process.exit(1);
 }
 
-validateSplitchDatasourceContracts(projectDir);
+if (!existsSync(tinybirdRoot)) {
+  console.error("tinybird:local: infra/tinybird project files are required.");
+  process.exit(1);
+}
+
+validateSplitchDatasourceContracts(tinybirdRoot);
 await requireTinybirdCli(projectDir);
-await ensureTinybirdLocal(projectDir);
-await run("tb", ["--no-version-warning", "--local", "build"], projectDir);
-await run("tb", ["--no-version-warning", "--local", "test", "run"], projectDir);
+const tokens = await generateTinybirdLocalTokens(projectDir);
+
+try {
+  await resetTinybirdLocal(projectDir, tokens);
+  await run("tb", ["--no-version-warning", "build"], projectDir);
+  if (hasTinybirdTests(testsDir)) {
+    await run("tb", ["--no-version-warning", "test", "run"], projectDir);
+  }
+} finally {
+  await removeTinybirdLocal(projectDir);
+}
 
 function validateSplitchDatasourceContracts(root) {
   const rawEvents = readDatasource(root, "raw_events");
@@ -72,6 +88,13 @@ function readDatasource(root, name) {
   return readFileSync(path, "utf8");
 }
 
+function hasTinybirdTests(path) {
+  if (!existsSync(path)) {
+    return false;
+  }
+  return readdirSync(path).some((file) => file.endsWith(".test"));
+}
+
 function requireColumns(contents, columns) {
   for (const column of columns) {
     if (!contents.includes(column)) {
@@ -91,17 +114,22 @@ function fail(message) {
   process.exit(1);
 }
 
-async function run(command, args, cwd) {
+async function run(command, args, cwd, options = {}) {
   await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
       env: {
         ...process.env,
+        ...options.env,
         TB_CLI_TELEMETRY_OPTOUT: "1",
         TB_VERSION_WARNING: "0",
       },
-      stdio: "inherit",
+      stdio: options.input ? ["pipe", "inherit", "inherit"] : "inherit",
     });
+
+    if (options.input) {
+      child.stdin.end(options.input);
+    }
 
     child.on("error", reject);
     child.on("exit", (code) => {
@@ -117,6 +145,40 @@ async function run(command, args, cwd) {
   });
 }
 
+async function output(command, args, cwd) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        TB_CLI_TELEMETRY_OPTOUT: "1",
+        TB_VERSION_WARNING: "0",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      if (code === 0) {
+        resolve(stdout);
+        return;
+      }
+      reject(new Error(`${command} ${args.join(" ")} failed with exit code ${code}: ${stderr}`));
+    });
+  }).catch((error) => {
+    console.error(`tinybird:local: ${error.message}`);
+    process.exit(1);
+  });
+}
+
 async function requireTinybirdCli(cwd) {
   const code = await quietExitCode("tb", ["--no-version-warning", "--version"], cwd);
   if (code !== 0) {
@@ -124,15 +186,63 @@ async function requireTinybirdCli(cwd) {
   }
 }
 
-async function ensureTinybirdLocal(cwd) {
-  const started = await quietExitCode(
+async function generateTinybirdLocalTokens(cwd) {
+  const raw = await output(
+    "tb",
+    ["--no-version-warning", "--output", "json", "local", "generate-tokens"],
+    cwd,
+  );
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed.user_token || !parsed.workspace_token) {
+      fail("Tinybird Local token generation did not return both required tokens.");
+    }
+    return {
+      userToken: parsed.user_token,
+      workspaceToken: parsed.workspace_token,
+    };
+  } catch {
+    fail("Tinybird Local token generation returned invalid JSON.");
+  }
+}
+
+async function resetTinybirdLocal(cwd, tokens) {
+  await quietExitCode("tb", ["--no-version-warning", "local", "stop"], cwd);
+  await quietExitCodeWithInput("tb", ["--no-version-warning", "local", "remove"], cwd, "y\n");
+  await run(
     "tb",
     ["--no-version-warning", "local", "start", "--daemon", "--skip-new-version"],
     cwd,
+    {
+      env: {
+        TB_LOCAL_USER_TOKEN: tokens.userToken,
+        TB_LOCAL_WORKSPACE_TOKEN: tokens.workspaceToken,
+      },
+    },
   );
-  if (started !== 0) {
-    fail("Tinybird Local is not ready and could not be started.");
-  }
+}
+
+async function removeTinybirdLocal(cwd) {
+  await quietExitCode("tb", ["--no-version-warning", "local", "stop"], cwd);
+  await quietExitCodeWithInput("tb", ["--no-version-warning", "local", "remove"], cwd, "y\n");
+}
+
+async function quietExitCodeWithInput(command, args, cwd, input) {
+  return await new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        TB_CLI_TELEMETRY_OPTOUT: "1",
+        TB_VERSION_WARNING: "0",
+      },
+      stdio: ["pipe", "ignore", "ignore"],
+    });
+
+    child.stdin.end(input);
+    child.on("error", () => resolve(127));
+    child.on("exit", (code) => resolve(code ?? 1));
+  });
 }
 
 async function quietExitCode(command, args, cwd) {

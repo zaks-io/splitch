@@ -1,34 +1,38 @@
-name: ci
+name: deploy-production
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: production-deploy
+  cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Verify
+  deploy:
+    name: Deploy Production
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 20
+    timeout-minutes: 30
+    environment: production
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
       TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
-      GITLEAKS_VERSION: 8.30.1
+      TB_TOKEN: ${{ secrets.TB_TOKEN }}
+      TB_HOST: ${{ vars.TB_HOST }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
+
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Production deploys must run from main. Current ref: $GITHUB_REF"
+          exit 1
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -57,26 +61,15 @@ jobs:
           curl -fsSL https://tinybird.co | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Verify
-        run: pnpm verify:ci
+      - name: Deploy production
+        run: pnpm deploy:production
 
-      - name: Install gitleaks
-        shell: bash
+      - name: Summary
+        if: always()
         run: |
-          set -euo pipefail
-          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          checksums="gitleaks_${GITLEAKS_VERSION}_checksums.txt"
-          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
-
-          curl -fsSLO "${base}/${asset}"
-          curl -fsSLO "${base}/${checksums}"
-          grep " ${asset}$" "${checksums}" > checksums.txt
-          sha256sum -c checksums.txt
-          tar -xzf "${asset}" gitleaks
-          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
-
-      - name: Scan for secrets
-        env:
-          SECRETS_RANGE_BEFORE: ${{ github.event.before }}
-          SECRETS_RANGE_AFTER: ${{ github.sha }}
-        run: pnpm secrets:range
+          {
+            echo "## Production deploy"
+            echo
+            echo "- Ref: \`${GITHUB_SHA}\`"
+            echo "- Tinybird: \`tb deploy --check\` then \`tb deploy --wait\` via \`pnpm tinybird:deploy:production\`"
+          } >> "$GITHUB_STEP_SUMMARY"

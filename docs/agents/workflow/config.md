@@ -16,7 +16,7 @@ with it.
 - Scope: scaffold pass over the repo root.
 - Evidence sources: root `package.json`, `pnpm-workspace.yaml`, `README.md`,
   `turbo.json`, `lefthook.yml`, `.github/workflows/*`, workspace
-  `package.json` files, Worker `wrangler.jsonc` files, `tinybird/`, filesystem
+  `package.json` files, Worker `wrangler.jsonc` files, `infra/tinybird/`, filesystem
   listing.
 - Safe commands run: `pnpm typecheck`, `pnpm format:check`, `pnpm lint`,
   `pnpm build`, `pnpm test`, `pnpm depcruise`, `pnpm duplicates`, `pnpm knip`, and
@@ -92,7 +92,7 @@ real package API boundary.
 | `packages/control-plane-sdk` | `@splitch/control-plane-sdk` | shared Control Plane SDK transport scaffold |
 | `packages/sdk`               | `@splitch/sdk`               | public JS/TS data-plane SDK scaffold        |
 | `packages/ui`                | `@splitch/ui`                | shared UI primitive scaffold                |
-| `tinybird/`                  | (not present)                | analytics project files planned             |
+| `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files            |
 
 - All workspace packages are `version: 0.0.0`.
 - Apps and internal packages are private. `@splitch/sdk` is a public package scaffold with
@@ -297,19 +297,24 @@ real package API boundary.
 - Git hooks: wired with Lefthook. `pre-commit` runs `pnpm verify:commit`;
   `pre-push` runs `pnpm verify:push`.
 - PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
-  Blacksmith. Tinybird Local and D1 local checks currently skip until project
-  files and migrations exist.
-- Shared Preview / Production: designed, not wired. Shared Preview is one
+  Blacksmith. Tinybird Local and D1 local checks run local backing-resource
+  validators.
+- Shared Preview / Production: partially wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
-  resources plus one Tinybird Branch. GitHub `preview` and `production`
-  environment shells exist. During build-out, production required-reviewer /
-  prevent-self-review protection is intentionally deferred until there is an
-  actual production target worth protecting.
+  resources plus one Tinybird Branch. Production has a manual
+  `deploy-production` workflow that runs `verify:ci` and deploys Tinybird
+  through the GitHub `production` environment. Cloudflare/D1 production deploy
+  legs remain designed but not wired. During build-out, production
+  required-reviewer / prevent-self-review protection is intentionally deferred
+  until there is an actual full production target worth protecting.
 - Planned backing services not yet provisioned: Cloudflare Flagship, D1, KV,
-  Durable Objects, Queues, Tinybird Cloud.
-- Production: no production deploy target is active yet. Do not wire or require
-  production protection checks during build-out; re-enable the approval-gate
-  decision when production resources and deploy workflows exist.
+  Durable Objects, and Queues. Tinybird Cloud workspaces `splitch_dev` and
+  `splitch_prod` exist; both have the committed datasources deployed, and
+  production Tinybird deploy is wired through GitHub Actions.
+- Production: Tinybird production deploy is active as a manual GitHub workflow.
+  Do not wire or require full production protection checks during build-out;
+  re-enable the approval-gate decision when Cloudflare production resources and
+  deploy workflows exist.
 - Hosted checks allowed without approval: CI and Gitleaks only.
 
 ## Instruction Trust Boundaries
@@ -334,9 +339,9 @@ real package API boundary.
       in `Pull Requests`.
 - [x] Hosted CI check name verified: `ci` (secret scanning is a step inside it;
       the standalone `gitleaks` workflow was removed). See `Pull Requests`.
-- [ ] Tinybird project files are absent. `pnpm tinybird:local` intentionally
-      skips until `tinybird/` exists. Verifier: add Tinybird datasources, pipes,
-      fixtures, and tests, then make the local script fail on validation errors.
+- [x] Tinybird datasource project files exist under `infra/tinybird`.
+      `pnpm tinybird:local` validates datasource contracts and builds against
+      Tinybird Local. Pipes, fixtures, and endpoint tests remain future work.
 - [x] Real D1 migrations exist (`@splitch/db`, SPL-9). `pnpm d1:migrate:local`
       runs a real `wrangler d1 migrations apply --local` and is wired into
       `verify:push` and `verify:ci`; a malformed/duplicate-column migration fails

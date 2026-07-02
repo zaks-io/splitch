@@ -53,10 +53,11 @@ Uncached or root-wide tasks:
 | `dev`                                 | no    | persistent local dev task                                              |
 | `deploy:*`, `migrate:*`, `rollback:*` | no    | remote-state mutation; never served from cache                         |
 
-CI uses Turborepo remote caching with `TURBO_TOKEN` and `TURBO_TEAM`. The current required gate runs
-`pnpm verify:ci`; later affected-package sharding can use `--affected` once hosted CI has a stable
-main baseline. Deployment jobs use `--filter=<workspace>...` to build only the Worker/app graph being
-deployed.
+CI uses Turborepo remote caching with `TURBO_TOKEN`, `TURBO_TEAM`, and
+`TURBO_REMOTE_CACHE_SIGNATURE_KEY`. Remote cache artifact signing is enabled in `turbo.json`. The
+current required gate runs `pnpm verify:ci`; later affected-package sharding can use `--affected` once
+hosted CI has a stable main baseline. Deployment jobs use `--filter=<workspace>...` to build only the
+Worker/app graph being deployed.
 Every build-affecting environment variable must be listed in `globalEnv` or task `env` so preview and
 production builds cannot reuse the wrong cache entry.
 
@@ -85,6 +86,9 @@ apps/
   event-ingest-api/        Event Ingest Worker (append-only event validation, queues, delivery)
   analysis-api/            Analysis Worker (Tinybird proxy reads, stats/result contracts)
   auth-api/             Auth API Worker (minimal auth surface; see auth spec)
+
+infra/
+  tinybird/                Tinybird datafiles for the analytics resource project
 ```
 
 The scaffold is intentionally thin: package entrypoints and Worker handlers are present so
@@ -95,6 +99,7 @@ Use the Turborepo convention directly:
 
 - `apps/*` are deployable or executable graph endpoints: Workers, frontend apps, and the CLI.
 - `packages/*` are libraries or tooling packages. They can be internal-only or publishable.
+- `infra/*` holds provider resource projects that are source-controlled but not JS workspaces.
 - App-owned code stays inside the owning `apps/*` workspace unless it is a real library boundary.
 - Publishability is not a directory rule. `@splitch/sdk` lives in `packages/sdk` because it is a JS/TS
   library installed by customer applications.

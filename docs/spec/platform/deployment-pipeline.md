@@ -1,7 +1,7 @@
 # Deployment pipeline: PR CI, shared preview, production release, rollback
 
-Status: CI and local gates wired; shared preview, production deploy, rollback, and real resource
-provisioning are still designed, not wired.
+Status: CI, local gates, and the Tinybird leg of production deploy are wired. Shared preview,
+Cloudflare production deploy, rollback, and real resource provisioning are still designed, not wired.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md). This document uses **platform target** for
 CI/deployment targets such as local, PR CI, shared preview, and production. A platform target is not a
 splitch product **Environment** under an App.
@@ -14,9 +14,9 @@ analytics resources. Every non-doc PR gets local validation against disposable C
 preview is a single shared target updated on demand. Production releases are queued, approval-gated
 GitHub deployments that run migrations as part of the release, not as a side manual step.
 
-The scaffold has the `ci` workflow (with a range-scoped Gitleaks secret-scan step), Turborepo task graph, package scripts,
-Lefthook hooks, and placeholder Wrangler configs. It does not provision or deploy Cloudflare or
-Tinybird resources.
+The scaffold has the `ci` workflow (with a range-scoped Gitleaks secret-scan step), the
+`deploy-production` workflow for Tinybird, Turborepo task graph, package scripts, Lefthook hooks, and
+placeholder Wrangler configs. It does not provision or deploy Cloudflare resources yet.
 
 Do not use Cloudflare dashboard edits as the source of truth. Wrangler config, generated preview
 configs, Tinybird project files, and GitHub environment settings are the release contract.
@@ -71,8 +71,8 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 - `globalEnv` and task-level `env` list every environment variable that changes build output, including
   public app URLs and platform target names. Missing env declarations can produce preview/prod cache
   cross-contamination.
-- CI sets `TURBO_TOKEN` and `TURBO_TEAM` for remote cache. Secrets used only by deploy/provision tasks
-  are not part of cacheable task outputs.
+- CI sets `TURBO_TOKEN`, `TURBO_TEAM`, and `TURBO_REMOTE_CACHE_SIGNATURE_KEY` for signed remote cache.
+  Secrets used only by deploy/provision tasks are not part of cacheable task outputs.
 - Debugging starts with `turbo run <task> --dry-run=json` to inspect the task graph, inputs, outputs,
   and cache hits before changing workflow YAML.
 
@@ -84,7 +84,7 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 | `gitleaks`              | PR and push                                          | none                             | wired: full git secret scan                                                                                                   |
 | `deploy-shared-preview` | manual dispatch, or trusted maintainer label/comment | `shared-preview-deploy`, queued  | not wired: deploy selected ref to the one hosted preview target                                                               |
 | `reset-shared-preview`  | manual dispatch                                      | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                 |
-| `deploy-production`     | push to main, or manual dispatch from main           | `production-deploy`, queued      | not wired: migration-backed production release with smoke checks                                                              |
+| `deploy-production`     | manual dispatch from main                            | `production-deploy`, queued      | wired for Tinybird: `verify:ci`, `tb deploy --check`, then `tb deploy --wait`; Cloudflare/D1/smoke legs remain pending        |
 | `rollback-production`   | manual dispatch                                      | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                  |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
@@ -178,6 +178,8 @@ or any Durable Object migration.
 - Cloudflare deploy tokens are scoped as tightly as Cloudflare supports. Prefer separate preview and
   production API tokens.
 - Runtime secret names are declared in Wrangler config with `secrets.required`.
+- Event Ingest declares `SPLITCH_EVENT_INGEST_TOKEN` and `TINYBIRD_INGEST_TOKEN` as required
+  Worker secrets. `TINYBIRD_API_URL` is non-secret Worker config and points at the Tinybird region API.
 - Secret rotation is its own release. Do not hide secret changes inside an unrelated code deploy.
 
 ## Tinybird policy
@@ -202,13 +204,21 @@ for `main` plus `shared_preview`, with two spare branches for temporary manual i
 
 Tinybird flow:
 
-1. PR CI runs `tb --local build`, loads fixture data, runs `tb --local test run`, and runs
-   `tb --cloud deploy --check` when cloud credentials are available to trusted PR workflows.
+1. PR CI runs `pnpm tinybird:local`, which starts disposable Tinybird Local with generated local-only
+   tokens, runs `tb build` through `tinybird.config.json` (`dev_mode=local`), runs tests when present,
+   and removes the Local container. Trusted PR workflows may also run `tb deploy --check` when
+   cloud credentials are available.
 2. Shared preview creates or updates `shared_preview --last-partition`, then runs `tb --branch=shared_preview build`
    and endpoint smoke tests against that branch.
-3. Production release runs `tb --cloud deploy --check`, then `tb --cloud deploy`.
+3. Production release runs `pnpm deploy:production`, which includes `verify:ci`, `tb deploy --check`,
+   and `tb deploy --wait` through the production GitHub environment `TB_TOKEN` and `TB_HOST`.
 4. Destructive Tinybird deploys require explicit human approval and `--allow-destructive-operations`.
    They are not allowed in the default production deploy workflow.
+
+Current cloud setup: Tinybird workspaces `splitch_dev` and `splitch_prod` exist. Both have the
+committed datasource shape deployed and a `raw_events_ingest` APPEND token generated by the Tinybird
+datafile. Worker secret attachment is still a separate Cloudflare step; do not copy token values into
+the repository or docs.
 
 The splitch physical dedup Copy Pipe snapshot is separate from Tinybird Branch snapshots. Production
 runs the scheduled Tinybird snapshot refresh on the Analysis Worker. Shared preview runs Copy Pipes on
@@ -216,12 +226,14 @@ demand for smoke tests only; it does not schedule its own hourly snapshot job by
 
 ## Production deploy order
 
-Production deployments run from the default branch only.
+Production deployments run from the default branch only. The current `deploy-production` workflow is
+manual-only and uses the GitHub `production` environment. It wires Tinybird first so datafiles cannot
+drift from the release path while the Cloudflare/D1 production legs are still being built.
 
 1. Install dependencies and run `verify:ci`.
-2. Run Tinybird deployment check.
-3. Wait for GitHub `production` environment approval. Required reviewers and prevent-self-review should
+2. Wait for GitHub `production` environment approval. Required reviewers and prevent-self-review should
    be enabled.
+3. Run Tinybird deployment check.
 4. Deploy Tinybird to Cloud main.
 5. Apply D1 migrations to production.
 6. Deploy stateful/internal Workers first: Event Ingest, Analysis, Control Plane API, Auth API.
@@ -275,13 +287,16 @@ is compatible with current data.
       tasks.
 - [x] Add local hook wiring from [local-quality-gates.md](./local-quality-gates.md), including
       `verify:commit`, `verify:push`, Knip, and Gitleaks.
-- [ ] Add scripts for `shared-preview:deploy`, `shared-preview:smoke`, `shared-preview:reset`,
-      `deploy:production`, and `rollback:production`.
-- [ ] Add Tinybird project files and `tinybird.config.json` with branch-mode development.
+- [ ] Add scripts for `shared-preview:deploy`, `shared-preview:smoke`, `shared-preview:reset`, and
+      `rollback:production`.
+- [x] Add `deploy:production` and hook Tinybird deployment into it.
+- [x] Add Tinybird project files and `tinybird.config.json` with local-mode development.
 - [x] Add Blacksmith-backed GitHub workflows for CI and Gitleaks.
-- [ ] Add Blacksmith-backed GitHub workflows for shared preview deploy/reset, production deploy, and rollback.
+- [ ] Add Blacksmith-backed GitHub workflows for shared preview deploy/reset and rollback.
+- [x] Add a Blacksmith-backed `deploy-production` workflow for the Tinybird production deploy leg.
 - [ ] Configure GitHub `preview` and `production` environments and required production reviewers.
-- [ ] Configure `TURBO_TOKEN` and `TURBO_TEAM` for CI remote caching.
+- [x] Wire `TURBO_TOKEN`, `TURBO_TEAM`, and `TURBO_REMOTE_CACHE_SIGNATURE_KEY` into CI/deploy workflows
+      for signed Turborepo remote caching.
 - [ ] Seed deterministic Tinybird Local fixtures for CI and document how to refresh the shared-preview branch.
 
 ## Sources
