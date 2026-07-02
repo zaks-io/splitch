@@ -82,14 +82,14 @@ function orgToken(): Promise<string> {
   });
 }
 
-function appToken(appId: string): Promise<string> {
+function appToken(appId: string, role: "owner" | "admin" | "member" = "admin"): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
     iss: "https://auth.splitch.test",
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
-    scopes: [`app:${appId}:admin`],
+    scopes: [`app:${appId}:${role}`],
   });
 }
 
@@ -109,11 +109,11 @@ async function request(
   });
 }
 
-async function createDefaultApp() {
+async function createDefaultApp(key = "checkout") {
   const res = await request("POST", `/orgs/${ORG.orgId}/apps`, await orgToken(), {
     organizationId: ORG.orgId,
-    name: "Checkout",
-    key: "checkout",
+    name: key === "checkout" ? "Checkout" : `Checkout ${key}`,
+    key,
   });
   expect(res.status).toBe(200);
   return (await res.json()) as {
@@ -189,21 +189,22 @@ describe("control-plane App and Environment CRUD", () => {
 
   it("round-trips App and Environment CRUD plus prod Policy patch", async () => {
     const created = await createDefaultApp();
-    const jwt = await appToken(created.app.id);
+    const adminJwt = await appToken(created.app.id, "admin");
+    const ownerJwt = await appToken(created.app.id, "owner");
     const prod = created.environments.find((env) => env.key === "prod");
     expect(prod).toBeDefined();
 
-    const getApp = await request("GET", `/apps/${created.app.id}`, jwt);
+    const getApp = await request("GET", `/apps/${created.app.id}`, adminJwt);
     expect(getApp.status).toBe(200);
     expect(await getApp.json()).toMatchObject({ id: created.app.id, key: "checkout" });
 
-    const patchApp = await request("PATCH", `/apps/${created.app.id}`, jwt, {
+    const patchApp = await request("PATCH", `/apps/${created.app.id}`, adminJwt, {
       name: "Checkout Renamed",
     });
     expect(patchApp.status).toBe(200);
     expect(await patchApp.json()).toMatchObject({ name: "Checkout Renamed" });
 
-    const listEnvs = await request("GET", `/apps/${created.app.id}/envs`, jwt);
+    const listEnvs = await request("GET", `/apps/${created.app.id}/envs`, adminJwt);
     expect(listEnvs.status).toBe(200);
     expect(((await listEnvs.json()) as { items: unknown[] }).items).toHaveLength(2);
 
@@ -213,13 +214,13 @@ describe("control-plane App and Environment CRUD", () => {
       enabledState: "confirm",
       startExperimentRun: "confirm",
     };
-    const patchProd = await request("PATCH", `/apps/${created.app.id}/envs/${prod?.id}`, jwt, {
+    const patchProd = await request("PATCH", `/apps/${created.app.id}/envs/${prod?.id}`, adminJwt, {
       policy: confirmPolicy,
     });
     expect(patchProd.status).toBe(200);
     expect(await patchProd.json()).toMatchObject({ id: prod?.id, policy: confirmPolicy });
 
-    const qa = await request("POST", `/apps/${created.app.id}/envs`, jwt, {
+    const qa = await request("POST", `/apps/${created.app.id}/envs`, adminJwt, {
       key: "qa",
       name: "QA",
     });
@@ -232,14 +233,14 @@ describe("control-plane App and Environment CRUD", () => {
       ),
     ).toHaveLength(1);
 
-    const deleteQa = await request("DELETE", `/apps/${created.app.id}/envs/${qaBody.id}`, jwt);
+    const deleteQa = await request("DELETE", `/apps/${created.app.id}/envs/${qaBody.id}`, ownerJwt);
     expect(deleteQa.status).toBe(200);
     expect(await deleteQa.json()).toEqual({ deleted: true });
   });
 
   it("blocks App and Environment deletes for running Experiments and last Environment", async () => {
     const created = await createDefaultApp();
-    const jwt = await appToken(created.app.id);
+    const jwt = await appToken(created.app.id, "owner");
     const prod = created.environments.find((env) => env.key === "prod");
     expect(prod).toBeDefined();
     await seedRunningExperiment(created.app.id, prod?.id ?? "");

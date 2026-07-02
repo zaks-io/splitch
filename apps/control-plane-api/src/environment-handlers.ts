@@ -1,7 +1,7 @@
 import type { EnvironmentPolicy } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { requireAppAdmin } from "./app-authz.js";
+import { requireAppDelete, requireAppWrite } from "./app-authz.js";
 import {
   ALLOW_POLICY,
   type AppEnvironmentDeps,
@@ -33,8 +33,8 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       requestId,
     }: HandlerArgs<unknown>): Promise<Response> {
       const appId = pathParam(input, "appId");
-      const adminError = requireAppAdmin(appId, principal.scopes, requestId);
-      if (adminError) return adminError;
+      const writeError = requireAppWrite(appId, principal.scopes, requestId);
+      if (writeError) return writeError;
 
       const app = await deps.repo.identity.getApp(appId);
       if (!app) return appNotFound(requestId);
@@ -69,8 +69,8 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
     }: HandlerArgs<unknown>): Promise<Response> {
       const appId = pathParam(input, "appId");
       const environmentId = pathParam(input, "environmentId");
-      const adminError = requireAppAdmin(appId, principal.scopes, requestId);
-      if (adminError) return adminError;
+      const writeError = requireAppWrite(appId, principal.scopes, requestId);
+      if (writeError) return writeError;
 
       const body = objectBody(input);
       const updated = await deps.repo.identity.updateEnvironment(appScope(appId), environmentId, {
@@ -91,8 +91,8 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
     }: HandlerArgs<unknown>): Promise<Response> {
       const appId = pathParam(input, "appId");
       const environmentId = pathParam(input, "environmentId");
-      const adminError = requireAppAdmin(appId, principal.scopes, requestId);
-      if (adminError) return adminError;
+      const deleteError = requireAppDelete(appId, principal.scopes, requestId);
+      if (deleteError) return deleteError;
 
       const scope = appScope(appId);
       const environments = await deps.repo.identity.listEnvironments(scope);

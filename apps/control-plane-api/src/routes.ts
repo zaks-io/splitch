@@ -15,15 +15,13 @@ export function controlPlaneRoute(operationId: string): RouteContract {
 }
 
 /**
- * Apply this Worker's access policy to a registry route: the required control-
- * plane scope for the operation (access-control-matrix.md: an App write requires
- * the `admin` role on that App). Returned as a new contract with `scopes` set so
- * the registrar's generic scope step enforces it; the underlying schemas, path,
- * and metadata are the registry's, unchanged.
+ * Apply a concrete required-scope list to a registry route. Returned as a new
+ * contract with `scopes` set so the registrar's generic scope step enforces it;
+ * the underlying schemas, path, and metadata are the registry's, unchanged.
  *
  * The registry ships these routes with `scopes: []` because App authorization is
- * co-scope (App binding) + D1 membership (ADR-0022). The role gate is layered
- * here, at the Worker that owns the operation.
+ * co-scope (App binding) + D1 membership (ADR-0022). Operation-specific role
+ * gates are layered by the Worker that owns each operation.
  */
 export function withRequiredScopes(
   contract: RouteContract,
