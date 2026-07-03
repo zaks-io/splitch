@@ -31,6 +31,13 @@ const upstreamFlagPage = {
   unexpectedSecretLikeField: "must-not-escape",
 };
 
+const updatedFlag = {
+  ...flagPage.items[0],
+  name: "Checkout v2",
+  description: "Updated checkout",
+  updatedAt: "2026-07-03T01:00:00.000Z",
+};
+
 const validationError: ErrorResponse = {
   code: "VALIDATION_ERROR",
   message: "request failed schema validation",
@@ -80,6 +87,51 @@ describe("mcp server Streamable HTTP transport", () => {
     expect(body.result.structuredContent).toEqual(flagPage);
     expect(body.result.structuredContent).not.toHaveProperty("unexpectedSecretLikeField");
     expect(body.result.structuredContent).not.toHaveProperty("cursor");
+  });
+
+  it("advertises and forwards flags_update with path params and body fields", async () => {
+    const listResponse = await mcp("tools/list");
+    const listBody = (await listResponse.json()) as JsonRpcSuccess<{ tools: ProtocolTool[] }>;
+    const updateTool = listBody.result.tools.find((tool) => tool.name === "flags_update");
+
+    expect(updateTool?.inputSchema).toMatchObject({
+      properties: expect.objectContaining({
+        appId: expect.any(Object),
+        flagId: expect.any(Object),
+        name: expect.any(Object),
+        description: expect.any(Object),
+      }),
+      required: expect.arrayContaining(["appId", "flagId"]),
+    });
+
+    const seen: SeenRequest[] = [];
+    const baseUrl = await bootControlPlaneApi(seen);
+    const response = await mcp(
+      "tools/call",
+      {
+        name: "flags_update",
+        arguments: {
+          appId: "app_local",
+          flagId: "flag_checkout",
+          name: "Checkout v2",
+          description: "Updated checkout",
+        },
+      },
+      baseUrl,
+    );
+    const body = (await response.json()) as JsonRpcSuccess<ToolResult<typeof updatedFlag>>;
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      method: "PATCH",
+      path: "/apps/app_local/flags/flag_checkout",
+      authorization: token,
+    });
+    expect(JSON.parse(seen[0]?.body ?? "{}")).toEqual({
+      name: "Checkout v2",
+      description: "Updated checkout",
+    });
+    expect(body.result.structuredContent).toEqual(updatedFlag);
   });
 
   it("returns MCP method-not-found for an unknown tool name", async () => {
@@ -136,6 +188,11 @@ interface JsonRpcFailure {
   error: { code: number; message: string };
 }
 
+interface ProtocolTool {
+  name: string;
+  inputSchema: Record<string, unknown>;
+}
+
 interface ToolResult<T> {
   structuredContent: T;
   isError?: boolean;
@@ -183,6 +240,10 @@ async function handleControlPlaneRequest(
 
   if (request.method === "GET" && request.url === "/apps/app_local/flags") {
     writeJson(response, 200, upstreamFlagPage);
+    return;
+  }
+  if (request.method === "PATCH" && request.url === "/apps/app_local/flags/flag_checkout") {
+    writeJson(response, 200, updatedFlag);
     return;
   }
   if (request.method === "POST" && request.url === "/apps/app_local/flags") {

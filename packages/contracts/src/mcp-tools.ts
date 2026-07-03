@@ -71,24 +71,42 @@ function requestParts(route: ApiRouteContract): {
 }
 
 /**
- * Derive the tool inputSchema: the request body for a write, or the merged
- * path+query params for a read (GET has no body). A route with no body, path, or
- * query (e.g. organizations_list, keyed entirely off the token) correctly derives
- * an empty-object input — that is a real no-argument tool, not a malformed contract.
+ * Derive the flat tool inputSchema the Control Plane SDK accepts:
+ * path params, query params, and JSON body fields all live at the top level.
+ * `bodyForRoute` strips path/query fields before forwarding the HTTP body, so the
+ * advertised tool schema must include every route field in the same flat shape.
+ * A route with no body, path, or query (e.g. organizations_list, keyed entirely
+ * off the token) correctly derives an empty-object input — that is a real
+ * no-argument tool, not a malformed contract.
  */
 function deriveInputSchema(route: ApiRouteContract): z.ZodTypeAny {
   const { body, params, query } = requestParts(route);
-  if (body) {
-    return body;
-  }
-  const readShape: z.ZodRawShape = {};
+  const shape: z.ZodRawShape = {};
   if (params instanceof z.ZodObject) {
-    Object.assign(readShape, params.shape);
+    Object.assign(shape, params.shape);
   }
   if (query instanceof z.ZodObject) {
-    Object.assign(readShape, query.shape);
+    Object.assign(shape, query.shape);
   }
-  return z.object(readShape);
+  const bodyObject = unwrapOptionalObject(body);
+  if (bodyObject) {
+    Object.assign(shape, bodyObject.shape);
+  } else if (body) {
+    if (Object.keys(shape).length > 0) {
+      throw new Error(
+        `mcp-tools: route "${route.operationId}" cannot derive flat input from non-object body plus path/query fields`,
+      );
+    }
+    return body;
+  }
+  return z.object(shape);
+}
+
+function unwrapOptionalObject(schema: z.ZodTypeAny | undefined): z.ZodObject | undefined {
+  if (schema instanceof z.ZodOptional || schema instanceof z.ZodDefault) {
+    return unwrapOptionalObject(schema.unwrap() as z.ZodTypeAny);
+  }
+  return schema instanceof z.ZodObject ? schema : undefined;
 }
 
 /** The 200 response schema from the route's openapi config. */
