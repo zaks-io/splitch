@@ -97,33 +97,26 @@ export type TargetingRule = z.infer<typeof TargetingRuleSchema>;
 // ---------------------------------------------------------------------------
 // Flag
 //
-// DEFINITION fields (App-level): id, appId, key, name, description, schema, variants
-// CONFIGURATION fields (per-Environment, ADR-0027): environmentId, enabled,
-//   availableVariantNames, defaultVariantId, targetingRules
+// App-level DEFINITION only: key, value schema, Variant catalog, and Default
+// Variant. Per-Environment Configuration (`enabled`, availability, targeting)
+// lives in FlagConfigResponse / FlagConfigKV, not this App-level leaf.
 // ---------------------------------------------------------------------------
 
-export const FlagSchema = z.object({
-  // DEFINITION — App-level; frozen once set
-  id: z.string(),
-  appId: z.string(),
-  key: z.string(),
-  name: z.string(),
-  description: z.string().optional(),
-  // null = unconstrained (any variant value passes)
-  schema: z.record(z.string(), z.unknown()).nullable().optional(),
-  variants: z.array(VariantSchema).min(1),
-
-  // CONFIGURATION — per-Environment (ADR-0027)
-  environmentId: z.string(),
-  enabled: z.boolean(),
-  availableVariantNames: z.array(z.string()),
-  defaultVariantId: z.string(),
-  targetingRules: z.array(TargetingRuleSchema),
-
-  // Audit timestamps (ISO 8601)
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
+export const FlagSchema = z
+  .object({
+    id: z.string(),
+    appId: z.string(),
+    key: z.string(),
+    name: z.string(),
+    description: z.string().optional(),
+    // null = unconstrained (any variant value passes)
+    schema: z.record(z.string(), z.unknown()).nullable().optional(),
+    variants: z.array(VariantSchema).min(1),
+    defaultVariantId: z.string(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .strict();
 export type Flag = z.infer<typeof FlagSchema>;
 
 // ---------------------------------------------------------------------------

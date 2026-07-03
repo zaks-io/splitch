@@ -33,11 +33,7 @@ const validFlag = {
   name: "Feature X",
   schema: null,
   variants: [validVariant, { id: "var_2", name: "treatment", value: "on" }],
-  environmentId: "env_prod",
-  enabled: true,
-  availableVariantNames: ["control", "treatment"],
   defaultVariantId: "var_1",
-  targetingRules: [validTargetingRule],
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-01-02T00:00:00Z",
 };
@@ -125,22 +121,16 @@ describe("TargetingRuleSchema", () => {
 });
 
 describe("FlagSchema", () => {
-  it("parses a full valid flag including definition and config sections", () => {
+  it("parses a full valid App-level flag definition", () => {
     const f = FlagSchema.parse(validFlag);
 
-    // DEFINITION fields
     expect(f.id).toBe("flag_1");
     expect(f.appId).toBe("app_1");
     expect(f.key).toBe("feature-x");
     expect(f.variants).toHaveLength(2);
     expect(f.schema).toBeNull();
-
-    // CONFIGURATION fields
-    expect(f.environmentId).toBe("env_prod");
-    expect(f.enabled).toBe(true);
     expect(f.defaultVariantId).toBe("var_1");
-    expect(f.availableVariantNames).toEqual(["control", "treatment"]);
-    expect(f.targetingRules).toHaveLength(1);
+    expect("enabled" in f).toBe(false);
   });
 
   it("accepts optional description", () => {
@@ -152,18 +142,20 @@ describe("FlagSchema", () => {
     expect(FlagSchema.safeParse({ ...validFlag, variants: [] }).success).toBe(false);
   });
 
-  it("rejects missing environmentId", () => {
-    const { environmentId: _, ...rest } = validFlag;
-    expect(FlagSchema.safeParse(rest).success).toBe(false);
-  });
-
   it("rejects missing defaultVariantId", () => {
     const { defaultVariantId: _, ...rest } = validFlag;
     expect(FlagSchema.safeParse(rest).success).toBe(false);
   });
 
-  it("rejects missing enabled", () => {
-    const { enabled: _, ...rest } = validFlag;
-    expect(FlagSchema.safeParse(rest).success).toBe(false);
+  it("rejects per-Environment config fields", () => {
+    expect(
+      FlagSchema.safeParse({
+        ...validFlag,
+        environmentId: "env_prod",
+        enabled: true,
+        availableVariantNames: ["control"],
+        targetingRules: [validTargetingRule],
+      }).success,
+    ).toBe(false);
   });
 });

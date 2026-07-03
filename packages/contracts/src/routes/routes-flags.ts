@@ -102,7 +102,7 @@ export const flagRoutes: readonly ApiRouteContract[] = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["FLAG_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING"],
+    errors: ["FLAG_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING", "RESOURCE_NOT_EMPTY"],
   }),
   defineApiRoute({
     operationId: "flag_variants_create",
@@ -141,7 +141,14 @@ export const flagRoutes: readonly ApiRouteContract[] = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["FLAG_NOT_FOUND", "VARIANT_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING"],
+    errors: [
+      "FLAG_NOT_FOUND",
+      "VARIANT_NOT_FOUND",
+      "FORBIDDEN",
+      "EXPERIMENT_RUNNING",
+      "RESOURCE_NOT_EMPTY",
+      "VALIDATION_ERROR",
+    ],
   }),
   defineApiRoute({
     operationId: "flag_config_get",

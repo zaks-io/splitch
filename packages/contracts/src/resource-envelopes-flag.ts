@@ -2,8 +2,8 @@ import { z } from "zod";
 import { FlagSchema, VariantSchema } from "./leaf-schemas-flag.js";
 
 /**
- * Create/patch/response wire envelopes for the Flag and Variant control-plane
- * resources, composed from the flag-side leaves (never redefining them).
+ * Create/patch/response wire envelopes for App-level Flag definition and
+ * Variant catalog resources, composed from the flag-side leaves.
  * Source of truth: docs/spec/contracts/request-response-envelopes-flag-variant.md
  *
  * Envelopes are DISTINCT from the leaf and from each other (ADR-0025 "reuse at
@@ -15,42 +15,43 @@ import { FlagSchema, VariantSchema } from "./leaf-schemas-flag.js";
 // ---------------------------------------------------------------------------
 // CreateFlagRequest
 //
-// Seeds the App-level DEFINITION (key, name, variant catalog) plus the initial
-// per-Environment CONFIGURATION for `environmentId` (ADR-0027). Worker computes
-// id/createdAt/updatedAt, so they are absent here.
+// Seeds the App-level DEFINITION (key, schema, Variant catalog, Default
+// Variant). Per-Environment Configuration is deliberately absent here.
 // ---------------------------------------------------------------------------
 
-export const CreateFlagRequestSchema = z.object({
-  appId: z.string(),
-  environmentId: z.string(),
-  name: z.string(),
-  // Immutable after create (DEFINITION audit boundary).
-  key: z.string(),
-  variants: z.array(VariantSchema).min(1),
-  enabled: z.boolean(),
-  // Per-Environment subset of the catalog; defaults to all when omitted.
-  availableVariantNames: z.array(z.string()).optional(),
-  defaultVariantId: z.string(),
-  targetingRules: FlagSchema.shape.targetingRules.default([]),
-  description: z.string().optional(),
-});
+const CreateVariantCatalogEntrySchema = z
+  .object({
+    name: z.string(),
+    value: VariantSchema.shape.value,
+    isDefault: z.boolean(),
+    description: z.string().optional(),
+  })
+  .strict();
+
+export const CreateFlagRequestSchema = z
+  .object({
+    appId: z.string(),
+    name: z.string(),
+    // Immutable after create (DEFINITION audit boundary).
+    key: z.string(),
+    schema: FlagSchema.shape.schema,
+    variants: z.array(CreateVariantCatalogEntrySchema).min(1),
+    description: z.string().optional(),
+  })
+  .strict();
 export type CreateFlagRequest = z.infer<typeof CreateFlagRequestSchema>;
 
 // ---------------------------------------------------------------------------
 // PatchFlagRequest
 //
-// `.strict()` so an immutable `key` or `appId` (or any unknown key) is REJECTED
-// at parse time, not silently dropped — the audit boundary is enforced by the
-// schema, not left to the Worker. Variants/TargetingRules are managed via the
-// /variants and /targeting-rules sub-resources, so they are not patchable here.
+// `.strict()` so `enabled`, immutable ids, or any unknown key are rejected at
+// parse time. Variants are managed via the /variants sub-resource.
 // ---------------------------------------------------------------------------
 
 export const PatchFlagRequestSchema = z
   .object({
     name: z.string().optional(),
-    enabled: z.boolean().optional(),
-    availableVariantNames: z.array(z.string()).optional(),
-    defaultVariantId: z.string().optional(),
+    schema: FlagSchema.shape.schema,
     description: z.string().optional(),
   })
   .strict();
@@ -74,13 +75,17 @@ export type FlagResponse = z.infer<typeof FlagResponseSchema>;
 // "Idempotency on retried creates"). Worker computes the Variant `id`.
 // ---------------------------------------------------------------------------
 
-export const CreateVariantRequestSchema = z.object({
-  flagId: z.string(),
-  name: z.string(),
-  value: VariantSchema.shape.value,
-  description: z.string().optional(),
-  idempotency_key: z.string().optional(),
-});
+export const CreateVariantRequestSchema = z
+  .object({
+    appId: z.string(),
+    flagId: z.string(),
+    name: z.string(),
+    value: VariantSchema.shape.value,
+    isDefault: z.boolean().optional(),
+    description: z.string().optional(),
+    idempotency_key: z.string().optional(),
+  })
+  .strict();
 export type CreateVariantRequest = z.infer<typeof CreateVariantRequestSchema>;
 
 // ---------------------------------------------------------------------------
