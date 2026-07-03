@@ -59,6 +59,15 @@ importers:
       '@splitch/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@splitch/stats':
+        specifier: workspace:*
+        version: link:../../packages/stats
+      '@splitch/worker-runtime':
+        specifier: workspace:*
+        version: link:../../packages/worker-runtime
+      hono:
+        specifier: ^4.12.27
+        version: 4.12.27
 
   apps/auth-api:
     dependencies:
