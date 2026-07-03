@@ -63,6 +63,9 @@ export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
 // ---------------------------------------------------------------------------
 
 export const DataPlaneEvaluateRequestSchema = z.object({
+  // Optional assertion only. The Evaluation Worker scopes from the Client Key,
+  // rejects mismatches, and discards matches before Provider reads.
+  appId: z.string().optional(),
   flagKey: z.string(),
   targetingKey: z.string(),
   idType: z.string(),

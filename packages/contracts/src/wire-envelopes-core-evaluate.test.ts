@@ -11,11 +11,13 @@ import {
 describe("DataPlaneEvaluateRequestSchema", () => {
   it("parses a full request", () => {
     const req = DataPlaneEvaluateRequestSchema.parse({
+      appId: "app_123",
       flagKey: "feature-x",
       targetingKey: "user-1",
       idType: "user",
       attributes: { plan: "enterprise" },
     });
+    expect(req.appId).toBe("app_123");
     expect(req.flagKey).toBe("feature-x");
     expect(req.attributes.plan).toBe("enterprise");
   });

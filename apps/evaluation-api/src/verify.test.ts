@@ -68,6 +68,19 @@ describe("POST /api/sdk/verify", () => {
     expect(assignmentStore.putCalls).toEqual([]);
   });
 
+  it("treats body appId as an assertion and rejects mismatches without data access", async () => {
+    const { app, assignmentStore, configKv } = await makeSdkRouteHarness();
+
+    const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY, {}, { appId: "app-other" }));
+    const body = (await res.json()) as ErrorResponse;
+
+    expect(res.status).toBe(403);
+    expect(body.code).toBe("APP_MISMATCH");
+    expect(configKv.getCalls).toEqual([]);
+    expect(assignmentStore.getAllCalls).toEqual([]);
+    expect(assignmentStore.putCalls).toEqual([]);
+  });
+
   it("enforces a Client Key origin allow-list before evaluation", async () => {
     const allowedHarness = await makeSdkRouteHarness();
     const allowed = await allowedHarness.app.request(

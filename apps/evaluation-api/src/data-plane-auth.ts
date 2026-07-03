@@ -57,6 +57,16 @@ export function makeApiKeyOnlyAuthResolver(dataPlaneAuthResolver: AuthResolver):
   };
 }
 
+export function makeClientKeyOnlyAuthResolver(dataPlaneAuthResolver: AuthResolver): AuthResolver {
+  return async (request) => {
+    const result = await dataPlaneAuthResolver(request);
+    if (!result.ok) return result;
+    if (result.principal.kind === "client-key") return result;
+
+    return { ok: false, reason: "UNAUTHORIZED" };
+  };
+}
+
 function credentialFailure(request: Request, cached: CredentialCache): AuthResult | null {
   if (cached.revoked) {
     return { ok: false, reason: "CREDENTIAL_REVOKED" };

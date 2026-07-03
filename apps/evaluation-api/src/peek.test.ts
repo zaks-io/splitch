@@ -45,6 +45,19 @@ describe("POST /api/sdk/peek", () => {
     expect(assignmentStore.putCalls).toEqual([]);
   });
 
+  it("treats body appId as an assertion and rejects mismatches without data access", async () => {
+    const { app, assignmentStore, configKv } = await makeSdkRouteHarness();
+
+    const res = await app.request(PATH, sdkRouteInit(API_KEY, {}, { appId: "app-other" }));
+    const body = (await res.json()) as ErrorResponse;
+
+    expect(res.status).toBe(403);
+    expect(body.code).toBe("APP_MISMATCH");
+    expect(configKv.getCalls).toEqual([]);
+    expect(assignmentStore.getAllCalls).toEqual([]);
+    expect(assignmentStore.putCalls).toEqual([]);
+  });
+
   it("rejects an API Key without data-plane:evaluate before evaluation", async () => {
     const { app, assignmentStore } = await makeSdkRouteHarness();
 
