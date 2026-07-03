@@ -2,7 +2,11 @@ import { envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model.js";
 import { randomHex } from "./credential-cache.js";
-import { configStoreUnavailable, experimentNotFound } from "./experiment-errors.js";
+import {
+  configStoreUnavailable,
+  experimentNoDraft,
+  experimentNotFound,
+} from "./experiment-errors.js";
 import { experimentResponse, json, runResponse } from "./experiment-model.js";
 import {
   draftPatch,
@@ -189,47 +193,41 @@ async function startExperiment(
   if (!prepared.ok) return prepared.response;
 
   const now = nowIso(deps);
-  const previous = await runningRunForExperiment(deps.repo, scope, experiment);
-  if (previous) {
-    await deps.repo.experiments.updateRunStatus(scope, previous.id, {
-      status: "ended",
-      endedAt: now,
-    });
-  }
-
-  const run = await deps.repo.experiments.runs.insert(scope, {
-    id: `run_${randomHex(12)}`,
-    appId: scope.appId,
-    environmentId: scope.environmentId,
+  const committed = await deps.repo.experiments.startRun(scope, {
     experimentId: experiment.id,
-    runNumber: await deps.repo.experiments.nextRunNumber(scope, experiment.id),
-    status: "running",
-    targetingKeyField: experiment.targetingKeyField,
-    targetingKeyType: experiment.targetingKeyType,
-    salt: prepared.value.salt,
-    allocation: json(prepared.value.allocation),
-    variantSet: json(prepared.value.variantSet),
-    targetingRules: json(prepared.value.targetingRules),
-    confidenceLevel: experiment.confidenceLevel,
-    decisionFamily: json(prepared.value.decisionFamily),
-    guardrailDecisions: json(prepared.value.guardrailDecisions),
-    configHash: prepared.value.configHash,
-    startedAt: now,
-    startReason: body.reason as string | undefined,
-    createdAt: now,
-    createdBy: args.principal.id,
-  });
-
-  await deps.repo.experiments.updateExperiment(scope, experiment.id, {
-    status: "running",
-    liveRunId: run.id,
-    draftAllocation: null,
-    draftSalt: null,
-    draftTargetingRules: null,
-    draftSegmentIds: null,
+    expectedDraft: {
+      draftAllocation: experiment.draftAllocation,
+      draftSalt: experiment.draftSalt,
+      draftTargetingRules: experiment.draftTargetingRules,
+      draftSegmentIds: experiment.draftSegmentIds,
+      liveRunId: experiment.liveRunId,
+    },
+    run: {
+      id: `run_${randomHex(12)}`,
+      targetingKeyField: experiment.targetingKeyField,
+      targetingKeyType: experiment.targetingKeyType,
+      salt: prepared.value.salt,
+      allocation: json(prepared.value.allocation),
+      variantSet: json(prepared.value.variantSet),
+      targetingRules: json(prepared.value.targetingRules),
+      confidenceLevel: experiment.confidenceLevel,
+      decisionFamily: json(prepared.value.decisionFamily),
+      guardrailDecisions: json(prepared.value.guardrailDecisions),
+      configHash: prepared.value.configHash,
+      startedAt: now,
+      startReason: body.reason as string | undefined,
+      createdAt: now,
+      createdBy: args.principal.id,
+    },
+    endedAt: now,
     updatedAt: now,
     updatedBy: args.principal.id,
   });
+  if (!committed.ok) {
+    if (committed.reason === "experiment_not_found") return experimentNotFound(args.requestId);
+    return experimentNoDraft(experiment.id, experiment.liveRunId, args.requestId);
+  }
+
   await deps.configStore.writerFor(scope.appId, scope.environmentId).syncExperimentConfig({
     appId: scope.appId,
     environmentId: scope.environmentId,
@@ -238,7 +236,7 @@ async function startExperiment(
 
   return Response.json({
     experimentId: experiment.id,
-    run: runResponse(run),
-    previousRunId: previous?.id ?? null,
+    run: runResponse(committed.run),
+    previousRunId: committed.previous?.id ?? null,
   });
 }

@@ -35,6 +35,10 @@ live in [request-response-envelopes-conventions.md](./request-response-envelopes
 | `activationMetricId` | no       | Assignment-affecting when set                                                                                |
 | `conversionWindowMs` | no       | Defaults to `0` (unbounded)                                                                                  |
 | `dimensions`         | no       | Defaults to `[]`                                                                                             |
+| `allocation`         | no       | Draft assignment field staged for the first Start; must sum to 100 at Start                                  |
+| `salt`               | no       | Draft assignment field staged for the first Start; generated at Start when omitted                           |
+| `targetingRules`     | no       | Draft assignment field staged for the first Start                                                            |
+| `segmentIds`         | no       | Draft assignment field staged for the first Start; resolved to frozen targeting rules at Start               |
 
 Worker sets: `id`, `status = 'draft'`, `liveRunId = null`, `createdAt`, `updatedAt`, and
 `defaultVariantId` — copied from the bound Flag's per-Environment `defaultVariantId` (resolved via
@@ -53,6 +57,11 @@ Sorted by edit type. The Worker enforces the edit taxonomy (ADR-0003):
 - `targetingKeyType` — changing the Entity type (`id_type`)
 - `activationMetricId` — Activation Metric change is an assignment edit
 - `flagId` — changing the controlled Flag
+- `allocation` — draft assignment allocation for the next Start
+- `salt` — draft assignment salt for the next Start
+- `variantSet` — draft assignment Variant set for the next Start
+- `targetingRules` — draft assignment inline rules for the next Start
+- `segmentIds` — draft assignment Segment ids for the next Start
 
 **Measurement edits** — applied to existing Run, triggers recompute, no sample reset:
 
@@ -86,19 +95,24 @@ with `VALIDATION_ERROR`; callers end a Run with `POST .../runs/{run_id}/end`.
 
 `PatchExperimentRequest` field set (all optional, Worker validates taxonomy on each):
 
-| Field                | Required | Edit type       |
-| -------------------- | -------- | --------------- |
-| `name`               | no       | non-material    |
-| `description`        | no       | non-material    |
-| `hypothesis`         | no       | non-material    |
-| `targetingKey`       | no       | assignment      |
-| `targetingKeyType`   | no       | assignment      |
-| `activationMetricId` | no       | assignment      |
-| `metrics`            | no       | measurement     |
-| `guardrailMetrics`   | no       | measurement     |
-| `conversionWindowMs` | no       | measurement     |
-| `dimensions`         | no       | measurement     |
-| `confidenceLevel`    | no       | decision-locked |
+| Field                | Required | Edit type        |
+| -------------------- | -------- | ---------------- |
+| `name`               | no       | non-material     |
+| `description`        | no       | non-material     |
+| `hypothesis`         | no       | non-material     |
+| `targetingKey`       | no       | assignment       |
+| `targetingKeyType`   | no       | assignment       |
+| `activationMetricId` | no       | assignment       |
+| `allocation`         | no       | draft assignment |
+| `salt`               | no       | draft assignment |
+| `variantSet`         | no       | draft assignment |
+| `targetingRules`     | no       | draft assignment |
+| `segmentIds`         | no       | draft assignment |
+| `metrics`            | no       | measurement      |
+| `guardrailMetrics`   | no       | measurement      |
+| `conversionWindowMs` | no       | measurement      |
+| `dimensions`         | no       | measurement      |
+| `confidenceLevel`    | no       | decision-locked  |
 
 ---
 

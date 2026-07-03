@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index.js";
 import type { Db } from "./client.js";
 import type { EnvScope, TenantScope } from "./scope.js";
+import { makeStartRun } from "./experiment-start-run.js";
 import { scopedTable } from "./scoped-table.js";
 
 /**
@@ -13,10 +14,11 @@ import { scopedTable } from "./scoped-table.js";
  * they still route through the scope-bound `update`, so a Run can only be
  * transitioned within its own App+Environment.
  */
-export function makeExperimentRepo(db: Db) {
+export function makeExperimentRepo(db: Db, d1: D1Database) {
   const experimentsTable = scopedTable(db, experiments);
   const runsTable = scopedTable(db, runs);
   const metricsTable = scopedTable(db, metrics);
+  const startRun = makeStartRun(d1, experimentsTable, runsTable);
 
   return {
     experiments: experimentsTable,
@@ -123,6 +125,8 @@ export function makeExperimentRepo(db: Db) {
       }
       return rows[0] ?? null;
     },
+
+    startRun,
 
     getMetric(scope: TenantScope, metricId: string) {
       return metricsTable.findOne(scope, eq(metrics.id, metricId));
