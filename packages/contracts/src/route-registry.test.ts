@@ -96,6 +96,7 @@ const CANONICAL_OPERATION_IDS = [
   "privacy_requests_get",
   // Data-plane SDK (not MCP tools)
   "sdk_evaluate",
+  "sdk_peek",
   "sdk_verify",
 ] as const;
 

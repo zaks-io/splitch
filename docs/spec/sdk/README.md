@@ -14,6 +14,7 @@ deferred; the `ResolutionDetails` _shape_ is not.
 | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | [credentials.md](./credentials.md)                                   | Client Key vs API Key: which credential, what it can do, lifecycle                                                                     |
 | [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)         | `POST /api/sdk/evaluate` contract: request/response shapes, safety invariants, edge binding                                            |
+| [exposure-accessor.md](./exposure-accessor.md#peek-endpoint-shape)   | `POST /api/sdk/peek` contract: API-Key-only non-exposing Variant resolution                                                            |
 | [verify-endpoint.md](./verify-endpoint.md)                           | `POST /api/sdk/verify` contract: non-exposing setup confirmation, reason tiered by credential (ADR-0037)                               |
 | [exposure-accessor.md](./exposure-accessor.md)                       | `evaluate` (fires Exposure), `peekVariant` + `verify` (no Exposure)                                                                    |
 | [seen-set.md](./seen-set.md)                                         | SDK-local per-instance exposure dedup cache (hot-path optimization only)                                                               |

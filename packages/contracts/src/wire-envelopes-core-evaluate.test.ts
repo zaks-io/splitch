@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DataPlaneEvaluateRequestSchema,
   DataPlaneEvaluateResponseSchema,
+  PeekEvaluateResponseSchema,
   TestEvaluationReasonSchema,
   TestEvaluationRequestSchema,
   TestEvaluationResponseSchema,
@@ -72,6 +73,22 @@ describe("DataPlaneEvaluateResponseSchema (non-revealing, strict)", () => {
     expect(DataPlaneEvaluateResponseSchema.safeParse({ variant: "on", salt: "abc" }).success).toBe(
       false,
     );
+  });
+});
+
+describe("PeekEvaluateResponseSchema (API-Key-only, strict)", () => {
+  it("reuses the bare { variant } response shape", () => {
+    expect(PeekEvaluateResponseSchema.parse({ variant: "on" })).toEqual({ variant: "on" });
+  });
+
+  it("rejects leaked reason metadata", () => {
+    expect(PeekEvaluateResponseSchema.safeParse({ variant: "on", reason: "SPLIT" }).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects null because peek fails loud instead of falling back", () => {
+    expect(PeekEvaluateResponseSchema.safeParse({ variant: null }).success).toBe(false);
   });
 });
 
