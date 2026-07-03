@@ -1,5 +1,6 @@
 import type { DedupeExposureRow, PerEntityMetricRow } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
+import type { CupedCovariateRow } from "./variance-estimator-types.js";
 import { estimateMetricArm, estimateMetricComparison } from "./variance-estimators.js";
 
 const RUN_ID = "run_variance_simulation";
@@ -83,6 +84,56 @@ describe("variance estimator negative-path simulations", () => {
     expect(result.status).toBe("ready");
     expect(result.sampling_var).toBeGreaterThan(wrong * 1.9);
   });
+
+  it("reduces variance with pre-period CUPED without shifting the null mean", () => {
+    const entityCount = 120;
+    const controlIds = Array.from({ length: entityCount }, (_, index) => `control_${index}`);
+    const treatmentIds = Array.from({ length: entityCount }, (_, index) => `treatment_${index}`);
+    const values = Array.from({ length: entityCount }, (_, index) => {
+      const covariate = centeredWave(index);
+      const noise = centeredWave(index * 17 + 5) / 5;
+      return { covariate, value: 10 + covariate * 2 + noise };
+    });
+    const metric_values = [
+      ...controlIds.map((entityId, index) => countRow(entityId, values[index]?.value ?? 0)),
+      ...treatmentIds.map((entityId, index) => countRow(entityId, values[index]?.value ?? 0)),
+    ];
+    const pre_period_covariates = [
+      ...controlIds.map((entityId, index) => prePeriodRow(entityId, values[index]?.covariate ?? 0)),
+      ...treatmentIds.map((entityId, index) =>
+        prePeriodRow(entityId, values[index]?.covariate ?? 0),
+      ),
+    ];
+    const raw = estimateMetricComparison({
+      run_id: RUN_ID,
+      metric_id: "clustered_count",
+      metric_type: "count",
+      control_variant: "control",
+      treatment_variant: "treatment",
+      exposures: [...exposures("control", controlIds), ...exposures("treatment", treatmentIds)],
+      metric_values,
+      winsorize: false,
+      cuped: false,
+    });
+    const cuped = estimateMetricComparison({
+      run_id: RUN_ID,
+      metric_id: "clustered_count",
+      metric_type: "count",
+      control_variant: "control",
+      treatment_variant: "treatment",
+      exposures: [...exposures("control", controlIds), ...exposures("treatment", treatmentIds)],
+      metric_values,
+      pre_period_covariates,
+      winsorize: false,
+    });
+
+    expect(cuped.absolute_lift).toBeCloseTo(raw.absolute_lift ?? Number.NaN, 12);
+    expect(cuped.absolute_lift).toBeCloseTo(0, 12);
+    expect(cuped.absolute_lift_sampling_var).toBeLessThan(
+      (raw.absolute_lift_sampling_var ?? 0) / 10,
+    );
+    expect(cuped.variance_techniques.cuped_method).toBe("pre_period");
+  });
 });
 
 function exposures(variant: string, entityIds: readonly string[]): DedupeExposureRow[] {
@@ -149,4 +200,17 @@ function sampleVariance(values: readonly number[]): number {
 
 function mean(values: readonly number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function prePeriodRow(targeting_key_hash: string, pre_period_value: number): CupedCovariateRow {
+  return {
+    targeting_key_hash,
+    metric_id: "clustered_count",
+    pre_period_value,
+    covariate_source: "pre_period",
+  };
+}
+
+function centeredWave(index: number): number {
+  return Math.sin(index * 1.819) + Math.cos(index * 0.731);
 }

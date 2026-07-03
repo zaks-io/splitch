@@ -1,4 +1,5 @@
 import type { MetricKind, PerEntityMetricRow, VarianceTechniques } from "@splitch/contracts";
+import { applyCupedAdjustment } from "./cuped.js";
 import {
   clampSamplingVariance,
   finiteValue,
@@ -39,15 +40,20 @@ export function estimateMetricComparison(
     ...controlEntities,
     ...treatmentEntities,
   ]);
-  const varianceTechniques = varianceTechniquesFor(input.metric_type, winsorization);
+  const cuped = applyCupedAdjustment(
+    input,
+    winsorizedEntities(input.metric_type, controlEntities, winsorization),
+    winsorizedEntities(input.metric_type, treatmentEntities, winsorization),
+  );
+  const varianceTechniques = varianceTechniquesFor(input.metric_type, winsorization, cuped);
   const control = estimateMetricArmFromEntities(
     controlInput,
-    winsorizedEntities(input.metric_type, controlEntities, winsorization),
+    cuped.controlEntities,
     varianceTechniques,
   );
   const treatment = estimateMetricArmFromEntities(
     treatmentInput,
-    winsorizedEntities(input.metric_type, treatmentEntities, winsorization),
+    cuped.treatmentEntities,
     varianceTechniques,
   );
 
@@ -72,7 +78,9 @@ function estimateMetricArmFromEntities(
   const values = entities.map((entity) => entity.value);
   const pointEstimate = mean(values);
   const armVariance =
-    input.metric_type === "binomial" ? pointEstimate * (1 - pointEstimate) : sampleVariance(values);
+    input.metric_type === "binomial" && !entities.some((entity) => entity.cuped_adjusted)
+      ? pointEstimate * (1 - pointEstimate)
+      : sampleVariance(values);
 
   return armEstimate(
     input,
@@ -152,7 +160,15 @@ function seedExposedEntities(input: MetricArmEstimateInput): Map<string, EntityA
   const entities = new Map<string, EntityAggregate>();
   for (const exposure of input.exposures) {
     if (exposure.run_id === input.run_id && exposure.variant === input.variant) {
-      entities.set(exposure.targeting_key_hash, { value: 0, num_value: 0, denom_value: 0 });
+      entities.set(exposure.targeting_key_hash, {
+        targeting_key_hash: exposure.targeting_key_hash,
+        first_exposure_ts: exposure.first_exposure_ts,
+        window_anchor: exposure.window_anchor,
+        value: 0,
+        num_value: 0,
+        denom_value: 0,
+        cuped_adjusted: false,
+      });
     }
   }
   return entities;
