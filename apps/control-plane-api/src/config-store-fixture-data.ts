@@ -8,9 +8,12 @@ export const ids = {
   appId: "app_config",
   otherAppId: "app_config_other",
   environmentId: "env_prod",
+  devEnvironmentId: "env_dev",
   flagId: "flag_checkout",
   flagKey: "checkout-redesign",
   configId: "flag_config_checkout_prod",
+  devConfigId: "flag_config_checkout_dev",
+  devTargetingRuleId: "rule_checkout_dev_treatment",
   controlVariantId: "var_control",
   treatmentVariantId: "var_treatment",
   experimentId: "exp_checkout",
@@ -42,6 +45,14 @@ export async function seedConfigGraph(d1: D1Database): Promise<void> {
     organizationId: ids.orgId,
     name: "Other Config App",
     key: "other-config-app",
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  await repo.identity.environments.insert(aScope, {
+    id: ids.devEnvironmentId,
+    appId: ids.appId,
+    key: "dev",
+    name: "Development",
     createdAt: NOW,
     updatedAt: NOW,
   });
@@ -82,6 +93,29 @@ export async function seedConfigGraph(d1: D1Database): Promise<void> {
     enabled: false,
     availableVariantNames: JSON.stringify(["control", "treatment"]),
     defaultVariantId: ids.controlVariantId,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  await repo.flags.flagConfigs.insert(envScope(ids.appId, ids.devEnvironmentId), {
+    id: ids.devConfigId,
+    appId: ids.appId,
+    environmentId: ids.devEnvironmentId,
+    flagId: ids.flagId,
+    enabled: true,
+    availableVariantNames: JSON.stringify(["control", "treatment"]),
+    defaultVariantId: ids.controlVariantId,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+  await repo.flags.targetingRules.insert(envScope(ids.appId, ids.devEnvironmentId), {
+    id: ids.devTargetingRuleId,
+    appId: ids.appId,
+    environmentId: ids.devEnvironmentId,
+    flagId: ids.flagId,
+    priority: 0,
+    conditions: JSON.stringify([{ attribute: "plan", operator: "eq", value: "pro" }]),
+    variantId: ids.treatmentVariantId,
+    percentageRollout: JSON.stringify({ percentage: 25, salt: "dev-rollout" }),
     createdAt: NOW,
     updatedAt: NOW,
   });
