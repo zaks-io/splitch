@@ -2,6 +2,7 @@ import {
   StatsInputSchema,
   StatsOutputSchema,
   type ArmResult,
+  type DedupeExposureRow,
   type MetricKind,
   type StatsEngine as StatsEngineContract,
   type StatsInput,
@@ -9,6 +10,7 @@ import {
   type StatsResultStatus,
 } from "@splitch/contracts";
 import { applyDecisionFamilyCorrection } from "./decision-family-fdr.js";
+import { analysisExposureRows } from "./exposure-denominator.js";
 import { FixedHorizonCI } from "./fixed-horizon-ci.js";
 import { applyGuardrailBoundChecks } from "./guardrail-bound-check.js";
 import { SequentialCI, type CIAdapter, type CIResult } from "./sequential-ci.js";
@@ -64,12 +66,17 @@ export async function analyzeStats(
 function analyzeMetrics(input: StatsInput, adapters: Required<StatsEngineOptions>): ArmResult[] {
   const metricTypes = metricTypesById(input);
   const variants = orderedVariants(input.allocation, input.control_variant);
+  const exposures = analysisExposureRows({
+    run_id: input.run_id,
+    exposures: input.exposures,
+    activation_rows: input.activation_rows,
+  });
   const armResults: ArmResult[] = [];
 
   for (const [metricId, metricType] of metricTypes) {
     const comparisons = variants
       .filter((variant) => variant !== input.control_variant)
-      .map((variant) => comparisonFor(input, metricId, metricType, variant));
+      .map((variant) => comparisonFor(input, metricId, metricType, variant, exposures));
     const firstComparison = comparisons[0];
     if (firstComparison === undefined) {
       continue;
@@ -128,6 +135,7 @@ function comparisonFor(
   metricId: string,
   metricType: MetricKind,
   treatmentVariant: string,
+  exposures: readonly DedupeExposureRow[],
 ): MetricComparisonEstimate {
   return estimateMetricComparison({
     run_id: input.run_id,
@@ -135,7 +143,7 @@ function comparisonFor(
     metric_type: metricType,
     control_variant: input.control_variant,
     treatment_variant: treatmentVariant,
-    exposures: input.exposures,
+    exposures,
     metric_values: input.metric_values,
     pre_period_covariates: input.pre_period_covariates,
   });
