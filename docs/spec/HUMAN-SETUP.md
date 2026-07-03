@@ -39,6 +39,7 @@ Backlog work is intentionally not listed here. Check Linear Backlog only when ex
 | 9   | Tenant-isolation upgrade trigger (app-enforced → DB RLS)    | 🟡 Decide later | Isolation architecture at scale      |
 | 10  | Attention-card numeric thresholds                           | 🟡 Decide later | Panel tuning (ship-then-tune)        |
 | 11  | Provisional-Org → real-account conversion UX                | 🟡 Decide later | Onboarding upgrade flow              |
+| 12  | Turborepo remote cache vendor token                         | 🔴 Active       | CI/deploy remote cache               |
 
 Everything else the spec calls "not provisioned" (Cloudflare resources, Tinybird Cloud +
 `shared_preview` branch, secret storage via `wrangler secret` / `gh secret`, Turborepo remote
@@ -52,7 +53,17 @@ into current setup.
 
 ## 🔴 Active
 
-None.
+### 12. Turborepo remote cache vendor token
+
+**Human input required.** Create the Turborepo/Vercel remote-cache token in the owned vendor account,
+then store it without exposing the value:
+
+- GitHub repository secret `TURBO_TOKEN`
+- GitHub repository variable `TURBO_TEAM`
+- GitHub repository secret `TURBO_REMOTE_CACHE_SIGNATURE_KEY`
+
+**Recorded:** not present at repository scope when checked on 2026-07-03. Secret values were not read
+or printed.
 
 ---
 
