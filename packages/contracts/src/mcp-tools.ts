@@ -38,6 +38,14 @@ export interface McpToolDefinition {
   errorSchema: typeof ErrorResponseSchema;
 }
 
+export interface McpProtocolToolDefinition {
+  name: string;
+  title: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+}
+
 /** A route is an MCP tool iff it is a control-plane (token-authed) route. */
 export function isMcpToolRoute(route: ApiRouteContract): boolean {
   return route.auth === MCP_AUTH_KIND;
@@ -114,4 +122,14 @@ function deriveTool(route: ApiRouteContract): McpToolDefinition {
  */
 export function deriveMcpTools(): readonly McpToolDefinition[] {
   return routeRegistry.filter(isMcpToolRoute).map(deriveTool);
+}
+
+export function deriveMcpProtocolTools(): readonly McpProtocolToolDefinition[] {
+  return deriveMcpTools().map((tool) => ({
+    name: tool.name,
+    title: tool.name,
+    description: tool.description,
+    inputSchema: z.toJSONSchema(tool.inputSchema) as Record<string, unknown>,
+    outputSchema: z.toJSONSchema(tool.outputSchema) as Record<string, unknown>,
+  }));
 }

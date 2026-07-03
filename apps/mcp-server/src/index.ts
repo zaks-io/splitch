@@ -1,19 +1,21 @@
-import { createControlPlaneSdk } from "@splitch/control-plane-sdk";
-import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
+import { handleMcpServerRequest } from "./mcp-handler.js";
 
 const service = "splitch-mcp-server";
 
 type Env = {
+  CONTROL_PLANE_API_ORIGIN?: string;
   SPLITCH_PLATFORM_TARGET?: string;
 };
 
 export default {
-  async fetch(_request, env): Promise<Response> {
-    const health = {
-      ...createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
-      controlPlaneSdkFactory: createControlPlaneSdk.name,
-    };
-
-    return Response.json(health);
+  async fetch(request, env): Promise<Response> {
+    return handleMcpServerRequest({
+      request,
+      service,
+      platformTarget: env.SPLITCH_PLATFORM_TARGET,
+      controlPlaneBaseUrl: env.CONTROL_PLANE_API_ORIGIN,
+    });
   },
 } satisfies ExportedHandler<Env>;
+
+export { handleMcpServerRequest };
