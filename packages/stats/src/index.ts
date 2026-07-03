@@ -1,4 +1,4 @@
-// biome-ignore lint/performance/noBarrelFile: package public-API entry; the stats package intentionally exposes only the contract-backed surface.
+// biome-ignore lint/performance/noBarrelFile: package public-API entry for contract-backed stats shapes and local CI adapters.
 export {
   ActivationRowSchema,
   ArmResultSchema,
@@ -10,6 +10,11 @@ export {
   StatsInputSchema,
   StatsOutputSchema,
 } from "@splitch/contracts";
+export {
+  computeSequentialCI,
+  SEQUENTIAL_CI_SOURCE,
+  SequentialCI,
+} from "./sequential-ci.js";
 export type {
   ActivationRow,
   ArmResult,
@@ -22,3 +27,13 @@ export type {
   StatsInput,
   StatsOutput,
 } from "@splitch/contracts";
+export type {
+  CIAdapter,
+  CIError,
+  CIParams,
+  CIResult,
+  CISource,
+  CIStatus,
+  CIWarning,
+  SequentialCIOptions,
+} from "./sequential-ci.js";
