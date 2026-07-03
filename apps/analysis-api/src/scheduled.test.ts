@@ -24,6 +24,22 @@ describe("scheduled snapshot stub", () => {
     expect(tinybird.calls).toEqual([]);
   });
 
+  it("fails loud on partial snapshot scope configuration", async () => {
+    const tinybird = new FakeTinybird();
+
+    await expect(
+      runScheduledSnapshot({
+        cron: "0 * * * *",
+        env: {
+          SPLITCH_SNAPSHOT_APP_ID: APP_ID,
+        },
+        logger: { log: () => undefined, error: () => undefined },
+        tinybird,
+      }),
+    ).rejects.toThrow(/partial snapshot scope configuration/);
+    expect(tinybird.calls).toEqual([]);
+  });
+
   it("uses the same app-scoped Tinybird read path when snapshot scope is configured", async () => {
     const tinybird = new FakeTinybird();
 

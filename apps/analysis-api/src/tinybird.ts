@@ -6,6 +6,8 @@ export interface TinybirdReadTransport {
   readPipe(pipeName: string, params: PipeParams): Promise<readonly unknown[]>;
 }
 
+const DEFAULT_TINYBIRD_TIMEOUT_MS = 5_000;
+
 export class TinybirdReadError extends Error {
   constructor(message: string) {
     super(message);
@@ -29,41 +31,68 @@ export function scopedPipeParams(input: {
   };
 }
 
-export function createTinybirdReadTransport(env: AnalysisApiEnv): TinybirdReadTransport {
+export function createTinybirdReadTransport(
+  env: AnalysisApiEnv,
+  opts: { fetchFn?: typeof fetch; timeoutMs?: number } = {},
+): TinybirdReadTransport {
+  const fetchFn = opts.fetchFn ?? fetch;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TINYBIRD_TIMEOUT_MS;
+
   return {
     async readPipe(pipeName, params) {
       assertAppScoped(params);
-      const token = env.TINYBIRD_READ_TOKEN;
-      if (!token) {
-        throw new TinybirdReadError("Tinybird read token is unavailable");
-      }
-
-      const url = new URL(
-        `/v0/pipes/${pipeName}.json`,
-        env.TINYBIRD_API_URL ?? "https://api.tinybird.co",
+      const response = await fetchWithTimeout(
+        fetchFn,
+        pipeUrl(env, pipeName, params),
+        requiredReadToken(env),
+        timeoutMs,
       );
-      for (const [key, value] of Object.entries(params)) {
-        url.searchParams.set(key, value);
-      }
-
-      const response = await fetch(url, {
-        headers: { authorization: `Bearer ${token}` },
-      });
       if (!response.ok) {
         throw new TinybirdReadError(`Tinybird pipe read failed with HTTP ${response.status}`);
       }
 
-      const body = (await response.json()) as { data?: unknown };
-      if (!Array.isArray(body.data)) {
-        throw new TinybirdReadError("Tinybird pipe read returned a malformed payload");
-      }
-      return body.data;
+      return parseRows(await responseBody(response));
     },
   };
 }
 
+function requiredReadToken(env: AnalysisApiEnv): string {
+  const token = env.TINYBIRD_READ_TOKEN;
+  if (!token) {
+    throw new TinybirdReadError("Tinybird read token is unavailable");
+  }
+  return token;
+}
+
+function pipeUrl(env: AnalysisApiEnv, pipeName: string, params: PipeParams): URL {
+  const url = new URL(
+    `/v0/pipes/${pipeName}.json`,
+    env.TINYBIRD_API_URL ?? "https://api.tinybird.co",
+  );
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  return url;
+}
+
+async function responseBody(response: Response): Promise<{ data?: unknown }> {
+  try {
+    return (await response.json()) as { data?: unknown };
+  } catch (cause) {
+    throw new TinybirdReadError(`Tinybird pipe read returned invalid JSON: ${errorMessage(cause)}`);
+  }
+}
+
+function parseRows(body: { data?: unknown }): readonly unknown[] {
+  if (!Array.isArray(body.data)) {
+    throw new TinybirdReadError("Tinybird pipe read returned a malformed payload");
+  }
+  return body.data;
+}
+
 function assertAppScoped(params: PipeParams): void {
   requiredParam(params.app_id, "app_id");
+  requiredParam(params.environment_id, "environment_id");
 }
 
 function requiredParam(value: string | null | undefined, name: string): string {
@@ -71,4 +100,28 @@ function requiredParam(value: string | null | undefined, name: string): string {
     throw new TinybirdReadError(`Tinybird pipe parameter ${name} is required`);
   }
   return value;
+}
+
+async function fetchWithTimeout(
+  fetchFn: typeof fetch,
+  url: URL,
+  token: string,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchFn(url, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+  } catch (cause) {
+    throw new TinybirdReadError(`Tinybird pipe read failed: ${errorMessage(cause)}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function errorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }

@@ -1,4 +1,5 @@
 export interface AnalysisApiEnv {
+  AUTH_API_ORIGIN?: string;
   AUTH_JWKS_URI?: string;
   CONTROL_PLANE_ORIGIN?: string;
   SESSION_STORE?: KVNamespace;

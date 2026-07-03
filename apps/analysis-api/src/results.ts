@@ -109,7 +109,7 @@ function materializeExposure(row: unknown, scope: ResultsScope): Record<string, 
   const appId = stringField(source, "app_id");
   const environmentId = stringField(source, "environment_id");
   if (appId !== scope.appId || environmentId !== scope.environmentId) {
-    throw new Error("Tinybird returned a row outside the requested App/Environment scope");
+    throw new AnalysisIsolationError();
   }
   return {
     ...source,
@@ -145,15 +145,17 @@ function resultsScope(
   const query = optionalObject(root.query);
   const body = optionalObject(root.body);
   const pathAppId = stringField(params, "appId");
-  const appId = requiredContext(principalAppId, "app_id");
+  const appId = requiredPrincipalContext(principalAppId);
   if (pathAppId !== appId) {
-    throw new Error("path app_id does not match the authenticated App context");
+    throw new ResultsForbiddenError("path app_id does not match the authenticated App context");
   }
 
   const pathEnvironmentId = stringField(params, "environmentId");
   const environmentId = principalEnvironmentId ?? pathEnvironmentId;
   if (environmentId !== pathEnvironmentId) {
-    throw new Error("path environment_id does not match the authenticated Environment context");
+    throw new ResultsForbiddenError(
+      "path environment_id does not match the authenticated Environment context",
+    );
   }
 
   return {
@@ -168,6 +170,9 @@ function errorFor(cause: unknown): ErrorResponse {
   if (cause instanceof ResultsNotFoundError) {
     return { code: cause.code, message: cause.message, details: {} };
   }
+  if (cause instanceof ResultsForbiddenError) {
+    return { code: "FORBIDDEN", message: cause.message, details: {} };
+  }
   if (cause instanceof TinybirdReadError) {
     return {
       code: "SERVICE_UNAVAILABLE",
@@ -175,7 +180,7 @@ function errorFor(cause: unknown): ErrorResponse {
       details: { retryAfterMs: 30_000 },
     };
   }
-  if (cause instanceof Error && cause.message.includes("outside the requested App/Environment")) {
+  if (cause instanceof AnalysisIsolationError) {
     return {
       code: "INTERNAL_SERVER_ERROR",
       message: "analysis isolation failure",
@@ -189,6 +194,20 @@ class ResultsNotFoundError extends Error {
   constructor(readonly code: "EXPERIMENT_NOT_FOUND" | "RUN_NOT_FOUND") {
     super(code === "RUN_NOT_FOUND" ? "Experiment Run not found" : "Experiment not found");
     this.name = "ResultsNotFoundError";
+  }
+}
+
+class ResultsForbiddenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ResultsForbiddenError";
+  }
+}
+
+class AnalysisIsolationError extends Error {
+  constructor() {
+    super("Tinybird returned a row outside the requested App/Environment scope");
+    this.name = "AnalysisIsolationError";
   }
 }
 
@@ -211,9 +230,9 @@ function stringField(source: Record<string, unknown>, key: string): string {
   return value;
 }
 
-function requiredContext(value: string | null, name: string): string {
+function requiredPrincipalContext(value: string | null): string {
   if (value === null || value.trim().length === 0) {
-    throw new TinybirdReadError(`Tinybird pipe parameter ${name} is required`);
+    throw new ResultsForbiddenError("credential is not scoped to this app");
   }
   return value;
 }

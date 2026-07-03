@@ -21,6 +21,8 @@ interface Jwks {
   keys: Jwk[];
 }
 
+type JwksFetcher = () => Promise<Jwks>;
+
 interface JwksVerifier {
   verify(token: string, nowSeconds: number): Promise<VerifiedToken | null>;
 }
@@ -33,6 +35,8 @@ const BEARER_PREFIX = "Bearer ";
 const REVOKED_PREFIX = "revoked:";
 const APP_SCOPE = /^app:([^:]+):(owner|admin|member)$/;
 const ORG_SCOPE = /^org:([^:]+):(owner|admin|member)$/;
+const DEFAULT_JWKS_TIMEOUT_MS = 3_000;
+const DEFAULT_JWKS_CACHE_TTL_MS = 5 * 60_000;
 
 export function makeControlPlaneAuthResolver(deps: {
   verifier: JwksVerifier;
@@ -80,19 +84,51 @@ export function makeSessionStore(kv: KVNamespace | undefined): SessionStore {
   };
 }
 
-export function makeHttpJwksFetcher(jwksUri: string): () => Promise<Jwks> {
+export function makeHttpJwksFetcher(
+  jwksUri: string,
+  opts: {
+    fetchFn?: typeof fetch;
+    now?: () => number;
+    timeoutMs?: number;
+    cacheTtlMs?: number;
+  } = {},
+): JwksFetcher {
+  const fetchFn = opts.fetchFn ?? fetch;
+  const now = opts.now ?? (() => Date.now());
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_JWKS_TIMEOUT_MS;
+  const cacheTtlMs = opts.cacheTtlMs ?? DEFAULT_JWKS_CACHE_TTL_MS;
+  let cached: { jwks: Jwks; expiresAtMs: number } | null = null;
+
   return async () => {
-    const res = await fetch(jwksUri);
+    const nowMs = now();
+    if (cached && cached.expiresAtMs > nowMs) {
+      return cached.jwks;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await fetchFn(jwksUri, { signal: controller.signal });
+    } catch (cause) {
+      throw new Error(`analysis-api: JWKS fetch failed (${errorMessage(cause)})`);
+    } finally {
+      clearTimeout(timeout);
+    }
+
     if (!res.ok) {
       throw new Error(`analysis-api: JWKS fetch failed (${res.status})`);
     }
-    return (await res.json()) as Jwks;
+    const jwks = (await res.json()) as Jwks;
+    cached = { jwks, expiresAtMs: nowMs + cacheTtlMs };
+    return jwks;
   };
 }
 
 export function makeJwksVerifier(opts: {
-  fetchJwks: () => Promise<Jwks>;
+  fetchJwks: JwksFetcher;
   controlPlaneAudience: string;
+  expectedIssuer: string;
 }): JwksVerifier {
   return {
     async verify(token, nowSeconds) {
@@ -103,7 +139,12 @@ export function makeJwksVerifier(opts: {
       if (!(await signatureValid(parsed, opts.fetchJwks))) {
         return null;
       }
-      return actorFromClaims(parsed.payload, opts.controlPlaneAudience, nowSeconds);
+      return actorFromClaims(
+        parsed.payload,
+        opts.controlPlaneAudience,
+        opts.expectedIssuer,
+        nowSeconds,
+      );
     },
   };
 }
@@ -173,7 +214,7 @@ function parseJwt(token: string): ParsedJwt | null {
   }
 }
 
-async function signatureValid(parsed: ParsedJwt, fetchJwks: () => Promise<Jwks>): Promise<boolean> {
+async function signatureValid(parsed: ParsedJwt, fetchJwks: JwksFetcher): Promise<boolean> {
   if (parsed.header.alg !== "RS256") {
     return false;
   }
@@ -203,8 +244,12 @@ function selectRsaKey(jwks: Jwks, kid: string | undefined): Jwk | null {
 function actorFromClaims(
   payload: Record<string, unknown>,
   controlPlaneAudience: string,
+  expectedIssuer: string,
   nowSeconds: number,
 ): VerifiedToken | null {
+  if (payload.iss !== expectedIssuer) {
+    return null;
+  }
   if (payload.aud !== controlPlaneAudience) {
     return null;
   }
@@ -222,4 +267,8 @@ function actorFromClaims(
 
 function isString(value: unknown): value is string {
   return typeof value === "string";
+}
+
+function errorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }

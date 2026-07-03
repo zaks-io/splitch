@@ -29,8 +29,13 @@ function scheduledScope(env: AnalysisApiEnv) {
   const appId = env.SPLITCH_SNAPSHOT_APP_ID;
   const environmentId = env.SPLITCH_SNAPSHOT_ENVIRONMENT_ID;
   const experimentId = env.SPLITCH_SNAPSHOT_EXPERIMENT_ID;
-  if (!appId || !environmentId || !experimentId) {
+  if (appId === undefined && environmentId === undefined && experimentId === undefined) {
     return null;
+  }
+  if (!hasValue(appId) || !hasValue(environmentId) || !hasValue(experimentId)) {
+    throw new Error(
+      "analysis-api: partial snapshot scope configuration (SPLITCH_SNAPSHOT_APP_ID/SPLITCH_SNAPSHOT_ENVIRONMENT_ID/SPLITCH_SNAPSHOT_EXPERIMENT_ID)",
+    );
   }
   return {
     appId,
@@ -38,4 +43,8 @@ function scheduledScope(env: AnalysisApiEnv) {
     experimentId,
     runId: env.SPLITCH_SNAPSHOT_RUN_ID,
   };
+}
+
+function hasValue(value: string | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }

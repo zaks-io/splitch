@@ -2,7 +2,7 @@ import { type ErrorResponse, StatsOutputSchema } from "@splitch/contracts";
 import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
-import { readStatsInputFromTinybird } from "./results.js";
+import { makeResultsHandler, readStatsInputFromTinybird } from "./results.js";
 import {
   APP_ID,
   ENVIRONMENT_ID,
@@ -15,14 +15,15 @@ import {
 } from "./results-test-support.js";
 
 const PATH = `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/experiments/${EXPERIMENT_ID}/results`;
+const REQUEST = new Request(`https://analysis.test${PATH}`);
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 
-function principal(appId: string, environmentId: string | null = null): Principal {
+function principal(appId: string | null, environmentId: string | null = null): Principal {
   return {
     kind: "control-plane-token",
     id: "actor-1",
-    scopes: [`app:${appId}:admin`],
+    scopes: appId === null ? [] : [`app:${appId}:admin`],
     orgId: null,
     appId,
     environmentId,
@@ -36,6 +37,12 @@ const authResolver: AuthResolver = (request) => {
   }
   if (authorization === "Bearer cp-other-app") {
     return { ok: true, principal: principal(OTHER_APP_ID) };
+  }
+  if (authorization === "Bearer cp-no-app") {
+    return { ok: true, principal: principal(null) };
+  }
+  if (authorization === "Bearer cp-other-env") {
+    return { ok: true, principal: principal(APP_ID, "env_other") };
   }
   return { ok: false, reason: "UNAUTHORIZED" };
 };
@@ -138,7 +145,9 @@ describe("GET/POST experiment results", () => {
       experiment_id: EXPERIMENT_ID,
     });
   });
+});
 
+describe("GET/POST experiment results isolation", () => {
   it("returns RUN_NOT_FOUND when a requested Run has no Tinybird run-input rows", async () => {
     const { app, tinybird } = makeHarness({
       ...rowsByPipe(),
@@ -183,6 +192,46 @@ describe("GET/POST experiment results", () => {
 
     const res = await app.request(PATH, {
       headers: { authorization: "Bearer cp-other-app" },
+    });
+
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as ErrorResponse).code).toBe("FORBIDDEN");
+    expect(tinybird.calls).toEqual([]);
+  });
+
+  it("rejects missing App context and Environment mismatches before any Tinybird read", async () => {
+    const missingAppHarness = makeHarness();
+    const missingApp = await missingAppHarness.app.request(PATH, {
+      headers: { authorization: "Bearer cp-no-app" },
+    });
+    const environmentHarness = makeHarness();
+    const environment = await environmentHarness.app.request(PATH, {
+      headers: { authorization: "Bearer cp-other-env" },
+    });
+
+    expect(missingApp.status).toBe(403);
+    expect(((await missingApp.json()) as ErrorResponse).code).toBe("FORBIDDEN");
+    expect(missingAppHarness.tinybird.calls).toEqual([]);
+    expect(environment.status).toBe(403);
+    expect(((await environment.json()) as ErrorResponse).code).toBe("FORBIDDEN");
+    expect(environmentHarness.tinybird.calls).toEqual([]);
+  });
+
+  it("maps handler-level scope mismatches to FORBIDDEN without Tinybird reads", async () => {
+    const tinybird = new FakeTinybird();
+    const handler = makeResultsHandler({ tinybird });
+
+    const res = await handler({
+      input: {
+        params: {
+          appId: OTHER_APP_ID,
+          environmentId: ENVIRONMENT_ID,
+          experimentId: EXPERIMENT_ID,
+        },
+      },
+      principal: principal(APP_ID),
+      requestId: "req_1",
+      request: REQUEST,
     });
 
     expect(res.status).toBe(403);
