@@ -1,0 +1,31 @@
+{
+  "name": "@splitch/stats",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist coverage",
+    "lint": "biome lint src",
+    "stats:golden": "vitest run --config vitest.golden.config.ts",
+    "stats:property": "vitest run --config vitest.property.config.ts",
+    "stats:simulation": "node scripts/run-stats-simulation.mjs",
+    "stats:simulation:vitest": "vitest run --config vitest.simulation.config.ts",
+    "stats:unit": "vitest run --config vitest.config.ts",
+    "test": "pnpm stats:unit",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@splitch/contracts": "workspace:*"
+  }
+}

@@ -13,8 +13,7 @@ call an Experiment Run result decision-valid.
 | `stats:simulation` | nightly or full CI | Seeded Monte Carlo checks for false positives and power pathologies |
 | `spec:lint`        | local and CI       | Blocks terminology/formula drift in docs/specs                      |
 
-Until package scripts exist, these names are target gates. Once the monorepo has a real test harness,
-they become package scripts and CI jobs.
+These names are package scripts and CI jobs. Math slices add their own fixtures to the matching gate.
 
 ## Contract tests
 
@@ -52,7 +51,7 @@ stats engine implementation once code exists.
 | Ratio              | `(num_value, denom_value)` covariance term changes CI versus naive variance   |
 | Zero denominator   | `denom_i = 0` rows retained; arm-level `B = 0` fails loud                     |
 | Relative lift      | `R_t / R_c - 1`; `R_c = 0` returns undefined relative lift, not fake infinity |
-| Winsorization      | pooled cap is applied, sample size unchanged, per-arm cap fixture fails       |
+| Winsorization      | pooled cap is applied, sample size unchanged, arm-specific cap fixture fails  |
 | CUPED              | pre-period covariate adjusts variance; insufficient coverage reports `none`   |
 | CUPED fallback     | only locked/pre-period/historical covariates can be selected                  |
 | BH FDR             | locked family rank/order produces expected adjusted significance              |
@@ -74,8 +73,8 @@ These tests prove invariants that should hold across many shapes of input.
   not change p-values.
 - Splitting one Entity's events into more rows does not change per-Entity Metric values.
 - Removing SDK seen-set suppression increases raw rows but does not change deduped results.
-- Replacing per-arm winsor caps with pooled caps is required; generated fixtures with asymmetric tails
-  must fail if caps are computed per arm.
+- Replacing arm-specific winsor caps with pooled caps is required; generated fixtures with asymmetric
+  tails must fail if caps are computed separately by arm.
 
 ## Simulation tests
 
@@ -104,13 +103,13 @@ Monte Carlo gates should run in two modes:
 
 The docs and specs should fail lint on phrases or formulas that represent known statistical drift:
 
-- `Publish` as the Experiment Run lifecycle verb.
-- `server_ts > last_snapshot` or tailing by event time instead of `ingest_ts`.
-- `bh_family` instead of `decision_family`.
-- `Exclude that Entity` for Ratio zero denominators.
-- `per-arm cap` as an allowed winsorization behavior.
-- `var_pooled`, `half_width`, or `p_value = 1 - alpha` as the aCS implementation contract.
-- Any result schema missing `decision_valid` for decision-bearing outputs.
+- the retired publish lifecycle verb with Experiment Runs.
+- event-time snapshot tailing instead of `ingest_ts` watermarking.
+- the old BH-family token instead of `decision_family`.
+- wording that drops Ratio zero-denominator Entities.
+- arm-specific caps as accepted winsorization behavior.
+- legacy pooled-variance, interval-width, or alpha-derived p-value formulas as the aCS contract.
+- any result schema missing `decision_valid` for decision-bearing outputs.
 
 ## Review checklist
 
