@@ -70,6 +70,7 @@ const BaseMetricSchema = z.object({
   eventName: z.string(),
   eventValueField: z.string().nullable().optional(),
   denominator: MetricRefSchema.nullable().optional(),
+  downsideThreshold: z.number().nullable().optional(),
   createdAt: z.string(),
 });
 
