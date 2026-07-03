@@ -1,8 +1,21 @@
-import type { ResolutionDetails, VariantValue } from "@splitch/contracts";
+import {
+  DataPlaneEvaluateResponseSchema,
+  ErrorCodeSchema,
+  PeekEvaluateResponseSchema,
+  ResolutionDetailsSchema,
+  type ResolutionDetails,
+  type VariantValue,
+} from "@splitch/contracts";
 import type { EvaluateContext, EvaluateDeps, Logger } from "./evaluate.js";
-import { runEvaluate } from "./evaluate.js";
+import { runEvaluate, runPeekVariant, runVerify } from "./evaluate.js";
 import { SeenSet } from "./seen-set.js";
-import type { Transport, TransportRequest, TransportResult } from "./transport.js";
+import type {
+  Transport,
+  TransportFailure,
+  TransportRequest,
+  TransportResult,
+  VerifyTransportResult,
+} from "./transport.js";
 
 /**
  * Public SDK entry. A client is constructed with exactly one credential — a
@@ -10,7 +23,7 @@ import type { Transport, TransportRequest, TransportResult } from "./transport.j
  * fetches on the first evaluate (no config fetch at init, public-evaluate-endpoint.md).
  *
  * `transport` and `logger` are injectable seams: the default transport is a
- * `fetch` HTTP adapter; tests substitute a fake that records calls and retries.
+ * `fetch` HTTP adapter; tests substitute a fake that records each accessor path.
  */
 export interface SplitchClientOptions {
   readonly clientKey?: string;
@@ -37,6 +50,10 @@ export interface SplitchClient {
   evaluate(flagKey: string, context: EvaluateContext): Promise<VariantValue>;
   /** Resolve a Flag and return the full OpenFeature ResolutionDetails. Fires an Exposure. */
   evaluateDetails(flagKey: string, context: EvaluateContext): Promise<ResolutionDetails>;
+  /** Resolve a Flag without firing an Exposure. API Key only. */
+  peekVariant(flagKey: string, context: EvaluateContext): Promise<VariantValue>;
+  /** Verify setup without firing an Exposure. Client Key or API Key. */
+  verify(flagKey: string, context: EvaluateContext): Promise<ResolutionDetails>;
 }
 
 const DEFAULT_ENDPOINT = "https://edge.splitch.dev";
@@ -76,6 +93,12 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
     evaluateDetails(flagKey, context) {
       return runEvaluate(deps, flagKey, context);
     },
+    peekVariant(flagKey, context) {
+      return runPeekVariant(deps, flagKey, context);
+    },
+    verify(flagKey, context) {
+      return runVerify(deps, flagKey, context);
+    },
   };
 }
 
@@ -98,52 +121,130 @@ interface FetchTransportConfig {
 }
 
 /**
- * The real network adapter: one `POST /api/sdk/evaluate`, no retry. Folds every
- * transport outcome (HTTP status, network error, timeout, body-parse failure)
- * into a structured `TransportResult` so the SDK core never touches the wire.
+ * The real network adapter: distinct `evaluate`, `peek`, and `verify` routes.
+ * Folds every transport outcome (HTTP status, network error, timeout,
+ * body-parse failure) into structured results so the SDK core never touches the wire.
  */
 export function createFetchTransport(config: FetchTransportConfig): Transport {
-  const url = new URL("/api/sdk/evaluate", config.endpoint);
+  const urls = {
+    evaluate: new URL("/api/sdk/evaluate", config.endpoint),
+    peek: new URL("/api/sdk/peek", config.endpoint),
+    verify: new URL("/api/sdk/verify", config.endpoint),
+  };
+
+  async function post(
+    path: keyof typeof urls,
+    request: TransportRequest,
+    signal: AbortSignal,
+  ): Promise<Response> {
+    return config.fetchImpl(urls[path], {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${config.credential}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        flagKey: request.flagKey,
+        targetingKey: request.targetingKey,
+        idType: request.idType,
+        attributes: request.attributes,
+      }),
+      signal,
+    });
+  }
+
+  async function withTimeout<Result>(
+    call: (signal: AbortSignal) => Promise<Result>,
+  ): Promise<Result> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.timeoutMs);
+    try {
+      return await call(controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   return {
     async evaluate(request: TransportRequest): Promise<TransportResult> {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), config.timeoutMs);
       try {
-        const response = await config.fetchImpl(url, {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${config.credential}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            flagKey: request.flagKey,
-            targetingKey: request.targetingKey,
-            idType: request.idType,
-            attributes: request.attributes,
-          }),
-          signal: controller.signal,
-        });
-        return await readResponse(response);
+        const response = await withTimeout((signal) => post("evaluate", request, signal));
+        return await readEvaluateResponse(response);
       } catch {
         // Network error or timeout (abort): a transport-level failure, status null.
         return { status: null, variant: null, runId: null };
-      } finally {
-        clearTimeout(timer);
+      }
+    },
+    async peek(request: TransportRequest): Promise<TransportResult> {
+      try {
+        const response = await withTimeout((signal) => post("peek", request, signal));
+        return await readPeekResponse(response);
+      } catch {
+        return { status: null, variant: null, runId: null };
+      }
+    },
+    async verify(request: TransportRequest): Promise<VerifyTransportResult> {
+      try {
+        const response = await withTimeout((signal) => post("verify", request, signal));
+        return await readVerifyResponse(response);
+      } catch {
+        return { status: null, details: null };
       }
     },
   };
 }
 
-async function readResponse(response: Response): Promise<TransportResult> {
+async function readEvaluateResponse(response: Response): Promise<TransportResult> {
   const runId = response.headers.get(RUN_ID_HEADER);
   if (!response.ok) {
-    return { status: response.status, variant: null, runId: null };
+    return { ...(await readFailure(response)), variant: null, runId: null };
   }
   try {
-    const body = (await response.json()) as { variant?: VariantValue | null };
-    return { status: response.status, variant: body.variant ?? null, runId };
+    const body = DataPlaneEvaluateResponseSchema.parse(await response.json());
+    return { status: response.status, variant: body.variant, runId };
   } catch {
     // A 200 with an unparseable body is a parse failure -> fail loud as status null.
     return { status: null, variant: null, runId: null };
+  }
+}
+
+async function readPeekResponse(response: Response): Promise<TransportResult> {
+  if (!response.ok) {
+    return { ...(await readFailure(response)), variant: null, runId: null };
+  }
+  try {
+    const body = PeekEvaluateResponseSchema.parse(await response.json());
+    return { status: response.status, variant: body.variant, runId: null };
+  } catch {
+    return { status: null, variant: null, runId: null };
+  }
+}
+
+async function readVerifyResponse(response: Response): Promise<VerifyTransportResult> {
+  if (!response.ok) {
+    return { ...(await readFailure(response)), details: null };
+  }
+  try {
+    return {
+      status: response.status,
+      details: ResolutionDetailsSchema.parse(await response.json()),
+    };
+  } catch {
+    return { status: null, details: null };
+  }
+}
+
+async function readFailure(response: Response): Promise<TransportFailure> {
+  const fallback: TransportFailure = { status: response.status };
+  try {
+    const body = (await response.json()) as { code?: unknown; message?: unknown };
+    const parsedCode = ErrorCodeSchema.safeParse(body.code);
+    return {
+      status: response.status,
+      errorCode: parsedCode.success ? parsedCode.data : undefined,
+      errorMessage: typeof body.message === "string" ? body.message : undefined,
+    };
+  } catch {
+    return fallback;
   }
 }
