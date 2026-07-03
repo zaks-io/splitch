@@ -3,14 +3,17 @@ import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runti
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
 import { readStatsInputFromTinybird } from "./results.js";
-import { runScheduledSnapshot } from "./scheduled.js";
-import type { PipeParams, TinybirdReadTransport } from "./tinybird.js";
+import {
+  APP_ID,
+  ENVIRONMENT_ID,
+  EXPERIMENT_ID,
+  FakeTinybird,
+  OTHER_APP_ID,
+  rowsByPipe,
+  RUN_ID,
+  type RowsByPipe,
+} from "./results-test-support.js";
 
-const APP_ID = "app_checkout";
-const OTHER_APP_ID = "app_other";
-const ENVIRONMENT_ID = "env_prod";
-const EXPERIMENT_ID = "exp_checkout_banner";
-const RUN_ID = "run_checkout_banner_1";
 const PATH = `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/experiments/${EXPERIMENT_ID}/results`;
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
@@ -37,8 +40,8 @@ const authResolver: AuthResolver = (request) => {
   return { ok: false, reason: "UNAUTHORIZED" };
 };
 
-function makeHarness() {
-  const tinybird = new FakeTinybird();
+function makeHarness(rows?: RowsByPipe) {
+  const tinybird = new FakeTinybird(rows);
   const app = createApp({
     authResolver,
     rateLimiter: allowLimiter,
@@ -136,6 +139,32 @@ describe("GET/POST experiment results", () => {
     });
   });
 
+  it("returns RUN_NOT_FOUND when a requested Run has no Tinybird run-input rows", async () => {
+    const { app, tinybird } = makeHarness({
+      ...rowsByPipe(),
+      analysis_run_inputs: [],
+    });
+
+    const res = await app.request(`${PATH}?runId=${RUN_ID}`, authInit("GET"));
+
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as ErrorResponse).code).toBe("RUN_NOT_FOUND");
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
+  });
+
+  it("returns EXPERIMENT_NOT_FOUND when the live Run selector has no Tinybird run-input rows", async () => {
+    const { app, tinybird } = makeHarness({
+      ...rowsByPipe(),
+      analysis_run_inputs: [],
+    });
+
+    const res = await app.request(PATH, authInit("GET"));
+
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as ErrorResponse).code).toBe("EXPERIMENT_NOT_FOUND");
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
+  });
+
   it("rejects missing and invalid control-plane tokens before any Tinybird read", async () => {
     const { app, tinybird } = makeHarness();
 
@@ -194,101 +223,3 @@ describe("GET/POST experiment results", () => {
     expect(tinybird.calls).toEqual([]);
   });
 });
-
-describe("scheduled snapshot stub", () => {
-  it("skips safely without a local snapshot scope", async () => {
-    const tinybird = new FakeTinybird();
-    const logs: string[] = [];
-
-    await runScheduledSnapshot({
-      cron: "0 * * * *",
-      env: {},
-      logger: { log: (message) => logs.push(message), error: (message) => logs.push(message) },
-      tinybird,
-    });
-
-    expect(logs[0]).toContain("skipped");
-    expect(tinybird.calls).toEqual([]);
-  });
-
-  it("uses the same app-scoped Tinybird read path when snapshot scope is configured", async () => {
-    const tinybird = new FakeTinybird();
-
-    await runScheduledSnapshot({
-      cron: "0 * * * *",
-      env: {
-        SPLITCH_SNAPSHOT_APP_ID: APP_ID,
-        SPLITCH_SNAPSHOT_ENVIRONMENT_ID: ENVIRONMENT_ID,
-        SPLITCH_SNAPSHOT_EXPERIMENT_ID: EXPERIMENT_ID,
-        SPLITCH_SNAPSHOT_RUN_ID: RUN_ID,
-      },
-      logger: { log: () => undefined, error: () => undefined },
-      tinybird,
-    });
-
-    expect(tinybird.calls).not.toEqual([]);
-    expect(tinybird.calls.every((call) => call.params.app_id === APP_ID)).toBe(true);
-  });
-});
-
-class FakeTinybird implements TinybirdReadTransport {
-  readonly calls: { pipeName: string; params: PipeParams }[] = [];
-
-  async readPipe(pipeName: string, params: PipeParams): Promise<readonly unknown[]> {
-    this.calls.push({ pipeName, params: { ...params } });
-    return rowsByPipe()[pipeName] ?? [];
-  }
-}
-
-function rowsByPipe(): Record<string, readonly unknown[]> {
-  return {
-    analysis_run_inputs: [
-      {
-        run_id: RUN_ID,
-        confidence_level: 0.95,
-        horizon: "sequential",
-        allocation: JSON.stringify({ control: 50, treatment: 50 }),
-        control_variant: "control",
-        decision_family: JSON.stringify([{ metric_id: "conversion", variant: "treatment" }]),
-        guardrail_decisions: JSON.stringify([]),
-      },
-    ],
-    analysis_deduped_exposures: [
-      exposure("control", "control_0"),
-      exposure("control", "control_1"),
-      exposure("treatment", "treatment_0"),
-      exposure("treatment", "treatment_1"),
-    ],
-    analysis_metric_values: [
-      metricValue("control_0", 1),
-      metricValue("treatment_0", 1),
-      metricValue("treatment_1", 1),
-    ],
-    analysis_pre_period_covariates: [],
-    analysis_activation_rows: [],
-  };
-}
-
-function exposure(variant: string, targetingKeyHash: string) {
-  return {
-    app_id: APP_ID,
-    environment_id: ENVIRONMENT_ID,
-    id_type: "user",
-    targeting_key_hash: targetingKeyHash,
-    run_id: RUN_ID,
-    variant,
-    first_exposure_ts: "2026-07-01T00:00:00.000Z",
-    window_anchor: "2026-07-01T00:00:00.000Z",
-  };
-}
-
-function metricValue(targetingKeyHash: string, value: number) {
-  return {
-    targeting_key_hash: targetingKeyHash,
-    run_id: RUN_ID,
-    metric_id: "conversion",
-    metric_type: "binomial",
-    value,
-    in_window: 1,
-  };
-}

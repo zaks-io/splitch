@@ -47,7 +47,13 @@ export async function readStatsInputFromTinybird(
   scope: ResultsScope,
 ): Promise<StatsInput> {
   const baseParams = scopedPipeParams(scope);
-  const [runInput] = await pipeRows(tinybird, RUN_INPUTS_PIPE, baseParams);
+  const runInputs = await pipeRows(tinybird, RUN_INPUTS_PIPE, baseParams);
+  const runInput = runInputs[0];
+  if (runInput === undefined) {
+    throw new ResultsNotFoundError(
+      scope.runId === undefined ? "EXPERIMENT_NOT_FOUND" : "RUN_NOT_FOUND",
+    );
+  }
   const run = materializeRunInput(runInput);
   const params = scopedPipeParams({ ...scope, runId: run.run_id });
 
@@ -159,6 +165,9 @@ function resultsScope(
 }
 
 function errorFor(cause: unknown): ErrorResponse {
+  if (cause instanceof ResultsNotFoundError) {
+    return { code: cause.code, message: cause.message, details: {} };
+  }
   if (cause instanceof TinybirdReadError) {
     return {
       code: "SERVICE_UNAVAILABLE",
@@ -174,6 +183,13 @@ function errorFor(cause: unknown): ErrorResponse {
     };
   }
   return { code: "INTERNAL_SERVER_ERROR", message: "analysis failed", details: {} };
+}
+
+class ResultsNotFoundError extends Error {
+  constructor(readonly code: "EXPERIMENT_NOT_FOUND" | "RUN_NOT_FOUND") {
+    super(code === "RUN_NOT_FOUND" ? "Experiment Run not found" : "Experiment not found");
+    this.name = "ResultsNotFoundError";
+  }
 }
 
 function rowObject(value: unknown): Record<string, unknown> {
