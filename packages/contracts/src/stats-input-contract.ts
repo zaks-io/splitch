@@ -5,6 +5,16 @@ import { CupedAttributeSourceSchema } from "./stats-result-contract.js";
 const MetricIdSchema = MetricRefSchema.shape.metricId;
 const TimestampSchema = z.string();
 const IntegerSchema = z.number().int();
+const ALLOCATION_SUM = 100;
+const ALLOCATION_EPSILON = 1e-6;
+
+const AllocationSchema = z.record(z.string(), z.number().min(0).max(100)).refine(
+  (allocation) => {
+    const sum = Object.values(allocation).reduce((acc, share) => acc + share, 0);
+    return Math.abs(sum - ALLOCATION_SUM) <= ALLOCATION_EPSILON;
+  },
+  { message: "allocation percentages must sum to 100" },
+);
 
 export const DedupeExposureRowSchema = z
   .object({
@@ -84,6 +94,16 @@ export const DecisionFamilyMemberSchema = z
   .strict();
 export type DecisionFamilyMember = z.infer<typeof DecisionFamilyMemberSchema>;
 
+const GuardrailDecisionSchema = z
+  .object({
+    metric_id: MetricIdSchema,
+    variant: z.string(),
+    downside_threshold: z.number(),
+    guardrail_locked_at_run_start: z.boolean(),
+    threshold_locked_at_run_start: z.boolean(),
+  })
+  .strict();
+
 export const StatsInputSchema = z
   .object({
     run_id: z.string(),
@@ -91,7 +111,10 @@ export const StatsInputSchema = z
     horizon: z.enum(["sequential", "fixed"]).default("sequential"),
     target_n: IntegerSchema.optional(),
     sample_size_locked: IntegerSchema.optional(),
+    allocation: AllocationSchema,
+    control_variant: z.string(),
     decision_family: z.array(DecisionFamilyMemberSchema),
+    guardrail_decisions: z.array(GuardrailDecisionSchema).default([]),
     exposures: z.array(DedupeExposureRowSchema),
     metric_values: z.array(PerEntityMetricRowSchema),
     pre_period_covariates: z.array(CupedCovariateRowSchema).optional(),

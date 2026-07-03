@@ -5,7 +5,11 @@ import type {
   SrmResult,
 } from "@splitch/contracts";
 import { chiSquareUpperTail } from "./chi-square.js";
-import { dedupedExposureRowsForVariant, MULTIPLE_VARIANT } from "./exposure-denominator.js";
+import {
+  activatedExposureRows,
+  dedupedExposureRowsForVariant,
+  MULTIPLE_VARIANT,
+} from "./exposure-denominator.js";
 import { expectedCountsForOutput, safeRate, sumCounts, zeroCounts } from "./srm-counts.js";
 
 export const SRM_MISMATCH_P_VALUE = 0.001;
@@ -159,47 +163,19 @@ function activatedCountsByVariant(
   variants: readonly string[],
 ): Record<string, number> {
   const counts = zeroCounts(variants);
-  const activationRows = input.activation_rows ?? [];
-  const activationsByEntity = activationRowsByEntity(input.run_id, activationRows);
+  const activatedRows = activatedExposureRows({
+    run_id: input.run_id,
+    exposures: input.exposures,
+    activation_rows: input.activation_rows ?? [],
+  });
 
-  for (const variant of variants) {
-    for (const exposure of dedupedExposureRowsForVariant({ ...input, variant })) {
-      if (isActivatedAfterExposure(exposure, activationsByEntity)) {
-        counts[variant] = (counts[variant] ?? 0) + 1;
-      }
+  for (const exposure of activatedRows) {
+    if (variants.includes(exposure.variant)) {
+      counts[exposure.variant] = (counts[exposure.variant] ?? 0) + 1;
     }
   }
 
   return counts;
-}
-
-function activationRowsByEntity(
-  runId: string,
-  rows: readonly ActivationRow[],
-): Map<string, ActivationRow[]> {
-  const byEntity = new Map<string, ActivationRow[]>();
-  for (const row of rows) {
-    if (row.run_id !== runId || !row.activated) {
-      continue;
-    }
-
-    const existing = byEntity.get(row.targeting_key_hash) ?? [];
-    existing.push(row);
-    byEntity.set(row.targeting_key_hash, existing);
-  }
-  return byEntity;
-}
-
-function isActivatedAfterExposure(
-  exposure: DedupeExposureRow,
-  activationsByEntity: ReadonlyMap<string, readonly ActivationRow[]>,
-): boolean {
-  const activations = activationsByEntity.get(exposure.targeting_key_hash) ?? [];
-  return activations.some(
-    (activation) =>
-      timestampMs(activation.activation_ts, "activation_ts") >
-      timestampMs(exposure.first_exposure_ts, "first_exposure_ts"),
-  );
 }
 
 function chiSquareAgainstAllocation(
@@ -270,12 +246,4 @@ function chiSquareActivationBalance(
     is_mismatch: pValue < SRM_MISMATCH_P_VALUE,
     chi2_stat: chi2Stat,
   };
-}
-
-function timestampMs(value: string, field: string): number {
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`${field} must be an ISO timestamp.`);
-  }
-  return parsed;
 }

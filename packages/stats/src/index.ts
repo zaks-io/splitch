@@ -15,6 +15,12 @@ export {
   SEQUENTIAL_CI_SOURCE,
   SequentialCI,
 } from "./sequential-ci.js";
+export {
+  computeFixedHorizonCI,
+  FIXED_HORIZON_CI_SOURCE,
+  FixedHorizonCI,
+} from "./fixed-horizon-ci.js";
+export { analyzeStats, StatsEngine } from "./stats-engine.js";
 export { applyGuardrailBoundChecks } from "./guardrail-bound-check.js";
 export { applyDecisionFamilyCorrection } from "./decision-family-fdr.js";
 export { estimateMetricArm, estimateMetricComparison } from "./variance-estimators.js";
@@ -29,7 +35,6 @@ export type {
   PerEntityMetricRow,
   PrePeriodRow,
   SrmResult,
-  StatsEngine,
   StatsInput,
   StatsOutput,
   WinsorizeCap,
@@ -44,6 +49,7 @@ export type {
   CIWarning,
   SequentialCIOptions,
 } from "./sequential-ci.js";
+export type { StatsEngineOptions } from "./stats-engine.js";
 export type {
   DecisionFamilyArmResult,
   DecisionFamilyCorrectionInput,

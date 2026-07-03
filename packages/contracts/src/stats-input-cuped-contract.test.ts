@@ -28,7 +28,10 @@ const decisionFamilyMember = {
 
 const statsInput = {
   run_id: "run_1",
+  allocation: { control: 50, treatment: 50 },
+  control_variant: "control",
   decision_family: [decisionFamilyMember],
+  guardrail_decisions: [],
   exposures: [exposureRow],
   metric_values: [metricRow],
 };
