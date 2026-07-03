@@ -74,11 +74,11 @@ export function makeControlPlaneAuthResolver(deps: {
 }
 
 export function makeSessionStore(kv: KVNamespace | undefined): SessionStore {
+  if (kv === undefined) {
+    throw new Error("analysis-api: SESSION_STORE binding is required for control-plane auth");
+  }
   return {
     async isRevoked(sessionId) {
-      if (kv === undefined) {
-        throw new Error("analysis-api: SESSION_STORE binding is required for control-plane auth");
-      }
       return (await kv.get(`${REVOKED_PREFIX}${sessionId}`)) !== null;
     },
   };

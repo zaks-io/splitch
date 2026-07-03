@@ -1,3 +1,4 @@
+import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import { createApp } from "./app.js";
 import {
@@ -12,13 +13,20 @@ import { createTinybirdReadTransport } from "./tinybird.js";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 const verifierCache = new Map<string, ReturnType<typeof makeJwksVerifier>>();
+const service = "splitch-analysis-api";
 
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
-    const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
-    const jwksUri = env.AUTH_JWKS_URI ?? `${controlPlaneAudience}/.well-known/jwks.json`;
-    const expectedIssuer = env.AUTH_API_ORIGIN ?? new URL(jwksUri).origin;
+    if (url.pathname === "/health" || url.pathname === "/") {
+      return Response.json(
+        createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
+      );
+    }
+
+    const controlPlaneAudience = requiredConfig(env.CONTROL_PLANE_ORIGIN, "CONTROL_PLANE_ORIGIN");
+    const jwksUri = requiredConfig(env.AUTH_JWKS_URI, "AUTH_JWKS_URI");
+    const expectedIssuer = requiredConfig(env.AUTH_API_ORIGIN, "AUTH_API_ORIGIN");
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: verifierFor({ jwksUri, controlPlaneAudience, expectedIssuer }),
@@ -42,6 +50,13 @@ export default {
     );
   },
 } satisfies ExportedHandler<AnalysisApiEnv>;
+
+function requiredConfig(value: string | undefined, name: string): string {
+  if (value === undefined || value.trim().length === 0) {
+    throw new Error(`analysis-api: ${name} config is required`);
+  }
+  return value;
+}
 
 function verifierFor(input: {
   jwksUri: string;

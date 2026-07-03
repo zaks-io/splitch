@@ -37,13 +37,14 @@ export function createTinybirdReadTransport(
 ): TinybirdReadTransport {
   const fetchFn = opts.fetchFn ?? fetch;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TINYBIRD_TIMEOUT_MS;
+  const apiUrl = requiredConfig(env.TINYBIRD_API_URL, "TINYBIRD_API_URL");
 
   return {
     async readPipe(pipeName, params) {
       assertAppScoped(params);
       const response = await fetchWithTimeout(
         fetchFn,
-        pipeUrl(env, pipeName, params),
+        pipeUrl(apiUrl, pipeName, params),
         requiredReadToken(env),
         timeoutMs,
       );
@@ -64,11 +65,8 @@ function requiredReadToken(env: AnalysisApiEnv): string {
   return token;
 }
 
-function pipeUrl(env: AnalysisApiEnv, pipeName: string, params: PipeParams): URL {
-  const url = new URL(
-    `/v0/pipes/${pipeName}.json`,
-    env.TINYBIRD_API_URL ?? "https://api.tinybird.co",
-  );
+function pipeUrl(apiUrl: string, pipeName: string, params: PipeParams): URL {
+  const url = new URL(`/v0/pipes/${pipeName}.json`, apiUrl);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
@@ -93,6 +91,13 @@ function parseRows(body: { data?: unknown }): readonly unknown[] {
 function assertAppScoped(params: PipeParams): void {
   requiredParam(params.app_id, "app_id");
   requiredParam(params.environment_id, "environment_id");
+}
+
+function requiredConfig(value: string | null | undefined, name: string): string {
+  if (value === undefined || value === null || value.trim().length === 0) {
+    throw new TinybirdReadError(`Tinybird config ${name} is required`);
+  }
+  return value;
 }
 
 function requiredParam(value: string | null | undefined, name: string): string {

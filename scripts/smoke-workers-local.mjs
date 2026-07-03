@@ -40,6 +40,7 @@ const workers = [
     port: 8790,
     response: "json",
     testScheduled: true,
+    guardedResultsPath: "/apps/smoke-app/envs/smoke-env/experiments/smoke-exp/results",
   },
   {
     alias: "auth-api",
@@ -167,9 +168,27 @@ async function smokeWorker(worker) {
 
   try {
     await waitForWorker(url, worker, logs);
+    await validateWorkerRouteGuards(url, worker);
     console.log(`smoke:local: ${worker.workspace} ok ${url}`);
   } finally {
     await stopProcess(child);
+  }
+}
+
+async function validateWorkerRouteGuards(baseUrl, worker) {
+  if (!worker.guardedResultsPath) {
+    return;
+  }
+
+  const response = await fetch(new URL(worker.guardedResultsPath, baseUrl), {
+    signal: AbortSignal.timeout(2000),
+  });
+  if (response.status !== 401) {
+    throw new Error(`expected guarded /results HTTP 401, got ${response.status}`);
+  }
+  const body = await response.json();
+  if (body.code !== "UNAUTHORIZED") {
+    throw new Error(`expected guarded /results UNAUTHORIZED, got ${body.code}`);
   }
 }
 

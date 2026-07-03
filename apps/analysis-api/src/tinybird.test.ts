@@ -4,6 +4,7 @@ import { createTinybirdReadTransport, TinybirdReadError } from "./tinybird.js";
 describe("Tinybird read transport", () => {
   it("requires app_id and environment_id at the read chokepoint", async () => {
     const transport = createTinybirdReadTransport({
+      TINYBIRD_API_URL: "https://tinybird.test",
       TINYBIRD_READ_TOKEN: "test-token",
     });
 
@@ -15,6 +16,7 @@ describe("Tinybird read transport", () => {
   it("maps Tinybird fetch timeouts to TinybirdReadError", async () => {
     const transport = createTinybirdReadTransport(
       {
+        TINYBIRD_API_URL: "https://tinybird.test",
         TINYBIRD_READ_TOKEN: "test-token",
       },
       {
