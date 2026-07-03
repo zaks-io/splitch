@@ -30,7 +30,7 @@ export interface McpToolDefinition {
   /** Tool name = route.operationId (stable, path-independent). */
   name: string;
   description: string;
-  /** Request body, or the query+path params for a GET — derived, never authored. */
+  /** Flat path, query, and JSON body fields in the Control Plane SDK call shape. */
   inputSchema: z.ZodTypeAny;
   /** The 200 response body schema. */
   outputSchema: z.ZodTypeAny;

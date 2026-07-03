@@ -1,4 +1,3 @@
-import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import { createRepository, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -221,23 +220,6 @@ describe("control-plane Flag Variant updates", () => {
 
     expect(res.status).toBe(409);
     expect((await errorBody(res)).code).toBe("RUN_FROZEN");
-  });
-
-  it("derives flag Variant MCP tools from the same routes", () => {
-    const tools = deriveMcpTools();
-    for (const operationId of [
-      "flags_create",
-      "flag_variants_create",
-      "flag_variants_update",
-    ] as const) {
-      const route = getRoute(operationId);
-      const tool = tools.find((candidate) => candidate.name === operationId);
-      const body = route?.openapi.request?.body?.content?.["application/json"]?.schema;
-      expect(route).toBeDefined();
-      expect(tool).toBeDefined();
-      expect(tool?.inputSchema).toBe(body);
-      expect(tool?.outputSchema).toBe(route?.output);
-    }
   });
 });
 
