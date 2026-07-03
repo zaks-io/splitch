@@ -3,6 +3,7 @@ import {
   TestEvaluationRequestSchema,
   TestEvaluationResponseSchema,
 } from "../wire-envelopes-core.js";
+import { StatsOutputSchema } from "../stats-result-contract.js";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
 import { AppParams, EnvFlagParams, ExperimentParams } from "./route-shapes.js";
 
@@ -16,17 +17,8 @@ import { AppParams, EnvFlagParams, ExperimentParams } from "./route-shapes.js";
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-// The metrics payload is owned by a later stats slice (stats/result-contracts.md);
-// this route advertises the readiness envelope and carries the payload opaquely
-// (present-with-null) until that schema lands, rather than redefining it here.
-const ResultsResponseSchema = z.object({
-  state: z.enum(["warming_up", "ready", "insufficient_data"]),
-  asOf: z.string(),
-  nextPollAfterMs: z.number().nullable(),
-  metrics: z.unknown().nullable(),
-});
-
-const ResultsQuerySchema = z.object({ runId: z.string().optional() });
+const ResultsSelectorSchema = z.object({ runId: z.string().optional() }).strict();
+const OptionalResultsSelectorSchema = ResultsSelectorSchema.default({});
 
 const AuditEventSchema = z.object({
   eventId: z.string(),
@@ -66,13 +58,42 @@ export const analysisRoutes: readonly ApiRouteContract[] = [
     owner: "analysis-api",
     method: "GET",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/results",
-    summary: "Get an Experiment's analysis summary (readiness-enveloped, polled).",
-    request: { params: ExperimentParams, query: ResultsQuerySchema },
-    response: ResultsResponseSchema,
+    summary: "Get an Experiment's StatsOutput from the Analysis Worker.",
+    request: { params: ExperimentParams, query: ResultsSelectorSchema },
+    response: StatsOutputSchema,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["EXPERIMENT_NOT_FOUND", "RUN_NOT_FOUND", "FORBIDDEN"],
+    errors: [
+      "EXPERIMENT_NOT_FOUND",
+      "RUN_NOT_FOUND",
+      "UNAUTHORIZED",
+      "FORBIDDEN",
+      "VALIDATION_ERROR",
+      "SERVICE_UNAVAILABLE",
+      "INTERNAL_SERVER_ERROR",
+    ],
+  }),
+  defineApiRoute({
+    operationId: "experiment_results_post",
+    owner: "analysis-api",
+    method: "POST",
+    path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/results",
+    summary: "Get an Experiment's StatsOutput from the Analysis Worker.",
+    request: { params: ExperimentParams, body: OptionalResultsSelectorSchema },
+    response: StatsOutputSchema,
+    auth: AUTH,
+    rateLimit: RATE,
+    idempotency: "none",
+    errors: [
+      "EXPERIMENT_NOT_FOUND",
+      "RUN_NOT_FOUND",
+      "UNAUTHORIZED",
+      "FORBIDDEN",
+      "VALIDATION_ERROR",
+      "SERVICE_UNAVAILABLE",
+      "INTERNAL_SERVER_ERROR",
+    ],
   }),
   defineApiRoute({
     operationId: "audit_log_list",

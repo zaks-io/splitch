@@ -1,19 +1,45 @@
-import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
+import type { RateLimiter } from "@splitch/worker-runtime";
+import { createApp } from "./app.js";
+import {
+  makeControlPlaneAuthResolver,
+  makeHttpJwksFetcher,
+  makeJwksVerifier,
+  makeSessionStore,
+} from "./auth.js";
+import type { AnalysisApiEnv } from "./env.js";
+import { runScheduledSnapshot } from "./scheduled.js";
+import { createTinybirdReadTransport } from "./tinybird.js";
 
-const service = "splitch-analysis-api";
-
-type Env = {
-  SPLITCH_PLATFORM_TARGET?: string;
-};
+const allowLimiter: RateLimiter = () => ({ limited: false });
 
 export default {
-  async fetch(_request, env): Promise<Response> {
-    return Response.json(
-      createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
-    );
+  async fetch(request, env): Promise<Response> {
+    const url = new URL(request.url);
+    const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
+    const jwksUri = env.AUTH_JWKS_URI ?? `${controlPlaneAudience}/.well-known/jwks.json`;
+    const app = createApp({
+      authResolver: makeControlPlaneAuthResolver({
+        verifier: makeJwksVerifier({
+          fetchJwks: makeHttpJwksFetcher(jwksUri),
+          controlPlaneAudience,
+        }),
+        sessions: makeSessionStore(env.SESSION_STORE),
+      }),
+      rateLimiter: allowLimiter,
+      tinybird: createTinybirdReadTransport(env),
+      platformTarget: env.SPLITCH_PLATFORM_TARGET,
+    });
+    return app.fetch(request, env);
   },
 
-  scheduled(event, _env, ctx): void {
-    ctx.waitUntil(Promise.resolve(console.log(`${service}: Tinybird snapshot ${event.cron}`)));
+  scheduled(event, env, ctx): void {
+    ctx.waitUntil(
+      runScheduledSnapshot({
+        cron: event.cron,
+        env,
+        logger: console,
+        tinybird: createTinybirdReadTransport(env),
+      }),
+    );
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<AnalysisApiEnv>;

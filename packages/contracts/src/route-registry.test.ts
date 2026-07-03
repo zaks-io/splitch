@@ -84,6 +84,7 @@ const CANONICAL_OPERATION_IDS = [
   // Test-eval + analytics + discovery
   "flags_test_eval",
   "experiment_results_get",
+  "experiment_results_post",
   "audit_log_list",
   "openapi_document_get",
   // Privacy

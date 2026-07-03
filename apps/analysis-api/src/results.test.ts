@@ -1,0 +1,294 @@
+import { type ErrorResponse, StatsOutputSchema } from "@splitch/contracts";
+import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
+import { describe, expect, it } from "vitest";
+import { createApp } from "./app.js";
+import { readStatsInputFromTinybird } from "./results.js";
+import { runScheduledSnapshot } from "./scheduled.js";
+import type { PipeParams, TinybirdReadTransport } from "./tinybird.js";
+
+const APP_ID = "app_checkout";
+const OTHER_APP_ID = "app_other";
+const ENVIRONMENT_ID = "env_prod";
+const EXPERIMENT_ID = "exp_checkout_banner";
+const RUN_ID = "run_checkout_banner_1";
+const PATH = `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/experiments/${EXPERIMENT_ID}/results`;
+
+const allowLimiter: RateLimiter = () => ({ limited: false });
+
+function principal(appId: string, environmentId: string | null = null): Principal {
+  return {
+    kind: "control-plane-token",
+    id: "actor-1",
+    scopes: [`app:${appId}:admin`],
+    orgId: null,
+    appId,
+    environmentId,
+  };
+}
+
+const authResolver: AuthResolver = (request) => {
+  const authorization = request.headers.get("authorization");
+  if (authorization === "Bearer cp-app") {
+    return { ok: true, principal: principal(APP_ID) };
+  }
+  if (authorization === "Bearer cp-other-app") {
+    return { ok: true, principal: principal(OTHER_APP_ID) };
+  }
+  return { ok: false, reason: "UNAUTHORIZED" };
+};
+
+function makeHarness() {
+  const tinybird = new FakeTinybird();
+  const app = createApp({
+    authResolver,
+    rateLimiter: allowLimiter,
+    tinybird,
+    platformTarget: "local",
+  });
+  return { app, tinybird };
+}
+
+function authInit(method: "GET" | "POST", body?: unknown): RequestInit {
+  return {
+    method,
+    headers: {
+      authorization: "Bearer cp-app",
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  };
+}
+
+describe("Analysis Worker health", () => {
+  it("keeps the smoke baseline on /", async () => {
+    const { app } = makeHarness();
+
+    const res = await app.request("/");
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({
+      ok: true,
+      service: "splitch-analysis-api",
+      platformTarget: "local",
+    });
+  });
+});
+
+describe("GET/POST experiment results", () => {
+  it("materializes Tinybird rows into StatsInput, calls StatsEngine, and returns StatsOutput", async () => {
+    const { app, tinybird } = makeHarness();
+
+    const res = await app.request(`${PATH}?runId=${RUN_ID}`, authInit("GET"));
+
+    expect(res.status).toBe(200);
+    const output = StatsOutputSchema.parse(await res.json());
+    expect(output.health.deduped_counts).toEqual({ control: 2, treatment: 2 });
+    expect(output.health.low_n_warning).toBe(true);
+    expect(output.arm_results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metric_id: "conversion",
+          variant: "treatment",
+          sample_size_n: 2,
+        }),
+      ]),
+    );
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
+      "analysis_run_inputs",
+      "analysis_deduped_exposures",
+      "analysis_metric_values",
+      "analysis_pre_period_covariates",
+      "analysis_activation_rows",
+    ]);
+    expect(tinybird.calls.every((call) => call.params.app_id === APP_ID)).toBe(true);
+    expect(tinybird.calls.every((call) => call.params.environment_id === ENVIRONMENT_ID)).toBe(
+      true,
+    );
+    expect(tinybird.calls.slice(1).every((call) => call.params.run_id === RUN_ID)).toBe(true);
+  });
+
+  it("supports POST with runId in the body without accepting client app_id", async () => {
+    const { app, tinybird } = makeHarness();
+
+    const res = await app.request(PATH, authInit("POST", { runId: RUN_ID }));
+
+    expect(res.status).toBe(200);
+    StatsOutputSchema.parse(await res.json());
+    expect(tinybird.calls[0]?.params).toMatchObject({
+      app_id: APP_ID,
+      environment_id: ENVIRONMENT_ID,
+      experiment_id: EXPERIMENT_ID,
+      run_id: RUN_ID,
+    });
+  });
+
+  it("supports POST without a body for the live Run selector path", async () => {
+    const { app, tinybird } = makeHarness();
+
+    const res = await app.request(PATH, authInit("POST"));
+
+    expect(res.status).toBe(200);
+    StatsOutputSchema.parse(await res.json());
+    expect(tinybird.calls[0]?.params).toMatchObject({
+      app_id: APP_ID,
+      environment_id: ENVIRONMENT_ID,
+      experiment_id: EXPERIMENT_ID,
+    });
+  });
+
+  it("rejects missing and invalid control-plane tokens before any Tinybird read", async () => {
+    const { app, tinybird } = makeHarness();
+
+    const missing = await app.request(PATH);
+    const invalid = await app.request(PATH, { headers: { authorization: "Bearer bad" } });
+
+    expect(missing.status).toBe(401);
+    expect(((await missing.json()) as ErrorResponse).code).toBe("UNAUTHORIZED");
+    expect(invalid.status).toBe(401);
+    expect(((await invalid.json()) as ErrorResponse).code).toBe("UNAUTHORIZED");
+    expect(tinybird.calls).toEqual([]);
+  });
+
+  it("rejects cross-App path attempts before any Tinybird read", async () => {
+    const { app, tinybird } = makeHarness();
+
+    const res = await app.request(PATH, {
+      headers: { authorization: "Bearer cp-other-app" },
+    });
+
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as ErrorResponse).code).toBe("FORBIDDEN");
+    expect(tinybird.calls).toEqual([]);
+  });
+
+  it("rejects client-supplied app_id in query or body before any Tinybird read", async () => {
+    const queryHarness = makeHarness();
+    const query = await queryHarness.app.request(`${PATH}?app_id=${OTHER_APP_ID}`, authInit("GET"));
+
+    expect(query.status).toBe(400);
+    expect(((await query.json()) as ErrorResponse).code).toBe("VALIDATION_ERROR");
+    expect(queryHarness.tinybird.calls).toEqual([]);
+
+    const bodyHarness = makeHarness();
+    const body = await bodyHarness.app.request(
+      PATH,
+      authInit("POST", { runId: RUN_ID, app_id: OTHER_APP_ID }),
+    );
+
+    expect(body.status).toBe(400);
+    expect(((await body.json()) as ErrorResponse).code).toBe("VALIDATION_ERROR");
+    expect(bodyHarness.tinybird.calls).toEqual([]);
+  });
+
+  it("fails before any Tinybird read when app_id context is missing", async () => {
+    const tinybird = new FakeTinybird();
+
+    await expect(
+      readStatsInputFromTinybird(tinybird, {
+        appId: "",
+        environmentId: ENVIRONMENT_ID,
+        experimentId: EXPERIMENT_ID,
+        runId: RUN_ID,
+      }),
+    ).rejects.toThrow(/app_id/);
+    expect(tinybird.calls).toEqual([]);
+  });
+});
+
+describe("scheduled snapshot stub", () => {
+  it("skips safely without a local snapshot scope", async () => {
+    const tinybird = new FakeTinybird();
+    const logs: string[] = [];
+
+    await runScheduledSnapshot({
+      cron: "0 * * * *",
+      env: {},
+      logger: { log: (message) => logs.push(message), error: (message) => logs.push(message) },
+      tinybird,
+    });
+
+    expect(logs[0]).toContain("skipped");
+    expect(tinybird.calls).toEqual([]);
+  });
+
+  it("uses the same app-scoped Tinybird read path when snapshot scope is configured", async () => {
+    const tinybird = new FakeTinybird();
+
+    await runScheduledSnapshot({
+      cron: "0 * * * *",
+      env: {
+        SPLITCH_SNAPSHOT_APP_ID: APP_ID,
+        SPLITCH_SNAPSHOT_ENVIRONMENT_ID: ENVIRONMENT_ID,
+        SPLITCH_SNAPSHOT_EXPERIMENT_ID: EXPERIMENT_ID,
+        SPLITCH_SNAPSHOT_RUN_ID: RUN_ID,
+      },
+      logger: { log: () => undefined, error: () => undefined },
+      tinybird,
+    });
+
+    expect(tinybird.calls).not.toEqual([]);
+    expect(tinybird.calls.every((call) => call.params.app_id === APP_ID)).toBe(true);
+  });
+});
+
+class FakeTinybird implements TinybirdReadTransport {
+  readonly calls: { pipeName: string; params: PipeParams }[] = [];
+
+  async readPipe(pipeName: string, params: PipeParams): Promise<readonly unknown[]> {
+    this.calls.push({ pipeName, params: { ...params } });
+    return rowsByPipe()[pipeName] ?? [];
+  }
+}
+
+function rowsByPipe(): Record<string, readonly unknown[]> {
+  return {
+    analysis_run_inputs: [
+      {
+        run_id: RUN_ID,
+        confidence_level: 0.95,
+        horizon: "sequential",
+        allocation: JSON.stringify({ control: 50, treatment: 50 }),
+        control_variant: "control",
+        decision_family: JSON.stringify([{ metric_id: "conversion", variant: "treatment" }]),
+        guardrail_decisions: JSON.stringify([]),
+      },
+    ],
+    analysis_deduped_exposures: [
+      exposure("control", "control_0"),
+      exposure("control", "control_1"),
+      exposure("treatment", "treatment_0"),
+      exposure("treatment", "treatment_1"),
+    ],
+    analysis_metric_values: [
+      metricValue("control_0", 1),
+      metricValue("treatment_0", 1),
+      metricValue("treatment_1", 1),
+    ],
+    analysis_pre_period_covariates: [],
+    analysis_activation_rows: [],
+  };
+}
+
+function exposure(variant: string, targetingKeyHash: string) {
+  return {
+    app_id: APP_ID,
+    environment_id: ENVIRONMENT_ID,
+    id_type: "user",
+    targeting_key_hash: targetingKeyHash,
+    run_id: RUN_ID,
+    variant,
+    first_exposure_ts: "2026-07-01T00:00:00.000Z",
+    window_anchor: "2026-07-01T00:00:00.000Z",
+  };
+}
+
+function metricValue(targetingKeyHash: string, value: number) {
+  return {
+    targeting_key_hash: targetingKeyHash,
+    run_id: RUN_ID,
+    metric_id: "conversion",
+    metric_type: "binomial",
+    value,
+    in_window: 1,
+  };
+}
