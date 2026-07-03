@@ -56,6 +56,8 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 | `ci_lower`       | `number \| null`  | Relative-lift CI lower bound; null when relative lift is undefined |
 | `threshold`      | `number`          | Downside threshold declared on the Metric                          |
 | `is_breached`    | `boolean \| null` | `true` if `ci_lower < threshold`; null when undefined              |
+| `in_bh_family`   | `boolean`         | Always false for Guardrails; carried so outputs self-audit         |
+| `exploratory`    | `boolean`         | True for post-start or non-decision Guardrail outputs              |
 | `decision_valid` | `boolean`         | True only if the Guardrail and threshold were locked at Run Start  |
 | `breach_reason`  | `string \| null`  | E.g., `"CI lower bound −0.02 < threshold −0.005"`                  |
 
