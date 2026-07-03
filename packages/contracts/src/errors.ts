@@ -196,7 +196,7 @@ const errorMembers = [
   member(
     "RESOURCE_NOT_EMPTY",
     z.object({
-      resourceType: z.enum(["app", "environment"]),
+      resourceType: z.enum(["app", "environment", "flag", "variant"]),
       resourceId: z.string(),
       childType: z.string(),
       childCount: z.number(),

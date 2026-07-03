@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index.js";
 import type { Db } from "./client.js";
 import type { EnvScope, TenantScope } from "./scope.js";
@@ -35,40 +35,24 @@ export function makeFlagRepo(db: Db) {
       return flagsTable.findOne(scope, eq(flags.id, flagId));
     },
 
-    /**
-     * List the Variant catalog for a Flag. Returns [] when the Flag is not in
-     * the caller's App — never another App's variants. The App-scope check on
-     * the parent flag is what enforces tenancy for this app_id-less table.
-     */
-    async listVariants(
+    updateFlag(
       scope: TenantScope,
       flagId: string,
-    ): Promise<(typeof variants.$inferSelect)[]> {
-      const flag = await flagInScope(scope, flagId);
-      if (!flag) return [];
-      return db.select().from(variants).where(eq(variants.flagId, flagId));
+      patch: Partial<
+        Pick<
+          typeof flags.$inferInsert,
+          "name" | "description" | "schema" | "defaultVariantId" | "updatedAt" | "updatedBy"
+        >
+      >,
+    ): Promise<typeof flags.$inferSelect | null> {
+      return flagsTable.update(scope, patch, eq(flags.id, flagId)).then((rows) => rows[0] ?? null);
     },
 
-    /** Insert a Variant, but only into a Flag the caller's App owns. */
-    async addVariant(
-      scope: TenantScope,
-      flagId: string,
-      values: Omit<typeof variants.$inferInsert, "flagId">,
-    ): Promise<typeof variants.$inferSelect> {
-      const flag = await flagInScope(scope, flagId);
-      if (!flag) {
-        throw new Error("addVariant: flag is not in this App scope");
-      }
-      const rows = await db
-        .insert(variants)
-        .values({ ...values, flagId })
-        .returning();
-      const inserted = rows[0];
-      if (!inserted) {
-        throw new Error("addVariant: no row returned");
-      }
-      return inserted;
+    removeFlag(scope: TenantScope, flagId: string): Promise<number> {
+      return flagsTable.remove(scope, eq(flags.id, flagId));
     },
+
+    ...makeVariantOps(db, flagInScope),
 
     getFlagConfig(scope: EnvScope, flagId: string) {
       return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
@@ -102,6 +86,83 @@ export function makeFlagRepo(db: Db) {
     listSegmentsByIds(scope: TenantScope, ids: readonly string[]) {
       if (ids.length === 0) return Promise.resolve([] as (typeof segments.$inferSelect)[]);
       return segmentsTable.findMany(scope, inArray(segments.id, [...ids]));
+    },
+  };
+}
+
+type FlagInScope = (
+  scope: TenantScope,
+  flagId: string,
+) => Promise<typeof flags.$inferSelect | null>;
+
+function makeVariantOps(db: Db, flagInScope: FlagInScope) {
+  async function variantByName(scope: TenantScope, flagId: string, name: string) {
+    const flag = await flagInScope(scope, flagId);
+    if (!flag) return null;
+    const rows = await db
+      .select()
+      .from(variants)
+      .where(and(eq(variants.flagId, flagId), eq(variants.name, name)))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  return {
+    async listVariants(
+      scope: TenantScope,
+      flagId: string,
+    ): Promise<(typeof variants.$inferSelect)[]> {
+      const flag = await flagInScope(scope, flagId);
+      if (!flag) return [];
+      return db.select().from(variants).where(eq(variants.flagId, flagId));
+    },
+
+    async addVariant(
+      scope: TenantScope,
+      flagId: string,
+      values: Omit<typeof variants.$inferInsert, "flagId">,
+    ): Promise<typeof variants.$inferSelect> {
+      const flag = await flagInScope(scope, flagId);
+      if (!flag) throw new Error("addVariant: flag is not in this App scope");
+      const rows = await db
+        .insert(variants)
+        .values({ ...values, flagId })
+        .returning();
+      const inserted = rows[0];
+      if (!inserted) throw new Error("addVariant: no row returned");
+      return inserted;
+    },
+
+    getVariantByName: variantByName,
+
+    async updateVariant(
+      scope: TenantScope,
+      flagId: string,
+      name: string,
+      patch: Partial<Pick<typeof variants.$inferInsert, "name" | "value" | "description">>,
+    ): Promise<typeof variants.$inferSelect | null> {
+      const variant = await variantByName(scope, flagId, name);
+      if (!variant) return null;
+      const rows = await db
+        .update(variants)
+        .set(patch)
+        .where(eq(variants.id, variant.id))
+        .returning();
+      return rows[0] ?? null;
+    },
+
+    async removeVariant(scope: TenantScope, flagId: string, name: string): Promise<number> {
+      const variant = await variantByName(scope, flagId, name);
+      if (!variant) return 0;
+      const rows = await db.delete(variants).where(eq(variants.id, variant.id)).returning();
+      return rows.length;
+    },
+
+    async removeVariantsForFlag(scope: TenantScope, flagId: string): Promise<number> {
+      const flag = await flagInScope(scope, flagId);
+      if (!flag) return 0;
+      const rows = await db.delete(variants).where(eq(variants.flagId, flagId)).returning();
+      return rows.length;
     },
   };
 }

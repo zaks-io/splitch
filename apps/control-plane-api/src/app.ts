@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do.js";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers.js";
 import { makeCredentialHandlers } from "./credential-handlers.js";
+import { makeFlagDefinitionHandlers } from "./flag-definition-handlers.js";
 import { makeHandlers } from "./handlers.js";
 import { mountLiveUpdateRoute } from "./live-updates.js";
 import type { MemberProfileResolver } from "./org-handlers.js";
@@ -66,6 +67,10 @@ export function createApp(deps: AppDeps): Hono {
     credentialStore: deps.credentialStore,
     nowIso: deps.nowIso,
   });
+  const flagDefinitionHandlers = makeFlagDefinitionHandlers({
+    repo: deps.repo,
+    nowIso: deps.nowIso,
+  });
   const appEnvironmentHandlers = makeAppEnvironmentHandlers({
     repo: deps.repo,
     credentialStore: deps.credentialStore,
@@ -117,6 +122,21 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("organization_members_add"), handlers.addMember);
   registrar.mount(app, controlPlaneRoute("organization_members_update"), handlers.updateMember);
   registrar.mount(app, controlPlaneRoute("organization_members_remove"), handlers.removeMember);
+  registrar.mount(app, controlPlaneRoute("flags_list"), flagDefinitionHandlers.listFlags);
+  registrar.mount(app, controlPlaneRoute("flags_create"), flagDefinitionHandlers.createFlag);
+  registrar.mount(app, controlPlaneRoute("flags_get"), flagDefinitionHandlers.getFlag);
+  registrar.mount(app, controlPlaneRoute("flags_update"), flagDefinitionHandlers.updateFlag);
+  registrar.mount(app, controlPlaneRoute("flags_delete"), flagDefinitionHandlers.deleteFlag);
+  registrar.mount(
+    app,
+    controlPlaneRoute("flag_variants_create"),
+    flagDefinitionHandlers.createVariant,
+  );
+  registrar.mount(
+    app,
+    controlPlaneRoute("flag_variants_delete"),
+    flagDefinitionHandlers.deleteVariant,
+  );
   registrar.mount(app, controlPlaneRoute("flag_config_get"), handlers.getFlagConfig);
   registrar.mount(app, controlPlaneRoute("flag_config_update"), handlers.updateFlagConfig);
   registrar.mount(app, controlPlaneRoute("client_key_get"), credentialHandlers.getClientKey);

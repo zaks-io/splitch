@@ -25,18 +25,19 @@ Body:
 
 ```
 {
-  flag_key: string,          // unique within App; snake_case recommended
+  appId: string,             // duplicates the path for derived MCP tools
+  key: string,                // unique within App
   name: string,
   description?: string,
-  schema?: JSONSchema,       // user-defined schema the Variant values must satisfy
+  schema?: JSONSchema,       // supported subset the Variant values must satisfy
   variants: [                // the App-level Variant catalog
-    { name: string, value: boolean|string|number|object, is_default: boolean }
+    { name: string, value: boolean|string|number|object, isDefault: boolean }
   ]
 }
 ```
 
-Returns: `{ flag_id, app_id, flag_key, name, schema, variants, created_at }`
-Invariant: exactly one Variant has `is_default: true`; every Variant `value` satisfies `schema`.
+Returns: `{ id, appId, key, name, schema, variants, defaultVariantId, createdAt, updatedAt }`
+Invariant: exactly one Variant is the Default Variant; every Variant `value` satisfies `schema`.
 **No `enabled` here** — enabled state is per-Environment (it lives on the Flag Configuration).
 
 ### `GET /apps/{app_id}/flags/{flag_id}`
@@ -50,9 +51,10 @@ Returns: updated Flag definition.
 
 ### `POST /apps/{app_id}/flags/{flag_id}/variants`
 
-Adds a Variant to the **catalog** (App-level). Body: `{ name, value, is_default? }`; `value` must
-satisfy the Flag's `schema`. A new catalog Variant is **not** available in any Environment until
-**promoted** (ADR-0028).
+Adds a Variant to the **catalog** (App-level). Body:
+`{ appId, flagId, name, value, isDefault? }`; `appId` and `flagId` duplicate the path for derived MCP
+tools and must match it. `value` must satisfy the Flag's `schema`. A new catalog Variant is **not**
+available in any Environment until **promoted** (ADR-0028).
 Returns: updated Flag definition.
 
 ### `DELETE /apps/{app_id}/flags/{flag_id}/variants/{variant_name}`
@@ -62,7 +64,8 @@ referenced in a running Experiment.
 
 ### `DELETE /apps/{app_id}/flags/{flag_id}`
 
-Blocked if referenced by a running Experiment in any Environment.
+Blocked if any Environment has a Flag Configuration for it or if it is referenced by a running
+Experiment in any Environment.
 
 ## Flag Configuration endpoints (per-Environment)
 
