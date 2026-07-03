@@ -45,6 +45,9 @@ The cap rule (`winsorize`, `winsorize_pct`, and whether a fixed historical cap i
 at Run Start for decision-valid results. The realized cap value is reported in output. Arm-specific
 caps are disallowed because they can change each arm's estimand differently.
 
+For Ratio Metrics, `winsorize_cap` reports the realized pooled component caps as
+`{ num_value, denom_value }`. For Count and Revenue Metrics, it reports the scalar cap.
+
 ### Bias acknowledgment
 
 Winsorization introduces small upward bias in variance estimates (truncation bias). This is

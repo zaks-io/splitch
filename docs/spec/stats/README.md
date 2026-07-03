@@ -24,7 +24,7 @@ diagnostics. The spine is one CI object flowing through six deterministic stages
 Every Metric flows through **one CI object** in a fixed order:
 
 ```
-type-variance → delta-method → [winsorize] → [CUPED] → aCS → relative-lift → Guardrail → BH FDR
+winsorize → type-variance → delta-method → [CUPED] → aCS → relative-lift → Guardrail → BH FDR
 ```
 
 Each bracket step is gated: winsorization is skipped for Binomial; CUPED is skipped below

@@ -150,6 +150,18 @@ describe("VarianceTechniquesSchema", () => {
     expect(Object.hasOwn(serialized, "winsorize_cap")).toBe(true);
   });
 
+  it("serializes Ratio component caps without inventing side-channel fields", () => {
+    const parsed = VarianceTechniquesSchema.parse({
+      ...varianceTechniques,
+      winsorized: true,
+      winsorize_pct: 99.9,
+      winsorize_cap: { num_value: 120, denom_value: 40 },
+      delta_method: true,
+    });
+
+    expect(parsed.winsorize_cap).toEqual({ num_value: 120, denom_value: 40 });
+  });
+
   it.each(["cuped_method", "winsorize_cap"])("rejects omitted %s", (field) => {
     expect(VarianceTechniquesSchema.safeParse(omitField(varianceTechniques, field)).success).toBe(
       false,

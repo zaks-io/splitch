@@ -1,4 +1,9 @@
-import type { DedupeExposureRow, MetricKind, PerEntityMetricRow } from "@splitch/contracts";
+import type {
+  DedupeExposureRow,
+  MetricKind,
+  PerEntityMetricRow,
+  VarianceTechniques,
+} from "@splitch/contracts";
 
 export type MetricVarianceStatus = "ready" | "running" | "insufficient_denominator";
 
@@ -23,6 +28,7 @@ export interface MetricArmEstimate {
   readonly denominator_mean: number | null;
   readonly zero_denominator_entity_count: number;
   readonly delta_method: boolean;
+  readonly variance_techniques: VarianceTechniques;
 }
 
 export interface MetricComparisonEstimateInput {
@@ -33,6 +39,8 @@ export interface MetricComparisonEstimateInput {
   readonly treatment_variant: string;
   readonly exposures: readonly DedupeExposureRow[];
   readonly metric_values: readonly PerEntityMetricRow[];
+  readonly winsorize?: boolean;
+  readonly winsorize_pct?: number;
 }
 
 export interface MetricComparisonEstimate {
@@ -45,6 +53,7 @@ export interface MetricComparisonEstimate {
   readonly relative_lift_pct: number | null;
   readonly sampling_var: number | null;
   readonly status: MetricVarianceStatus;
+  readonly variance_techniques: VarianceTechniques;
 }
 
 export interface EntityAggregate {

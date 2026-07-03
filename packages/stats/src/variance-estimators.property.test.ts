@@ -62,6 +62,37 @@ describe("variance estimator metamorphic properties", () => {
     expect(split.sampling_var).toBe(unsplit.sampling_var);
     expect(split.sample_size_n).toBe(unsplit.sample_size_n);
   });
+
+  it("requires pooled caps for asymmetric additive tails", () => {
+    for (const tailValue of [50, 100, 500, 1_000]) {
+      const result = estimateMetricComparison({
+        run_id: RUN_ID,
+        metric_id: "count_metric",
+        metric_type: "count",
+        control_variant: "control",
+        treatment_variant: "treatment",
+        exposures: [
+          ...exposures("control", ["c1", "c2", "c3"]),
+          ...exposures("treatment", ["t1", "t2", "t3"]),
+        ],
+        metric_values: [
+          countRow("c1", 1),
+          countRow("c2", 2),
+          countRow("c3", tailValue),
+          countRow("t1", 3),
+          countRow("t2", 4),
+          countRow("t3", 5),
+        ],
+        winsorize_pct: 67,
+      });
+      const wrongControlMean = wrongPerArmWinsorizedMean([1, 2, tailValue], 67);
+
+      expect(result.variance_techniques.winsorize_cap).toBe(5);
+      expect(result.control.point_estimate).toBeCloseTo(8 / 3, 15);
+      expect(wrongControlMean).toBeCloseTo((3 + tailValue) / 3, 15);
+      expect(result.control.point_estimate).not.toBeCloseTo(wrongControlMean, 12);
+    }
+  });
 });
 
 function countComparison(scale: number) {
@@ -119,4 +150,15 @@ function countRow(targeting_key_hash: string, value: number): PerEntityMetricRow
     value,
     in_window: true,
   };
+}
+
+function wrongPerArmWinsorizedMean(values: readonly number[], winsorizePct: number): number {
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.min(sorted.length - 1, Math.ceil((winsorizePct / 100) * sorted.length) - 1);
+  const cap = sorted[index];
+  if (cap === undefined) {
+    throw new Error("test fixture cap missing");
+  }
+  const capped = values.map((value) => Math.min(value, cap));
+  return capped.reduce((sum, value) => sum + value, 0) / capped.length;
 }

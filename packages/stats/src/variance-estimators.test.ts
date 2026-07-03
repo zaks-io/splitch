@@ -27,6 +27,32 @@ describe("variance estimators", () => {
     });
   });
 
+  it("never winsorizes Binomial Metrics, even when winsorization is requested", () => {
+    const result = estimateMetricComparison({
+      run_id: RUN_ID,
+      metric_id: "conversion",
+      metric_type: "binomial",
+      control_variant: "control",
+      treatment_variant: "treatment",
+      exposures: [...exposures("control", ["c1", "c2"]), ...exposures("treatment", ["t1", "t2"])],
+      metric_values: [
+        metricRow("conversion", "binomial", "c1", 500),
+        metricRow("conversion", "binomial", "t1", 1),
+      ],
+      winsorize: true,
+      winsorize_pct: 50,
+    });
+
+    expect(result.control.point_estimate).toBe(0.5);
+    expect(result.treatment.point_estimate).toBe(0.5);
+    expect(result.variance_techniques).toMatchObject({
+      winsorized: false,
+      winsorize_pct: null,
+      winsorize_cap: null,
+      delta_method: false,
+    });
+  });
+
   it("uses sample variance of per-Entity sums for Count and Revenue Metrics", () => {
     for (const metric_type of ["count", "revenue"] as const) {
       const result = estimateMetricArm({
@@ -46,6 +72,32 @@ describe("variance estimators", () => {
       expect(result.arm_variance).toBe(4);
       expect(result.sampling_var).toBeCloseTo(4 / 3, 15);
     }
+  });
+
+  it("leaves winsorization metadata null when the additive none path is requested", () => {
+    const result = estimateMetricComparison({
+      run_id: RUN_ID,
+      metric_id: "orders",
+      metric_type: "count",
+      control_variant: "control",
+      treatment_variant: "treatment",
+      exposures: [...exposures("control", ["c1", "c2"]), ...exposures("treatment", ["t1", "t2"])],
+      metric_values: [
+        metricRow("orders", "count", "c1", 1),
+        metricRow("orders", "count", "c2", 2),
+        metricRow("orders", "count", "t1", 3),
+        metricRow("orders", "count", "t2", 100),
+      ],
+      winsorize: false,
+      winsorize_pct: 50,
+    });
+
+    expect(result.treatment.point_estimate).toBe(51.5);
+    expect(result.variance_techniques).toMatchObject({
+      winsorized: false,
+      winsorize_pct: null,
+      winsorize_cap: null,
+    });
   });
 
   it("fails loud when a Ratio arm denominator mean is zero", () => {

@@ -8,11 +8,11 @@ one thing.
 
 ```
 per-Entity Metric values (one row per Entity, aggregated upstream — ADR-0015)
-  ▼ 1. Type-appropriate variance estimator                          → variance_i
-  ▼ 2. Delta-method term (Ratio Metrics and relative-lift; always)  → delta_adjusted_variance_i
-  ▼ 3. Winsorization (additive Metrics only; on per-Entity values before step 1):
+  ▼ 1. Winsorization (additive Metrics only):
        cap value at p-th percentile, recompute variance over capped values
-  ▼ 4. CUPED adjustment (gated; when applied, replaces variance_i)  → cuped_adjusted_variance_i
+  ▼ 2. Type-appropriate variance estimator                         → variance_i
+  ▼ 3. Delta-method term (Ratio Metrics and relative-lift; always) → delta_adjusted_variance_i
+  ▼ 4. CUPED adjustment (gated; when applied, replaces variance_i) → cuped_adjusted_variance_i
   ▼ 5. Asymptotic confidence sequence (aCS) — variance → time-uniform CI:
        [ci_lower_N, ci_upper_N] (valid at any N, safe to peek continuously)
   ▼ 6. Relative-lift CI (delta-method ratio of CI objects):
