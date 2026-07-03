@@ -38,16 +38,22 @@ async function deleteExpiredProvisionalOrg(
   orgId: string,
   nowIso: string,
 ): Promise<boolean> {
-  // D1 batch is the transaction boundary; each statement repeats the expiry
-  // guard so a claimed or unexpired Organization becomes a 0-row no-op.
-  const results = await d1.batch([
-    deleteEnvironmentsForOrg(d1, orgId, nowIso),
-    deleteAppMembershipsForOrg(d1, orgId, nowIso),
+  const statements = [
+    ...APP_CHILD_DELETE_ORDER.map((spec) => deleteAppScopedRowsForOrg(d1, spec, orgId, nowIso)),
+    deleteVariantsForOrg(d1, orgId, nowIso),
+    deleteAppScopedRowsForOrg(d1, { table: "flags", returning: "id" }, orgId, nowIso),
+    deleteAppScopedRowsForOrg(d1, { table: "environments", returning: "id" }, orgId, nowIso),
+    deleteAppScopedRowsForOrg(d1, { table: "app_memberships", returning: "app_id" }, orgId, nowIso),
+    deletePrivacyRequestsForOrg(d1, orgId, nowIso),
     deleteAppsForOrg(d1, orgId, nowIso),
     deleteOrgMembershipsForOrg(d1, orgId, nowIso),
+    deleteTrustedIdpsForOrg(d1, orgId, nowIso),
     deleteExpiredOrgRoot(d1, orgId, nowIso),
-  ]);
-  return (results[4]?.results ?? []).length === 1;
+  ];
+  // D1 batch is the transaction boundary; each statement repeats the expiry
+  // guard so a claimed or unexpired Organization becomes a 0-row no-op.
+  const results = await d1.batch(statements);
+  return (results[results.length - 1]?.results ?? []).length === 1;
 }
 
 const EXPIRED_ORG_EXISTS_SQL = `
@@ -59,12 +65,64 @@ const EXPIRED_ORG_EXISTS_SQL = `
     AND demo_expires_at < ?
 `;
 
-function deleteEnvironmentsForOrg(d1: D1Database, orgId: string, nowIso: string) {
+const APP_IDS_FOR_ORG_SQL = "SELECT id FROM apps WHERE organization_id = ?";
+
+interface AppScopedDeleteSpec {
+  table:
+    | "runs"
+    | "flag_configs"
+    | "targeting_rules"
+    | "experiments"
+    | "api_keys"
+    | "client_keys"
+    | "entity_deletions"
+    | "segments"
+    | "metrics"
+    | "flags"
+    | "environments"
+    | "app_memberships";
+  returning: "id" | "key_id" | "app_id";
+}
+
+const APP_CHILD_DELETE_ORDER: readonly AppScopedDeleteSpec[] = [
+  { table: "runs", returning: "id" },
+  { table: "flag_configs", returning: "id" },
+  { table: "targeting_rules", returning: "id" },
+  { table: "experiments", returning: "id" },
+  { table: "api_keys", returning: "key_id" },
+  { table: "client_keys", returning: "key_id" },
+  { table: "entity_deletions", returning: "app_id" },
+  { table: "segments", returning: "id" },
+  { table: "metrics", returning: "id" },
+];
+
+function deleteAppScopedRowsForOrg(
+  d1: D1Database,
+  spec: AppScopedDeleteSpec,
+  orgId: string,
+  nowIso: string,
+) {
+  // Table identifiers come only from AppScopedDeleteSpec; caller values stay bound.
   return d1
     .prepare(
       `
-      DELETE FROM environments
-      WHERE app_id IN (SELECT id FROM apps WHERE organization_id = ?)
+      DELETE FROM ${spec.table}
+      WHERE app_id IN (${APP_IDS_FOR_ORG_SQL})
+        AND EXISTS (${EXPIRED_ORG_EXISTS_SQL})
+      RETURNING ${spec.returning}
+    `,
+    )
+    .bind(orgId, orgId, nowIso);
+}
+
+function deleteVariantsForOrg(d1: D1Database, orgId: string, nowIso: string) {
+  return d1
+    .prepare(
+      `
+      DELETE FROM variants
+      WHERE flag_id IN (
+        SELECT id FROM flags WHERE app_id IN (${APP_IDS_FOR_ORG_SQL})
+      )
         AND EXISTS (${EXPIRED_ORG_EXISTS_SQL})
       RETURNING id
     `,
@@ -72,17 +130,17 @@ function deleteEnvironmentsForOrg(d1: D1Database, orgId: string, nowIso: string)
     .bind(orgId, orgId, nowIso);
 }
 
-function deleteAppMembershipsForOrg(d1: D1Database, orgId: string, nowIso: string) {
+function deletePrivacyRequestsForOrg(d1: D1Database, orgId: string, nowIso: string) {
   return d1
     .prepare(
       `
-      DELETE FROM app_memberships
-      WHERE app_id IN (SELECT id FROM apps WHERE organization_id = ?)
+      DELETE FROM privacy_requests
+      WHERE (org_id = ? OR app_id IN (${APP_IDS_FOR_ORG_SQL}))
         AND EXISTS (${EXPIRED_ORG_EXISTS_SQL})
-      RETURNING app_id
+      RETURNING request_id
     `,
     )
-    .bind(orgId, orgId, nowIso);
+    .bind(orgId, orgId, orgId, nowIso);
 }
 
 function deleteAppsForOrg(d1: D1Database, orgId: string, nowIso: string) {
@@ -106,6 +164,19 @@ function deleteOrgMembershipsForOrg(d1: D1Database, orgId: string, nowIso: strin
       WHERE org_id = ?
         AND EXISTS (${EXPIRED_ORG_EXISTS_SQL})
       RETURNING org_id
+    `,
+    )
+    .bind(orgId, orgId, nowIso);
+}
+
+function deleteTrustedIdpsForOrg(d1: D1Database, orgId: string, nowIso: string) {
+  return d1
+    .prepare(
+      `
+      DELETE FROM trusted_idps
+      WHERE org_id = ?
+        AND EXISTS (${EXPIRED_ORG_EXISTS_SQL})
+      RETURNING idp_id
     `,
     )
     .bind(orgId, orgId, nowIso);
