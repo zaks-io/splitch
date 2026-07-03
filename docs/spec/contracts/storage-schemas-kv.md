@@ -16,13 +16,13 @@ an unknown/future schema version fails loud — on the evaluation edge (no D1 bi
 control-plane reader rebuilds from D1 instead (see [../platform/contracts-and-validation.md](../platform/contracts-and-validation.md)).
 (ADR-0025 "every KV read is Zod-parsed, including hot-path reads".)
 
-| Namespace key pattern                                   | Value schema         | TTL                          | Notes                                                                        |
-| ------------------------------------------------------- | -------------------- | ---------------------------- | ---------------------------------------------------------------------------- |
-| `app:{appId}:{environmentId}:flag:{flagKey}`            | `FlagConfigKV`       | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027)  |
-| `app:{appId}:{environmentId}:run:{runId}`               | `RunConfigKV`        | none                         | Hot-path live Experiment Run read; per-Environment (ADR-0027)                |
-| `app:{appId}:{environmentId}:experiment:{experimentId}` | `ExperimentConfigKV` | none (invalidated on change) | Edge `getExperiment` read; per-Environment (ADR-0027)                        |
-| `cred:{hash}`                                           | `CredentialCacheKV`  | 60s                          | Credential validation cache; evicted on revoke                               |
-| `app:{appId}:{environmentId}:liveRun`                   | `{ runId: string }`  | none                         | Written on Start; edge reads this to know the live Experiment Run (ADR-0027) |
+| Namespace key pattern                                   | Value schema         | TTL                          | Notes                                                                                        |
+| ------------------------------------------------------- | -------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
+| `app:{appId}:{environmentId}:flag:{flagKey}`            | `FlagConfigKV`       | none (invalidated on change) | Hot-path flag config read; Flag CONFIGURATION is per-Environment (ADR-0027)                  |
+| `app:{appId}:{environmentId}:run:{runId}`               | `RunConfigKV`        | none                         | Hot-path live Experiment Run config, read only from `ExperimentConfigKV.liveRunId`           |
+| `app:{appId}:{environmentId}:experiment:{experimentId}` | `ExperimentConfigKV` | none (invalidated on change) | Edge Experiment config read; carries nullable `liveRunId` for evaluation and ingest          |
+| `live_run:{appId}:{environmentId}:{experimentId}`       | `LiveRunKV`          | none                         | Explicit live Run pointer written on Start and cleared on End; never inferred from latest D1 |
+| `cred:{hash}`                                           | `CredentialCacheKV`  | 60s                          | Credential validation cache; evicted on revoke                                               |
 
 ### FlagConfigKV
 
@@ -73,8 +73,9 @@ new entity, just a nullable field on config the path already reads.
 the Run leaf exactly — the edge evaluates eligibility from the frozen rules and buckets by name without
 resolving a Segment or joining ids at read time. `configHash` in KV equals the D1 Run's `configHash`.
 
-Note: `targetingKey` is NOT in RunConfigKV — it lives on Experiment and is fetched from D1 on the
-control plane. Edge evaluate path reads it from `ExperimentConfigKV` (see below).
+Note: `targetingKey` is NOT in `RunConfigKV` — it lives on Experiment. Edge evaluate and ingest read
+it from `ExperimentConfigKV` and read `RunConfigKV` only when `ExperimentConfigKV.liveRunId` is
+non-null.
 
 ### ExperimentConfigKV (added to support edge evaluate)
 
@@ -93,6 +94,24 @@ control plane. Edge evaluate path reads it from `ExperimentConfigKV` (see below)
 `status` is carried so the resolved `ExperimentConfig` view (provider-port.md marks it Required) is
 hydrated in the one `getExperiment` read — the edge never needs a second resolution to learn whether
 the Experiment is live. It reuses the Experiment-leaf `ExperimentStatus` enum, never a redefined set.
+
+`liveRunId` is present-with-null. `null` means no Run is live, so readers must not read
+`RunConfigKV`. A non-null value is the only Run id evaluation and ingest readers dereference; missing
+or mismatched `RunConfigKV` fails loud. Readers never select the latest D1 Run as a fallback.
+
+### LiveRunKV
+
+```
+{
+  runId: string
+}
+```
+
+`live_run:{appId}:{environmentId}:{experimentId}` is an explicit control-plane live signal, written
+with the same Start sync that writes `ExperimentConfigKV.liveRunId` and the new `RunConfigKV`, and
+deleted with the End sync that reverts `ExperimentConfigKV.liveRunId` to `null`. It exists so
+control-plane and proof paths can assert live-Run state without inferring it from D1 history; hot
+evaluation and ingest readers still use the `ExperimentConfigKV` → `RunConfigKV` model above.
 
 ### CredentialCacheKV
 

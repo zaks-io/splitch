@@ -78,26 +78,27 @@ frozen at Run Start and immutable for the Run's life (see [storage-schemas-d1-ex
 - `description`
 - `hypothesis`
 
-**Status transitions** (non-material):
+**Status transitions**:
 
-- `status: 'ended'` — ends the running Run (if any) and freezes the Experiment
+Experiment status is not patchable. Start and End are lifecycle endpoints, not `PATCH
+/experiments/:id` fields. A PATCH body containing `status` is rejected by the strict request schema
+with `VALIDATION_ERROR`; callers end a Run with `POST .../runs/{run_id}/end`.
 
 `PatchExperimentRequest` field set (all optional, Worker validates taxonomy on each):
 
-| Field                | Required | Edit type                                        |
-| -------------------- | -------- | ------------------------------------------------ |
-| `name`               | no       | non-material                                     |
-| `description`        | no       | non-material                                     |
-| `hypothesis`         | no       | non-material                                     |
-| `targetingKey`       | no       | assignment                                       |
-| `targetingKeyType`   | no       | assignment                                       |
-| `activationMetricId` | no       | assignment                                       |
-| `metrics`            | no       | measurement                                      |
-| `guardrailMetrics`   | no       | measurement                                      |
-| `conversionWindowMs` | no       | measurement                                      |
-| `dimensions`         | no       | measurement                                      |
-| `confidenceLevel`    | no       | decision-locked                                  |
-| `status`             | no       | non-material (only `'ended'` accepted via PATCH) |
+| Field                | Required | Edit type       |
+| -------------------- | -------- | --------------- |
+| `name`               | no       | non-material    |
+| `description`        | no       | non-material    |
+| `hypothesis`         | no       | non-material    |
+| `targetingKey`       | no       | assignment      |
+| `targetingKeyType`   | no       | assignment      |
+| `activationMetricId` | no       | assignment      |
+| `metrics`            | no       | measurement     |
+| `guardrailMetrics`   | no       | measurement     |
+| `conversionWindowMs` | no       | measurement     |
+| `dimensions`         | no       | measurement     |
+| `confidenceLevel`    | no       | decision-locked |
 
 ---
 
@@ -107,23 +108,29 @@ frozen at Run Start and immutable for the Run's life (see [storage-schemas-d1-ex
 
 The Start action ends the current running Experiment Run (if any) and opens a new Experiment Run. This
 is the only path to open an Experiment Run (first-Start Run rule "first Experiment Run opens on first
-Start"). All assignment config is supplied here.
+Start"). Assignment config is not supplied in the Start body. It lives on the Experiment draft,
+staged by `CreateExperimentRequest` or `PatchExperimentRequest` fields such as `allocation`, `salt`,
+`variantSet`, `targetingRules`, and `segmentIds`. Start validates that staged draft, freezes it onto
+the new Run, and then consumes the draft so an unchanged second Start returns `EXPERIMENT_NO_DRAFT`.
 
-| Field                | Required | Notes                                                                                                              |
-| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| `experimentId`       | yes      | —                                                                                                                  |
-| `variantSet`         | yes      | `Variant[]`; snapshot of the Flag's current Variants at Start time                                                 |
-| `allocation`         | yes      | `Record<variantName, number>`; Variant **name** → percentage; must sum to 100                                      |
-| `salt`               | no       | Auto-generated UUID4 if omitted; guaranteed unique per Experiment                                                  |
-| `targetingSegmentId` | no       | Optional Segment to gate eligibility; **resolved to frozen rules at Start** (see below), not stored as a reference |
+The request body is optional. When present, it is lifecycle metadata only:
 
-Worker computes: `id`, `configHash`, `status = 'running'`, `startedAt`, and **`targetingRules`** —
-the resolved targeting snapshot. If `targetingSegmentId` is supplied, the Worker reads that Segment's
-current `TargetingRule[]` and freezes the resolved rules onto the Run; if omitted, `targetingRules = []`
-(all Entities eligible). The Run stores the frozen rules, never the segment id, so a later edit to the
-Segment cannot change a finished Run's population.
-Worker writes `liveRunId` to Experiment and KV.
-`targetingKey` is read from `Experiment.targetingKey` (not supplied here).
+| Field             | Required | Notes                                                              |
+| ----------------- | -------- | ------------------------------------------------------------------ |
+| `confirm`         | no       | `true` self-confirms when Environment Policy requires confirmation |
+| `reason`          | no       | Human or agent-readable Start reason copied onto the Run           |
+| `idempotency_key` | no       | Optional caller retry key; no assignment config is accepted here   |
+
+Worker computes: `id`, dense `runNumber`, `configHash`, `status = 'running'`, `startedAt`,
+`variantSet`, `allocation`, and **`targetingRules`** from the staged draft. Draft `segmentIds` are
+resolved at Start into frozen `TargetingRule[]`; the Run stores the frozen rules, never Segment ids,
+so a later Segment edit cannot change a finished Run's population. `targetingKey` and
+`targetingKeyType` are read from the Experiment, not supplied here.
+
+Worker writes `Experiment.liveRunId`, `ExperimentConfigKV.liveRunId`, the new `RunConfigKV`, and the
+explicit `live_run:{appId}:{environmentId}:{experimentId}` pointer. Edge readers use
+`ExperimentConfigKV.liveRunId` plus `RunConfigKV` as the reader model; they never derive a live Run
+from the latest D1 Run.
 
 ### PatchRunRequest (non-material only)
 
