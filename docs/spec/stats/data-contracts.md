@@ -87,10 +87,13 @@ interface StatsEngine {
 interface StatsInput {
   run_id: string;
   confidence_level: number;              // default 0.95
-  horizon: 'sequential' | 'fixed';      // default 'sequential'
+  horizon: 'sequential' | 'fixed';       // locked at Run Start; default 'sequential'
   target_n?: integer;                    // sequential tuning, locked at Run Start when set
   sample_size_locked?: integer;          // required when horizon='fixed'
+  allocation: Record<string, number>;    // locked Run allocation, percentages keyed by Variant
+  control_variant: string;               // locked Control Variant name
   decision_family: DecisionFamilyMember[]; // locked goal Metric × Variant × Primary Dimension family
+  guardrail_decisions?: GuardrailDecision[]; // locked Guardrails; defaults to []
   exposures: DedupeExposureRow[];
   metric_values: PerEntityMetricRow[];
   pre_period_covariates?: PrePeriodRow[];
@@ -104,6 +107,14 @@ interface DecisionFamilyMember {
   dimension_value?: string | null;
 }
 
+interface GuardrailDecision {
+  metric_id: string;
+  variant: string;                       // non-Control Variant
+  downside_threshold: number;            // relative-lift CI lower-bound threshold
+  guardrail_locked_at_run_start: boolean;
+  threshold_locked_at_run_start: boolean;
+}
+
 interface StatsOutput {
   arm_results: ArmResult[];
   srm: SrmResult;
@@ -115,6 +126,16 @@ interface StatsOutput {
 
 `StatsOutput` member shapes (`ArmResult`, `SrmResult`, `GuardrailResult`, `HealthMetrics`,
 `DimensionResult`) are defined in [result-contracts.md](result-contracts.md).
+
+The Run-mode fields are immutable inputs from Run Start. `horizon='fixed'` requires
+`sample_size_locked` and disables peeking until that locked sample size is reached; sequential Runs
+may set `target_n` but must not send `sample_size_locked`. `allocation` and `control_variant` come
+from the same locked Run snapshot so SRM, Control selection, and decision families cannot drift
+mid-experiment.
+
+`guardrail_decisions` is the optional locked Guardrail family. When omitted, the engine treats it as
+empty. When present, Guardrail breach evaluation uses the treatment Arm's relative-lift CI lower
+bound and only emits a breach once the Arm is decisionable.
 
 The engine is a **pure function**: same input → same output, no internal state. All state lives in
 Tinybird (raw log + deduped snapshots), not the engine.

@@ -2,7 +2,7 @@ import type { ArmResult, GuardrailResult } from "@splitch/contracts";
 
 type GuardrailResultFields = Pick<
   ArmResult,
-  "metric_id" | "variant" | "relative_lift_pct" | "ci_lower"
+  "metric_id" | "variant" | "relative_lift_pct" | "ci_lower" | "status"
 >;
 
 export interface GuardrailThreshold {
@@ -70,12 +70,22 @@ function breached(result: GuardrailResultFields, guardrail: GuardrailThreshold):
   if (result.relative_lift_pct === null) {
     return null;
   }
+  if (!isDecisionable(result)) {
+    return null;
+  }
   if (result.ci_lower === null) {
     throw new Error(
       `relative lift is defined for ${result.metric_id}/${result.variant}, but ci_lower is null.`,
     );
   }
+  if (!Number.isFinite(result.ci_lower)) {
+    return null;
+  }
   return result.ci_lower < guardrail.downside_threshold;
+}
+
+function isDecisionable(result: GuardrailResultFields): boolean {
+  return result.status === "ready" || result.status === "stopped";
 }
 
 function decisionValid(guardrail: GuardrailThreshold): boolean {

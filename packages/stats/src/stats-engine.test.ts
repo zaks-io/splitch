@@ -95,6 +95,37 @@ describe("StatsEngine.analyze", () => {
     expect(treatment.is_significant).toBe(false);
   });
 
+  it("does not breach locked guardrails before fixed-horizon sample size is locked", async () => {
+    const output = await analyzeStats(
+      binomialStatsInput({
+        controlN: 99,
+        treatmentN: 99,
+        controlConversions: 20,
+        treatmentConversions: 40,
+        horizon: "fixed",
+        sampleSizeLocked: 100,
+        includeGuardrail: true,
+      }),
+    );
+    const guardrailArm = treatmentResult(output, "guardrail_conversion");
+
+    expect(guardrailArm.status).toBe("running");
+    expect(guardrailArm.ci_lower).toBe(Number.NEGATIVE_INFINITY);
+    expect(output.guardrail_results).toEqual([
+      {
+        metric_id: "guardrail_conversion",
+        variant: "treatment",
+        ci_lower: Number.NEGATIVE_INFINITY,
+        threshold: 10,
+        is_breached: null,
+        in_bh_family: false,
+        exploratory: false,
+        decision_valid: true,
+        breach_reason: null,
+      },
+    ]);
+  });
+
   it("rejects sample_size_locked on a sequential locked Run input", async () => {
     await expect(
       analyzeStats(
