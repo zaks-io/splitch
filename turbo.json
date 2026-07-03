@@ -26,6 +26,23 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "stats:unit": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "stats:golden": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "stats:property": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "stats:simulation": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "outputs": []
+    },
     "test:mutation": {
       "dependsOn": ["^build"],
       "cache": false,

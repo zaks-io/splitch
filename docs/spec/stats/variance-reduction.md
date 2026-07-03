@@ -42,7 +42,7 @@ Sample size `n` (count of unique Entities) is **unchanged** by winsorization. Wi
 Entities still count in `n`.
 
 The cap rule (`winsorize`, `winsorize_pct`, and whether a fixed historical cap is used) is locked
-at Run Start for decision-valid results. The realized cap value is reported in output. Per-arm
+at Run Start for decision-valid results. The realized cap value is reported in output. Arm-specific
 caps are disallowed because they can change each arm's estimand differently.
 
 ### Bias acknowledgment
