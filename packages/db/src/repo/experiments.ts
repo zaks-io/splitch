@@ -21,6 +21,11 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
   const metricsTable = scopedTable(db, metrics);
   const startRun = makeStartRun(d1, experimentsTable, runsTable);
   const endRun = makeEndRun(d1, experimentsTable, runsTable);
+  const findRunningExperimentsForFlag = (scope: EnvScope, flagId: string) =>
+    experimentsTable.findMany(
+      scope,
+      and(eq(experiments.flagId, flagId), eq(experiments.status, "running")),
+    );
 
   return {
     experiments: experimentsTable,
@@ -75,11 +80,10 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       return experimentsTable.remove(scope, eq(experiments.id, experimentId));
     },
 
+    findRunningExperimentsForFlag,
+
     async findRunningExperimentForFlag(scope: EnvScope, flagId: string) {
-      const rows = await experimentsTable.findMany(
-        scope,
-        and(eq(experiments.flagId, flagId), eq(experiments.status, "running")),
-      );
+      const rows = await findRunningExperimentsForFlag(scope, flagId);
       if (rows.length > 1) {
         throw new Error("findRunningExperimentForFlag: multiple running Experiments for one Flag");
       }

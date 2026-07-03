@@ -123,6 +123,7 @@ export const experimentRoutes: readonly ApiRouteContract[] = [
     errors: [
       "EXPERIMENT_NOT_FOUND",
       "FORBIDDEN",
+      "EXPERIMENT_RUNNING",
       "EXPERIMENT_NO_DRAFT",
       "ALLOCATION_INVALID",
       "VARIANT_NOT_AVAILABLE",

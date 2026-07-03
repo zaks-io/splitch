@@ -15,6 +15,7 @@ type StartRunExpectedDraft = Pick<
 
 export type StartRunInput = {
   experimentId: string;
+  flagId: string;
   expectedDraft: StartRunExpectedDraft;
   run: Omit<RunInsert, "appId" | "environmentId" | "experimentId" | "runNumber" | "status">;
   endedAt: string;
@@ -78,7 +79,7 @@ async function runStartBatch(
   scope: EnvScope,
   input: StartRunInput,
 ): Promise<boolean> {
-  const guardParams = draftGuardParams(scope, input.experimentId, input.expectedDraft);
+  const guardParams = startGuardParams(scope, input);
   const batch = await d1.batch([
     endCurrentRunStatement(d1, scope, input, guardParams),
     insertRunStatement(d1, scope, input, guardParams),
@@ -105,7 +106,7 @@ function endCurrentRunStatement(
       UPDATE runs
       SET status = 'ended', ended_at = ?
       WHERE app_id = ? AND environment_id = ? AND experiment_id = ? AND status = 'running'
-        AND EXISTS (SELECT 1 FROM experiments WHERE ${DRAFT_GUARD_SQL})
+        AND EXISTS (SELECT 1 FROM experiments WHERE ${START_GUARD_SQL})
       RETURNING id
     `,
     )
@@ -138,7 +139,7 @@ function insertRunStatement(
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?
-      WHERE EXISTS (SELECT 1 FROM experiments WHERE ${DRAFT_GUARD_SQL})
+      WHERE EXISTS (SELECT 1 FROM experiments WHERE ${START_GUARD_SQL})
       RETURNING id
     `,
     )
@@ -163,7 +164,7 @@ function updateExperimentStartedStatement(
         draft_segment_ids = NULL,
         updated_at = ?,
         updated_by = ?
-      WHERE ${DRAFT_GUARD_SQL}
+      WHERE ${START_GUARD_SQL}
       RETURNING id
     `,
     )
@@ -191,6 +192,29 @@ const DRAFT_GUARD_SQL = `
   AND (draft_segment_ids = ? OR (draft_segment_ids IS NULL AND ? IS NULL))
   AND (live_run_id = ? OR (live_run_id IS NULL AND ? IS NULL))
 `;
+
+const START_GUARD_SQL = `
+  ${DRAFT_GUARD_SQL}
+  AND NOT EXISTS (
+    SELECT 1
+    FROM experiments AS blocker
+    WHERE blocker.app_id = ?
+      AND blocker.environment_id = ?
+      AND blocker.flag_id = ?
+      AND blocker.status = 'running'
+      AND blocker.id <> ?
+  )
+`;
+
+function startGuardParams(scope: EnvScope, input: StartRunInput): unknown[] {
+  return [
+    ...draftGuardParams(scope, input.experimentId, input.expectedDraft),
+    scope.appId,
+    scope.environmentId,
+    input.flagId,
+    input.experimentId,
+  ];
+}
 
 function draftGuardParams(
   scope: EnvScope,

@@ -13,6 +13,11 @@ export interface ExperimentDeps {
   nowIso?: () => string;
 }
 
+export interface RunningExperimentBlocker {
+  experimentId: string;
+  runId: string;
+}
+
 export async function experimentFromPath(
   deps: ExperimentDeps,
   input: unknown,
@@ -32,6 +37,18 @@ export async function runningRunForExperiment(
     (experiment.liveRunId ? await repo.experiments.getRun(scope, experiment.liveRunId) : null) ??
     repo.experiments.findRunningRunForExperiment(scope, experiment.id)
   );
+}
+
+export async function blockingRunningExperimentForStart(
+  repo: Repository,
+  scope: EnvScope,
+  experiment: ExperimentRow,
+): Promise<RunningExperimentBlocker | null> {
+  const running = await repo.experiments.findRunningExperimentsForFlag(scope, experiment.flagId);
+  const blocker = running.find((candidate) => candidate.id !== experiment.id);
+  if (!blocker) return null;
+  const run = blocker.liveRunId ? await repo.experiments.getRun(scope, blocker.liveRunId) : null;
+  return { experimentId: blocker.id, runId: run?.id ?? blocker.liveRunId ?? "unknown" };
 }
 
 export function draftPatch(body: Record<string, unknown>) {

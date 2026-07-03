@@ -4,17 +4,18 @@ import { appNotFound, nowIso } from "./app-environment-model.js";
 import type { ConfigStoreAccess } from "./config-store-do.js";
 import { randomHex } from "./credential-cache.js";
 import {
+  experimentAlreadyRunningForFlag,
   configStoreUnavailable,
   experimentNoDraft,
   experimentNotFound,
 } from "./experiment-errors.js";
 import { experimentResponse, json, runResponse, type ExperimentRow } from "./experiment-model.js";
 import {
+  blockingRunningExperimentForStart,
   draftPatch,
   environmentExists,
   experimentFromPath,
   nullableString,
-  optionalBody,
   requireWritableEnvironment,
   runningRunForExperiment,
   syncExperimentConfigFromD1,
@@ -22,6 +23,7 @@ import {
 } from "./experiment-handler-shared.js";
 import { makeRunHandlers } from "./experiment-run-handlers.js";
 import { prepareStart } from "./experiment-start.js";
+import { validateStartRequest } from "./experiment-start-request.js";
 import {
   loadUpdateContext,
   prepareUpdatePatch,
@@ -29,7 +31,6 @@ import {
   validateRunningPatch,
 } from "./experiment-update-plan.js";
 import { runningExperimentError } from "./flag-definition-errors.js";
-import { confirmationRequired, readEnvironmentPolicy } from "./flag-config-policy.js";
 import { objectBody, pathParam } from "./handler-input.js";
 
 export function makeExperimentHandlers(deps: ExperimentDeps) {
@@ -171,26 +172,8 @@ async function startExperiment(
   const scope = envScope(pathParam(args.input, "appId"), pathParam(args.input, "environmentId"));
   const experiment = await experimentFromPath(deps, args.input);
   if (!experiment) return experimentNotFound(args.requestId);
-  const writeError = await requireWritableEnvironment(
-    deps,
-    scope,
-    args.principal.id,
-    args.requestId,
-  );
-  if (writeError) return writeError;
-
-  const body = optionalBody(args.input);
-  const policy = await readEnvironmentPolicy(deps.repo, scope.appId, scope.environmentId);
-  if (!policy) return appNotFound(args.requestId);
-  const confirmation = confirmationRequired(
-    policy,
-    ["start_experiment_run"],
-    body.confirm === true,
-    scope.environmentId,
-    "START_EXPERIMENT_RUN",
-    args.requestId,
-  );
-  if (confirmation) return confirmation;
+  const startContext = await validateStartRequest(deps, args, scope, experiment);
+  if (!startContext.ok) return startContext.response;
 
   const prepared = await prepareStartOrReplaySync(
     deps.repo,
@@ -204,6 +187,7 @@ async function startExperiment(
   const now = nowIso(deps);
   const committed = await deps.repo.experiments.startRun(scope, {
     experimentId: experiment.id,
+    flagId: experiment.flagId,
     expectedDraft: {
       draftAllocation: experiment.draftAllocation,
       draftSalt: experiment.draftSalt,
@@ -224,7 +208,7 @@ async function startExperiment(
       guardrailDecisions: json(prepared.value.guardrailDecisions),
       configHash: prepared.value.configHash,
       startedAt: now,
-      startReason: body.reason as string | undefined,
+      startReason: startContext.body.reason as string | undefined,
       createdAt: now,
       createdBy: args.principal.id,
     },
@@ -234,6 +218,14 @@ async function startExperiment(
   });
   if (!committed.ok) {
     if (committed.reason === "experiment_not_found") return experimentNotFound(args.requestId);
+    const staleBlocker = await blockingRunningExperimentForStart(deps.repo, scope, experiment);
+    if (staleBlocker) {
+      return experimentAlreadyRunningForFlag(
+        staleBlocker.experimentId,
+        staleBlocker.runId,
+        args.requestId,
+      );
+    }
     return staleStartResponse(deps.repo, configStore, scope, experiment, args.requestId);
   }
 

@@ -1,4 +1,4 @@
-import { liveRunKey } from "@splitch/contracts";
+import { flagConfigKey, liveRunKey } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { errorBody, NOW_ISO, request } from "./flag-definition-test-harness.js";
@@ -7,7 +7,9 @@ import {
   endRun,
   experimentFixture,
   type ExperimentRunHarness,
+  kvJson,
   makeExperimentRunHarness,
+  readEvaluationExperiment,
   type StartResponse,
   startExperiment,
 } from "./experiment-run-test-fixture.js";
@@ -133,6 +135,54 @@ describe("control-plane Experiment Run invariants", () => {
       (await getRun.json()) as { targetingRules: Array<{ conditions: unknown[] }> },
     ).toMatchObject({
       targetingRules: [{ conditions: [{ attribute: "plan", operator: "eq", value: "paid" }] }],
+    });
+  });
+});
+
+describe("same-Flag Experiment Start guard", () => {
+  it("rejects Start when another running Experiment controls the same Flag", async () => {
+    const fx = await experimentFixture(ctx);
+    const experimentA = await createExperimentDraft(ctx, fx, {
+      key: "same-flag-a",
+      allocation: { control: 50, treatment: 50 },
+      salt: "same-flag-a-salt",
+    });
+    const startA = await startExperiment(ctx, fx, experimentA.id);
+    expect(startA.status).toBe(200);
+    const startedA = (await startA.json()) as StartResponse;
+
+    const experimentB = await createExperimentDraft(ctx, fx, {
+      key: "same-flag-b",
+      allocation: { control: 50, treatment: 50 },
+      salt: "same-flag-b-salt",
+    });
+
+    const rejected = await startExperiment(ctx, fx, experimentB.id);
+    expect(rejected.status).toBe(409);
+    expect(await errorBody(rejected)).toMatchObject({
+      code: "EXPERIMENT_RUNNING",
+      details: {
+        experimentId: experimentA.id,
+        runningRunId: startedA.run.id,
+        attemptedOp: "START_EXPERIMENT_RUN",
+        recommendedAction: "END_RUNNING_RUN_FIRST",
+      },
+    });
+
+    const scope = envScope(fx.appId, fx.environmentId);
+    expect(await ctx.repo.experiments.getExperiment(scope, experimentB.id)).toMatchObject({
+      status: "draft",
+      liveRunId: null,
+    });
+    expect(await ctx.repo.experiments.listRunsForExperiment(scope, experimentB.id)).toEqual([]);
+    expect(await kvJson(ctx, flagConfigKey(fx.appId, fx.environmentId, fx.flag.key))).toMatchObject(
+      {
+        data: { id: fx.flag.id, experimentId: experimentA.id },
+      },
+    );
+    await expect(readEvaluationExperiment(ctx, fx, experimentA.id)).resolves.toMatchObject({
+      liveRunId: startedA.run.id,
+      liveRun: { id: startedA.run.id },
     });
   });
 });

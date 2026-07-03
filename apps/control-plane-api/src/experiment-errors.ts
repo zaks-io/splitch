@@ -33,6 +33,26 @@ export function experimentNoDraft(
   );
 }
 
+export function experimentAlreadyRunningForFlag(
+  experimentId: string,
+  runningRunId: string,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "EXPERIMENT_RUNNING",
+      message: "another Experiment is already running for this Flag in this Environment",
+      details: {
+        experimentId,
+        runningRunId,
+        attemptedOp: "START_EXPERIMENT_RUN",
+        recommendedAction: "END_RUNNING_RUN_FIRST",
+      },
+    },
+    { requestId },
+  );
+}
+
 export function allocationInvalid(
   allocation: Record<string, number>,
   got: number,
