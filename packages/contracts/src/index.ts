@@ -72,6 +72,8 @@ export type {
 } from "./leaf-schemas-experiment.js";
 export {
   ActivationRowSchema,
+  CupedCovariateRowSchema,
+  CupedCovariateSourceSchema,
   DecisionFamilyMemberSchema,
   DedupeExposureRowSchema,
   PerEntityMetricRowSchema,
@@ -80,6 +82,8 @@ export {
 } from "./stats-input-contract.js";
 export type {
   ActivationRow,
+  CupedCovariateRow,
+  CupedCovariateSource,
   DecisionFamilyMember,
   DedupeExposureRow,
   PerEntityMetricRow,

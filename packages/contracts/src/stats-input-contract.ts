@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MetricKindSchema, MetricRefSchema } from "./leaf-schemas-experiment.js";
+import { CupedAttributeSourceSchema } from "./stats-result-contract.js";
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
 const TimestampSchema = z.string();
@@ -38,15 +39,29 @@ export const PerEntityMetricRowSchema = z
   );
 export type PerEntityMetricRow = z.infer<typeof PerEntityMetricRowSchema>;
 
-export const PrePeriodRowSchema = z
-  .object({
-    targeting_key_hash: z.string(),
-    metric_id: MetricIdSchema,
-    pre_period_value: z.number(),
-    covariate_source: z.enum(["pre_period", "declared_attribute", "historical_attribute"]),
-  })
-  .strict();
-export type PrePeriodRow = z.infer<typeof PrePeriodRowSchema>;
+export const CupedCovariateSourceSchema = z.enum([
+  "pre_period",
+  "declared_attribute",
+  "historical_attribute",
+]);
+export type CupedCovariateSource = z.infer<typeof CupedCovariateSourceSchema>;
+
+const CupedCovariateRowShape = {
+  targeting_key_hash: z.string(),
+  metric_id: MetricIdSchema,
+  pre_period_value: z.number(),
+  covariate_source: CupedCovariateSourceSchema,
+  attribute: z.string().optional(),
+  locked: z.boolean().optional(),
+  attribute_source: CupedAttributeSourceSchema.optional(),
+  observed_at: TimestampSchema.optional(),
+};
+
+export const CupedCovariateRowSchema = z.object(CupedCovariateRowShape).strict();
+export type CupedCovariateRow = z.infer<typeof CupedCovariateRowSchema>;
+
+export const PrePeriodRowSchema = z.object(CupedCovariateRowShape).strict();
+export type PrePeriodRow = CupedCovariateRow;
 
 export const ActivationRowSchema = z
   .object({
@@ -79,7 +94,7 @@ export const StatsInputSchema = z
     decision_family: z.array(DecisionFamilyMemberSchema),
     exposures: z.array(DedupeExposureRowSchema),
     metric_values: z.array(PerEntityMetricRowSchema),
-    pre_period_covariates: z.array(PrePeriodRowSchema).optional(),
+    pre_period_covariates: z.array(CupedCovariateRowSchema).optional(),
     activation_rows: z.array(ActivationRowSchema).optional(),
   })
   .strict()

@@ -88,6 +88,22 @@ describe("CUPED attribute and anchor golden fixtures", () => {
     ).toThrow(/post-treatment CUPED covariates/);
   });
 
+  it("rejects post-treatment attributes even when pre-period coverage is sufficient", () => {
+    expect(() =>
+      countComparison({
+        controlValues: [10, 12],
+        treatmentValues: [11, 13],
+        pre_period_covariates: [
+          prePeriodRow("c1", 5),
+          prePeriodRow("c2", 6),
+          prePeriodRow("t1", 5),
+          prePeriodRow("t2", 6),
+          attributeRow("spent_after_exposure", "c1", 9, "post_treatment", true),
+        ],
+      }),
+    ).toThrow(/post-treatment CUPED covariates/);
+  });
+
   it("anchors pre-period validation at first_exposure_ts even with an Activation window anchor", () => {
     expect(() =>
       countComparison({
@@ -198,7 +214,7 @@ function attributeRow(
   attribute: string,
   targeting_key_hash: string,
   pre_period_value: number,
-  covariate_source: CupedCovariateRow["covariate_source"],
+  covariate_source: string,
   locked: boolean,
 ): CupedCovariateRow {
   return {
@@ -208,5 +224,5 @@ function attributeRow(
     pre_period_value,
     covariate_source,
     locked,
-  };
+  } as CupedCovariateRow;
 }

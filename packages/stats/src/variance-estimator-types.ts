@@ -1,12 +1,13 @@
 import type {
   DedupeExposureRow,
   CupedAttributeSource,
+  CupedCovariateRow,
   CupedMethod,
   MetricKind,
   PerEntityMetricRow,
-  PrePeriodRow,
   VarianceTechniques,
 } from "@splitch/contracts";
+export type { CupedCovariateRow, CupedCovariateSource } from "@splitch/contracts";
 
 export type MetricVarianceStatus = "ready" | "running" | "insufficient_denominator";
 
@@ -79,17 +80,4 @@ export interface CupedAdjustment {
   readonly attribute: string | null;
   readonly attributeSource: CupedAttributeSource | null;
   readonly coveragePct: number | null;
-}
-
-export type CupedCovariateSource = PrePeriodRow["covariate_source"] | "post_treatment";
-
-export interface CupedCovariateRow {
-  readonly targeting_key_hash: string;
-  readonly metric_id: string;
-  readonly pre_period_value: number;
-  readonly covariate_source: CupedCovariateSource;
-  readonly attribute?: string;
-  readonly attribute_source?: CupedAttributeSource;
-  readonly locked?: boolean;
-  readonly observed_at?: string;
 }

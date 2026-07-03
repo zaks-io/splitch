@@ -25,6 +25,10 @@ interface AttributeGroup {
   readonly values: Map<string, number>;
 }
 
+type RuntimeCupedCovariateRow = Omit<CupedCovariateRow, "covariate_source"> & {
+  readonly covariate_source?: string;
+};
+
 export function applyCupedAdjustment(
   input: MetricComparisonEstimateInput,
   controlEntities: readonly EntityAggregate[],
@@ -36,7 +40,7 @@ export function applyCupedAdjustment(
 
   const thresholdPct = cupedCoverageThresholdPct(input.cuped_coverage_threshold);
   const covariates = input.pre_period_covariates ?? [];
-  validateCovariatesBeforeExposure(covariates, [...controlEntities, ...treatmentEntities]);
+  validateCovariates(covariates, [...controlEntities, ...treatmentEntities]);
 
   const prePeriod = prePeriodCandidate(input, controlEntities, treatmentEntities, covariates);
   if (prePeriod.coveragePct >= thresholdPct) {
@@ -114,9 +118,6 @@ function eligibleAttributeGroups(covariates: readonly CupedCovariateRow[]): Attr
   const groups = new Map<string, { source: CupedAttributeSource; values: Map<string, number> }>();
 
   for (const row of covariates) {
-    if (row.covariate_source === "post_treatment") {
-      throw new Error("post-treatment CUPED covariates are not eligible.");
-    }
     if (!row.attribute || row.locked !== true) {
       continue;
     }
@@ -241,7 +242,7 @@ function coveragePct(
   return (covered / entities.length) * 100;
 }
 
-function validateCovariatesBeforeExposure(
+function validateCovariates(
   covariates: readonly CupedCovariateRow[],
   entities: readonly EntityAggregate[],
 ): void {
@@ -250,6 +251,9 @@ function validateCovariatesBeforeExposure(
   );
 
   for (const row of covariates) {
+    if ((row as RuntimeCupedCovariateRow).covariate_source === "post_treatment") {
+      throw new Error("post-treatment CUPED covariates are not eligible.");
+    }
     const firstExposureTs = firstExposureByEntity.get(row.targeting_key_hash);
     if (!firstExposureTs || !row.observed_at) {
       continue;
