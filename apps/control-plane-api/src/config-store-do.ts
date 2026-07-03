@@ -70,6 +70,18 @@ export class ConfigStoreDurableObject
     return this.store().promoteFlagConfig(input);
   }
 
+  writeLiveRun(
+    input: Parameters<ConfigStoreWriter["writeLiveRun"]>[0],
+  ): ReturnType<ConfigStoreWriter["writeLiveRun"]> {
+    return this.store().writeLiveRun(input);
+  }
+
+  clearLiveRun(
+    input: Parameters<ConfigStoreWriter["clearLiveRun"]>[0],
+  ): ReturnType<ConfigStoreWriter["clearLiveRun"]> {
+    return this.store().clearLiveRun(input);
+  }
+
   override fetch(request: Request): Response {
     if (request.method !== "GET" || request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
       return new Response("expected WebSocket upgrade", { status: 426 });

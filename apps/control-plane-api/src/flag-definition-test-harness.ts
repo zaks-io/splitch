@@ -5,6 +5,7 @@ import type { Hono } from "hono";
 import { expect } from "vitest";
 import { createApp } from "./app.js";
 import { makeControlPlaneAuthResolver } from "./auth-resolver.js";
+import type { ConfigStoreAccess } from "./config-store-do.js";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer.js";
 import { makeJwksVerifier } from "./jwks-verify.js";
 import { makeSessionStore } from "./session-store.js";
@@ -56,6 +57,7 @@ export async function makeFlagDefinitionHarness(): Promise<FlagDefinitionHarness
 export function makeAppForRepo(
   h: Pick<FlagDefinitionHarness, "bindings" | "signer">,
   repo: Repository,
+  configStore?: ConfigStoreAccess,
 ): Hono {
   const verifier = makeJwksVerifier({
     fetchJwks: async () => h.signer.jwks,
@@ -69,6 +71,7 @@ export function makeAppForRepo(
     }),
     rateLimiter: allowLimiter,
     repo,
+    configStore,
     credentialStore: h.bindings.credentialKv,
     nowIso: () => NOW_ISO,
   });

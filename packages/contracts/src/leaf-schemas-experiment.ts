@@ -118,6 +118,10 @@ export const ExperimentSchema = z.object({
   activationMetricId: z.string().nullable().optional(),
   conversionWindowMs: z.number(),
   dimensions: z.array(z.string()),
+  draftAllocation: z.record(z.string(), z.number()).nullable().optional(),
+  draftSalt: z.string().nullable().optional(),
+  draftTargetingRules: z.array(TargetingRuleSchema).nullable().optional(),
+  draftSegmentIds: z.array(z.string()).nullable().optional(),
   // Required field that is null before the first Start.
   liveRunId: z.string().nullable(),
   createdAt: z.string(),

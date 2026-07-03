@@ -44,12 +44,32 @@ export async function writeSnapshot(
       envelope(RunConfigEnvelope, snapshot.run),
     );
     await kv.put(
-      liveRunKey(scope.appId, scope.environmentId),
+      liveRunKey(scope.appId, scope.environmentId, snapshot.run.experimentId),
       envelope(LiveRunEnvelope, {
         runId: snapshot.run.id,
       }),
     );
   }
+}
+
+export async function writeLiveRunPointer(
+  kv: KVNamespace,
+  scope: EnvScope,
+  experimentId: string,
+  runId: string,
+): Promise<void> {
+  await kv.put(
+    liveRunKey(scope.appId, scope.environmentId, experimentId),
+    envelope(LiveRunEnvelope, { runId }),
+  );
+}
+
+export async function clearLiveRunPointer(
+  kv: KVNamespace,
+  scope: EnvScope,
+  experimentId: string,
+): Promise<void> {
+  await kv.delete(liveRunKey(scope.appId, scope.environmentId, experimentId));
 }
 
 function envelope<T>(schema: ReturnType<typeof kvEnvelope>, data: T): string {

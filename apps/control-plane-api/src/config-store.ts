@@ -1,4 +1,5 @@
 import { envScope, type EnvScope } from "@splitch/db";
+import { clearLiveRun, type LiveRunPointerInput, writeLiveRun } from "./config-store-live-run.js";
 import { promoteFlagConfig, replaceTargetingRules } from "./config-store-mutations.js";
 import {
   buildSnapshotFromD1,
@@ -27,6 +28,8 @@ export interface ConfigStoreWriter {
   writeFlagConfig(input: PatchFlagConfigInput): Promise<FlagConfigWriteResult>;
   replaceTargetingRules(input: ReplaceTargetingRulesInput): Promise<FlagConfigWriteResult>;
   promoteFlagConfig(input: PromoteFlagConfigInput): Promise<PromoteFlagConfigResult>;
+  writeLiveRun(input: LiveRunPointerInput): Promise<void>;
+  clearLiveRun(input: Omit<LiveRunPointerInput, "runId">): Promise<void>;
 }
 
 export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
@@ -48,6 +51,14 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
 
     async promoteFlagConfig(input) {
       return promoteFlagConfig(deps, input);
+    },
+
+    async writeLiveRun(input) {
+      return writeLiveRun(deps, input);
+    },
+
+    async clearLiveRun(input) {
+      return clearLiveRun(deps, input);
     },
   };
 }

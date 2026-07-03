@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do.js";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers.js";
 import { makeCredentialHandlers } from "./credential-handlers.js";
+import { makeExperimentHandlers } from "./experiment-handlers.js";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers.js";
 import { makeHandlers } from "./handlers.js";
 import { mountLiveUpdateRoute } from "./live-updates.js";
@@ -74,6 +75,11 @@ export function createApp(deps: AppDeps): Hono {
   });
   const metricSegmentHandlers = makeMetricSegmentHandlers({
     repo: deps.repo,
+    nowIso: deps.nowIso,
+  });
+  const experimentHandlers = makeExperimentHandlers({
+    repo: deps.repo,
+    configStore: deps.configStore,
     nowIso: deps.nowIso,
   });
   const appEnvironmentHandlers = makeAppEnvironmentHandlers({
@@ -160,11 +166,8 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("segments_get"), metricSegmentHandlers.getSegment);
   registrar.mount(app, controlPlaneRoute("segments_update"), metricSegmentHandlers.updateSegment);
   registrar.mount(app, controlPlaneRoute("segments_delete"), metricSegmentHandlers.deleteSegment);
-  registrar.mount(app, controlPlaneRoute("metrics_list"), metricSegmentHandlers.listMetrics);
-  registrar.mount(app, controlPlaneRoute("metrics_create"), metricSegmentHandlers.createMetric);
-  registrar.mount(app, controlPlaneRoute("metrics_get"), metricSegmentHandlers.getMetric);
-  registrar.mount(app, controlPlaneRoute("metrics_update"), metricSegmentHandlers.updateMetric);
-  registrar.mount(app, controlPlaneRoute("metrics_delete"), metricSegmentHandlers.deleteMetric);
+  mountExperimentRoutes(app, registrar, experimentHandlers);
+  mountMetricRoutes(app, registrar, metricSegmentHandlers);
   registrar.mount(app, controlPlaneRoute("client_key_get"), credentialHandlers.getClientKey);
   registrar.mount(app, controlPlaneRoute("client_key_update"), credentialHandlers.updateClientKey);
   registrar.mount(app, controlPlaneRoute("client_key_rotate"), credentialHandlers.rotateClientKey);
@@ -173,4 +176,32 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("api_keys_revoke"), credentialHandlers.revokeApiKey);
 
   return app;
+}
+
+function mountExperimentRoutes(
+  app: Hono,
+  registrar: Registrar,
+  handlers: ReturnType<typeof makeExperimentHandlers>,
+): void {
+  registrar.mount(app, controlPlaneRoute("experiments_list"), handlers.listExperiments);
+  registrar.mount(app, controlPlaneRoute("experiments_create"), handlers.createExperiment);
+  registrar.mount(app, controlPlaneRoute("experiments_get"), handlers.getExperiment);
+  registrar.mount(app, controlPlaneRoute("experiments_update"), handlers.updateExperiment);
+  registrar.mount(app, controlPlaneRoute("experiments_delete"), handlers.deleteExperiment);
+  registrar.mount(app, controlPlaneRoute("experiments_start"), handlers.startExperiment);
+  registrar.mount(app, controlPlaneRoute("runs_list"), handlers.listRuns);
+  registrar.mount(app, controlPlaneRoute("runs_get"), handlers.getRun);
+  registrar.mount(app, controlPlaneRoute("runs_end"), handlers.endRun);
+}
+
+function mountMetricRoutes(
+  app: Hono,
+  registrar: Registrar,
+  handlers: ReturnType<typeof makeMetricSegmentHandlers>,
+): void {
+  registrar.mount(app, controlPlaneRoute("metrics_list"), handlers.listMetrics);
+  registrar.mount(app, controlPlaneRoute("metrics_create"), handlers.createMetric);
+  registrar.mount(app, controlPlaneRoute("metrics_get"), handlers.getMetric);
+  registrar.mount(app, controlPlaneRoute("metrics_update"), handlers.updateMetric);
+  registrar.mount(app, controlPlaneRoute("metrics_delete"), handlers.deleteMetric);
 }

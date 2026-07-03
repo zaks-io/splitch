@@ -27,6 +27,50 @@ export function makeExperimentRepo(db: Db) {
       return experimentsTable.findOne(scope, eq(experiments.id, experimentId));
     },
 
+    listExperiments(scope: EnvScope) {
+      return experimentsTable.findMany(scope);
+    },
+
+    updateExperiment(
+      scope: EnvScope,
+      experimentId: string,
+      patch: Partial<
+        Pick<
+          typeof experiments.$inferInsert,
+          | "key"
+          | "flagId"
+          | "name"
+          | "description"
+          | "hypothesis"
+          | "status"
+          | "targetingKeyField"
+          | "targetingKeyType"
+          | "confidenceLevel"
+          | "defaultVariantId"
+          | "metrics"
+          | "guardrailMetrics"
+          | "activationMetricId"
+          | "conversionWindowMs"
+          | "dimensions"
+          | "draftAllocation"
+          | "draftSalt"
+          | "draftTargetingRules"
+          | "draftSegmentIds"
+          | "liveRunId"
+          | "updatedAt"
+          | "updatedBy"
+        >
+      >,
+    ): Promise<typeof experiments.$inferSelect | null> {
+      return experimentsTable
+        .update(scope, patch, eq(experiments.id, experimentId))
+        .then((rows) => rows[0] ?? null);
+    },
+
+    removeExperiment(scope: EnvScope, experimentId: string): Promise<number> {
+      return experimentsTable.remove(scope, eq(experiments.id, experimentId));
+    },
+
     async findRunningExperimentForFlag(scope: EnvScope, flagId: string) {
       const rows = await experimentsTable.findMany(
         scope,
@@ -53,6 +97,20 @@ export function makeExperimentRepo(db: Db) {
 
     getRun(scope: EnvScope, runId: string) {
       return runsTable.findOne(scope, eq(runs.id, runId));
+    },
+
+    updateRunStatus(
+      scope: EnvScope,
+      runId: string,
+      patch: Pick<typeof runs.$inferInsert, "status" | "endedAt"> &
+        Partial<Pick<typeof runs.$inferInsert, "endReason">>,
+    ): Promise<typeof runs.$inferSelect | null> {
+      return runsTable.update(scope, patch, eq(runs.id, runId)).then((rows) => rows[0] ?? null);
+    },
+
+    async nextRunNumber(scope: EnvScope, experimentId: string): Promise<number> {
+      const existing = await runsTable.findMany(scope, eq(runs.experimentId, experimentId));
+      return existing.reduce((max, run) => Math.max(max, run.runNumber), 0) + 1;
     },
 
     async findRunningRunForExperiment(scope: EnvScope, experimentId: string) {
