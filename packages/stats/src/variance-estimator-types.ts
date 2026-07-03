@@ -1,7 +1,10 @@
 import type {
   DedupeExposureRow,
+  CupedAttributeSource,
+  CupedMethod,
   MetricKind,
   PerEntityMetricRow,
+  PrePeriodRow,
   VarianceTechniques,
 } from "@splitch/contracts";
 
@@ -41,6 +44,9 @@ export interface MetricComparisonEstimateInput {
   readonly metric_values: readonly PerEntityMetricRow[];
   readonly winsorize?: boolean;
   readonly winsorize_pct?: number;
+  readonly cuped?: boolean;
+  readonly cuped_coverage_threshold?: number;
+  readonly pre_period_covariates?: readonly CupedCovariateRow[];
 }
 
 export interface MetricComparisonEstimate {
@@ -57,7 +63,33 @@ export interface MetricComparisonEstimate {
 }
 
 export interface EntityAggregate {
+  targeting_key_hash: string;
+  first_exposure_ts: string;
+  window_anchor: string;
   value: number;
   num_value: number;
   denom_value: number;
+  cuped_adjusted: boolean;
+}
+
+export interface CupedAdjustment {
+  readonly controlEntities: readonly EntityAggregate[];
+  readonly treatmentEntities: readonly EntityAggregate[];
+  readonly method: CupedMethod;
+  readonly attribute: string | null;
+  readonly attributeSource: CupedAttributeSource | null;
+  readonly coveragePct: number | null;
+}
+
+export type CupedCovariateSource = PrePeriodRow["covariate_source"] | "post_treatment";
+
+export interface CupedCovariateRow {
+  readonly targeting_key_hash: string;
+  readonly metric_id: string;
+  readonly pre_period_value: number;
+  readonly covariate_source: CupedCovariateSource;
+  readonly attribute?: string;
+  readonly attribute_source?: CupedAttributeSource;
+  readonly locked?: boolean;
+  readonly observed_at?: string;
 }

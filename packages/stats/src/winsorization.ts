@@ -1,5 +1,9 @@
 import type { MetricKind, VarianceTechniques, WinsorizeCap } from "@splitch/contracts";
-import type { EntityAggregate, MetricComparisonEstimateInput } from "./variance-estimator-types.js";
+import type {
+  CupedAdjustment,
+  EntityAggregate,
+  MetricComparisonEstimateInput,
+} from "./variance-estimator-types.js";
 
 const DEFAULT_WINSORIZE_PCT = 99.9;
 const ADDITIVE_METRIC_TYPES = new Set<MetricKind>(["count", "revenue", "ratio"]);
@@ -84,16 +88,17 @@ export function winsorizedEntities(
 export function varianceTechniquesFor(
   metricType: MetricKind,
   winsorization: PooledWinsorization | null,
+  cuped?: CupedAdjustment,
 ): VarianceTechniques {
   return {
     winsorized: winsorization !== null,
     winsorize_pct: winsorization?.pct ?? null,
     winsorize_cap: winsorization?.cap ?? null,
-    cuped_applied: false,
-    cuped_method: null,
-    cuped_attribute: null,
-    cuped_attribute_source: null,
-    cuped_coverage_pct: null,
+    cuped_applied: cuped?.method !== undefined && cuped.method !== "none",
+    cuped_method: cuped?.method ?? null,
+    cuped_attribute: cuped?.attribute ?? null,
+    cuped_attribute_source: cuped?.attributeSource ?? null,
+    cuped_coverage_pct: cuped?.coveragePct ?? null,
     delta_method: metricType === "ratio",
   };
 }

@@ -40,6 +40,8 @@ export type {
   SequentialCIOptions,
 } from "./sequential-ci.js";
 export type {
+  CupedCovariateRow,
+  CupedCovariateSource,
   MetricArmEstimate,
   MetricArmEstimateInput,
   MetricComparisonEstimate,
