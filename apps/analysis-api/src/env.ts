@@ -4,10 +4,7 @@ export interface AnalysisApiEnv {
   CONTROL_PLANE_ORIGIN?: string;
   SESSION_STORE?: KVNamespace;
   SPLITCH_PLATFORM_TARGET?: string;
-  SPLITCH_SNAPSHOT_APP_ID?: string;
-  SPLITCH_SNAPSHOT_ENVIRONMENT_ID?: string;
-  SPLITCH_SNAPSHOT_EXPERIMENT_ID?: string;
-  SPLITCH_SNAPSHOT_RUN_ID?: string;
   TINYBIRD_API_URL?: string;
+  TINYBIRD_COPY_TOKEN?: string;
   TINYBIRD_READ_TOKEN?: string;
 }

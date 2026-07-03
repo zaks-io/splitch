@@ -1,0 +1,40 @@
+DESCRIPTION Refreshes the deduped first-touch exposure snapshot from the raw append-only log.
+
+NODE deduped_first_touch
+SQL >
+    %
+    {% if not defined(copy_watermark_ts) %}
+    {{error('copy_watermark_ts is required')}}
+    {% end %}
+    {{max_threads(1)}}
+    WITH {{DateTime64(copy_watermark_ts)}} AS copy_watermark
+    SELECT
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        targeting_key_hash,
+        if(
+            countIf(isNull(variant)) > 0 OR countDistinct(variant) > 1,
+            '__multiple__',
+            max(assumeNotNull(variant))
+        ) AS variant,
+        min(server_received_at) AS first_exposure_ts,
+        now64(3) AS snapshot_ts,
+        copy_watermark AS watermark_ts
+    FROM raw_events
+    WHERE type = 'exposure'
+        AND ingest_ts <= copy_watermark
+    GROUP BY
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        targeting_key_hash
+
+TYPE COPY
+TARGET_DATASOURCE deduped_exposures
+COPY_SCHEDULE @on-demand
+COPY_MODE replace

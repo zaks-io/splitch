@@ -6,12 +6,23 @@ export interface TinybirdReadTransport {
   readPipe(pipeName: string, params: PipeParams): Promise<readonly unknown[]>;
 }
 
+export interface TinybirdCopyTransport {
+  runCopyPipe(pipeName: string, params: PipeParams): Promise<void>;
+}
+
 const DEFAULT_TINYBIRD_TIMEOUT_MS = 5_000;
 
 export class TinybirdReadError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "TinybirdReadError";
+  }
+}
+
+export class TinybirdCopyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TinybirdCopyError";
   }
 }
 
@@ -47,12 +58,38 @@ export function createTinybirdReadTransport(
         pipeUrl(apiUrl, pipeName, params),
         requiredReadToken(env),
         timeoutMs,
+        "pipe read",
       );
       if (!response.ok) {
         throw new TinybirdReadError(`Tinybird pipe read failed with HTTP ${response.status}`);
       }
 
       return parseRows(await responseBody(response));
+    },
+  };
+}
+
+export function createTinybirdCopyTransport(
+  env: AnalysisApiEnv,
+  opts: { fetchFn?: typeof fetch; timeoutMs?: number } = {},
+): TinybirdCopyTransport {
+  const fetchFn = opts.fetchFn ?? fetch;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TINYBIRD_TIMEOUT_MS;
+  const apiUrl = requiredConfig(env.TINYBIRD_API_URL, "TINYBIRD_API_URL");
+
+  return {
+    async runCopyPipe(pipeName, params) {
+      const response = await fetchWithTimeout(
+        fetchFn,
+        copyPipeUrl(apiUrl, pipeName, params),
+        requiredCopyToken(env),
+        timeoutMs,
+        "copy run",
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        throw new TinybirdCopyError(`Tinybird copy run failed with HTTP ${response.status}`);
+      }
     },
   };
 }
@@ -65,8 +102,24 @@ function requiredReadToken(env: AnalysisApiEnv): string {
   return token;
 }
 
+function requiredCopyToken(env: AnalysisApiEnv): string {
+  const token = env.TINYBIRD_COPY_TOKEN;
+  if (!token) {
+    throw new TinybirdCopyError("Tinybird copy token is unavailable");
+  }
+  return token;
+}
+
 function pipeUrl(apiUrl: string, pipeName: string, params: PipeParams): URL {
   const url = new URL(`/v0/pipes/${pipeName}.json`, apiUrl);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  return url;
+}
+
+function copyPipeUrl(apiUrl: string, pipeName: string, params: PipeParams): URL {
+  const url = new URL(`/v0/pipes/${pipeName}/copy`, apiUrl);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
@@ -112,19 +165,26 @@ async function fetchWithTimeout(
   url: URL,
   token: string,
   timeoutMs: number,
+  kind: "pipe read" | "copy run",
+  init: RequestInit = {},
 ): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetchFn(url, {
+      ...init,
       headers: { authorization: `Bearer ${token}` },
       signal: controller.signal,
     });
   } catch (cause) {
-    throw new TinybirdReadError(`Tinybird pipe read failed: ${errorMessage(cause)}`);
+    throw tinybirdRequestError(kind, `Tinybird ${kind} failed: ${errorMessage(cause)}`);
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function tinybirdRequestError(kind: "pipe read" | "copy run", message: string): Error {
+  return kind === "pipe read" ? new TinybirdReadError(message) : new TinybirdCopyError(message);
 }
 
 function errorMessage(cause: unknown): string {
