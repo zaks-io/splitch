@@ -1,5 +1,6 @@
 import type { MetricKind, PerEntityMetricRow, VarianceTechniques } from "@splitch/contracts";
 import { applyCupedAdjustment } from "./cuped.js";
+import { dedupedExposureRowsForVariant } from "./exposure-denominator.js";
 import {
   clampSamplingVariance,
   finiteValue,
@@ -158,18 +159,16 @@ function aggregateEntities(input: MetricArmEstimateInput): EntityAggregate[] {
 
 function seedExposedEntities(input: MetricArmEstimateInput): Map<string, EntityAggregate> {
   const entities = new Map<string, EntityAggregate>();
-  for (const exposure of input.exposures) {
-    if (exposure.run_id === input.run_id && exposure.variant === input.variant) {
-      entities.set(exposure.targeting_key_hash, {
-        targeting_key_hash: exposure.targeting_key_hash,
-        first_exposure_ts: exposure.first_exposure_ts,
-        window_anchor: exposure.window_anchor,
-        value: 0,
-        num_value: 0,
-        denom_value: 0,
-        cuped_adjusted: false,
-      });
-    }
+  for (const exposure of dedupedExposureRowsForVariant(input)) {
+    entities.set(exposure.targeting_key_hash, {
+      targeting_key_hash: exposure.targeting_key_hash,
+      first_exposure_ts: exposure.first_exposure_ts,
+      window_anchor: exposure.window_anchor,
+      value: 0,
+      num_value: 0,
+      denom_value: 0,
+      cuped_adjusted: false,
+    });
   }
   return entities;
 }
