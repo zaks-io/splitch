@@ -1,0 +1,54 @@
+import type { DedupeExposureRow, MetricKind, PerEntityMetricRow } from "@splitch/contracts";
+
+export type MetricVarianceStatus = "ready" | "running" | "insufficient_denominator";
+
+export interface MetricArmEstimateInput {
+  readonly run_id: string;
+  readonly metric_id: string;
+  readonly metric_type: MetricKind;
+  readonly variant: string;
+  readonly exposures: readonly DedupeExposureRow[];
+  readonly metric_values: readonly PerEntityMetricRow[];
+}
+
+export interface MetricArmEstimate {
+  readonly variant: string;
+  readonly metric_id: string;
+  readonly metric_type: MetricKind;
+  readonly sample_size_n: number;
+  readonly point_estimate: number | null;
+  readonly sampling_var: number | null;
+  readonly status: MetricVarianceStatus;
+  readonly arm_variance: number | null;
+  readonly denominator_mean: number | null;
+  readonly zero_denominator_entity_count: number;
+  readonly delta_method: boolean;
+}
+
+export interface MetricComparisonEstimateInput {
+  readonly run_id: string;
+  readonly metric_id: string;
+  readonly metric_type: MetricKind;
+  readonly control_variant: string;
+  readonly treatment_variant: string;
+  readonly exposures: readonly DedupeExposureRow[];
+  readonly metric_values: readonly PerEntityMetricRow[];
+}
+
+export interface MetricComparisonEstimate {
+  readonly metric_id: string;
+  readonly metric_type: MetricKind;
+  readonly control: MetricArmEstimate;
+  readonly treatment: MetricArmEstimate;
+  readonly absolute_lift: number | null;
+  readonly absolute_lift_sampling_var: number | null;
+  readonly relative_lift_pct: number | null;
+  readonly sampling_var: number | null;
+  readonly status: MetricVarianceStatus;
+}
+
+export interface EntityAggregate {
+  value: number;
+  num_value: number;
+  denom_value: number;
+}
