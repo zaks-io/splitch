@@ -16,14 +16,17 @@ export {
   SequentialCI,
 } from "./sequential-ci.js";
 export { estimateMetricArm, estimateMetricComparison } from "./variance-estimators.js";
+export { checkSrmHealth, SRM_MISMATCH_P_VALUE } from "./srm-checker.js";
 export type {
   ActivationRow,
   ArmResult,
   DecisionFamilyMember,
   DedupeExposureRow,
   GuardrailResult,
+  HealthMetrics,
   PerEntityMetricRow,
   PrePeriodRow,
+  SrmResult,
   StatsEngine,
   StatsInput,
   StatsOutput,
@@ -48,3 +51,4 @@ export type {
   MetricComparisonEstimateInput,
   MetricVarianceStatus,
 } from "./variance-estimator-types.js";
+export type { SrmCheckerInput, SrmCheckerOutput } from "./srm-checker.js";
