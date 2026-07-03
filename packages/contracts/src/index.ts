@@ -101,6 +101,7 @@ export {
   StatsOutputSchema,
   StatsResultStatusSchema,
   statsResultStatuses,
+  WinsorizeCapSchema,
   VarianceTechniquesSchema,
 } from "./stats-result-contract.js";
 export type {
@@ -115,6 +116,7 @@ export type {
   StatsEngine,
   StatsOutput,
   StatsResultStatus,
+  WinsorizeCap,
   VarianceTechniques,
 } from "./stats-result-contract.js";
 export {

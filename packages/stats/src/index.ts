@@ -27,6 +27,7 @@ export type {
   StatsEngine,
   StatsInput,
   StatsOutput,
+  WinsorizeCap,
 } from "@splitch/contracts";
 export type {
   CIAdapter,

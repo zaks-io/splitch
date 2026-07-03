@@ -1,10 +1,47 @@
 import type { DedupeExposureRow, PerEntityMetricRow } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { estimateMetricArm } from "./variance-estimators.js";
+import { estimateMetricArm, estimateMetricComparison } from "./variance-estimators.js";
 
 const RUN_ID = "run_variance_simulation";
 
 describe("variance estimator negative-path simulations", () => {
+  it("reduces heavy-tail additive variance while keeping sample size unchanged", () => {
+    const controlIds = Array.from({ length: 10 }, (_, index) => `control_${index}`);
+    const treatmentIds = Array.from({ length: 10 }, (_, index) => `treatment_${index}`);
+    const metric_values = [
+      ...controlIds.map((entityId) => countRow(entityId, 1)),
+      ...treatmentIds.map((entityId, index) => countRow(entityId, index === 9 ? 1_000 : 1)),
+    ];
+    const raw = estimateMetricComparison({
+      run_id: RUN_ID,
+      metric_id: "clustered_count",
+      metric_type: "count",
+      control_variant: "control",
+      treatment_variant: "treatment",
+      exposures: [...exposures("control", controlIds), ...exposures("treatment", treatmentIds)],
+      metric_values,
+      winsorize: false,
+    });
+    const winsorized = estimateMetricComparison({
+      run_id: RUN_ID,
+      metric_id: "clustered_count",
+      metric_type: "count",
+      control_variant: "control",
+      treatment_variant: "treatment",
+      exposures: [...exposures("control", controlIds), ...exposures("treatment", treatmentIds)],
+      metric_values,
+      winsorize_pct: 90,
+    });
+
+    expect(winsorized.treatment.sample_size_n).toBe(raw.treatment.sample_size_n);
+    expect(winsorized.treatment.sampling_var).toBeLessThan(raw.treatment.sampling_var ?? 0);
+    expect(winsorized.variance_techniques).toMatchObject({
+      winsorized: true,
+      winsorize_pct: 90,
+      winsorize_cap: 1,
+    });
+  });
+
   it("rejects an event-row variance fake under clustered data", () => {
     const entityIds = Array.from({ length: 12 }, (_, index) => `entity_${index}`);
     const metric_values = entityIds.flatMap((entityId, index) =>

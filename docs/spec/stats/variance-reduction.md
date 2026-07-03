@@ -8,22 +8,22 @@ and never silently mis-apply. Both are gated on the data they require.
 ### What it does
 
 Caps per-Entity values at a high percentile before variance computation, replacing — not deleting —
-extreme values. Heavy-tailed Count/Revenue Metrics let a few whales dominate variance; winsorization
-neutralizes that.
+extreme values. Heavy-tailed Count, Revenue, and Ratio Metrics let a few whales dominate variance;
+winsorization neutralizes that.
 
 ### Applies to
 
 - **Count Metrics**: caps per-Entity sum at the p-th percentile of pooled per-Entity sums across all arms.
 - **Revenue (Mean) Metrics**: caps per-Entity sum at the p-th percentile of pooled per-Entity sums across all arms.
 - **Binomial Metrics**: **never applied** (0/1 has no tail; winsorization is meaningless).
-- **Ratio Metrics**: applied independently to pooled `num_i` and pooled `denom_i` if configured per Metric; zero denominators are preserved.
+- **Ratio Metrics**: applied independently to pooled `num_i` and pooled `denom_i` unless disabled for the Metric; zero denominators are preserved.
 
 ### Defaults
 
-| Config field    | Default | Scope                      |
-| --------------- | ------- | -------------------------- |
-| `winsorize`     | `true`  | per-Metric (count/revenue) |
-| `winsorize_pct` | `99.9`  | per-Metric                 |
+| Config field    | Default | Scope                            |
+| --------------- | ------- | -------------------------------- |
+| `winsorize`     | `true`  | per-Metric (count/revenue/ratio) |
+| `winsorize_pct` | `99.9`  | per-Metric                       |
 
 This default-on is a deliberate divergence from Eppo and GrowthBook, which are opt-in per Metric
 (ADR-0016). We follow Statsig's default-on reasoning: the untreated failure (a whale silently
@@ -44,6 +44,9 @@ Entities still count in `n`.
 The cap rule (`winsorize`, `winsorize_pct`, and whether a fixed historical cap is used) is locked
 at Run Start for decision-valid results. The realized cap value is reported in output. Arm-specific
 caps are disallowed because they can change each arm's estimand differently.
+
+For Ratio Metrics, `winsorize_cap` reports the realized pooled component caps as
+`{ num_value, denom_value }`. For Count and Revenue Metrics, it reports the scalar cap.
 
 ### Bias acknowledgment
 

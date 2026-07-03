@@ -1,7 +1,7 @@
 # Sequential testing mechanics: aCS implementation
 
 Asymptotic confidence sequence (aCS) construction, boundary calculation, peeking safety, and
-stopping rules. Applies after variance computation and CUPED in the CI pipeline.
+stopping rules. aCS applies after winsorize -> type-variance -> delta-method -> CUPED in the CI pipeline.
 
 ## What aCS provides
 

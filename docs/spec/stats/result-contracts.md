@@ -24,17 +24,17 @@ contract and `StatsEngine` signature live in [data-contracts.md](data-contracts.
 
 ## VarianceTechniques object (never silent)
 
-| Field                    | Type             | Meaning                                                          |
-| ------------------------ | ---------------- | ---------------------------------------------------------------- |
-| `winsorized`             | `boolean`        | True if winsorization was applied                                |
-| `winsorize_pct`          | `number \| null` | Percentile used (e.g., `99.9`); null if not winsorized           |
-| `winsorize_cap`          | `number \| null` | Realized pooled cap value; null if not winsorized                |
-| `cuped_applied`          | `boolean`        | True if CUPED adjustment was applied                             |
-| `cuped_method`           | `enum \| null`   | `pre_period \| attribute_covariate \| none`                      |
-| `cuped_attribute`        | `string \| null` | Named attribute used (for `attribute_covariate`)                 |
-| `cuped_attribute_source` | `enum \| null`   | `declared \| pre_period_selected \| historical_selected \| null` |
-| `cuped_coverage_pct`     | `number \| null` | Fraction of Entities with pre-period data (0–100)                |
-| `delta_method`           | `boolean`        | True if delta method was applied (always true for Ratio)         |
+| Field                    | Type                                           | Meaning                                                                                         |
+| ------------------------ | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `winsorized`             | `boolean`                                      | True if winsorization was applied                                                               |
+| `winsorize_pct`          | `number \| null`                               | Percentile used (e.g., `99.9`); null if not winsorized                                          |
+| `winsorize_cap`          | `number \| { num_value, denom_value } \| null` | Realized pooled cap value; Ratio reports numerator and denominator caps; null if not winsorized |
+| `cuped_applied`          | `boolean`                                      | True if CUPED adjustment was applied                                                            |
+| `cuped_method`           | `enum \| null`                                 | `pre_period \| attribute_covariate \| none`                                                     |
+| `cuped_attribute`        | `string \| null`                               | Named attribute used (for `attribute_covariate`)                                                |
+| `cuped_attribute_source` | `enum \| null`                                 | `declared \| pre_period_selected \| historical_selected \| null`                                |
+| `cuped_coverage_pct`     | `number \| null`                               | Fraction of Entities with pre-period data (0–100)                                               |
+| `delta_method`           | `boolean`                                      | True if delta method was applied (always true for Ratio)                                        |
 
 ## SRM result object
 

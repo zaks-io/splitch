@@ -6,6 +6,72 @@ import { estimateMetricArm, estimateMetricComparison } from "./variance-estimato
 const RUN_ID = "run_variance_golden";
 
 describe("variance estimator golden fixtures", () => {
+  it("applies one pooled winsorization cap without changing sample size", () => {
+    const result = estimateMetricComparison({
+      run_id: RUN_ID,
+      metric_id: "clustered_count",
+      metric_type: "count",
+      control_variant: "control",
+      treatment_variant: "treatment",
+      exposures: [
+        ...exposures("control", ["c1", "c2", "c3", "c4"]),
+        ...exposures("treatment", ["t1", "t2", "t3", "t4"]),
+      ],
+      metric_values: [
+        metricRow("c1", 1),
+        metricRow("c2", 2),
+        metricRow("c3", 3),
+        metricRow("c4", 100),
+        metricRow("t1", 4),
+        metricRow("t2", 5),
+        metricRow("t3", 6),
+        metricRow("t4", 7),
+      ],
+      winsorize_pct: 80,
+    });
+    const perArmWrong = wrongPerArmWinsorizedMean([1, 2, 3, 100], 80);
+
+    expect(result.control.sample_size_n).toBe(4);
+    expect(result.treatment.sample_size_n).toBe(4);
+    expect(result.variance_techniques).toMatchObject({
+      winsorized: true,
+      winsorize_pct: 80,
+      winsorize_cap: 7,
+    });
+    expect(result.control.point_estimate).toBe(3.25);
+    expect(result.control.arm_variance).toBeCloseTo(6.916666666666667, 15);
+    expect(result.control.sampling_var).toBeCloseTo(1.7291666666666667, 15);
+    expect(perArmWrong).toBe(26.5);
+    expect(result.control.point_estimate).not.toBe(perArmWrong);
+  });
+
+  it("reports pooled Ratio numerator and denominator caps", () => {
+    const result = estimateMetricComparison({
+      run_id: RUN_ID,
+      metric_id: "ratio_metric",
+      metric_type: "ratio",
+      control_variant: "control",
+      treatment_variant: "treatment",
+      exposures: [...exposures("control", ["c1", "c2"]), ...exposures("treatment", ["t1", "t2"])],
+      metric_values: [
+        ratioRow("c1", 1, 1),
+        ratioRow("c2", 10, 100),
+        ratioRow("t1", 2, 2),
+        ratioRow("t2", 20, 200),
+      ],
+      winsorize_pct: 75,
+    });
+
+    expect(result.variance_techniques).toMatchObject({
+      winsorized: true,
+      winsorize_pct: 75,
+      winsorize_cap: { num_value: 10, denom_value: 100 },
+      delta_method: true,
+    });
+    expect(result.treatment.point_estimate).toBeCloseTo(6 / 51, 15);
+    expect(result.treatment.sample_size_n).toBe(2);
+  });
+
   it("uses Ratio covariance in the relative-lift CI input", () => {
     const result = estimateMetricComparison({
       run_id: RUN_ID,
@@ -125,4 +191,20 @@ function wrongEventRowSamplingVar(values: readonly number[]): number {
   const sampleVariance =
     values.reduce((sum, value) => sum + (value - center) ** 2, 0) / (values.length - 1);
   return sampleVariance / values.length;
+}
+
+function wrongPerArmWinsorizedMean(values: readonly number[], winsorizePct: number): number {
+  const cap = nearestRankCap(values, winsorizePct);
+  const capped = values.map((value) => Math.min(value, cap));
+  return capped.reduce((sum, value) => sum + value, 0) / capped.length;
+}
+
+function nearestRankCap(values: readonly number[], pct: number): number {
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.min(sorted.length - 1, Math.ceil((pct / 100) * sorted.length) - 1);
+  const cap = sorted[index];
+  if (cap === undefined) {
+    throw new Error("test fixture cap missing");
+  }
+  return cap;
 }

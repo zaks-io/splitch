@@ -37,11 +37,22 @@ export const dimensionClasses = ["primary", "secondary"] as const;
 export const DimensionClassSchema = z.enum(dimensionClasses);
 export type DimensionClass = z.infer<typeof DimensionClassSchema>;
 
+export const WinsorizeCapSchema = z.union([
+  z.number(),
+  z
+    .object({
+      num_value: z.number(),
+      denom_value: z.number(),
+    })
+    .strict(),
+]);
+export type WinsorizeCap = z.infer<typeof WinsorizeCapSchema>;
+
 export const VarianceTechniquesSchema = z
   .object({
     winsorized: z.boolean(),
     winsorize_pct: z.number().nullable(),
-    winsorize_cap: z.number().nullable(),
+    winsorize_cap: WinsorizeCapSchema.nullable(),
     cuped_applied: z.boolean(),
     cuped_method: CupedMethodSchema.nullable(),
     cuped_attribute: z.string().nullable(),

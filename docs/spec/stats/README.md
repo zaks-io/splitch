@@ -2,32 +2,32 @@
 
 The stats engine takes per-Entity Metric values from the Exposure pipeline and Activation gate
 and produces trusted results: point estimates, always-valid CIs, significance calls, and health
-diagnostics. The spine is one CI object flowing through six deterministic stages.
+diagnostics. The spine is one CI object flowing through a fixed deterministic sequence.
 
 ## Files
 
-| File                                                                   | Purpose                                                                                                                                            |
-| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [inference-engine.md](inference-engine.md)                             | The one CI object: variance → winsorization → CUPED → aCS → relative-lift → Guardrail → BH FDR; per-type estimators; failure contracts             |
-| [multiple-comparisons-fdr.md](multiple-comparisons-fdr.md)             | Benjamini-Hochberg FDR over the goal-metric × Variant family; family definition and lock; BH algorithm; "None" mode; what's excluded               |
-| [metric-types.md](metric-types.md)                                     | Metric taxonomy (Binomial / Count / Revenue / Ratio / Guardrail), per-Entity aggregation shapes, Conversion Window anchoring                       |
-| [variance-reduction.md](variance-reduction.md)                         | CUPED gating and pre-period anchor; attribute-covariate fallback; winsorization defaults and application order                                     |
-| [srm-and-health.md](srm-and-health.md)                                 | Full-exposed SRM + activated-population SRM; `__multiple__` quarantine; health metrics object                                                      |
-| [sequential-testing-mechanics.md](sequential-testing-mechanics.md)     | aCS construction, boundary/tuning parameters, stopping rules; fixed-horizon opt-in; SequentialCI / FixedHorizonCI adapter interface                |
-| [dimension-slicing.md](dimension-slicing.md)                           | Primary vs. secondary Dimensions; BH family expansion; composition with Activation gate                                                            |
-| [data-contracts.md](data-contracts.md)                                 | Input rows from Exposure pipeline (deduped Exposure, per-Entity Metric values, pre-period covariates, activation rows); StatsEngine seam interface |
-| [result-contracts.md](result-contracts.md)                             | Output shapes the engine writes: per-arm result, VarianceTechniques, SRM, Guardrail, and health objects                                            |
-| [statistical-rigor-verification.md](statistical-rigor-verification.md) | Required unit, golden, property, simulation, and spec-lint gates for decision-valid stats                                                          |
+| File                                                                   | Purpose                                                                                                                                                       |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [inference-engine.md](inference-engine.md)                             | The one CI object: winsorize -> type-variance -> delta-method -> CUPED -> aCS -> relative-lift -> Guardrail -> BH FDR; per-type estimators; failure contracts |
+| [multiple-comparisons-fdr.md](multiple-comparisons-fdr.md)             | Benjamini-Hochberg FDR over the goal-metric × Variant family; family definition and lock; BH algorithm; "None" mode; what's excluded                          |
+| [metric-types.md](metric-types.md)                                     | Metric taxonomy (Binomial / Count / Revenue / Ratio / Guardrail), per-Entity aggregation shapes, Conversion Window anchoring                                  |
+| [variance-reduction.md](variance-reduction.md)                         | CUPED gating and pre-period anchor; attribute-covariate fallback; winsorization defaults and application order                                                |
+| [srm-and-health.md](srm-and-health.md)                                 | Full-exposed SRM + activated-population SRM; `__multiple__` quarantine; health metrics object                                                                 |
+| [sequential-testing-mechanics.md](sequential-testing-mechanics.md)     | aCS construction, boundary/tuning parameters, stopping rules; fixed-horizon opt-in; SequentialCI / FixedHorizonCI adapter interface                           |
+| [dimension-slicing.md](dimension-slicing.md)                           | Primary vs. secondary Dimensions; BH family expansion; composition with Activation gate                                                                       |
+| [data-contracts.md](data-contracts.md)                                 | Input rows from Exposure pipeline (deduped Exposure, per-Entity Metric values, pre-period covariates, activation rows); StatsEngine seam interface            |
+| [result-contracts.md](result-contracts.md)                             | Output shapes the engine writes: per-arm result, VarianceTechniques, SRM, Guardrail, and health objects                                                       |
+| [statistical-rigor-verification.md](statistical-rigor-verification.md) | Required unit, golden, property, simulation, and spec-lint gates for decision-valid stats                                                                     |
 
 ## Spine idea
 
 Every Metric flows through **one CI object** in a fixed order:
 
 ```
-type-variance → delta-method → [winsorize] → [CUPED] → aCS → relative-lift → Guardrail → BH FDR
+winsorize -> type-variance -> delta-method -> CUPED -> aCS -> relative-lift -> Guardrail -> BH FDR
 ```
 
-Each bracket step is gated: winsorization is skipped for Binomial; CUPED is skipped below
+Each optional step is gated: winsorization is skipped for Binomial; CUPED is skipped below
 coverage threshold (with documented fallback). Nothing degrades silently.
 
 ## Key cross-area seams

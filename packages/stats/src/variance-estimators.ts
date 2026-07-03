@@ -1,4 +1,4 @@
-import type { MetricKind, PerEntityMetricRow } from "@splitch/contracts";
+import type { MetricKind, PerEntityMetricRow, VarianceTechniques } from "@splitch/contracts";
 import {
   clampSamplingVariance,
   finiteValue,
@@ -14,17 +14,59 @@ import type {
   MetricComparisonEstimateInput,
   MetricVarianceStatus,
 } from "./variance-estimator-types.js";
+import { comparisonEstimate } from "./variance-effects.js";
+import {
+  computePooledWinsorization,
+  noVarianceTechniques,
+  varianceTechniquesFor,
+  winsorizedEntities,
+} from "./winsorization.js";
 
 export function estimateMetricArm(input: MetricArmEstimateInput): MetricArmEstimate {
   const entities = aggregateEntities(input);
+
+  return estimateMetricArmFromEntities(input, entities, noVarianceTechniques(input.metric_type));
+}
+
+export function estimateMetricComparison(
+  input: MetricComparisonEstimateInput,
+): MetricComparisonEstimate {
+  const controlInput = { ...input, variant: input.control_variant };
+  const treatmentInput = { ...input, variant: input.treatment_variant };
+  const controlEntities = aggregateEntities(controlInput);
+  const treatmentEntities = aggregateEntities(treatmentInput);
+  const winsorization = computePooledWinsorization(input, [
+    ...controlEntities,
+    ...treatmentEntities,
+  ]);
+  const varianceTechniques = varianceTechniquesFor(input.metric_type, winsorization);
+  const control = estimateMetricArmFromEntities(
+    controlInput,
+    winsorizedEntities(input.metric_type, controlEntities, winsorization),
+    varianceTechniques,
+  );
+  const treatment = estimateMetricArmFromEntities(
+    treatmentInput,
+    winsorizedEntities(input.metric_type, treatmentEntities, winsorization),
+    varianceTechniques,
+  );
+
+  return comparisonEstimate(input, control, treatment, varianceTechniques);
+}
+
+function estimateMetricArmFromEntities(
+  input: MetricArmEstimateInput,
+  entities: readonly EntityAggregate[],
+  varianceTechniques: VarianceTechniques,
+): MetricArmEstimate {
   const sampleSize = entities.length;
 
   if (sampleSize === 0) {
-    return armEstimate(input, sampleSize, null, null, "running", null, null, 0);
+    return armEstimate(input, sampleSize, null, null, "running", null, null, 0, varianceTechniques);
   }
 
   if (input.metric_type === "ratio") {
-    return estimateRatioArm(input, entities);
+    return estimateRatioArm(input, entities, varianceTechniques);
   }
 
   const values = entities.map((entity) => entity.value);
@@ -41,24 +83,14 @@ export function estimateMetricArm(input: MetricArmEstimateInput): MetricArmEstim
     armVariance,
     null,
     0,
+    varianceTechniques,
   );
-}
-
-export function estimateMetricComparison(
-  input: MetricComparisonEstimateInput,
-): MetricComparisonEstimate {
-  const control = estimateMetricArm({ ...input, variant: input.control_variant });
-  const treatment = estimateMetricArm({ ...input, variant: input.treatment_variant });
-
-  return comparisonEstimate(input, control, treatment, {
-    ...absoluteLiftEffect(control, treatment),
-    ...relativeLiftEffect(control, treatment),
-  });
 }
 
 function estimateRatioArm(
   input: MetricArmEstimateInput,
   entities: readonly EntityAggregate[],
+  varianceTechniques: VarianceTechniques,
 ): MetricArmEstimate {
   const nums = entities.map((entity) => entity.num_value);
   const denoms = entities.map((entity) => entity.denom_value);
@@ -77,6 +109,7 @@ function estimateRatioArm(
       null,
       denominatorMean,
       zeroDenominatorCount,
+      varianceTechniques,
     );
   }
 
@@ -98,6 +131,7 @@ function estimateRatioArm(
     clampSamplingVariance(armVariance),
     denominatorMean,
     zeroDenominatorCount,
+    varianceTechniques,
   );
 }
 
@@ -166,6 +200,7 @@ function armEstimate(
   arm_variance: number | null,
   denominator_mean: number | null,
   zero_denominator_entity_count: number,
+  variance_techniques: VarianceTechniques,
 ): MetricArmEstimate {
   return {
     variant: input.variant,
@@ -179,91 +214,6 @@ function armEstimate(
     denominator_mean,
     zero_denominator_entity_count,
     delta_method: input.metric_type === "ratio",
+    variance_techniques,
   };
-}
-
-function comparisonEstimate(
-  input: MetricComparisonEstimateInput,
-  control: MetricArmEstimate,
-  treatment: MetricArmEstimate,
-  effect: Pick<
-    MetricComparisonEstimate,
-    "absolute_lift" | "absolute_lift_sampling_var" | "relative_lift_pct" | "sampling_var" | "status"
-  >,
-): MetricComparisonEstimate {
-  return {
-    metric_id: input.metric_id,
-    metric_type: input.metric_type,
-    control,
-    treatment,
-    ...effect,
-  };
-}
-
-function absoluteLiftEffect(
-  control: MetricArmEstimate,
-  treatment: MetricArmEstimate,
-): Pick<MetricComparisonEstimate, "absolute_lift" | "absolute_lift_sampling_var"> {
-  return {
-    absolute_lift:
-      treatment.point_estimate === null || control.point_estimate === null
-        ? null
-        : treatment.point_estimate - control.point_estimate,
-    absolute_lift_sampling_var:
-      treatment.sampling_var === null || control.sampling_var === null
-        ? null
-        : treatment.sampling_var + control.sampling_var,
-  };
-}
-
-function relativeLiftEffect(
-  control: MetricArmEstimate,
-  treatment: MetricArmEstimate,
-): Pick<MetricComparisonEstimate, "relative_lift_pct" | "sampling_var" | "status"> {
-  if (control.status !== "ready" || treatment.status !== "ready") {
-    return {
-      relative_lift_pct: null,
-      sampling_var: null,
-      status:
-        control.status === "insufficient_denominator" ||
-        treatment.status === "insufficient_denominator"
-          ? "insufficient_denominator"
-          : "running",
-    };
-  }
-
-  const values = readyRelativeValues(control, treatment);
-  if (!values || values.controlPoint === 0) {
-    return { relative_lift_pct: null, sampling_var: null, status: "insufficient_denominator" };
-  }
-
-  const relativeLift = values.treatmentPoint / values.controlPoint - 1;
-  const samplingVar =
-    (values.treatmentSamplingVar / values.controlPoint ** 2 +
-      (values.treatmentPoint ** 2 * values.controlSamplingVar) / values.controlPoint ** 4) *
-    10_000;
-
-  return {
-    relative_lift_pct: relativeLift * 100,
-    sampling_var: clampSamplingVariance(samplingVar),
-    status: "ready",
-  };
-}
-
-function readyRelativeValues(control: MetricArmEstimate, treatment: MetricArmEstimate) {
-  const controlPoint = control.point_estimate;
-  const treatmentPoint = treatment.point_estimate;
-  const controlSamplingVar = control.sampling_var;
-  const treatmentSamplingVar = treatment.sampling_var;
-
-  if (
-    controlPoint === null ||
-    treatmentPoint === null ||
-    controlSamplingVar === null ||
-    treatmentSamplingVar === null
-  ) {
-    return null;
-  }
-
-  return { controlPoint, treatmentPoint, controlSamplingVar, treatmentSamplingVar };
 }
