@@ -15,6 +15,7 @@ export {
   SEQUENTIAL_CI_SOURCE,
   SequentialCI,
 } from "./sequential-ci.js";
+export { applyGuardrailBoundChecks } from "./guardrail-bound-check.js";
 export { applyDecisionFamilyCorrection } from "./decision-family-fdr.js";
 export { estimateMetricArm, estimateMetricComparison } from "./variance-estimators.js";
 export { checkSrmHealth, SRM_MISMATCH_P_VALUE } from "./srm-checker.js";
@@ -49,6 +50,7 @@ export type {
   DecisionFamilyCorrectionOutput,
   DecisionFamilyCorrectionSummary,
 } from "./decision-family-fdr.js";
+export type { GuardrailBoundCheckInput, GuardrailThreshold } from "./guardrail-bound-check.js";
 export type {
   CupedCovariateRow,
   CupedCovariateSource,

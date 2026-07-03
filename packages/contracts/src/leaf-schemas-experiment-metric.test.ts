@@ -43,6 +43,11 @@ describe("MetricSchema — binomial", () => {
     const m = MetricSchema.parse({ ...baseMetric, kind: "binomial" });
     expect(m.kind).toBe("binomial");
   });
+
+  it("parses a regular Metric carrying a downsideThreshold", () => {
+    const m = MetricSchema.parse({ ...baseMetric, kind: "binomial", downsideThreshold: -0.005 });
+    expect(m.downsideThreshold).toBe(-0.005);
+  });
 });
 
 describe("MetricSchema — count / revenue require eventValueField", () => {
