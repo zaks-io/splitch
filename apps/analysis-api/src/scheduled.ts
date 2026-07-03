@@ -1,50 +1,46 @@
-import { readStatsInputFromTinybird } from "./results.js";
-import type { AnalysisApiEnv } from "./env.js";
-import type { TinybirdReadTransport } from "./tinybird.js";
+import type { TinybirdCopyTransport } from "./tinybird.js";
+
+const SNAPSHOT_COPY_PIPE = "cp_deduped_exposures";
+const SNAPSHOT_COPY_MODE = "replace";
+const COPY_WATERMARK_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/;
 
 export interface ScheduledSnapshotDeps {
   cron: string;
-  env: AnalysisApiEnv;
   logger?: Pick<Console, "log" | "error">;
-  tinybird: TinybirdReadTransport;
+  scheduledTimeMs: number;
+  tinybird: TinybirdCopyTransport;
 }
 
 export async function runScheduledSnapshot(deps: ScheduledSnapshotDeps): Promise<void> {
-  const scope = scheduledScope(deps.env);
-  if (scope === null) {
-    deps.logger?.log(`splitch-analysis-api: Tinybird snapshot ${deps.cron} skipped`);
-    return;
-  }
+  const watermarkTs = copyWatermarkFromScheduledTime(deps.scheduledTimeMs);
 
   try {
-    await readStatsInputFromTinybird(deps.tinybird, scope);
-    deps.logger?.log(`splitch-analysis-api: Tinybird snapshot ${deps.cron} checked`);
+    await deps.tinybird.runCopyPipe(SNAPSHOT_COPY_PIPE, {
+      _mode: SNAPSHOT_COPY_MODE,
+      copy_watermark_ts: watermarkTs,
+    });
+    deps.logger?.log(
+      `splitch-analysis-api: Tinybird snapshot ${deps.cron} triggered at watermark ${watermarkTs}`,
+    );
   } catch (cause) {
     deps.logger?.error(`splitch-analysis-api: Tinybird snapshot ${deps.cron} failed`);
     throw cause;
   }
 }
 
-function scheduledScope(env: AnalysisApiEnv) {
-  const appId = env.SPLITCH_SNAPSHOT_APP_ID;
-  const environmentId = env.SPLITCH_SNAPSHOT_ENVIRONMENT_ID;
-  const experimentId = env.SPLITCH_SNAPSHOT_EXPERIMENT_ID;
-  if (appId === undefined && environmentId === undefined && experimentId === undefined) {
-    return null;
+export function copyWatermarkFromScheduledTime(scheduledTimeMs: number): string {
+  if (!Number.isFinite(scheduledTimeMs) || scheduledTimeMs < 0) {
+    throw new Error("analysis-api: malformed snapshot copy watermark");
   }
-  if (!hasValue(appId) || !hasValue(environmentId) || !hasValue(experimentId)) {
-    throw new Error(
-      "analysis-api: partial snapshot scope configuration (SPLITCH_SNAPSHOT_APP_ID/SPLITCH_SNAPSHOT_ENVIRONMENT_ID/SPLITCH_SNAPSHOT_EXPERIMENT_ID)",
-    );
-  }
-  return {
-    appId,
-    environmentId,
-    experimentId,
-    runId: env.SPLITCH_SNAPSHOT_RUN_ID,
-  };
-}
 
-function hasValue(value: string | undefined): value is string {
-  return typeof value === "string" && value.trim().length > 0;
+  const date = new Date(scheduledTimeMs);
+  if (!Number.isFinite(date.getTime())) {
+    throw new Error("analysis-api: malformed snapshot copy watermark");
+  }
+
+  const watermarkTs = date.toISOString().replace("T", " ").replace("Z", "");
+  if (!COPY_WATERMARK_PATTERN.test(watermarkTs)) {
+    throw new Error("analysis-api: malformed snapshot copy watermark");
+  }
+  return watermarkTs;
 }

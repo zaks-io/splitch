@@ -9,7 +9,7 @@ import {
 } from "./auth.js";
 import type { AnalysisApiEnv } from "./env.js";
 import { runScheduledSnapshot } from "./scheduled.js";
-import { createTinybirdReadTransport } from "./tinybird.js";
+import { createTinybirdCopyTransport, createTinybirdReadTransport } from "./tinybird.js";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 const verifierCache = new Map<string, ReturnType<typeof makeJwksVerifier>>();
@@ -43,9 +43,9 @@ export default {
     ctx.waitUntil(
       runScheduledSnapshot({
         cron: event.cron,
-        env,
         logger: console,
-        tinybird: createTinybirdReadTransport(env),
+        scheduledTimeMs: event.scheduledTime,
+        tinybird: createTinybirdCopyTransport(env),
       }),
     );
   },

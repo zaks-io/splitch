@@ -12,7 +12,7 @@
     "crons": ["0 * * * *"]
   },
   "secrets": {
-    "required": ["TINYBIRD_READ_TOKEN"]
+    "required": ["TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
@@ -30,6 +30,9 @@
   "env": {
     "shared-preview": {
       "name": "splitch-analysis-api-shared-preview",
+      "triggers": {
+        "crons": []
+      },
       "secrets": {
         "required": ["TINYBIRD_READ_TOKEN"]
       },
@@ -49,8 +52,11 @@
     },
     "production": {
       "name": "splitch-analysis-api",
+      "triggers": {
+        "crons": ["0 * * * *"]
+      },
       "secrets": {
-        "required": ["TINYBIRD_READ_TOKEN"]
+        "required": ["TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",

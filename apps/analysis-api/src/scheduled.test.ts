@@ -1,61 +1,56 @@
 import { describe, expect, it } from "vitest";
-import {
-  APP_ID,
-  ENVIRONMENT_ID,
-  EXPERIMENT_ID,
-  FakeTinybird,
-  RUN_ID,
-} from "./results-test-support.js";
-import { runScheduledSnapshot } from "./scheduled.js";
+import { copyWatermarkFromScheduledTime, runScheduledSnapshot } from "./scheduled.js";
+import type { PipeParams, TinybirdCopyTransport } from "./tinybird.js";
 
-describe("scheduled snapshot stub", () => {
-  it("skips safely without a local snapshot scope", async () => {
-    const tinybird = new FakeTinybird();
-    const logs: string[] = [];
+const HOURLY_CRON = "0 * * * *";
+const SCHEDULED_TIME_MS = Date.UTC(2026, 6, 3, 21, 0, 0, 123);
+const WATERMARK_TS = "2026-07-03 21:00:00.123";
+
+class FakeTinybirdCopy implements TinybirdCopyTransport {
+  readonly calls: { pipeName: string; params: PipeParams }[] = [];
+
+  async runCopyPipe(pipeName: string, params: PipeParams): Promise<void> {
+    this.calls.push({ pipeName, params: { ...params } });
+  }
+}
+
+describe("scheduled snapshot refresh", () => {
+  it("invokes the deduped exposure Copy Pipe with the scheduled ingest watermark", async () => {
+    const tinybird = new FakeTinybirdCopy();
 
     await runScheduledSnapshot({
-      cron: "0 * * * *",
-      env: {},
-      logger: { log: (message) => logs.push(message), error: (message) => logs.push(message) },
+      cron: HOURLY_CRON,
+      logger: { log: () => undefined, error: () => undefined },
+      scheduledTimeMs: SCHEDULED_TIME_MS,
       tinybird,
     });
 
-    expect(logs[0]).toContain("skipped");
-    expect(tinybird.calls).toEqual([]);
+    expect(tinybird.calls).toEqual([
+      {
+        pipeName: "cp_deduped_exposures",
+        params: {
+          _mode: "replace",
+          copy_watermark_ts: WATERMARK_TS,
+        },
+      },
+    ]);
   });
 
-  it("fails loud on partial snapshot scope configuration", async () => {
-    const tinybird = new FakeTinybird();
+  it("fails loud on a malformed watermark before starting a copy job", async () => {
+    const tinybird = new FakeTinybirdCopy();
 
     await expect(
       runScheduledSnapshot({
-        cron: "0 * * * *",
-        env: {
-          SPLITCH_SNAPSHOT_APP_ID: APP_ID,
-        },
+        cron: HOURLY_CRON,
         logger: { log: () => undefined, error: () => undefined },
+        scheduledTimeMs: Number.NaN,
         tinybird,
       }),
-    ).rejects.toThrow(/partial snapshot scope configuration/);
+    ).rejects.toThrow(/malformed snapshot copy watermark/);
     expect(tinybird.calls).toEqual([]);
   });
 
-  it("uses the same app-scoped Tinybird read path when snapshot scope is configured", async () => {
-    const tinybird = new FakeTinybird();
-
-    await runScheduledSnapshot({
-      cron: "0 * * * *",
-      env: {
-        SPLITCH_SNAPSHOT_APP_ID: APP_ID,
-        SPLITCH_SNAPSHOT_ENVIRONMENT_ID: ENVIRONMENT_ID,
-        SPLITCH_SNAPSHOT_EXPERIMENT_ID: EXPERIMENT_ID,
-        SPLITCH_SNAPSHOT_RUN_ID: RUN_ID,
-      },
-      logger: { log: () => undefined, error: () => undefined },
-      tinybird,
-    });
-
-    expect(tinybird.calls).not.toEqual([]);
-    expect(tinybird.calls.every((call) => call.params.app_id === APP_ID)).toBe(true);
+  it("formats Tinybird DateTime64 query parameters with millisecond precision", () => {
+    expect(copyWatermarkFromScheduledTime(SCHEDULED_TIME_MS)).toBe(WATERMARK_TS);
   });
 });
