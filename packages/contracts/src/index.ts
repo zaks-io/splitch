@@ -93,6 +93,22 @@ export type {
   RunStatus,
 } from "./leaf-schemas-experiment.js";
 export {
+  ActivationRowSchema,
+  DecisionFamilyMemberSchema,
+  DedupeExposureRowSchema,
+  PerEntityMetricRowSchema,
+  PrePeriodRowSchema,
+  StatsInputSchema,
+} from "./stats-input-contract.js";
+export type {
+  ActivationRow,
+  DecisionFamilyMember,
+  DedupeExposureRow,
+  PerEntityMetricRow,
+  PrePeriodRow,
+  StatsInput,
+} from "./stats-input-contract.js";
+export {
   ConditionOperatorSchema,
   ConditionSchema,
   FlagSchema,
