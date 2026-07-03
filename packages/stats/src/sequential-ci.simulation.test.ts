@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   meetsAlwaysValidBound,
+  runFixedHorizonSimulation,
   monteCarloTolerance,
   runRepeatedLookSimulation,
 } from "./sequential-ci-simulation.js";
+import { FixedHorizonCI } from "./fixed-horizon-ci.js";
 import { SequentialCI } from "./sequential-ci.js";
 
 const SIMULATION_ALPHA = 0.05;
@@ -50,5 +52,20 @@ describe("SequentialCI audit simulation", () => {
     );
     expect(meetsAlwaysValidBound(result, tolerance)).toBe(false);
     expect(result.rejectionRate).toBeGreaterThan(SIMULATION_ALPHA + tolerance);
+  });
+
+  it("certifies fixed-horizon Type-I control at the locked sample size", () => {
+    const result = runFixedHorizonSimulation({
+      adapter: new FixedHorizonCI(),
+      alpha: SIMULATION_ALPHA,
+      seed,
+      iterations,
+      sample_size_locked: 400,
+    });
+
+    console.info(
+      `FixedHorizonCI ${mode} seed=${seed} iterations=${iterations} rejectionRate=${result.rejectionRate} tolerance=${tolerance}`,
+    );
+    expect(Math.abs(result.rejectionRate - SIMULATION_ALPHA)).toBeLessThanOrEqual(tolerance);
   });
 });

@@ -1,4 +1,5 @@
 import type { CIAdapter } from "./sequential-ci.js";
+import { fixedHorizonPValue } from "./fixed-horizon-ci.js";
 
 export interface RepeatedLookSimulationConfig {
   readonly adapter: CIAdapter;
@@ -10,6 +11,14 @@ export interface RepeatedLookSimulationConfig {
   readonly target_n?: number;
 }
 
+export interface FixedHorizonSimulationConfig {
+  readonly adapter: CIAdapter;
+  readonly alpha: number;
+  readonly seed: string;
+  readonly iterations: number;
+  readonly sample_size_locked: number;
+}
+
 export interface RepeatedLookSimulationResult {
   readonly method: "sequential" | "fixed-horizon";
   readonly seed: string;
@@ -18,6 +27,16 @@ export interface RepeatedLookSimulationResult {
   readonly rejectionRate: number;
   readonly alpha: number;
   readonly lookSchedule: readonly number[];
+}
+
+export interface FixedHorizonSimulationResult {
+  readonly method: "fixed";
+  readonly seed: string;
+  readonly iterations: number;
+  readonly rejections: number;
+  readonly rejectionRate: number;
+  readonly alpha: number;
+  readonly sample_size_locked: number;
 }
 
 export function runRepeatedLookSimulation(
@@ -40,6 +59,29 @@ export function runRepeatedLookSimulation(
     rejectionRate: rejections / config.iterations,
     alpha: config.alpha,
     lookSchedule: config.lookSchedule,
+  };
+}
+
+export function runFixedHorizonSimulation(
+  config: FixedHorizonSimulationConfig,
+): FixedHorizonSimulationResult {
+  const rng = seededNormal(config.seed);
+  let rejections = 0;
+
+  for (let iteration = 0; iteration < config.iterations; iteration += 1) {
+    if (runOneLockedNullExperiment(config, rng)) {
+      rejections += 1;
+    }
+  }
+
+  return {
+    method: "fixed",
+    seed: config.seed,
+    iterations: config.iterations,
+    rejections,
+    rejectionRate: rejections / config.iterations,
+    alpha: config.alpha,
+    sample_size_locked: config.sample_size_locked,
   };
 }
 
@@ -67,6 +109,36 @@ function runOneNullExperiment(config: RepeatedLookSimulationConfig, rng: () => n
   }
 
   return false;
+}
+
+function runOneLockedNullExperiment(
+  config: FixedHorizonSimulationConfig,
+  rng: () => number,
+): boolean {
+  const treatment = new RunningStats();
+  const control = new RunningStats();
+
+  for (let sample = 1; sample <= config.sample_size_locked; sample += 1) {
+    treatment.push(rng());
+    control.push(rng());
+  }
+
+  const samplingVar = treatment.variance / treatment.count + control.variance / control.count;
+  const estimate = treatment.mean - control.mean;
+  const result = config.adapter.compute({
+    estimate,
+    sampling_var: samplingVar,
+    n_t: treatment.count,
+    n_c: control.count,
+    alpha: config.alpha,
+    sample_size_locked: config.sample_size_locked,
+  });
+
+  if (result.mode !== "fixed" || result.peeking_allowed) {
+    throw new Error("fixed-horizon simulation requires a non-peeking fixed adapter.");
+  }
+
+  return result.p_value <= config.alpha;
 }
 
 function pValueAtLook(
@@ -117,25 +189,6 @@ class RunningStats {
     this.mean += delta / this.count;
     this.#m2 += delta * (value - this.mean);
   }
-}
-
-function fixedHorizonPValue(estimate: number, standardError: number): number {
-  if (standardError === 0) {
-    return 1;
-  }
-
-  const z = Math.abs(estimate / standardError);
-  return Math.max(0, Math.min(1, 2 * (1 - normalCdf(z))));
-}
-
-function normalCdf(value: number): number {
-  const sign = value < 0 ? -1 : 1;
-  const x = Math.abs(value) / Math.SQRT2;
-  const t = 1 / (1 + 0.3275911 * x);
-  const coefficients = [0.254829592, -0.284496736, 1.421413741, -1.453152027, 1.061405429];
-  const polynomial = coefficients.reduceRight((acc, coefficient) => (acc + coefficient) * t, 0);
-  const erf = sign * (1 - polynomial * Math.exp(-x * x));
-  return 0.5 * (1 + erf);
 }
 
 function seededNormal(seed: string): () => number {

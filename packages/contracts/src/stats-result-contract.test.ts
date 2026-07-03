@@ -202,7 +202,10 @@ describe("StatsEngine", () => {
       run_id: "run_1",
       confidence_level: 0.95,
       horizon: "sequential",
+      allocation: { control: 50, treatment: 50 },
+      control_variant: "control",
       decision_family: [{ metric_id: "metric_1", variant: "treatment" }],
+      guardrail_decisions: [],
       exposures: [],
       metric_values: [],
     };

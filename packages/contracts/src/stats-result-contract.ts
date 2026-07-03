@@ -4,6 +4,9 @@ import type { StatsInput } from "./stats-input-contract.js";
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
 const IntegerSchema = z.number().int();
+const CiBoundSchema = z
+  .union([z.number(), z.literal(Number.NEGATIVE_INFINITY), z.literal(Number.POSITIVE_INFINITY)])
+  .nullable();
 const VariantCountSchema = z.record(z.string(), IntegerSchema);
 
 export const statsResultStatuses = [
@@ -70,8 +73,8 @@ export const ArmResultSchema = z
     sample_size_n: IntegerSchema,
     point_estimate: z.number(),
     relative_lift_pct: z.number().nullable(),
-    ci_lower: z.number().nullable(),
-    ci_upper: z.number().nullable(),
+    ci_lower: CiBoundSchema,
+    ci_upper: CiBoundSchema,
     p_value: z.number(),
     is_significant: z.boolean(),
     in_bh_family: z.boolean(),
@@ -99,7 +102,7 @@ export const GuardrailResultSchema = z
   .object({
     metric_id: MetricIdSchema,
     variant: z.string(),
-    ci_lower: z.number().nullable(),
+    ci_lower: CiBoundSchema,
     threshold: z.number(),
     is_breached: z.boolean().nullable(),
     in_bh_family: z.boolean(),

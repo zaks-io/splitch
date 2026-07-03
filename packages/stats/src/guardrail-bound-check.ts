@@ -83,7 +83,11 @@ function decisionValid(guardrail: GuardrailThreshold): boolean {
 }
 
 function validateRelativeLiftCi(result: GuardrailResultFields): void {
-  if (result.relative_lift_pct === null && result.ci_lower !== null) {
+  if (
+    result.relative_lift_pct === null &&
+    result.ci_lower !== null &&
+    Number.isFinite(result.ci_lower)
+  ) {
     throw new Error(
       `relative lift is undefined for ${result.metric_id}/${result.variant}, but ci_lower is set.`,
     );

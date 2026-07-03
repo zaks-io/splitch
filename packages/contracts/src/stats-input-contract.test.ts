@@ -35,7 +35,10 @@ const decisionFamilyMember = {
 
 const statsInput = {
   run_id: "run_1",
+  allocation: { control: 50, treatment: 50 },
+  control_variant: "control",
   decision_family: [decisionFamilyMember],
+  guardrail_decisions: [],
   exposures: [exposureRow],
   metric_values: [metricRow],
 };
@@ -227,6 +230,8 @@ describe("DecisionFamilyMemberSchema", () => {
 describe("StatsInputSchema", () => {
   it.each([
     "run_id",
+    "allocation",
+    "control_variant",
     "decision_family",
     "exposures",
     "metric_values",
@@ -239,6 +244,7 @@ describe("StatsInputSchema", () => {
 
     expect(input.confidence_level).toBe(0.95);
     expect(input.horizon).toBe("sequential");
+    expect(input.guardrail_decisions).toEqual([]);
   });
 
   it("requires sample_size_locked for fixed horizon input", () => {
@@ -256,5 +262,34 @@ describe("StatsInputSchema", () => {
         sample_size_locked: 1000,
       }).success,
     ).toBe(true);
+  });
+
+  it("requires allocation to sum to 100", () => {
+    expect(
+      StatsInputSchema.safeParse({
+        ...statsInput,
+        allocation: { control: 60, treatment: 60 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("parses locked Guardrail decisions", () => {
+    const input = StatsInputSchema.parse({
+      ...statsInput,
+      guardrail_decisions: [
+        {
+          metric_id: "guardrail_latency",
+          variant: "treatment",
+          downside_threshold: -5,
+          guardrail_locked_at_run_start: true,
+          threshold_locked_at_run_start: true,
+        },
+      ],
+    });
+
+    expect(input.guardrail_decisions[0]).toMatchObject({
+      metric_id: "guardrail_latency",
+      downside_threshold: -5,
+    });
   });
 });

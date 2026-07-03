@@ -9,22 +9,28 @@ export interface CIParams {
   readonly n_c: number;
   readonly alpha: number;
   readonly target_n?: number;
+  readonly sample_size_locked?: number;
 }
 
 export type CIStatus = "ok" | "warning" | "error";
 
 export interface CIWarning {
-  readonly code: "ZERO_SAMPLING_VARIANCE" | "INSUFFICIENT_SAMPLE";
+  readonly code:
+    | "ZERO_SAMPLING_VARIANCE"
+    | "INSUFFICIENT_SAMPLE"
+    | "FIXED_HORIZON_NOT_AT_LOCKED_SAMPLE";
   readonly message: string;
 }
 
 export interface CIError {
-  readonly code: "INVALID_INPUT" | "NUMERICAL_OVERFLOW";
+  readonly code: "INVALID_INPUT" | "NUMERICAL_OVERFLOW" | "FIXED_HORIZON_LOCK_MISSING";
   readonly message: string;
 }
 
 export interface CISource {
-  readonly family: "normal-mixture-asymptotic-confidence-sequence";
+  readonly family:
+    | "normal-mixture-asymptotic-confidence-sequence"
+    | "fixed-horizon-two-sample-z-test";
   readonly references: readonly string[];
 }
 
@@ -32,13 +38,16 @@ export interface CIResult {
   readonly ci_lower: number;
   readonly ci_upper: number;
   readonly p_value: number;
-  readonly mode: "sequential";
+  readonly mode: "sequential" | "fixed";
   readonly status: CIStatus;
   readonly source: CISource;
   readonly n: number;
-  readonly target_n: number;
-  readonly rho_squared: number;
+  readonly peeking_allowed: boolean;
+  readonly target_n?: number;
+  readonly sample_size_locked?: number;
+  readonly rho_squared?: number;
   readonly boundary: number;
+  readonly critical_value?: number;
   readonly warnings?: readonly CIWarning[];
   readonly error?: CIError;
 }
@@ -125,6 +134,7 @@ export class SequentialCI implements CIAdapter {
       status: "ok",
       source: SEQUENTIAL_CI_SOURCE,
       n,
+      peeking_allowed: true,
       target_n: targetN,
       rho_squared: rhoSquared,
       boundary,
@@ -132,9 +142,8 @@ export class SequentialCI implements CIAdapter {
   }
 }
 
-export function computeSequentialCI(params: CIParams): CIResult {
-  return new SequentialCI().compute(params);
-}
+export const computeSequentialCI = (params: CIParams): CIResult =>
+  new SequentialCI().compute(params);
 
 export function rhoSquaredForTargetN(alpha: number, targetN: number): number {
   return solveOptimalNormalMixtureInformation(alpha) / targetN;
@@ -267,6 +276,7 @@ function infiniteResult(
     status,
     source: SEQUENTIAL_CI_SOURCE,
     n: params.n_t + params.n_c,
+    peeking_allowed: true,
     target_n: targetN,
     rho_squared: rhoSquared,
     boundary: Number.POSITIVE_INFINITY,
