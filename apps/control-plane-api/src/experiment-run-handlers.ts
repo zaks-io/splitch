@@ -70,7 +70,7 @@ async function endRun(deps: ExperimentDeps, args: HandlerArgs<unknown>): Promise
     updatedAt: now,
     updatedBy: args.principal.id,
   });
-  await deps.configStore.writerFor(scope.appId, scope.environmentId).clearLiveRun({
+  await deps.configStore.writerFor(scope.appId, scope.environmentId).syncExperimentConfig({
     appId: scope.appId,
     environmentId: scope.environmentId,
     experimentId: run.experimentId,

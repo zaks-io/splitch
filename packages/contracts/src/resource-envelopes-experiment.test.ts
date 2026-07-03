@@ -82,8 +82,8 @@ describe("PatchExperimentRequestSchema", () => {
     expect(req.variantSet).toHaveLength(2);
   });
 
-  it("accepts status: 'ended' only", () => {
-    expect(PatchExperimentRequestSchema.safeParse({ status: "ended" }).success).toBe(true);
+  it("rejects status patches because Run end owns lifecycle transitions", () => {
+    expect(PatchExperimentRequestSchema.safeParse({ status: "ended" }).success).toBe(false);
     expect(PatchExperimentRequestSchema.safeParse({ status: "running" }).success).toBe(false);
   });
 

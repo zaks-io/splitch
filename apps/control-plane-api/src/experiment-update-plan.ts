@@ -151,7 +151,6 @@ function experimentPatchFromBody(
   applyPatchField(patch, body, "activationMetricId", "activationMetricId", nullableString);
   applyPatchField(patch, body, "conversionWindowMs", "conversionWindowMs");
   applyPatchField(patch, body, "dimensions", "dimensions", json);
-  applyPatchField(patch, body, "status", "status");
   if (body.flagId !== undefined) patch.defaultVariantId = defaultVariantId;
   return patch;
 }

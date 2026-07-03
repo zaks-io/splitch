@@ -6,7 +6,7 @@ import {
 } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { NOW_ISO, request } from "./flag-definition-test-harness.js";
+import { errorBody, NOW_ISO, request } from "./flag-definition-test-harness.js";
 import {
   createExperimentDraft,
   experimentFixture,
@@ -15,6 +15,8 @@ import {
   kvJson,
   makeExperimentRunHarness,
   patchExperiment,
+  readEvaluationExperiment,
+  readIngestLiveRun,
   type StartResponse,
 } from "./experiment-run-test-fixture.js";
 
@@ -77,6 +79,48 @@ describe("control-plane Experiment Run lifecycle", () => {
       schemaVersion: CURRENT_KV_SCHEMA_VERSION,
       data: { runId: started.run.id },
     });
+    await expect(readEvaluationExperiment(ctx, fx, experiment.id)).resolves.toMatchObject({
+      liveRunId: started.run.id,
+      liveRun: { id: started.run.id, experimentId: experiment.id },
+    });
+    await expect(readIngestLiveRun(ctx, fx, experiment.id, "user")).resolves.toEqual({
+      ok: true,
+      runId: started.run.id,
+    });
+
+    const unchangedStart = await request(
+      ctx.h,
+      "POST",
+      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experiment.id}/start`,
+      fx.jwt,
+    );
+    expect(unchangedStart.status).toBe(409);
+    expect((await errorBody(unchangedStart)).code).toBe("EXPERIMENT_NO_DRAFT");
+
+    const endFirst = await request(
+      ctx.h,
+      "POST",
+      `/apps/${fx.appId}/envs/${fx.environmentId}/runs/${started.run.id}/end`,
+      fx.jwt,
+      { reason: "first done" },
+    );
+    expect(endFirst.status).toBe(200);
+    await expect(readEvaluationExperiment(ctx, fx, experiment.id)).resolves.toMatchObject({
+      liveRunId: null,
+      liveRun: null,
+    });
+    expect(
+      await ctx.h.bindings.kv.get(liveRunKey(fx.appId, fx.environmentId, experiment.id), "text"),
+    ).toBe(null);
+
+    expect(
+      (
+        await patchExperiment(ctx, fx, experiment.id, {
+          allocation: { control: 60, treatment: 40 },
+          salt: "run-salt-3",
+        })
+      ).status,
+    ).toBe(200);
 
     const secondStart = await request(
       ctx.h,
@@ -87,7 +131,7 @@ describe("control-plane Experiment Run lifecycle", () => {
     );
     expect(secondStart.status).toBe(200);
     const second = (await secondStart.json()) as StartResponse;
-    expect(second.previousRunId).toBe(started.run.id);
+    expect(second.previousRunId).toBeNull();
 
     const afterSecondStart = await ctx.repo.experiments.listRunsForExperiment(
       envScope(fx.appId, fx.environmentId),
@@ -104,6 +148,10 @@ describe("control-plane Experiment Run lifecycle", () => {
     await insertSyntheticNewerRun(ctx, fx, experiment.id);
     expect(await kvJson(ctx, liveRunKey(fx.appId, fx.environmentId, experiment.id))).toMatchObject({
       data: { runId: second.run.id },
+    });
+    await expect(readIngestLiveRun(ctx, fx, experiment.id, "user")).resolves.toEqual({
+      ok: true,
+      runId: second.run.id,
     });
 
     const end = await request(

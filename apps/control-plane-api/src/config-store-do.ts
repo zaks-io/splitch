@@ -70,16 +70,10 @@ export class ConfigStoreDurableObject
     return this.store().promoteFlagConfig(input);
   }
 
-  writeLiveRun(
-    input: Parameters<ConfigStoreWriter["writeLiveRun"]>[0],
-  ): ReturnType<ConfigStoreWriter["writeLiveRun"]> {
-    return this.store().writeLiveRun(input);
-  }
-
-  clearLiveRun(
-    input: Parameters<ConfigStoreWriter["clearLiveRun"]>[0],
-  ): ReturnType<ConfigStoreWriter["clearLiveRun"]> {
-    return this.store().clearLiveRun(input);
+  syncExperimentConfig(
+    input: Parameters<ConfigStoreWriter["syncExperimentConfig"]>[0],
+  ): ReturnType<ConfigStoreWriter["syncExperimentConfig"]> {
+    return this.store().syncExperimentConfig(input);
   }
 
   override fetch(request: Request): Response {

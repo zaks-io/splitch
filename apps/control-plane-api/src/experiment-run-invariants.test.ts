@@ -62,6 +62,16 @@ describe("control-plane Experiment Run invariants", () => {
     expect(frozenPatch.status).toBe(409);
     expect((await errorBody(frozenPatch)).code).toBe("RUN_FROZEN");
 
+    const statusPatch = await request(
+      ctx.h,
+      "PATCH",
+      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${running.id}`,
+      fx.jwt,
+      { status: "ended" },
+    );
+    expect(statusPatch.status).toBe(400);
+    expect((await errorBody(statusPatch)).code).toBe("VALIDATION_ERROR");
+
     const firstEnd = await endRun(ctx, fx, started.run.id);
     expect(firstEnd.status).toBe(200);
     const secondEnd = await endRun(ctx, fx, started.run.id);

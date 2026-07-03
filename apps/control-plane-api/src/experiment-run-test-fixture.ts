@@ -1,3 +1,12 @@
+import {
+  ExperimentConfigKVSchema,
+  experimentConfigKey,
+  kvEnvelope,
+  RunConfigKVSchema,
+  runConfigKey,
+  type ExperimentConfigKV,
+  type RunConfigKV,
+} from "@splitch/contracts";
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
 import { makeConfigStore, type ConfigStoreWriter } from "./config-store.js";
 import {
@@ -27,6 +36,9 @@ export type StartResponse = {
     runNumber?: number;
   };
 };
+
+const ExperimentConfigEnvelope = kvEnvelope(ExperimentConfigKVSchema);
+const RunConfigEnvelope = kvEnvelope(RunConfigKVSchema);
 
 export async function makeExperimentRunHarness(): Promise<ExperimentRunHarness> {
   const h = await makeFlagDefinitionHarness();
@@ -141,6 +153,54 @@ export async function kvJson(ctx: ExperimentRunHarness, key: string): Promise<un
   const raw = await ctx.h.bindings.kv.get(key, "text");
   if (!raw) throw new Error(`missing KV key ${key}`);
   return JSON.parse(raw);
+}
+
+export async function readEvaluationExperiment(
+  ctx: ExperimentRunHarness,
+  fx: Pick<Fixture, "appId" | "environmentId">,
+  experimentId: string,
+): Promise<{ liveRunId: string | null; liveRun: RunConfigKV | null }> {
+  const experiment = await readExperimentConfig(ctx, fx, experimentId);
+  const liveRun = experiment.liveRunId ? await readRunConfig(ctx, fx, experiment.liveRunId) : null;
+  return { liveRunId: experiment.liveRunId, liveRun };
+}
+
+export async function readIngestLiveRun(
+  ctx: ExperimentRunHarness,
+  fx: Pick<Fixture, "appId" | "environmentId">,
+  experimentId: string,
+  idType: string,
+): Promise<{ ok: true; runId: string } | { ok: false; code: string }> {
+  const experiment = await readExperimentConfig(ctx, fx, experimentId);
+  if (experiment.targetingKeyType !== idType) return { ok: false, code: "VALIDATION_ERROR" };
+  if (experiment.liveRunId === null) return { ok: false, code: "RUN_NOT_FOUND" };
+  const run = await readRunConfig(ctx, fx, experiment.liveRunId);
+  return run.experimentId === experimentId
+    ? { ok: true, runId: experiment.liveRunId }
+    : { ok: false, code: "INTERNAL_SERVER_ERROR" };
+}
+
+async function readExperimentConfig(
+  ctx: ExperimentRunHarness,
+  fx: Pick<Fixture, "appId" | "environmentId">,
+  experimentId: string,
+): Promise<ExperimentConfigKV> {
+  const raw = await ctx.h.bindings.kv.get(
+    experimentConfigKey(fx.appId, fx.environmentId, experimentId),
+    "text",
+  );
+  if (!raw) throw new Error(`missing ExperimentConfigKV for ${experimentId}`);
+  return ExperimentConfigEnvelope.parse(JSON.parse(raw)).data;
+}
+
+async function readRunConfig(
+  ctx: ExperimentRunHarness,
+  fx: Pick<Fixture, "appId" | "environmentId">,
+  runId: string,
+): Promise<RunConfigKV> {
+  const raw = await ctx.h.bindings.kv.get(runConfigKey(fx.appId, fx.environmentId, runId), "text");
+  if (!raw) throw new Error(`missing RunConfigKV for ${runId}`);
+  return RunConfigEnvelope.parse(JSON.parse(raw)).data;
 }
 
 export async function insertSyntheticNewerRun(

@@ -223,15 +223,17 @@ async function startExperiment(
   await deps.repo.experiments.updateExperiment(scope, experiment.id, {
     status: "running",
     liveRunId: run.id,
+    draftAllocation: null,
     draftSalt: null,
+    draftTargetingRules: null,
+    draftSegmentIds: null,
     updatedAt: now,
     updatedBy: args.principal.id,
   });
-  await deps.configStore.writerFor(scope.appId, scope.environmentId).writeLiveRun({
+  await deps.configStore.writerFor(scope.appId, scope.environmentId).syncExperimentConfig({
     appId: scope.appId,
     environmentId: scope.environmentId,
     experimentId: experiment.id,
-    runId: run.id,
   });
 
   return Response.json({

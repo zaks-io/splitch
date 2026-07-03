@@ -63,7 +63,6 @@ export type CreateExperimentRequest = z.infer<typeof CreateExperimentRequestSche
 // runtime — those are not structural. `.strict()` still rejects unknown keys, and
 // Run-level fields (horizon, targetN, sampleSizeLocked) are not patchable here at
 // all (they live on the Run, not the Experiment) so they are simply absent.
-// `status` accepts only 'ended' via PATCH (Worker validates the transition).
 // ---------------------------------------------------------------------------
 
 export const PatchExperimentRequestSchema = z
@@ -85,7 +84,6 @@ export const PatchExperimentRequestSchema = z
     conversionWindowMs: z.number().optional(),
     dimensions: z.array(z.string()).optional(),
     confidenceLevel: z.number().optional(),
-    status: z.literal("ended").optional(),
   })
   .strict();
 export type PatchExperimentRequest = z.infer<typeof PatchExperimentRequestSchema>;
