@@ -25,7 +25,7 @@ export function createRepository(d1: D1Database) {
     flags: makeFlagRepo(db),
     experiments: makeExperimentRepo(db, d1),
     credentials: makeCredentialRepo(db),
-    identity: makeIdentityRepo(db),
+    identity: makeIdentityRepo(db, d1),
     privacy: makePrivacyRepo(db),
   };
 }
