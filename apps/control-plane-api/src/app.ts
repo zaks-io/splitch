@@ -13,6 +13,7 @@ import { makeCredentialHandlers } from "./credential-handlers.js";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers.js";
 import { makeHandlers } from "./handlers.js";
 import { mountLiveUpdateRoute } from "./live-updates.js";
+import { makeMetricSegmentHandlers } from "./metric-segment-handlers.js";
 import type { MemberProfileResolver } from "./org-handlers.js";
 import { controlPlaneRoute } from "./routes.js";
 
@@ -68,6 +69,10 @@ export function createApp(deps: AppDeps): Hono {
     nowIso: deps.nowIso,
   });
   const flagDefinitionHandlers = makeFlagDefinitionHandlers({
+    repo: deps.repo,
+    nowIso: deps.nowIso,
+  });
+  const metricSegmentHandlers = makeMetricSegmentHandlers({
     repo: deps.repo,
     nowIso: deps.nowIso,
   });
@@ -144,6 +149,16 @@ export function createApp(deps: AppDeps): Hono {
   );
   registrar.mount(app, controlPlaneRoute("flag_config_get"), handlers.getFlagConfig);
   registrar.mount(app, controlPlaneRoute("flag_config_update"), handlers.updateFlagConfig);
+  registrar.mount(app, controlPlaneRoute("segments_list"), metricSegmentHandlers.listSegments);
+  registrar.mount(app, controlPlaneRoute("segments_create"), metricSegmentHandlers.createSegment);
+  registrar.mount(app, controlPlaneRoute("segments_get"), metricSegmentHandlers.getSegment);
+  registrar.mount(app, controlPlaneRoute("segments_update"), metricSegmentHandlers.updateSegment);
+  registrar.mount(app, controlPlaneRoute("segments_delete"), metricSegmentHandlers.deleteSegment);
+  registrar.mount(app, controlPlaneRoute("metrics_list"), metricSegmentHandlers.listMetrics);
+  registrar.mount(app, controlPlaneRoute("metrics_create"), metricSegmentHandlers.createMetric);
+  registrar.mount(app, controlPlaneRoute("metrics_get"), metricSegmentHandlers.getMetric);
+  registrar.mount(app, controlPlaneRoute("metrics_update"), metricSegmentHandlers.updateMetric);
+  registrar.mount(app, controlPlaneRoute("metrics_delete"), metricSegmentHandlers.deleteMetric);
   registrar.mount(app, controlPlaneRoute("client_key_get"), credentialHandlers.getClientKey);
   registrar.mount(app, controlPlaneRoute("client_key_update"), credentialHandlers.updateClientKey);
   registrar.mount(app, controlPlaneRoute("client_key_rotate"), credentialHandlers.rotateClientKey);
