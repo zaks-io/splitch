@@ -15,6 +15,7 @@ export {
   SEQUENTIAL_CI_SOURCE,
   SequentialCI,
 } from "./sequential-ci.js";
+export { estimateMetricArm, estimateMetricComparison } from "./variance-estimators.js";
 export type {
   ActivationRow,
   ArmResult,
@@ -37,3 +38,10 @@ export type {
   CIWarning,
   SequentialCIOptions,
 } from "./sequential-ci.js";
+export type {
+  MetricArmEstimate,
+  MetricArmEstimateInput,
+  MetricComparisonEstimate,
+  MetricComparisonEstimateInput,
+  MetricVarianceStatus,
+} from "./variance-estimator-types.js";

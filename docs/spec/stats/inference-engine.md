@@ -115,7 +115,7 @@ R = A / B               # ratio
 
 # Delta-method sampling variance (with covariance term — this is the non-negotiable rule):
 sampling_var_ratio = (1/n) * [ var(num_i)/B^2
-                             - 2*(A/B^2)*cov(num_i, denom_i)
+                             - 2*(A/B^3)*cov(num_i, denom_i)
                              + (A^2/B^4)*var(denom_i) ]
 ```
 
