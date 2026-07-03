@@ -58,6 +58,18 @@ export class ConfigStoreDurableObject
     return this.store().writeFlagConfig(input);
   }
 
+  replaceTargetingRules(
+    input: Parameters<ConfigStoreWriter["replaceTargetingRules"]>[0],
+  ): ReturnType<ConfigStoreWriter["replaceTargetingRules"]> {
+    return this.store().replaceTargetingRules(input);
+  }
+
+  promoteFlagConfig(
+    input: Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0],
+  ): ReturnType<ConfigStoreWriter["promoteFlagConfig"]> {
+    return this.store().promoteFlagConfig(input);
+  }
+
   override fetch(request: Request): Response {
     if (request.method !== "GET" || request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
       return new Response("expected WebSocket upgrade", { status: 426 });

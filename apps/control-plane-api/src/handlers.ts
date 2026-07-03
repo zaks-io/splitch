@@ -1,9 +1,16 @@
-import type { Repository } from "@splitch/db";
+import type { TargetingRule } from "@splitch/contracts";
+import { envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import type { ConfigStoreWriter } from "./config-store.js";
 import type { ConfigStoreAccess } from "./config-store-do.js";
 import { requireAppAdmin } from "./app-authz.js";
+import {
+  confirmationRequired,
+  flagConfigPatchGates,
+  promotionGates,
+  readEnvironmentPolicy,
+} from "./flag-config-policy.js";
 import { objectBody, pathParam } from "./handler-input.js";
 import { makeOrgHandlers, type MemberProfileResolver } from "./org-handlers.js";
 
@@ -67,15 +74,114 @@ export function makeHandlers(deps: HandlerDeps) {
       const adminError = requireAppAdmin(appId, principal.scopes, requestId);
       if (adminError) return adminError;
 
+      const body = objectBody(input);
+      const policy = await readEnvironmentPolicy(deps.repo, appId, environmentId);
+      if (!policy) return flagConfigNotFound(requestId);
+
+      const confirmation = confirmationRequired(
+        policy,
+        flagConfigPatchGates(body),
+        body.confirm === true,
+        environmentId,
+        "PATCH_FLAG_CONFIG",
+        requestId,
+      );
+      if (confirmation) return confirmation;
+
       const result = await deps.configStore
         .writerFor(appId, environmentId)
-        .writeFlagConfig(flagConfigPatchInput(appId, environmentId, flagId, objectBody(input)));
+        .writeFlagConfig(flagConfigPatchInput(appId, environmentId, flagId, body));
       return renderFlagConfigWriteResult(result, flagId, environmentId, requestId);
+    },
+
+    async replaceTargetingRules({
+      input,
+      principal,
+      requestId,
+    }: HandlerArgs<unknown>): Promise<Response> {
+      if (!deps.configStore) return configStoreUnavailable(requestId);
+
+      const appId = pathParam(input, "appId");
+      const environmentId = pathParam(input, "environmentId");
+      const flagId = pathParam(input, "flagId");
+      const adminError = requireAppAdmin(appId, principal.scopes, requestId);
+      if (adminError) return adminError;
+
+      const body = objectBody(input);
+      const policy = await readEnvironmentPolicy(deps.repo, appId, environmentId);
+      if (!policy) return flagConfigNotFound(requestId);
+
+      const confirmation = confirmationRequired(
+        policy,
+        ["targeting_rollout_value"],
+        body.confirm === true,
+        environmentId,
+        "PUT_TARGETING_RULES",
+        requestId,
+      );
+      if (confirmation) return confirmation;
+
+      const result = await deps.configStore.writerFor(appId, environmentId).replaceTargetingRules({
+        appId,
+        environmentId,
+        flagId,
+        targetingRules: body.targetingRules as TargetingRule[],
+      });
+      return renderFlagConfigWriteResult(result, flagId, environmentId, requestId);
+    },
+
+    async promoteFlagConfig({
+      input,
+      principal,
+      requestId,
+    }: HandlerArgs<unknown>): Promise<Response> {
+      if (!deps.configStore) return configStoreUnavailable(requestId);
+
+      const appId = pathParam(input, "appId");
+      const targetEnvironmentId = pathParam(input, "targetEnvironmentId");
+      const flagId = pathParam(input, "flagId");
+      const adminError = requireAppAdmin(appId, principal.scopes, requestId);
+      if (adminError) return adminError;
+
+      const body = objectBody(input);
+      const fromEnvironmentId = body.fromEnvironmentId as string;
+      const policy = await readEnvironmentPolicy(deps.repo, appId, targetEnvironmentId);
+      if (!policy) return flagConfigNotFound(requestId);
+
+      const sourceConfig = await deps.repo.flags.getFlagConfig(
+        envScope(appId, fromEnvironmentId),
+        flagId,
+      );
+      if (!sourceConfig) return flagConfigNotFound(requestId);
+
+      const gates = promotionGates(body.select as PromotionSelect, sourceConfig.enabled);
+      const confirmation = confirmationRequired(
+        policy,
+        gates,
+        body.confirm === true,
+        targetEnvironmentId,
+        "PROMOTE_FLAG_CONFIG",
+        requestId,
+      );
+      if (confirmation) return confirmation;
+
+      const result = await deps.configStore
+        .writerFor(appId, targetEnvironmentId)
+        .promoteFlagConfig({
+          appId,
+          targetEnvironmentId,
+          flagId,
+          fromEnvironmentId,
+          select: body.select as PromotionSelect,
+        });
+      return renderPromotionResult(result, flagId, targetEnvironmentId, requestId);
     },
   };
 }
 
 type FlagConfigWriteResult = Awaited<ReturnType<ConfigStoreWriter["writeFlagConfig"]>>;
+type PromotionResult = Awaited<ReturnType<ConfigStoreWriter["promoteFlagConfig"]>>;
+type PromotionSelect = Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0]["select"];
 
 function flagConfigPatchInput(
   appId: string,
@@ -88,7 +194,7 @@ function flagConfigPatchInput(
     environmentId,
     flagId,
     ...(payload.enabled !== undefined ? { enabled: payload.enabled as boolean } : {}),
-    ...(payload.availableVariantNames
+    ...(payload.availableVariantNames !== undefined
       ? { availableVariantNames: payload.availableVariantNames as string[] }
       : {}),
   };
@@ -102,20 +208,46 @@ function renderFlagConfigWriteResult(
 ): Response {
   if (result.ok) return Response.json(result.config);
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
-    return renderError(
-      {
-        code: "VARIANT_NOT_AVAILABLE",
-        message: "requested variants are not in the Flag catalog",
-        details: {
-          flagId,
-          environmentId,
-          missingVariants: result.missingVariants,
-          recommendedAction: "ADD_VARIANT_TO_ENV",
-        },
-      },
-      { requestId },
-    );
+    return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
   }
+  return flagConfigNotFound(requestId);
+}
+
+function renderPromotionResult(
+  result: PromotionResult,
+  flagId: string,
+  environmentId: string,
+  requestId: string,
+): Response {
+  if (result.ok) return Response.json({ config: result.config, diff: result.diff });
+  if (result.reason === "VARIANT_NOT_AVAILABLE") {
+    return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
+  }
+  return flagConfigNotFound(requestId);
+}
+
+function variantNotAvailable(
+  flagId: string,
+  environmentId: string,
+  missingVariants: string[],
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "VARIANT_NOT_AVAILABLE",
+      message: "requested variants are not available for this Flag Configuration",
+      details: {
+        flagId,
+        environmentId,
+        missingVariants,
+        recommendedAction: "ADD_VARIANT_TO_ENV",
+      },
+    },
+    { requestId },
+  );
+}
+
+function flagConfigNotFound(requestId: string): Response {
   return renderError(
     { code: "FLAG_NOT_FOUND", message: "flag configuration not found", details: {} },
     { requestId },

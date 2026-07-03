@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index.js";
 import type { Db } from "./client.js";
 import type { EnvScope, TenantScope } from "./scope.js";
+import { assertMintedScope } from "./scope.js";
 import { scopedTable } from "./scoped-table.js";
 
 /**
@@ -82,6 +83,42 @@ export function makeFlagRepo(db: Db) {
       return targetingRulesTable.findMany(scope, eq(targetingRules.flagId, flagId));
     },
 
+    async replaceTargetingRules(
+      scope: EnvScope,
+      flagId: string,
+      rows: Array<Omit<typeof targetingRules.$inferInsert, "appId" | "environmentId" | "flagId">>,
+      configPatch: Partial<
+        Pick<typeof flagConfigs.$inferInsert, "enabled" | "availableVariantNames" | "updatedAt">
+      >,
+    ): Promise<typeof flagConfigs.$inferSelect | null> {
+      assertMintedScope(scope);
+      const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
+      if (!current) return null;
+
+      const batch = [
+        db.delete(targetingRules).where(scopedTargetingRule(scope, flagId)).returning(),
+        ...rows.map((row) =>
+          db
+            .insert(targetingRules)
+            .values({
+              ...row,
+              appId: scope.appId,
+              environmentId: scope.environmentId,
+              flagId,
+            })
+            .returning(),
+        ),
+        db
+          .update(flagConfigs)
+          .set({ ...configPatch, version: current.version + 1 })
+          .where(scopedFlagConfig(scope, flagId))
+          .returning(),
+      ];
+      const results = await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
+      const updated = results.at(-1) as (typeof flagConfigs.$inferSelect)[] | undefined;
+      return updated?.[0] ?? null;
+    },
+
     /** App-scoped Segment fetch by a set of IDs (e.g. for a draft Run snapshot). */
     listSegmentsByIds(scope: TenantScope, ids: readonly string[]) {
       if (ids.length === 0) return Promise.resolve([] as (typeof segments.$inferSelect)[]);
@@ -108,6 +145,22 @@ export function makeFlagRepo(db: Db) {
       return segmentsTable.remove(scope, eq(segments.id, segmentId));
     },
   };
+}
+
+function scopedTargetingRule(scope: EnvScope, flagId: string) {
+  return and(
+    eq(targetingRules.appId, scope.appId),
+    eq(targetingRules.environmentId, scope.environmentId),
+    eq(targetingRules.flagId, flagId),
+  );
+}
+
+function scopedFlagConfig(scope: EnvScope, flagId: string) {
+  return and(
+    eq(flagConfigs.appId, scope.appId),
+    eq(flagConfigs.environmentId, scope.environmentId),
+    eq(flagConfigs.flagId, flagId),
+  );
 }
 
 type FlagInScope = (

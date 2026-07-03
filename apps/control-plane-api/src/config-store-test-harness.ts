@@ -1,8 +1,8 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type DeltaNudge, flagConfigKey } from "@splitch/contracts";
-import { createRepository, envScope, type Repository } from "@splitch/db";
+import { type DeltaNudge, type EnvironmentPolicy, flagConfigKey } from "@splitch/contracts";
+import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { Miniflare } from "miniflare";
@@ -100,6 +100,40 @@ export async function patchFlagConfig(
   body: Record<string, unknown>,
 ): Promise<Response> {
   return authedPatch(h.app, h.signer, body);
+}
+
+export async function replaceTargetingRules(
+  h: Harness,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const jwt = await token(h.signer);
+  return h.app.request(
+    `/apps/${ids.appId}/envs/${ids.environmentId}/flags/${ids.flagId}/targeting-rules`,
+    {
+      method: "PUT",
+      headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export async function promoteFlagConfig(
+  h: Harness,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const jwt = await token(h.signer);
+  return h.app.request(`/apps/${ids.appId}/envs/${ids.environmentId}/flags/${ids.flagId}/promote`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function setProdPolicy(h: Harness, policy: EnvironmentPolicy): Promise<void> {
+  await h.repo.identity.updateEnvironment(appScope(ids.appId), ids.environmentId, {
+    policy: JSON.stringify(policy),
+    updatedAt: NOW,
+  });
 }
 
 export async function authedPatch(app: Hono, signer: FixtureSigner, body: Record<string, unknown>) {

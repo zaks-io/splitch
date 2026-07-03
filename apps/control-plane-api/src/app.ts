@@ -149,6 +149,12 @@ export function createApp(deps: AppDeps): Hono {
   );
   registrar.mount(app, controlPlaneRoute("flag_config_get"), handlers.getFlagConfig);
   registrar.mount(app, controlPlaneRoute("flag_config_update"), handlers.updateFlagConfig);
+  registrar.mount(
+    app,
+    controlPlaneRoute("flag_targeting_rules_replace"),
+    handlers.replaceTargetingRules,
+  );
+  registrar.mount(app, controlPlaneRoute("flags_promote"), handlers.promoteFlagConfig);
   registrar.mount(app, controlPlaneRoute("segments_list"), metricSegmentHandlers.listSegments);
   registrar.mount(app, controlPlaneRoute("segments_create"), metricSegmentHandlers.createSegment);
   registrar.mount(app, controlPlaneRoute("segments_get"), metricSegmentHandlers.getSegment);

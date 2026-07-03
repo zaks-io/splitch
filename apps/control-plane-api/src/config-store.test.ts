@@ -17,10 +17,20 @@ import {
   NOW,
   NOW_MS,
   patchFlagConfig,
+  promoteFlagConfig,
+  replaceTargetingRules,
+  setProdPolicy,
   token,
 } from "./config-store-test-harness.js";
 
 let h: Harness;
+
+const confirmPolicy = {
+  variantAvailability: "confirm",
+  targetingRolloutValue: "confirm",
+  enabledState: "confirm",
+  startExperimentRun: "confirm",
+} as const;
 
 beforeEach(async () => {
   h = await makeHarness();
@@ -152,5 +162,121 @@ describe("config store write path", () => {
       schemaVersion: CURRENT_KV_SCHEMA_VERSION,
       data: { enabled: false, availableVariantNames: ["control", "treatment"] },
     });
+  });
+});
+
+describe("flag configuration and promotion routes", () => {
+  it("replaces Targeting Rules through the config-store write path", async () => {
+    const res = await replaceTargetingRules(h, {
+      targetingRules: [
+        {
+          id: "rule_prod_treatment",
+          flagId: ids.flagId,
+          priority: 0,
+          conditions: [{ attribute: "plan", operator: "eq", value: "pro" }],
+          variantId: ids.treatmentVariantId,
+        },
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      version: 2,
+      targetingRules: [
+        expect.objectContaining({
+          id: "rule_prod_treatment",
+          variantId: ids.treatmentVariantId,
+        }),
+      ],
+    });
+    expect(h.events.slice(0, 2)).toEqual(["d1-before-kv:false", "kv:flag"]);
+    expect(h.events.at(-1)).toBe("broadcast");
+  });
+
+  it("returns CONFIRMATION_REQUIRED for a Policy-gated PATCH without confirm", async () => {
+    await setProdPolicy(h, confirmPolicy);
+
+    const res = await patchFlagConfig(h, { availableVariantNames: ["control"] });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      code: "CONFIRMATION_REQUIRED",
+      details: {
+        gate: "variant_availability",
+        environmentId: ids.environmentId,
+        attemptedOp: "PATCH_FLAG_CONFIG",
+        recommendedAction: "RETRY_WITH_CONFIRMATION",
+      },
+    });
+    expect(h.nudges).toEqual([]);
+  });
+
+  it("accepts enabled-off as an ungated kill switch", async () => {
+    await setProdPolicy(h, confirmPolicy);
+
+    const enable = await patchFlagConfig(h, { enabled: true, confirm: true });
+    expect(enable.status).toBe(200);
+
+    const disable = await patchFlagConfig(h, { enabled: false });
+
+    expect(disable.status).toBe(200);
+    expect(await disable.json()).toMatchObject({ enabled: false });
+  });
+
+  it("promotes selected config field-groups and returns a before/after diff", async () => {
+    const res = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { targeting: true, enabled: true },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      config: {
+        flagId: ids.flagId,
+        environmentId: ids.environmentId,
+        enabled: true,
+        targetingRules: [
+          expect.objectContaining({
+            variantId: ids.treatmentVariantId,
+          }),
+        ],
+      },
+      diff: {
+        before: { enabled: false, targetingRules: [] },
+        after: {
+          enabled: true,
+          targetingRules: [
+            expect.objectContaining({
+              variantId: ids.treatmentVariantId,
+            }),
+          ],
+        },
+      },
+    });
+    expect(h.events.slice(0, 2)).toEqual(["d1-before-kv:true", "kv:flag"]);
+    expect(h.events.at(-1)).toBe("broadcast");
+  });
+
+  it("rejects promoted Targeting Rules that route to an unavailable Variant", async () => {
+    const narrow = await patchFlagConfig(h, { availableVariantNames: ["control"] });
+    expect(narrow.status).toBe(200);
+    const nudgeCount = h.nudges.length;
+
+    const res = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { targeting: true },
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      code: "VARIANT_NOT_AVAILABLE",
+      details: {
+        flagId: ids.flagId,
+        environmentId: ids.environmentId,
+        missingVariants: ["treatment"],
+        recommendedAction: "ADD_VARIANT_TO_ENV",
+      },
+    });
+    expect(h.nudges).toHaveLength(nudgeCount);
   });
 });
