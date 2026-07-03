@@ -40,7 +40,7 @@ not declared at design time are secondary and excluded from `m`.
 Each `(dimension_value, variant)` pair is an independent analysis:
 
 1. Filter deduped Exposure rows to `entity.dimension_attribute = dimension_value`.
-2. Run the full CI pipeline (variance → winsorization → CUPED → aCS → relative-lift → Guardrail).
+2. Run the full CI pipeline (winsorize -> type-variance -> delta-method -> CUPED -> aCS -> relative-lift -> Guardrail).
 3. Collect the `p_value` for BH correction if the Dimension is Primary.
 
 Per-Dimension n may be small; `health.low_n_warning = true` is set per slice.

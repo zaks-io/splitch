@@ -21,8 +21,8 @@ per-Entity Metric values (one row per Entity, aggregated upstream — ADR-0015)
   ▼ 8. Benjamini-Hochberg FDR (across goal-metric × Variant family)  → is_significant (post-FDR)
 ```
 
-Note: step 3 winsorizes input values _before_ variance computation (effective ordering:
-winsorize → type variance → delta-method → CUPED → aCS).
+Note: step 1 winsorizes input values _before_ variance computation (effective ordering:
+winsorize -> type-variance -> delta-method -> CUPED -> aCS).
 
 ## Inference framework (ADR-0014)
 
