@@ -48,7 +48,6 @@ export {
   platformTargets,
 } from "./health-response.js";
 export type { HealthResponse, PlatformTarget } from "./health-response.js";
-
 export {
   ExperimentSchema,
   ExperimentStatusSchema,
@@ -75,6 +74,7 @@ export {
   CupedCovariateRowSchema,
   CupedCovariateSourceSchema,
   DecisionFamilyMemberSchema,
+  DimensionInputSchema,
   DedupeExposureRowSchema,
   PerEntityMetricRowSchema,
   PrePeriodRowSchema,
@@ -85,6 +85,7 @@ export type {
   CupedCovariateRow,
   CupedCovariateSource,
   DecisionFamilyMember,
+  DimensionInput,
   DedupeExposureRow,
   PerEntityMetricRow,
   PrePeriodRow,

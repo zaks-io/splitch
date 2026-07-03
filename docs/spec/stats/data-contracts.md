@@ -21,6 +21,7 @@ query (ADR-0010); `__multiple__` Entities are already excluded upstream.
 | `variant`            | `string`    | yes      | Variant name assigned to this Entity in this Run                                                                                                   |
 | `first_exposure_ts`  | `timestamp` | yes      | `MIN(server_ts)` — the Conversion Window anchor (ungated)                                                                                          |
 | `window_anchor`      | `timestamp` | yes      | `COALESCE(activation_ts, first_exposure_ts)` — effective anchor                                                                                    |
+| `dimension_values`   | `object`    | no       | Attribute values available for Dimension slicing, keyed by Dimension id                                                                            |
 
 `window_anchor` is computed by the Activation gate layer (see
 [../pipeline/activation-gate-query-contract.md](../pipeline/activation-gate-query-contract.md));
@@ -103,6 +104,7 @@ interface StatsInput {
   metric_values: PerEntityMetricRow[];
   pre_period_covariates?: PrePeriodRow[];
   activation_rows?: ActivationRow[];
+  dimensions?: DimensionInput[];
 }
 
 interface DecisionFamilyMember {
@@ -110,6 +112,12 @@ interface DecisionFamilyMember {
   variant: string;                       // non-Control Variant
   dimension_id?: string | null;
   dimension_value?: string | null;
+}
+
+interface DimensionInput {
+  dimension_id: string;
+  class: 'primary' | 'secondary';
+  values?: string[];                     // declared values; Secondary may infer observed values
 }
 
 interface GuardrailDecision {

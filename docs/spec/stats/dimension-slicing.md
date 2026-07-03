@@ -70,7 +70,8 @@ interface DimensionResult {
   dimension_value: string;        // e.g., "US"
   class:           'primary' | 'secondary';
   arm_results:     ArmResult[];   // same shape as top-level arm results
-  sample_size_n:   integer;       // Entities in this dimension slice × arm
+  sample_size_n:   integer;       // Unique Entities in this dimension slice
+  low_n_warning:   boolean;       // true if any arm in the slice has n < 100
   in_bh_family:    boolean;
   exploratory:     boolean;
   decision_valid:  boolean;
@@ -86,7 +87,7 @@ reported as a raw `p_value < alpha` — no BH — with `exploratory: true` and
 
 When `horizon = 'fixed'`, Dimension slicing is permitted but each slice must meet its own
 `n >= sample_size_locked` per arm requirement. If a Dimension slice does not hit the required N,
-it is suppressed in the output with `status = 'insufficient_n'`.
+its per-arm result reports `status = 'insufficient_n'`.
 
 ## Seam note: no superposition
 

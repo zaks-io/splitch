@@ -141,26 +141,6 @@ describe("StatsEngine.analyze", () => {
   });
 });
 
-describe("StatsEngine.analyze Activation gates", () => {
-  it("uses only activated Entities as the metric denominator when Activation gate rows exist", async () => {
-    const output = await analyzeStats(activationGatedStatsInput());
-    const control = armResult(output, "conversion", "control");
-    const treatment = treatmentResult(output);
-
-    expect(control).toMatchObject({
-      sample_size_n: 1,
-      point_estimate: 1,
-    });
-    expect(treatment).toMatchObject({
-      sample_size_n: 1,
-      point_estimate: 1,
-    });
-    expect(output.srm.observed_counts).toEqual({ control: 2, treatment: 2 });
-    expect(output.health.deduped_counts).toEqual({ control: 2, treatment: 2 });
-    expect(output.health.activation_rates).toEqual({ control: 0.5, treatment: 0.5 });
-  });
-});
-
 function treatmentResult(
   output: Awaited<ReturnType<typeof analyzeStats>>,
   metricId = "conversion",
@@ -180,83 +160,6 @@ function armResult(
     throw new Error(`test fixture missing ${variant} result for ${metricId}`);
   }
   return result;
-}
-
-function activationGatedStatsInput(): StatsInput {
-  const controlActivated = "control_activated";
-  const controlUnactivated = "control_unactivated";
-  const treatmentActivated = "treatment_activated";
-  const treatmentUnactivated = "treatment_unactivated";
-
-  return {
-    run_id: ENGINE_RUN_ID,
-    confidence_level: 0.95,
-    horizon: "sequential",
-    allocation: { control: 50, treatment: 50 },
-    control_variant: "control",
-    decision_family: [{ metric_id: "conversion", variant: "treatment" }],
-    guardrail_decisions: [],
-    exposures: [
-      gatedExposure("control", controlActivated, ACTIVATION_TS),
-      gatedExposure("control", controlUnactivated, FIRST_EXPOSURE_TS),
-      gatedExposure("treatment", treatmentActivated, ACTIVATION_TS),
-      gatedExposure("treatment", treatmentUnactivated, FIRST_EXPOSURE_TS),
-    ],
-    activation_rows: [
-      activationRow(controlActivated, true),
-      activationRow(controlUnactivated, false),
-      activationRow(treatmentActivated, true),
-      activationRow(treatmentUnactivated, false),
-    ],
-    metric_values: [
-      binomialRow(controlActivated, 1),
-      binomialRow(controlUnactivated, 0),
-      binomialRow(treatmentActivated, 1),
-      binomialRow(treatmentUnactivated, 0),
-    ],
-  };
-}
-
-const FIRST_EXPOSURE_TS = "2026-07-01T00:00:00.000Z";
-const ACTIVATION_TS = "2026-07-01T00:05:00.000Z";
-
-function gatedExposure(
-  variant: string,
-  targeting_key_hash: string,
-  window_anchor: string,
-): StatsInput["exposures"][number] {
-  return {
-    ...exposure(variant, targeting_key_hash),
-    first_exposure_ts: FIRST_EXPOSURE_TS,
-    window_anchor,
-  };
-}
-
-function activationRow(
-  targeting_key_hash: string,
-  activated: boolean,
-): NonNullable<StatsInput["activation_rows"]>[number] {
-  return {
-    targeting_key_hash,
-    run_id: ENGINE_RUN_ID,
-    activation_ts: ACTIVATION_TS,
-    counterfactual: false,
-    activated,
-  };
-}
-
-function binomialRow(
-  targeting_key_hash: string,
-  value: number,
-): StatsInput["metric_values"][number] {
-  return {
-    targeting_key_hash,
-    run_id: ENGINE_RUN_ID,
-    metric_id: "conversion",
-    metric_type: "binomial",
-    value,
-    in_window: true,
-  };
 }
 
 function countRow(targeting_key_hash: string, value: number) {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MetricKindSchema, MetricRefSchema } from "./leaf-schemas-experiment.js";
-import { CupedAttributeSourceSchema } from "./stats-result-contract.js";
+import { CupedAttributeSourceSchema, DimensionClassSchema } from "./stats-result-contract.js";
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
 const TimestampSchema = z.string();
@@ -26,6 +26,7 @@ export const DedupeExposureRowSchema = z
     variant: z.string(),
     first_exposure_ts: TimestampSchema,
     window_anchor: TimestampSchema,
+    dimension_values: z.record(z.string(), z.string()).optional(),
   })
   .strict();
 export type DedupeExposureRow = z.infer<typeof DedupeExposureRowSchema>;
@@ -94,6 +95,15 @@ export const DecisionFamilyMemberSchema = z
   .strict();
 export type DecisionFamilyMember = z.infer<typeof DecisionFamilyMemberSchema>;
 
+export const DimensionInputSchema = z
+  .object({
+    dimension_id: z.string(),
+    class: DimensionClassSchema,
+    values: z.array(z.string()).optional(),
+  })
+  .strict();
+export type DimensionInput = z.infer<typeof DimensionInputSchema>;
+
 const GuardrailDecisionSchema = z
   .object({
     metric_id: MetricIdSchema,
@@ -119,6 +129,7 @@ export const StatsInputSchema = z
     metric_values: z.array(PerEntityMetricRowSchema),
     pre_period_covariates: z.array(CupedCovariateRowSchema).optional(),
     activation_rows: z.array(ActivationRowSchema).optional(),
+    dimensions: z.array(DimensionInputSchema).optional(),
   })
   .strict()
   .refine((input) => input.horizon !== "fixed" || input.sample_size_locked !== undefined, {
