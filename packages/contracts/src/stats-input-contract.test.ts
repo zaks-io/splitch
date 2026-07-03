@@ -33,21 +33,72 @@ const decisionFamilyMember = {
   variant: "treatment",
 };
 
+const statsInput = {
+  run_id: "run_1",
+  decision_family: [decisionFamilyMember],
+  exposures: [exposureRow],
+  metric_values: [metricRow],
+};
+
+function omitField(input: Record<string, unknown>, field: string): Record<string, unknown> {
+  const copy = { ...input };
+  delete copy[field];
+  return copy;
+}
+
 describe("DedupeExposureRowSchema", () => {
   it("requires the stats input dedupe fields", () => {
     expect(DedupeExposureRowSchema.parse(exposureRow).id_type).toBe("user");
+  });
 
-    const { id_type: _, ...missingIdType } = exposureRow;
-    expect(DedupeExposureRowSchema.safeParse(missingIdType).success).toBe(false);
+  it.each([
+    "app_id",
+    "targeting_key_hash",
+    "environment_id",
+    "id_type",
+    "run_id",
+    "variant",
+    "first_exposure_ts",
+    "window_anchor",
+  ])("rejects a missing %s field", (field) => {
+    expect(DedupeExposureRowSchema.safeParse(omitField(exposureRow, field)).success).toBe(false);
   });
 });
 
 describe("PerEntityMetricRowSchema", () => {
   it("requires value and in_window for every Metric row", () => {
     expect(PerEntityMetricRowSchema.parse(metricRow).value).toBe(1);
+  });
 
-    const { value: _, ...missingValue } = metricRow;
-    expect(PerEntityMetricRowSchema.safeParse(missingValue).success).toBe(false);
+  it.each([
+    "targeting_key_hash",
+    "run_id",
+    "metric_id",
+    "metric_type",
+    "value",
+    "in_window",
+  ])("rejects a missing %s field", (field) => {
+    expect(PerEntityMetricRowSchema.safeParse(omitField(metricRow, field)).success).toBe(false);
+  });
+
+  it.each(["num_value", "denom_value"])("rejects a missing Ratio %s field", (field) => {
+    expect(
+      PerEntityMetricRowSchema.safeParse(
+        omitField(
+          {
+            ...metricRow,
+            metric_type: "ratio",
+            num_value: 3,
+            denom_value: 4,
+          },
+          field,
+        ),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("allows non-Ratio rows without the Ratio pair", () => {
+    expect(PerEntityMetricRowSchema.safeParse(metricRow).success).toBe(true);
   });
 
   it("uses the MetricKind leaf for metric_type", () => {
@@ -89,6 +140,22 @@ describe("PerEntityMetricRowSchema", () => {
 });
 
 describe("PrePeriodRowSchema", () => {
+  const prePeriodRow = {
+    targeting_key_hash: "tkh_1",
+    metric_id: "metric_1",
+    pre_period_value: 12,
+    covariate_source: "pre_period",
+  };
+
+  it.each([
+    "targeting_key_hash",
+    "metric_id",
+    "pre_period_value",
+    "covariate_source",
+  ])("rejects a missing %s field", (field) => {
+    expect(PrePeriodRowSchema.safeParse(omitField(prePeriodRow, field)).success).toBe(false);
+  });
+
   it("parses the CUPED covariate source enum", () => {
     for (const covariate_source of ["pre_period", "declared_attribute", "historical_attribute"]) {
       expect(
@@ -113,20 +180,38 @@ describe("PrePeriodRowSchema", () => {
 });
 
 describe("ActivationRowSchema", () => {
+  const activationRow = {
+    targeting_key_hash: "tkh_1",
+    run_id: "run_1",
+    activation_ts: "2026-07-01T00:05:00.000Z",
+    counterfactual: false,
+    activated: true,
+  };
+
+  it.each([
+    "targeting_key_hash",
+    "run_id",
+    "activation_ts",
+    "counterfactual",
+    "activated",
+  ])("rejects a missing %s field", (field) => {
+    expect(ActivationRowSchema.safeParse(omitField(activationRow, field)).success).toBe(false);
+  });
+
   it("parses the Activation gate row fields", () => {
-    const row = ActivationRowSchema.parse({
-      targeting_key_hash: "tkh_1",
-      run_id: "run_1",
-      activation_ts: "2026-07-01T00:05:00.000Z",
-      counterfactual: false,
-      activated: true,
-    });
+    const row = ActivationRowSchema.parse(activationRow);
 
     expect(row.activated).toBe(true);
   });
 });
 
 describe("DecisionFamilyMemberSchema", () => {
+  it.each(["metric_id", "variant"])("rejects a missing %s field", (field) => {
+    expect(
+      DecisionFamilyMemberSchema.safeParse(omitField(decisionFamilyMember, field)).success,
+    ).toBe(false);
+  });
+
   it("keeps Dimension fields optional and nullable", () => {
     expect(DecisionFamilyMemberSchema.parse(decisionFamilyMember).dimension_id).toBeUndefined();
     expect(
@@ -140,13 +225,17 @@ describe("DecisionFamilyMemberSchema", () => {
 });
 
 describe("StatsInputSchema", () => {
+  it.each([
+    "run_id",
+    "decision_family",
+    "exposures",
+    "metric_values",
+  ])("rejects a missing %s field", (field) => {
+    expect(StatsInputSchema.safeParse(omitField(statsInput, field)).success).toBe(false);
+  });
+
   it("parses the final stats engine input shape with defaults", () => {
-    const input = StatsInputSchema.parse({
-      run_id: "run_1",
-      decision_family: [decisionFamilyMember],
-      exposures: [exposureRow],
-      metric_values: [metricRow],
-    });
+    const input = StatsInputSchema.parse(statsInput);
 
     expect(input.confidence_level).toBe(0.95);
     expect(input.horizon).toBe("sequential");
@@ -155,22 +244,16 @@ describe("StatsInputSchema", () => {
   it("requires sample_size_locked for fixed horizon input", () => {
     expect(
       StatsInputSchema.safeParse({
-        run_id: "run_1",
+        ...statsInput,
         horizon: "fixed",
-        decision_family: [decisionFamilyMember],
-        exposures: [exposureRow],
-        metric_values: [metricRow],
       }).success,
     ).toBe(false);
 
     expect(
       StatsInputSchema.safeParse({
-        run_id: "run_1",
+        ...statsInput,
         horizon: "fixed",
         sample_size_locked: 1000,
-        decision_family: [decisionFamilyMember],
-        exposures: [exposureRow],
-        metric_values: [metricRow],
       }).success,
     ).toBe(true);
   });
