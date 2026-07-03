@@ -1,7 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["biome.json", "tsconfig.base.json"],
-  "globalEnv": ["CI", "NODE_ENV", "SPLITCH_PLATFORM_TARGET"],
+  "globalEnv": [
+    "CI",
+    "NODE_ENV",
+    "SPLITCH_PLATFORM_TARGET",
+    "AUTH_API_ORIGIN",
+    "AUTH_JWKS_URI",
+    "CONTROL_PLANE_ORIGIN",
+    "TINYBIRD_API_URL"
+  ],
   "remoteCache": {
     "signature": true
   },
@@ -9,7 +17,14 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**", "build/**"],
-      "inputs": ["$TURBO_DEFAULT$"]
+      "inputs": ["$TURBO_DEFAULT$"],
+      "env": [
+        "SPLITCH_PLATFORM_TARGET",
+        "AUTH_API_ORIGIN",
+        "AUTH_JWKS_URI",
+        "CONTROL_PLANE_ORIGIN",
+        "TINYBIRD_API_URL"
+      ]
     },
     "clean": {
       "cache": false
@@ -56,6 +71,33 @@
       "cache": false
     },
     "deploy:dry-run": {
+      "cache": false
+    },
+    "d1:migrate:local": {
+      "cache": false
+    },
+    "migrate": {
+      "cache": false
+    },
+    "migrate:local": {
+      "cache": false
+    },
+    "provision": {
+      "cache": false
+    },
+    "tb": {
+      "cache": false
+    },
+    "tinybird:deploy:check": {
+      "cache": false
+    },
+    "tinybird:deploy:production": {
+      "cache": false
+    },
+    "tinybird:local": {
+      "cache": false
+    },
+    "wrangler": {
       "cache": false
     },
     "wrangler:types": {
