@@ -15,6 +15,7 @@ export {
   SEQUENTIAL_CI_SOURCE,
   SequentialCI,
 } from "./sequential-ci.js";
+export { applyDecisionFamilyCorrection } from "./decision-family-fdr.js";
 export { estimateMetricArm, estimateMetricComparison } from "./variance-estimators.js";
 export { checkSrmHealth, SRM_MISMATCH_P_VALUE } from "./srm-checker.js";
 export type {
@@ -42,6 +43,12 @@ export type {
   CIWarning,
   SequentialCIOptions,
 } from "./sequential-ci.js";
+export type {
+  DecisionFamilyArmResult,
+  DecisionFamilyCorrectionInput,
+  DecisionFamilyCorrectionOutput,
+  DecisionFamilyCorrectionSummary,
+} from "./decision-family-fdr.js";
 export type {
   CupedCovariateRow,
   CupedCovariateSource,
