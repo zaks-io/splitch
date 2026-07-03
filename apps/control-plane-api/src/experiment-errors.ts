@@ -1,0 +1,163 @@
+import { renderError } from "@splitch/worker-runtime";
+
+export function experimentNotFound(requestId: string): Response {
+  return renderError(
+    { code: "EXPERIMENT_NOT_FOUND", message: "Experiment not found", details: {} },
+    { requestId },
+  );
+}
+
+export function runNotFound(requestId: string): Response {
+  return renderError(
+    { code: "RUN_NOT_FOUND", message: "Run not found", details: {} },
+    { requestId },
+  );
+}
+
+export function experimentNoDraft(
+  experimentId: string,
+  currentRunId: string | null,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "EXPERIMENT_NO_DRAFT",
+      message: "Experiment has no draft assignment config to Start",
+      details: {
+        experimentId,
+        currentRunId,
+        recommendedAction: "EDIT_DRAFT_THEN_START",
+      },
+    },
+    { requestId },
+  );
+}
+
+export function experimentAlreadyRunningForFlag(
+  experimentId: string,
+  runningRunId: string,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "EXPERIMENT_RUNNING",
+      message: "another Experiment is already running for this Flag in this Environment",
+      details: {
+        experimentId,
+        runningRunId,
+        attemptedOp: "START_EXPERIMENT_RUN",
+        recommendedAction: "END_RUNNING_RUN_FIRST",
+      },
+    },
+    { requestId },
+  );
+}
+
+export function allocationInvalid(
+  allocation: Record<string, number>,
+  got: number,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "ALLOCATION_INVALID",
+      message: "allocation percentages must sum to 100",
+      details: {
+        expected: 100,
+        got,
+        variantAllocations: allocation,
+      },
+    },
+    { requestId },
+  );
+}
+
+export function variantNotAvailable(
+  flagId: string,
+  environmentId: string,
+  missingVariants: string[],
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "VARIANT_NOT_AVAILABLE",
+      message: "requested variants are not available for this Environment",
+      details: {
+        flagId,
+        environmentId,
+        missingVariants,
+        recommendedAction: "ADD_VARIANT_TO_ENV",
+      },
+    },
+    { requestId },
+  );
+}
+
+export function runNotRunning(runId: string, requestId: string): Response {
+  return renderError(
+    {
+      code: "RUN_NOT_RUNNING",
+      message: "Run is not running",
+      details: {
+        runId,
+        currentState: "ended",
+        attemptedOp: "END_RUN",
+        recommendedAction: "START_A_RUN",
+      },
+    },
+    { requestId },
+  );
+}
+
+export function runFrozen(
+  runId: string,
+  fields: string[],
+  attemptedChange: string,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "RUN_FROZEN",
+      message: "running Run freezes assignment-affecting Experiment fields",
+      details: {
+        frozenFields: fields,
+        currentRunId: runId,
+        attemptedChange,
+        recommendedAction: "CREATE_NEW_RUN",
+      },
+    },
+    { requestId },
+  );
+}
+
+export function decisionLocked(
+  runId: string,
+  fields: string[],
+  attemptedChange: string,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "DECISION_LOCKED",
+      message: "running Run locks decision-valid fields",
+      details: {
+        lockedFields: fields,
+        currentRunId: runId,
+        attemptedChange,
+        recommendedAction: "CREATE_NEW_RUN",
+      },
+    },
+    { requestId },
+  );
+}
+
+export function configStoreUnavailable(requestId: string): Response {
+  return renderError(
+    {
+      code: "SERVICE_UNAVAILABLE",
+      message: "config store is not configured",
+      details: { retryAfterMs: 1000 },
+    },
+    { requestId },
+  );
+}

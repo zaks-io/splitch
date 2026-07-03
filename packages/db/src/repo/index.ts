@@ -23,7 +23,7 @@ export function createRepository(d1: D1Database) {
   const db = createDb(d1);
   return {
     flags: makeFlagRepo(db),
-    experiments: makeExperimentRepo(db),
+    experiments: makeExperimentRepo(db, d1),
     credentials: makeCredentialRepo(db),
     identity: makeIdentityRepo(db),
     privacy: makePrivacyRepo(db),

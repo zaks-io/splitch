@@ -2,6 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index.js";
 import type { Db } from "./client.js";
 import type { EnvScope, TenantScope } from "./scope.js";
+import { makeEndRun } from "./experiment-end-run.js";
+import { makeStartRun } from "./experiment-start-run.js";
 import { scopedTable } from "./scoped-table.js";
 
 /**
@@ -13,10 +15,17 @@ import { scopedTable } from "./scoped-table.js";
  * they still route through the scope-bound `update`, so a Run can only be
  * transitioned within its own App+Environment.
  */
-export function makeExperimentRepo(db: Db) {
+export function makeExperimentRepo(db: Db, d1: D1Database) {
   const experimentsTable = scopedTable(db, experiments);
   const runsTable = scopedTable(db, runs);
   const metricsTable = scopedTable(db, metrics);
+  const startRun = makeStartRun(d1, experimentsTable, runsTable);
+  const endRun = makeEndRun(d1, experimentsTable, runsTable);
+  const findRunningExperimentsForFlag = (scope: EnvScope, flagId: string) =>
+    experimentsTable.findMany(
+      scope,
+      and(eq(experiments.flagId, flagId), eq(experiments.status, "running")),
+    );
 
   return {
     experiments: experimentsTable,
@@ -27,11 +36,54 @@ export function makeExperimentRepo(db: Db) {
       return experimentsTable.findOne(scope, eq(experiments.id, experimentId));
     },
 
+    listExperiments(scope: EnvScope) {
+      return experimentsTable.findMany(scope);
+    },
+
+    updateExperiment(
+      scope: EnvScope,
+      experimentId: string,
+      patch: Partial<
+        Pick<
+          typeof experiments.$inferInsert,
+          | "key"
+          | "flagId"
+          | "name"
+          | "description"
+          | "hypothesis"
+          | "status"
+          | "targetingKeyField"
+          | "targetingKeyType"
+          | "confidenceLevel"
+          | "defaultVariantId"
+          | "metrics"
+          | "guardrailMetrics"
+          | "activationMetricId"
+          | "conversionWindowMs"
+          | "dimensions"
+          | "draftAllocation"
+          | "draftSalt"
+          | "draftTargetingRules"
+          | "draftSegmentIds"
+          | "liveRunId"
+          | "updatedAt"
+          | "updatedBy"
+        >
+      >,
+    ): Promise<typeof experiments.$inferSelect | null> {
+      return experimentsTable
+        .update(scope, patch, eq(experiments.id, experimentId))
+        .then((rows) => rows[0] ?? null);
+    },
+
+    removeExperiment(scope: EnvScope, experimentId: string): Promise<number> {
+      return experimentsTable.remove(scope, eq(experiments.id, experimentId));
+    },
+
+    findRunningExperimentsForFlag,
+
     async findRunningExperimentForFlag(scope: EnvScope, flagId: string) {
-      const rows = await experimentsTable.findMany(
-        scope,
-        and(eq(experiments.flagId, flagId), eq(experiments.status, "running")),
-      );
+      const rows = await findRunningExperimentsForFlag(scope, flagId);
       if (rows.length > 1) {
         throw new Error("findRunningExperimentForFlag: multiple running Experiments for one Flag");
       }
@@ -55,6 +107,20 @@ export function makeExperimentRepo(db: Db) {
       return runsTable.findOne(scope, eq(runs.id, runId));
     },
 
+    updateRunStatus(
+      scope: EnvScope,
+      runId: string,
+      patch: Pick<typeof runs.$inferInsert, "status" | "endedAt"> &
+        Partial<Pick<typeof runs.$inferInsert, "endReason">>,
+    ): Promise<typeof runs.$inferSelect | null> {
+      return runsTable.update(scope, patch, eq(runs.id, runId)).then((rows) => rows[0] ?? null);
+    },
+
+    async nextRunNumber(scope: EnvScope, experimentId: string): Promise<number> {
+      const existing = await runsTable.findMany(scope, eq(runs.experimentId, experimentId));
+      return existing.reduce((max, run) => Math.max(max, run.runNumber), 0) + 1;
+    },
+
     async findRunningRunForExperiment(scope: EnvScope, experimentId: string) {
       const rows = await runsTable.findMany(
         scope,
@@ -65,6 +131,9 @@ export function makeExperimentRepo(db: Db) {
       }
       return rows[0] ?? null;
     },
+
+    startRun,
+    endRun,
 
     getMetric(scope: TenantScope, metricId: string) {
       return metricsTable.findOne(scope, eq(metrics.id, metricId));

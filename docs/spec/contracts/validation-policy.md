@@ -81,7 +81,7 @@ All domain invariants live in the Worker — both skins (MCP, CLI) inherit corre
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | **Run frozen fields**                 | Reject `PatchRunRequest` with any of `{salt, allocation, variantSet, targetingRules, targetingSegmentId}`                                                                     | `RUN_FROZEN`                                 |
 | **Variant frozen per Run**            | Reject `PatchVariantRequest.value` if any running Run's `variantSet` includes this variant                                                                                    | `RUN_FROZEN`                                 |
-| **Allocation sums to 100**            | Sum check on `StartRunRequest.allocation`                                                                                                                                     | `ALLOCATION_INVALID`                         |
+| **Allocation sums to 100**            | Sum check on the staged Experiment draft allocation when Start freezes it into a Run                                                                                          | `ALLOCATION_INVALID`                         |
 | **Activation ordering**               | `activation_ts > first_exposure_ts`; enforced at ingest time in the Exposure pipeline                                                                                         | `ACTIVATION_TIMESTAMP_INVALID`               |
 | **app_id scoping**                    | Every D1/Tinybird query filtered by `app_id` (and `environment_id` co-scoped for experiments/runs/exposures/credentials, ADR-0027) in the data-access layer                   | `FORBIDDEN` (wrong app)                      |
 | **Credential scopes**                 | KV cache lookup on every request; checked before the handler runs                                                                                                             | `INSUFFICIENT_SCOPES` / `CREDENTIAL_REVOKED` |
@@ -113,13 +113,28 @@ not a partial resolution.
 
 When `POST /apps/{app_id}/envs/{environment_id}/experiments/:id/start` fires:
 
-1. Worker validates the request (Zod).
-2. D1 transaction: end running Run (set `ended_at`, `status = 'ended'`), insert new Run, update `experiments.live_run_id`.
-3. KV write: update `app:{appId}:{environmentId}:liveRun` and `app:{appId}:{environmentId}:run:{newRunId}`.
-4. Broadcast WebSocket nudge (ADR-0019) after D1 + KV succeed.
+1. Worker validates the optional lifecycle request body (Zod): `confirm`, `reason`, and
+   `idempotency_key` only. Assignment config is rejected here and must already be staged on the
+   Experiment draft via create/patch.
+2. Worker validates the staged draft assignment config: allocation sums to 100, Variants are
+   available in this Environment, and draft Segment ids resolve to frozen `targetingRules`.
+3. D1 transaction: end any running Run (set `ended_at`, `status = 'ended'`), insert the new Run,
+   update `experiments.live_run_id`, and consume the draft assignment fields.
+4. KV sync: write the D1-derived reader set: `app:{appId}:{environmentId}:experiment:{experimentId}`
+   with `ExperimentConfigKV.liveRunId`, `app:{appId}:{environmentId}:run:{newRunId}` with
+   `RunConfigKV`, and `live_run:{appId}:{environmentId}:{experimentId}` with `LiveRunKV`.
+5. Broadcast WebSocket nudge (ADR-0019) after D1 + KV succeed.
 
-If D1 succeeds but KV write fails: D1 is truth; next edge request sees stale KV for up to ~60s
-(self-healing per ADR-0009 consistency window). Nudge is NOT sent until KV is confirmed. This preserves the ADR-0019 persisted-before-announced ordering.
+When `POST /apps/{app_id}/envs/{environment_id}/runs/{run_id}/end` fires, the same D1-derived KV
+sync rewrites `ExperimentConfigKV.liveRunId` to `null` and deletes
+`live_run:{appId}:{environmentId}:{experimentId}`. Evaluation and ingest readers use
+`ExperimentConfigKV.liveRunId` plus `RunConfigKV`; they never infer a live Run from the latest D1
+Run.
+
+If D1 succeeds but KV write fails: D1 is truth and the config-store sync is replayable from D1. Nudge
+is NOT sent until KV is confirmed. This preserves the ADR-0019 persisted-before-announced ordering.
+Edge readers remain fail-loud on missing or mismatched live Run config rather than deriving state
+from D1 history.
 
 ## Sources
 

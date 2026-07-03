@@ -20,8 +20,8 @@ describe("config key-pattern constructors (per-Environment, ADR-0027)", () => {
     expect(runConfigKey("app_1", "env_prod", "run_10")).toBe("app:app_1:env_prod:run:run_10");
   });
 
-  it("liveRunKey produces app:{appId}:{environmentId}:liveRun", () => {
-    expect(liveRunKey("app_1", "env_prod")).toBe("app:app_1:env_prod:liveRun");
+  it("liveRunKey produces live_run:{appId}:{environmentId}:{experimentId}", () => {
+    expect(liveRunKey("app_1", "env_prod", "exp_5")).toBe("live_run:app_1:env_prod:exp_5");
   });
 
   it("experimentConfigKey produces app:{appId}:{environmentId}:experiment:{experimentId}", () => {

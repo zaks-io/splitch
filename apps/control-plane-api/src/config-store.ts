@@ -1,6 +1,7 @@
 import { envScope, type EnvScope } from "@splitch/db";
 import { promoteFlagConfig, replaceTargetingRules } from "./config-store-mutations.js";
 import {
+  buildExperimentSnapshotFromD1,
   buildSnapshotFromD1,
   json,
   missingAvailableVariants,
@@ -27,6 +28,13 @@ export interface ConfigStoreWriter {
   writeFlagConfig(input: PatchFlagConfigInput): Promise<FlagConfigWriteResult>;
   replaceTargetingRules(input: ReplaceTargetingRulesInput): Promise<FlagConfigWriteResult>;
   promoteFlagConfig(input: PromoteFlagConfigInput): Promise<PromoteFlagConfigResult>;
+  syncExperimentConfig(input: ExperimentConfigSyncInput): Promise<FlagConfigWriteResult>;
+}
+
+interface ExperimentConfigSyncInput {
+  appId: string;
+  environmentId: string;
+  experimentId: string;
 }
 
 export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
@@ -49,7 +57,21 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
     async promoteFlagConfig(input) {
       return promoteFlagConfig(deps, input);
     },
+
+    async syncExperimentConfig(input) {
+      return syncExperimentConfig(deps, input);
+    },
   };
+}
+
+async function syncExperimentConfig(
+  deps: ConfigStoreDeps,
+  input: ExperimentConfigSyncInput,
+): Promise<FlagConfigWriteResult> {
+  const scope = envScope(input.appId, input.environmentId);
+  const snapshot = await buildExperimentSnapshotFromD1(deps.repo, scope, input.experimentId);
+  if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
+  return writeSnapshotAndBroadcast(deps, scope, snapshot.flag.id, snapshot);
 }
 
 async function writeFlagConfig(

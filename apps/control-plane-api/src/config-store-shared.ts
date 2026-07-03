@@ -111,6 +111,26 @@ export async function buildSnapshotFromD1(
   scope: EnvScope,
   flagId: string,
 ): Promise<Snapshot | null> {
+  const experiment = await repo.experiments.findRunningExperimentForFlag(scope, flagId);
+  return buildSnapshot(repo, scope, flagId, experiment);
+}
+
+export async function buildExperimentSnapshotFromD1(
+  repo: Repository,
+  scope: EnvScope,
+  experimentId: string,
+): Promise<Snapshot | null> {
+  const experiment = await repo.experiments.getExperiment(scope, experimentId);
+  if (!experiment) return null;
+  return buildSnapshot(repo, scope, experiment.flagId, experiment);
+}
+
+async function buildSnapshot(
+  repo: Repository,
+  scope: EnvScope,
+  flagId: string,
+  experiment: Awaited<ReturnType<Repository["experiments"]["getExperiment"]>>,
+): Promise<Snapshot | null> {
   const flag = await repo.flags.getFlag(appScope(scope.appId), flagId);
   const config = await repo.flags.getFlagConfig(scope, flagId);
   if (!flag || !config) return null;
@@ -123,7 +143,6 @@ export async function buildSnapshotFromD1(
   }));
 
   const targetingRules = (await repo.flags.listTargetingRules(scope, flagId)).map(toTargetingRule);
-  const experiment = await repo.experiments.findRunningExperimentForFlag(scope, flagId);
   const run = experiment?.liveRunId
     ? await repo.experiments.getRun(scope, experiment.liveRunId)
     : null;
@@ -136,7 +155,7 @@ export async function buildSnapshotFromD1(
       id: flag.id,
       key: flag.key,
       environmentId: scope.environmentId,
-      experimentId: experiment?.id ?? null,
+      experimentId: experiment?.status === "running" ? experiment.id : null,
       enabled: config.enabled,
       defaultVariantId: requiredString(config.defaultVariantId, "defaultVariantId"),
       variants,

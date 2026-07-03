@@ -70,6 +70,12 @@ export class ConfigStoreDurableObject
     return this.store().promoteFlagConfig(input);
   }
 
+  syncExperimentConfig(
+    input: Parameters<ConfigStoreWriter["syncExperimentConfig"]>[0],
+  ): ReturnType<ConfigStoreWriter["syncExperimentConfig"]> {
+    return this.store().syncExperimentConfig(input);
+  }
+
   override fetch(request: Request): Response {
     if (request.method !== "GET" || request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
       return new Response("expected WebSocket upgrade", { status: 426 });

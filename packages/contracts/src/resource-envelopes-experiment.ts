@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { VariantSchema } from "./leaf-schemas-flag.js";
+import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag.js";
 import { ExperimentSchema, MetricRefSchema, RunSchema } from "./leaf-schemas-experiment.js";
 
 /**
@@ -16,12 +16,17 @@ import { ExperimentSchema, MetricRefSchema, RunSchema } from "./leaf-schemas-exp
  */
 
 // ---------------------------------------------------------------------------
+const DraftAllocationSchema = z.record(z.string(), z.number());
+
+// ---------------------------------------------------------------------------
 // CreateExperimentRequest
 //
 // `defaultVariantId` is intentionally absent: the Worker copies it from the bound
 // Flag's per-Environment default (resolved via flagId + environmentId), so the
 // request PARSES WITHOUT it. `metrics` is `MetricRef[]` with min 0. Worker sets
 // id/status/liveRunId/createdAt/updatedAt/defaultVariantId.
+// Draft assignment fields are intentionally shape-only here. Start validates the
+// staged draft and returns domain errors such as ALLOCATION_INVALID.
 // ---------------------------------------------------------------------------
 
 export const CreateExperimentRequestSchema = z.object({
@@ -39,9 +44,13 @@ export const CreateExperimentRequestSchema = z.object({
   confidenceLevel: ExperimentSchema.shape.confidenceLevel.default(0.95),
   metrics: z.array(MetricRefSchema).min(0),
   guardrailMetrics: z.array(MetricRefSchema).default([]),
-  activationMetricId: z.string().optional(),
+  activationMetricId: z.string().nullable().optional(),
   conversionWindowMs: z.number().default(0),
   dimensions: z.array(z.string()).default([]),
+  allocation: DraftAllocationSchema.optional(),
+  salt: z.string().optional(),
+  targetingRules: z.array(TargetingRuleSchema).optional(),
+  segmentIds: z.array(z.string()).optional(),
   idempotency_key: z.string().optional(),
 });
 export type CreateExperimentRequest = z.infer<typeof CreateExperimentRequestSchema>;
@@ -54,7 +63,6 @@ export type CreateExperimentRequest = z.infer<typeof CreateExperimentRequestSche
 // runtime — those are not structural. `.strict()` still rejects unknown keys, and
 // Run-level fields (horizon, targetN, sampleSizeLocked) are not patchable here at
 // all (they live on the Run, not the Experiment) so they are simply absent.
-// `status` accepts only 'ended' via PATCH (Worker validates the transition).
 // ---------------------------------------------------------------------------
 
 export const PatchExperimentRequestSchema = z
@@ -62,15 +70,20 @@ export const PatchExperimentRequestSchema = z
     name: z.string().optional(),
     description: z.string().optional(),
     hypothesis: z.string().optional(),
+    flagId: z.string().optional(),
     targetingKey: z.string().optional(),
     targetingKeyType: z.string().optional(),
-    activationMetricId: z.string().optional(),
+    activationMetricId: z.string().nullable().optional(),
+    allocation: DraftAllocationSchema.optional(),
+    salt: z.string().optional(),
+    variantSet: z.array(VariantSchema).optional(),
+    targetingRules: z.array(TargetingRuleSchema).optional(),
+    segmentIds: z.array(z.string()).optional(),
     metrics: z.array(MetricRefSchema).optional(),
     guardrailMetrics: z.array(MetricRefSchema).optional(),
     conversionWindowMs: z.number().optional(),
     dimensions: z.array(z.string()).optional(),
     confidenceLevel: z.number().optional(),
-    status: z.literal("ended").optional(),
   })
   .strict();
 export type PatchExperimentRequest = z.infer<typeof PatchExperimentRequestSchema>;
@@ -85,29 +98,19 @@ export type ExperimentResponse = z.infer<typeof ExperimentResponseSchema>;
 // ---------------------------------------------------------------------------
 // StartRunRequest (opens a new Experiment Run — the ONLY path to open one)
 //
-// Carries all assignment config. `allocation` reuses the Run leaf's sum-to-100
-// refinement. The Worker computes `targetingRules` (the resolved snapshot from
-// `targetingSegmentId`), so it is NOT supplied here. There is NO CreateRunRequest
-// — Runs are created by Start. `confirm?` makes this a gated write under the
-// Environment Policy (ADR-0029); `reason?` is the Run's start note;
-// `idempotency_key?` guards a retried `experiments_start`.
+// The assignment config lives on the Experiment draft. Start validates the draft
+// and freezes it into a Run. `confirm?` makes this a gated write under the
+// Environment Policy (ADR-0029); `reason?` is the Run's start note.
 // ---------------------------------------------------------------------------
 
-export const StartRunRequestSchema = z.object({
-  experimentId: z.string(),
-  // Snapshot of the Flag's current Variants at Start time.
-  variantSet: z.array(VariantSchema),
-  // Variant NAME → percentage; reuses the Run leaf's sum-to-100 guard.
-  allocation: RunSchema.shape.allocation,
-  // Auto-generated UUID4 by the Worker if omitted.
-  salt: z.string().optional(),
-  // Resolved to frozen rules at Start; the Run stores rules, never this id.
-  targetingSegmentId: z.string().optional(),
-  // Environment-Policy confirmation gate (ADR-0029); default false.
-  confirm: z.boolean().optional(),
-  reason: z.string().optional(),
-  idempotency_key: z.string().optional(),
-});
+export const StartRunRequestSchema = z
+  .object({
+    // Environment-Policy confirmation gate (ADR-0029); default false.
+    confirm: z.boolean().optional(),
+    reason: z.string().optional(),
+    idempotency_key: z.string().optional(),
+  })
+  .strict();
 export type StartRunRequest = z.infer<typeof StartRunRequestSchema>;
 
 // ---------------------------------------------------------------------------

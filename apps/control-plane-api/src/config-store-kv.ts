@@ -44,11 +44,13 @@ export async function writeSnapshot(
       envelope(RunConfigEnvelope, snapshot.run),
     );
     await kv.put(
-      liveRunKey(scope.appId, scope.environmentId),
+      liveRunKey(scope.appId, scope.environmentId, snapshot.run.experimentId),
       envelope(LiveRunEnvelope, {
         runId: snapshot.run.id,
       }),
     );
+  } else if (snapshot.experiment) {
+    await kv.delete(liveRunKey(scope.appId, scope.environmentId, snapshot.experiment.id));
   }
 }
 

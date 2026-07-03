@@ -37,9 +37,9 @@ export function experimentConfigKey(
   return `app:${appId}:${environmentId}:experiment:${experimentId}`;
 }
 
-/** `app:{appId}:{environmentId}:liveRun` — live Experiment Run pointer (LiveRunKV). */
-export function liveRunKey(appId: string, environmentId: string): string {
-  return `app:${appId}:${environmentId}:liveRun`;
+/** `live_run:{appId}:{environmentId}:{experimentId}` — explicit live Experiment Run pointer. */
+export function liveRunKey(appId: string, environmentId: string, experimentId: string): string {
+  return `live_run:${appId}:${environmentId}:${experimentId}`;
 }
 
 /**
