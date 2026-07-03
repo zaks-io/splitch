@@ -1,7 +1,7 @@
 import type { ResolutionDetails, VariantValue } from "@splitch/contracts";
-import { synthesizeDetails } from "./resolution.js";
+import { errorCodeForStatus, synthesizeDetails } from "./resolution.js";
 import type { SeenSet } from "./seen-set.js";
-import type { AttributeValue, Transport } from "./transport.js";
+import type { AttributeValue, Transport, TransportFailure, TransportRequest } from "./transport.js";
 
 /**
  * Caller-facing evaluate options. `idType` defaults to `'user'` client-side (the
@@ -43,6 +43,28 @@ const DEFAULT_ID_TYPE = "user";
 // off-state for the canonical boolean flag.
 const FALLBACK_DEFAULT_VALUE: VariantValue = false;
 
+class SplitchSdkError extends Error {
+  readonly code: NonNullable<TransportFailure["errorCode"]>;
+  readonly status: TransportFailure["status"];
+
+  constructor(operation: "peekVariant", result: TransportFailure) {
+    const code = result.errorCode ?? errorCodeForStatus(result.status);
+    super(result.errorMessage ?? `${operation} failed: ${code}`);
+    this.name = "SplitchSdkError";
+    this.code = code;
+    this.status = result.status;
+  }
+}
+
+function requestFor(flagKey: string, context: EvaluateContext): TransportRequest {
+  return {
+    flagKey,
+    targetingKey: context.targetingKey,
+    idType: context.idType ?? DEFAULT_ID_TYPE,
+    attributes: context.attributes ?? {},
+  };
+}
+
 /**
  * The single evaluate path shared by `evaluate` and `evaluateDetails`. Ordering
  * follows docs/spec/sdk/exposure-accessor.md and seen-set.md:
@@ -76,10 +98,7 @@ export async function runEvaluate(
   }
 
   const result = await deps.transport.evaluate({
-    flagKey,
-    targetingKey,
-    idType: context.idType ?? DEFAULT_ID_TYPE,
-    attributes: context.attributes ?? {},
+    ...requestFor(flagKey, context),
   });
 
   const details = synthesizeDetails(result, defaultValue);
@@ -101,5 +120,58 @@ export async function runEvaluate(
   if (result.runId !== null) {
     deps.seenSet.set(flagKey, result.runId, targetingKey, details.value, deps.now());
   }
+  return details;
+}
+
+export async function runPeekVariant(
+  deps: EvaluateDeps,
+  flagKey: string,
+  context: EvaluateContext,
+): Promise<VariantValue> {
+  const result = await deps.transport.peek(requestFor(flagKey, context));
+
+  if (result.status === 200 && result.variant !== null) {
+    return result.variant;
+  }
+
+  const error = new SplitchSdkError("peekVariant", result);
+  deps.logger.error("[splitch] peekVariant failed-loud", {
+    flagKey,
+    targetingKey: context.targetingKey,
+    status: error.status,
+    errorCode: error.code,
+  });
+  throw error;
+}
+
+export async function runVerify(
+  deps: EvaluateDeps,
+  flagKey: string,
+  context: EvaluateContext,
+): Promise<ResolutionDetails> {
+  const defaultValue = context.defaultValue ?? FALLBACK_DEFAULT_VALUE;
+  const result = await deps.transport.verify(requestFor(flagKey, context));
+  const details =
+    result.details ??
+    synthesizeDetails(
+      {
+        status: result.status,
+        variant: null,
+        runId: null,
+        errorCode: result.errorCode,
+        errorMessage: result.errorMessage,
+      },
+      defaultValue,
+    );
+
+  if (details.reason === "ERROR") {
+    deps.logger.error("[splitch] verify failed-loud to Default Variant", {
+      flagKey,
+      targetingKey: context.targetingKey,
+      status: result.status,
+      errorCode: details.errorCode,
+    });
+  }
+
   return details;
 }

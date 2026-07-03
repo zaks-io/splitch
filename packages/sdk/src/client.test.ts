@@ -164,6 +164,51 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
     expect(result.status).toBeNull();
   });
 
+  it("peek calls /api/sdk/peek and preserves the route's INSUFFICIENT_SCOPES error", async () => {
+    let seenUrl = "";
+    const t = transport(((url: URL | RequestInfo) => {
+      seenUrl = String(url);
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            code: "INSUFFICIENT_SCOPES",
+            message: "API Key required for this route",
+            details: { requiredScopes: ["data-plane:evaluate"], heldScopes: [] },
+          }),
+          { status: 403 },
+        ),
+      );
+    }) as typeof fetch);
+
+    const result = await t.peek(REQ);
+    expect(seenUrl).toBe("https://edge.test/api/sdk/peek");
+    expect(result.status).toBe(403);
+    expect(result.errorCode).toBe("INSUFFICIENT_SCOPES");
+    expect(result.errorMessage).toBe("API Key required for this route");
+  });
+
+  it("verify calls /api/sdk/verify and parses ResolutionDetails", async () => {
+    let seenUrl = "";
+    const t = transport(((url: URL | RequestInfo) => {
+      seenUrl = String(url);
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ value: "treatment", variantName: "treatment", reason: "SPLIT" }),
+          { status: 200 },
+        ),
+      );
+    }) as typeof fetch);
+
+    const result = await t.verify(REQ);
+    expect(seenUrl).toBe("https://edge.test/api/sdk/verify");
+    expect(result.status).toBe(200);
+    expect(result.details).toEqual({
+      value: "treatment",
+      variantName: "treatment",
+      reason: "SPLIT",
+    });
+  });
+
   it("end-to-end through createSplitchClient with an injected fetch fails loud on a 503", async () => {
     const logger = new FakeLogger();
     const client = createSplitchClient({

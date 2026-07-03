@@ -1,4 +1,4 @@
-import type { VariantValue } from "@splitch/contracts";
+import type { ErrorCode, ResolutionDetails, VariantValue } from "@splitch/contracts";
 
 /**
  * Mirrors the contract's `EvaluationContext.attributes` value union
@@ -10,9 +10,8 @@ import type { VariantValue } from "@splitch/contracts";
 export type AttributeValue = boolean | string | number | readonly unknown[];
 
 /**
- * The single network seam the SDK evaluates over. The real adapter is an HTTP
- * `fetch` call (see client.ts); tests substitute a fake that records calls and
- * retries with no network. Two real adapters exist, so the seam is justified.
+ * The network seam the SDK accessors use. The real adapter is an HTTP `fetch`
+ * call (see client.ts); tests substitute a fake that records each distinct path.
  *
  * The transport returns a STRUCTURED outcome, never a raw Response: the SDK must
  * never inspect HTTP status or parse bodies itself (that branching lives in
@@ -33,15 +32,28 @@ export interface TransportRequest {
   readonly attributes: Readonly<Record<string, AttributeValue>>;
 }
 
-export interface TransportResult {
+export interface TransportFailure {
   /** HTTP status for an HTTP response, or `null` for a transport-level failure. */
   readonly status: number | null;
+  /** Wire error code when the endpoint returned one; otherwise SDK-synthesized. */
+  readonly errorCode?: ErrorCode;
+  readonly errorMessage?: string;
+}
+
+export interface TransportResult extends TransportFailure {
   /** The bare wire body's `variant`, or `null` when absent / unparseable. */
   readonly variant: VariantValue | null;
   /** Live Run id from response metadata; present only on a 200 resolution. */
   readonly runId: string | null;
 }
 
+export interface VerifyTransportResult extends TransportFailure {
+  /** The endpoint's ResolutionDetails on a parsed 200 response, else null. */
+  readonly details: ResolutionDetails | null;
+}
+
 export interface Transport {
   evaluate(request: TransportRequest): Promise<TransportResult>;
+  peek(request: TransportRequest): Promise<TransportResult>;
+  verify(request: TransportRequest): Promise<VerifyTransportResult>;
 }

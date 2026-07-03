@@ -4,7 +4,7 @@ import type {
   ResolutionReason,
   VariantValue,
 } from "@splitch/contracts";
-import type { TransportResult } from "./transport.js";
+import type { TransportFailure, TransportResult } from "./transport.js";
 
 /**
  * Synthesize the OpenFeature `ResolutionDetails` from the bare `{ variant }` wire
@@ -66,11 +66,14 @@ export function errorCodeForStatus(status: number | null): ErrorCode {
   return ERROR_CODE_BY_STATUS[status] ?? FALLBACK_ERROR_CODE;
 }
 
-function errorMessageForStatus(status: number | null): string {
+function errorMessageForStatus(
+  status: number | null,
+  errorCode = errorCodeForStatus(status),
+): string {
   if (status === null) {
     return "splitch evaluate failed at the transport (network/timeout/parse)";
   }
-  return `splitch evaluate failed: HTTP ${status} (${errorCodeForStatus(status)})`;
+  return `splitch evaluate failed: HTTP ${status} (${errorCode})`;
 }
 
 /**
@@ -94,13 +97,14 @@ function resolveSuccess(result: TransportResult, defaultValue: VariantValue): Re
  * never disguised as a real resolution (ADR-0036). Fires no Exposure (the caller
  * in evaluate.ts never reaches the seen-set write on this path).
  */
-function resolveError(status: number | null, defaultValue: VariantValue): ResolutionDetails {
+function resolveError(result: TransportFailure, defaultValue: VariantValue): ResolutionDetails {
+  const errorCode = result.errorCode ?? errorCodeForStatus(result.status);
   return {
     value: defaultValue,
     variantName: null,
     reason: "ERROR",
-    errorCode: errorCodeForStatus(status),
-    errorMessage: errorMessageForStatus(status),
+    errorCode,
+    errorMessage: result.errorMessage ?? errorMessageForStatus(result.status, errorCode),
   };
 }
 
@@ -109,6 +113,6 @@ export function synthesizeDetails(
   defaultValue: VariantValue,
 ): ResolutionDetails {
   return isError(result.status)
-    ? resolveError(result.status, defaultValue)
+    ? resolveError(result, defaultValue)
     : resolveSuccess(result, defaultValue);
 }

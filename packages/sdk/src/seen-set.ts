@@ -29,7 +29,7 @@ import type { VariantValue } from "@splitch/contracts";
  * redundant Exposure, which the pipeline collapses.
  */
 
-export const DEFAULT_SEEN_SET_MAX_SIZE = 10_000;
+const DEFAULT_SEEN_SET_MAX_SIZE = 10_000;
 // Matches the ~60s KV propagation window the platform already tolerates.
 export const DEFAULT_REVALIDATE_MS = 60_000;
 
