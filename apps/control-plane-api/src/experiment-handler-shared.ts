@@ -117,3 +117,15 @@ export function optionalBody(input: unknown): Record<string, unknown> {
     ? (body as Record<string, unknown>)
     : {};
 }
+
+export async function syncExperimentConfigFromD1(
+  configStore: ConfigStoreAccess,
+  scope: EnvScope,
+  experimentId: string,
+) {
+  return configStore.writerFor(scope.appId, scope.environmentId).syncExperimentConfig({
+    appId: scope.appId,
+    environmentId: scope.environmentId,
+    experimentId,
+  });
+}

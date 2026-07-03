@@ -1,13 +1,14 @@
-import { envScope } from "@splitch/db";
+import { envScope, type EnvScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model.js";
+import type { ConfigStoreAccess } from "./config-store-do.js";
 import { randomHex } from "./credential-cache.js";
 import {
   configStoreUnavailable,
   experimentNoDraft,
   experimentNotFound,
 } from "./experiment-errors.js";
-import { experimentResponse, json, runResponse } from "./experiment-model.js";
+import { experimentResponse, json, runResponse, type ExperimentRow } from "./experiment-model.js";
 import {
   draftPatch,
   environmentExists,
@@ -16,6 +17,7 @@ import {
   optionalBody,
   requireWritableEnvironment,
   runningRunForExperiment,
+  syncExperimentConfigFromD1,
   type ExperimentDeps,
 } from "./experiment-handler-shared.js";
 import { makeRunHandlers } from "./experiment-run-handlers.js";
@@ -164,7 +166,8 @@ async function startExperiment(
   deps: ExperimentDeps,
   args: HandlerArgs<unknown>,
 ): Promise<Response> {
-  if (!deps.configStore) return configStoreUnavailable(args.requestId);
+  const configStore = deps.configStore;
+  if (!configStore) return configStoreUnavailable(args.requestId);
   const scope = envScope(pathParam(args.input, "appId"), pathParam(args.input, "environmentId"));
   const experiment = await experimentFromPath(deps, args.input);
   if (!experiment) return experimentNotFound(args.requestId);
@@ -189,7 +192,13 @@ async function startExperiment(
   );
   if (confirmation) return confirmation;
 
-  const prepared = await prepareStart(deps.repo, scope, experiment, args.requestId);
+  const prepared = await prepareStartOrReplaySync(
+    deps.repo,
+    configStore,
+    scope,
+    experiment,
+    args.requestId,
+  );
   if (!prepared.ok) return prepared.response;
 
   const now = nowIso(deps);
@@ -225,18 +234,51 @@ async function startExperiment(
   });
   if (!committed.ok) {
     if (committed.reason === "experiment_not_found") return experimentNotFound(args.requestId);
-    return experimentNoDraft(experiment.id, experiment.liveRunId, args.requestId);
+    return staleStartResponse(deps.repo, configStore, scope, experiment, args.requestId);
   }
 
-  await deps.configStore.writerFor(scope.appId, scope.environmentId).syncExperimentConfig({
-    appId: scope.appId,
-    environmentId: scope.environmentId,
-    experimentId: experiment.id,
-  });
+  await syncExperimentConfigFromD1(configStore, scope, experiment.id);
 
   return Response.json({
     experimentId: experiment.id,
     run: runResponse(committed.run),
     previousRunId: committed.previous?.id ?? null,
   });
+}
+
+async function prepareStartOrReplaySync(
+  repo: Repository,
+  configStore: ConfigStoreAccess,
+  scope: EnvScope,
+  experiment: ExperimentRow,
+  requestId: string,
+): ReturnType<typeof prepareStart> {
+  if (experiment.draftAllocation !== null) return prepareStart(repo, scope, experiment, requestId);
+  return {
+    ok: false,
+    response: await staleStartResponse(repo, configStore, scope, experiment, requestId),
+  };
+}
+
+async function staleStartResponse(
+  repo: Repository,
+  configStore: ConfigStoreAccess,
+  scope: EnvScope,
+  experiment: ExperimentRow,
+  requestId: string,
+): Promise<Response> {
+  const currentRunId = await replayStartedExperimentSync(repo, configStore, scope, experiment.id);
+  return experimentNoDraft(experiment.id, currentRunId ?? experiment.liveRunId, requestId);
+}
+
+async function replayStartedExperimentSync(
+  repo: Repository,
+  configStore: ConfigStoreAccess,
+  scope: EnvScope,
+  experimentId: string,
+): Promise<string | null> {
+  const current = await repo.experiments.getExperiment(scope, experimentId);
+  if (current?.status !== "running" || !current.liveRunId) return null;
+  await syncExperimentConfigFromD1(configStore, scope, experimentId);
+  return current.liveRunId;
 }

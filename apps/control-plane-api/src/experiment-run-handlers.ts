@@ -12,6 +12,7 @@ import {
   experimentFromPath,
   optionalBody,
   requireWritableEnvironment,
+  syncExperimentConfigFromD1,
   type ExperimentDeps,
 } from "./experiment-handler-shared.js";
 import { pathParam } from "./handler-input.js";
@@ -43,7 +44,8 @@ async function getRun(deps: ExperimentDeps, { input, requestId }: HandlerArgs<un
 }
 
 async function endRun(deps: ExperimentDeps, args: HandlerArgs<unknown>): Promise<Response> {
-  if (!deps.configStore) return configStoreUnavailable(args.requestId);
+  const configStore = deps.configStore;
+  if (!configStore) return configStoreUnavailable(args.requestId);
   const scope = envScope(pathParam(args.input, "appId"), pathParam(args.input, "environmentId"));
   const run = await deps.repo.experiments.getRun(scope, pathParam(args.input, "runId"));
   if (!run) return runNotFound(args.requestId);
@@ -54,7 +56,10 @@ async function endRun(deps: ExperimentDeps, args: HandlerArgs<unknown>): Promise
     args.requestId,
   );
   if (writeError) return writeError;
-  if (run.status !== "running") return runNotRunning(run.id, args.requestId);
+  if (run.status !== "running") {
+    await syncExperimentConfigFromD1(configStore, scope, run.experimentId);
+    return runNotRunning(run.id, args.requestId);
+  }
 
   const body = optionalBody(args.input);
   const now = nowIso(deps);
@@ -69,12 +74,9 @@ async function endRun(deps: ExperimentDeps, args: HandlerArgs<unknown>): Promise
   });
   if (!ended.ok) {
     if (ended.reason === "run_not_found") return runNotFound(args.requestId);
+    await syncExperimentConfigFromD1(configStore, scope, run.experimentId);
     return runNotRunning(run.id, args.requestId);
   }
-  await deps.configStore.writerFor(scope.appId, scope.environmentId).syncExperimentConfig({
-    appId: scope.appId,
-    environmentId: scope.environmentId,
-    experimentId: run.experimentId,
-  });
+  await syncExperimentConfigFromD1(configStore, scope, run.experimentId);
   return Response.json(runResponse(ended.run));
 }

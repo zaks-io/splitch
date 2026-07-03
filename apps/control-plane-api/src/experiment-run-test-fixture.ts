@@ -19,6 +19,7 @@ import {
   NOW_ISO,
   request,
 } from "./flag-definition-test-harness.js";
+import type { ConfigStoreAccess } from "./config-store-do.js";
 
 export type ExperimentRunHarness = {
   h: FlagDefinitionHarness;
@@ -37,13 +38,19 @@ export type StartResponse = {
   };
 };
 
+export type SyncFailureControl = {
+  remaining: number;
+};
+
 const ExperimentConfigEnvelope = kvEnvelope(ExperimentConfigKVSchema);
 const RunConfigEnvelope = kvEnvelope(RunConfigKVSchema);
 
-export async function makeExperimentRunHarness(): Promise<ExperimentRunHarness> {
+export async function makeExperimentRunHarness(options?: {
+  syncFailures?: SyncFailureControl;
+}): Promise<ExperimentRunHarness> {
   const h = await makeFlagDefinitionHarness();
   const repo = createRepository(h.bindings.d1);
-  h.app = makeAppForRepo(h, repo, configStoreAccess(repo, h.bindings.kv));
+  h.app = makeAppForRepo(h, repo, configStoreAccess(repo, h.bindings.kv, options?.syncFailures));
   return { h, repo };
 }
 
@@ -231,16 +238,30 @@ export async function insertSyntheticNewerRun(
   });
 }
 
-function configStoreAccess(repo: Repository, kv: KVNamespace) {
+function configStoreAccess(
+  repo: Repository,
+  kv: KVNamespace,
+  syncFailures?: SyncFailureControl,
+): ConfigStoreAccess {
   const writer = makeConfigStore({
     repo,
     kv,
     broadcaster: { broadcast() {} },
     now: () => new Date(Date.parse(NOW_ISO)),
   });
+  const controlledWriter: ConfigStoreWriter = {
+    ...writer,
+    async syncExperimentConfig(input) {
+      if (syncFailures && syncFailures.remaining > 0) {
+        syncFailures.remaining -= 1;
+        throw new Error("injected syncExperimentConfig failure");
+      }
+      return writer.syncExperimentConfig(input);
+    },
+  };
   return {
     writerFor(): ConfigStoreWriter {
-      return writer;
+      return controlledWriter;
     },
     liveUpdatesFor: () => ({
       connect: async () => new Response("test live updates unavailable", { status: 503 }),

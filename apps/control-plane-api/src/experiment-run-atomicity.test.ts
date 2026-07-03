@@ -61,6 +61,51 @@ describe("Experiment Run Start atomicity", () => {
     });
   });
 
+  it("repairs KV from D1 when retrying Start after sync failure", async () => {
+    await ctx.h.bindings.dispose();
+    const syncFailures = { remaining: 1 };
+    ctx = await makeExperimentRunHarness({ syncFailures });
+    const fx = await experimentFixture(ctx);
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "retry-repair-start",
+      allocation: { control: 50, treatment: 50 },
+      salt: "retry-repair-start-salt",
+    });
+
+    const failedStart = await startExperiment(ctx, fx, experiment.id);
+    expect(failedStart.status).toBe(500);
+    expect((await errorBody(failedStart)).code).toBe("INTERNAL_SERVER_ERROR");
+    expect(syncFailures.remaining).toBe(0);
+
+    const scope = envScope(fx.appId, fx.environmentId);
+    const committed = await ctx.repo.experiments.getExperiment(scope, experiment.id);
+    if (!committed?.liveRunId) throw new Error("Start did not commit a live Run");
+    const runId = committed.liveRunId;
+    expect(committed).toMatchObject({
+      status: "running",
+      draftAllocation: null,
+      liveRunId: runId,
+    });
+    expect(
+      await ctx.h.bindings.kv.get(liveRunKey(fx.appId, fx.environmentId, experiment.id), "text"),
+    ).toBe(null);
+
+    const retry = await startExperiment(ctx, fx, experiment.id);
+    expect(retry.status).toBe(409);
+    expect((await errorBody(retry)).code).toBe("EXPERIMENT_NO_DRAFT");
+    expect(await kvJson(ctx, liveRunKey(fx.appId, fx.environmentId, experiment.id))).toMatchObject({
+      data: { runId },
+    });
+    await expect(readEvaluationExperiment(ctx, fx, experiment.id)).resolves.toMatchObject({
+      liveRunId: runId,
+      liveRun: { id: runId },
+    });
+    await expect(readIngestLiveRun(ctx, fx, experiment.id, "user")).resolves.toEqual({
+      ok: true,
+      runId,
+    });
+  });
+
   it("rolls back ending the current Run when the replacement Run insert fails", async () => {
     const fx = await experimentFixture(ctx);
     const scope = envScope(fx.appId, fx.environmentId);
@@ -146,6 +191,52 @@ describe("Experiment Run End atomicity", () => {
     await expect(readEvaluationExperiment(ctx, fx, experiment.id)).resolves.toMatchObject({
       liveRunId: null,
       liveRun: null,
+    });
+  });
+
+  it("repairs KV from D1 when retrying End after sync failure", async () => {
+    await ctx.h.bindings.dispose();
+    const syncFailures = { remaining: 0 };
+    ctx = await makeExperimentRunHarness({ syncFailures });
+    const fx = await experimentFixture(ctx);
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "retry-repair-end",
+      allocation: { control: 50, treatment: 50 },
+    });
+    const started = await startOk(fx, experiment.id);
+
+    syncFailures.remaining = 1;
+    const failedEnd = await endRun(ctx, fx, started.run.id);
+    expect(failedEnd.status).toBe(500);
+    expect((await errorBody(failedEnd)).code).toBe("INTERNAL_SERVER_ERROR");
+    expect(syncFailures.remaining).toBe(0);
+
+    const scope = envScope(fx.appId, fx.environmentId);
+    expect(await ctx.repo.experiments.getRun(scope, started.run.id)).toMatchObject({
+      status: "ended",
+      endedAt: NOW_ISO,
+    });
+    expect(await ctx.repo.experiments.getExperiment(scope, experiment.id)).toMatchObject({
+      status: "draft",
+      liveRunId: null,
+    });
+    expect(await kvJson(ctx, liveRunKey(fx.appId, fx.environmentId, experiment.id))).toMatchObject({
+      data: { runId: started.run.id },
+    });
+
+    const retry = await endRun(ctx, fx, started.run.id);
+    expect(retry.status).toBe(409);
+    expect((await errorBody(retry)).code).toBe("RUN_NOT_RUNNING");
+    expect(
+      await ctx.h.bindings.kv.get(liveRunKey(fx.appId, fx.environmentId, experiment.id), "text"),
+    ).toBe(null);
+    await expect(readEvaluationExperiment(ctx, fx, experiment.id)).resolves.toMatchObject({
+      liveRunId: null,
+      liveRun: null,
+    });
+    await expect(readIngestLiveRun(ctx, fx, experiment.id, "user")).resolves.toEqual({
+      ok: false,
+      code: "RUN_NOT_FOUND",
     });
   });
 
