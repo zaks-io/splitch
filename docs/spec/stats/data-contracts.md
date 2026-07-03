@@ -48,6 +48,11 @@ arrive as a per-Entity pair so the delta-method covariance term is computable â€
 independent aggregation. Rows with `denom_value = 0` are retained; dropping them would change the
 randomized population and can bias denominator-sensitive Metrics.
 
+For locked non-Ratio decision-family or Guardrail Metrics, `metric_values` may be sparse at the
+beginning of a Run. If no row has arrived for a locked Metric yet, the engine still evaluates that
+Metric over the Exposure denominator as zero-valued per-Entity aggregates. This keeps early Binomial,
+Count, and Revenue Metrics decision-family-complete without inventing event rows.
+
 ### Pre-period covariate row (CUPED input)
 
 Supplied only when CUPED applies (pre-period data present, coverage above threshold).

@@ -13,6 +13,7 @@ import { applyDecisionFamilyCorrection } from "./decision-family-fdr.js";
 import { analysisExposureRows } from "./exposure-denominator.js";
 import { FixedHorizonCI } from "./fixed-horizon-ci.js";
 import { applyGuardrailBoundChecks } from "./guardrail-bound-check.js";
+import { metricTypesById } from "./metric-discovery.js";
 import { SequentialCI, type CIAdapter, type CIResult } from "./sequential-ci.js";
 import { checkSrmHealth } from "./srm-checker.js";
 import { estimateMetricComparison } from "./variance-estimators.js";
@@ -90,24 +91,6 @@ function analyzeMetrics(input: StatsInput, adapters: Required<StatsEngineOptions
   }
 
   return armResults;
-}
-
-function metricTypesById(input: StatsInput): Map<string, MetricKind> {
-  const byId = new Map<string, MetricKind>();
-
-  for (const row of input.metric_values) {
-    if (row.run_id !== input.run_id) {
-      continue;
-    }
-
-    const existing = byId.get(row.metric_id);
-    if (existing !== undefined && existing !== row.metric_type) {
-      throw new Error(`metric ${row.metric_id} mixed ${existing} and ${row.metric_type}.`);
-    }
-    byId.set(row.metric_id, row.metric_type);
-  }
-
-  return new Map([...byId.entries()].sort(([left], [right]) => left.localeCompare(right)));
 }
 
 function orderedVariants(
