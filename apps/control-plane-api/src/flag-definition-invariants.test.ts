@@ -139,10 +139,97 @@ describe("control-plane Flag definition invariants", () => {
     expect(blocked.status).toBe(409);
     expect((await errorBody(blocked)).code).toBe("RESOURCE_NOT_EMPTY");
   });
+});
 
-  it("derives flags_create and flag_variants_create MCP tools from the same routes", () => {
+describe("control-plane Flag Variant updates", () => {
+  it("updates catalog Variants and returns the full Flag definition response", async () => {
+    const createdApp = await createDefaultApp(h);
+    const jwt = await appToken(h, createdApp.app.id);
+    const flag = await createFlag(h, createdApp.app.id, jwt);
+
+    const res = await request(
+      h,
+      "PATCH",
+      `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
+      jwt,
+      { name: "beta", value: false, description: "renamed catalog entry" },
+    );
+
+    expect(res.status).toBe(200);
+    const updated = (await res.json()) as {
+      variants: Array<{ name: string; value: unknown; description?: string }>;
+    };
+    expect("enabled" in updated).toBe(false);
+    expect(updated.variants).toContainEqual(
+      expect.objectContaining({
+        name: "beta",
+        value: false,
+        description: "renamed catalog entry",
+      }),
+    );
+  });
+
+  it("rejects duplicate names and schema-invalid values on Variant update", async () => {
+    const createdApp = await createDefaultApp(h);
+    const jwt = await appToken(h, createdApp.app.id);
+    const flag = await createFlag(h, createdApp.app.id, jwt);
+
+    const duplicate = await request(
+      h,
+      "PATCH",
+      `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
+      jwt,
+      { name: "control" },
+    );
+    expect(duplicate.status).toBe(400);
+    expect((await errorBody(duplicate)).code).toBe("VALIDATION_ERROR");
+
+    const wrongType = await request(
+      h,
+      "PATCH",
+      `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
+      jwt,
+      { value: "not-boolean" },
+    );
+    expect(wrongType.status).toBe(400);
+    expect((await errorBody(wrongType)).code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects Variant value changes when a running Run includes the Variant", async () => {
+    const createdApp = await createDefaultApp(h);
+    const jwt = await appToken(h, createdApp.app.id);
+    const flag = await createFlag(h, createdApp.app.id, jwt);
+    const prod = createdApp.environments.find((env) => env.key === "prod");
+    const treatment = flag.variants.find((variant) => variant.name === "treatment");
+    expect(prod).toBeDefined();
+    expect(treatment).toBeDefined();
+
+    await seedRunningVariantRun(
+      createdApp.app.id,
+      prod?.id ?? "",
+      flag.id,
+      treatment ?? { id: "", name: "treatment", value: true },
+    );
+
+    const res = await request(
+      h,
+      "PATCH",
+      `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
+      jwt,
+      { value: false },
+    );
+
+    expect(res.status).toBe(409);
+    expect((await errorBody(res)).code).toBe("RUN_FROZEN");
+  });
+
+  it("derives flag Variant MCP tools from the same routes", () => {
     const tools = deriveMcpTools();
-    for (const operationId of ["flags_create", "flag_variants_create"] as const) {
+    for (const operationId of [
+      "flags_create",
+      "flag_variants_create",
+      "flag_variants_update",
+    ] as const) {
       const route = getRoute(operationId);
       const tool = tools.find((candidate) => candidate.name === operationId);
       const body = route?.openapi.request?.body?.content?.["application/json"]?.schema;
@@ -153,3 +240,52 @@ describe("control-plane Flag definition invariants", () => {
     }
   });
 });
+
+async function seedRunningVariantRun(
+  appId: string,
+  environmentId: string,
+  flagId: string,
+  variant: { id: string; name: string; value: unknown },
+) {
+  const repo = createRepository(h.bindings.d1);
+  const scope = envScope(appId, environmentId);
+  const experimentId = "exp_flag_variant_update_guard";
+  const runId = "run_flag_variant_update_guard";
+  await repo.experiments.experiments.insert(scope, {
+    id: experimentId,
+    appId,
+    environmentId,
+    key: "variant-update-guard",
+    flagId,
+    name: "Variant update guard",
+    status: "running",
+    targetingKeyField: "userId",
+    targetingKeyType: "user",
+    metrics: "[]",
+    guardrailMetrics: "[]",
+    dimensions: "[]",
+    liveRunId: runId,
+    createdAt: NOW_ISO,
+    updatedAt: NOW_ISO,
+  });
+  await repo.experiments.runs.insert(scope, {
+    id: runId,
+    appId,
+    environmentId,
+    experimentId,
+    runNumber: 1,
+    status: "running",
+    targetingKeyField: "userId",
+    targetingKeyType: "user",
+    salt: "salt_variant_update_guard",
+    allocation: JSON.stringify({ control: 50, treatment: 50 }),
+    variantSet: JSON.stringify([variant]),
+    targetingRules: "[]",
+    confidenceLevel: 0.95,
+    decisionFamily: "[]",
+    guardrailDecisions: "[]",
+    configHash: "hash_variant_update_guard",
+    startedAt: NOW_ISO,
+    createdAt: NOW_ISO,
+  });
+}

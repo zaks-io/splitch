@@ -47,6 +47,27 @@ export function runningExperimentError(
   );
 }
 
+export function runFrozenError(
+  blocker: RunningBlocker,
+  frozenFields: string[],
+  attemptedChange: string,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "RUN_FROZEN",
+      message: "running Run freezes this Variant value",
+      details: {
+        frozenFields,
+        currentRunId: blocker.runId,
+        attemptedChange,
+        recommendedAction: "CREATE_NEW_RUN",
+      },
+    },
+    { requestId },
+  );
+}
+
 export function resourceNotEmpty(
   resourceType: "flag" | "variant",
   resourceId: string,

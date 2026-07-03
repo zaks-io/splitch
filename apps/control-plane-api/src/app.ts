@@ -134,6 +134,11 @@ export function createApp(deps: AppDeps): Hono {
   );
   registrar.mount(
     app,
+    controlPlaneRoute("flag_variants_update"),
+    flagDefinitionHandlers.updateVariant,
+  );
+  registrar.mount(
+    app,
     controlPlaneRoute("flag_variants_delete"),
     flagDefinitionHandlers.deleteVariant,
   );

@@ -6,7 +6,7 @@ import {
   listFlags,
   updateFlag,
 } from "./flag-definition-flag-handlers.js";
-import { createVariant, deleteVariant } from "./flag-definition-variant-handlers.js";
+import { createVariant, deleteVariant, updateVariant } from "./flag-definition-variant-handlers.js";
 import type { FlagDefinitionDeps } from "./flag-definition-handler-utils.js";
 
 export function makeFlagDefinitionHandlers(deps: FlagDefinitionDeps) {
@@ -17,6 +17,7 @@ export function makeFlagDefinitionHandlers(deps: FlagDefinitionDeps) {
     updateFlag: (args: HandlerArgs<unknown>) => updateFlag(deps, args),
     deleteFlag: (args: HandlerArgs<unknown>) => deleteFlag(deps, args),
     createVariant: (args: HandlerArgs<unknown>) => createVariant(deps, args),
+    updateVariant: (args: HandlerArgs<unknown>) => updateVariant(deps, args),
     deleteVariant: (args: HandlerArgs<unknown>) => deleteVariant(deps, args),
   };
 }
