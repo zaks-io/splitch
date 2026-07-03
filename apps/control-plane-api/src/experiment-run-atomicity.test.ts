@@ -112,6 +112,88 @@ describe("Experiment Run Start atomicity", () => {
   });
 });
 
+describe("Experiment Run End atomicity", () => {
+  it("allows only one overlapping End to close a running Run", async () => {
+    const fx = await experimentFixture(ctx);
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "overlapping-end",
+      allocation: { control: 50, treatment: 50 },
+    });
+    const started = await startOk(fx, experiment.id);
+
+    const ends = await Promise.all([
+      endRun(ctx, fx, started.run.id),
+      endRun(ctx, fx, started.run.id),
+    ]);
+    expect(ends.map((res) => res.status).sort((a, b) => a - b)).toEqual([200, 409]);
+
+    const stale = ends.find((res) => res.status === 409);
+    expect(stale).toBeDefined();
+    expect((await errorBody(stale as Response)).code).toBe("RUN_NOT_RUNNING");
+
+    const scope = envScope(fx.appId, fx.environmentId);
+    expect(await ctx.repo.experiments.getRun(scope, started.run.id)).toMatchObject({
+      status: "ended",
+      endedAt: NOW_ISO,
+    });
+    expect(await ctx.repo.experiments.getExperiment(scope, experiment.id)).toMatchObject({
+      status: "draft",
+      liveRunId: null,
+    });
+    expect(
+      await ctx.h.bindings.kv.get(liveRunKey(fx.appId, fx.environmentId, experiment.id), "text"),
+    ).toBe(null);
+    await expect(readEvaluationExperiment(ctx, fx, experiment.id)).resolves.toMatchObject({
+      liveRunId: null,
+      liveRun: null,
+    });
+  });
+
+  it("rolls back ending the Run when Experiment cleanup fails", async () => {
+    const fx = await experimentFixture(ctx);
+    const scope = envScope(fx.appId, fx.environmentId);
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "rollback-end",
+      allocation: { control: 50, treatment: 50 },
+    });
+    const started = await startOk(fx, experiment.id);
+    await ctx.h.bindings.d1
+      .prepare(
+        `
+        CREATE TRIGGER fail_experiment_end_cleanup
+        BEFORE UPDATE OF live_run_id ON experiments
+        WHEN NEW.live_run_id IS NULL
+        BEGIN
+          SELECT RAISE(FAIL, 'forced experiment cleanup failure');
+        END
+      `,
+      )
+      .run();
+
+    const failedEnd = await endRun(ctx, fx, started.run.id);
+    await ctx.h.bindings.d1.prepare("DROP TRIGGER fail_experiment_end_cleanup").run();
+    expect(failedEnd.status).toBe(500);
+    expect((await errorBody(failedEnd)).code).toBe("INTERNAL_SERVER_ERROR");
+
+    await expectSingleRunningRun(scope, experiment.id, started.run.id);
+    expect(await ctx.repo.experiments.getRun(scope, started.run.id)).toMatchObject({
+      status: "running",
+      endedAt: null,
+    });
+    expect(await ctx.repo.experiments.getExperiment(scope, experiment.id)).toMatchObject({
+      status: "running",
+      liveRunId: started.run.id,
+    });
+    expect(await kvJson(ctx, liveRunKey(fx.appId, fx.environmentId, experiment.id))).toMatchObject({
+      data: { runId: started.run.id },
+    });
+    await expect(readIngestLiveRun(ctx, fx, experiment.id, "user")).resolves.toEqual({
+      ok: true,
+      runId: started.run.id,
+    });
+  });
+});
+
 async function startOk(fx: Awaited<ReturnType<typeof experimentFixture>>, experimentId: string) {
   const response = await startExperiment(ctx, fx, experimentId);
   expect(response.status).toBe(200);

@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index.js";
 import type { Db } from "./client.js";
 import type { EnvScope, TenantScope } from "./scope.js";
+import { makeEndRun } from "./experiment-end-run.js";
 import { makeStartRun } from "./experiment-start-run.js";
 import { scopedTable } from "./scoped-table.js";
 
@@ -19,6 +20,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
   const runsTable = scopedTable(db, runs);
   const metricsTable = scopedTable(db, metrics);
   const startRun = makeStartRun(d1, experimentsTable, runsTable);
+  const endRun = makeEndRun(d1, experimentsTable, runsTable);
 
   return {
     experiments: experimentsTable,
@@ -127,6 +129,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
     },
 
     startRun,
+    endRun,
 
     getMetric(scope: TenantScope, metricId: string) {
       return metricsTable.findOne(scope, eq(metrics.id, metricId));

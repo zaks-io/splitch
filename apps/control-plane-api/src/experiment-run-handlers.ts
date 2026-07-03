@@ -58,22 +58,23 @@ async function endRun(deps: ExperimentDeps, args: HandlerArgs<unknown>): Promise
 
   const body = optionalBody(args.input);
   const now = nowIso(deps);
-  const ended = await deps.repo.experiments.updateRunStatus(scope, run.id, {
-    status: "ended",
+  const ended = await deps.repo.experiments.endRun(scope, {
+    experimentId: run.experimentId,
+    runId: run.id,
+    expectedLiveRunId: run.id,
     endedAt: now,
     endReason: body.reason as string | undefined,
-  });
-  if (!ended) return runNotFound(args.requestId);
-  await deps.repo.experiments.updateExperiment(scope, run.experimentId, {
-    status: "draft",
-    liveRunId: null,
     updatedAt: now,
     updatedBy: args.principal.id,
   });
+  if (!ended.ok) {
+    if (ended.reason === "run_not_found") return runNotFound(args.requestId);
+    return runNotRunning(run.id, args.requestId);
+  }
   await deps.configStore.writerFor(scope.appId, scope.environmentId).syncExperimentConfig({
     appId: scope.appId,
     environmentId: scope.environmentId,
     experimentId: run.experimentId,
   });
-  return Response.json(runResponse(ended));
+  return Response.json(runResponse(ended.run));
 }
