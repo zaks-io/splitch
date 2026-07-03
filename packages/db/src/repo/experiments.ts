@@ -43,6 +43,10 @@ export function makeExperimentRepo(db: Db) {
       return rows[0] ?? null;
     },
 
+    listRunningExperiments(scope: EnvScope) {
+      return experimentsTable.findMany(scope, eq(experiments.status, "running"));
+    },
+
     listRunsForExperiment(scope: EnvScope, experimentId: string) {
       return runsTable.findMany(scope, eq(runs.experimentId, experimentId));
     },
@@ -64,6 +68,25 @@ export function makeExperimentRepo(db: Db) {
 
     getMetric(scope: TenantScope, metricId: string) {
       return metricsTable.findOne(scope, eq(metrics.id, metricId));
+    },
+
+    updateMetric(
+      scope: TenantScope,
+      metricId: string,
+      patch: Partial<
+        Pick<
+          typeof metrics.$inferInsert,
+          "key" | "name" | "description" | "eventName" | "eventValueField" | "denominatorMetricId"
+        >
+      >,
+    ): Promise<typeof metrics.$inferSelect | null> {
+      return metricsTable
+        .update(scope, patch, eq(metrics.id, metricId))
+        .then((rows) => rows[0] ?? null);
+    },
+
+    removeMetric(scope: TenantScope, metricId: string): Promise<number> {
+      return metricsTable.remove(scope, eq(metrics.id, metricId));
     },
   };
 }

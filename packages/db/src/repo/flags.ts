@@ -87,6 +87,26 @@ export function makeFlagRepo(db: Db) {
       if (ids.length === 0) return Promise.resolve([] as (typeof segments.$inferSelect)[]);
       return segmentsTable.findMany(scope, inArray(segments.id, [...ids]));
     },
+
+    getSegment(scope: TenantScope, segmentId: string) {
+      return segmentsTable.findOne(scope, eq(segments.id, segmentId));
+    },
+
+    updateSegment(
+      scope: TenantScope,
+      segmentId: string,
+      patch: Partial<
+        Pick<typeof segments.$inferInsert, "name" | "description" | "conditions" | "updatedAt">
+      >,
+    ): Promise<typeof segments.$inferSelect | null> {
+      return segmentsTable
+        .update(scope, patch, eq(segments.id, segmentId))
+        .then((rows) => rows[0] ?? null);
+    },
+
+    removeSegment(scope: TenantScope, segmentId: string): Promise<number> {
+      return segmentsTable.remove(scope, eq(segments.id, segmentId));
+    },
   };
 }
 
