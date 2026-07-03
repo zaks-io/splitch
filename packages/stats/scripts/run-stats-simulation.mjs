@@ -35,7 +35,7 @@ function parseArgs(args) {
       parsed.seed = value;
       continue;
     }
-    if (key === "--iterations" && value) {
+    if ((key === "--iterations" || key === "--iters") && value) {
       parsed.iterations = value;
       continue;
     }
