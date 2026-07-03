@@ -68,7 +68,7 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
         throw new Error(`control-plane-sdk: ${operationId} returned an invalid response body`);
       }
 
-      return { ok: true, data: body, status: response.status };
+      return { ok: true, data: parsed.data, status: response.status };
     },
   };
 }

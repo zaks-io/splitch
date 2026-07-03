@@ -21,9 +21,14 @@ const flagPage = {
       updatedAt: "2026-07-03T00:00:00.000Z",
     },
   ],
+};
+
+const upstreamFlagPage = {
+  ...flagPage,
   cursor: null,
   limit: 50,
   total: null,
+  unexpectedSecretLikeField: "must-not-escape",
 };
 
 const validationError: ErrorResponse = {
@@ -73,6 +78,8 @@ describe("mcp server Streamable HTTP transport", () => {
       },
     ]);
     expect(body.result.structuredContent).toEqual(flagPage);
+    expect(body.result.structuredContent).not.toHaveProperty("unexpectedSecretLikeField");
+    expect(body.result.structuredContent).not.toHaveProperty("cursor");
   });
 
   it("returns MCP method-not-found for an unknown tool name", async () => {
@@ -175,7 +182,7 @@ async function handleControlPlaneRequest(
   });
 
   if (request.method === "GET" && request.url === "/apps/app_local/flags") {
-    writeJson(response, 200, flagPage);
+    writeJson(response, 200, upstreamFlagPage);
     return;
   }
   if (request.method === "POST" && request.url === "/apps/app_local/flags") {
