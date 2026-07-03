@@ -134,6 +134,7 @@ export const DimensionResultSchema = z
     class: DimensionClassSchema,
     arm_results: z.array(ArmResultSchema),
     sample_size_n: IntegerSchema,
+    low_n_warning: z.boolean(),
     in_bh_family: z.boolean(),
     exploratory: z.boolean(),
     decision_valid: z.boolean(),

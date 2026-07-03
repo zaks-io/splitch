@@ -77,6 +77,7 @@ const dimensionResult = {
   class: "primary",
   arm_results: [armResult],
   sample_size_n: 120,
+  low_n_warning: false,
   in_bh_family: true,
   exploratory: false,
   decision_valid: true,

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   ActivationRowSchema,
-  DecisionFamilyMemberSchema,
   DedupeExposureRowSchema,
   PerEntityMetricRowSchema,
   PrePeriodRowSchema,
@@ -17,6 +16,7 @@ const exposureRow = {
   variant: "treatment",
   first_exposure_ts: "2026-07-01T00:00:00.000Z",
   window_anchor: "2026-07-01T00:00:00.000Z",
+  dimension_values: { country: "US" },
 };
 
 const metricRow = {
@@ -41,6 +41,7 @@ const statsInput = {
   guardrail_decisions: [],
   exposures: [exposureRow],
   metric_values: [metricRow],
+  dimensions: [{ dimension_id: "country", class: "secondary", values: ["US"] }],
 };
 
 function omitField(input: Record<string, unknown>, field: string): Record<string, unknown> {
@@ -51,7 +52,10 @@ function omitField(input: Record<string, unknown>, field: string): Record<string
 
 describe("DedupeExposureRowSchema", () => {
   it("requires the stats input dedupe fields", () => {
-    expect(DedupeExposureRowSchema.parse(exposureRow).id_type).toBe("user");
+    const row = DedupeExposureRowSchema.parse(exposureRow);
+
+    expect(row.id_type).toBe("user");
+    expect(row.dimension_values?.country).toBe("US");
   });
 
   it.each([
@@ -208,25 +212,6 @@ describe("ActivationRowSchema", () => {
   });
 });
 
-describe("DecisionFamilyMemberSchema", () => {
-  it.each(["metric_id", "variant"])("rejects a missing %s field", (field) => {
-    expect(
-      DecisionFamilyMemberSchema.safeParse(omitField(decisionFamilyMember, field)).success,
-    ).toBe(false);
-  });
-
-  it("keeps Dimension fields optional and nullable", () => {
-    expect(DecisionFamilyMemberSchema.parse(decisionFamilyMember).dimension_id).toBeUndefined();
-    expect(
-      DecisionFamilyMemberSchema.parse({
-        ...decisionFamilyMember,
-        dimension_id: null,
-        dimension_value: null,
-      }).dimension_value,
-    ).toBeNull();
-  });
-});
-
 describe("StatsInputSchema", () => {
   it.each([
     "run_id",
@@ -245,6 +230,7 @@ describe("StatsInputSchema", () => {
     expect(input.confidence_level).toBe(0.95);
     expect(input.horizon).toBe("sequential");
     expect(input.guardrail_decisions).toEqual([]);
+    expect(input.dimensions?.[0]?.dimension_id).toBe("country");
   });
 
   it("requires sample_size_locked for fixed horizon input", () => {

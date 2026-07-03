@@ -39,6 +39,45 @@ describe("decision_family FDR metamorphic properties", () => {
       });
     }
   });
+
+  it("keeps locked significance stable when a Secondary Dimension is added post-start", () => {
+    const random = seededRandom(944_519);
+
+    for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
+      const pValues = Array.from({ length: FAMILY_SIZE }, () => random());
+      const decisionFamily = familyMembers(FAMILY_SIZE);
+      const lockedResults = decisionFamily.map((member, index) =>
+        armResult(member.metric_id, member.variant, pValues[index] ?? 1),
+      );
+      const secondaryDimension = {
+        ...armResult("goal_0", "treatment_a", 0),
+        dimension_id: `post_start_${iteration}`,
+        dimension_value: "new_value",
+      };
+      const before = applyDecisionFamilyCorrection({
+        confidence_level: 0.95,
+        decision_family: decisionFamily,
+        arm_results: lockedResults,
+      });
+      const after = applyDecisionFamilyCorrection({
+        confidence_level: 0.95,
+        decision_family: decisionFamily,
+        arm_results: [secondaryDimension, ...lockedResults],
+      });
+
+      expect(significanceByKey(after.arm_results)).toMatchObject(
+        significanceByKey(before.arm_results),
+      );
+      expect(after.summary.family_size_m).toBe(before.summary.family_size_m);
+      expect(after.arm_results[0]).toMatchObject({
+        dimension_id: `post_start_${iteration}`,
+        dimension_value: "new_value",
+        in_bh_family: false,
+        exploratory: true,
+        decision_valid: false,
+      });
+    }
+  });
 });
 
 function familyMembers(count: number): DecisionFamilyMember[] {
