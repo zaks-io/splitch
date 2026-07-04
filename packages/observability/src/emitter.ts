@@ -1,4 +1,9 @@
-import { scrubSentryEvent, scrubValue, type ScrubOptions, type SentryEventLike } from "@splitch/privacy";
+import {
+  scrubSentryEvent,
+  scrubValue,
+  type ScrubOptions,
+  type SentryEventLike,
+} from "@splitch/privacy";
 import { OBSERVABILITY_SCRUB_OPTIONS } from "./scrub-options.js";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";

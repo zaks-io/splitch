@@ -14,12 +14,10 @@ const TEST_ENV = {
   SPLITCH_PLATFORM_TARGET: "local",
 };
 
-type SurfaceEmitterFactory = (
-  hooks: {
-    onSentryEvent?: (event: Record<string, unknown>) => void;
-    onAxiomEvents?: (events: Record<string, unknown>[]) => void;
-  },
-) => {
+type SurfaceEmitterFactory = (hooks: {
+  onSentryEvent?: (event: Record<string, unknown>) => void;
+  onAxiomEvents?: (events: Record<string, unknown>[]) => void;
+}) => {
   captureException: (error: unknown, extra?: Record<string, unknown>) => void;
   log: (
     level: "debug" | "info" | "warn" | "error",
@@ -29,8 +27,7 @@ type SurfaceEmitterFactory = (
 };
 
 const SURFACE_EMITTERS: Record<ObservabilitySurfaceId, SurfaceEmitterFactory> = {
-  "control-plane-api": (hooks) =>
-    workerEmitter(TEST_ENV, { surface: "control-plane-api" }, hooks),
+  "control-plane-api": (hooks) => workerEmitter(TEST_ENV, { surface: "control-plane-api" }, hooks),
   "evaluation-api": (hooks) => workerEmitter(TEST_ENV, { surface: "evaluation-api" }, hooks),
   "event-ingest-api": (hooks) => workerEmitter(TEST_ENV, { surface: "event-ingest-api" }, hooks),
   "analysis-api": (hooks) => workerEmitter(TEST_ENV, { surface: "analysis-api" }, hooks),

@@ -40,10 +40,7 @@ function getSentryWrappedHandler<E extends WorkerEnv>(
   if (cached) {
     return cached as ExportedHandler<E>;
   }
-  const wrapped = Sentry.withSentry(
-    (env) => workerSentryOptions(env, options, Sentry),
-    handler,
-  );
+  const wrapped = Sentry.withSentry((env) => workerSentryOptions(env, options, Sentry), handler);
   sentryHandlers.set(cacheKey, wrapped as ExportedHandler<WorkerEnv>);
   return wrapped;
 }
@@ -98,11 +95,7 @@ export function wrapWorkerHandler<E extends WorkerEnv>(
 
   if (handler.scheduled) {
     const innerScheduled = handler.scheduled;
-    wrapped.scheduled = async (
-      event: ScheduledController,
-      env: E,
-      ctx: ExecutionContext,
-    ) => {
+    wrapped.scheduled = async (event: ScheduledController, env: E, ctx: ExecutionContext) => {
       if (!env.SENTRY_DSN) {
         innerScheduled(event, env, ctx);
         return;

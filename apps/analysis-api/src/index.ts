@@ -1,5 +1,9 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
-import { createWorkerObservability, workerEmitter, wrapWorkerHandler } from "@splitch/observability/worker";
+import {
+  createWorkerObservability,
+  workerEmitter,
+  wrapWorkerHandler,
+} from "@splitch/observability/worker";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import {
@@ -47,11 +51,13 @@ const handler = {
         cron: event.cron,
         logger: {
           log: (message, ...args) => {
-            const fields = args[0] && typeof args[0] === "object" ? (args[0] as Record<string, unknown>) : {};
+            const fields =
+              args[0] && typeof args[0] === "object" ? (args[0] as Record<string, unknown>) : {};
             workerEmitter(env, { surface: "analysis-api" }).log("info", String(message), fields);
           },
           error: (message, ...args) => {
-            const fields = args[0] && typeof args[0] === "object" ? (args[0] as Record<string, unknown>) : {};
+            const fields =
+              args[0] && typeof args[0] === "object" ? (args[0] as Record<string, unknown>) : {};
             workerEmitter(env, { surface: "analysis-api" }).log("error", String(message), fields);
           },
         },

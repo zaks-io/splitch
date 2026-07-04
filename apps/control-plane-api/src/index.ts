@@ -1,6 +1,10 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import { createWorkerObservability, workerEmitter, wrapWorkerHandler } from "@splitch/observability/worker";
+import {
+  createWorkerObservability,
+  workerEmitter,
+  wrapWorkerHandler,
+} from "@splitch/observability/worker";
 import { createApp } from "./app";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
