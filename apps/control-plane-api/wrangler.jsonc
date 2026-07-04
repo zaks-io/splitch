@@ -46,12 +46,60 @@
       "name": "splitch-control-plane-api-shared-preview",
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "splitch-d1-shared-preview",
+          "database_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "SESSION_STORE",
+          "id": "00000000000000000000000000000000"
+        },
+        {
+          "binding": "CONFIG_STORE",
+          "id": "00000000000000000000000000000000"
+        },
+        {
+          "binding": "CREDENTIAL_STORE",
+          "id": "00000000000000000000000000000000"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [{ "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" }]
       }
     },
     "production": {
       "name": "splitch-control-plane-api",
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "splitch-d1",
+          "database_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "SESSION_STORE",
+          "id": "00000000000000000000000000000000"
+        },
+        {
+          "binding": "CONFIG_STORE",
+          "id": "00000000000000000000000000000000"
+        },
+        {
+          "binding": "CREDENTIAL_STORE",
+          "id": "00000000000000000000000000000000"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [{ "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" }]
       }
     }
   }
