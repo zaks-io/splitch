@@ -3,7 +3,9 @@ import { DEVICE_CODE_GRANT, type DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
 import type { RevocationStore } from "./revocation";
+import { authMarkdown } from "./auth-markdown";
 import {
+  ClientCredentialsRequestSchema,
   DeviceAuthorizationRequestSchema,
   DeviceTokenRequestSchema,
   RevokeTokenRequestSchema,
@@ -11,8 +13,17 @@ import {
 } from "./schemas";
 import type { TokenSigner } from "./token-exchange";
 import { verifyAccessToken } from "./access-token";
+import { accessTokenJwks } from "./access-token-key";
 
 const ACCESS_TOKEN_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
+const CLIENT_CREDENTIALS_GRANT = "client_credentials";
+
+export interface SmokeClientCredentials {
+  clientId: string;
+  clientSecret: string;
+  userId: string;
+  scopes: string[];
+}
 
 export interface OAuthRouteDeps {
   tokenSigner: TokenSigner;
@@ -21,6 +32,7 @@ export interface OAuthRouteDeps {
   revocations: RevocationStore;
   accessSecret: string;
   controlPlaneAudience: string;
+  smokeClientCredentials?: SmokeClientCredentials;
   now: () => number;
 }
 
@@ -37,13 +49,21 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
 
   app.get("/.well-known/oauth-authorization-server", (c) => {
     const issuer = new URL(c.req.raw.url).origin;
+    const smokeEnabled = deps.smokeClientCredentials !== undefined;
     return Response.json({
       issuer,
       token_endpoint: `${issuer}/oauth2/token`,
       revocation_endpoint: `${issuer}/oauth2/revoke`,
       device_authorization_endpoint: `${issuer}/oauth2/device_authorization`,
-      grant_types_supported: [ACCESS_TOKEN_GRANT, DEVICE_CODE_GRANT],
-      token_endpoint_auth_methods_supported: ["none"],
+      grant_types_supported: [
+        ACCESS_TOKEN_GRANT,
+        DEVICE_CODE_GRANT,
+        ...(smokeEnabled ? [CLIENT_CREDENTIALS_GRANT] : []),
+      ],
+      token_endpoint_auth_methods_supported: [
+        "none",
+        ...(smokeEnabled ? ["client_secret_post"] : []),
+      ],
       agent_auth: {
         skill: `${issuer}/auth.md`,
         identity_endpoint: `${issuer}/agent/identity`,
@@ -53,9 +73,17 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
     });
   });
 
+  app.get("/.well-known/jwks.json", () => {
+    const jwks = accessTokenJwks(deps.accessSecret);
+    if (!jwks) {
+      return Response.json({ error: "access-token JWKS is not configured" }, { status: 500 });
+    }
+    return Response.json(jwks);
+  });
+
   app.get("/auth.md", (c) => {
     const issuer = new URL(c.req.raw.url).origin;
-    return new Response(authMarkdown(issuer), {
+    return new Response(authMarkdown(issuer, Boolean(deps.smokeClientCredentials)), {
       headers: { "content-type": "text/markdown; charset=utf-8" },
     });
   });
@@ -82,6 +110,9 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
     }
     if (grantType === DEVICE_CODE_GRANT) {
       return exchangeDeviceCode(deps, body, nowSeconds());
+    }
+    if (grantType === CLIENT_CREDENTIALS_GRANT && deps.smokeClientCredentials) {
+      return exchangeClientCredentials(deps, body, nowSeconds());
     }
     if (grantType) {
       return renderOAuthError(
@@ -118,6 +149,50 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
 
     return new Response(null, { status: 200 });
   });
+}
+
+async function exchangeClientCredentials(
+  deps: OAuthRouteDeps,
+  body: unknown,
+  nowSeconds: number,
+): Promise<Response> {
+  const parsed = ClientCredentialsRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/token body"));
+  }
+  const client = deps.smokeClientCredentials;
+  if (!client) {
+    return renderOAuthError(
+      new OAuthError(
+        "unsupported_grant_type",
+        `grant_type "${CLIENT_CREDENTIALS_GRANT}" not supported`,
+      ),
+    );
+  }
+  if (
+    parsed.data.client_id !== client.clientId ||
+    parsed.data.client_secret !== client.clientSecret
+  ) {
+    return renderOAuthError(new OAuthError("invalid_client", "client credentials are invalid"));
+  }
+
+  const requestedScopes = parsed.data.scope?.split(/\s+/).filter(Boolean) ?? [];
+  const scopes = requestedScopes.length > 0 ? requestedScopes : client.scopes;
+  if (scopes.some((scope) => !client.scopes.includes(scope))) {
+    return renderOAuthError(new OAuthError("invalid_request", "requested scope is not allowed"));
+  }
+
+  try {
+    const accessToken = await deps.tokenSigner.mintAccessToken(
+      client.userId,
+      scopes,
+      "client_credentials",
+      nowSeconds,
+    );
+    return tokenResponse(accessToken);
+  } catch (cause) {
+    return renderDoorFault(cause);
+  }
 }
 
 async function exchangeIdentityAssertion(
@@ -183,18 +258,6 @@ function tokenResponse(accessToken: string, refreshToken?: string): Response {
     expires_in: 3600,
     ...(refreshToken ? { refresh_token: refreshToken } : {}),
   });
-}
-
-function authMarkdown(issuer: string): string {
-  return `# splitch auth
-
-Use one of the supported auth doors, then exchange the resulting credential at ${issuer}/oauth2/token.
-
-- ID-JAG or anonymous: POST ${issuer}/agent/identity
-- Claim ceremony: POST ${issuer}/agent/identity/claim
-- Device flow: POST ${issuer}/oauth2/device_authorization, then poll ${issuer}/oauth2/token with the device_code grant
-- Revoke: POST ${issuer}/oauth2/revoke
-`;
 }
 
 async function readBody(request: Request): Promise<unknown> {

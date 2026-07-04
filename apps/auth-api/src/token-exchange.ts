@@ -1,4 +1,5 @@
 import { OAuthError } from "./oauth-errors";
+import { accessTokenPrivateJwkFromSecret } from "./access-token-key";
 
 /**
  * identity_assertion mint + /oauth2/token exchange.
@@ -29,6 +30,8 @@ interface AssertionClaims {
   exp: number;
 }
 
+type AccessTokenAuthDoor = "id_jag" | "anonymous" | "device_flow" | "client_credentials";
+
 interface AccessTokenClaims {
   typ: "access_token";
   sub: string;
@@ -37,7 +40,7 @@ interface AccessTokenClaims {
   iat: number;
   exp: number;
   scopes: string[];
-  auth_door: "id_jag" | "anonymous" | "device_flow";
+  auth_door: AccessTokenAuthDoor;
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
@@ -62,7 +65,7 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
   );
 }
 
-async function signJwt(claims: object, secret: string): Promise<string> {
+async function signHmacJwt(claims: object, secret: string): Promise<string> {
   const signingInput = `${encodeSegment({ alg: "HS256", typ: "JWT" })}.${encodeSegment(claims)}`;
   const sig = await crypto.subtle.sign(
     "HMAC",
@@ -70,6 +73,36 @@ async function signJwt(claims: object, secret: string): Promise<string> {
     new TextEncoder().encode(signingInput) as unknown as BufferSource,
   );
   return `${signingInput}.${bytesToBase64Url(new Uint8Array(sig))}`;
+}
+
+async function rsaSigningKey(jwk: JsonWebKey): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+}
+
+async function signRs256Jwt(claims: object, secret: string): Promise<string | null> {
+  const jwk = accessTokenPrivateJwkFromSecret(secret);
+  if (!jwk) {
+    return null;
+  }
+  const jwkRecord = jwk as Record<string, unknown>;
+  const header = { alg: "RS256", typ: "JWT", kid: jwkRecord.kid };
+  const signingInput = `${encodeSegment(header)}.${encodeSegment(claims)}`;
+  const sig = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    await rsaSigningKey(jwk),
+    new TextEncoder().encode(signingInput) as unknown as BufferSource,
+  );
+  return `${signingInput}.${bytesToBase64Url(new Uint8Array(sig))}`;
+}
+
+async function signAccessJwt(claims: object, secret: string): Promise<string> {
+  return (await signRs256Jwt(claims, secret)) ?? signHmacJwt(claims, secret);
 }
 
 function base64UrlToBytes(input: string): Uint8Array {
@@ -155,7 +188,7 @@ export function makeTokenSigner(opts: {
         iat: nowSeconds,
         exp: nowSeconds + ASSERTION_TTL_SECONDS,
       };
-      return signJwt(claims, opts.assertionSecret);
+      return signHmacJwt(claims, opts.assertionSecret);
     },
 
     async exchangeForAccessToken(assertion, nowSeconds) {
@@ -178,7 +211,7 @@ export function makeTokenSigner(opts: {
         scopes,
         auth_door: "id_jag",
       };
-      return signJwt(access, opts.accessSecret);
+      return signAccessJwt(access, opts.accessSecret);
     },
 
     async verifyIdentityAssertion(assertion, nowSeconds) {
@@ -206,7 +239,7 @@ export function makeTokenSigner(opts: {
         scopes,
         auth_door: authDoor,
       };
-      return signJwt(access, opts.accessSecret);
+      return signAccessJwt(access, opts.accessSecret);
     },
   };
 }

@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { createProbePlan } from "./shared-preview-smoke/probes.mjs";
 
 const expectedPlatformTarget = "shared-preview";
 const tinybirdBranch = "shared_preview";
@@ -36,35 +37,23 @@ const routes = [
 
 const authBaseUrl = originUrl("SPLITCH_SMOKE_AUTH_BASE_URL", "https://auth.preview.splitch.dev");
 const mcpBaseUrl = originUrl("SPLITCH_SMOKE_MCP_BASE_URL", "https://mcp.preview.splitch.dev");
-const probes = [
-  ...routes.map((route) => ({
-    name: `${route.surface} health`,
-    url: route.url,
-    run: () => assertHealth(route),
-  })),
-  {
-    name: "Auth OAuth discovery",
-    url: `${authBaseUrl}/.well-known/oauth-authorization-server`,
-    run: assertAuthDiscovery,
-  },
-  {
-    name: "Auth WorkOS device authorization",
-    url: `${authBaseUrl}/oauth2/device_authorization`,
-    run: assertDeviceAuthorization,
-  },
-  {
-    name: "MCP tools/list",
-    url: `${mcpBaseUrl}/mcp`,
-    run: assertMcpToolsList,
-  },
-  {
-    name: "MCP Analysis binding",
-    url: `${mcpBaseUrl}/mcp`,
-    run: assertMcpAnalysisBinding,
-  },
-];
+const { unauthenticatedProbes, smokeAuthProbe, authenticatedProbes } = createProbePlan({
+  expectedPlatformTarget,
+  requestTimeoutMs,
+  routes,
+  authBaseUrl,
+  mcpBaseUrl,
+  smokeClientId: process.env.SPLITCH_SMOKE_CLIENT_ID ?? "splitch-shared-preview-smoke",
+  smokeClientSecret: process.env.SPLITCH_SMOKE_CLIENT_SECRET,
+  smokeAppId: process.env.SPLITCH_SMOKE_APP_ID ?? "smoke-auth-missing-app",
+});
 
-const results = await Promise.all(probes.map(runProbe));
+const unauthenticatedResults = await Promise.all(unauthenticatedProbes.map(runProbe));
+const smokeAuthResult = await runProbe(smokeAuthProbe);
+const authenticatedResults = smokeAuthResult.ok
+  ? await Promise.all(authenticatedProbes.map(runProbe))
+  : [];
+const results = [...unauthenticatedResults, smokeAuthResult, ...authenticatedResults];
 const migrations = await migrationNames();
 const markdown = smokeMarkdown({ results, migrations });
 await writeSummary(markdown);
@@ -108,129 +97,6 @@ async function runProbe(probe) {
     detail: lastError instanceof Error ? lastError.message : String(lastError),
     attempts,
   };
-}
-
-async function assertHealth(route) {
-  const response = await fetchWithTimeout(route.url);
-  assertStatus(response, 200);
-  const body = await response.json();
-  assertEqual(body.ok, true, "ok");
-  assertEqual(body.service, route.service, "service");
-  assertEqual(body.platformTarget, expectedPlatformTarget, "platformTarget");
-  return `${route.service} ${body.platformTarget}`;
-}
-
-async function assertAuthDiscovery() {
-  const url = `${authBaseUrl}/.well-known/oauth-authorization-server`;
-  const response = await fetchWithTimeout(url);
-  assertStatus(response, 200);
-  const body = await response.json();
-  assertEqual(body.issuer, authBaseUrl, "issuer");
-  assertEqual(body.token_endpoint, `${authBaseUrl}/oauth2/token`, "token_endpoint");
-  assertEqual(
-    body.device_authorization_endpoint,
-    `${authBaseUrl}/oauth2/device_authorization`,
-    "device_authorization_endpoint",
-  );
-  if (!body.agent_auth?.identity_types_supported?.includes("device_flow")) {
-    throw new Error("agent_auth.identity_types_supported did not include device_flow");
-  }
-  return "oauth metadata includes device_flow";
-}
-
-async function assertDeviceAuthorization() {
-  const response = await fetchWithTimeout(`${authBaseUrl}/oauth2/device_authorization`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(),
-  });
-  assertStatus(response, 200);
-  const body = await response.json();
-  const missingField = ["device_code", "user_code", "verification_uri", "expires_in"].find(
-    (field) => body[field] === undefined || body[field] === null || body[field] === "",
-  );
-  if (missingField) {
-    throw new Error(`device authorization response missing ${missingField}`);
-  }
-  if (typeof body.verification_uri !== "string" || !body.verification_uri.startsWith("https://")) {
-    throw new Error("device authorization verification_uri was not https");
-  }
-  if (body.verification_uri.includes(".test")) {
-    throw new Error("device authorization used fixture WorkOS provider");
-  }
-  if (typeof body.expires_in !== "number" || body.expires_in <= 0) {
-    throw new Error("device authorization expires_in was not positive");
-  }
-  return `verification_uri=${body.verification_uri}`;
-}
-
-async function assertMcpToolsList() {
-  const body = await mcpRequest({
-    jsonrpc: "2.0",
-    id: "tools-list-smoke",
-    method: "tools/list",
-  });
-  const tools = body.result?.tools;
-  if (!Array.isArray(tools) || tools.length === 0) {
-    throw new Error("MCP tools/list returned no tools");
-  }
-  if (!tools.some((tool) => tool?.name === "experiment_results_get")) {
-    throw new Error("MCP tools/list did not include experiment_results_get");
-  }
-  return `${tools.length} tools`;
-}
-
-async function assertMcpAnalysisBinding() {
-  const body = await mcpRequest({
-    jsonrpc: "2.0",
-    id: "analysis-binding-smoke",
-    method: "tools/call",
-    params: {
-      name: "experiment_results_get",
-      arguments: {
-        appId: "smoke-app",
-        environmentId: "smoke-env",
-        experimentId: "smoke-exp",
-      },
-    },
-  });
-  if (body.error) {
-    throw new Error(`MCP returned ${body.error.code}: ${body.error.message}`);
-  }
-  const structured = body.result?.structuredContent;
-  if (body.result?.isError !== true || structured?.code !== "UNAUTHORIZED") {
-    throw new Error("MCP analysis binding did not return expected UNAUTHORIZED tool result");
-  }
-  return "analysis service binding returned UNAUTHORIZED as expected";
-}
-
-async function mcpRequest(body) {
-  const response = await fetchWithTimeout(`${mcpBaseUrl}/mcp`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  assertStatus(response, 200);
-  return response.json();
-}
-
-async function fetchWithTimeout(url, init = {}) {
-  return fetch(url, {
-    ...init,
-    signal: AbortSignal.timeout(requestTimeoutMs),
-  });
-}
-
-function assertStatus(response, expected) {
-  if (response.status !== expected) {
-    throw new Error(`expected HTTP ${expected}, got ${response.status}`);
-  }
-}
-
-function assertEqual(actual, expected, name) {
-  if (actual !== expected) {
-    throw new Error(`expected ${name} ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
 }
 
 async function migrationNames() {

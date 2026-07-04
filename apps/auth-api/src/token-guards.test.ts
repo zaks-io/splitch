@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { verifyAccessToken } from "./access-token";
+import { makeTokenSigner } from "./token-exchange";
 
 /**
  * Focused guards on the access-token verifier (H1/H2): exp is REQUIRED, typ must
@@ -39,6 +40,21 @@ async function sign(claims: Record<string, unknown>, secret: string): Promise<st
   return `${input}.${b64url(new Uint8Array(sig))}`;
 }
 
+async function privateRsaJwkSecret(): Promise<string> {
+  const pair = await crypto.subtle.generateKey(
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    true,
+    ["sign", "verify"],
+  );
+  const jwk = (await crypto.subtle.exportKey("jwk", pair.privateKey)) as JsonWebKey;
+  return JSON.stringify({ ...jwk, kid: "test-access-key", alg: "RS256", use: "sig" });
+}
+
 const opts = { accessSecret: ACCESS_SECRET, controlPlaneAudience: CP_AUDIENCE };
 
 function valid(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -56,6 +72,33 @@ describe("verifyAccessToken guards", () => {
   it("accepts a well-formed access token (control)", async () => {
     const token = await sign(valid(), ACCESS_SECRET);
     expect(await verifyAccessToken(`Bearer ${token}`, opts, NOW)).not.toBeNull();
+  });
+
+  it("accepts an RS256 access token when ACCESS_TOKEN_SECRET is an RSA private JWK", async () => {
+    const accessSecret = await privateRsaJwkSecret();
+    const signer = makeTokenSigner({
+      assertionSecret: "test-assertion-secret",
+      accessSecret,
+      issuer: "https://auth.splitch.test",
+      controlPlaneAudience: CP_AUDIENCE,
+    });
+    const token = await signer.mintAccessToken(
+      "user_shared_preview_smoke",
+      ["app:smoke-auth-missing-app:member"],
+      "client_credentials",
+      NOW,
+    );
+
+    const actor = await verifyAccessToken(
+      `Bearer ${token}`,
+      { accessSecret, controlPlaneAudience: CP_AUDIENCE },
+      NOW,
+    );
+
+    expect(actor).toMatchObject({
+      userId: "user_shared_preview_smoke",
+      scopes: ["app:smoke-auth-missing-app:member"],
+    });
   });
 
   it("H2: rejects a token with NO exp (missing exp is not never-expires)", async () => {

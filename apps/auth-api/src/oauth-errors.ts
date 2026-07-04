@@ -13,6 +13,7 @@
 
 const oauthErrorCodes = [
   "invalid_request", // malformed body / missing field
+  "invalid_client", // bad client_credentials client auth
   "invalid_token", // JWT decode/signature/claim failure
   "unknown_issuer", // `iss` not in trusted_idps (never silently trusted)
   "issuer_disabled", // trusted_idp row exists but enabled = 0 (rejected, not skipped)
@@ -46,6 +47,7 @@ export interface OAuthErrorBody {
 /** HTTP status for each OAuth error code (OAuth 2.0 / auth.md mapping). */
 const statusByCode: Record<OAuthErrorCode, number> = {
   invalid_request: 400,
+  invalid_client: 401,
   invalid_token: 401,
   unknown_issuer: 401,
   issuer_disabled: 401,
