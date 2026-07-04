@@ -29,7 +29,7 @@
     }
   ],
   "secrets": {
-    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+    "required": ["SENTRY_DSN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
@@ -52,7 +52,6 @@
       "secrets": {
         "required": [
           "SENTRY_DSN",
-          "AXIOM_TOKEN",
           "ACCESS_TOKEN_SECRET",
           "ASSERTION_SIGNING_SECRET",
           "TURNSTILE_SECRET",
@@ -86,7 +85,6 @@
       "secrets": {
         "required": [
           "SENTRY_DSN",
-          "AXIOM_TOKEN",
           "ACCESS_TOKEN_SECRET",
           "ASSERTION_SIGNING_SECRET",
           "TURNSTILE_SECRET",

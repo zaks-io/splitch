@@ -9,7 +9,7 @@
     "head_sampling_rate": 1
   },
   "secrets": {
-    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+    "required": ["SENTRY_DSN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
@@ -24,7 +24,7 @@
       "workers_dev": false,
       "routes": [{ "pattern": "mcp.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+        "required": ["SENTRY_DSN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
@@ -39,7 +39,7 @@
       "workers_dev": false,
       "routes": [{ "pattern": "mcp.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+        "required": ["SENTRY_DSN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",

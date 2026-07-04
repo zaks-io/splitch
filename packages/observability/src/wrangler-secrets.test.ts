@@ -44,9 +44,9 @@ describe("Worker Wrangler observability secrets", () => {
       ["local", config],
       ["shared-preview", config.env?.["shared-preview"]],
       ["production", config.env?.production],
-    ])(`${surface.id} declares SENTRY_DSN and AXIOM_TOKEN for %s`, (_target, target) => {
+    ])(`${surface.id} declares SENTRY_DSN for %s`, (_target, target) => {
       expect(target?.secrets?.required).toContain("SENTRY_DSN");
-      expect(target?.secrets?.required).toContain("AXIOM_TOKEN");
+      expect(target?.secrets?.required).not.toContain("AXIOM_TOKEN");
       expect(target?.vars?.SENTRY_DSN).toBeUndefined();
       expect(target?.vars?.AXIOM_TOKEN).toBeUndefined();
     });

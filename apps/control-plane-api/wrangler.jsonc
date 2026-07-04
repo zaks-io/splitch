@@ -39,7 +39,7 @@
     { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] }
   ],
   "secrets": {
-    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+    "required": ["SENTRY_DSN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
@@ -51,7 +51,7 @@
       "workers_dev": false,
       "routes": [{ "pattern": "api.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+        "required": ["SENTRY_DSN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
@@ -83,7 +83,7 @@
       "workers_dev": false,
       "routes": [{ "pattern": "api.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+        "required": ["SENTRY_DSN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
