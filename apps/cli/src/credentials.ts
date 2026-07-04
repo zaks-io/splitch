@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -34,6 +34,9 @@ export function createFileCredentialStore(path = CREDENTIALS_PATH): CredentialSt
     async load() {
       try {
         const raw = await readFile(path, "utf8");
+        if (!raw.trim()) {
+          return null;
+        }
         return JSON.parse(raw) as CliCredentialFile;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -49,7 +52,7 @@ export function createFileCredentialStore(path = CREDENTIALS_PATH): CredentialSt
     },
     async clear() {
       try {
-        await writeFile(path, "");
+        await unlink(path);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
           throw error;

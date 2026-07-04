@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { access, readFile, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK } from "./exit-codes.js";
@@ -42,6 +43,33 @@ describe("login exit code", () => {
       credential: { refreshToken: string };
     };
     expect(saved.credential.refreshToken).toBe("fixture-refresh-token");
+  });
+});
+
+describe("logout exit code", () => {
+  it("logout removes credentials so the next command fails as logged out", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => request.url.endsWith("/oauth2/revoke"),
+        status: 200,
+        body: {},
+      },
+    ]);
+
+    const logoutCode = await runCli(["logout", "--json"], {
+      credentialPath,
+      fetch: transport.fetch,
+    });
+    expect(logoutCode).toBe(EXIT_OK);
+    await expect(access(credentialPath, constants.F_OK)).rejects.toThrow();
+
+    const listCode = await runCli(["flags", "list", "--json", "--app", "app_1"], {
+      credentialPath,
+      fetch: transport.fetch,
+    });
+    expect(listCode).toBe(EXIT_AUTH);
   });
 });
 
@@ -93,6 +121,48 @@ describe("flags verify transport", () => {
     expect(clientKeyCall?.authorization).toBe(authHeader());
     expect(verifyCall?.authorization).toBe(`Bearer ${clientKeyMaterial}`);
     expect(verifyCall?.authorization).not.toBe(authHeader());
+  });
+
+  it("flags verify returns EXIT_API when SDK reason is ERROR", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => request.url.includes("/client-key"),
+        status: 200,
+        body: {
+          keyId: "ck_1",
+          appId: "app_1",
+          environmentId: "env_1",
+          keyMaterial: clientKeyMaterial,
+          isOriginOpen: true,
+          createdAt: "2026-07-03T00:00:00.000Z",
+        },
+      },
+      {
+        match: (request) => request.url.includes("/api/sdk/verify"),
+        status: 404,
+        body: jsonError("FLAG_NOT_FOUND", "flag not found"),
+      },
+    ]);
+
+    const code = await runCli(
+      [
+        "flags",
+        "verify",
+        "--json",
+        "--app",
+        "app_1",
+        "--env",
+        "env_1",
+        "missing_flag",
+        "--targeting-key",
+        "user-1",
+      ],
+      { credentialPath, fetch: transport.fetch },
+    );
+
+    expect(code).toBe(EXIT_API);
   });
 });
 

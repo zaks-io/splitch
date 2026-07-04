@@ -72,6 +72,9 @@ export async function executeFlagsVerify(
     });
     const verifyDetails = await client.verify(flagId, evaluationContext);
     emit(io, invocation.flags.json, verifyDetails);
+    if (verifyDetails.reason === "ERROR") {
+      return { exitCode: EXIT_API, payload: verifyDetails };
+    }
     return { exitCode: EXIT_OK, payload: verifyDetails };
   } catch (error) {
     return handleExecutionError(error, io);
