@@ -36,7 +36,7 @@ afterEach(async () => {
 });
 
 describe("mcp server owner routing", () => {
-  it("routes evaluation-owned tools through the Evaluation API origin", async () => {
+  it("routes hosted evaluation-owned tools without requiring the Analysis API binding", async () => {
     const controlSeen: SeenRequest[] = [];
     const evaluationSeen: SeenRequest[] = [];
     const controlPlaneBaseUrl = await bootApi(controlSeen, handleControlPlaneRequest);
@@ -56,7 +56,7 @@ describe("mcp server owner routing", () => {
           },
         },
       },
-      { controlPlaneBaseUrl, evaluationBaseUrl },
+      { controlPlaneBaseUrl, evaluationBaseUrl, platformTarget: "shared-preview" },
     );
     const body = (await response.json()) as JsonRpcSuccess<ToolResult<typeof testEvaluation>>;
 

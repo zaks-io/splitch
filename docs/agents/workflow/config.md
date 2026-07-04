@@ -66,16 +66,18 @@ with it.
   `shared_preview` Branch exists, and Worker secret sync is wired before deploy. Cloudflare Custom
   Domain DNS/cert activation can lag after first deploy. See
   `docs/spec/platform/deployment-pipeline.md`.
-- Production deploy path: auto-starts after `ci` succeeds on `main`; Tinybird, D1, and Cloudflare
-  Worker deploy legs are wired through Turborepo package tasks. See
+- Production deploy path: auto-starts after `ci` succeeds on `main` and can also be manually
+  dispatched from `main`; Tinybird, D1, and Cloudflare Worker deploy legs are wired through
+  Turborepo package tasks. See
   `docs/spec/platform/deployment-pipeline.md`.
 - Merge authority: Orchestrator may merge low/normal-risk PRs when the automation
   merge gate in `Pull Requests` passes. Human approval is required for the high-risk
   set named in `Pull Requests`, production deploys, and any PR with blocking review
   findings.
-- Production approval required: controlled by the GitHub `production` environment. The workflow starts
-  automatically after CI passes on `main`; required reviewers on that environment still gate traffic
-  if configured. Automation merge authority never includes direct production resource mutation.
+- Production approval required: controlled by the GitHub `production` environment. It gates the
+  deploy job itself, not traffic. The workflow starts automatically after CI passes on `main` or
+  from manual `main` dispatch. Automation merge authority never includes direct production resource
+  mutation.
 
 ## Workspaces
 

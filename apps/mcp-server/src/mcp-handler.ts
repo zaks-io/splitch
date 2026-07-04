@@ -28,7 +28,8 @@ const tools = deriveMcpProtocolTools();
 const toolNames = new Set(tools.map((tool) => tool.name));
 type McpRoutableOwner = "control-plane-api" | "evaluation-api" | "analysis-api";
 type OperationSdk = ReturnType<typeof createControlPlaneSdk>;
-type OperationSdks = Record<McpRoutableOwner, OperationSdk>;
+type OperationSdkResolver = () => OperationSdk;
+type OperationSdks = Record<McpRoutableOwner, OperationSdkResolver>;
 
 export interface McpServerRequestOptions {
   readonly request: Request;
@@ -75,32 +76,46 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
 function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
   const platformTarget = parsePlatformTarget(options.platformTarget);
   return {
-    "control-plane-api": createControlPlaneSdk({
-      baseUrl: apiBaseUrl(
-        "CONTROL_PLANE_API_ORIGIN",
-        options.controlPlaneBaseUrl,
-        defaultControlPlaneBaseUrl,
-        platformTarget,
-      ),
-      fetch: options.controlPlaneFetch,
-    }),
-    "evaluation-api": createControlPlaneSdk({
-      baseUrl: apiBaseUrl(
-        "EVALUATION_API_ORIGIN",
-        options.evaluationBaseUrl,
-        defaultEvaluationBaseUrl,
-        platformTarget,
-      ),
-      fetch: options.controlPlaneFetch,
-    }),
-    "analysis-api": createControlPlaneSdk({
-      baseUrl: analysisApiBaseUrl(
-        options.analysisBaseUrl,
-        platformTarget,
-        options.analysisFetch !== undefined,
-      ),
-      fetch: options.analysisFetch ?? options.controlPlaneFetch,
-    }),
+    "control-plane-api": createLazyOperationSdk(() =>
+      createControlPlaneSdk({
+        baseUrl: apiBaseUrl(
+          "CONTROL_PLANE_API_ORIGIN",
+          options.controlPlaneBaseUrl,
+          defaultControlPlaneBaseUrl,
+          platformTarget,
+        ),
+        fetch: options.controlPlaneFetch,
+      }),
+    ),
+    "evaluation-api": createLazyOperationSdk(() =>
+      createControlPlaneSdk({
+        baseUrl: apiBaseUrl(
+          "EVALUATION_API_ORIGIN",
+          options.evaluationBaseUrl,
+          defaultEvaluationBaseUrl,
+          platformTarget,
+        ),
+        fetch: options.controlPlaneFetch,
+      }),
+    ),
+    "analysis-api": createLazyOperationSdk(() =>
+      createControlPlaneSdk({
+        baseUrl: analysisApiBaseUrl(
+          options.analysisBaseUrl,
+          platformTarget,
+          options.analysisFetch !== undefined,
+        ),
+        fetch: options.analysisFetch ?? options.controlPlaneFetch,
+      }),
+    ),
+  };
+}
+
+function createLazyOperationSdk(createSdk: () => OperationSdk): OperationSdkResolver {
+  let sdk: OperationSdk | undefined;
+  return () => {
+    sdk ??= createSdk();
+    return sdk;
   };
 }
 
@@ -218,7 +233,7 @@ async function callTool(
 
 function sdkForOwner(sdks: OperationSdks, owner: RouteOwner): OperationSdk {
   if (owner === "control-plane-api" || owner === "evaluation-api" || owner === "analysis-api") {
-    return sdks[owner];
+    return sdks[owner]();
   }
   throw new Error(`mcp-server: no API origin configured for route owner "${owner}"`);
 }

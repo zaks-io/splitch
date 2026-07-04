@@ -85,7 +85,6 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 | Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                             |
 | ----------------------- | --------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks               |
-| `gitleaks`              | PR and push                                         | none                             | wired: full git secret scan                                                                                                                 |
 | `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, and Turborepo Worker deploy tasks |
 | `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                               |
 | `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, and Turborepo Worker deploy tasks      |
@@ -166,8 +165,9 @@ or any Durable Object migration.
 - Shared preview applies migrations remotely to the shared-preview D1 database before Worker deployment.
 - Production applies migrations remotely as part of `deploy-production`, after approval and before code
   that requires the new schema is serving traffic.
-- D1 captures a backup before `wrangler d1 migrations apply`; failed migrations roll back the failed
-  migration and leave prior successful migrations applied.
+- Production D1 migration recovery policy is tracked separately in SPL-82. Do not add backup,
+  export, restore, or time-travel automation until the security and retention boundaries are decided.
+- Failed migrations roll back the failed migration and leave prior successful migrations applied.
 - Schema changes follow expand/contract. Additive migrations and backward-compatible reads ship first;
   destructive cleanup ships in a later release with an explicit runbook.
 
