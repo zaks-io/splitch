@@ -3,7 +3,7 @@ import {
   ResolutionDetailsSchema,
   ResolutionReasonSchema,
   resolutionReasons,
-} from "./leaf-schemas-runtime.js";
+} from "./leaf-schemas-runtime";
 
 describe("ResolutionReasonSchema", () => {
   it("accepts every declared reason", () => {

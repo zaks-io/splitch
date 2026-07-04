@@ -1,10 +1,10 @@
 import { and, eq } from "drizzle-orm";
-import { experiments, metrics, runs } from "../schema/index.js";
-import type { Db } from "./client.js";
-import type { EnvScope, TenantScope } from "./scope.js";
-import { makeEndRun } from "./experiment-end-run.js";
-import { makeStartRun } from "./experiment-start-run.js";
-import { scopedTable } from "./scoped-table.js";
+import { experiments, metrics, runs } from "../schema/index";
+import type { Db } from "./client";
+import type { EnvScope, TenantScope } from "./scope";
+import { makeEndRun } from "./experiment-end-run";
+import { makeStartRun } from "./experiment-start-run";
+import { scopedTable } from "./scoped-table";
 
 /**
  * Experiment-domain repository. Per-Environment (require an EnvScope):

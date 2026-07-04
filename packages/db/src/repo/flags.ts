@@ -1,9 +1,9 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index.js";
-import type { Db } from "./client.js";
-import type { EnvScope, TenantScope } from "./scope.js";
-import { assertMintedScope } from "./scope.js";
-import { scopedTable } from "./scoped-table.js";
+import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index";
+import type { Db } from "./client";
+import type { EnvScope, TenantScope } from "./scope";
+import { assertMintedScope } from "./scope";
+import { scopedTable } from "./scoped-table";
 
 /**
  * Flag-domain repository. App-scoped: flags, segments. Per-Environment:

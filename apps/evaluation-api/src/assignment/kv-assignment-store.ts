@@ -12,7 +12,7 @@ import {
   type AssignmentStorePutResult,
   hashedAssignmentIdentity,
   readAssignmentValue,
-} from "./assignment-store.js";
+} from "./assignment-store";
 
 export interface AssignmentWriterNamespace {
   idFromName(name: string): DurableObjectId;

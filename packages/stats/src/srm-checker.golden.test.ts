@@ -1,6 +1,6 @@
 import type { ActivationRow, DedupeExposureRow } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { checkSrmHealth } from "./srm-checker.js";
+import { checkSrmHealth } from "./srm-checker";
 
 const RUN_ID = "run_srm_golden";
 const BASE_TS = "2026-07-01T00:00:00.000Z";

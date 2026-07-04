@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { hashedAssignmentIdentity } from "../assignment/assignment-store.js";
+import { hashedAssignmentIdentity } from "../assignment/assignment-store";
 import {
   RecordingKv,
   RecordingWriterNamespace,
   StaticSaltStore,
-} from "../assignment/assignment-store-test-fixtures.js";
-import { KvAssignmentStore } from "../assignment/kv-assignment-store.js";
-import { ProviderError } from "../provider/provider.js";
-import { evaluatePath } from "./evaluate-path.js";
+} from "../assignment/assignment-store-test-fixtures";
+import { KvAssignmentStore } from "../assignment/kv-assignment-store";
+import { ProviderError } from "../provider/provider";
+import { evaluatePath } from "./evaluate-path";
 import {
   EXPERIMENT_ID,
   RecordingAssignmentStore,
@@ -17,7 +17,7 @@ import {
   experimentConfig,
   flagConfig,
   runConfig,
-} from "./evaluate-path-test-fixtures.js";
+} from "./evaluate-path-test-fixtures";
 
 describe("evaluatePath orchestration", () => {
   it("resolves the Experiment before reading holdovers so idType can be validated", async () => {

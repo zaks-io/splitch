@@ -5,7 +5,7 @@ import {
   PAGINATION_MAX_LIMIT,
   PaginationQuerySchema,
   paginatedResponse,
-} from "./wire-envelopes-core.js";
+} from "./wire-envelopes-core";
 
 const PageOfStrings = paginatedResponse(z.string());
 

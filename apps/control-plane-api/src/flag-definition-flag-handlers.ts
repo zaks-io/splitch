@@ -1,16 +1,16 @@
 import type { Variant } from "@splitch/contracts";
 import { appScope, type TenantScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { nowIso } from "./app-environment-model.js";
-import { randomHex } from "./credential-cache.js";
-import { flagConfigReferenceCount, runningExperimentForFlag } from "./flag-definition-guards.js";
+import { nowIso } from "./app-environment-model";
+import { randomHex } from "./credential-cache";
+import { flagConfigReferenceCount, runningExperimentForFlag } from "./flag-definition-guards";
 import {
   flagNotFound,
   resourceNotEmpty,
   runningExperimentError,
   validationError,
   validationErrors,
-} from "./flag-definition-errors.js";
+} from "./flag-definition-errors";
 import {
   type FlagDefinitionDeps,
   type FlagRow,
@@ -21,7 +21,7 @@ import {
   ok,
   requireWritableApp,
   serializeSchema,
-} from "./flag-definition-handler-utils.js";
+} from "./flag-definition-handler-utils";
 import {
   type CreateVariantInput,
   duplicateVariantNameIssue,
@@ -30,10 +30,10 @@ import {
   pathBodyMismatch,
   schemaFromBody,
   variantSchemaIssues,
-} from "./flag-definition-model.js";
-import { schemaDefinitionIssues } from "./flag-definition-schema.js";
-import { objectBody, pathParam } from "./handler-input.js";
-import { appNotFound } from "./app-environment-model.js";
+} from "./flag-definition-model";
+import { schemaDefinitionIssues } from "./flag-definition-schema";
+import { objectBody, pathParam } from "./handler-input";
+import { appNotFound } from "./app-environment-model";
 
 export async function listFlags(
   deps: FlagDefinitionDeps,

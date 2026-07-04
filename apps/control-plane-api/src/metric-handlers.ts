@@ -1,10 +1,10 @@
 import type { MetricKind, MetricRef } from "@splitch/contracts";
 import { appScope, type Repository, type TenantScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { appNotFound, nowIso } from "./app-environment-model.js";
-import { randomHex } from "./credential-cache.js";
-import { runningExperimentError, validationError } from "./flag-definition-errors.js";
-import { objectBody, pathParam } from "./handler-input.js";
+import { appNotFound, nowIso } from "./app-environment-model";
+import { randomHex } from "./credential-cache";
+import { runningExperimentError, validationError } from "./flag-definition-errors";
+import { objectBody, pathParam } from "./handler-input";
 import {
   decisionLockedError,
   fail,
@@ -17,7 +17,7 @@ import {
   type MetricRow,
   type MetricSegmentDeps,
   type Result,
-} from "./metric-segment-shared.js";
+} from "./metric-segment-shared";
 
 export function makeMetricHandlers(deps: MetricSegmentDeps) {
   return {

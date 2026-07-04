@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { copyWatermarkFromScheduledTime, runScheduledSnapshot } from "./scheduled.js";
-import type { PipeParams, TinybirdCopyTransport } from "./tinybird.js";
+import { copyWatermarkFromScheduledTime, runScheduledSnapshot } from "./scheduled";
+import type { PipeParams, TinybirdCopyTransport } from "./tinybird";
 
 const HOURLY_CRON = "0 * * * *";
 const SCHEDULED_TIME_MS = Date.UTC(2026, 6, 3, 21, 0, 0, 123);

@@ -1,15 +1,15 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import type { RateLimiter } from "@splitch/worker-runtime";
-import { createApp } from "./app.js";
+import { createApp } from "./app";
 import {
   makeControlPlaneAuthResolver,
   makeHttpJwksFetcher,
   makeJwksVerifier,
   makeSessionStore,
-} from "./auth.js";
-import type { AnalysisApiEnv } from "./env.js";
-import { runScheduledSnapshot } from "./scheduled.js";
-import { createTinybirdCopyTransport, createTinybirdReadTransport } from "./tinybird.js";
+} from "./auth";
+import type { AnalysisApiEnv } from "./env";
+import { runScheduledSnapshot } from "./scheduled";
+import { createTinybirdCopyTransport, createTinybirdReadTransport } from "./tinybird";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 const verifierCache = new Map<string, ReturnType<typeof makeJwksVerifier>>();

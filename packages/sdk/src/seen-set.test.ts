@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_REVALIDATE_MS, SeenSet } from "./seen-set.js";
+import { DEFAULT_REVALIDATE_MS, SeenSet } from "./seen-set";
 
 const T0 = 1_000_000; // arbitrary epoch-ms base for the injected clock
 

@@ -9,8 +9,8 @@ import {
   makeFlagDefinitionHarness,
   NOW_ISO,
   request,
-} from "./flag-definition-test-harness.js";
-import { seedOrgApp } from "./test-fixtures.js";
+} from "./flag-definition-test-harness";
+import { seedOrgApp } from "./test-fixtures";
 
 let h: FlagDefinitionHarness;
 

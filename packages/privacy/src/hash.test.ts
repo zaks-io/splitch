@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { computeTargetingKeyHash, keyVersionOf } from "./hash.js";
-import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store.js";
+import { computeTargetingKeyHash, keyVersionOf } from "./hash";
+import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store";
 
 // Obvious fake test salts — NOT real secrets. Keyed per (app, version).
 const FAKE_SALTS: Record<string, Record<string, string>> = {

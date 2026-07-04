@@ -1,15 +1,15 @@
 import type { EnvScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { appNotFound } from "./app-environment-model.js";
-import { experimentAlreadyRunningForFlag } from "./experiment-errors.js";
+import { appNotFound } from "./app-environment-model";
+import { experimentAlreadyRunningForFlag } from "./experiment-errors";
 import {
   blockingRunningExperimentForStart,
   optionalBody,
   requireWritableEnvironment,
   type ExperimentDeps,
-} from "./experiment-handler-shared.js";
-import type { ExperimentRow } from "./experiment-model.js";
-import { confirmationRequired, readEnvironmentPolicy } from "./flag-config-policy.js";
+} from "./experiment-handler-shared";
+import type { ExperimentRow } from "./experiment-model";
+import { confirmationRequired, readEnvironmentPolicy } from "./flag-config-policy";
 
 export async function validateStartRequest(
   deps: ExperimentDeps,

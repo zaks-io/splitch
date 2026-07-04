@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { deriveMcpProtocolTools, type ErrorResponse } from "@splitch/contracts";
 import { afterEach, describe, expect, it } from "vitest";
-import { handleMcpServerRequest } from "./mcp-handler.js";
+import { handleMcpServerRequest } from "./mcp-handler";
 
 const service = "splitch-mcp-server";
 const token = "Bearer local-test-token";

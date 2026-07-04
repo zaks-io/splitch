@@ -1,7 +1,7 @@
 import type { DedupeExposureRow, PerEntityMetricRow } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { computeSequentialCI } from "./sequential-ci.js";
-import { estimateMetricArm, estimateMetricComparison } from "./variance-estimators.js";
+import { computeSequentialCI } from "./sequential-ci";
+import { estimateMetricArm, estimateMetricComparison } from "./variance-estimators";
 
 const RUN_ID = "run_variance_property";
 const ALPHA = 0.05;

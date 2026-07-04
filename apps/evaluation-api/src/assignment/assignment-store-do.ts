@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import type { AssignmentKv, HashedAssignmentPutInput } from "./assignment-store.js";
-import { AssignmentStoreWriter } from "./assignment-store-writer.js";
+import type { AssignmentKv, HashedAssignmentPutInput } from "./assignment-store";
+import { AssignmentStoreWriter } from "./assignment-store-writer";
 
 export interface AssignmentStoreEnv {
   ASSIGNMENTS_KV: AssignmentKv;

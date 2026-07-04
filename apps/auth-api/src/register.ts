@@ -1,8 +1,8 @@
 import { appScope, type Repository } from "@splitch/db";
-import type { RateLimiter } from "./rate-limit.js";
-import type { TokenSigner } from "./token-exchange.js";
-import type { TurnstilePort } from "./turnstile.js";
-import type { WorkOsPort } from "./workos.js";
+import type { RateLimiter } from "./rate-limit";
+import type { TokenSigner } from "./token-exchange";
+import type { TurnstilePort } from "./turnstile";
+import type { WorkOsPort } from "./workos";
 
 /**
  * Door B: anonymous / pre-claim register (auth-doors.md, ADR-0034).

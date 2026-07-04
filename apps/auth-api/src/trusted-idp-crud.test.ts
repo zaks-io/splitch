@@ -1,18 +1,18 @@
 import { createRepository } from "@splitch/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createApp } from "./app.js";
-import { makeFixtureDeviceFlow } from "./device-flow.js";
-import { makeD1DeviceRefreshSessionStore } from "./device-session-store.js";
-import { makeJtiCache } from "./jti-cache.js";
-import { makeKvRevocationStore } from "./revocation.js";
-import { makeTokenSigner, type TokenSigner } from "./token-exchange.js";
+import { createApp } from "./app";
+import { makeFixtureDeviceFlow } from "./device-flow";
+import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
+import { makeJtiCache } from "./jti-cache";
+import { makeKvRevocationStore } from "./revocation";
+import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import {
   type LocalBindings,
   makeDoorBDeps,
   makeFixtureKeypair,
   makeLocalBindings,
-} from "./test-fixtures.js";
-import { makeFixtureWorkOs } from "./workos.js";
+} from "./test-fixtures";
+import { makeFixtureWorkOs } from "./workos";
 
 /**
  * Trusted-IdP CRUD is Org-owner only (access-control-matrix.md). A valid Bearer

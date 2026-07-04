@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { scrubEmbeddedJson } from "./embedded-json.js";
-import { REDACTED } from "./redaction-rules.js";
+import { scrubEmbeddedJson } from "./embedded-json";
+import { REDACTED } from "./redaction-rules";
 
 // Fake scrubber: blanks out any `email` value, recursing through objects/arrays.
 function blankEmails(value: unknown): unknown {

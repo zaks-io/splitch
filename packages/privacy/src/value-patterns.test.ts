@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { REDACTED } from "./redaction-rules.js";
-import { redactValuePatterns } from "./value-patterns.js";
+import { REDACTED } from "./redaction-rules";
+import { redactValuePatterns } from "./value-patterns";
 
 describe("redactValuePatterns", () => {
   it("redacts a bare email anywhere in a string", () => {

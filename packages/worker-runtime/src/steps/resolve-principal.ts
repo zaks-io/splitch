@@ -1,6 +1,6 @@
 import type { ErrorResponse, RouteContract } from "@splitch/contracts";
-import type { RegistrarDeps } from "../deps.js";
-import { type Principal, PUBLIC_PRINCIPAL } from "../principal.js";
+import type { RegistrarDeps } from "../deps";
+import { type Principal, PUBLIC_PRINCIPAL } from "../principal";
 
 export type ResolveOutcome =
   | { ok: true; principal: Principal }

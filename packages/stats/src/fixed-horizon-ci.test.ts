@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  computeFixedHorizonCI,
-  FIXED_HORIZON_CI_SOURCE,
-  FixedHorizonCI,
-} from "./fixed-horizon-ci.js";
+import { computeFixedHorizonCI, FIXED_HORIZON_CI_SOURCE, FixedHorizonCI } from "./fixed-horizon-ci";
 
 describe("FixedHorizonCI", () => {
   const adapter = new FixedHorizonCI();

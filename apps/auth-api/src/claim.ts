@@ -1,10 +1,10 @@
 import type { Repository } from "@splitch/db";
-import { normalizeEmail } from "./email.js";
-import { OAuthError } from "./oauth-errors.js";
-import type { ClaimRecord, IdempotencyStore, OtpVerifier } from "./otp.js";
-import type { RateLimiter } from "./rate-limit.js";
-import type { TokenSigner } from "./token-exchange.js";
-import type { WorkOsPort } from "./workos.js";
+import { normalizeEmail } from "./email";
+import { OAuthError } from "./oauth-errors";
+import type { ClaimRecord, IdempotencyStore, OtpVerifier } from "./otp";
+import type { RateLimiter } from "./rate-limit";
+import type { TokenSigner } from "./token-exchange";
+import type { WorkOsPort } from "./workos";
 
 /**
  * Door B claim ceremony (auth-doors.md). A TWO-STEP flow because the OTP must

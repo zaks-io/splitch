@@ -1,6 +1,6 @@
 import type { ClientKey } from "@splitch/contracts";
 import type { envScope, Repository } from "@splitch/db";
-import { randomHex, writeClientKeyCache } from "./credential-cache.js";
+import { randomHex, writeClientKeyCache } from "./credential-cache";
 
 interface ClientKeyDeps {
   repo: Repository;

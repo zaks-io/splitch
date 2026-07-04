@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
-import { experiments, runs } from "../schema/index.js";
-import type { EnvScope } from "./scope.js";
-import { assertMintedScope } from "./scope.js";
-import type { ScopedTable } from "./scoped-table.js";
+import { experiments, runs } from "../schema/index";
+import type { EnvScope } from "./scope";
+import { assertMintedScope } from "./scope";
+import type { ScopedTable } from "./scoped-table";
 
 type ExperimentRow = typeof experiments.$inferSelect;
 type RunRow = typeof runs.$inferSelect;

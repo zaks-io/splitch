@@ -1,8 +1,8 @@
 import { defineRoute, type RouteContract } from "@splitch/contracts";
 import { z } from "zod";
-import type { RegistrarDeps } from "./deps.js";
-import type { AuthResolver, Principal } from "./principal.js";
-import type { RateLimiter } from "./rate-limit.js";
+import type { RegistrarDeps } from "./deps";
+import type { AuthResolver, Principal } from "./principal";
+import type { RateLimiter } from "./rate-limit";
 
 /**
  * Shared fixtures for the guard test matrix: route-contract builders + fake

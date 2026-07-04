@@ -1,21 +1,21 @@
 import { envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { nowIso } from "./app-environment-model.js";
+import { nowIso } from "./app-environment-model";
 import {
   configStoreUnavailable,
   experimentNotFound,
   runNotFound,
   runNotRunning,
-} from "./experiment-errors.js";
-import { runResponse } from "./experiment-model.js";
+} from "./experiment-errors";
+import { runResponse } from "./experiment-model";
 import {
   experimentFromPath,
   optionalBody,
   requireWritableEnvironment,
   syncExperimentConfigFromD1,
   type ExperimentDeps,
-} from "./experiment-handler-shared.js";
-import { pathParam } from "./handler-input.js";
+} from "./experiment-handler-shared";
+import { pathParam } from "./handler-input";
 
 export function makeRunHandlers(deps: ExperimentDeps) {
   return {

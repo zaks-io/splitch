@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag.js";
+import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
 
 /**
  * Canonical Zod leaf schemas for the experiment-side glossary nouns.

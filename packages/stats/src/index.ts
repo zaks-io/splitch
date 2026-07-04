@@ -17,17 +17,17 @@ export {
   computeSequentialCI,
   SEQUENTIAL_CI_SOURCE,
   SequentialCI,
-} from "./sequential-ci.js";
+} from "./sequential-ci";
 export {
   computeFixedHorizonCI,
   FIXED_HORIZON_CI_SOURCE,
   FixedHorizonCI,
-} from "./fixed-horizon-ci.js";
-export { analyzeStats, StatsEngine } from "./stats-engine.js";
-export { applyGuardrailBoundChecks } from "./guardrail-bound-check.js";
-export { applyDecisionFamilyCorrection } from "./decision-family-fdr.js";
-export { estimateMetricArm, estimateMetricComparison } from "./variance-estimators.js";
-export { checkSrmHealth, SRM_MISMATCH_P_VALUE } from "./srm-checker.js";
+} from "./fixed-horizon-ci";
+export { analyzeStats, StatsEngine } from "./stats-engine";
+export { applyGuardrailBoundChecks } from "./guardrail-bound-check";
+export { applyDecisionFamilyCorrection } from "./decision-family-fdr";
+export { estimateMetricArm, estimateMetricComparison } from "./variance-estimators";
+export { checkSrmHealth, SRM_MISMATCH_P_VALUE } from "./srm-checker";
 export type {
   ActivationRow,
   ArmResult,
@@ -54,15 +54,15 @@ export type {
   CIStatus,
   CIWarning,
   SequentialCIOptions,
-} from "./sequential-ci.js";
-export type { StatsEngineOptions } from "./stats-engine.js";
+} from "./sequential-ci";
+export type { StatsEngineOptions } from "./stats-engine";
 export type {
   DecisionFamilyArmResult,
   DecisionFamilyCorrectionInput,
   DecisionFamilyCorrectionOutput,
   DecisionFamilyCorrectionSummary,
-} from "./decision-family-fdr.js";
-export type { GuardrailBoundCheckInput, GuardrailThreshold } from "./guardrail-bound-check.js";
+} from "./decision-family-fdr";
+export type { GuardrailBoundCheckInput, GuardrailThreshold } from "./guardrail-bound-check";
 export type {
   CupedCovariateRow,
   CupedCovariateSource,
@@ -71,5 +71,5 @@ export type {
   MetricComparisonEstimate,
   MetricComparisonEstimateInput,
   MetricVarianceStatus,
-} from "./variance-estimator-types.js";
-export type { SrmCheckerInput, SrmCheckerOutput } from "./srm-checker.js";
+} from "./variance-estimator-types";
+export type { SrmCheckerInput, SrmCheckerOutput } from "./srm-checker";

@@ -6,8 +6,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { computeTargetingKeyHash, keyVersionOf } from "./hash.js";
-import type { SaltStore } from "./salt-store.js";
+import { computeTargetingKeyHash, keyVersionOf } from "./hash";
+import type { SaltStore } from "./salt-store";
 
 const store: SaltStore = {
   async currentKeyVersion() {

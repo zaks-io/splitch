@@ -1,9 +1,9 @@
 import { experimentConfigKey, flagConfigKey } from "@splitch/contracts";
 import type { DeltaNudge } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { FakeKv } from "./fake-kv.js";
-import { experimentConfigKV, flagConfigKV, runConfigKV } from "./fixtures.js";
-import { KvProvider } from "./kv-provider.js";
+import { FakeKv } from "./fake-kv";
+import { experimentConfigKV, flagConfigKV, runConfigKV } from "./fixtures";
+import { KvProvider } from "./kv-provider";
 
 describe("KvProvider.getFlag", () => {
   it("resolves a FlagConfig with experimentId read in the SAME call — no second KV get", async () => {

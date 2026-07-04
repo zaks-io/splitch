@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ErrorCodeSchema } from "./errors.js";
+import { ErrorCodeSchema } from "./errors";
 
 /**
  * Canonical Zod leaf schemas for the runtime/identity glossary nouns:

@@ -1,7 +1,7 @@
 import { ResolutionDetailsSchema } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { errorCodeForStatus, synthesizeDetails } from "./resolution.js";
-import type { TransportResult } from "./transport.js";
+import { errorCodeForStatus, synthesizeDetails } from "./resolution";
+import type { TransportResult } from "./transport";
 
 const DEFAULT_VALUE = "control";
 

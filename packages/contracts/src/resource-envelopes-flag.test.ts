@@ -5,7 +5,7 @@ import {
   FlagResponseSchema,
   PatchFlagRequestSchema,
   PatchVariantRequestSchema,
-} from "./resource-envelopes-flag.js";
+} from "./resource-envelopes-flag";
 
 const variantControl = { name: "control", value: false, isDefault: true };
 const variantTreatment = { name: "treatment", value: "on", isDefault: false };

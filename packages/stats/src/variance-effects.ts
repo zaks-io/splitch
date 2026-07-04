@@ -3,8 +3,8 @@ import type {
   MetricArmEstimate,
   MetricComparisonEstimate,
   MetricComparisonEstimateInput,
-} from "./variance-estimator-types.js";
-import { clampSamplingVariance } from "./variance-math.js";
+} from "./variance-estimator-types";
+import { clampSamplingVariance } from "./variance-math";
 
 export function comparisonEstimate(
   input: MetricComparisonEstimateInput,

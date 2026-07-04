@@ -1,22 +1,22 @@
 import type { Repository } from "@splitch/db";
 import { Hono } from "hono";
-import { verifyAccessToken } from "./access-token.js";
-import { type ClaimDeps, initiateClaim, verifyClaim } from "./claim.js";
-import type { DeviceFlowPort } from "./device-flow.js";
-import type { DeviceRefreshSessionStore } from "./device-session-store.js";
-import { type IdJagDeps, verifyIdJag } from "./idjag-verify.js";
-import { OAuthError, renderOAuthError } from "./oauth-errors.js";
-import { mountOAuthRoutes } from "./oauth-routes.js";
-import { type RegisterDeps, registerAnonymous } from "./register.js";
-import type { RevocationStore } from "./revocation.js";
+import { verifyAccessToken } from "./access-token";
+import { type ClaimDeps, initiateClaim, verifyClaim } from "./claim";
+import type { DeviceFlowPort } from "./device-flow";
+import type { DeviceRefreshSessionStore } from "./device-session-store";
+import { type IdJagDeps, verifyIdJag } from "./idjag-verify";
+import { OAuthError, renderOAuthError } from "./oauth-errors";
+import { mountOAuthRoutes } from "./oauth-routes";
+import { type RegisterDeps, registerAnonymous } from "./register";
+import type { RevocationStore } from "./revocation";
 import {
   AgentIdentityRequestSchema,
   AnonymousIdentityRequestSchema,
   ClaimRequestSchema,
   CreateTrustedIdpRequestSchema,
-} from "./schemas.js";
-import type { TokenSigner } from "./token-exchange.js";
-import { makeTrustedIdpCrud } from "./trusted-idp-crud.js";
+} from "./schemas";
+import type { TokenSigner } from "./token-exchange";
+import { makeTrustedIdpCrud } from "./trusted-idp-crud";
 
 /**
  * Auth API Worker HTTP surface.

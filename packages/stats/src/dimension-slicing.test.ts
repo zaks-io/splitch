@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StatsInput } from "@splitch/contracts";
-import { analyzeStats } from "./stats-engine.js";
-import { ENGINE_RUN_ID, exposure } from "./stats-engine-test-helpers.js";
+import { analyzeStats } from "./stats-engine";
+import { ENGINE_RUN_ID, exposure } from "./stats-engine-test-helpers";
 
 describe("StatsEngine.analyze Activation gates", () => {
   it("applies Activation before Dimension slicing and keeps SRM non-sliced", async () => {

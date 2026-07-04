@@ -1,4 +1,4 @@
-import type { AnalysisApiEnv } from "./env.js";
+import type { AnalysisApiEnv } from "./env";
 
 export type PipeParams = Record<string, string>;
 

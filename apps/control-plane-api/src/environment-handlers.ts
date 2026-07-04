@@ -1,8 +1,8 @@
 import type { EnvironmentPolicy } from "@splitch/contracts";
 import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { requireAppDelete, requireAppWrite } from "./app-authz.js";
-import { deleteEnvironmentCredentials } from "./app-environment-credentials.js";
+import { requireAppDelete, requireAppWrite } from "./app-authz";
+import { deleteEnvironmentCredentials } from "./app-environment-credentials";
 import {
   ALLOW_POLICY,
   type AppEnvironmentDeps,
@@ -13,9 +13,9 @@ import {
   lastEnvironmentRequired,
   nowIso,
   runningExperimentError,
-} from "./app-environment-model.js";
-import { provisionClientKey } from "./client-key-provisioning.js";
-import { objectBody, pathParam } from "./handler-input.js";
+} from "./app-environment-model";
+import { provisionClientKey } from "./client-key-provisioning";
+import { objectBody, pathParam } from "./handler-input";
 
 export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
   return {

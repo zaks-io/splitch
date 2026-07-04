@@ -1,5 +1,5 @@
-import { validationError } from "./errors.js";
-import type { Outcome, Payload } from "./types.js";
+import { validationError } from "./errors";
+import type { Outcome, Payload } from "./types";
 
 export async function readJsonObject(request: Request): Promise<Outcome<Payload>> {
   const text = await request.text();

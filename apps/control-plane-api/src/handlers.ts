@@ -2,17 +2,17 @@ import type { TargetingRule } from "@splitch/contracts";
 import { envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
-import type { ConfigStoreWriter } from "./config-store.js";
-import type { ConfigStoreAccess } from "./config-store-do.js";
-import { requireAppAdmin } from "./app-authz.js";
+import type { ConfigStoreWriter } from "./config-store";
+import type { ConfigStoreAccess } from "./config-store-do";
+import { requireAppAdmin } from "./app-authz";
 import {
   confirmationRequired,
   flagConfigPatchGates,
   promotionGates,
   readEnvironmentPolicy,
-} from "./flag-config-policy.js";
-import { objectBody, pathParam } from "./handler-input.js";
-import { makeOrgHandlers, type MemberProfileResolver } from "./org-handlers.js";
+} from "./flag-config-policy";
+import { objectBody, pathParam } from "./handler-input";
+import { makeOrgHandlers, type MemberProfileResolver } from "./org-handlers";
 
 /**
  * Minimal-but-real control-plane handlers for the mounted routes. They run AFTER

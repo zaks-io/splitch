@@ -1,4 +1,4 @@
-import { hashToUnitInterval } from "./hash.js";
+import { hashToUnitInterval } from "./hash";
 
 /**
  * An ordered, name-keyed weight set. Each share's `weight` is a percentage in

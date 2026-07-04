@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { errorStatusByCode, httpStatusForError } from "./error-status.js";
-import { ErrorCodeSchema, errorCodes, ErrorResponseSchema } from "./errors.js";
+import { errorStatusByCode, httpStatusForError } from "./error-status";
+import { ErrorCodeSchema, errorCodes, ErrorResponseSchema } from "./errors";
 
 describe("ErrorResponse contract", () => {
   it("parses a structured-detail error and narrows details by code", () => {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createRepository } from "../index.js";
-import { createLocalD1, type LocalD1 } from "./test-d1.js";
+import { createRepository } from "../index";
+import { createLocalD1, type LocalD1 } from "./test-d1";
 
 const NOW = "2026-07-03T08:00:00.000Z";
 const EXPIRED = "2026-07-02T08:00:00.000Z";

@@ -1,15 +1,15 @@
 import { envScope, type EnvScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { appNotFound, nowIso } from "./app-environment-model.js";
-import type { ConfigStoreAccess } from "./config-store-do.js";
-import { randomHex } from "./credential-cache.js";
+import { appNotFound, nowIso } from "./app-environment-model";
+import type { ConfigStoreAccess } from "./config-store-do";
+import { randomHex } from "./credential-cache";
 import {
   experimentAlreadyRunningForFlag,
   configStoreUnavailable,
   experimentNoDraft,
   experimentNotFound,
-} from "./experiment-errors.js";
-import { experimentResponse, json, runResponse, type ExperimentRow } from "./experiment-model.js";
+} from "./experiment-errors";
+import { experimentResponse, json, runResponse, type ExperimentRow } from "./experiment-model";
 import {
   blockingRunningExperimentForStart,
   draftPatch,
@@ -20,18 +20,18 @@ import {
   runningRunForExperiment,
   syncExperimentConfigFromD1,
   type ExperimentDeps,
-} from "./experiment-handler-shared.js";
-import { makeRunHandlers } from "./experiment-run-handlers.js";
-import { prepareStart } from "./experiment-start.js";
-import { validateStartRequest } from "./experiment-start-request.js";
+} from "./experiment-handler-shared";
+import { makeRunHandlers } from "./experiment-run-handlers";
+import { prepareStart } from "./experiment-start";
+import { validateStartRequest } from "./experiment-start-request";
 import {
   loadUpdateContext,
   prepareUpdatePatch,
   validateCreateExperiment,
   validateRunningPatch,
-} from "./experiment-update-plan.js";
-import { runningExperimentError } from "./flag-definition-errors.js";
-import { objectBody, pathParam } from "./handler-input.js";
+} from "./experiment-update-plan";
+import { runningExperimentError } from "./flag-definition-errors";
+import { objectBody, pathParam } from "./handler-input";
 
 export function makeExperimentHandlers(deps: ExperimentDeps) {
   return {

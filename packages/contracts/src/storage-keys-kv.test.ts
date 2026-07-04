@@ -7,7 +7,7 @@ import {
   flagConfigKey,
   liveRunKey,
   runConfigKey,
-} from "./storage-keys-kv.js";
+} from "./storage-keys-kv";
 
 describe("config key-pattern constructors (per-Environment, ADR-0027)", () => {
   it("flagConfigKey produces app:{appId}:{environmentId}:flag:{flagKey}", () => {

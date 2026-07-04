@@ -1,8 +1,8 @@
 import type { EvaluationContext, TargetingRule, Variant } from "@splitch/contracts";
-import type { AssignmentPutInput, AssignmentStore } from "../assignment/assignment-store.js";
-import type { RunConfig } from "../assignment/run-config.js";
-import type { ExperimentConfig, FlagConfig, Provider } from "../provider/provider.js";
-import type { EvaluatePathInput } from "./evaluate-path.js";
+import type { AssignmentPutInput, AssignmentStore } from "../assignment/assignment-store";
+import type { RunConfig } from "../assignment/run-config";
+import type { ExperimentConfig, FlagConfig, Provider } from "../provider/provider";
+import type { EvaluatePathInput } from "./evaluate-path";
 
 export const APP_ID = "app-A";
 export const ENVIRONMENT_ID = "env-1";

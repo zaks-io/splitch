@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { GuardrailThreshold } from "./guardrail-bound-check.js";
-import { applyGuardrailBoundChecks } from "./guardrail-bound-check.js";
-import { armResult } from "./decision-family-fdr-test-helpers.js";
+import type { GuardrailThreshold } from "./guardrail-bound-check";
+import { applyGuardrailBoundChecks } from "./guardrail-bound-check";
+import { armResult } from "./decision-family-fdr-test-helpers";
 
 describe("applyGuardrailBoundChecks", () => {
   it("populates GuardrailResult from the relative-lift CI lower bound", () => {

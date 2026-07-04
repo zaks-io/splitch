@@ -1,4 +1,4 @@
-import { OAuthError, type OAuthErrorCode } from "./oauth-errors.js";
+import { OAuthError, type OAuthErrorCode } from "./oauth-errors";
 
 export const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 

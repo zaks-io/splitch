@@ -1,6 +1,6 @@
-import { makeMetricHandlers } from "./metric-handlers.js";
-import { makeSegmentHandlers } from "./segment-handlers.js";
-import type { MetricSegmentDeps } from "./metric-segment-shared.js";
+import { makeMetricHandlers } from "./metric-handlers";
+import { makeSegmentHandlers } from "./segment-handlers";
+import type { MetricSegmentDeps } from "./metric-segment-shared";
 
 export function makeMetricSegmentHandlers(deps: MetricSegmentDeps) {
   return {

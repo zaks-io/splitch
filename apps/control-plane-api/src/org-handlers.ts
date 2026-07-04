@@ -2,8 +2,8 @@ import { UserRoleSchema, type User, type UserRole } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
-import { objectBody, pathParam } from "./handler-input.js";
-import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, ORG_OWNER_ROLES, requireOrgRole } from "./org-authz.js";
+import { objectBody, pathParam } from "./handler-input";
+import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, ORG_OWNER_ROLES, requireOrgRole } from "./org-authz";
 
 export interface MemberProfile {
   email: string;

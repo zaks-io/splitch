@@ -4,16 +4,16 @@
   "private": true,
   "type": "module",
   "bin": {
-    "splitch": "./dist/cli.js"
+    "splitch": "./src/cli.mjs"
   },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     }
   },
   "files": [
-    "dist"
+    "src"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -23,6 +23,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@splitch/control-plane-sdk": "workspace:*"
+    "@splitch/control-plane-sdk": "workspace:*",
+    "tsx": "4.22.4"
   }
 }

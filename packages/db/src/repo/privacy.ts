@@ -1,8 +1,8 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { entityDeletions, privacyRequests, trustedIdps } from "../schema/index.js";
-import type { Db } from "./client.js";
-import type { TenantScope } from "./scope.js";
-import { scopedTable } from "./scoped-table.js";
+import { entityDeletions, privacyRequests, trustedIdps } from "../schema/index";
+import type { Db } from "./client";
+import type { TenantScope } from "./scope";
+import { scopedTable } from "./scoped-table";
 
 /**
  * Privacy + IdP-allow-list repository.

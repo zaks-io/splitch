@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { ErrorResponseSchema } from "./errors.js";
-import type { ApiRouteContract } from "./openapi-route.js";
-import { routeRegistry } from "./route-registry.js";
+import { ErrorResponseSchema } from "./errors";
+import type { ApiRouteContract } from "./openapi-route";
+import { routeRegistry } from "./route-registry";
 
 /**
  * MCP tool-schema derivation from THE single route registry (ADR-0023/0025). One

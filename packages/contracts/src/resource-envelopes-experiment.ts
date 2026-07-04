@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag.js";
-import { ExperimentSchema, MetricRefSchema, RunSchema } from "./leaf-schemas-experiment.js";
+import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
+import { ExperimentSchema, MetricRefSchema, RunSchema } from "./leaf-schemas-experiment";
 
 /**
  * Create/patch/response wire envelopes for the Experiment and Experiment Run

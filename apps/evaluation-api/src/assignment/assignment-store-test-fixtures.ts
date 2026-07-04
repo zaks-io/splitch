@@ -1,11 +1,7 @@
 import type { SaltStore } from "@splitch/privacy";
-import type {
-  AssignmentKv,
-  AssignmentPutInput,
-  AssignmentStoreLogger,
-} from "./assignment-store.js";
-import type { AssignmentWriterStorage } from "./assignment-store-writer.js";
-import type { AssignmentWriterNamespace } from "./kv-assignment-store.js";
+import type { AssignmentKv, AssignmentPutInput, AssignmentStoreLogger } from "./assignment-store";
+import type { AssignmentWriterStorage } from "./assignment-store-writer";
+import type { AssignmentWriterNamespace } from "./kv-assignment-store";
 
 export const RAW_TARGETING_KEY = "alice@example.com";
 

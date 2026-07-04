@@ -1,9 +1,9 @@
 import { experimentConfigKey, flagConfigKey } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { FakeKv } from "./fake-kv.js";
-import { experimentConfigKV, flagConfigKV } from "./fixtures.js";
-import { KvProvider } from "./kv-provider.js";
-import { ProviderError } from "./provider.js";
+import { FakeKv } from "./fake-kv";
+import { experimentConfigKV, flagConfigKV } from "./fixtures";
+import { KvProvider } from "./kv-provider";
+import { ProviderError } from "./provider";
 
 const KEY = flagConfigKey("app-A", "env-1", "f");
 

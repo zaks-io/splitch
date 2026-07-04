@@ -7,7 +7,7 @@ import {
 } from "@splitch/contracts";
 import { StatsEngine as DefaultStatsEngine } from "@splitch/stats";
 import { renderError, type HandlerArgs } from "@splitch/worker-runtime";
-import { scopedPipeParams, TinybirdReadError, type TinybirdReadTransport } from "./tinybird.js";
+import { scopedPipeParams, TinybirdReadError, type TinybirdReadTransport } from "./tinybird";
 
 const RUN_INPUTS_PIPE = "analysis_run_inputs";
 const EXPOSURES_PIPE = "analysis_deduped_exposures";

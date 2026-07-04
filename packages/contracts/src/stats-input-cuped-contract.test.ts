@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CupedCovariateRowSchema, StatsInputSchema } from "./stats-input-contract.js";
+import { CupedCovariateRowSchema, StatsInputSchema } from "./stats-input-contract";
 
 const exposureRow = {
   app_id: "app_1",

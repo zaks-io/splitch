@@ -1,4 +1,4 @@
-import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store.js";
+import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
 
 interface ExposureIngestFetcher {
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;

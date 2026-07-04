@@ -1,7 +1,7 @@
 import type { DecisionFamilyMember } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { applyDecisionFamilyCorrection } from "./decision-family-fdr.js";
-import { armResult, resultKey } from "./decision-family-fdr-test-helpers.js";
+import { applyDecisionFamilyCorrection } from "./decision-family-fdr";
+import { armResult, resultKey } from "./decision-family-fdr-test-helpers";
 
 const FAMILY: DecisionFamilyMember[] = [
   { metric_id: "goal_clicks", variant: "treatment_a" },

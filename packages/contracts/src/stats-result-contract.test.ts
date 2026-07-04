@@ -7,8 +7,8 @@ import {
   SrmResultSchema,
   StatsOutputSchema,
   VarianceTechniquesSchema,
-} from "./index.js";
-import type { StatsEngine, StatsInput, StatsOutput } from "./index.js";
+} from "./index";
+import type { StatsEngine, StatsInput, StatsOutput } from "./index";
 
 const varianceTechniques = {
   winsorized: false,

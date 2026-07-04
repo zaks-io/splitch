@@ -1,7 +1,7 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { createRegistrar } from "./registrar.js";
+import { createRegistrar } from "./registrar";
 import {
   BodyInput,
   denyLimiter,
@@ -12,7 +12,7 @@ import {
   resolverFor,
   route,
   throwingLimiter,
-} from "./test-fixtures.js";
+} from "./test-fixtures";
 
 async function bodyOf(res: Response): Promise<ErrorResponse> {
   return (await res.json()) as ErrorResponse;

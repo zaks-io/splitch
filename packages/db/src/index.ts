@@ -19,11 +19,11 @@
 // constructors come straight from the internal scope module (this root barrel
 // is INSIDE packages/db, so reaching repo/* is allowed; outside code cannot).
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the seam + schema surface is intentionally aggregated here
-export { createRepository } from "./repo/index.js";
-export type { Repository } from "./repo/index.js";
-export { appScope, envScope } from "./repo/scope.js";
-export type { EnvScope, TenantScope } from "./repo/scope.js";
-export type { ScopedTable } from "./repo/scoped-table.js";
+export { createRepository } from "./repo/index";
+export type { Repository } from "./repo/index";
+export { appScope, envScope } from "./repo/scope";
+export type { EnvScope, TenantScope } from "./repo/scope";
+export type { ScopedTable } from "./repo/scoped-table";
 
 export {
   apiKeys,
@@ -45,4 +45,4 @@ export {
   targetingRules,
   trustedIdps,
   variants,
-} from "./schema/index.js";
+} from "./schema/index";

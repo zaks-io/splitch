@@ -1,6 +1,6 @@
 import { FlagSchema, type Flag, type Variant } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
-import { validateJsonSchema, type ValidationIssue } from "./flag-definition-schema.js";
+import { validateJsonSchema, type ValidationIssue } from "./flag-definition-schema";
 
 type FlagRow = NonNullable<Awaited<ReturnType<Repository["flags"]["getFlag"]>>>;
 type VariantRow = Awaited<ReturnType<Repository["flags"]["listVariants"]>>[number];

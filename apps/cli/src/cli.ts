@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S tsx
 import { pathToFileURL } from "node:url";
 import { createControlPlaneSdk } from "@splitch/control-plane-sdk";
 

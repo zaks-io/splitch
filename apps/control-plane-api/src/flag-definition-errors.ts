@@ -1,6 +1,6 @@
 import { renderError } from "@splitch/worker-runtime";
-import type { RunningBlocker } from "./flag-definition-guards.js";
-import type { ValidationIssue } from "./flag-definition-schema.js";
+import type { RunningBlocker } from "./flag-definition-guards";
+import type { ValidationIssue } from "./flag-definition-schema";
 
 export function validationError(requestId: string, issue: [string[], string]): Response {
   return validationErrors(requestId, [{ path: issue[0], message: issue[1] }]);

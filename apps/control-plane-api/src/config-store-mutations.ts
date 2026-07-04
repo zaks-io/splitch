@@ -1,6 +1,6 @@
 import type { TargetingRule, Variant } from "@splitch/contracts";
 import { envScope, type EnvScope } from "@splitch/db";
-import { randomHex } from "./credential-cache.js";
+import { randomHex } from "./credential-cache";
 import {
   buildSnapshotFromD1,
   json,
@@ -15,7 +15,7 @@ import {
   type PromoteFlagConfigResult,
   type ReplaceTargetingRulesInput,
   type Snapshot,
-} from "./config-store-shared.js";
+} from "./config-store-shared";
 
 export async function replaceTargetingRules(
   deps: ConfigStoreDeps,

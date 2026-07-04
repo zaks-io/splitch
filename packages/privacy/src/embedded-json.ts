@@ -11,7 +11,7 @@
  * that don't parse are left verbatim until a bounded fail-safe cap is reached.
  */
 
-import { REDACTED } from "./redaction-rules.js";
+import { REDACTED } from "./redaction-rules";
 
 type ScrubJson = (parsed: unknown) => unknown;
 

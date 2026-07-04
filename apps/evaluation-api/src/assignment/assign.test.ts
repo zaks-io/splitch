@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assign } from "./assign.js";
-import type { RunConfig } from "./run-config.js";
+import { assign } from "./assign";
+import type { RunConfig } from "./run-config";
 
 /**
  * A minimal valid RunConfig. Only the fields assign() reads (salt, allocation)

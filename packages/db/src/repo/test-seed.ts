@@ -1,4 +1,4 @@
-import { appScope, createRepository, envScope } from "../index.js";
+import { appScope, createRepository, envScope } from "../index";
 
 /**
  * Seed two complete tenant graphs (App A, App B) into one local D1.

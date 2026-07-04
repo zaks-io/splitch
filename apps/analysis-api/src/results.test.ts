@@ -1,8 +1,8 @@
 import { type ErrorResponse, StatsOutputSchema } from "@splitch/contracts";
 import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
-import { createApp } from "./app.js";
-import { makeResultsHandler, readStatsInputFromTinybird } from "./results.js";
+import { createApp } from "./app";
+import { makeResultsHandler, readStatsInputFromTinybird } from "./results";
 import {
   APP_ID,
   ENVIRONMENT_ID,
@@ -12,7 +12,7 @@ import {
   rowsByPipe,
   RUN_ID,
   type RowsByPipe,
-} from "./results-test-support.js";
+} from "./results-test-support";
 
 const PATH = `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/experiments/${EXPERIMENT_ID}/results`;
 const REQUEST = new Request(`https://analysis.test${PATH}`);
