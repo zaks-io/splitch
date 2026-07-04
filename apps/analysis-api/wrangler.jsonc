@@ -5,8 +5,16 @@
   "compatibility_date": "2026-06-21",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
-    "enabled": true,
-    "head_sampling_rate": 1
+    "traces": {
+      "enabled": true,
+      "destinations": ["axiom-traces"],
+      "head_sampling_rate": 1
+    },
+    "logs": {
+      "enabled": true,
+      "destinations": ["axiom-logs"],
+      "head_sampling_rate": 1
+    }
   },
   "triggers": {
     "crons": ["0 * * * *"]
@@ -32,6 +40,18 @@
     "shared-preview": {
       "name": "splitch-analysis-api-shared-preview",
       "workers_dev": false,
+      "observability": {
+        "traces": {
+          "enabled": true,
+          "destinations": ["axiom-traces"],
+          "head_sampling_rate": 1
+        },
+        "logs": {
+          "enabled": true,
+          "destinations": ["axiom-logs"],
+          "head_sampling_rate": 1
+        }
+      },
       "triggers": {
         "crons": []
       },
@@ -56,6 +76,18 @@
     "production": {
       "name": "splitch-analysis-api",
       "workers_dev": false,
+      "observability": {
+        "traces": {
+          "enabled": true,
+          "destinations": ["axiom-traces"],
+          "head_sampling_rate": 1
+        },
+        "logs": {
+          "enabled": true,
+          "destinations": ["axiom-logs"],
+          "head_sampling_rate": 1
+        }
+      },
       "triggers": {
         "crons": ["0 * * * *"]
       },

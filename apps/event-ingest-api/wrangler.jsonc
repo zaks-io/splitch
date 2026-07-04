@@ -5,8 +5,16 @@
   "compatibility_date": "2026-06-21",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
-    "enabled": true,
-    "head_sampling_rate": 1
+    "traces": {
+      "enabled": true,
+      "destinations": ["axiom-traces"],
+      "head_sampling_rate": 1
+    },
+    "logs": {
+      "enabled": true,
+      "destinations": ["axiom-logs"],
+      "head_sampling_rate": 1
+    }
   },
   "secrets": {
     "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
@@ -26,6 +34,18 @@
     "shared-preview": {
       "name": "splitch-event-ingest-api-shared-preview",
       "workers_dev": false,
+      "observability": {
+        "traces": {
+          "enabled": true,
+          "destinations": ["axiom-traces"],
+          "head_sampling_rate": 1
+        },
+        "logs": {
+          "enabled": true,
+          "destinations": ["axiom-logs"],
+          "head_sampling_rate": 1
+        }
+      },
       "routes": [{ "pattern": "ingest.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
         "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
@@ -40,6 +60,18 @@
     "production": {
       "name": "splitch-event-ingest-api",
       "workers_dev": false,
+      "observability": {
+        "traces": {
+          "enabled": true,
+          "destinations": ["axiom-traces"],
+          "head_sampling_rate": 1
+        },
+        "logs": {
+          "enabled": true,
+          "destinations": ["axiom-logs"],
+          "head_sampling_rate": 1
+        }
+      },
       "routes": [{ "pattern": "ingest.splitch.dev", "custom_domain": true }],
       "secrets": {
         "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
