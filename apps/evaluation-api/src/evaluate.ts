@@ -1,0 +1,230 @@
+import {
+  DataPlaneEvaluateResponseSchema,
+  type DataPlaneEvaluateRequest,
+  type ErrorCode,
+  type ErrorResponse,
+  type Variant,
+} from "@splitch/contracts";
+import { renderError, type HandlerArgs, type Principal } from "@splitch/worker-runtime";
+import { evaluate } from "./evaluate/accessor-paths.js";
+import type { AssembledExposure, ExposureAssemblyDeps } from "./evaluate/exposure-assembly.js";
+import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types.js";
+import type { EvaluateResult } from "./evaluate/evaluate-path.js";
+import type { ExposureSink } from "./exposure-sink.js";
+import { ExposureSinkError } from "./exposure-sink.js";
+import type { FlagConfig, Provider } from "./provider/provider.js";
+
+type EvaluateInput = {
+  body: DataPlaneEvaluateRequest;
+};
+
+interface EvaluateRouteDeps extends EvaluatePathDeps {
+  readonly exposureAssembly: ExposureAssemblyDeps;
+  readonly exposureSink: ExposureSink;
+}
+
+interface CredentialScope {
+  readonly appId: string;
+  readonly environmentId: string;
+}
+
+export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
+  return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
+    const parsed = evaluateInput(input);
+    const scope = credentialScope(principal);
+    if (!scope.ok) return renderError(scope.error, { requestId });
+
+    const assertionError = appAssertionError(parsed.body.appId, scope.value.appId);
+    if (assertionError !== null) return renderError(assertionError, { requestId });
+
+    const evaluated = await evaluateWithCapture(parsed.body, scope.value, deps);
+    return evaluateResponse(evaluated, deps, requestId);
+  };
+}
+
+function credentialScope(
+  principal: Principal,
+): { ok: true; value: CredentialScope } | { ok: false; error: ErrorResponse } {
+  if (principal.appId === null || principal.environmentId === null) {
+    return {
+      ok: false,
+      error: errorResponse("INTERNAL_SERVER_ERROR", "credential is not environment-scoped"),
+    };
+  }
+  return { ok: true, value: { appId: principal.appId, environmentId: principal.environmentId } };
+}
+
+function appAssertionError(appId: string | undefined, scopedAppId: string): ErrorResponse | null {
+  return appId !== undefined && appId !== scopedAppId
+    ? errorResponse("APP_MISMATCH", "Client Key does not belong to appId")
+    : null;
+}
+
+async function evaluateWithCapture(
+  body: DataPlaneEvaluateRequest,
+  scope: CredentialScope,
+  deps: EvaluateRouteDeps,
+) {
+  const provider = new CapturingProvider(deps.provider);
+  const routeInput: EvaluatePathInput = {
+    appId: scope.appId,
+    environmentId: scope.environmentId,
+    flagKey: body.flagKey,
+    evaluationContext: {
+      targetingKey: body.targetingKey,
+      idType: body.idType,
+      attributes: body.attributes,
+    },
+  };
+  const output = await evaluate(routeInput, { ...deps, provider }, deps.exposureAssembly);
+  return { output, provider };
+}
+
+async function evaluateResponse(
+  evaluated: Awaited<ReturnType<typeof evaluateWithCapture>>,
+  deps: EvaluateRouteDeps,
+  requestId: string,
+): Promise<Response> {
+  const { output, provider } = evaluated;
+  if (output.result.kind === "error") {
+    return renderError(errorResponse(output.result.errorCode, output.result.errorMessage), {
+      requestId,
+    });
+  }
+  if (provider.flag === null) {
+    return renderError(errorResponse("INTERNAL_SERVER_ERROR", "flag config was not resolved"), {
+      requestId,
+    });
+  }
+
+  const body = responseBody(provider.flag, output.result);
+  if (!body.ok) return renderError(body.error, { requestId });
+
+  const write = await writeExposures(output.exposures, deps);
+  if (!write.ok) return renderError(write.error, { requestId });
+
+  return Response.json(DataPlaneEvaluateResponseSchema.parse(body.value));
+}
+
+function responseBody(
+  flag: FlagConfig,
+  result: Exclude<EvaluateResult, { kind: "error" }>,
+): { ok: true; value: { variant: Variant["value"] | null } } | { ok: false; error: ErrorResponse } {
+  const value = valueForVariant(flag.variants, result);
+  return value.ok
+    ? { ok: true, value: { variant: value.value } }
+    : {
+        ok: false,
+        error: errorResponse(
+          "INTERNAL_SERVER_ERROR",
+          `Variant "${value.variantName}" has no value`,
+        ),
+      };
+}
+
+async function writeExposures(
+  exposures: readonly AssembledExposure[],
+  deps: EvaluateRouteDeps,
+): Promise<{ ok: true } | { ok: false; error: ErrorResponse }> {
+  try {
+    for (const exposure of exposures) {
+      await deps.exposureSink.write(exposure);
+    }
+    return { ok: true };
+  } catch (cause) {
+    if (!(cause instanceof ExposureSinkError)) {
+      throw cause;
+    }
+    deps.logger?.error("exposure_sink_failed", { cause });
+    return {
+      ok: false,
+      error: errorResponse("SERVICE_UNAVAILABLE", "Exposure ingest is unavailable"),
+    };
+  }
+}
+
+function evaluateInput(input: unknown): EvaluateInput {
+  const root = record(input);
+  const body = record(root.body);
+  return {
+    body: {
+      appId: optionalStringField(body, "appId"),
+      flagKey: stringField(body, "flagKey"),
+      targetingKey: stringField(body, "targetingKey"),
+      idType: stringField(body, "idType"),
+      attributes: record(body.attributes) as EvaluatePathInput["evaluationContext"]["attributes"],
+    },
+  };
+}
+
+function record(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("evaluation-api: expected parsed object input");
+  }
+  return value as Record<string, unknown>;
+}
+
+function stringField(value: Record<string, unknown>, key: string): string {
+  const field = value[key];
+  if (typeof field !== "string" || field.length === 0) {
+    throw new Error(`evaluation-api: missing ${key}`);
+  }
+  return field;
+}
+
+function optionalStringField(value: Record<string, unknown>, key: string): string | undefined {
+  const field = value[key];
+  if (field === undefined) return undefined;
+  if (typeof field !== "string" || field.length === 0) {
+    throw new Error(`evaluation-api: invalid ${key}`);
+  }
+  return field;
+}
+
+class CapturingProvider implements Provider {
+  flag: FlagConfig | null = null;
+
+  constructor(private readonly inner: Provider) {}
+
+  async getFlag(appId: string, environmentId: string, flagKey: string) {
+    this.flag = await this.inner.getFlag(appId, environmentId, flagKey);
+    return this.flag;
+  }
+
+  getExperiment(...args: Parameters<Provider["getExperiment"]>) {
+    return this.inner.getExperiment(...args);
+  }
+
+  getFlags(...args: Parameters<Provider["getFlags"]>) {
+    return this.inner.getFlags(...args);
+  }
+}
+
+function valueForVariant(
+  variants: readonly Variant[],
+  result: Exclude<EvaluateResult, { kind: "error" }>,
+): { ok: true; value: Variant["value"] | null } | { ok: false; variantName: string | null } {
+  if (result.variant === null) {
+    return { ok: true, value: null };
+  }
+  const variant = variants.find((item) => item.name === result.variant);
+  return variant === undefined
+    ? { ok: false, variantName: result.variant }
+    : { ok: true, value: variant.value };
+}
+
+function errorResponse(code: ErrorCode, message: string): ErrorResponse {
+  if (code === "FLAG_NOT_FOUND") {
+    return { code, message: "flag not found", details: {} };
+  }
+  if (code === "VALIDATION_ERROR") {
+    return { code, message, details: { issues: [] } };
+  }
+  if (code === "INTERNAL_SERVER_ERROR") {
+    return { code, message: "evaluation failed", details: {} };
+  }
+  if (code === "SERVICE_UNAVAILABLE") {
+    return { code, message, details: { retryAfterMs: 1000 } };
+  }
+  return { code, message, details: {} } as ErrorResponse;
+}

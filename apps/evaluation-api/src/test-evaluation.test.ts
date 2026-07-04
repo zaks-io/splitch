@@ -1,6 +1,7 @@
 import { experimentConfigKey, flagConfigKey, type ErrorResponse } from "@splitch/contracts";
 import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
+import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures.js";
 import { createApp } from "./app.js";
 import {
   EXPERIMENT_ID,
@@ -11,6 +12,7 @@ import {
 import { FakeKv } from "./provider/fake-kv.js";
 import { experimentConfigKV, flagConfigKV } from "./provider/fixtures.js";
 import { KvProvider } from "./provider/kv-provider.js";
+import { RecordingExposureSink } from "./sdk-route-test-fixtures.js";
 
 const APP_ID = "app-A";
 const ENVIRONMENT_ID = "env-1";
@@ -67,6 +69,11 @@ function makeHarness() {
     rateLimiter: allowLimiter,
     provider: new KvProvider(configKv),
     assignmentStore,
+    exposureAssembly: {
+      saltStore: new StaticSaltStore(),
+      sourceId: "pop-test",
+    },
+    exposureSink: new RecordingExposureSink(),
   });
   return { app, assignmentStore, configKv };
 }
