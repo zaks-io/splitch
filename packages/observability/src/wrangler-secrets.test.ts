@@ -23,6 +23,12 @@ const AXIOM_LOG_DESTINATION = "axiom-logs";
 const SENTRY_DSN =
   "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048";
 const GITHUB_SENTRY_SECRET_REFERENCE = "SENTRY_DSN: $" + "{{ secrets.SENTRY_DSN }}";
+const WORKER_SECRET_SYNC_NAMES = [
+  "ACCESS_TOKEN_SECRET",
+  "ASSERTION_SIGNING_SECRET",
+  "SENTRY_DSN",
+  "EVALUATION_PRIVACY_SALT",
+] as const;
 
 interface WranglerTarget {
   observability?: {
@@ -75,7 +81,9 @@ describe("Deploy workflow observability secrets", () => {
     const workflow = readFileSync(join(repoRoot, workflowPath), "utf8");
 
     expect(workflow).toContain(GITHUB_SENTRY_SECRET_REFERENCE);
-    expect(workflow).toContain("ASSERTION_SIGNING_SECRET SENTRY_DSN EVALUATION_PRIVACY_SALT");
+    for (const secretName of WORKER_SECRET_SYNC_NAMES) {
+      expect(workflow).toContain(secretName);
+    }
   });
 });
 

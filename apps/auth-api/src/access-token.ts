@@ -16,7 +16,7 @@
  * must equal the control-plane audience.
  */
 
-import { accessTokenPublicJwkFromSecret } from "./access-token-key";
+import { accessTokenPublicJwkFromSecret, type AccessTokenPublicJwk } from "./access-token-key";
 
 export interface VerifiedActor {
   userId: string;
@@ -47,18 +47,38 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
   );
 }
 
+interface RsaSecretCacheEntry {
+  publicJwk: AccessTokenPublicJwk | null;
+  verifyKey?: Promise<CryptoKey>;
+}
+
+const rsaSecretCache = new Map<string, RsaSecretCacheEntry>();
+
+function rsaSecret(secret: string): RsaSecretCacheEntry {
+  const cached = rsaSecretCache.get(secret);
+  if (cached) {
+    return cached;
+  }
+  const entry: RsaSecretCacheEntry = {
+    publicJwk: accessTokenPublicJwkFromSecret(secret),
+  };
+  rsaSecretCache.set(secret, entry);
+  return entry;
+}
+
 async function rsaVerifyKey(secret: string): Promise<CryptoKey | null> {
-  const jwk = accessTokenPublicJwkFromSecret(secret);
-  if (!jwk) {
+  const entry = rsaSecret(secret);
+  if (!entry.publicJwk) {
     return null;
   }
-  return crypto.subtle.importKey(
+  entry.verifyKey ??= crypto.subtle.importKey(
     "jwk",
-    { ...jwk, ext: true },
+    { ...entry.publicJwk, ext: true },
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
     false,
     ["verify"],
   );
+  return entry.verifyKey;
 }
 
 function decodeSegment(segment: string): Record<string, unknown> | null {
@@ -79,7 +99,7 @@ async function signatureValid(
   accessSecret: string,
 ): Promise<boolean> {
   if (header.alg === "HS256") {
-    if (accessTokenPublicJwkFromSecret(accessSecret)) {
+    if (rsaSecret(accessSecret).publicJwk) {
       return false;
     }
     return crypto.subtle.verify(
@@ -148,7 +168,12 @@ export async function verifyAccessToken(
   if (!header || !claims) {
     return null;
   }
-  const ok = await signatureValid(header, `${h}.${p}`, s, opts.accessSecret);
+  let ok = false;
+  try {
+    ok = await signatureValid(header, `${h}.${p}`, s, opts.accessSecret);
+  } catch {
+    return null;
+  }
   if (!ok) {
     return null;
   }

@@ -101,6 +101,18 @@ describe("verifyAccessToken guards", () => {
     });
   });
 
+  it("returns null when ACCESS_TOKEN_SECRET contains malformed JWK JSON", async () => {
+    const token = await sign(valid(), ACCESS_SECRET);
+
+    await expect(
+      verifyAccessToken(
+        `Bearer ${token}`,
+        { accessSecret: "{malformed", controlPlaneAudience: CP_AUDIENCE },
+        NOW,
+      ),
+    ).resolves.toBeNull();
+  });
+
   it("H2: rejects a token with NO exp (missing exp is not never-expires)", async () => {
     const noExp = valid();
     delete noExp.exp;

@@ -14,7 +14,6 @@
     "GITHUB_RUN_ID",
     "SPLITCH_SMOKE_APP_ID",
     "SPLITCH_SMOKE_CLIENT_ID",
-    "SPLITCH_SMOKE_CLIENT_SECRET",
     "SPLITCH_SMOKE_ENVIRONMENT_ID",
     "SPLITCH_SMOKE_FLAG_ID",
     "SPLITCH_SMOKE_FLAG_KEY",
@@ -73,6 +72,11 @@
       "dependsOn": ["^build"],
       "cache": false,
       "outputs": ["reports/mutation/**"]
+    },
+    "shared-preview:smoke": {
+      "cache": false,
+      "outputs": ["playwright-report/shared-preview/**", "test-results/shared-preview/**"],
+      "passThroughEnv": ["SPLITCH_SMOKE_CLIENT_SECRET"]
     },
     "typecheck": {
       "dependsOn": ["^build"],

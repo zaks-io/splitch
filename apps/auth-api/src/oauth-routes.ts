@@ -11,6 +11,7 @@ import {
   RevokeTokenRequestSchema,
   TokenExchangeRequestSchema,
 } from "./schemas";
+import { timingSafeEqualString } from "./secret-compare";
 import type { TokenSigner } from "./token-exchange";
 import { verifyAccessToken } from "./access-token";
 import { accessTokenJwks } from "./access-token-key";
@@ -169,10 +170,10 @@ async function exchangeClientCredentials(
       ),
     );
   }
-  if (
-    parsed.data.client_id !== client.clientId ||
-    parsed.data.client_secret !== client.clientSecret
-  ) {
+  if (parsed.data.client_id !== client.clientId) {
+    return renderOAuthError(new OAuthError("invalid_client", "client credentials are invalid"));
+  }
+  if (!(await timingSafeEqualString(parsed.data.client_secret, client.clientSecret))) {
     return renderOAuthError(new OAuthError("invalid_client", "client credentials are invalid"));
   }
 

@@ -66,10 +66,7 @@ export function accessTokenPublicJwkFromSecret(secret: string): AccessTokenPubli
   }
   return {
     kty: "RSA",
-    kid:
-      typeof privateJwkRecord.kid === "string" && privateJwkRecord.kid.length > 0
-        ? privateJwkRecord.kid
-        : DEFAULT_ACCESS_TOKEN_KID,
+    kid: accessTokenKid(privateJwkRecord),
     n: privateJwk.n,
     e: privateJwk.e,
     alg: "RS256",

@@ -10,6 +10,7 @@ test.describe("shared-preview auth and MCP", () => {
       `${smoke.config.authBaseUrl}/oauth2/device_authorization`,
     );
     expect(metadata.grant_types_supported).toContain("client_credentials");
+    expect(metadata.agent_auth).toBeDefined();
     expect(
       (metadata.agent_auth as { identity_types_supported?: string[] }).identity_types_supported,
     ).toContain("device_flow");

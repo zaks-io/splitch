@@ -23,23 +23,32 @@ test.describe("shared-preview functional API workflow", () => {
     smoke,
   }) => {
     const key = smoke.uniqueKey("playwright-smoke-app");
-    const created = await smoke.callTool<{
-      app: App;
-      environments: Environment[];
-      clientKeys: { environmentId: string; isOriginOpen: boolean }[];
-    }>(accessToken, "apps_create", {
-      orgId: smoke.config.smokeOrgId,
-      organizationId: smoke.config.smokeOrgId,
-      name: `Playwright Smoke ${key}`,
-      key,
-      description: "Created by shared-preview Playwright smoke.",
-      idempotency_key: key,
-    });
+    let createdApp: App | undefined;
 
-    expect(created.app).toMatchObject({ key, organizationId: smoke.config.smokeOrgId });
-    expect(created.environments.map((environment) => environment.key)).toEqual(["dev", "prod"]);
-    expect(created.clientKeys).toHaveLength(2);
-    expect(created.clientKeys.every((clientKey) => clientKey.isOriginOpen)).toBe(true);
+    try {
+      const created = await smoke.callTool<{
+        app: App;
+        environments: Environment[];
+        clientKeys: { environmentId: string; isOriginOpen: boolean }[];
+      }>(accessToken, "apps_create", {
+        orgId: smoke.config.smokeOrgId,
+        organizationId: smoke.config.smokeOrgId,
+        name: `Playwright Smoke ${key}`,
+        key,
+        description: "Created by shared-preview Playwright smoke.",
+        idempotency_key: key,
+      });
+      createdApp = created.app;
+
+      expect(created.app).toMatchObject({ key, organizationId: smoke.config.smokeOrgId });
+      expect(created.environments.map((environment) => environment.key)).toEqual(["dev", "prod"]);
+      expect(created.clientKeys).toHaveLength(2);
+      expect(created.clientKeys.every((clientKey) => clientKey.isOriginOpen)).toBe(true);
+    } finally {
+      if (createdApp) {
+        await smoke.callTool(accessToken, "apps_delete", { appId: createdApp.id });
+      }
+    }
   });
 
   test("round-trips Flag definition CRUD on the seeded smoke App", async ({

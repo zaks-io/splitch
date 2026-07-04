@@ -115,6 +115,8 @@ class SmokeClient {
       id: "tools-list-smoke",
       method: "tools/list",
     });
+    expect(envelope.error, "tools/list error").toBeUndefined();
+    expect(envelope.result, "tools/list result").toBeDefined();
     const tools = envelope.result?.structuredContent ?? envelope.result;
     const list = (tools as { tools?: unknown[] }).tools;
     expect(Array.isArray(list)).toBe(true);

@@ -9,6 +9,8 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dbDir = join(repoRoot, "packages", "db");
 const configPath = join(dbDir, "wrangler.jsonc");
 const now = new Date().toISOString();
+const transientSmokeAppKeyPattern = "playwright-smoke-app-%";
+const seedTimeoutMs = 60_000;
 
 const ids = {
   app: "app_shared_preview_smoke",
@@ -40,32 +42,32 @@ const confirmPolicy = JSON.stringify({
 
 const sql = `
 DELETE FROM targeting_rules WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE 'playwright-smoke-app-%'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
 );
 DELETE FROM flag_configs WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE 'playwright-smoke-app-%'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
 );
 DELETE FROM variants WHERE flag_id IN (
   SELECT id FROM flags WHERE app_id IN (
-    SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE 'playwright-smoke-app-%'
+    SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
   )
 );
 DELETE FROM flags WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE 'playwright-smoke-app-%'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
 );
 DELETE FROM client_keys WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE 'playwright-smoke-app-%'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
 );
 DELETE FROM api_keys WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE 'playwright-smoke-app-%'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
 );
 DELETE FROM environments WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE 'playwright-smoke-app-%'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
 );
 DELETE FROM app_memberships WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE 'playwright-smoke-app-%'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
 );
-DELETE FROM apps WHERE organization_id = '${ids.org}' AND key LIKE 'playwright-smoke-app-%';
+DELETE FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}';
 
 INSERT INTO organizations (id, name, plan, created_at, updated_at)
 VALUES ('${ids.org}', 'Shared Preview Smoke', 'free', '${now}', '${now}')
@@ -192,11 +194,16 @@ try {
       "--file",
       sqlPath,
     ],
-    { cwd: repoRoot, stdio: "inherit" },
+    { cwd: repoRoot, stdio: "inherit", timeout: seedTimeoutMs },
   );
 
-  if (result.error) {
+  if (result.error && result.error.code !== "ETIMEDOUT") {
     throw result.error;
+  }
+  if (result.error?.code === "ETIMEDOUT" || result.signal === "SIGTERM") {
+    throw new Error(
+      `seed-shared-preview-smoke: wrangler d1 execute timed out after ${seedTimeoutMs}ms`,
+    );
   }
   if (result.status !== 0) {
     process.exit(result.status ?? 1);

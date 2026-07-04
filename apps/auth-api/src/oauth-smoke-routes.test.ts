@@ -88,6 +88,31 @@ describe("OAuth access-token JWKS", () => {
 });
 
 describe("OAuth smoke client_credentials route", () => {
+  it("does not advertise client_credentials without the shared-preview smoke client", async () => {
+    const app = routeApp({});
+
+    const discovery = await app.request("/.well-known/oauth-authorization-server");
+    expect(discovery.status).toBe(200);
+    const metadata = (await discovery.json()) as {
+      grant_types_supported: string[];
+      token_endpoint_auth_methods_supported: string[];
+    };
+    expect(metadata.grant_types_supported).not.toContain("client_credentials");
+    expect(metadata.token_endpoint_auth_methods_supported).not.toContain("client_secret_post");
+
+    const token = await app.request("/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form({
+        grant_type: "client_credentials",
+        client_id: "splitch-shared-preview-smoke",
+        client_secret: "smoke-secret",
+      }),
+    });
+    expect(token.status).toBe(400);
+    expect(await token.json()).toMatchObject({ error: "unsupported_grant_type" });
+  });
+
   it("mints an access token for the configured shared-preview smoke client", async () => {
     const minted: Array<{ userId: string; scopes: string[]; authDoor: string }> = [];
     const signer = {
