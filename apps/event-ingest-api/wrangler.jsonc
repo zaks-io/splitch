@@ -25,6 +25,8 @@
   "env": {
     "shared-preview": {
       "name": "splitch-event-ingest-api-shared-preview",
+      "workers_dev": false,
+      "routes": [{ "pattern": "ingest.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
         "required": [
           "SENTRY_DSN",
@@ -37,10 +39,13 @@
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
         "AXIOM_DATASET": "splitch-logs"
-      }
+      },
+      "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "70cc24e1592e4db4a5b37e8d0dd6d6af" }]
     },
     "production": {
       "name": "splitch-event-ingest-api",
+      "workers_dev": false,
+      "routes": [{ "pattern": "ingest.splitch.dev", "custom_domain": true }],
       "secrets": {
         "required": [
           "SENTRY_DSN",
@@ -53,7 +58,8 @@
         "SPLITCH_PLATFORM_TARGET": "production",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
         "AXIOM_DATASET": "splitch-logs"
-      }
+      },
+      "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" }]
     }
   }
 }

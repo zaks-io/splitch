@@ -19,6 +19,16 @@ describe("Auth Worker Wrangler runtime config", () => {
     expect(target?.secrets?.required).toContain("TURNSTILE_SECRET");
     expect(target?.vars?.TURNSTILE_SECRET).toBeUndefined();
   });
+
+  it.each([
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("declares real WorkOS device-flow bindings for %s", (_target, target) => {
+    expect(target?.secrets?.required).toContain("WORKOS_CLIENT_ID");
+    expect(target?.secrets?.required).toContain("WORKOS_API_KEY");
+    expect(target?.vars?.WORKOS_CLIENT_ID).toBeUndefined();
+    expect(target?.vars?.WORKOS_API_KEY).toBeUndefined();
+  });
 });
 
 interface WranglerConfig {

@@ -14,12 +14,16 @@
   "env": {
     "shared-preview": {
       "name": "splitch-marketing-shared-preview",
+      "workers_dev": false,
+      "routes": [{ "pattern": "preview.splitch.dev", "custom_domain": true }],
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview"
       }
     },
     "production": {
       "name": "splitch-marketing",
+      "workers_dev": false,
+      "routes": [{ "pattern": "splitch.dev", "custom_domain": true }],
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production"
       }

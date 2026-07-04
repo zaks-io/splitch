@@ -28,37 +28,83 @@
       "id": "00000000000000000000000000000000"
     }
   ],
+  "secrets": {
+    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+  },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "AUTH_API_ORIGIN": "http://localhost:8791",
     "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
     "AXIOM_DATASET": "splitch-logs"
   },
-  "secrets": {
-    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
-  },
   "env": {
     "shared-preview": {
       "name": "splitch-auth-api-shared-preview",
-      "secrets": {
-        "required": ["SENTRY_DSN", "AXIOM_TOKEN", "TURNSTILE_SECRET"]
-      },
+      "workers_dev": false,
+      "routes": [{ "pattern": "auth.preview.splitch.dev", "custom_domain": true }],
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
+        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
         "TURNSTILE_SITE_KEY": "0x4AAAAAADsCXVP9TRrC6c6N",
         "AXIOM_DATASET": "splitch-logs"
-      }
+      },
+      "secrets": {
+        "required": [
+          "SENTRY_DSN",
+          "AXIOM_TOKEN",
+          "ACCESS_TOKEN_SECRET",
+          "ASSERTION_SIGNING_SECRET",
+          "TURNSTILE_SECRET",
+          "WORKOS_CLIENT_ID",
+          "WORKOS_API_KEY"
+        ]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "splitch-shared-preview-d1",
+          "database_id": "34971683-d76b-4fc0-9bc0-9e97f297fbec"
+        }
+      ],
+      "kv_namespaces": [
+        { "binding": "JTI_CACHE", "id": "04607132d6614c96bb44e7f67f873598" },
+        { "binding": "SESSION_STORE", "id": "673d17e768eb45f5bfc5275fbd0e9320" }
+      ]
     },
     "production": {
       "name": "splitch-auth-api",
-      "secrets": {
-        "required": ["SENTRY_DSN", "AXIOM_TOKEN", "TURNSTILE_SECRET"]
-      },
+      "workers_dev": false,
+      "routes": [{ "pattern": "auth.splitch.dev", "custom_domain": true }],
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
+        "AUTH_API_ORIGIN": "https://auth.splitch.dev",
+        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
         "TURNSTILE_SITE_KEY": "0x4AAAAAADsCY8JNBv2vrTFC",
         "AXIOM_DATASET": "splitch-logs"
-      }
+      },
+      "secrets": {
+        "required": [
+          "SENTRY_DSN",
+          "AXIOM_TOKEN",
+          "ACCESS_TOKEN_SECRET",
+          "ASSERTION_SIGNING_SECRET",
+          "TURNSTILE_SECRET",
+          "WORKOS_CLIENT_ID",
+          "WORKOS_API_KEY"
+        ]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "splitch-production-d1",
+          "database_id": "f419e372-d548-4afb-966f-40ff298303d8"
+        }
+      ],
+      "kv_namespaces": [
+        { "binding": "JTI_CACHE", "id": "499e8d49082f43a48371c6784495a2ad" },
+        { "binding": "SESSION_STORE", "id": "bdfa1197123d4eef945c5a703d63a572" }
+      ]
     }
   }
 }

@@ -68,16 +68,43 @@
       "outputs": []
     },
     "deploy": {
-      "cache": false
+      "dependsOn": ["build"],
+      "cache": false,
+      "outputs": [],
+      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
+    },
+    "@splitch/evaluation-api#deploy": {
+      "dependsOn": ["build", "@splitch/event-ingest-api#deploy"],
+      "cache": false,
+      "outputs": [],
+      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
     },
     "deploy:dry-run": {
-      "cache": false
+      "dependsOn": ["build"],
+      "cache": false,
+      "outputs": [],
+      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
+    },
+    "@splitch/evaluation-api#deploy:dry-run": {
+      "dependsOn": ["build", "@splitch/event-ingest-api#deploy:dry-run"],
+      "cache": false,
+      "outputs": [],
+      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
     },
     "d1:migrate:local": {
       "cache": false
     },
     "migrate": {
-      "cache": false
+      "cache": false,
+      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
+    },
+    "migrate:shared-preview": {
+      "cache": false,
+      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
+    },
+    "migrate:production": {
+      "cache": false,
+      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
     },
     "migrate:local": {
       "cache": false

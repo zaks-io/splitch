@@ -38,81 +38,77 @@
   "migrations": [
     { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] }
   ],
+  "secrets": {
+    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+  },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "AXIOM_DATASET": "splitch-logs"
   },
-  "secrets": {
-    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
-  },
   "env": {
     "shared-preview": {
       "name": "splitch-control-plane-api-shared-preview",
-      "vars": {
-        "SPLITCH_PLATFORM_TARGET": "shared-preview",
-        "AXIOM_DATASET": "splitch-logs"
-      },
+      "workers_dev": false,
+      "routes": [{ "pattern": "api.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
         "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+      },
+      "vars": {
+        "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
+        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "splitch-d1-shared-preview",
-          "database_id": "00000000-0000-0000-0000-000000000000"
+          "database_name": "splitch-shared-preview-d1",
+          "database_id": "34971683-d76b-4fc0-9bc0-9e97f297fbec"
         }
       ],
       "kv_namespaces": [
-        {
-          "binding": "SESSION_STORE",
-          "id": "00000000000000000000000000000000"
-        },
-        {
-          "binding": "CONFIG_STORE",
-          "id": "00000000000000000000000000000000"
-        },
-        {
-          "binding": "CREDENTIAL_STORE",
-          "id": "00000000000000000000000000000000"
-        }
+        { "binding": "SESSION_STORE", "id": "673d17e768eb45f5bfc5275fbd0e9320" },
+        { "binding": "CONFIG_STORE", "id": "70cc24e1592e4db4a5b37e8d0dd6d6af" },
+        { "binding": "CREDENTIAL_STORE", "id": "05f656eb41b54063aa0d2d23a6082c5b" }
       ],
       "durable_objects": {
         "bindings": [{ "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" }]
-      }
+      },
+      "migrations": [
+        { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] }
+      ]
     },
     "production": {
       "name": "splitch-control-plane-api",
-      "vars": {
-        "SPLITCH_PLATFORM_TARGET": "production",
-        "AXIOM_DATASET": "splitch-logs"
-      },
+      "workers_dev": false,
+      "routes": [{ "pattern": "api.splitch.dev", "custom_domain": true }],
       "secrets": {
         "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+      },
+      "vars": {
+        "SPLITCH_PLATFORM_TARGET": "production",
+        "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
+        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "splitch-d1",
-          "database_id": "00000000-0000-0000-0000-000000000000"
+          "database_name": "splitch-production-d1",
+          "database_id": "f419e372-d548-4afb-966f-40ff298303d8"
         }
       ],
       "kv_namespaces": [
-        {
-          "binding": "SESSION_STORE",
-          "id": "00000000000000000000000000000000"
-        },
-        {
-          "binding": "CONFIG_STORE",
-          "id": "00000000000000000000000000000000"
-        },
-        {
-          "binding": "CREDENTIAL_STORE",
-          "id": "00000000000000000000000000000000"
-        }
+        { "binding": "SESSION_STORE", "id": "bdfa1197123d4eef945c5a703d63a572" },
+        { "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" },
+        { "binding": "CREDENTIAL_STORE", "id": "2c0082cdd2f4426f8cfeb4d2bbd62277" }
       ],
       "durable_objects": {
         "bindings": [{ "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" }]
-      }
+      },
+      "migrations": [
+        { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] }
+      ]
     }
   }
 }
