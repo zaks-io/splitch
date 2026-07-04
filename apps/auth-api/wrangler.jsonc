@@ -38,9 +38,11 @@
       "id": "00000000000000000000000000000000"
     }
   ],
+  "secrets": {
+    "required": ["SENTRY_DSN"]
+  },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
-    "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048",
     "AUTH_API_ORIGIN": "http://localhost:8791",
     "CONTROL_PLANE_ORIGIN": "http://localhost:8787"
   },
@@ -65,7 +67,6 @@
       "routes": [{ "pattern": "auth.preview.splitch.dev", "custom_domain": true }],
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
-        "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048",
         "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
         "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
         "TURNSTILE_SITE_KEY": "0x4AAAAAADsCXVP9TRrC6c6N",
@@ -75,6 +76,7 @@
       },
       "secrets": {
         "required": [
+          "SENTRY_DSN",
           "ACCESS_TOKEN_SECRET",
           "ASSERTION_SIGNING_SECRET",
           "TURNSTILE_SECRET",
@@ -115,13 +117,13 @@
       "routes": [{ "pattern": "auth.splitch.dev", "custom_domain": true }],
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
-        "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048",
         "AUTH_API_ORIGIN": "https://auth.splitch.dev",
         "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
         "TURNSTILE_SITE_KEY": "0x4AAAAAADsCY8JNBv2vrTFC"
       },
       "secrets": {
         "required": [
+          "SENTRY_DSN",
           "ACCESS_TOKEN_SECRET",
           "ASSERTION_SIGNING_SECRET",
           "TURNSTILE_SECRET",

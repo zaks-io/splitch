@@ -19,11 +19,10 @@
     }
   },
   "secrets": {
-    "required": ["SPLITCH_EVENT_INGEST_TOKEN"]
+    "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN"]
   },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local",
-    "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
+    "SPLITCH_PLATFORM_TARGET": "local"
   },
   "services": [
     {
@@ -87,11 +86,10 @@
       },
       "routes": [{ "pattern": "edge.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["EVALUATION_PRIVACY_SALT", "SPLITCH_EVENT_INGEST_TOKEN"]
+        "required": ["SENTRY_DSN", "EVALUATION_PRIVACY_SALT", "SPLITCH_EVENT_INGEST_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
-        "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048",
         "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
         "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev"
       },
@@ -141,11 +139,10 @@
       },
       "routes": [{ "pattern": "edge.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["EVALUATION_PRIVACY_SALT", "SPLITCH_EVENT_INGEST_TOKEN"]
+        "required": ["SENTRY_DSN", "EVALUATION_PRIVACY_SALT", "SPLITCH_EVENT_INGEST_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
-        "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048",
         "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
         "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev"
       },

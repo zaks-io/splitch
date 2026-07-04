@@ -18,9 +18,11 @@
       "head_sampling_rate": 1
     }
   },
+  "secrets": {
+    "required": ["SENTRY_DSN"]
+  },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
-    "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048",
     "CONTROL_PLANE_API_ORIGIN": "http://127.0.0.1:8787",
     "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788",
     "ANALYSIS_API_ORIGIN": "http://127.0.0.1:8790"
@@ -44,9 +46,11 @@
         }
       },
       "routes": [{ "pattern": "mcp.preview.splitch.dev", "custom_domain": true }],
+      "secrets": {
+        "required": ["SENTRY_DSN"]
+      },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
-        "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048",
         "CONTROL_PLANE_API_ORIGIN": "https://api.preview.splitch.dev",
         "EVALUATION_API_ORIGIN": "https://edge.preview.splitch.dev"
       },
@@ -70,9 +74,11 @@
         }
       },
       "routes": [{ "pattern": "mcp.splitch.dev", "custom_domain": true }],
+      "secrets": {
+        "required": ["SENTRY_DSN"]
+      },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
-        "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048",
         "CONTROL_PLANE_API_ORIGIN": "https://api.splitch.dev",
         "EVALUATION_API_ORIGIN": "https://edge.splitch.dev"
       },

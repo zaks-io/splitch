@@ -54,16 +54,28 @@ describe("Worker Wrangler observability secrets", () => {
 
     it.each(
       wranglerTargets(config),
-    )(`${surfaceId} declares SENTRY_DSN and stays Axiom token-free for %s`, (_target, target) => {
+    )(`${surfaceId} requires SENTRY_DSN and stays Axiom token-free for %s`, (_target, target) => {
       const requiredSecrets = target?.secrets?.required ?? [];
 
-      expect(requiredSecrets).not.toContain("SENTRY_DSN");
+      expect(requiredSecrets).toContain("SENTRY_DSN");
       expect(requiredSecrets).not.toContain("AXIOM_TOKEN");
-      expect(target?.vars?.SENTRY_DSN).toBe(SENTRY_DSN);
+      expect(target?.vars?.SENTRY_DSN).toBeUndefined();
       expect(target?.vars?.AXIOM_TOKEN).toBeUndefined();
       expect(target?.vars?.AXIOM_DATASET).toBeUndefined();
     });
   }
+});
+
+describe("Deploy workflow observability secrets", () => {
+  it.each([
+    ".github/workflows/deploy-shared-preview.yml",
+    ".github/workflows/deploy-production.yml",
+  ])("%s provides SENTRY_DSN to Worker secret sync", (workflowPath) => {
+    const workflow = readFileSync(join(repoRoot, workflowPath), "utf8");
+
+    expect(workflow).toContain(`SENTRY_DSN: ${SENTRY_DSN}`);
+    expect(workflow).toContain("ASSERTION_SIGNING_SECRET SENTRY_DSN EVALUATION_PRIVACY_SALT");
+  });
 });
 
 describe("Worker Wrangler Cloudflare Observability destinations", () => {
