@@ -9,9 +9,14 @@ type Env = {
 };
 
 export default {
-  async fetch(_request, env): Promise<Response> {
+  async fetch(request, env): Promise<Response> {
+    const url = new URL(request.url);
     const health = createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET));
     const sdkFactory = createControlPlaneSdk.name;
+
+    if (url.pathname === "/health") {
+      return Response.json(health);
+    }
 
     return new Response(
       `<!doctype html><html lang="en"><body class="${surfaceClassName}"><pre>${JSON.stringify(

@@ -1,8 +1,8 @@
 # Deployment pipeline: PR CI, shared preview, production release, rollback
 
-Status: CI, local gates, shared-preview deploy, production deploy wiring, Worker secret sync, and
-Cloudflare D1/KV resource provisioning are in place. Rollback and smoke checks are still designed,
-not wired.
+Status: CI, local gates, shared-preview deploy and smoke, production deploy wiring, Worker secret
+sync, and Cloudflare D1/KV resource provisioning are in place. Shared-preview reset, production
+smoke, and rollback are still designed, not wired.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md). This document uses **platform target** for
 CI/deployment targets such as local, PR CI, shared preview, and production. A platform target is not a
 splitch product **Environment** under an App.
@@ -82,13 +82,13 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 
 ## Required GitHub workflows
 
-| Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                             |
-| ----------------------- | --------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks               |
-| `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, and Turborepo Worker deploy tasks |
-| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                               |
-| `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, and Turborepo Worker deploy tasks      |
-| `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                |
+| Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                                           |
+| ----------------------- | --------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks                             |
+| `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke |
+| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                                             |
+| `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, and Turborepo Worker deploy tasks                    |
+| `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                              |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
@@ -330,8 +330,8 @@ is compatible with current data.
 - [x] Add local hook wiring from [local-quality-gates.md](./local-quality-gates.md), including
       `verify:commit`, `verify:push`, Knip, and Gitleaks.
 - [x] Add `deploy:shared-preview` and `deploy:production` scripts through Turborepo package tasks.
-- [ ] Add scripts for `shared-preview:smoke`, `shared-preview:reset`, and
-      `rollback:production`.
+- [x] Add script for `shared-preview:smoke`.
+- [ ] Add scripts for `shared-preview:reset` and `rollback:production`.
 - [x] Add `deploy:production` and hook Tinybird deployment into it.
 - [x] Add Tinybird project files and `tinybird.config.json` with local-mode development.
 - [x] Add Blacksmith-backed GitHub workflows for CI and Gitleaks.

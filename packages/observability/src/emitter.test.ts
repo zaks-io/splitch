@@ -1,41 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const axiomIngest = vi.fn();
-const axiomFlush = vi.fn().mockResolvedValue(undefined);
-
-vi.mock("@axiomhq/js", () => ({
-  Axiom: class {
-    ingest = axiomIngest;
-    flush = axiomFlush;
-  },
-}));
-
 import { createScrubbedEmitter } from "./emitter.js";
 
 describe("createScrubbedEmitter", () => {
   beforeEach(() => {
-    axiomIngest.mockReset();
-    axiomFlush.mockReset();
-    axiomFlush.mockResolvedValue(undefined);
+    vi.clearAllMocks();
   });
 
-  it("extends Axiom flush through scheduleBackgroundWork when configured", async () => {
-    const scheduled: Promise<unknown>[] = [];
+  it("emits scrubbed structured log events without vendor token flushing", () => {
+    const structuredLogEvents: Record<string, unknown>[][] = [];
     const emitter = createScrubbedEmitter({
       surface: "test-worker",
-      axiomToken: "xaat-test-token",
-      axiomDataset: "splitch-logs",
-      scheduleBackgroundWork: (work) => {
-        scheduled.push(work);
+      onStructuredLogEvents: (events) => {
+        structuredLogEvents.push(events);
       },
     });
 
-    emitter.log("info", "request", { requestId: "req-1" });
+    emitter.log("info", "request", { requestId: "req-1", email: "leak@example.com" });
 
-    expect(scheduled).toHaveLength(1);
-    await scheduled[0];
-    expect(axiomIngest).toHaveBeenCalled();
-    expect(axiomFlush).toHaveBeenCalled();
+    expect(structuredLogEvents).toHaveLength(1);
+    expect(structuredLogEvents[0]?.[0]).toMatchObject({
+      level: "info",
+      message: "request",
+      requestId: "req-1",
+      email: "[Redacted]",
+    });
   });
 
   it("invokes onSentryCaptureException after scrubbing extras", () => {

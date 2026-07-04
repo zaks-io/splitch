@@ -40,10 +40,10 @@ describe("golden-leak canary per observability surface", () => {
         expect(extra?.targeting).toBe("[Redacted]");
       });
 
-      it("scrubs Axiom structured logs before ingest", () => {
+      it("scrubs structured logs before emit", () => {
         const captured: Record<string, unknown>[][] = [];
         const emitter = createSurfaceEmitter(surface.id)({
-          onAxiomEvents: (events) => {
+          onStructuredLogEvents: (events) => {
             captured.push(events);
           },
         });

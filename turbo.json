@@ -10,6 +10,16 @@
     "CONTROL_PLANE_ORIGIN",
     "TINYBIRD_API_URL"
   ],
+  "globalPassThroughEnv": [
+    "GITHUB_RUN_ID",
+    "SPLITCH_SMOKE_APP_ID",
+    "SPLITCH_SMOKE_CLIENT_ID",
+    "SPLITCH_SMOKE_ENVIRONMENT_ID",
+    "SPLITCH_SMOKE_FLAG_ID",
+    "SPLITCH_SMOKE_FLAG_KEY",
+    "SPLITCH_SMOKE_ORG_ID",
+    "SPLITCH_SMOKE_RUN_ID"
+  ],
   "remoteCache": {
     "signature": true
   },
@@ -62,6 +72,11 @@
       "dependsOn": ["^build"],
       "cache": false,
       "outputs": ["reports/mutation/**"]
+    },
+    "shared-preview:smoke": {
+      "cache": false,
+      "outputs": ["playwright-report/shared-preview/**", "test-results/shared-preview/**"],
+      "passThroughEnv": ["SPLITCH_SMOKE_CLIENT_SECRET"]
     },
     "typecheck": {
       "dependsOn": ["^build"],

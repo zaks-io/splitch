@@ -58,6 +58,14 @@ export const DeviceTokenRequestSchema = z.object({
   scope: z.string().min(1).optional(),
 });
 
+/** POST /oauth2/token: shared-preview smoke client_credentials grant. */
+export const ClientCredentialsRequestSchema = z.object({
+  grant_type: z.string(),
+  client_id: z.string().min(1),
+  client_secret: z.string().min(1),
+  scope: z.string().min(1).optional(),
+});
+
 /** POST /oauth2/revoke: RFC 7009 token revocation. */
 export const RevokeTokenRequestSchema = z.object({
   token: z.string().min(1),

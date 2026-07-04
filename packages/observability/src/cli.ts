@@ -12,15 +12,13 @@ export function __resetCliObservabilityForTests(): void {
 
 export interface CliObservabilityEnv {
   SENTRY_DSN?: string;
-  AXIOM_TOKEN?: string;
-  AXIOM_DATASET?: string;
   SPLITCH_PLATFORM_TARGET?: string;
 }
 
 /**
- * Initialize Sentry + Axiom for the CLI process. Idempotent — safe to call once
- * at CLI startup. When vendor tokens are absent (local dev), initialization is a
- * no-op except for registering the scrubbed emitters used in tests.
+ * Initialize Sentry for the CLI process. Idempotent — safe to call once at CLI
+ * startup. When Sentry is absent (local dev), initialization is a no-op except
+ * for registering the scrubbed emitters used in tests.
  */
 export function initCliObservability(
   env: CliObservabilityEnv = process.env as CliObservabilityEnv,

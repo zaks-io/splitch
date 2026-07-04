@@ -57,33 +57,34 @@ reviewed exception, but normal tool upgrades wait until the package version sati
 
 The root `package.json` exposes these scripts:
 
-| Script            | Command contract                                       |
-| ----------------- | ------------------------------------------------------ |
-| `format:check`    | `biome format . && prettier --check "**/*.md"`         |
-| `format:write`    | `biome format --write . && prettier --write "**/*.md"` |
-| `lint`            | `turbo run lint`                                       |
-| `typecheck`       | `turbo run typecheck`                                  |
-| `test`            | `turbo run test`                                       |
-| `build`           | `turbo run build`                                      |
-| `dev:api`         | API/MCP Worker local dev set on stable ports           |
-| `smoke:local`     | local Wrangler smoke for selected Workers              |
-| `smoke:local:api` | local Wrangler smoke for API/MCP Workers               |
-| `depcruise`       | `dependency-cruiser --config .dependency-cruiser.cjs`  |
-| `duplicates`      | `jscpd --config .jscpd.json --exit-code`               |
-| `knip`            | `knip --treat-config-hints-as-errors`                  |
-| `secrets:staged`  | `gitleaks git --redact --no-banner --staged .`         |
-| `secrets:range`   | scan only the change's commit range (CI/pre-push)      |
-| `secrets:git`     | `gitleaks git --redact --no-banner .` (full history)   |
-| `verify:commit`   | commit hook entrypoint                                 |
-| `verify:push`     | pre-push and local CI-parity entrypoint                |
-| `verify:ci`       | CI entrypoint                                          |
+| Script                 | Command contract                                          |
+| ---------------------- | --------------------------------------------------------- |
+| `format:check`         | `biome format . && prettier --check "**/*.md"`            |
+| `format:write`         | `biome format --write . && prettier --write "**/*.md"`    |
+| `lint`                 | `turbo run lint`                                          |
+| `typecheck`            | `turbo run typecheck`                                     |
+| `test`                 | `turbo run test`                                          |
+| `build`                | `turbo run build`                                         |
+| `dev:api`              | API/MCP Worker local dev set on stable ports              |
+| `smoke:local`          | local Wrangler smoke for selected Workers                 |
+| `smoke:local:api`      | local Wrangler smoke for API/MCP Workers                  |
+| `shared-preview:smoke` | hosted shared-preview route, auth, MCP, and binding smoke |
+| `depcruise`            | `dependency-cruiser --config .dependency-cruiser.cjs`     |
+| `duplicates`           | `jscpd --config .jscpd.json --exit-code`                  |
+| `knip`                 | `knip --treat-config-hints-as-errors`                     |
+| `secrets:staged`       | `gitleaks git --redact --no-banner --staged .`            |
+| `secrets:range`        | scan only the change's commit range (CI/pre-push)         |
+| `secrets:git`          | `gitleaks git --redact --no-banner .` (full history)      |
+| `verify:commit`        | commit hook entrypoint                                    |
+| `verify:push`          | pre-push and local CI-parity entrypoint                   |
+| `verify:ci`            | CI entrypoint                                             |
 
 Root scripts own repository-wide static analysis commands that do not belong to one runtime package.
 Biome formats code/config. Prettier formats Markdown only.
 
 `verify:ci` and `verify:push` must stay aligned. The only required difference is that `verify:push`
 does not run hosted smoke tests or any command that mutates Cloudflare, Tinybird, GitHub
-deployments, or secrets.
+deployments, or secrets. Hosted smoke runs after trusted deploy workflows update the matching target.
 
 `verify:push` runs `smoke:local:api` after build. This starts each API/MCP Worker locally with
 Wrangler and fails if the Worker cannot boot or its health response has the wrong service or platform
@@ -119,10 +120,9 @@ run the matching root script locally, fix the failure, and rerun `verify:push` b
 ## CI policy
 
 The required CI check runs on Blacksmith and executes `verify:ci`. It includes everything in
-`verify:push`, plus hosted smoke checks where the workflow has trusted credentials and an appropriate
-platform target. The local API Worker smoke is safe in CI and remote Cursor because it uses Wrangler
-local mode and loopback ports only. The scaffold's hosted smoke command is an intentional skip until
-shared-preview or production targets exist.
+`verify:push`; hosted smoke checks run in trusted deploy workflows where the target has just been
+updated. The local API Worker smoke is safe in CI and remote Cursor because it uses Wrangler local
+mode and loopback ports only.
 
 Gitleaks runs as a dedicated step in the `ci` workflow (`secrets:range`), after `verify:ci`, scoped
 to the change's commit range rather than the whole tree. It is a separate step (not folded into

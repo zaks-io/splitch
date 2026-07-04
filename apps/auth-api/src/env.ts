@@ -28,6 +28,14 @@ export interface AuthApiEnv {
   WORKOS_API_KEY?: string;
   /** WorkOS user-management API base URL; defaults to the public WorkOS API. */
   WORKOS_API_BASE_URL?: string;
+  /** Shared-preview smoke OAuth client id for non-interactive auth proof. */
+  SPLITCH_SMOKE_CLIENT_ID?: string;
+  /** Shared-preview smoke OAuth client secret. Never configure for production. */
+  SPLITCH_SMOKE_CLIENT_SECRET?: string;
+  /** Shared-preview smoke user id stamped into the access token. */
+  SPLITCH_SMOKE_USER_ID?: string;
+  /** Space-delimited shared-preview smoke access-token scopes. */
+  SPLITCH_SMOKE_SCOPES?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
 }

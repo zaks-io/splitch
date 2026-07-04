@@ -36,7 +36,7 @@ If a slice cannot meet this shape, it is not ready for agent implementation.
 | Tinybird Local       | Any pipeline/stats/analytics slice            | `pnpm tinybird:local` must fail on bad project files under `infra/tinybird`     |
 | Route contract smoke | Any new HTTP route                            | Slice adds fixture plus a local Worker smoke or integration test for that route |
 | CLI/MCP parity       | Any control-plane operation                   | Same operation proven through SDK contract plus CLI/MCP schema derivation test  |
-| Shared-preview smoke | Hosted integration, real bindings, URLs       | Maintainer-triggered `shared-preview` deploy and smoke, never default PR CI     |
+| Shared-preview smoke | Hosted integration, real bindings, URLs       | Maintainer-triggered `deploy-shared-preview` workflow, never default PR CI      |
 | Production smoke     | Production release                            | GitHub `production` environment approval plus deployment summary evidence       |
 
 `smoke:local:api` is a **separate explicit step**, not part of `verify:push` (which mirrors
@@ -65,8 +65,9 @@ Selectors:
 - `pnpm smoke:local -- all` also smokes Control Panel and Marketing.
 - `pnpm smoke:local -- @splitch/control-plane-api` smokes one Worker.
 
-The smoke requires `platformTarget = "local"`. A shared-preview or production smoke must assert the
-target it actually deployed.
+The smoke requires `platformTarget = "local"`. `pnpm shared-preview:smoke` asserts
+`platformTarget = "shared-preview"` against the hosted preview URLs after the deploy workflow
+updates that target.
 
 ## Remote Cursor requirements
 
@@ -111,8 +112,8 @@ and the `splitch` repo-route label from [../../agents/workflow/config.md](../../
 
 - `pnpm d1:migrate:local` and `pnpm tinybird:local` intentionally skip until migrations and Tinybird
   files exist. The slice that adds those files must convert the skip to a failing validator.
-- Hosted smoke, shared-preview deploy/reset, production deploy, and rollback scripts are still not
-  wired. They cannot be used as Done proof yet.
+- Shared-preview deploy and smoke are wired. Shared-preview reset, production smoke, and rollback
+  scripts are still not wired.
 - Real provider credentials, real Cloudflare bindings, Tinybird Cloud, code host remote, and repo-route
   tracker wiring are not provisioned.
 

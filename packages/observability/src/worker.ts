@@ -23,17 +23,15 @@ type SentryErrorEvent = import("@sentry/cloudflare").ErrorEvent;
 
 export interface WorkerObservabilityOptions {
   readonly surface: ObservabilitySurfaceId;
-  readonly scheduleBackgroundWork?: (work: Promise<unknown>) => void;
 }
 
-/** Bind Worker observability background work to `ctx.waitUntil`. */
+/** Build Worker observability options from request context. */
 export function workerObservabilityWithWaitUntil(
   surface: ObservabilitySurfaceId,
-  ctx: Pick<ExecutionContext, "waitUntil">,
+  _ctx: Pick<ExecutionContext, "waitUntil">,
 ): WorkerObservabilityOptions {
   return {
     surface,
-    scheduleBackgroundWork: (work) => ctx.waitUntil(work),
   };
 }
 
@@ -196,7 +194,10 @@ async function addSentryBreadcrumb(
 export function workerEmitter(
   env: WorkerEnv,
   options: WorkerObservabilityOptions,
-  hooks: Pick<Parameters<typeof createScrubbedEmitter>[0], "onSentryEvent" | "onAxiomEvents"> = {},
+  hooks: Pick<
+    Parameters<typeof createScrubbedEmitter>[0],
+    "onSentryEvent" | "onStructuredLogEvents"
+  > = {},
 ): ScrubbedEmitter {
   return createScrubbedEmitter({
     surface: options.surface,

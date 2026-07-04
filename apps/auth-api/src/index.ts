@@ -17,6 +17,7 @@ import { makeKvRevocationStore } from "./revocation";
 import { makeTokenSigner } from "./token-exchange";
 import { makeFixtureTurnstile } from "./turnstile";
 import { makeFixtureWorkOs } from "./workos";
+import type { SmokeClientCredentials } from "./oauth-routes";
 
 const service = "splitch-auth-api";
 
@@ -81,6 +82,7 @@ const handler = {
         now,
       }),
       revocations: makeKvRevocationStore(env.SESSION_STORE),
+      smokeClientCredentials: sharedPreviewSmokeClient(env),
     });
 
     observability.onRequest?.({
@@ -93,3 +95,17 @@ const handler = {
 } satisfies ExportedHandler<AuthApiEnv>;
 
 export default wrapWorkerHandler(handler, { surface: "auth-api" });
+
+function sharedPreviewSmokeClient(env: AuthApiEnv): SmokeClientCredentials | undefined {
+  if (env.SPLITCH_PLATFORM_TARGET !== "shared-preview" || !env.SPLITCH_SMOKE_CLIENT_SECRET) {
+    return undefined;
+  }
+  return {
+    clientId: env.SPLITCH_SMOKE_CLIENT_ID ?? "splitch-shared-preview-smoke",
+    clientSecret: env.SPLITCH_SMOKE_CLIENT_SECRET,
+    userId: env.SPLITCH_SMOKE_USER_ID ?? "user_shared_preview_smoke",
+    scopes: (env.SPLITCH_SMOKE_SCOPES ?? "app:smoke-auth-missing-app:member")
+      .split(/\s+/)
+      .filter(Boolean),
+  };
+}

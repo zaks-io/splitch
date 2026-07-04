@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseConfigFileTextToJson } from "typescript";
 import { describe, expect, it } from "vitest";
-import { OBSERVABILITY_SURFACES } from "./surfaces.js";
 
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 
@@ -21,6 +20,15 @@ const WORKER_WRANGLER_PATHS: Record<string, string> = {
 const OBSERVABILITY_TARGETS = ["local", "shared-preview", "production"] as const;
 const AXIOM_TRACE_DESTINATION = "axiom-traces";
 const AXIOM_LOG_DESTINATION = "axiom-logs";
+const SENTRY_DSN =
+  "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048";
+const GITHUB_SENTRY_SECRET_REFERENCE = "SENTRY_DSN: $" + "{{ secrets.SENTRY_DSN }}";
+const WORKER_SECRET_SYNC_NAMES = [
+  "ACCESS_TOKEN_SECRET",
+  "ASSERTION_SIGNING_SECRET",
+  "SENTRY_DSN",
+  "EVALUATION_PRIVACY_SALT",
+] as const;
 
 interface WranglerTarget {
   observability?: {
@@ -48,28 +56,35 @@ interface WranglerConfig {
 }
 
 describe("Worker Wrangler observability secrets", () => {
-  for (const surface of OBSERVABILITY_SURFACES) {
-    if (surface.kind !== "worker") {
-      continue;
-    }
-
-    const wranglerPath = WORKER_WRANGLER_PATHS[surface.id];
-    if (!wranglerPath) {
-      continue;
-    }
-
+  for (const [surfaceId, wranglerPath] of Object.entries(WORKER_WRANGLER_PATHS)) {
     const config = readWranglerConfig(join(repoRoot, wranglerPath));
 
     it.each(
       wranglerTargets(config),
-    )(`${surface.id} declares SENTRY_DSN for %s`, (_target, target) => {
-      expect(target?.secrets?.required).toContain("SENTRY_DSN");
-      expect(target?.secrets?.required).not.toContain("AXIOM_TOKEN");
-      expect(target?.vars?.SENTRY_DSN).toBeUndefined();
+    )(`${surfaceId} declares SENTRY_DSN and stays Axiom token-free for %s`, (_target, target) => {
+      const requiredSecrets = target?.secrets?.required ?? [];
+      const sentryVar = target?.vars?.SENTRY_DSN;
+
+      expect(requiredSecrets.includes("SENTRY_DSN") || sentryVar === SENTRY_DSN).toBe(true);
+      expect(requiredSecrets).not.toContain("AXIOM_TOKEN");
       expect(target?.vars?.AXIOM_TOKEN).toBeUndefined();
       expect(target?.vars?.AXIOM_DATASET).toBeUndefined();
     });
   }
+});
+
+describe("Deploy workflow observability secrets", () => {
+  it.each([
+    ".github/workflows/deploy-shared-preview.yml",
+    ".github/workflows/deploy-production.yml",
+  ])("%s provides SENTRY_DSN to Worker secret sync", (workflowPath) => {
+    const workflow = readFileSync(join(repoRoot, workflowPath), "utf8");
+
+    expect(workflow).toContain(GITHUB_SENTRY_SECRET_REFERENCE);
+    for (const secretName of WORKER_SECRET_SYNC_NAMES) {
+      expect(workflow).toContain(secretName);
+    }
+  });
 });
 
 describe("Worker Wrangler Cloudflare Observability destinations", () => {

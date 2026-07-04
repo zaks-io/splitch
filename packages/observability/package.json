@@ -25,7 +25,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@axiomhq/js": "^1.6.1",
     "@sentry/cloudflare": "^9.47.0",
     "@sentry/node": "^9.47.0",
     "@splitch/contracts": "workspace:*",

@@ -10,3 +10,5 @@ dist/
 .tinyb
 reports/mutation/
 .stryker-tmp/
+playwright-report/
+test-results/

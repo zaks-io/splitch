@@ -6,7 +6,7 @@ import type { DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import { type IdJagDeps, verifyIdJag } from "./idjag-verify";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
-import { mountOAuthRoutes } from "./oauth-routes";
+import { mountOAuthRoutes, type SmokeClientCredentials } from "./oauth-routes";
 import { type RegisterDeps, registerAnonymous } from "./register";
 import type { RevocationStore } from "./revocation";
 import {
@@ -48,6 +48,8 @@ export interface AppDeps {
   deviceRefreshSessions: DeviceRefreshSessionStore;
   /** Shared revocation marker writer/reader for control-plane access tokens. */
   revocations: RevocationStore;
+  /** Shared-preview-only smoke OAuth client credentials. */
+  smokeClientCredentials?: SmokeClientCredentials;
   now: () => number;
 }
 

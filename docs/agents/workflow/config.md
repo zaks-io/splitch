@@ -34,8 +34,8 @@ with it.
 - Verified hosted PR check name: `ci` (runs on push to `zaks-io/splitch`). Secret
   scanning is a step inside `ci`; the standalone `gitleaks` workflow was removed.
   See `Pull Requests`.
-- Critical unknowns: friction-intake fields remain unverified. Hosted smoke, reset, and rollback
-  scripts remain unwired.
+- Critical unknowns: friction-intake fields remain unverified. Shared-preview reset, production
+  smoke, and rollback scripts remain unwired.
   See `Unknowns`.
 
 ## Repo
@@ -62,7 +62,7 @@ with it.
   coverage, `.turbo/`, and `.wrangler/` are ignored.
 - PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus
   a range-scoped Gitleaks secret scan.
-- Shared preview deploy: workflow wired, Cloudflare D1/KV resources are provisioned, the Tinybird
+- Shared preview deploy: workflow and hosted smoke wired, Cloudflare D1/KV resources are provisioned, the Tinybird
   `shared_preview` Branch exists, and Worker secret sync is wired before deploy. Cloudflare Custom
   Domain DNS/cert activation can lag after first deploy. See
   `docs/spec/platform/deployment-pipeline.md`.
@@ -360,9 +360,10 @@ real package API boundary.
       public data-plane SDK scaffold, but no package has been published. Verifier: create a release
       slice with ownership, provenance, changelog, npm token/OIDC setup, and publish dry run.
 - [x] Shared-preview and production deploy workflows are wired, Cloudflare
-      D1/KV resource IDs are provisioned and committed, Worker secret sync is wired, and the
-      `shared_preview` Tinybird Branch exists. Rollback remains designed but not wired. Verifier: implement
-      the remaining `docs/spec/platform/deployment-pipeline.md` reset/rollback
+      D1/KV resource IDs are provisioned and committed, Worker secret sync is wired, hosted
+      shared-preview smoke is wired, and the `shared_preview` Tinybird Branch exists. Rollback remains
+      designed but not wired. Verifier: implement the remaining
+      `docs/spec/platform/deployment-pipeline.md` reset/rollback
       work, run workflow syntax checks, and confirm required GitHub environment
       secrets/vars.
 - [ ] Production environment protection is controlled by the GitHub

@@ -44,6 +44,7 @@ jobs:
       TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
       WORKOS_CLIENT_ID: ${{ vars.WORKOS_CLIENT_ID }}
       WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
+      SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -74,7 +75,7 @@ jobs:
       - name: Check deploy credentials
         run: |
           set -euo pipefail
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TB_TOKEN TB_HOST ACCESS_TOKEN_SECRET ASSERTION_SIGNING_SECRET SENTRY_DSN EVALUATION_PRIVACY_SALT SPLITCH_EVENT_INGEST_TOKEN TINYBIRD_INGEST_TOKEN TINYBIRD_READ_TOKEN TURNSTILE_SECRET WORKOS_CLIENT_ID WORKOS_API_KEY; do
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TB_TOKEN TB_HOST ACCESS_TOKEN_SECRET ASSERTION_SIGNING_SECRET SENTRY_DSN EVALUATION_PRIVACY_SALT SPLITCH_EVENT_INGEST_TOKEN TINYBIRD_INGEST_TOKEN TINYBIRD_READ_TOKEN TURNSTILE_SECRET WORKOS_CLIENT_ID WORKOS_API_KEY SPLITCH_SMOKE_CLIENT_SECRET; do
             if [ -z "${!name}" ]; then
               echo "::error::$name is required for shared-preview deploys"
               exit 1
@@ -102,6 +103,25 @@ jobs:
       - name: Deploy shared preview
         run: pnpm deploy:shared-preview
 
+      - name: Seed shared preview smoke data
+        run: pnpm shared-preview:seed-smoke
+
+      - name: Smoke shared preview
+        env:
+          SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
+        run: |
+          SPLITCH_SMOKE_COMMIT_SHA="$(git rev-parse HEAD)" pnpm shared-preview:smoke
+
+      - name: Upload Playwright smoke report
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: shared-preview-playwright-report
+          path: |
+            playwright-report/shared-preview
+            test-results/shared-preview
+          if-no-files-found: ignore
+
       - name: Summary
         if: always()
         run: |
@@ -117,4 +137,5 @@ jobs:
             echo "- Evaluation API: https://edge.preview.splitch.dev/"
             echo "- Event Ingest API: https://ingest.preview.splitch.dev/"
             echo "- MCP: https://mcp.preview.splitch.dev/"
+            echo "- Smoke: Playwright API tests (\`pnpm shared-preview:smoke\`)"
           } >> "$GITHUB_STEP_SUMMARY"
