@@ -1,15 +1,17 @@
 {
-  "name": "@splitch/cli",
+  "name": "@splitch/observability",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "bin": {
-    "splitch": "./src/cli.mjs"
-  },
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./worker": {
+      "types": "./src/worker.ts",
+      "default": "./src/worker.ts"
     }
   },
   "files": [
@@ -23,8 +25,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@splitch/control-plane-sdk": "workspace:*",
-    "@splitch/observability": "workspace:*",
-    "tsx": "4.22.4"
+    "@axiomhq/js": "^1.6.1",
+    "@sentry/cloudflare": "^9.47.0",
+    "@sentry/node": "^9.47.0",
+    "@splitch/contracts": "workspace:*",
+    "@splitch/privacy": "workspace:*",
+    "@splitch/worker-runtime": "workspace:*"
   }
 }

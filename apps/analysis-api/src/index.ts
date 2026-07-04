@@ -1,4 +1,10 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
+import {
+  createWorkerObservability,
+  workerEmitter,
+  workerObservabilityWithWaitUntil,
+  wrapWorkerHandler,
+} from "@splitch/observability/worker";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import {
@@ -15,8 +21,8 @@ const allowLimiter: RateLimiter = () => ({ limited: false });
 const verifierCache = new Map<string, ReturnType<typeof makeJwksVerifier>>();
 const service = "splitch-analysis-api";
 
-export default {
-  async fetch(request, env): Promise<Response> {
+const handler = {
+  async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health" || url.pathname === "/") {
       return Response.json(
@@ -35,21 +41,39 @@ export default {
       rateLimiter: allowLimiter,
       tinybird: createTinybirdReadTransport(env),
       platformTarget: env.SPLITCH_PLATFORM_TARGET,
+      observability: createWorkerObservability(
+        env,
+        workerObservabilityWithWaitUntil("analysis-api", ctx),
+      ),
     });
     return app.fetch(request, env);
   },
 
   scheduled(event, env, ctx): void {
+    const axiomEmitter = workerEmitter(env, workerObservabilityWithWaitUntil("analysis-api", ctx));
     ctx.waitUntil(
       runScheduledSnapshot({
         cron: event.cron,
-        logger: console,
+        logger: {
+          log: (message, ...args) => {
+            const fields =
+              args[0] && typeof args[0] === "object" ? (args[0] as Record<string, unknown>) : {};
+            axiomEmitter.log("info", String(message), fields);
+          },
+          error: (message, ...args) => {
+            const fields =
+              args[0] && typeof args[0] === "object" ? (args[0] as Record<string, unknown>) : {};
+            axiomEmitter.log("error", String(message), fields);
+          },
+        },
         scheduledTimeMs: event.scheduledTime,
         tinybird: createTinybirdCopyTransport(env),
       }),
     );
   },
 } satisfies ExportedHandler<AnalysisApiEnv>;
+
+export default wrapWorkerHandler(handler, { surface: "analysis-api" });
 
 function requiredConfig(value: string | undefined, name: string): string {
   if (value === undefined || value.trim().length === 0) {

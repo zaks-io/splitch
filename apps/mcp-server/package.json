@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@splitch/control-plane-sdk": "workspace:*",
-    "@splitch/contracts": "workspace:*"
+    "@splitch/contracts": "workspace:*",
+    "@splitch/observability": "workspace:*"
   }
 }

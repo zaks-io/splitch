@@ -29,4 +29,7 @@ export interface AuthApiEnv {
   /** WorkOS user-management API base URL; defaults to the public WorkOS API. */
   WORKOS_API_BASE_URL?: string;
   SPLITCH_PLATFORM_TARGET?: string;
+  SENTRY_DSN?: string;
+  AXIOM_TOKEN?: string;
+  AXIOM_DATASET?: string;
 }

@@ -1,6 +1,9 @@
 #!/usr/bin/env -S tsx
 import { pathToFileURL } from "node:url";
 import { createControlPlaneSdk } from "@splitch/control-plane-sdk";
+import { initCliObservability, shutdownCliObservability } from "@splitch/observability";
+
+const cliObservability = initCliObservability();
 
 export async function runCli(args: readonly string[] = process.argv.slice(2)): Promise<number> {
   const [command] = args;
@@ -8,10 +11,15 @@ export async function runCli(args: readonly string[] = process.argv.slice(2)): P
   if (command === "health") {
     const endpoint = readOption(args, "--endpoint") ?? "http://localhost:8787";
     const controlPlane = createControlPlaneSdk({ baseUrl: endpoint });
-    const health = await controlPlane.health();
-
-    console.log(JSON.stringify(health, null, 2));
-    return 0;
+    try {
+      const health = await controlPlane.health();
+      cliObservability.log("info", "cli health", { endpoint, ok: health.ok });
+      console.log(JSON.stringify(health, null, 2));
+      return 0;
+    } catch (error) {
+      cliObservability.captureException(error, { endpoint, command });
+      throw error;
+    }
   }
 
   console.log("Usage: splitch health --endpoint <url>");
@@ -23,8 +31,16 @@ function readOption(args: readonly string[], name: string): string | undefined {
   return index >= 0 ? args[index + 1] : undefined;
 }
 
+export async function launchCli(): Promise<void> {
+  try {
+    process.exitCode = await runCli();
+  } catch {
+    process.exitCode = 1;
+  } finally {
+    await shutdownCliObservability();
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  runCli().then((code) => {
-    process.exitCode = code;
-  });
+  void launchCli();
 }

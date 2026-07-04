@@ -38,18 +38,26 @@
   "migrations": [
     { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] }
   ],
+  "secrets": {
+    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+  },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local"
+    "SPLITCH_PLATFORM_TARGET": "local",
+    "AXIOM_DATASET": "splitch-logs"
   },
   "env": {
     "shared-preview": {
       "name": "splitch-control-plane-api-shared-preview",
       "workers_dev": false,
       "routes": [{ "pattern": "api.preview.splitch.dev", "custom_domain": true }],
+      "secrets": {
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+      },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev"
+        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "d1_databases": [
         {
@@ -74,10 +82,14 @@
       "name": "splitch-control-plane-api",
       "workers_dev": false,
       "routes": [{ "pattern": "api.splitch.dev", "custom_domain": true }],
+      "secrets": {
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+      },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev"
+        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "d1_databases": [
         {

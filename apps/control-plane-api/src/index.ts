@@ -1,5 +1,11 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
+import {
+  createWorkerObservability,
+  workerEmitter,
+  workerObservabilityWithWaitUntil,
+  wrapWorkerHandler,
+} from "@splitch/observability/worker";
 import { createApp } from "./app";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
@@ -11,16 +17,8 @@ import { makeSessionStore } from "./session-store";
 
 const service = "splitch-control-plane-api";
 
-/**
- * Control Plane API Worker entry. Health is served directly; everything else
- * mounts through the worker-runtime registrar behind the control-plane-token
- * resolver. D1 access is ALWAYS through createRepository (the tenant-isolation
- * seam, ADR-0018); KV handles session validation plus credential hot-validation
- * write-through. The JWKS verifier is injected so the real WorkOS/auth-api JWKS
- * (HUMAN-SETUP S41) swaps in behind the same port without touching the resolver.
- */
-export default {
-  async fetch(request, env): Promise<Response> {
+const handler = {
+  async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health" || url.pathname === "/") {
       return Response.json(
@@ -45,28 +43,40 @@ export default {
       credentialStore: env.CREDENTIAL_STORE,
       configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
       memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
+      observability: createWorkerObservability(
+        env,
+        workerObservabilityWithWaitUntil("control-plane-api", ctx),
+      ),
     });
 
     return app.fetch(request, env);
   },
 
   scheduled(event, env, ctx): void {
-    ctx.waitUntil(runDemoReaper(env, event));
+    ctx.waitUntil(runDemoReaper(env, event, ctx));
   },
 } satisfies ExportedHandler<ControlPlaneApiEnv>;
 
-async function runDemoReaper(env: ControlPlaneApiEnv, event: ScheduledController): Promise<void> {
+export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
+
+async function runDemoReaper(
+  env: ControlPlaneApiEnv,
+  event: ScheduledController,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+): Promise<void> {
   const result = await createRepository(env.DB).identity.reapExpiredProvisionalOrganizations(
     new Date(event.scheduledTime).toISOString(),
   );
-  console.log(
-    JSON.stringify({
+  workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
+    "info",
+    "demo-reaper",
+    {
       service,
       job: "demo-reaper",
       cron: event.cron,
       candidates: result.candidates,
       reaped: result.reaped,
-    }),
+    },
   );
 }
 

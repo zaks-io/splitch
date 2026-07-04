@@ -82,17 +82,25 @@ async function token(sub: string, scopes: string[]): Promise<string> {
   });
 }
 
+const testCtx = {
+  waitUntil() {},
+  passThroughOnException() {},
+} as unknown as ExecutionContext;
+
 function call(method: string, path: string, jwt: string, body?: unknown): Promise<Response> {
-  return worker.fetch(
-    new Request(`${AUDIENCE}${path}`, {
-      method,
-      headers: {
-        authorization: `Bearer ${jwt}`,
-        ...(body ? { "content-type": "application/json" } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    }) as unknown as Parameters<typeof worker.fetch>[0],
-    testEnv,
+  return Promise.resolve(
+    worker.fetch(
+      new Request(`${AUDIENCE}${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${jwt}`,
+          ...(body ? { "content-type": "application/json" } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      }) as unknown as Parameters<typeof worker.fetch>[0],
+      testEnv,
+      testCtx,
+    ),
   );
 }
 

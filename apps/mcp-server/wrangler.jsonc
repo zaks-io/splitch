@@ -8,20 +8,29 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  "secrets": {
+    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+  },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "CONTROL_PLANE_API_ORIGIN": "http://127.0.0.1:8787",
-    "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788"
+    "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788",
+    "ANALYSIS_API_ORIGIN": "http://127.0.0.1:8790",
+    "AXIOM_DATASET": "splitch-logs"
   },
   "env": {
     "shared-preview": {
       "name": "splitch-mcp-server-shared-preview",
       "workers_dev": false,
       "routes": [{ "pattern": "mcp.preview.splitch.dev", "custom_domain": true }],
+      "secrets": {
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+      },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "CONTROL_PLANE_API_ORIGIN": "https://api.preview.splitch.dev",
-        "EVALUATION_API_ORIGIN": "https://edge.preview.splitch.dev"
+        "EVALUATION_API_ORIGIN": "https://edge.preview.splitch.dev",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "services": [{ "binding": "ANALYSIS_API", "service": "splitch-analysis-api-shared-preview" }]
     },
@@ -29,10 +38,14 @@
       "name": "splitch-mcp-server",
       "workers_dev": false,
       "routes": [{ "pattern": "mcp.splitch.dev", "custom_domain": true }],
+      "secrets": {
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+      },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "CONTROL_PLANE_API_ORIGIN": "https://api.splitch.dev",
-        "EVALUATION_API_ORIGIN": "https://edge.splitch.dev"
+        "EVALUATION_API_ORIGIN": "https://edge.splitch.dev",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "services": [{ "binding": "ANALYSIS_API", "service": "splitch-analysis-api" }]
     }

@@ -12,14 +12,15 @@
     "crons": ["0 * * * *"]
   },
   "secrets": {
-    "required": ["TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
+    "required": ["SENTRY_DSN", "AXIOM_TOKEN", "TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "AUTH_API_ORIGIN": "http://localhost:8791",
     "AUTH_JWKS_URI": "http://localhost:8791/.well-known/jwks.json",
     "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
-    "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
+    "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
+    "AXIOM_DATASET": "splitch-logs"
   },
   "kv_namespaces": [
     {
@@ -35,14 +36,15 @@
         "crons": []
       },
       "secrets": {
-        "required": ["TINYBIRD_READ_TOKEN"]
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN", "TINYBIRD_READ_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
         "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
         "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
-        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
+        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "kv_namespaces": [
         {
@@ -58,14 +60,15 @@
         "crons": ["0 * * * *"]
       },
       "secrets": {
-        "required": ["TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN", "TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "AUTH_API_ORIGIN": "https://auth.splitch.dev",
         "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
         "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
-        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
+        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "kv_namespaces": [
         {

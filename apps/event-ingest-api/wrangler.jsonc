@@ -9,11 +9,12 @@
     "head_sampling_rate": 1
   },
   "secrets": {
-    "required": ["SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+    "required": ["SENTRY_DSN", "AXIOM_TOKEN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
-    "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
+    "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
+    "AXIOM_DATASET": "splitch-logs"
   },
   "kv_namespaces": [
     {
@@ -27,11 +28,17 @@
       "workers_dev": false,
       "routes": [{ "pattern": "ingest.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+        "required": [
+          "SENTRY_DSN",
+          "AXIOM_TOKEN",
+          "SPLITCH_EVENT_INGEST_TOKEN",
+          "TINYBIRD_INGEST_TOKEN"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
-        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
+        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "70cc24e1592e4db4a5b37e8d0dd6d6af" }]
     },
@@ -40,11 +47,17 @@
       "workers_dev": false,
       "routes": [{ "pattern": "ingest.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+        "required": [
+          "SENTRY_DSN",
+          "AXIOM_TOKEN",
+          "SPLITCH_EVENT_INGEST_TOKEN",
+          "TINYBIRD_INGEST_TOKEN"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
-        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
+        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" }]
     }
