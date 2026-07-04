@@ -8,11 +8,13 @@
     "traces": {
       "enabled": true,
       "destinations": ["axiom-traces"],
+      "persist": false,
       "head_sampling_rate": 1
     },
     "logs": {
       "enabled": true,
       "destinations": ["axiom-logs"],
+      "persist": false,
       "head_sampling_rate": 1
     }
   },
@@ -50,8 +52,7 @@
     "required": ["SENTRY_DSN"]
   },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local",
-    "AXIOM_DATASET": "splitch-logs"
+    "SPLITCH_PLATFORM_TARGET": "local"
   },
   "env": {
     "shared-preview": {
@@ -61,11 +62,13 @@
         "traces": {
           "enabled": true,
           "destinations": ["axiom-traces"],
+          "persist": false,
           "head_sampling_rate": 1
         },
         "logs": {
           "enabled": true,
           "destinations": ["axiom-logs"],
+          "persist": false,
           "head_sampling_rate": 1
         }
       },
@@ -76,8 +79,7 @@
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
-        "AXIOM_DATASET": "splitch-logs"
+        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev"
       },
       "d1_databases": [
         {
@@ -105,11 +107,13 @@
         "traces": {
           "enabled": true,
           "destinations": ["axiom-traces"],
+          "persist": false,
           "head_sampling_rate": 1
         },
         "logs": {
           "enabled": true,
           "destinations": ["axiom-logs"],
+          "persist": false,
           "head_sampling_rate": 1
         }
       },
@@ -120,8 +124,7 @@
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
-        "AXIOM_DATASET": "splitch-logs"
+        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev"
       },
       "d1_databases": [
         {

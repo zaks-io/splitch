@@ -15,8 +15,6 @@ import type { ObservabilitySurfaceId } from "./surfaces.js";
 
 type WorkerEnv = {
   SENTRY_DSN?: string;
-  AXIOM_TOKEN?: string;
-  AXIOM_DATASET?: string;
   SPLITCH_PLATFORM_TARGET?: string;
 };
 
@@ -137,8 +135,8 @@ export function wrapWorkerHandler<E extends WorkerEnv>(
 }
 
 /**
- * Worker-runtime observability hooks that log scrubbed structured events to Axiom
- * (when configured) and leave error capture to Sentry's automatic instrumentation.
+ * Worker-runtime observability hooks that keep the shared scrubber path in-process
+ * and leave external log export to Cloudflare Observability destinations.
  */
 export function createWorkerObservability(
   env: WorkerEnv,
@@ -200,11 +198,10 @@ export function workerEmitter(
   options: WorkerObservabilityOptions,
   hooks: Pick<Parameters<typeof createScrubbedEmitter>[0], "onSentryEvent" | "onAxiomEvents"> = {},
 ): ScrubbedEmitter {
-  const secrets = secretsFromEnv(env);
   return createScrubbedEmitter({
     surface: options.surface,
-    ...secrets,
-    scheduleBackgroundWork: options.scheduleBackgroundWork,
+    sentryDsn: env.SENTRY_DSN,
+    environment: env.SPLITCH_PLATFORM_TARGET ?? "local",
     ...hooks,
   });
 }

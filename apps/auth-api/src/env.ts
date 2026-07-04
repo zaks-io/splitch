@@ -30,6 +30,4 @@ export interface AuthApiEnv {
   WORKOS_API_BASE_URL?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
-  AXIOM_TOKEN?: string;
-  AXIOM_DATASET?: string;
 }

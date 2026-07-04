@@ -14,8 +14,6 @@ type Env = {
   ANALYSIS_API_ORIGIN?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
-  AXIOM_TOKEN?: string;
-  AXIOM_DATASET?: string;
 };
 
 const handler = {

@@ -8,11 +8,13 @@
     "traces": {
       "enabled": true,
       "destinations": ["axiom-traces"],
+      "persist": false,
       "head_sampling_rate": 1
     },
     "logs": {
       "enabled": true,
       "destinations": ["axiom-logs"],
+      "persist": false,
       "head_sampling_rate": 1
     }
   },
@@ -21,8 +23,7 @@
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
-    "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
-    "AXIOM_DATASET": "splitch-logs"
+    "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
   },
   "kv_namespaces": [
     {
@@ -38,11 +39,13 @@
         "traces": {
           "enabled": true,
           "destinations": ["axiom-traces"],
+          "persist": false,
           "head_sampling_rate": 1
         },
         "logs": {
           "enabled": true,
           "destinations": ["axiom-logs"],
+          "persist": false,
           "head_sampling_rate": 1
         }
       },
@@ -52,8 +55,7 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
-        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
-        "AXIOM_DATASET": "splitch-logs"
+        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
       "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "70cc24e1592e4db4a5b37e8d0dd6d6af" }]
     },
@@ -64,11 +66,13 @@
         "traces": {
           "enabled": true,
           "destinations": ["axiom-traces"],
+          "persist": false,
           "head_sampling_rate": 1
         },
         "logs": {
           "enabled": true,
           "destinations": ["axiom-logs"],
+          "persist": false,
           "head_sampling_rate": 1
         }
       },
@@ -78,8 +82,7 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
-        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
-        "AXIOM_DATASET": "splitch-logs"
+        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
       "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" }]
     }

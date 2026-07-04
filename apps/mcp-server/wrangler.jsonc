@@ -8,11 +8,13 @@
     "traces": {
       "enabled": true,
       "destinations": ["axiom-traces"],
+      "persist": false,
       "head_sampling_rate": 1
     },
     "logs": {
       "enabled": true,
       "destinations": ["axiom-logs"],
+      "persist": false,
       "head_sampling_rate": 1
     }
   },
@@ -23,8 +25,7 @@
     "SPLITCH_PLATFORM_TARGET": "local",
     "CONTROL_PLANE_API_ORIGIN": "http://127.0.0.1:8787",
     "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788",
-    "ANALYSIS_API_ORIGIN": "http://127.0.0.1:8790",
-    "AXIOM_DATASET": "splitch-logs"
+    "ANALYSIS_API_ORIGIN": "http://127.0.0.1:8790"
   },
   "env": {
     "shared-preview": {
@@ -34,11 +35,13 @@
         "traces": {
           "enabled": true,
           "destinations": ["axiom-traces"],
+          "persist": false,
           "head_sampling_rate": 1
         },
         "logs": {
           "enabled": true,
           "destinations": ["axiom-logs"],
+          "persist": false,
           "head_sampling_rate": 1
         }
       },
@@ -49,8 +52,7 @@
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "CONTROL_PLANE_API_ORIGIN": "https://api.preview.splitch.dev",
-        "EVALUATION_API_ORIGIN": "https://edge.preview.splitch.dev",
-        "AXIOM_DATASET": "splitch-logs"
+        "EVALUATION_API_ORIGIN": "https://edge.preview.splitch.dev"
       },
       "services": [{ "binding": "ANALYSIS_API", "service": "splitch-analysis-api-shared-preview" }]
     },
@@ -61,11 +63,13 @@
         "traces": {
           "enabled": true,
           "destinations": ["axiom-traces"],
+          "persist": false,
           "head_sampling_rate": 1
         },
         "logs": {
           "enabled": true,
           "destinations": ["axiom-logs"],
+          "persist": false,
           "head_sampling_rate": 1
         }
       },
@@ -76,8 +80,7 @@
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "CONTROL_PLANE_API_ORIGIN": "https://api.splitch.dev",
-        "EVALUATION_API_ORIGIN": "https://edge.splitch.dev",
-        "AXIOM_DATASET": "splitch-logs"
+        "EVALUATION_API_ORIGIN": "https://edge.splitch.dev"
       },
       "services": [{ "binding": "ANALYSIS_API", "service": "splitch-analysis-api" }]
     }

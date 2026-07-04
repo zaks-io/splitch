@@ -38,7 +38,7 @@ describe("cross-surface observability wiring", () => {
   });
 
   for (const surface of OBSERVABILITY_SURFACES) {
-    it(`${surface.id} registers scrubbed Sentry and Axiom emitters`, () => {
+    it(`${surface.id} registers scrubbed Sentry and structured-log emitters`, () => {
       const sentryEvents: Record<string, unknown>[] = [];
       const axiomEvents: Record<string, unknown>[][] = [];
       const emitter = createSurfaceEmitter(surface.id)({

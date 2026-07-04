@@ -8,6 +8,4 @@ export interface AnalysisApiEnv {
   TINYBIRD_COPY_TOKEN?: string;
   TINYBIRD_READ_TOKEN?: string;
   SENTRY_DSN?: string;
-  AXIOM_TOKEN?: string;
-  AXIOM_DATASET?: string;
 }

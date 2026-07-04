@@ -27,6 +27,4 @@ export interface ControlPlaneApiEnv {
   AUTH_JWKS_URI?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
-  AXIOM_TOKEN?: string;
-  AXIOM_DATASET?: string;
 }

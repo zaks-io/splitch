@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { __setSentryModuleForTests, createWorkerObservability } from "./worker.js";
+import { __setSentryModuleForTests, createWorkerObservability, workerEmitter } from "./worker.js";
 
 const captureMessage = vi.fn();
 const addBreadcrumb = vi.fn();
@@ -108,28 +108,32 @@ describe("createWorkerObservability onError", () => {
     expect(addBreadcrumb).not.toHaveBeenCalled();
   });
 
-  it("schedules Axiom flush through waitUntil when configured", () => {
+  it("keeps Worker log scrubbing local and skips app-level Axiom flushes", () => {
     const scheduled: Promise<unknown>[] = [];
-    const observability = createWorkerObservability(
-      {
-        AXIOM_TOKEN: "xaat-test-token",
-        AXIOM_DATASET: "splitch-logs",
-      },
+    const axiomEvents: Record<string, unknown>[][] = [];
+    const legacyAxiomEnv = {
+      AXIOM_TOKEN: "xaat-test-token",
+      AXIOM_DATASET: "splitch-logs",
+      SPLITCH_PLATFORM_TARGET: "local",
+    };
+    const emitter = workerEmitter(
+      legacyAxiomEnv,
       {
         surface: "evaluation-api",
         scheduleBackgroundWork: (work) => {
           scheduled.push(work);
         },
       },
+      {
+        onAxiomEvents: (events) => {
+          axiomEvents.push(events);
+        },
+      },
     );
 
-    observability.onRequest?.({
-      requestId: "req-axiom",
-      method: "GET",
-      path: "/health",
-    });
+    emitter.log("info", "request", { requestId: "req-axiom" });
 
-    expect(scheduled).toHaveLength(1);
-    expect(scheduled[0]).toBeInstanceOf(Promise);
+    expect(axiomEvents).toHaveLength(1);
+    expect(scheduled).toHaveLength(0);
   });
 });

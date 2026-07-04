@@ -143,6 +143,26 @@ Shared-preview smoke is the first proof that hosted bindings are correct. Each s
 include the URL, expected `platformTarget = "shared-preview"`, deployed commit SHA, migration list,
 Tinybird Branch, and which routes were exercised.
 
+The smoke summary must also include Cloudflare-to-Axiom verification when Worker observability wiring
+changes. Use a unique smoke `User-Agent` value, wait for the destination ingestion delay, and query the
+shared Axiom `cloudflare` dataset for the same time window:
+
+```apl
+['cloudflare']
+| where ['resource.cloudflare.script_name'] startswith "splitch-"
+| where ['resource.cloudflare.script_name'] endswith "-shared-preview"
+| where ['attributes.user_agent.original'] == "<unique-smoke-user-agent>"
+| summarize count() by ['resource.cloudflare.script_name'], ['attributes.server.address']
+| order by ['resource.cloudflare.script_name'] asc
+```
+
+The verification passes only when the grouped result includes the shared-preview Worker scripts hit by
+the smoke. For the full SPL-88 surface check, include `splitch-marketing-shared-preview`,
+`splitch-control-panel-shared-preview`, `splitch-control-plane-api-shared-preview`,
+`splitch-auth-api-shared-preview`, `splitch-evaluation-api-shared-preview`,
+`splitch-event-ingest-api-shared-preview`, `splitch-mcp-server-shared-preview`, and
+`splitch-analysis-api-shared-preview`.
+
 `wrangler versions upload` is useful for code-only preview URLs, but it is not the default for shared
 preview because Worker versions do not cover D1/KV/DO state, and Durable Object migrations are not
 supported by version upload. Use `wrangler deploy` for shared preview when it includes stateful resources

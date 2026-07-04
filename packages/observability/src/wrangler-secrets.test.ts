@@ -24,8 +24,18 @@ const AXIOM_LOG_DESTINATION = "axiom-logs";
 
 interface WranglerTarget {
   observability?: {
-    traces?: { enabled?: boolean; destinations?: string[]; head_sampling_rate?: number };
-    logs?: { enabled?: boolean; destinations?: string[]; head_sampling_rate?: number };
+    traces?: {
+      enabled?: boolean;
+      destinations?: string[];
+      persist?: boolean;
+      head_sampling_rate?: number;
+    };
+    logs?: {
+      enabled?: boolean;
+      destinations?: string[];
+      persist?: boolean;
+      head_sampling_rate?: number;
+    };
   };
   secrets?: { required?: string[] };
   vars?: Record<string, unknown>;
@@ -57,6 +67,7 @@ describe("Worker Wrangler observability secrets", () => {
       expect(target?.secrets?.required).not.toContain("AXIOM_TOKEN");
       expect(target?.vars?.SENTRY_DSN).toBeUndefined();
       expect(target?.vars?.AXIOM_TOKEN).toBeUndefined();
+      expect(target?.vars?.AXIOM_DATASET).toBeUndefined();
     });
   }
 });
@@ -70,10 +81,12 @@ describe("Worker Wrangler Cloudflare Observability destinations", () => {
     )(`${surfaceId} exports %s telemetry to Axiom destinations`, (_target, target) => {
       expect(target?.observability?.traces?.enabled).toBe(true);
       expect(target?.observability?.traces?.destinations).toContain(AXIOM_TRACE_DESTINATION);
+      expect(target?.observability?.traces?.persist).toBe(false);
       expect(target?.observability?.traces?.head_sampling_rate).toBe(1);
 
       expect(target?.observability?.logs?.enabled).toBe(true);
       expect(target?.observability?.logs?.destinations).toContain(AXIOM_LOG_DESTINATION);
+      expect(target?.observability?.logs?.persist).toBe(false);
       expect(target?.observability?.logs?.head_sampling_rate).toBe(1);
     });
   }

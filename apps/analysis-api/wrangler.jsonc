@@ -8,11 +8,13 @@
     "traces": {
       "enabled": true,
       "destinations": ["axiom-traces"],
+      "persist": false,
       "head_sampling_rate": 1
     },
     "logs": {
       "enabled": true,
       "destinations": ["axiom-logs"],
+      "persist": false,
       "head_sampling_rate": 1
     }
   },
@@ -27,8 +29,7 @@
     "AUTH_API_ORIGIN": "http://localhost:8791",
     "AUTH_JWKS_URI": "http://localhost:8791/.well-known/jwks.json",
     "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
-    "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
-    "AXIOM_DATASET": "splitch-logs"
+    "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
   },
   "kv_namespaces": [
     {
@@ -44,11 +45,13 @@
         "traces": {
           "enabled": true,
           "destinations": ["axiom-traces"],
+          "persist": false,
           "head_sampling_rate": 1
         },
         "logs": {
           "enabled": true,
           "destinations": ["axiom-logs"],
+          "persist": false,
           "head_sampling_rate": 1
         }
       },
@@ -63,8 +66,7 @@
         "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
         "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
         "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
-        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
-        "AXIOM_DATASET": "splitch-logs"
+        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
       "kv_namespaces": [
         {
@@ -80,11 +82,13 @@
         "traces": {
           "enabled": true,
           "destinations": ["axiom-traces"],
+          "persist": false,
           "head_sampling_rate": 1
         },
         "logs": {
           "enabled": true,
           "destinations": ["axiom-logs"],
+          "persist": false,
           "head_sampling_rate": 1
         }
       },
@@ -99,8 +103,7 @@
         "AUTH_API_ORIGIN": "https://auth.splitch.dev",
         "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
         "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
-        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
-        "AXIOM_DATASET": "splitch-logs"
+        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
       "kv_namespaces": [
         {

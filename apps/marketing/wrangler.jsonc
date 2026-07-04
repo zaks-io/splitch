@@ -8,11 +8,13 @@
     "traces": {
       "enabled": true,
       "destinations": ["axiom-traces"],
+      "persist": false,
       "head_sampling_rate": 1
     },
     "logs": {
       "enabled": true,
       "destinations": ["axiom-logs"],
+      "persist": false,
       "head_sampling_rate": 1
     }
   },
@@ -27,11 +29,13 @@
         "traces": {
           "enabled": true,
           "destinations": ["axiom-traces"],
+          "persist": false,
           "head_sampling_rate": 1
         },
         "logs": {
           "enabled": true,
           "destinations": ["axiom-logs"],
+          "persist": false,
           "head_sampling_rate": 1
         }
       },
@@ -47,11 +51,13 @@
         "traces": {
           "enabled": true,
           "destinations": ["axiom-traces"],
+          "persist": false,
           "head_sampling_rate": 1
         },
         "logs": {
           "enabled": true,
           "destinations": ["axiom-logs"],
+          "persist": false,
           "head_sampling_rate": 1
         }
       },
