@@ -93,6 +93,9 @@ importers:
       '@splitch/control-plane-sdk':
         specifier: workspace:*
         version: link:../../packages/control-plane-sdk
+      tsx:
+        specifier: 4.22.4
+        version: 4.22.4
 
   apps/control-panel:
     dependencies:
