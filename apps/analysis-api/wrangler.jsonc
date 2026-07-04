@@ -30,6 +30,7 @@
   "env": {
     "shared-preview": {
       "name": "splitch-analysis-api-shared-preview",
+      "workers_dev": false,
       "triggers": {
         "crons": []
       },
@@ -46,12 +47,13 @@
       "kv_namespaces": [
         {
           "binding": "SESSION_STORE",
-          "id": "00000000000000000000000000000000"
+          "id": "673d17e768eb45f5bfc5275fbd0e9320"
         }
       ]
     },
     "production": {
       "name": "splitch-analysis-api",
+      "workers_dev": false,
       "triggers": {
         "crons": ["0 * * * *"]
       },
@@ -68,7 +70,7 @@
       "kv_namespaces": [
         {
           "binding": "SESSION_STORE",
-          "id": "00000000000000000000000000000000"
+          "id": "bdfa1197123d4eef945c5a703d63a572"
         }
       ]
     }

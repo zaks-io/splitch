@@ -1,13 +1,14 @@
 # Agent Config
 
-Last updated: 2026-06-27
+Last updated: 2026-07-04
 
 Scaffold is in place. The repo is now a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
 and Worker-shaped deploy units. The code host now exists: `main` is pushed to
 `github.com/zaks-io/splitch` (private) and the `ci` workflow (secret scanning
-included) runs on every push. Shared-preview deploy, Cloudflare production deploy, and most real
-backing resources are still not provisioned. The Linear repo-route label
+included) runs on every push. Shared-preview and production deploy workflows are wired through
+Tinybird, D1 migrations, and Turborepo Worker deploy tasks. Cloudflare D1/KV backing resources are
+provisioned and their Wrangler binding IDs are committed. The Linear repo-route label
 `zaks-io/splitch` now exists and current `splitch v1` Todo issues are routed
 with it.
 
@@ -33,8 +34,8 @@ with it.
 - Verified hosted PR check name: `ci` (runs on push to `zaks-io/splitch`). Secret
   scanning is a step inside `ci`; the standalone `gitleaks` workflow was removed.
   See `Pull Requests`.
-- Critical unknowns: shared preview is not provisioned, only the Tinybird leg of
-  production deployment is wired, and friction-intake fields remain unverified.
+- Critical unknowns: friction-intake fields remain unverified. Hosted smoke, reset, and rollback
+  scripts remain unwired.
   See `Unknowns`.
 
 ## Repo
@@ -61,16 +62,22 @@ with it.
   coverage, `.turbo/`, and `.wrangler/` are ignored.
 - PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus
   a range-scoped Gitleaks secret scan.
-- Shared preview checks: designed, not wired. See
+- Shared preview deploy: workflow wired, Cloudflare D1/KV resources are provisioned, the Tinybird
+  `shared_preview` Branch exists, and Worker secret sync is wired before deploy. Cloudflare Custom
+  Domain DNS/cert activation can lag after first deploy. See
   `docs/spec/platform/deployment-pipeline.md`.
-- Production deploy path: Tinybird leg wired; Cloudflare/D1 production deploy
-  legs remain designed, not wired. See `docs/spec/platform/deployment-pipeline.md`.
+- Production deploy path: auto-starts after `ci` succeeds on `main` and can also be manually
+  dispatched from `main`; Tinybird, D1, and Cloudflare Worker deploy legs are wired through
+  Turborepo package tasks. See
+  `docs/spec/platform/deployment-pipeline.md`.
 - Merge authority: Orchestrator may merge low/normal-risk PRs when the automation
   merge gate in `Pull Requests` passes. Human approval is required for the high-risk
   set named in `Pull Requests`, production deploys, and any PR with blocking review
   findings.
-- Production approval required: yes. Automation merge authority never includes
-  production deploys or production resource mutation.
+- Production approval required: controlled by the GitHub `production` environment. It gates the
+  deploy job itself, not traffic. The workflow starts automatically after CI passes on `main` or
+  from manual `main` dispatch. Automation merge authority never includes direct production resource
+  mutation.
 
 ## Workspaces
 
@@ -300,24 +307,25 @@ real package API boundary.
 - PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
   Blacksmith. Tinybird Local and D1 local checks run local backing-resource
   validators.
-- Shared Preview / Production: partially wired. Shared Preview is one
+- Shared Preview / Production: workflows are wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
-  resources plus one Tinybird Branch. Production has a manual
-  `deploy-production` workflow that validates with `verify:ci` before the
-  production gate, then deploys Tinybird through the GitHub `production`
-  environment. Cloudflare/D1 production deploy legs remain designed but not
-  wired. During build-out, production
-  required-reviewer / prevent-self-review protection is intentionally deferred
-  until there is an actual full production target worth protecting.
-- Planned backing services not yet provisioned: Cloudflare Flagship, D1, KV,
-  Durable Objects, and Queues. Tinybird Cloud workspaces `splitch_dev` and
-  `splitch_prod` exist; both have the committed datasources deployed, and
-  production Tinybird deploy is wired through GitHub Actions.
-- Production: Tinybird production deploy is active as a manual GitHub workflow.
-  Do not wire or require full production protection checks during build-out;
-  re-enable the approval-gate decision when Cloudflare production resources and
-  deploy workflows exist.
-- Hosted checks allowed without approval: CI and Gitleaks only.
+  resources plus one Tinybird Branch. Production starts automatically after
+  `ci` succeeds on a same-repository push to `main`, validates the exact CI
+  commit, then deploys Tinybird, D1 migrations, and Workers through the GitHub
+  `production` environment.
+- Planned backing services not yet wired: Cloudflare Flagship and Queues. Cloudflare D1/KV resources
+  are provisioned for shared-preview and production, and Durable Object namespaces are created by the
+  Worker deploys that declare their migrations. Tinybird Cloud workspaces `splitch_dev` and
+  `splitch_prod` exist; both have the committed datasources deployed, and production Tinybird deploy
+  is wired through GitHub Actions.
+- Production: the deploy workflow is active once merged. GitHub environment secret names are present,
+  and the workflow syncs Worker secrets before deploying Workers.
+  Required reviewers and prevent-self-review are controlled by the GitHub
+  `production` environment when the plan supports them.
+- Hosted automation allowed without separate approval: CI, Gitleaks, shared-preview deploy, and the
+  production deploy workflow start. The production deploy job itself is gated by the GitHub
+  `production` environment when protection rules are configured; that environment does not control
+  traffic after Workers are deployed.
 
 ## Instruction Trust Boundaries
 
@@ -351,16 +359,16 @@ real package API boundary.
 - [ ] Public npm publishing workflow and credentials are unverified. `@splitch/sdk` exists as the
       public data-plane SDK scaffold, but no package has been published. Verifier: create a release
       slice with ownership, provenance, changelog, npm token/OIDC setup, and publish dry run.
-- [ ] Shared-preview, Cloudflare production deploy, and rollback workflows are
-      designed but not wired. Verifier: implement `docs/spec/platform/deployment-pipeline.md`,
-      including deploy/reset workflows, D1 migrations, Durable Object migrations,
-      Tinybird branch flow, and production approval rules.
-- [ ] Production environment protection is intentionally deferred. GitHub
-      `preview` and `production` environment shells exist, but required
-      reviewers and prevent-self-review should not be wired until there is an
-      actual production target worth protecting. GitHub previously rejected
-      those protection rules for this private repo with plan-support HTTP 422
-      errors, so revisit plan support or choose a different approval gate later.
-- [ ] Shared preview branch not provisioned. Verifier: create the single
-      Tinybird `shared_preview` Branch and matching non-production Cloudflare
-      resources when hosted preview is needed.
+- [x] Shared-preview and production deploy workflows are wired, Cloudflare
+      D1/KV resource IDs are provisioned and committed, Worker secret sync is wired, and the
+      `shared_preview` Tinybird Branch exists. Rollback remains designed but not wired. Verifier: implement
+      the remaining `docs/spec/platform/deployment-pipeline.md` reset/rollback
+      work, run workflow syntax checks, and confirm required GitHub environment
+      secrets/vars.
+- [ ] Production environment protection is controlled by the GitHub
+      `production` environment. GitHub previously rejected required-reviewer and
+      prevent-self-review rules for this private repo with plan-support HTTP 422
+      errors, so revisit plan support or choose a different approval gate if
+      human approval is still required.
+- [x] Shared preview branch provisioned. Verifier: Tinybird `shared_preview` Branch and matching
+      non-production Cloudflare resources exist for hosted preview.
