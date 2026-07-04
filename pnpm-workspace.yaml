@@ -11,6 +11,7 @@ packages:
 # minimumReleaseAgeIgnoreMissingTime: false
 # blockExoticSubdeps: true
 allowBuilds:
+  '@sentry/cli': true
   esbuild: true
   lefthook: true
   sharp: true

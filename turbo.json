@@ -86,25 +86,65 @@
       "dependsOn": ["build"],
       "cache": false,
       "outputs": [],
-      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
+      "passThroughEnv": [
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "SENTRY_AUTH_TOKEN",
+        "SENTRY_ORG",
+        "SENTRY_PROJECT",
+        "SENTRY_RELEASE",
+        "SENTRY_RELEASE_BASE",
+        "SENTRY_URL",
+        "SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV"
+      ]
     },
     "@splitch/evaluation-api#deploy": {
       "dependsOn": ["build", "@splitch/event-ingest-api#deploy"],
       "cache": false,
       "outputs": [],
-      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
+      "passThroughEnv": [
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "SENTRY_AUTH_TOKEN",
+        "SENTRY_ORG",
+        "SENTRY_PROJECT",
+        "SENTRY_RELEASE",
+        "SENTRY_RELEASE_BASE",
+        "SENTRY_URL",
+        "SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV"
+      ]
     },
     "deploy:dry-run": {
       "dependsOn": ["build"],
       "cache": false,
       "outputs": [],
-      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
+      "passThroughEnv": [
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "SENTRY_AUTH_TOKEN",
+        "SENTRY_ORG",
+        "SENTRY_PROJECT",
+        "SENTRY_RELEASE",
+        "SENTRY_RELEASE_BASE",
+        "SENTRY_URL",
+        "SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV"
+      ]
     },
     "@splitch/evaluation-api#deploy:dry-run": {
       "dependsOn": ["build", "@splitch/event-ingest-api#deploy:dry-run"],
       "cache": false,
       "outputs": [],
-      "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]
+      "passThroughEnv": [
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "SENTRY_AUTH_TOKEN",
+        "SENTRY_ORG",
+        "SENTRY_PROJECT",
+        "SENTRY_RELEASE",
+        "SENTRY_RELEASE_BASE",
+        "SENTRY_URL",
+        "SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV"
+      ]
     },
     "d1:migrate:local": {
       "cache": false
