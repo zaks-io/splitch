@@ -18,11 +18,9 @@
       "head_sampling_rate": 1
     }
   },
-  "secrets": {
-    "required": ["SENTRY_DSN"]
-  },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local"
+    "SPLITCH_PLATFORM_TARGET": "local",
+    "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
   },
   "env": {
     "shared-preview": {
@@ -43,11 +41,9 @@
         }
       },
       "routes": [{ "pattern": "preview.splitch.dev", "custom_domain": true }],
-      "secrets": {
-        "required": ["SENTRY_DSN"]
-      },
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "shared-preview"
+        "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
       }
     },
     "production": {
@@ -68,11 +64,9 @@
         }
       },
       "routes": [{ "pattern": "splitch.dev", "custom_domain": true }],
-      "secrets": {
-        "required": ["SENTRY_DSN"]
-      },
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "production"
+        "SPLITCH_PLATFORM_TARGET": "production",
+        "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
       }
     }
   }
