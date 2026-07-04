@@ -6,6 +6,11 @@ import {
   secretsFromEnv,
   type ScrubbedEmitter,
 } from "./emitter.js";
+import {
+  resolveRequestErrorStatus,
+  shouldReportRequestErrorToSentry,
+  type RequestErrorContext,
+} from "./request-error-sentry.js";
 import type { ObservabilitySurfaceId } from "./surfaces.js";
 
 type WorkerEnv = {
@@ -23,9 +28,19 @@ export interface WorkerObservabilityOptions {
 }
 
 let sentryModule: SentryCloudflare | undefined;
+let sentryModuleOverride: SentryCloudflare | undefined;
 const sentryHandlers = new WeakMap<object, ExportedHandler<WorkerEnv>>();
 
+/** @internal Injects a Sentry client for unit tests. */
+export function __setSentryModuleForTests(module: SentryCloudflare | undefined): void {
+  sentryModuleOverride = module;
+  sentryModule = module;
+}
+
 async function loadSentry(): Promise<SentryCloudflare> {
+  if (sentryModuleOverride) {
+    return sentryModuleOverride;
+  }
   sentryModule ??= await import("@sentry/cloudflare");
   return sentryModule;
 }
@@ -122,25 +137,48 @@ export function createWorkerObservability(
     onRequest(ctx: { requestId: string; method: string; path: string }) {
       emitter.log("info", "request", ctx);
     },
-    onError(ctx: { requestId: string; code: string; status: number }) {
-      emitter.log("error", "request_error", ctx);
+    onError(ctx: RequestErrorContext) {
+      const status = resolveRequestErrorStatus(ctx);
+      const enriched = { ...ctx, status };
+
+      if (shouldReportRequestErrorToSentry(ctx)) {
+        emitter.log("error", "request_fault", enriched);
+        if (env.SENTRY_DSN) {
+          void captureSentryMessage(options, enriched);
+        }
+        return;
+      }
+
+      emitter.log("warn", "request_error", enriched);
       if (env.SENTRY_DSN) {
-        void captureSentryMessage(env, options, ctx);
+        void addSentryBreadcrumb(options, enriched);
       }
     },
   };
 }
 
 async function captureSentryMessage(
-  _env: WorkerEnv,
   options: WorkerObservabilityOptions,
-  ctx: { requestId: string; code: string; status: number },
+  ctx: RequestErrorContext & { status: number },
 ): Promise<void> {
   const Sentry = await loadSentry();
-  Sentry.captureMessage(`worker error ${ctx.code}`, {
+  Sentry.captureMessage(`worker fault ${ctx.code}`, {
     level: "error",
     tags: { surface: options.surface, code: ctx.code },
-    extra: ctx,
+    extra: { requestId: ctx.requestId, code: ctx.code, status: ctx.status },
+  });
+}
+
+async function addSentryBreadcrumb(
+  options: WorkerObservabilityOptions,
+  ctx: RequestErrorContext & { status: number },
+): Promise<void> {
+  const Sentry = await loadSentry();
+  Sentry.addBreadcrumb({
+    category: "request_error",
+    level: "info",
+    message: ctx.code,
+    data: { surface: options.surface, ...ctx },
   });
 }
 

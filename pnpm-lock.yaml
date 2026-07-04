@@ -234,6 +234,9 @@ importers:
       '@sentry/node':
         specifier: ^9.47.0
         version: 9.47.1
+      '@splitch/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@splitch/privacy':
         specifier: workspace:*
         version: link:../privacy
