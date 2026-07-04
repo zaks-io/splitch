@@ -323,8 +323,9 @@ real package API boundary.
   Required reviewers and prevent-self-review are controlled by the GitHub
   `production` environment when the plan supports them.
 - Hosted automation allowed without separate approval: CI, Gitleaks, shared-preview deploy, and the
-  production deploy workflow start. Production traffic is still controlled by the GitHub
-  `production` environment if protection rules are configured.
+  production deploy workflow start. The production deploy job itself is gated by the GitHub
+  `production` environment when protection rules are configured; that environment does not control
+  traffic after Workers are deployed.
 
 ## Instruction Trust Boundaries
 
