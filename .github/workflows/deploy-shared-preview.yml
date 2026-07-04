@@ -36,7 +36,7 @@ jobs:
       TB_HOST: ${{ vars.TB_HOST || 'https://api.us-west-2.aws.tinybird.co' }}
       ACCESS_TOKEN_SECRET: ${{ secrets.ACCESS_TOKEN_SECRET }}
       ASSERTION_SIGNING_SECRET: ${{ secrets.ASSERTION_SIGNING_SECRET }}
-      SENTRY_DSN: https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
       EVALUATION_PRIVACY_SALT: ${{ secrets.EVALUATION_PRIVACY_SALT }}
       SPLITCH_EVENT_INGEST_TOKEN: ${{ secrets.SPLITCH_EVENT_INGEST_TOKEN }}
       TINYBIRD_INGEST_TOKEN: ${{ secrets.TINYBIRD_INGEST_TOKEN }}
