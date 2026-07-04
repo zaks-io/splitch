@@ -72,7 +72,7 @@
         "TURNSTILE_SITE_KEY": "0x4AAAAAADsCXVP9TRrC6c6N",
         "SPLITCH_SMOKE_CLIENT_ID": "splitch-shared-preview-smoke",
         "SPLITCH_SMOKE_USER_ID": "user_shared_preview_smoke",
-        "SPLITCH_SMOKE_SCOPES": "org:org_shared_preview_smoke:owner app:app_shared_preview_smoke:member"
+        "SPLITCH_SMOKE_SCOPES": "org:org_shared_preview_smoke:owner app:app_shared_preview_smoke:admin"
       },
       "secrets": {
         "required": [
