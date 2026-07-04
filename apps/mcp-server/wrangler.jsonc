@@ -12,19 +12,31 @@
     "SPLITCH_PLATFORM_TARGET": "local",
     "CONTROL_PLANE_API_ORIGIN": "http://127.0.0.1:8787",
     "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788",
-    "ANALYSIS_API_ORIGIN": "http://127.0.0.1:8790"
+    "ANALYSIS_API_ORIGIN": "http://127.0.0.1:8790",
+    "AXIOM_DATASET": "splitch-logs"
+  },
+  "secrets": {
+    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
   },
   "env": {
     "shared-preview": {
       "name": "splitch-mcp-server-shared-preview",
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "shared-preview"
+        "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "AXIOM_DATASET": "splitch-logs"
+      },
+      "secrets": {
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
       }
     },
     "production": {
       "name": "splitch-mcp-server",
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "production"
+        "SPLITCH_PLATFORM_TARGET": "production",
+        "AXIOM_DATASET": "splitch-logs"
+      },
+      "secrets": {
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
       }
     }
   }

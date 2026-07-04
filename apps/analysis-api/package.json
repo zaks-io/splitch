@@ -17,6 +17,7 @@
   "dependencies": {
     "@splitch/contracts": "workspace:*",
     "@splitch/stats": "workspace:*",
+    "@splitch/observability": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
     "hono": "^4.12.27"
   }

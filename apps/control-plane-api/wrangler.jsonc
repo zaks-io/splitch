@@ -39,13 +39,21 @@
     { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] }
   ],
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local"
+    "SPLITCH_PLATFORM_TARGET": "local",
+    "AXIOM_DATASET": "splitch-logs"
+  },
+  "secrets": {
+    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
   },
   "env": {
     "shared-preview": {
       "name": "splitch-control-plane-api-shared-preview",
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "shared-preview"
+        "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "AXIOM_DATASET": "splitch-logs"
+      },
+      "secrets": {
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
       },
       "d1_databases": [
         {
@@ -75,7 +83,11 @@
     "production": {
       "name": "splitch-control-plane-api",
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "production"
+        "SPLITCH_PLATFORM_TARGET": "production",
+        "AXIOM_DATASET": "splitch-logs"
+      },
+      "secrets": {
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
       },
       "d1_databases": [
         {

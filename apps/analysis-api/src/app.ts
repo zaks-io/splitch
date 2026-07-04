@@ -4,6 +4,7 @@ import {
   createRegistrar,
   type RateLimiter,
   type Registrar,
+  type RegistrarDeps,
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import { makeResultsHandler, type ResultsDeps } from "./results.js";
@@ -16,6 +17,7 @@ export interface AnalysisAppDeps extends ResultsDeps {
   rateLimiter: RateLimiter;
   platformTarget?: string;
   defaultHeaders?: Record<string, string>;
+  observability?: RegistrarDeps["observability"];
 }
 
 export function createApp(deps: AnalysisAppDeps): Hono {
@@ -38,5 +40,6 @@ function analysisRegistrar(deps: AnalysisAppDeps): Registrar {
     authResolvers: { "control-plane-token": deps.authResolver },
     rateLimiter: deps.rateLimiter,
     defaultHeaders: deps.defaultHeaders,
+    observability: deps.observability,
   });
 }

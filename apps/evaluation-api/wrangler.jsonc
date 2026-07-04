@@ -9,10 +9,11 @@
     "head_sampling_rate": 1
   },
   "secrets": {
-    "required": ["SPLITCH_EVENT_INGEST_TOKEN"]
+    "required": ["SENTRY_DSN", "AXIOM_TOKEN", "SPLITCH_EVENT_INGEST_TOKEN"]
   },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local"
+    "SPLITCH_PLATFORM_TARGET": "local",
+    "AXIOM_DATASET": "splitch-logs"
   },
   "services": [
     {
@@ -60,10 +61,11 @@
     "shared-preview": {
       "name": "splitch-evaluation-api-shared-preview",
       "secrets": {
-        "required": ["SPLITCH_EVENT_INGEST_TOKEN"]
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN", "SPLITCH_EVENT_INGEST_TOKEN"]
       },
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "shared-preview"
+        "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "services": [
         {
@@ -75,10 +77,11 @@
     "production": {
       "name": "splitch-evaluation-api",
       "secrets": {
-        "required": ["SPLITCH_EVENT_INGEST_TOKEN"]
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN", "SPLITCH_EVENT_INGEST_TOKEN"]
       },
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "production"
+        "SPLITCH_PLATFORM_TARGET": "production",
+        "AXIOM_DATASET": "splitch-logs"
       },
       "services": [
         {

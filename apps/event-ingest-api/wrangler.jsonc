@@ -9,11 +9,12 @@
     "head_sampling_rate": 1
   },
   "secrets": {
-    "required": ["SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+    "required": ["SENTRY_DSN", "AXIOM_TOKEN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
-    "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
+    "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
+    "AXIOM_DATASET": "splitch-logs"
   },
   "kv_namespaces": [
     {
@@ -25,21 +26,23 @@
     "shared-preview": {
       "name": "splitch-event-ingest-api-shared-preview",
       "secrets": {
-        "required": ["SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
-        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
+        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
+        "AXIOM_DATASET": "splitch-logs"
       }
     },
     "production": {
       "name": "splitch-event-ingest-api",
       "secrets": {
-        "required": ["SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
-        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
+        "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co",
+        "AXIOM_DATASET": "splitch-logs"
       }
     }
   }

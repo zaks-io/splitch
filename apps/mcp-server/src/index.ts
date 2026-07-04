@@ -1,4 +1,5 @@
 import { handleMcpServerRequest } from "./mcp-handler.js";
+import { createWorkerObservability, wrapWorkerHandler } from "@splitch/observability/worker";
 
 const service = "splitch-mcp-server";
 
@@ -7,10 +8,20 @@ type Env = {
   EVALUATION_API_ORIGIN?: string;
   ANALYSIS_API_ORIGIN?: string;
   SPLITCH_PLATFORM_TARGET?: string;
+  SENTRY_DSN?: string;
+  AXIOM_TOKEN?: string;
+  AXIOM_DATASET?: string;
 };
 
-export default {
+const handler = {
   async fetch(request, env): Promise<Response> {
+    const observability = createWorkerObservability(env, { surface: "mcp-server" });
+    const url = new URL(request.url);
+    observability.onRequest?.({
+      requestId: request.headers.get("x-request-id") ?? "mcp-request",
+      method: request.method,
+      path: url.pathname,
+    });
     return handleMcpServerRequest({
       request,
       service,
@@ -21,5 +32,7 @@ export default {
     });
   },
 } satisfies ExportedHandler<Env>;
+
+export default wrapWorkerHandler(handler, { surface: "mcp-server" });
 
 export { handleMcpServerRequest };

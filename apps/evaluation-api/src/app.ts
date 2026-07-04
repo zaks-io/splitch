@@ -1,4 +1,4 @@
-import type { RateLimiter, AuthResolver } from "@splitch/worker-runtime";
+import type { RateLimiter, AuthResolver, RegistrarDeps } from "@splitch/worker-runtime";
 import { createRegistrar } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import type { EvaluatePathDeps } from "./evaluate/evaluate-path.js";
@@ -18,6 +18,7 @@ export interface AppDeps extends EvaluatePathDeps {
   exposureSink: ExposureSink;
   rateLimiter: RateLimiter;
   defaultHeaders?: Record<string, string>;
+  observability?: RegistrarDeps["observability"];
 }
 
 export function createApp(deps: AppDeps): Hono {
@@ -31,6 +32,7 @@ export function createApp(deps: AppDeps): Hono {
     },
     rateLimiter: deps.rateLimiter,
     defaultHeaders: deps.defaultHeaders,
+    observability: deps.observability,
   });
 
   registrar.mount(app, evaluationRoute("sdk_evaluate"), makeEvaluateHandler(deps));

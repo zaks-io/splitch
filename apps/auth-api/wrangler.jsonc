@@ -31,27 +31,33 @@
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "AUTH_API_ORIGIN": "http://localhost:8791",
-    "CONTROL_PLANE_ORIGIN": "http://localhost:8787"
+    "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
+    "AXIOM_DATASET": "splitch-logs"
+  },
+  "secrets": {
+    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
   },
   "env": {
     "shared-preview": {
       "name": "splitch-auth-api-shared-preview",
       "secrets": {
-        "required": ["TURNSTILE_SECRET"]
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN", "TURNSTILE_SECRET"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
-        "TURNSTILE_SITE_KEY": "0x4AAAAAADsCXVP9TRrC6c6N"
+        "TURNSTILE_SITE_KEY": "0x4AAAAAADsCXVP9TRrC6c6N",
+        "AXIOM_DATASET": "splitch-logs"
       }
     },
     "production": {
       "name": "splitch-auth-api",
       "secrets": {
-        "required": ["TURNSTILE_SECRET"]
+        "required": ["SENTRY_DSN", "AXIOM_TOKEN", "TURNSTILE_SECRET"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
-        "TURNSTILE_SITE_KEY": "0x4AAAAAADsCY8JNBv2vrTFC"
+        "TURNSTILE_SITE_KEY": "0x4AAAAAADsCY8JNBv2vrTFC",
+        "AXIOM_DATASET": "splitch-logs"
       }
     }
   }

@@ -1,5 +1,6 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
+import { createWorkerObservability, workerEmitter, wrapWorkerHandler } from "@splitch/observability/worker";
 import { createApp } from "./app.js";
 import { makeControlPlaneAuthResolver } from "./auth-resolver.js";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do.js";
@@ -11,15 +12,7 @@ import { makeSessionStore } from "./session-store.js";
 
 const service = "splitch-control-plane-api";
 
-/**
- * Control Plane API Worker entry. Health is served directly; everything else
- * mounts through the worker-runtime registrar behind the control-plane-token
- * resolver. D1 access is ALWAYS through createRepository (the tenant-isolation
- * seam, ADR-0018); KV handles session validation plus credential hot-validation
- * write-through. The JWKS verifier is injected so the real WorkOS/auth-api JWKS
- * (HUMAN-SETUP S41) swaps in behind the same port without touching the resolver.
- */
-export default {
+const handler = {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health" || url.pathname === "/") {
@@ -45,6 +38,7 @@ export default {
       credentialStore: env.CREDENTIAL_STORE,
       configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
       memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
+      observability: createWorkerObservability(env, { surface: "control-plane-api" }),
     });
 
     return app.fetch(request, env);
@@ -55,19 +49,19 @@ export default {
   },
 } satisfies ExportedHandler<ControlPlaneApiEnv>;
 
+export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
+
 async function runDemoReaper(env: ControlPlaneApiEnv, event: ScheduledController): Promise<void> {
   const result = await createRepository(env.DB).identity.reapExpiredProvisionalOrganizations(
     new Date(event.scheduledTime).toISOString(),
   );
-  console.log(
-    JSON.stringify({
-      service,
-      job: "demo-reaper",
-      cron: event.cron,
-      candidates: result.candidates,
-      reaped: result.reaped,
-    }),
-  );
+  workerEmitter(env, { surface: "control-plane-api" }).log("info", "demo-reaper", {
+    service,
+    job: "demo-reaper",
+    cron: event.cron,
+    candidates: result.candidates,
+    reaped: result.reaped,
+  });
 }
 
 export { ConfigStoreDurableObject };

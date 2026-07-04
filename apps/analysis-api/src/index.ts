@@ -1,5 +1,6 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import type { RateLimiter } from "@splitch/worker-runtime";
+import { createWorkerObservability, workerEmitter, wrapWorkerHandler } from "@splitch/observability/worker";
 import { createApp } from "./app.js";
 import {
   makeControlPlaneAuthResolver,
@@ -15,7 +16,7 @@ const allowLimiter: RateLimiter = () => ({ limited: false });
 const verifierCache = new Map<string, ReturnType<typeof makeJwksVerifier>>();
 const service = "splitch-analysis-api";
 
-export default {
+const handler = {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health" || url.pathname === "/") {
@@ -35,6 +36,7 @@ export default {
       rateLimiter: allowLimiter,
       tinybird: createTinybirdReadTransport(env),
       platformTarget: env.SPLITCH_PLATFORM_TARGET,
+      observability: createWorkerObservability(env, { surface: "analysis-api" }),
     });
     return app.fetch(request, env);
   },
@@ -43,13 +45,24 @@ export default {
     ctx.waitUntil(
       runScheduledSnapshot({
         cron: event.cron,
-        logger: console,
+        logger: {
+          log: (message, ...args) => {
+            const fields = args[0] && typeof args[0] === "object" ? (args[0] as Record<string, unknown>) : {};
+            workerEmitter(env, { surface: "analysis-api" }).log("info", String(message), fields);
+          },
+          error: (message, ...args) => {
+            const fields = args[0] && typeof args[0] === "object" ? (args[0] as Record<string, unknown>) : {};
+            workerEmitter(env, { surface: "analysis-api" }).log("error", String(message), fields);
+          },
+        },
         scheduledTimeMs: event.scheduledTime,
         tinybird: createTinybirdCopyTransport(env),
       }),
     );
   },
 } satisfies ExportedHandler<AnalysisApiEnv>;
+
+export default wrapWorkerHandler(handler, { surface: "analysis-api" });
 
 function requiredConfig(value: string | undefined, name: string): string {
   if (value === undefined || value.trim().length === 0) {

@@ -38,6 +38,11 @@ beforeAll(async () => {
 
 afterAll(() => local.dispose());
 
+const testCtx = {
+  waitUntil() {},
+  passThroughOnException() {},
+} as unknown as ExecutionContext;
+
 function call(body: unknown, ip: string, path = "/agent/identity"): Promise<Response> {
   const request = new Request(`https://auth.splitch.test${path}`, {
     method: "POST",
@@ -47,7 +52,9 @@ function call(body: unknown, ip: string, path = "/agent/identity"): Promise<Resp
   // The handler's typed param is the Cloudflare IncomingRequest (carries `cf`);
   // a plain test Request lacks those edge-only props, so cast at the boundary —
   // the handler reads only headers/url/body, never `cf`.
-  return worker.fetch(request as unknown as Parameters<typeof worker.fetch>[0], env);
+  return Promise.resolve(
+    worker.fetch(request as unknown as Parameters<typeof worker.fetch>[0], env, testCtx),
+  );
 }
 
 let turnstileSeq = 0;

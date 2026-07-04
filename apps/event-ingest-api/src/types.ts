@@ -7,6 +7,9 @@ export type Env = {
   SPLITCH_SOURCE_ID?: string;
   TINYBIRD_API_URL?: string;
   TINYBIRD_INGEST_TOKEN?: string;
+  SENTRY_DSN?: string;
+  AXIOM_TOKEN?: string;
+  AXIOM_DATASET?: string;
 };
 
 export type Payload = Record<string, unknown>;

@@ -44,6 +44,7 @@ export interface AppDeps {
   memberProfileResolver?: MemberProfileResolver;
   nowIso?: () => string;
   defaultHeaders?: Record<string, string>;
+  observability?: RegistrarDeps["observability"];
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -52,6 +53,7 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
     authResolvers: { "control-plane-token": deps.authResolver },
     rateLimiter: deps.rateLimiter,
     defaultHeaders: deps.defaultHeaders,
+    observability: deps.observability,
   };
   return createRegistrar(registrarDeps);
 }
