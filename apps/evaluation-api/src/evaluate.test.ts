@@ -1,13 +1,17 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  API_KEY,
   APP_ID,
   CLIENT_KEY,
   EXPERIMENT_ID,
+  LOCKED_CLIENT_KEY,
+  RecordingExposureSink,
   REVOKED_CLIENT_KEY,
   makeSdkRouteHarness,
   sdkRouteInit,
 } from "./sdk-route-test-fixtures.js";
+import { ExposureSinkError } from "./exposure-sink.js";
 
 const PATH = "/api/sdk/evaluate";
 
@@ -56,6 +60,35 @@ describe("POST /api/sdk/evaluate", () => {
     expect(exposureSink.writes).toEqual([]);
   });
 
+  it("rejects API Keys before evaluation", async () => {
+    const { app, assignmentStore, configKv, exposureSink } = await liveRunHarness();
+
+    const res = await app.request(PATH, sdkRouteInit(API_KEY));
+    const body = (await res.json()) as ErrorResponse;
+
+    expect(res.status).toBe(401);
+    expect(body.code).toBe("UNAUTHORIZED");
+    expect(configKv.getCalls).toEqual([]);
+    expect(assignmentStore.getAllCalls).toEqual([]);
+    expect(exposureSink.writes).toEqual([]);
+  });
+
+  it("enforces a Client Key origin allow-list before evaluation", async () => {
+    const { app, assignmentStore, configKv, exposureSink } = await liveRunHarness();
+
+    const res = await app.request(
+      PATH,
+      sdkRouteInit(LOCKED_CLIENT_KEY, { origin: "https://evil.example.test" }),
+    );
+    const body = (await res.json()) as ErrorResponse;
+
+    expect(res.status).toBe(403);
+    expect(body.code).toBe("ORIGIN_NOT_ALLOWED");
+    expect(configKv.getCalls).toEqual([]);
+    expect(assignmentStore.getAllCalls).toEqual([]);
+    expect(exposureSink.writes).toEqual([]);
+  });
+
   it("treats body appId as an assertion and rejects mismatches without data access", async () => {
     const { app, assignmentStore, configKv, exposureSink } = await makeSdkRouteHarness({
       liveRun: true,
@@ -67,6 +100,24 @@ describe("POST /api/sdk/evaluate", () => {
     expect(res.status).toBe(403);
     expect(body.code).toBe("APP_MISMATCH");
     expect(body).not.toHaveProperty("variant");
+    expect(configKv.getCalls).toEqual([]);
+    expect(assignmentStore.getAllCalls).toEqual([]);
+    expect(exposureSink.writes).toEqual([]);
+  });
+
+  it.each([
+    ["empty appId", { appId: "" }, "appId"],
+    ["empty flagKey", { flagKey: "" }, "flagKey"],
+  ] as const)("returns VALIDATION_ERROR for %s before handler data access", async (_case, body, field) => {
+    const { app, assignmentStore, configKv, credentialKv, exposureSink } = await liveRunHarness();
+
+    const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY, {}, body));
+    const response = (await res.json()) as ErrorResponse;
+
+    expect(res.status).toBe(400);
+    expect(response.code).toBe("VALIDATION_ERROR");
+    expect(JSON.stringify(response.details)).toContain(field);
+    expect(credentialKv.getCalls).toEqual([]);
     expect(configKv.getCalls).toEqual([]);
     expect(assignmentStore.getAllCalls).toEqual([]);
     expect(exposureSink.writes).toEqual([]);
@@ -84,6 +135,20 @@ describe("POST /api/sdk/evaluate", () => {
     await expect(res.json()).resolves.toEqual({ variant: true });
     expect(exposureSink.writes).toHaveLength(1);
     expect(exposureSink.writes[0]?.appId).toBe(APP_ID);
+  });
+
+  it("returns SERVICE_UNAVAILABLE when Exposure ingest fails", async () => {
+    const { app } = await makeSdkRouteHarness({
+      exposureSink: new FailingExposureSink(),
+      liveRun: true,
+      runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
+    });
+
+    const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
+    const body = (await res.json()) as ErrorResponse;
+
+    expect(res.status).toBe(503);
+    expect(body.code).toBe("SERVICE_UNAVAILABLE");
   });
 
   it("returns a holdover Variant without firing another Exposure", async () => {
@@ -114,3 +179,13 @@ describe("POST /api/sdk/evaluate", () => {
     expect(exposureSink.writes).toEqual([]);
   });
 });
+
+function liveRunHarness() {
+  return makeSdkRouteHarness({ liveRun: true });
+}
+
+class FailingExposureSink extends RecordingExposureSink {
+  override async write(): Promise<void> {
+    throw new ExposureSinkError("forced failure");
+  }
+}
