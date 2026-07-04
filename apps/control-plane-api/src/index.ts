@@ -50,9 +50,24 @@ export default {
     return app.fetch(request, env);
   },
 
-  scheduled(event, _env, ctx): void {
-    ctx.waitUntil(Promise.resolve(console.log(`${service}: demo reaper ${event.cron}`)));
+  scheduled(event, env, ctx): void {
+    ctx.waitUntil(runDemoReaper(env, event));
   },
 } satisfies ExportedHandler<ControlPlaneApiEnv>;
+
+async function runDemoReaper(env: ControlPlaneApiEnv, event: ScheduledController): Promise<void> {
+  const result = await createRepository(env.DB).identity.reapExpiredProvisionalOrganizations(
+    new Date(event.scheduledTime).toISOString(),
+  );
+  console.log(
+    JSON.stringify({
+      service,
+      job: "demo-reaper",
+      cron: event.cron,
+      candidates: result.candidates,
+      reaped: result.reaped,
+    }),
+  );
+}
 
 export { ConfigStoreDurableObject };

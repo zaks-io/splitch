@@ -8,6 +8,7 @@ import {
   orgMemberships,
 } from "../schema/index.js";
 import type { Db } from "./client.js";
+import { makeDemoReaper } from "./identity-demo-reaper.js";
 import type { TenantScope } from "./scope.js";
 import { scopedTable } from "./scoped-table.js";
 
@@ -32,10 +33,11 @@ import { scopedTable } from "./scoped-table.js";
  * scopes); this layer enforces that an App is only ever reached via its own id
  * or its parent Org, never via a sibling App's scope.
  */
-export function makeIdentityRepo(db: Db) {
+export function makeIdentityRepo(db: Db, d1: D1Database) {
   const environmentsTable = scopedTable(db, environments);
   const appMembershipsTable = scopedTable(db, appMemberships);
   const orgMutations = makeOrgMutations(db);
+  const demoReaper = makeDemoReaper(db, d1);
 
   return {
     environments: environmentsTable,
@@ -101,6 +103,7 @@ export function makeIdentityRepo(db: Db) {
     },
 
     ...orgMutations,
+    ...demoReaper,
 
     /**
      * Fetch a single App by its own id. The tenant root is reached by identity,
