@@ -5,9 +5,9 @@ import {
   type Variant,
 } from "@splitch/contracts";
 import { renderError, type HandlerArgs } from "@splitch/worker-runtime";
-import { evaluatePath } from "./evaluate/evaluate-path.js";
-import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types.js";
-import type { FlagConfig, Provider } from "./provider/provider.js";
+import { evaluatePath } from "./evaluate/evaluate-path";
+import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
+import type { FlagConfig, Provider } from "./provider/provider";
 
 type TestEvaluationInput = {
   params: { appId: string; environmentId: string; flagId: string };

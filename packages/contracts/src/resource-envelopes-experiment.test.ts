@@ -6,7 +6,7 @@ import {
   PatchRunRequestSchema,
   RunResponseSchema,
   StartRunRequestSchema,
-} from "./resource-envelopes-experiment.js";
+} from "./resource-envelopes-experiment";
 
 const validCreateExperiment = {
   appId: "app_1",

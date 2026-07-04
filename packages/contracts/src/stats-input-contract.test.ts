@@ -5,7 +5,7 @@ import {
   PerEntityMetricRowSchema,
   PrePeriodRowSchema,
   StatsInputSchema,
-} from "./stats-input-contract.js";
+} from "./stats-input-contract";
 
 const exposureRow = {
   app_id: "app_1",

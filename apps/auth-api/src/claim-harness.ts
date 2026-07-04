@@ -1,15 +1,15 @@
 import { createRepository } from "@splitch/db";
 import { afterAll, beforeAll, beforeEach } from "vitest";
-import { initiateClaim, verifyClaim } from "./claim.js";
-import { FIXTURE_OTP } from "./otp.js";
-import { registerAnonymous } from "./register.js";
-import { makeTokenSigner, type TokenSigner } from "./token-exchange.js";
+import { initiateClaim, verifyClaim } from "./claim";
+import { FIXTURE_OTP } from "./otp";
+import { registerAnonymous } from "./register";
+import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import {
   type DoorBFixtures,
   type LocalBindings,
   makeDoorBDeps,
   makeLocalBindings,
-} from "./test-fixtures.js";
+} from "./test-fixtures";
 
 /**
  * Shared Door B claim TEST HARNESS. The claim suite is split across two files

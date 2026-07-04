@@ -8,7 +8,7 @@ import {
   assignmentWriterName,
   hashedAssignmentIdentity,
   mergeAssignmentValue,
-} from "./assignment-store.js";
+} from "./assignment-store";
 
 export class InMemoryAssignmentStore implements AssignmentStore {
   private readonly entityValues = new Map<string, Record<string, AssignmentStoreEntry>>();

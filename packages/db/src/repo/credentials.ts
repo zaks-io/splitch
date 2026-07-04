@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
-import { apiKeys, clientKeys } from "../schema/index.js";
-import type { Db } from "./client.js";
-import type { EnvScope } from "./scope.js";
-import { scopedTable } from "./scoped-table.js";
+import { apiKeys, clientKeys } from "../schema/index";
+import type { Db } from "./client";
+import type { EnvScope } from "./scope";
+import { scopedTable } from "./scoped-table";
 
 /**
  * Credential-domain repository. Both tables are per-Environment (ADR-0027): an

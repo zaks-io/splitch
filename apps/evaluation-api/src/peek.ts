@@ -5,10 +5,10 @@ import {
   type Variant,
 } from "@splitch/contracts";
 import { renderError, type HandlerArgs, type Principal } from "@splitch/worker-runtime";
-import { peekVariant } from "./evaluate/accessor-paths.js";
-import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types.js";
-import type { EvaluateResult } from "./evaluate/evaluate-path.js";
-import type { FlagConfig, Provider } from "./provider/provider.js";
+import { peekVariant } from "./evaluate/accessor-paths";
+import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
+import type { EvaluateResult } from "./evaluate/evaluate-path";
+import type { FlagConfig, Provider } from "./provider/provider";
 
 type ResolvedEvaluateResult = Exclude<EvaluateResult, { kind: "error" }>;
 type PeekDefaultFallbackKind = Extract<

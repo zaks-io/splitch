@@ -5,7 +5,7 @@ import {
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
-import type { ConfigStoreWriter } from "./config-store.js";
+import type { ConfigStoreWriter } from "./config-store";
 
 type PromotionSelect = Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0]["select"];
 

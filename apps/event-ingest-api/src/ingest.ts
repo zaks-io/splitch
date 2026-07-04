@@ -1,8 +1,8 @@
-import { emptyError, renderError, serviceUnavailable } from "./errors.js";
-import { loadLiveRun } from "./kv-config.js";
-import { readJsonObject, stringField } from "./payload.js";
-import { appendRawEvent, exposureEvent, tinybirdDelivery, toTinybirdRow } from "./tinybird.js";
-import type { CredentialScope, Env, Outcome } from "./types.js";
+import { emptyError, renderError, serviceUnavailable } from "./errors";
+import { loadLiveRun } from "./kv-config";
+import { readJsonObject, stringField } from "./payload";
+import { appendRawEvent, exposureEvent, tinybirdDelivery, toTinybirdRow } from "./tinybird";
+import type { CredentialScope, Env, Outcome } from "./types";
 
 export async function handleIngest(
   request: Request,

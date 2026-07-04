@@ -6,16 +6,16 @@ import {
   type ResolutionDetails,
   type VariantValue,
 } from "@splitch/contracts";
-import type { EvaluateContext, EvaluateDeps, Logger } from "./evaluate.js";
-import { runEvaluate, runPeekVariant, runVerify } from "./evaluate.js";
-import { SeenSet } from "./seen-set.js";
+import type { EvaluateContext, EvaluateDeps, Logger } from "./evaluate";
+import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
+import { SeenSet } from "./seen-set";
 import type {
   Transport,
   TransportFailure,
   TransportRequest,
   TransportResult,
   VerifyTransportResult,
-} from "./transport.js";
+} from "./transport";
 
 /**
  * Public SDK entry. A client is constructed with exactly one credential — a

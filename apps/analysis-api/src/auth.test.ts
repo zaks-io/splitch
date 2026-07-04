@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeHttpJwksFetcher, makeJwksVerifier } from "./auth.js";
+import { makeHttpJwksFetcher, makeJwksVerifier } from "./auth";
 
 const AUDIENCE = "https://cp.splitch.test";
 const ISSUER = "https://auth.splitch.test";

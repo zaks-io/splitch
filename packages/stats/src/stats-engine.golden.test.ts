@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DimensionResult, StatsInput } from "@splitch/contracts";
-import { analyzeStats } from "./stats-engine.js";
-import { ENGINE_RUN_ID, binomialStatsInput, exposure } from "./stats-engine-test-helpers.js";
+import { analyzeStats } from "./stats-engine";
+import { ENGINE_RUN_ID, binomialStatsInput, exposure } from "./stats-engine-test-helpers";
 
 describe("StatsEngine golden fixtures", () => {
   it("assembles a full fixed-horizon two-arm Binomial StatsOutput", async () => {

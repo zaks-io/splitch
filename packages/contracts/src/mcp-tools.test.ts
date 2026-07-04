@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { ErrorResponseSchema } from "./errors.js";
-import { deriveMcpTools, isMcpToolRoute } from "./mcp-tools.js";
-import { getRoute, routeRegistry } from "./route-registry.js";
+import { ErrorResponseSchema } from "./errors";
+import { deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
+import { getRoute, routeRegistry } from "./route-registry";
 
 /**
  * MCP tools are derived from the registry and proven HERE — never committed. The

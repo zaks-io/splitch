@@ -14,8 +14,8 @@ export {
   organizations,
   orgMemberships,
   trustedIdps,
-} from "./identity.js";
-export { flagConfigs, flags, segments, targetingRules, variants } from "./flags.js";
-export { experiments, metrics, runs } from "./experiments.js";
-export { apiKeys, clientKeys } from "./credentials.js";
-export { entityDeletions, privacyRequests } from "./privacy.js";
+} from "./identity";
+export { flagConfigs, flags, segments, targetingRules, variants } from "./flags";
+export { experiments, metrics, runs } from "./experiments";
+export { apiKeys, clientKeys } from "./credentials";
+export { entityDeletions, privacyRequests } from "./privacy";

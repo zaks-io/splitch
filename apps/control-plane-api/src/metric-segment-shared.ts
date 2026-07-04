@@ -1,10 +1,10 @@
 import type { Condition, Metric, MetricKind, Segment } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
-import { requireAppWrite as requireAppWriteAuthz } from "./app-authz.js";
-import { appNotFound } from "./app-environment-model.js";
-import type { RunningBlocker } from "./flag-definition-guards.js";
-import { pathParam } from "./handler-input.js";
+import { requireAppWrite as requireAppWriteAuthz } from "./app-authz";
+import { appNotFound } from "./app-environment-model";
+import type { RunningBlocker } from "./flag-definition-guards";
+import { pathParam } from "./handler-input";
 
 export interface MetricSegmentDeps {
   repo: Repository;

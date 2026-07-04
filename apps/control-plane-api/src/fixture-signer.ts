@@ -1,4 +1,4 @@
-import type { Jwks } from "./jwks-verify.js";
+import type { Jwks } from "./jwks-verify";
 
 /**
  * Fixture RS256 signer for the auth-middleware tests.

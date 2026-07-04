@@ -18,7 +18,7 @@ import {
   makeSdkRouteHarness,
   sdkRouteInit,
   sha256Hex,
-} from "./sdk-route-test-fixtures.js";
+} from "./sdk-route-test-fixtures";
 
 const PATH = "/api/sdk/verify";
 

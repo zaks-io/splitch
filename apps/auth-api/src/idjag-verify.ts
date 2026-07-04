@@ -1,8 +1,8 @@
 import type { Repository } from "@splitch/db";
-import type { JtiCache } from "./jti-cache.js";
-import { type DecodedJwt, decodeJwt, type JwksFetcher, verifySignature } from "./jwks.js";
-import { OAuthError } from "./oauth-errors.js";
-import type { WorkOsPort } from "./workos.js";
+import type { JtiCache } from "./jti-cache";
+import { type DecodedJwt, decodeJwt, type JwksFetcher, verifySignature } from "./jwks";
+import { OAuthError } from "./oauth-errors";
+import type { WorkOsPort } from "./workos";
 
 /**
  * The ID-JAG validation flow (auth-doors.md "Validation steps", fail-loud on any

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { analyzeStats } from "./stats-engine.js";
-import { binomialStatsInput } from "./stats-engine-test-helpers.js";
+import { analyzeStats } from "./stats-engine";
+import { binomialStatsInput } from "./stats-engine-test-helpers";
 
 describe("StatsEngine metamorphic properties", () => {
   it("returns the same output for the same input", async () => {

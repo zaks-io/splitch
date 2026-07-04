@@ -11,7 +11,7 @@ import {
   makeFlagDefinitionHarness,
   NOW_ISO,
   request,
-} from "./flag-definition-test-harness.js";
+} from "./flag-definition-test-harness";
 
 let h: FlagDefinitionHarness;
 

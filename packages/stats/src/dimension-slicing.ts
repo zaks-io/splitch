@@ -7,8 +7,8 @@ import type {
   StatsInput,
   StatsResultStatus,
 } from "@splitch/contracts";
-import { validatePrimaryDimensionSpecs } from "./dimension-family-validation.js";
-import { analyzeMetricArmResults, type ArmResultAdapters } from "./metric-arm-results.js";
+import { validatePrimaryDimensionSpecs } from "./dimension-family-validation";
+import { analyzeMetricArmResults, type ArmResultAdapters } from "./metric-arm-results";
 
 export type DimensionArmResult = ArmResult & {
   readonly dimension_id: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeWorkOsDeviceFlow } from "./device-flow.js";
+import { makeWorkOsDeviceFlow } from "./device-flow";
 
 function b64url(value: unknown): string {
   let binary = "";

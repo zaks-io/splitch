@@ -1,5 +1,5 @@
 import { createRoute, type RouteConfig, z } from "@hono/zod-openapi";
-import type { ErrorCode } from "./errors.js";
+import type { ErrorCode } from "./errors";
 import {
   type AuthKind,
   defineRoute,
@@ -8,7 +8,7 @@ import {
   type RateLimitClass,
   type RouteContract,
   type RouteOwner,
-} from "./route-contract.js";
+} from "./route-contract";
 
 /**
  * One authored shape per HTTP endpoint that serves BOTH consumers from a single

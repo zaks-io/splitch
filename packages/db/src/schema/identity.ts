@@ -1,5 +1,5 @@
 import { integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { createdAt, updatedAt, userRef } from "./columns.js";
+import { createdAt, updatedAt, userRef } from "./columns";
 
 /**
  * Identity-domain D1 tables: Organization tier, memberships, Apps, Environments,

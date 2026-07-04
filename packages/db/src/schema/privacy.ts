@@ -1,5 +1,5 @@
 import { primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { apps, organizations } from "./identity.js";
+import { apps, organizations } from "./identity";
 
 /**
  * Privacy-domain D1 tables: the bounded privacy-request ledger and the Entity

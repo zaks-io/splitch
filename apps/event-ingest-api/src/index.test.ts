@@ -1,6 +1,6 @@
 import { CURRENT_KV_SCHEMA_VERSION, experimentConfigKey, runConfigKey } from "@splitch/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import worker from "./index.js";
+import worker from "./index";
 
 const appId = "app_credential";
 const clientAppId = "app_from_client";

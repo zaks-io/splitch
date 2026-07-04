@@ -1,9 +1,9 @@
 import { appScope, type Repository, type TenantScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { requireAppWrite } from "./app-authz.js";
-import { appNotFound } from "./app-environment-model.js";
-import { flagNotFound } from "./flag-definition-errors.js";
-import { pathParam } from "./handler-input.js";
+import { requireAppWrite } from "./app-authz";
+import { appNotFound } from "./app-environment-model";
+import { flagNotFound } from "./flag-definition-errors";
+import { pathParam } from "./handler-input";
 
 export interface FlagDefinitionDeps {
   repo: Repository;

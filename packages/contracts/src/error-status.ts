@@ -1,4 +1,4 @@
-import type { ErrorCode } from "./errors.js";
+import type { ErrorCode } from "./errors";
 
 /**
  * Canonical ErrorCode -> HTTP status map. The single source for the status of

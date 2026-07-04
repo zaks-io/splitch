@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/d1";
 // biome-ignore lint/performance/noNamespaceImport: drizzle(d1, { schema }) takes the whole table namespace as one object; this is drizzle's documented schema-registration shape, not an unused-tree-shaking concern.
-import * as schema from "../schema/index.js";
+import * as schema from "../schema/index";
 
 /**
  * The raw Drizzle client, ENCAPSULATED.

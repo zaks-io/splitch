@@ -10,7 +10,7 @@ const forbiddenExportPatterns = [
 
 describe("@splitch/stats public surface", () => {
   it("does not expose a naive variance entrypoint", async () => {
-    const statsSurface = await import("./index.js");
+    const statsSurface = await import("./index");
     const forbiddenExports = Object.keys(statsSurface).filter((name) =>
       forbiddenExportPatterns.some((pattern) => pattern.test(name)),
     );

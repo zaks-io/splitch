@@ -1,8 +1,8 @@
 import type { DeltaNudge } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import { DurableObject } from "cloudflare:workers";
-import { makeConfigStore, type ConfigStoreWriter } from "./config-store.js";
-import type { ControlPlaneApiEnv } from "./env.js";
+import { makeConfigStore, type ConfigStoreWriter } from "./config-store";
+import type { ControlPlaneApiEnv } from "./env";
 
 export interface ConfigStoreDurableObjectNamespace {
   getByName(name: string): ConfigStoreDurableObjectStub;

@@ -1,9 +1,9 @@
 import type { SQL } from "drizzle-orm";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
-import type { Db } from "./client.js";
-import type { EnvScope, ScopeColumns, TenantScope } from "./scope.js";
-import { assertMintedScope, withScope } from "./scope.js";
+import type { Db } from "./client";
+import type { EnvScope, ScopeColumns, TenantScope } from "./scope";
+import { assertMintedScope, withScope } from "./scope";
 
 /**
  * The structural tenant-scope guarantee (ADR-0018).

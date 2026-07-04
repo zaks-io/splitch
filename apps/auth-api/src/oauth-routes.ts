@@ -1,16 +1,16 @@
 import type { Hono } from "hono";
-import { DEVICE_CODE_GRANT, type DeviceFlowPort } from "./device-flow.js";
-import type { DeviceRefreshSessionStore } from "./device-session-store.js";
-import { OAuthError, renderOAuthError } from "./oauth-errors.js";
-import type { RevocationStore } from "./revocation.js";
+import { DEVICE_CODE_GRANT, type DeviceFlowPort } from "./device-flow";
+import type { DeviceRefreshSessionStore } from "./device-session-store";
+import { OAuthError, renderOAuthError } from "./oauth-errors";
+import type { RevocationStore } from "./revocation";
 import {
   DeviceAuthorizationRequestSchema,
   DeviceTokenRequestSchema,
   RevokeTokenRequestSchema,
   TokenExchangeRequestSchema,
-} from "./schemas.js";
-import type { TokenSigner } from "./token-exchange.js";
-import { verifyAccessToken } from "./access-token.js";
+} from "./schemas";
+import type { TokenSigner } from "./token-exchange";
+import { verifyAccessToken } from "./access-token";
 
 const ACCESS_TOKEN_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
 

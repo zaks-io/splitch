@@ -1,15 +1,15 @@
 import type { RateLimiter, AuthResolver } from "@splitch/worker-runtime";
 import { createRegistrar } from "@splitch/worker-runtime";
 import { Hono } from "hono";
-import type { EvaluatePathDeps } from "./evaluate/evaluate-path.js";
-import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly.js";
-import { makeTestEvaluationHandler } from "./test-evaluation.js";
-import { evaluationRoute } from "./routes.js";
-import { makeVerifyHandler } from "./verify.js";
-import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./data-plane-auth.js";
-import { makePeekHandler } from "./peek.js";
-import { makeEvaluateHandler } from "./evaluate.js";
-import type { ExposureSink } from "./exposure-sink.js";
+import type { EvaluatePathDeps } from "./evaluate/evaluate-path";
+import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
+import { makeTestEvaluationHandler } from "./test-evaluation";
+import { evaluationRoute } from "./routes";
+import { makeVerifyHandler } from "./verify";
+import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./data-plane-auth";
+import { makePeekHandler } from "./peek";
+import { makeEvaluateHandler } from "./evaluate";
+import type { ExposureSink } from "./exposure-sink";
 
 export interface AppDeps extends EvaluatePathDeps {
   authResolver: AuthResolver;

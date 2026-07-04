@@ -1,5 +1,5 @@
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the contracts surface is intentionally aggregated here
-export { errorStatusByCode, httpStatusForError } from "./error-status.js";
+export { errorStatusByCode, httpStatusForError } from "./error-status";
 export {
   ErrorCodeSchema,
   errorCodes,
@@ -8,8 +8,8 @@ export {
   policyChangeTypes,
   RecommendedActionSchema,
   recommendedActions,
-} from "./errors.js";
-export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors.js";
+} from "./errors";
+export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
 export {
   AuthKindSchema,
   authKinds,
@@ -22,7 +22,7 @@ export {
   rateLimitClasses,
   RouteOwnerSchema,
   routeOwners,
-} from "./route-contract.js";
+} from "./route-contract";
 export type {
   AuthKind,
   HttpMethod,
@@ -30,24 +30,24 @@ export type {
   RateLimitClass,
   RouteContract,
   RouteOwner,
-} from "./route-contract.js";
-export { defineApiRoute } from "./openapi-route.js";
-export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route.js";
-export { getRoute, operationIds, routeRegistry } from "./route-registry.js";
-export { buildOpenApiDocument } from "./openapi-document.js";
-export type { OpenApiDocumentInfo } from "./openapi-document.js";
-export { deriveMcpTools, isMcpToolRoute } from "./mcp-tools.js";
-export type { McpToolDefinition } from "./mcp-tools.js";
-export { DeltaNudgeEntitySchema, deltaNudgeEntities, DeltaNudgeSchema } from "./delta-nudge.js";
-export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge.js";
+} from "./route-contract";
+export { defineApiRoute } from "./openapi-route";
+export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
+export { getRoute, operationIds, routeRegistry } from "./route-registry";
+export { buildOpenApiDocument } from "./openapi-document";
+export type { OpenApiDocumentInfo } from "./openapi-document";
+export { deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
+export type { McpToolDefinition } from "./mcp-tools";
+export { DeltaNudgeEntitySchema, deltaNudgeEntities, DeltaNudgeSchema } from "./delta-nudge";
+export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export {
   createHealthResponse,
   HealthResponseSchema,
   parsePlatformTarget,
   PlatformTargetSchema,
   platformTargets,
-} from "./health-response.js";
-export type { HealthResponse, PlatformTarget } from "./health-response.js";
+} from "./health-response";
+export type { HealthResponse, PlatformTarget } from "./health-response";
 export {
   ExperimentSchema,
   ExperimentStatusSchema,
@@ -59,7 +59,7 @@ export {
   RunSchema,
   RunStatusSchema,
   runStatuses,
-} from "./leaf-schemas-experiment.js";
+} from "./leaf-schemas-experiment";
 export type {
   Experiment,
   ExperimentStatus,
@@ -68,7 +68,7 @@ export type {
   MetricRef,
   Run,
   RunStatus,
-} from "./leaf-schemas-experiment.js";
+} from "./leaf-schemas-experiment";
 export {
   ActivationRowSchema,
   CupedCovariateRowSchema,
@@ -79,7 +79,7 @@ export {
   PerEntityMetricRowSchema,
   PrePeriodRowSchema,
   StatsInputSchema,
-} from "./stats-input-contract.js";
+} from "./stats-input-contract";
 export type {
   ActivationRow,
   CupedCovariateRow,
@@ -90,7 +90,7 @@ export type {
   PerEntityMetricRow,
   PrePeriodRow,
   StatsInput,
-} from "./stats-input-contract.js";
+} from "./stats-input-contract";
 export {
   ArmResultSchema,
   CupedAttributeSourceSchema,
@@ -108,7 +108,7 @@ export {
   statsResultStatuses,
   WinsorizeCapSchema,
   VarianceTechniquesSchema,
-} from "./stats-result-contract.js";
+} from "./stats-result-contract";
 export type {
   ArmResult,
   CupedAttributeSource,
@@ -123,7 +123,7 @@ export type {
   StatsResultStatus,
   WinsorizeCap,
   VarianceTechniques,
-} from "./stats-result-contract.js";
+} from "./stats-result-contract";
 export {
   ConditionOperatorSchema,
   ConditionSchema,
@@ -133,7 +133,7 @@ export {
   TargetingRuleSchema,
   VariantSchema,
   conditionOperators,
-} from "./leaf-schemas-flag.js";
+} from "./leaf-schemas-flag";
 export type {
   Condition,
   ConditionOperator,
@@ -142,7 +142,7 @@ export type {
   Segment,
   TargetingRule,
   Variant,
-} from "./leaf-schemas-flag.js";
+} from "./leaf-schemas-flag";
 export {
   APIKeySchema,
   AppSchema,
@@ -165,7 +165,7 @@ export {
   userRoles,
   UserSchema,
   VariantValueSchema,
-} from "./leaf-schemas-runtime.js";
+} from "./leaf-schemas-runtime";
 export type {
   APIKey,
   App,
@@ -183,7 +183,7 @@ export type {
   User,
   UserRole,
   VariantValue,
-} from "./leaf-schemas-runtime.js";
+} from "./leaf-schemas-runtime";
 export {
   apiKeyCacheKey,
   assignmentKey,
@@ -192,7 +192,7 @@ export {
   flagConfigKey,
   liveRunKey,
   runConfigKey,
-} from "./storage-keys-kv.js";
+} from "./storage-keys-kv";
 export {
   AssignmentStoreEntrySchema,
   AssignmentStoreValueSchema,
@@ -205,7 +205,7 @@ export {
   kvEnvelope,
   LiveRunKVSchema,
   RunConfigKVSchema,
-} from "./storage-schemas-kv.js";
+} from "./storage-schemas-kv";
 export type {
   AssignmentStoreEntry,
   AssignmentStoreValue,
@@ -215,7 +215,7 @@ export type {
   FlagConfigKV,
   LiveRunKV,
   RunConfigKV,
-} from "./storage-schemas-kv.js";
+} from "./storage-schemas-kv";
 export {
   DataPlaneEvaluateRequestSchema,
   DataPlaneEvaluateResponseSchema,
@@ -228,7 +228,7 @@ export {
   TestEvaluationReasonSchema,
   TestEvaluationRequestSchema,
   TestEvaluationResponseSchema,
-} from "./wire-envelopes-core.js";
+} from "./wire-envelopes-core";
 export type {
   DataPlaneEvaluateRequest,
   DataPlaneEvaluateResponse,
@@ -238,21 +238,21 @@ export type {
   TestEvaluationReason,
   TestEvaluationRequest,
   TestEvaluationResponse,
-} from "./wire-envelopes-core.js";
+} from "./wire-envelopes-core";
 export {
   CreateFlagRequestSchema,
   CreateVariantRequestSchema,
   FlagResponseSchema,
   PatchFlagRequestSchema,
   PatchVariantRequestSchema,
-} from "./resource-envelopes-flag.js";
+} from "./resource-envelopes-flag";
 export type {
   CreateFlagRequest,
   CreateVariantRequest,
   FlagResponse,
   PatchFlagRequest,
   PatchVariantRequest,
-} from "./resource-envelopes-flag.js";
+} from "./resource-envelopes-flag";
 export {
   CreateExperimentRequestSchema,
   ExperimentResponseSchema,
@@ -260,7 +260,7 @@ export {
   PatchRunRequestSchema,
   RunResponseSchema,
   StartRunRequestSchema,
-} from "./resource-envelopes-experiment.js";
+} from "./resource-envelopes-experiment";
 export type {
   CreateExperimentRequest,
   ExperimentResponse,
@@ -268,7 +268,7 @@ export type {
   PatchRunRequest,
   RunResponse,
   StartRunRequest,
-} from "./resource-envelopes-experiment.js";
+} from "./resource-envelopes-experiment";
 export {
   AppResponseSchema,
   CreateAppRequestSchema,
@@ -282,7 +282,7 @@ export {
   PatchAppRequestSchema,
   PatchMetricRequestSchema,
   PatchOrganizationRequestSchema,
-} from "./resource-envelopes-account.js";
+} from "./resource-envelopes-account";
 export type {
   AppResponse,
   CreateAppRequest,
@@ -296,4 +296,4 @@ export type {
   PatchAppRequest,
   PatchMetricRequest,
   PatchOrganizationRequest,
-} from "./resource-envelopes-account.js";
+} from "./resource-envelopes-account";

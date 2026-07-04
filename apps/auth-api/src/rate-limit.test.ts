@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { OAuthError } from "./oauth-errors.js";
-import { makeRateLimiter } from "./rate-limit.js";
+import { OAuthError } from "./oauth-errors";
+import { makeRateLimiter } from "./rate-limit";
 
 /**
  * Focused guards on the anon-create rate ceiling (ADR-0034 §4). Both the per-IP

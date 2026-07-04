@@ -6,7 +6,7 @@ import {
 } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { errorBody, NOW_ISO, request } from "./flag-definition-test-harness.js";
+import { errorBody, NOW_ISO, request } from "./flag-definition-test-harness";
 import {
   createExperimentDraft,
   experimentFixture,
@@ -18,7 +18,7 @@ import {
   readEvaluationExperiment,
   readIngestLiveRun,
   type StartResponse,
-} from "./experiment-run-test-fixture.js";
+} from "./experiment-run-test-fixture";
 
 let ctx: ExperimentRunHarness;
 

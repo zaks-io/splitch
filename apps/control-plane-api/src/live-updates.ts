@@ -8,7 +8,7 @@ import {
   type RateLimiter,
 } from "@splitch/worker-runtime";
 import type { Context, Hono } from "hono";
-import type { ConfigStoreAccess } from "./config-store-do.js";
+import type { ConfigStoreAccess } from "./config-store-do";
 
 const LIVE_UPDATE_PATH = "/apps/:appId/envs/:environmentId/live";
 const REQUEST_ID_HEADER = "x-request-id";

@@ -1,13 +1,13 @@
 import type { MetricKind, PerEntityMetricRow, VarianceTechniques } from "@splitch/contracts";
-import { applyCupedAdjustment } from "./cuped.js";
-import { dedupedExposureRowsForVariant } from "./exposure-denominator.js";
+import { applyCupedAdjustment } from "./cuped";
+import { dedupedExposureRowsForVariant } from "./exposure-denominator";
 import {
   clampSamplingVariance,
   finiteValue,
   mean,
   sampleCovariance,
   sampleVariance,
-} from "./variance-math.js";
+} from "./variance-math";
 import type {
   EntityAggregate,
   MetricArmEstimate,
@@ -15,14 +15,14 @@ import type {
   MetricComparisonEstimate,
   MetricComparisonEstimateInput,
   MetricVarianceStatus,
-} from "./variance-estimator-types.js";
-import { comparisonEstimate } from "./variance-effects.js";
+} from "./variance-estimator-types";
+import { comparisonEstimate } from "./variance-effects";
 import {
   computePooledWinsorization,
   noVarianceTechniques,
   varianceTechniquesFor,
   winsorizedEntities,
-} from "./winsorization.js";
+} from "./winsorization";
 
 export function estimateMetricArm(input: MetricArmEstimateInput): MetricArmEstimate {
   const entities = aggregateEntities(input);

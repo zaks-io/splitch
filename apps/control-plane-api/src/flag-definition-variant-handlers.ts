@@ -1,9 +1,9 @@
-import { nowIso } from "./app-environment-model.js";
-import { randomHex } from "./credential-cache.js";
+import { nowIso } from "./app-environment-model";
+import { randomHex } from "./credential-cache";
 import {
   availableVariantReferenceCount,
   runningExperimentForVariant,
-} from "./flag-definition-guards.js";
+} from "./flag-definition-guards";
 import {
   flagNotFound,
   resourceNotEmpty,
@@ -12,7 +12,7 @@ import {
   validationError,
   validationErrors,
   variantNotFound,
-} from "./flag-definition-errors.js";
+} from "./flag-definition-errors";
 import {
   type FlagDefinitionDeps,
   type LoadedFlag,
@@ -20,10 +20,10 @@ import {
   fail,
   loadWritableFlag,
   ok,
-} from "./flag-definition-handler-utils.js";
-import { flagResponse, parseStoredSchema, pathBodyMismatch } from "./flag-definition-model.js";
-import { validateJsonSchema } from "./flag-definition-schema.js";
-import { objectBody, pathParam } from "./handler-input.js";
+} from "./flag-definition-handler-utils";
+import { flagResponse, parseStoredSchema, pathBodyMismatch } from "./flag-definition-model";
+import { validateJsonSchema } from "./flag-definition-schema";
+import { objectBody, pathParam } from "./handler-input";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 

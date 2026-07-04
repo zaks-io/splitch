@@ -1,7 +1,7 @@
 import type { AuthResolver } from "@splitch/worker-runtime";
-import { deriveBinding } from "./scope-binding.js";
-import type { JwksVerifier } from "./jwks-verify.js";
-import type { SessionStore } from "./session-store.js";
+import { deriveBinding } from "./scope-binding";
+import type { JwksVerifier } from "./jwks-verify";
+import type { SessionStore } from "./session-store";
 
 /**
  * Control-plane bearer-JWT auth resolver (the `control-plane-token` AuthKind).

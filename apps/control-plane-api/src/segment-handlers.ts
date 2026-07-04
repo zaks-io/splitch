@@ -1,9 +1,9 @@
 import { appScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { appNotFound, nowIso } from "./app-environment-model.js";
-import { randomHex } from "./credential-cache.js";
-import { runningExperimentError } from "./flag-definition-errors.js";
-import { objectBody, pathParam } from "./handler-input.js";
+import { appNotFound, nowIso } from "./app-environment-model";
+import { randomHex } from "./credential-cache";
+import { runningExperimentError } from "./flag-definition-errors";
+import { objectBody, pathParam } from "./handler-input";
 import {
   requireWritableApp,
   runningSegmentReference,
@@ -11,7 +11,7 @@ import {
   segmentNotFound,
   segmentResponse,
   type MetricSegmentDeps,
-} from "./metric-segment-shared.js";
+} from "./metric-segment-shared";
 
 export function makeSegmentHandlers(deps: MetricSegmentDeps) {
   return {

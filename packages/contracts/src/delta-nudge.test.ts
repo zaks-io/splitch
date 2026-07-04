@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DeltaNudgeSchema } from "./delta-nudge.js";
+import { DeltaNudgeSchema } from "./delta-nudge";
 
 const valid = { type: "config.changed", entity: "flag", id: "flag-1", version: 4 } as const;
 

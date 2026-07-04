@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CreateAppResponseSchema } from "./resource-envelopes-account.js";
+import { CreateAppResponseSchema } from "./resource-envelopes-account";
 
 const timestamp = "2026-06-28T00:00:00.000Z";
 

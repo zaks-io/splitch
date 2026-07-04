@@ -1,15 +1,15 @@
 import type { Condition, MetricRef, TargetingRule, Variant } from "@splitch/contracts";
 import { appScope, type EnvScope, type Repository } from "@splitch/db";
-import { randomHex } from "./credential-cache.js";
-import { allocationInvalid, experimentNoDraft, variantNotAvailable } from "./experiment-errors.js";
+import { randomHex } from "./credential-cache";
+import { allocationInvalid, experimentNoDraft, variantNotAvailable } from "./experiment-errors";
 import {
   jsonArray,
   jsonArrayOrNull,
   jsonObject,
   runConfigHash,
   type ExperimentRow,
-} from "./experiment-model.js";
-import { flagNotFound } from "./flag-definition-errors.js";
+} from "./experiment-model";
+import { flagNotFound } from "./flag-definition-errors";
 
 type Result<T> = { ok: true; value: T } | { ok: false; response: Response };
 

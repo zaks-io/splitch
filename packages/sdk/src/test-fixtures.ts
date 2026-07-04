@@ -1,10 +1,10 @@
-import type { Logger } from "./evaluate.js";
+import type { Logger } from "./evaluate";
 import type {
   Transport,
   TransportRequest,
   TransportResult,
   VerifyTransportResult,
-} from "./transport.js";
+} from "./transport";
 
 /**
  * Test-only fake transport: records each accessor path (no real network) and

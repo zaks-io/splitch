@@ -12,7 +12,7 @@ import {
   type FlagConfigKV,
 } from "@splitch/contracts";
 import type { EnvScope } from "@splitch/db";
-import type { Snapshot } from "./config-store-shared.js";
+import type { Snapshot } from "./config-store-shared";
 
 const FlagConfigEnvelope = kvEnvelope(FlagConfigKVSchema);
 const ExperimentConfigEnvelope = kvEnvelope(ExperimentConfigKVSchema);

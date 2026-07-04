@@ -1,4 +1,4 @@
-import { OAuthError } from "./oauth-errors.js";
+import { OAuthError } from "./oauth-errors";
 
 /**
  * identity_assertion mint + /oauth2/token exchange.

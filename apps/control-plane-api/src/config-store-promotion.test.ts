@@ -9,7 +9,7 @@ import {
   promoteFlagConfig,
   replaceTargetingRules,
   setProdPolicy,
-} from "./config-store-test-harness.js";
+} from "./config-store-test-harness";
 
 let h: Harness;
 

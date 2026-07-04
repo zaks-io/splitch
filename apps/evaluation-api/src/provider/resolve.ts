@@ -1,6 +1,6 @@
 import type { ExperimentConfigKV, FlagConfigKV, RunConfigKV } from "@splitch/contracts";
-import { runConfigFromKV } from "../assignment/run-config-adapter.js";
-import { type ExperimentConfig, type FlagConfig, ProviderError } from "./provider.js";
+import { runConfigFromKV } from "../assignment/run-config-adapter";
+import { type ExperimentConfig, type FlagConfig, ProviderError } from "./provider";
 
 /**
  * Pure KV-blob -> resolved-view mappings. No I/O and no Zod parsing here — the

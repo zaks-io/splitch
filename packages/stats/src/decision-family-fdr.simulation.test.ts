@@ -1,7 +1,7 @@
 import type { DecisionFamilyMember } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { applyDecisionFamilyCorrection } from "./decision-family-fdr.js";
-import { armResult } from "./decision-family-fdr-test-helpers.js";
+import { applyDecisionFamilyCorrection } from "./decision-family-fdr";
+import { armResult } from "./decision-family-fdr-test-helpers";
 
 const METRIC_COUNT = 6;
 const TREATMENT_VARIANTS = ["treatment_a", "treatment_b", "treatment_c", "treatment_d"] as const;

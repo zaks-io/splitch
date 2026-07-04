@@ -1,8 +1,8 @@
 import type { ErrorCode } from "@splitch/contracts";
-import { AssignmentStoreError } from "../assignment/assignment-store.js";
-import { ProviderError } from "../provider/provider.js";
-import { ConditionMatchError } from "./conditions.js";
-import type { ErrorEvaluateResult, EvaluatePathDeps } from "./evaluate-path-types.js";
+import { AssignmentStoreError } from "../assignment/assignment-store";
+import { ProviderError } from "../provider/provider";
+import { ConditionMatchError } from "./conditions";
+import type { ErrorEvaluateResult, EvaluatePathDeps } from "./evaluate-path-types";
 
 export class EvaluatePathError extends Error {
   readonly errorCode: ErrorCode;

@@ -1,7 +1,7 @@
 import { liveRunKey } from "@splitch/contracts";
 import { envScope, type EnvScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { errorBody, NOW_ISO } from "./flag-definition-test-harness.js";
+import { errorBody, NOW_ISO } from "./flag-definition-test-harness";
 import {
   createExperimentDraft,
   endRun,
@@ -14,7 +14,7 @@ import {
   readIngestLiveRun,
   startExperiment,
   type StartResponse,
-} from "./experiment-run-test-fixture.js";
+} from "./experiment-run-test-fixture";
 
 let ctx: ExperimentRunHarness;
 

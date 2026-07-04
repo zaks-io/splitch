@@ -1,6 +1,6 @@
 import { and, eq, isNotNull, lt } from "drizzle-orm";
-import { organizations } from "../schema/index.js";
-import type { Db } from "./client.js";
+import { organizations } from "../schema/index";
+import type { Db } from "./client";
 
 export interface DemoReaperResult {
   candidates: number;

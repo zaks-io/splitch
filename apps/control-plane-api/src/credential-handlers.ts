@@ -2,16 +2,16 @@ import type { APIKey } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
-import { requireAppAdmin } from "./app-authz.js";
+import { requireAppAdmin } from "./app-authz";
 import {
   type ClientKeyRow,
   clientKeyResponse,
   createClientKey,
   ensureActiveClientKey,
   provisionClientKey,
-} from "./client-key-provisioning.js";
-import { randomHex, sha256Hex, writeApiKeyCache, writeClientKeyCache } from "./credential-cache.js";
-import { objectBody, pathParam } from "./handler-input.js";
+} from "./client-key-provisioning";
+import { randomHex, sha256Hex, writeApiKeyCache, writeClientKeyCache } from "./credential-cache";
+import { objectBody, pathParam } from "./handler-input";
 
 interface CredentialHandlerDeps {
   repo: Repository;

@@ -4,7 +4,7 @@ import {
   ExposureEventSchema,
   ExposureTypeSchema,
   exposureTypes,
-} from "./leaf-schemas-runtime.js";
+} from "./leaf-schemas-runtime";
 
 // A full Exposure row with EVERY required field, incl. the three
 // canonically-named timestamps and the `type` discriminator.

@@ -1,5 +1,5 @@
 import { assignmentKey } from "@splitch/contracts";
-import type { AssignmentStoreEntry } from "./assignment-store.js";
+import type { AssignmentStoreEntry } from "./assignment-store";
 import {
   type AssignmentKv,
   type AssignmentStorePutResult,
@@ -7,7 +7,7 @@ import {
   mergeAssignmentValue,
   readAssignmentValue,
   serializeAssignmentValue,
-} from "./assignment-store.js";
+} from "./assignment-store";
 
 const STORAGE_KEY = "assignment";
 

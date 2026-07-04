@@ -6,14 +6,14 @@ import { appScope, createRepository, envScope, type Repository } from "@splitch/
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { Miniflare } from "miniflare";
-import { createApp } from "./app.js";
-import { makeControlPlaneAuthResolver } from "./auth-resolver.js";
-import { ids, NOW, NOW_MS, seedConfigGraph } from "./config-store-fixture-data.js";
-import { makeConfigStore, type ConfigStoreWriter } from "./config-store.js";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer.js";
-import { makeJwksVerifier } from "./jwks-verify.js";
-import { appAdminScope } from "./scope-binding.js";
-import { makeSessionStore } from "./session-store.js";
+import { createApp } from "./app";
+import { makeControlPlaneAuthResolver } from "./auth-resolver";
+import { ids, NOW, NOW_MS, seedConfigGraph } from "./config-store-fixture-data";
+import { makeConfigStore, type ConfigStoreWriter } from "./config-store";
+import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
+import { makeJwksVerifier } from "./jwks-verify";
+import { appAdminScope } from "./scope-binding";
+import { makeSessionStore } from "./session-store";
 
 const AUDIENCE = "https://cp.splitch.test";
 const USER_ID = "user_config_admin";

@@ -4,9 +4,9 @@ import {
   runFixedHorizonSimulation,
   monteCarloTolerance,
   runRepeatedLookSimulation,
-} from "./sequential-ci-simulation.js";
-import { FixedHorizonCI } from "./fixed-horizon-ci.js";
-import { SequentialCI } from "./sequential-ci.js";
+} from "./sequential-ci-simulation";
+import { FixedHorizonCI } from "./fixed-horizon-ci";
+import { SequentialCI } from "./sequential-ci";
 
 const SIMULATION_ALPHA = 0.05;
 const AUDIT_LOOKS = [20, 35, 55, 80, 120, 180, 260, 380, 520, 700, 950, 1_250] as const;

@@ -1,12 +1,5 @@
-import { inverseNormalCdf, normalCdf } from "./normal-distribution.js";
-import type {
-  CIAdapter,
-  CIError,
-  CIParams,
-  CIResult,
-  CISource,
-  CIWarning,
-} from "./sequential-ci.js";
+import { inverseNormalCdf, normalCdf } from "./normal-distribution";
+import type { CIAdapter, CIError, CIParams, CIResult, CISource, CIWarning } from "./sequential-ci";
 
 export const FIXED_HORIZON_CI_SOURCE: CISource = {
   family: "fixed-horizon-two-sample-z-test",

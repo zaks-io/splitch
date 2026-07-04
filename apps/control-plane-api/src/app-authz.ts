@@ -1,6 +1,6 @@
 import { appScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
-import { appAdminScope } from "./scope-binding.js";
+import { appAdminScope } from "./scope-binding";
 
 const APP_WRITE_ROLES = ["owner", "admin"] as const;
 const APP_DELETE_ROLES = ["owner"] as const;

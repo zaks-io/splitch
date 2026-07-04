@@ -1,5 +1,5 @@
 import type { ExperimentConfigKV, RunConfigKV } from "@splitch/contracts";
-import type { RunConfig } from "./run-config.js";
+import type { RunConfig } from "./run-config";
 
 /**
  * Assemble the clean, assign()-shaped `RunConfig` from the two KV blobs the edge

@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { MetricSchema, MetricRefSchema } from "./leaf-schemas-experiment.js";
+import { MetricSchema, MetricRefSchema } from "./leaf-schemas-experiment";
 import {
   APIKeySchema,
   AppSchema,
   ClientKeySchema,
   EnvironmentSchema,
   OrganizationSchema,
-} from "./leaf-schemas-runtime.js";
+} from "./leaf-schemas-runtime";
 
 /**
  * Create/patch/response wire envelopes for the account-tier resources: Metric,

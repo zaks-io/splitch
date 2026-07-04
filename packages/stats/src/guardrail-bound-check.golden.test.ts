@@ -1,8 +1,8 @@
 import type { DecisionFamilyMember } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { applyDecisionFamilyCorrection } from "./decision-family-fdr.js";
-import { armResult, resultKey } from "./decision-family-fdr-test-helpers.js";
-import { applyGuardrailBoundChecks } from "./guardrail-bound-check.js";
+import { applyDecisionFamilyCorrection } from "./decision-family-fdr";
+import { armResult, resultKey } from "./decision-family-fdr-test-helpers";
+import { applyGuardrailBoundChecks } from "./guardrail-bound-check";
 
 describe("guardrail bound check golden fixtures", () => {
   it("fires a non-significant but breached Guardrail outside the BH family", () => {

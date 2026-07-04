@@ -6,11 +6,11 @@ import {
   environments,
   organizations,
   orgMemberships,
-} from "../schema/index.js";
-import type { Db } from "./client.js";
-import { makeDemoReaper } from "./identity-demo-reaper.js";
-import type { TenantScope } from "./scope.js";
-import { scopedTable } from "./scoped-table.js";
+} from "../schema/index";
+import type { Db } from "./client";
+import { makeDemoReaper } from "./identity-demo-reaper";
+import type { TenantScope } from "./scope";
+import { scopedTable } from "./scoped-table";
 
 /**
  * Identity-domain repository.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DecisionFamilyMemberSchema, DimensionInputSchema } from "./stats-input-contract.js";
+import { DecisionFamilyMemberSchema, DimensionInputSchema } from "./stats-input-contract";
 
 const decisionFamilyMember = {
   metric_id: "metric_1",

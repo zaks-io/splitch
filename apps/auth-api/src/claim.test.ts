@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { EMAIL, setupClaimHarness } from "./claim-harness.js";
-import { initiateClaim, verifyClaim } from "./claim.js";
-import { FIXTURE_OTP } from "./otp.js";
+import { EMAIL, setupClaimHarness } from "./claim-harness";
+import { initiateClaim, verifyClaim } from "./claim";
+import { FIXTURE_OTP } from "./otp";
 
 /**
  * Door B CLAIM ceremony — behavioral surface (happy path, OTP binding, atomic

@@ -14,8 +14,8 @@
  * see docs/spec/frontend/observability-pii-scrubbing.md "What is NOT scrubbed".
  */
 
-import { REDACTED } from "./redaction-rules.js";
-import { scrubValue, type ScrubOptions } from "./scrubber.js";
+import { REDACTED } from "./redaction-rules";
+import { scrubValue, type ScrubOptions } from "./scrubber";
 
 export type SentryEventLike = Record<string, unknown>;
 

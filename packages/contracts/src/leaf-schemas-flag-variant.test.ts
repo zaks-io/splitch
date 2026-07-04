@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FlagSchema, TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag.js";
+import { FlagSchema, TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
 
 const validCondition = {
   attribute: "plan",

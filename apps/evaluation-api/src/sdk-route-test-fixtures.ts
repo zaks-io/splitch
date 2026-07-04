@@ -10,10 +10,10 @@ import {
   type RunConfigKV,
 } from "@splitch/contracts";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
-import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures.js";
-import { createApp } from "./app.js";
-import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth.js";
-import type { AssembledExposure } from "./evaluate/exposure-assembly.js";
+import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
+import { createApp } from "./app";
+import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth";
+import type { AssembledExposure } from "./evaluate/exposure-assembly";
 import {
   APP_ID,
   ENVIRONMENT_ID,
@@ -22,10 +22,10 @@ import {
   RecordingAssignmentStore,
   baseInput,
   targetingRule,
-} from "./evaluate/evaluate-path-test-fixtures.js";
-import { FakeKv } from "./provider/fake-kv.js";
-import { experimentConfigKV, flagConfigKV, runConfigKV } from "./provider/fixtures.js";
-import { KvProvider } from "./provider/kv-provider.js";
+} from "./evaluate/evaluate-path-test-fixtures";
+import { FakeKv } from "./provider/fake-kv";
+import { experimentConfigKV, flagConfigKV, runConfigKV } from "./provider/fixtures";
+import { KvProvider } from "./provider/kv-provider";
 
 export { APP_ID, ENVIRONMENT_ID, EXPERIMENT_ID, FLAG_KEY, sha256Hex };
 

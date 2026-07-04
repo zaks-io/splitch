@@ -1,5 +1,5 @@
 import type { ErrorCode, ExperimentStatus, TargetingRule, Variant } from "@splitch/contracts";
-import type { RunConfig } from "../assignment/run-config.js";
+import type { RunConfig } from "../assignment/run-config";
 
 /**
  * The Provider port: a STATELESS read-side resolver (ADR-0007). Its only state is

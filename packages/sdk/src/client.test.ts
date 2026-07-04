@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createFetchTransport, createSplitchClient } from "./client.js";
-import { FakeLogger, FakeTransport, httpError, ok, transportFailure } from "./test-fixtures.js";
-import type { Transport, TransportRequest } from "./transport.js";
+import { createFetchTransport, createSplitchClient } from "./client";
+import { FakeLogger, FakeTransport, httpError, ok, transportFailure } from "./test-fixtures";
+import type { Transport, TransportRequest } from "./transport";
 
 const REQ: TransportRequest = {
   flagKey: "flag",
