@@ -10,8 +10,6 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export interface ObservabilitySecrets {
   readonly sentryDsn?: string;
-  readonly axiomToken?: string;
-  readonly axiomDataset?: string;
   readonly environment?: string;
 }
 
@@ -20,12 +18,10 @@ export interface ScrubbedEmitterConfig extends ObservabilitySecrets {
   readonly scrubOptions?: ScrubOptions;
   /** Test hook: invoked with the scrubbed Sentry event immediately before emit. */
   readonly onSentryEvent?: (event: SentryEventLike) => void;
-  /** Test hook: invoked with scrubbed Axiom rows immediately before ingest. */
-  readonly onAxiomEvents?: (events: Record<string, unknown>[]) => void;
+  /** Test hook: invoked with scrubbed structured log rows immediately before emit. */
+  readonly onStructuredLogEvents?: (events: Record<string, unknown>[]) => void;
   /** When set, delivers scrubbed exceptions to the surface Sentry client. */
   readonly onSentryCaptureException?: (error: unknown, extra: Record<string, unknown>) => void;
-  /** Extends background work (e.g. Axiom flush) past the response when set. */
-  readonly scheduleBackgroundWork?: (work: Promise<unknown>) => void;
 }
 
 export interface ScrubbedEmitter {
@@ -72,28 +68,9 @@ export function createScrubbedEmitter(config: ScrubbedEmitterConfig): ScrubbedEm
         scrubOptions,
       ) as Record<string, unknown>;
       const events = [row];
-      config.onAxiomEvents?.(events);
-      if (config.axiomToken && config.axiomDataset) {
-        const flush = ingestAxiomRows(config.axiomToken, config.axiomDataset, events);
-        if (config.scheduleBackgroundWork) {
-          config.scheduleBackgroundWork(flush);
-        } else {
-          void flush;
-        }
-      }
+      config.onStructuredLogEvents?.(events);
     },
   };
-}
-
-async function ingestAxiomRows(
-  token: string,
-  dataset: string,
-  events: Record<string, unknown>[],
-): Promise<void> {
-  const { Axiom } = await import("@axiomhq/js");
-  const axiom = new Axiom({ token });
-  axiom.ingest(dataset, events);
-  await axiom.flush();
 }
 
 export function createSentryBeforeSend(
@@ -108,14 +85,10 @@ export function createSentryBeforeSend(
 
 export function secretsFromEnv(env: {
   SENTRY_DSN?: string;
-  AXIOM_TOKEN?: string;
-  AXIOM_DATASET?: string;
   SPLITCH_PLATFORM_TARGET?: string;
 }): ObservabilitySecrets {
   return {
     sentryDsn: env.SENTRY_DSN,
-    axiomToken: env.AXIOM_TOKEN,
-    axiomDataset: env.AXIOM_DATASET ?? "splitch-logs",
     environment: env.SPLITCH_PLATFORM_TARGET ?? "local",
   };
 }

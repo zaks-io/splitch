@@ -108,32 +108,26 @@ describe("createWorkerObservability onError", () => {
     expect(addBreadcrumb).not.toHaveBeenCalled();
   });
 
-  it("keeps Worker log scrubbing local and skips app-level Axiom flushes", () => {
-    const scheduled: Promise<unknown>[] = [];
-    const axiomEvents: Record<string, unknown>[][] = [];
-    const legacyAxiomEnv = {
-      AXIOM_TOKEN: "xaat-test-token",
-      AXIOM_DATASET: "splitch-logs",
+  it("keeps Worker structured log scrubbing local", () => {
+    const structuredLogEvents: Record<string, unknown>[][] = [];
+    const env = {
       SPLITCH_PLATFORM_TARGET: "local",
     };
     const emitter = workerEmitter(
-      legacyAxiomEnv,
+      env,
       {
         surface: "evaluation-api",
-        scheduleBackgroundWork: (work) => {
-          scheduled.push(work);
-        },
       },
       {
-        onAxiomEvents: (events) => {
-          axiomEvents.push(events);
+        onStructuredLogEvents: (events) => {
+          structuredLogEvents.push(events);
         },
       },
     );
 
-    emitter.log("info", "request", { requestId: "req-axiom" });
+    emitter.log("info", "request", { requestId: "req-structured-log" });
 
-    expect(axiomEvents).toHaveLength(1);
-    expect(scheduled).toHaveLength(0);
+    expect(structuredLogEvents).toHaveLength(1);
+    expect(structuredLogEvents[0]?.[0]?.requestId).toBe("req-structured-log");
   });
 });

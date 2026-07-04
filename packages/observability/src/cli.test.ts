@@ -20,8 +20,6 @@ import {
 
 const CLI_ENV = {
   SENTRY_DSN: "https://example@o0.ingest.sentry.io/0",
-  AXIOM_TOKEN: "xaat-test-token",
-  AXIOM_DATASET: "splitch-logs",
   SPLITCH_PLATFORM_TARGET: "local",
 };
 

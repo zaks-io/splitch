@@ -9,8 +9,6 @@ import {
 
 const TEST_ENV = {
   SENTRY_DSN: "https://example@o0.ingest.sentry.io/0",
-  AXIOM_TOKEN: "xaat-test-token",
-  AXIOM_DATASET: "splitch-logs",
   SPLITCH_PLATFORM_TARGET: "local",
 };
 
@@ -21,7 +19,7 @@ const WORKER_TEST_ENV = {
 
 type SurfaceEmitterFactory = (hooks: {
   onSentryEvent?: (event: Record<string, unknown>) => void;
-  onAxiomEvents?: (events: Record<string, unknown>[]) => void;
+  onStructuredLogEvents?: (events: Record<string, unknown>[]) => void;
 }) => {
   captureException: (error: unknown, extra?: Record<string, unknown>) => void;
   log: (

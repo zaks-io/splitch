@@ -40,13 +40,13 @@ describe("cross-surface observability wiring", () => {
   for (const surface of OBSERVABILITY_SURFACES) {
     it(`${surface.id} registers scrubbed Sentry and structured-log emitters`, () => {
       const sentryEvents: Record<string, unknown>[] = [];
-      const axiomEvents: Record<string, unknown>[][] = [];
+      const structuredLogEvents: Record<string, unknown>[][] = [];
       const emitter = createSurfaceEmitter(surface.id)({
         onSentryEvent: (event) => {
           sentryEvents.push(event);
         },
-        onAxiomEvents: (events) => {
-          axiomEvents.push(events);
+        onStructuredLogEvents: (events) => {
+          structuredLogEvents.push(events);
         },
       });
 
@@ -56,8 +56,8 @@ describe("cross-surface observability wiring", () => {
       emitter.log("info", "wiring check", { targetingKey: "tk-should-redact" });
 
       expect(sentryEvents[0]?.extra).toMatchObject({ targeting: "[Redacted]" });
-      expect(JSON.stringify(axiomEvents)).not.toContain("leak@example.com");
-      expect(JSON.stringify(axiomEvents)).not.toContain("tk-should-redact");
+      expect(JSON.stringify(structuredLogEvents)).not.toContain("leak@example.com");
+      expect(JSON.stringify(structuredLogEvents)).not.toContain("tk-should-redact");
     });
 
     it(`${surface.id} is wired in its owning workspace entrypoint`, () => {

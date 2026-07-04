@@ -2,14 +2,12 @@ import { createScrubbedEmitter, secretsFromEnv } from "./emitter.js";
 
 export interface SdkHarnessObservabilityEnv {
   SENTRY_DSN?: string;
-  AXIOM_TOKEN?: string;
-  AXIOM_DATASET?: string;
   SPLITCH_PLATFORM_TARGET?: string;
 }
 
 /**
  * SDK integration-test harness observability. The public SDK does not emit to
- * Sentry/Axiom in customer apps, but the repo's SDK test harness exercises the
+ * Sentry in customer apps, but the repo's SDK test harness exercises the
  * same scrubbed emission boundary as Workers and the CLI.
  */
 export function initSdkHarnessObservability(
