@@ -6,16 +6,16 @@
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
     "./worker": {
-      "types": "./dist/worker.d.ts",
-      "default": "./dist/worker.js"
+      "types": "./src/worker.ts",
+      "default": "./src/worker.ts"
     }
   },
   "files": [
-    "dist"
+    "src"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

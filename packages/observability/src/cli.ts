@@ -32,6 +32,8 @@ export function initCliObservability(
     Sentry.init({
       dsn: secrets.sentryDsn,
       environment: secrets.environment,
+      integrations: (integrations) =>
+        integrations.filter((integration) => integration.name !== "OnUnhandledRejection"),
       beforeSend(event) {
         return scrubbedBeforeSend(event as unknown as SentryEventLike) as unknown as typeof event;
       },
@@ -51,6 +53,20 @@ export function initCliObservability(
         }
       : undefined,
   });
+}
+
+/**
+ * Flush and close the CLI Sentry client after a command finishes or faults.
+ * Call from CLI launchers instead of relying on global unhandled-rejection hooks.
+ */
+export async function shutdownCliObservability(timeoutMs = 2000): Promise<void> {
+  if (!initialized) {
+    return;
+  }
+
+  await Sentry.flush(timeoutMs);
+  await Sentry.close(timeoutMs);
+  initialized = false;
 }
 
 export function cliEmitter(

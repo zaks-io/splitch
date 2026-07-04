@@ -8,7 +8,7 @@ export {
   type ScrubbedEmitter,
   type ScrubbedEmitterConfig,
 } from "./emitter.js";
-export { initCliObservability, cliEmitter } from "./cli.js";
+export { initCliObservability, shutdownCliObservability, cliEmitter } from "./cli.js";
 export { initSdkHarnessObservability, sdkHarnessEmitter } from "./sdk-harness.js";
 export {
   OBSERVABILITY_SURFACE_KINDS,

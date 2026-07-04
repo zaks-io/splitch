@@ -1,7 +1,7 @@
 #!/usr/bin/env -S tsx
 import { pathToFileURL } from "node:url";
 import { createControlPlaneSdk } from "@splitch/control-plane-sdk";
-import { initCliObservability } from "@splitch/observability";
+import { initCliObservability, shutdownCliObservability } from "@splitch/observability";
 
 const cliObservability = initCliObservability();
 
@@ -31,8 +31,16 @@ function readOption(args: readonly string[], name: string): string | undefined {
   return index >= 0 ? args[index + 1] : undefined;
 }
 
+export async function launchCli(): Promise<void> {
+  try {
+    process.exitCode = await runCli();
+  } catch {
+    process.exitCode = 1;
+  } finally {
+    await shutdownCliObservability();
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  runCli().then((code) => {
-    process.exitCode = code;
-  });
+  void launchCli();
 }
