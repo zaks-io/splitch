@@ -38,9 +38,6 @@
       "id": "00000000000000000000000000000000"
     }
   ],
-  "secrets": {
-    "required": ["SENTRY_DSN"]
-  },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "AUTH_API_ORIGIN": "http://localhost:8791",
@@ -76,7 +73,6 @@
       },
       "secrets": {
         "required": [
-          "SENTRY_DSN",
           "ACCESS_TOKEN_SECRET",
           "ASSERTION_SIGNING_SECRET",
           "TURNSTILE_SECRET",
@@ -123,7 +119,6 @@
       },
       "secrets": {
         "required": [
-          "SENTRY_DSN",
           "ACCESS_TOKEN_SECRET",
           "ASSERTION_SIGNING_SECRET",
           "TURNSTILE_SECRET",

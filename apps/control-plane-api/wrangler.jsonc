@@ -48,9 +48,6 @@
   "migrations": [
     { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] }
   ],
-  "secrets": {
-    "required": ["SENTRY_DSN"]
-  },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local"
   },
@@ -73,9 +70,6 @@
         }
       },
       "routes": [{ "pattern": "api.preview.splitch.dev", "custom_domain": true }],
-      "secrets": {
-        "required": ["SENTRY_DSN"]
-      },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
@@ -118,9 +112,6 @@
         }
       },
       "routes": [{ "pattern": "api.splitch.dev", "custom_domain": true }],
-      "secrets": {
-        "required": ["SENTRY_DSN"]
-      },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",

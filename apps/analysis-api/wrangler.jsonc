@@ -22,7 +22,7 @@
     "crons": ["0 * * * *"]
   },
   "secrets": {
-    "required": ["SENTRY_DSN", "TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
+    "required": ["TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
@@ -59,7 +59,7 @@
         "crons": []
       },
       "secrets": {
-        "required": ["SENTRY_DSN", "TINYBIRD_READ_TOKEN"]
+        "required": ["TINYBIRD_READ_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
@@ -96,7 +96,7 @@
         "crons": ["0 * * * *"]
       },
       "secrets": {
-        "required": ["SENTRY_DSN", "TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
+        "required": ["TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",

@@ -62,9 +62,11 @@ describe("Worker Wrangler observability secrets", () => {
 
     it.each(
       wranglerTargets(config),
-    )(`${surface.id} declares SENTRY_DSN for %s`, (_target, target) => {
-      expect(target?.secrets?.required).toContain("SENTRY_DSN");
-      expect(target?.secrets?.required).not.toContain("AXIOM_TOKEN");
+    )(`${surface.id} keeps Sentry optional and Axiom token-free for %s`, (_target, target) => {
+      const requiredSecrets = target?.secrets?.required ?? [];
+
+      expect(requiredSecrets).not.toContain("SENTRY_DSN");
+      expect(requiredSecrets).not.toContain("AXIOM_TOKEN");
       expect(target?.vars?.SENTRY_DSN).toBeUndefined();
       expect(target?.vars?.AXIOM_TOKEN).toBeUndefined();
       expect(target?.vars?.AXIOM_DATASET).toBeUndefined();
