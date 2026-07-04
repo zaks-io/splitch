@@ -36,8 +36,8 @@ export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./o
 export { getRoute, operationIds, routeRegistry } from "./route-registry.js";
 export { buildOpenApiDocument } from "./openapi-document.js";
 export type { OpenApiDocumentInfo } from "./openapi-document.js";
-export { deriveMcpTools, isMcpToolRoute } from "./mcp-tools.js";
-export type { McpToolDefinition } from "./mcp-tools.js";
+export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "./mcp-tools.js";
+export type { McpProtocolToolDefinition, McpToolDefinition } from "./mcp-tools.js";
 export { DeltaNudgeEntitySchema, deltaNudgeEntities, DeltaNudgeSchema } from "./delta-nudge.js";
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge.js";
 export {

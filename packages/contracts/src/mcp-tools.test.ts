@@ -96,15 +96,26 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
     }
   });
 
-  it("write tool input = the route request body; read tool input = path+query", () => {
+  it("tool input combines route path, query, and body fields in SDK call shape", () => {
     const create = tools.find((tool) => tool.name === "flags_create");
-    const route = getRoute("flags_create");
-    const body = route?.openapi.request?.body?.content?.["application/json"]?.schema;
-    expect(create?.inputSchema).toBe(body);
+    const createShape = objectShape(create?.inputSchema);
+    expect(Object.keys(createShape)).toEqual(
+      expect.arrayContaining(["appId", "name", "key", "schema", "variants"]),
+    );
 
     const list = tools.find((tool) => tool.name === "flags_list");
-    const listShape = (list?.inputSchema as { shape?: Record<string, unknown> }).shape ?? {};
+    const listShape = objectShape(list?.inputSchema);
     expect(Object.keys(listShape)).toContain("appId");
+
+    const update = tools.find((tool) => tool.name === "flags_update");
+    const updateShape = objectShape(update?.inputSchema);
+    expect(Object.keys(updateShape)).toEqual(
+      expect.arrayContaining(["appId", "flagId", "name", "schema", "description"]),
+    );
+    expect(
+      update?.inputSchema.safeParse({ appId: "app_1", flagId: "flag_1", name: "Checkout" }).success,
+    ).toBe(true);
+    expect(update?.inputSchema.safeParse({ name: "Checkout" }).success).toBe(false);
   });
 
   it("tool output = the route 200 response schema", () => {
@@ -120,3 +131,7 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
     }
   });
 });
+
+function objectShape(schema: unknown): Record<string, unknown> {
+  return (schema as { shape?: Record<string, unknown> } | undefined)?.shape ?? {};
+}
