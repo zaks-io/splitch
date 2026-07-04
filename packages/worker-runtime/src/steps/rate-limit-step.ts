@@ -1,6 +1,6 @@
 import type { ErrorResponse, RouteContract } from "@splitch/contracts";
-import type { RegistrarDeps } from "../deps.js";
-import type { Principal } from "../principal.js";
+import type { RegistrarDeps } from "../deps";
+import type { Principal } from "../principal";
 
 /** Fail-closed retry window when a guarded limiter throws and gives us no number. */
 const FAIL_CLOSED_RETRY_MS = 1000;

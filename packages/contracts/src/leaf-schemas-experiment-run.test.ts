@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Run } from "./leaf-schemas-experiment.js";
-import { RunSchema, RunStatusSchema, runStatuses } from "./leaf-schemas-experiment.js";
+import type { Run } from "./leaf-schemas-experiment";
+import { RunSchema, RunStatusSchema, runStatuses } from "./leaf-schemas-experiment";
 
 const validVariantSet = [
   { id: "var_1", name: "control", value: false },

@@ -4,7 +4,7 @@ import {
   createTinybirdReadTransport,
   TinybirdCopyError,
   TinybirdReadError,
-} from "./tinybird.js";
+} from "./tinybird";
 
 describe("Tinybird read transport", () => {
   it("requires app_id and environment_id at the read chokepoint", async () => {

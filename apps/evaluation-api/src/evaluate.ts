@@ -6,13 +6,13 @@ import {
   type Variant,
 } from "@splitch/contracts";
 import { renderError, type HandlerArgs, type Principal } from "@splitch/worker-runtime";
-import { evaluate } from "./evaluate/accessor-paths.js";
-import type { AssembledExposure, ExposureAssemblyDeps } from "./evaluate/exposure-assembly.js";
-import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types.js";
-import type { EvaluateResult } from "./evaluate/evaluate-path.js";
-import type { ExposureSink } from "./exposure-sink.js";
-import { ExposureSinkError } from "./exposure-sink.js";
-import type { FlagConfig, Provider } from "./provider/provider.js";
+import { evaluate } from "./evaluate/accessor-paths";
+import type { AssembledExposure, ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
+import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
+import type { EvaluateResult } from "./evaluate/evaluate-path";
+import type { ExposureSink } from "./exposure-sink";
+import { ExposureSinkError } from "./exposure-sink";
+import type { FlagConfig, Provider } from "./provider/provider";
 
 type EvaluateInput = {
   body: DataPlaneEvaluateRequest;

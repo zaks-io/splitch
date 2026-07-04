@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { appScope, createRepository, envScope } from "../index.js";
-import { seedTwoTenants } from "./test-seed.js";
-import { createLocalD1, type LocalD1 } from "./test-d1.js";
+import { appScope, createRepository, envScope } from "../index";
+import { seedTwoTenants } from "./test-seed";
+import { createLocalD1, type LocalD1 } from "./test-d1";
 
 /**
  * The cross-tenant isolation proof (the headline acceptance criterion).

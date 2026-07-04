@@ -5,9 +5,9 @@ import {
   FlagResponseSchema,
   PatchFlagRequestSchema,
   PatchVariantRequestSchema,
-} from "../resource-envelopes-flag.js";
-import { SegmentSchema } from "../leaf-schemas-flag.js";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
+} from "../resource-envelopes-flag";
+import { SegmentSchema } from "../leaf-schemas-flag";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   AppParams,
   CreateSegmentRequestSchema,
@@ -22,7 +22,7 @@ import {
   PromoteResponseSchema,
   ReplaceTargetingRulesRequestSchema,
   SegmentParams,
-} from "./route-shapes.js";
+} from "./route-shapes";
 
 /**
  * Flag definition (App-level catalog), Variant sub-resource, per-Environment Flag

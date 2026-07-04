@@ -5,12 +5,12 @@
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     }
   },
   "files": [
-    "dist"
+    "src"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

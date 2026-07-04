@@ -4,7 +4,7 @@ import type {
   ResolutionReason,
   VariantValue,
 } from "@splitch/contracts";
-import type { TransportFailure, TransportResult } from "./transport.js";
+import type { TransportFailure, TransportResult } from "./transport";
 
 /**
  * Synthesize the OpenFeature `ResolutionDetails` from the bare `{ variant }` wire

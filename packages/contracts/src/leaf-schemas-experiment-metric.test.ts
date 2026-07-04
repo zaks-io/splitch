@@ -4,7 +4,7 @@ import {
   MetricRefSchema,
   MetricSchema,
   metricKinds,
-} from "./leaf-schemas-experiment.js";
+} from "./leaf-schemas-experiment";
 
 const baseMetric = {
   id: "metric_1",

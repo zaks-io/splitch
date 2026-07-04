@@ -3,7 +3,7 @@ import {
   ExperimentSchema,
   ExperimentStatusSchema,
   experimentStatuses,
-} from "./leaf-schemas-experiment.js";
+} from "./leaf-schemas-experiment";
 
 const validExperiment = {
   id: "exp_1",

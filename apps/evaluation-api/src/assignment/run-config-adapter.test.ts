@@ -1,7 +1,7 @@
 import type { ExperimentConfigKV, RunConfigKV } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { assign } from "./assign.js";
-import { runConfigFromKV } from "./run-config-adapter.js";
+import { assign } from "./assign";
+import { runConfigFromKV } from "./run-config-adapter";
 
 const runKV: RunConfigKV = {
   id: "run-42",

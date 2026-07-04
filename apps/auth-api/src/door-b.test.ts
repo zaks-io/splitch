@@ -1,20 +1,20 @@
 import { createRepository } from "@splitch/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app.js";
-import { makeFixtureDeviceFlow } from "./device-flow.js";
-import { makeD1DeviceRefreshSessionStore } from "./device-session-store.js";
-import { makeJtiCache } from "./jti-cache.js";
-import { makeKvRevocationStore } from "./revocation.js";
-import { makeTokenSigner, type TokenSigner } from "./token-exchange.js";
+import { createApp } from "./app";
+import { makeFixtureDeviceFlow } from "./device-flow";
+import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
+import { makeJtiCache } from "./jti-cache";
+import { makeKvRevocationStore } from "./revocation";
+import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import {
   type DoorBFixtures,
   type LocalBindings,
   makeDoorBDeps,
   makeFixtureKeypair,
   makeLocalBindings,
-} from "./test-fixtures.js";
-import { FIXTURE_TURNSTILE_TOKEN } from "./turnstile.js";
-import { makeFixtureWorkOs } from "./workos.js";
+} from "./test-fixtures";
+import { FIXTURE_TURNSTILE_TOKEN } from "./turnstile";
+import { makeFixtureWorkOs } from "./workos";
 
 /**
  * Door B REGISTER integration: anonymous register (Turnstile → rate ceiling →

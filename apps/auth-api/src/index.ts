@@ -1,18 +1,18 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import { createWorkerObservability, wrapWorkerHandler } from "@splitch/observability/worker";
-import { createApp } from "./app.js";
-import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow.js";
-import { makeD1DeviceRefreshSessionStore } from "./device-session-store.js";
-import type { AuthApiEnv } from "./env.js";
-import { fetchJwks } from "./jwks.js";
-import { makeJtiCache } from "./jti-cache.js";
-import { makeFixtureOtp, makeIdempotencyStore } from "./otp.js";
-import { makeRateLimiter } from "./rate-limit.js";
-import { makeKvRevocationStore } from "./revocation.js";
-import { makeTokenSigner } from "./token-exchange.js";
-import { makeFixtureTurnstile } from "./turnstile.js";
-import { makeFixtureWorkOs } from "./workos.js";
+import { createApp } from "./app";
+import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow";
+import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
+import type { AuthApiEnv } from "./env";
+import { fetchJwks } from "./jwks";
+import { makeJtiCache } from "./jti-cache";
+import { makeFixtureOtp, makeIdempotencyStore } from "./otp";
+import { makeRateLimiter } from "./rate-limit";
+import { makeKvRevocationStore } from "./revocation";
+import { makeTokenSigner } from "./token-exchange";
+import { makeFixtureTurnstile } from "./turnstile";
+import { makeFixtureWorkOs } from "./workos";
 
 const service = "splitch-auth-api";
 

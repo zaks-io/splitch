@@ -1,9 +1,9 @@
-import { createDb } from "./client.js";
-import { makeCredentialRepo } from "./credentials.js";
-import { makeExperimentRepo } from "./experiments.js";
-import { makeFlagRepo } from "./flags.js";
-import { makeIdentityRepo } from "./identity.js";
-import { makePrivacyRepo } from "./privacy.js";
+import { createDb } from "./client";
+import { makeCredentialRepo } from "./credentials";
+import { makeExperimentRepo } from "./experiments";
+import { makeFlagRepo } from "./flags";
+import { makeIdentityRepo } from "./identity";
+import { makePrivacyRepo } from "./privacy";
 
 /**
  * The single tenant-isolation seam (ADR-0018).

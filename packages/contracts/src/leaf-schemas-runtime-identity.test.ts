@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { User } from "./leaf-schemas-runtime.js";
+import type { User } from "./leaf-schemas-runtime";
 import {
   APIKeySchema,
   AppSchema,
@@ -12,7 +12,7 @@ import {
   UserRoleSchema,
   userRoles,
   UserSchema,
-} from "./leaf-schemas-runtime.js";
+} from "./leaf-schemas-runtime";
 
 describe("Organization", () => {
   const validOrg = {

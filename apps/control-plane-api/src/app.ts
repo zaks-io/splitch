@@ -7,16 +7,16 @@ import {
   type RegistrarDeps,
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
-import type { ConfigStoreAccess } from "./config-store-do.js";
-import { makeAppEnvironmentHandlers } from "./app-environment-handlers.js";
-import { makeCredentialHandlers } from "./credential-handlers.js";
-import { makeExperimentHandlers } from "./experiment-handlers.js";
-import { makeFlagDefinitionHandlers } from "./flag-definition-handlers.js";
-import { makeHandlers } from "./handlers.js";
-import { mountLiveUpdateRoute } from "./live-updates.js";
-import { makeMetricSegmentHandlers } from "./metric-segment-handlers.js";
-import type { MemberProfileResolver } from "./org-handlers.js";
-import { controlPlaneRoute } from "./routes.js";
+import type { ConfigStoreAccess } from "./config-store-do";
+import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
+import { makeCredentialHandlers } from "./credential-handlers";
+import { makeExperimentHandlers } from "./experiment-handlers";
+import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
+import { makeHandlers } from "./handlers";
+import { mountLiveUpdateRoute } from "./live-updates";
+import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
+import type { MemberProfileResolver } from "./org-handlers";
+import { controlPlaneRoute } from "./routes";
 
 /**
  * Control Plane API Worker HTTP surface.

@@ -1,15 +1,15 @@
 import type { RouteContract } from "@splitch/contracts";
 import type { Context, Hono } from "hono";
 import type { z } from "zod";
-import type { RegistrarDeps } from "./deps.js";
-import { parseInput } from "./parse-input.js";
-import { type Principal, PUBLIC_PRINCIPAL } from "./principal.js";
-import { checkIdempotency } from "./steps/idempotency.js";
-import { resolvePrincipal } from "./steps/resolve-principal.js";
-import { applyRateLimit } from "./steps/rate-limit-step.js";
-import { enforceScopes } from "./steps/scopes.js";
-import { emptyError, renderError } from "./respond.js";
-import { resolveRequestId } from "./request-id.js";
+import type { RegistrarDeps } from "./deps";
+import { parseInput } from "./parse-input";
+import { type Principal, PUBLIC_PRINCIPAL } from "./principal";
+import { checkIdempotency } from "./steps/idempotency";
+import { resolvePrincipal } from "./steps/resolve-principal";
+import { applyRateLimit } from "./steps/rate-limit-step";
+import { enforceScopes } from "./steps/scopes";
+import { emptyError, renderError } from "./respond";
+import { resolveRequestId } from "./request-id";
 
 /**
  * What a route handler receives: the validated input, the resolved principal, and

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appScope, createRepository, envScope } from "../index.js";
+import { appScope, createRepository, envScope } from "../index";
 
 /**
  * Type-level proof that "missing app_id" / "wrong scope" is UNCOMPILABLE.

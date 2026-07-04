@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { defineApiRoute, z } from "./openapi-route.js";
-import type { ApiRouteContract, DefineApiRouteInput } from "./openapi-route.js";
-import { assertRegistry } from "./route-registry.js";
-import type { ErrorCode } from "./errors.js";
-import type { RouteContract } from "./route-contract.js";
+import { defineApiRoute, z } from "./openapi-route";
+import type { ApiRouteContract, DefineApiRouteInput } from "./openapi-route";
+import { assertRegistry } from "./route-registry";
+import type { ErrorCode } from "./errors";
+import type { RouteContract } from "./route-contract";
 
 /**
  * Fail-loud proofs for the registry's contract guards. A malformed registry must

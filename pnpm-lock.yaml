@@ -102,6 +102,9 @@ importers:
       '@splitch/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      tsx:
+        specifier: 4.22.4
+        version: 4.22.4
 
   apps/control-panel:
     dependencies:

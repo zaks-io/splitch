@@ -7,17 +7,17 @@ import {
   type StatsInput,
   type StatsOutput,
 } from "@splitch/contracts";
-import { applyDecisionFamilyCorrection } from "./decision-family-fdr.js";
+import { applyDecisionFamilyCorrection } from "./decision-family-fdr";
 import {
   analyzeDimensionResults,
   dimensionResultsWithCorrectedArms,
   type DimensionArmResult,
-} from "./dimension-slicing.js";
-import { analysisExposureRows } from "./exposure-denominator.js";
-import { applyGuardrailBoundChecks } from "./guardrail-bound-check.js";
-import { analyzeMetricArmResults, defaultArmResultAdapters } from "./metric-arm-results.js";
-import type { CIAdapter } from "./sequential-ci.js";
-import { checkSrmHealth } from "./srm-checker.js";
+} from "./dimension-slicing";
+import { analysisExposureRows } from "./exposure-denominator";
+import { applyGuardrailBoundChecks } from "./guardrail-bound-check";
+import { analyzeMetricArmResults, defaultArmResultAdapters } from "./metric-arm-results";
+import type { CIAdapter } from "./sequential-ci";
+import { checkSrmHealth } from "./srm-checker";
 
 export interface StatsEngineOptions {
   readonly sequentialCI?: CIAdapter;

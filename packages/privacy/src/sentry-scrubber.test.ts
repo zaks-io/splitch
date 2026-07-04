@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scrubSentryEvent } from "./sentry-scrubber.js";
+import { scrubSentryEvent } from "./sentry-scrubber";
 
 describe("scrubSentryEvent allow-list traversal", () => {
   it("scrubs an unknown future field by default (fail-safe, not leak-by-default)", () => {

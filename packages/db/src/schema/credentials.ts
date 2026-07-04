@@ -1,7 +1,7 @@
 import { isNull } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { createdAt, userRef } from "./columns.js";
-import { apps, environments } from "./identity.js";
+import { createdAt, userRef } from "./columns";
+import { apps, environments } from "./identity";
 
 /**
  * Credential-domain D1 tables: Client Keys (public, key material stored) and API

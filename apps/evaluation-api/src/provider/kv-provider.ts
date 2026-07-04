@@ -8,14 +8,9 @@ import {
   runConfigKey,
   RunConfigKVSchema,
 } from "@splitch/contracts";
-import { FlagConfigCache } from "./cache.js";
-import {
-  type ExperimentConfig,
-  type FlagConfig,
-  type Provider,
-  ProviderError,
-} from "./provider.js";
-import { experimentConfigFromKV, flagConfigFromKV } from "./resolve.js";
+import { FlagConfigCache } from "./cache";
+import { type ExperimentConfig, type FlagConfig, type Provider, ProviderError } from "./provider";
+import { experimentConfigFromKV, flagConfigFromKV } from "./resolve";
 
 /**
  * KV-backed Provider adapter. Read-side ONLY: it reads app-scoped KV keys, parses

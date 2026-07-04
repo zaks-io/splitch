@@ -1,5 +1,5 @@
 import { envScope, type Repository } from "@splitch/db";
-import { writeApiKeyCache, writeClientKeyCache } from "./credential-cache.js";
+import { writeApiKeyCache, writeClientKeyCache } from "./credential-cache";
 
 interface CredentialDeleteDeps {
   repo: Pick<Repository, "credentials">;

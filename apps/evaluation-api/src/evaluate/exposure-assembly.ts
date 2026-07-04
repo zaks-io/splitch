@@ -1,6 +1,6 @@
 import type { ExposureEvent } from "@splitch/contracts";
 import { computeTargetingKeyHash, type SaltStore } from "@splitch/privacy";
-import type { EvaluatePathInput, EvaluateResult } from "./evaluate-path-types.js";
+import type { EvaluatePathInput, EvaluateResult } from "./evaluate-path-types";
 
 const EXPOSURE_TYPE = "exposure" as const;
 

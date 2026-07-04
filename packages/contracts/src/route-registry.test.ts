@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { errorCodes } from "./errors.js";
-import { getRoute, operationIds, routeRegistry } from "./route-registry.js";
-import { authKinds, httpMethods, idempotencyModes, rateLimitClasses } from "./route-contract.js";
+import { errorCodes } from "./errors";
+import { getRoute, operationIds, routeRegistry } from "./route-registry";
+import { authKinds, httpMethods, idempotencyModes, rateLimitClasses } from "./route-contract";
 
 /**
  * The registry is cross-cutting: every Worker mounts it, the SDK infers from it,

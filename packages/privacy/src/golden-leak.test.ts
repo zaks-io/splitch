@@ -18,8 +18,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { ScrubOptions } from "./scrubber.js";
-import { scrubSentryEvent, type SentryEventLike } from "./sentry-scrubber.js";
+import type { ScrubOptions } from "./scrubber";
+import { scrubSentryEvent, type SentryEventLike } from "./sentry-scrubber";
 
 const CANARY_EMAIL = "canary-leak@example.com";
 const CANARY_TARGETING_KEY = "tk-canary-targeting-key";

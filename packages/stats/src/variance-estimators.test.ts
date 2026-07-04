@@ -1,6 +1,6 @@
 import type { DedupeExposureRow, MetricKind, PerEntityMetricRow } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { estimateMetricArm, estimateMetricComparison } from "./variance-estimators.js";
+import { estimateMetricArm, estimateMetricComparison } from "./variance-estimators";
 
 const RUN_ID = "run_variance";
 

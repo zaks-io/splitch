@@ -6,7 +6,7 @@ import {
   TestEvaluationReasonSchema,
   TestEvaluationRequestSchema,
   TestEvaluationResponseSchema,
-} from "./wire-envelopes-core.js";
+} from "./wire-envelopes-core";
 
 describe("DataPlaneEvaluateRequestSchema", () => {
   it("parses a full request", () => {

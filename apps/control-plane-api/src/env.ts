@@ -1,4 +1,4 @@
-import type { ConfigStoreDurableObjectNamespace } from "./config-store-do.js";
+import type { ConfigStoreDurableObjectNamespace } from "./config-store-do";
 
 /**
  * Control Plane API Worker bindings.

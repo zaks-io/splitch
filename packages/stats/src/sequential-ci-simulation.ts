@@ -1,5 +1,5 @@
-import type { CIAdapter } from "./sequential-ci.js";
-import { fixedHorizonPValue } from "./fixed-horizon-ci.js";
+import type { CIAdapter } from "./sequential-ci";
+import { fixedHorizonPValue } from "./fixed-horizon-ci";
 
 export interface RepeatedLookSimulationConfig {
   readonly adapter: CIAdapter;

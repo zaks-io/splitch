@@ -5,7 +5,7 @@ import {
   rhoSquaredForTargetN,
   SEQUENTIAL_CI_SOURCE,
   SequentialCI,
-} from "./sequential-ci.js";
+} from "./sequential-ci";
 
 describe("SequentialCI", () => {
   const adapter = new SequentialCI();

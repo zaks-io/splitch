@@ -1,5 +1,5 @@
-import { handleMcpServerRequest } from "./mcp-handler.js";
 import { createWorkerObservability, wrapWorkerHandler } from "@splitch/observability/worker";
+import { handleMcpServerRequest } from "./mcp-handler";
 
 const service = "splitch-mcp-server";
 

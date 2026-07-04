@@ -1,6 +1,6 @@
 import { z } from "@hono/zod-openapi";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
-import { AppParams, OrgParams, PrivacyRequestParams } from "./route-shapes.js";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { AppParams, OrgParams, PrivacyRequestParams } from "./route-shapes";
 
 /**
  * Privacy request intake: User/Org/App exports, User deletion, Entity data-subject

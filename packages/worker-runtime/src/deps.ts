@@ -1,6 +1,6 @@
 import type { AuthKind } from "@splitch/contracts";
-import type { AuthResolver } from "./principal.js";
-import type { RateLimiter } from "./rate-limit.js";
+import type { AuthResolver } from "./principal";
+import type { RateLimiter } from "./rate-limit";
 
 /** Auth kinds that need a resolver. `public` is resolved without one. */
 export type ResolvableAuthKind = Exclude<AuthKind, "public">;

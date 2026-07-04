@@ -1,18 +1,18 @@
 import { experimentConfigKey, flagConfigKey, type ErrorResponse } from "@splitch/contracts";
 import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
-import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures.js";
-import { createApp } from "./app.js";
+import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
+import { createApp } from "./app";
 import {
   EXPERIMENT_ID,
   RecordingAssignmentStore,
   baseInput,
   targetingRule,
-} from "./evaluate/evaluate-path-test-fixtures.js";
-import { FakeKv } from "./provider/fake-kv.js";
-import { experimentConfigKV, flagConfigKV } from "./provider/fixtures.js";
-import { KvProvider } from "./provider/kv-provider.js";
-import { RecordingExposureSink } from "./sdk-route-test-fixtures.js";
+} from "./evaluate/evaluate-path-test-fixtures";
+import { FakeKv } from "./provider/fake-kv";
+import { experimentConfigKV, flagConfigKV } from "./provider/fixtures";
+import { KvProvider } from "./provider/kv-provider";
+import { RecordingExposureSink } from "./sdk-route-test-fixtures";
 
 const APP_ID = "app-A";
 const ENVIRONMENT_ID = "env-1";

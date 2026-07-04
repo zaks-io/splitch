@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ErrorCode } from "./errors.js";
+import type { ErrorCode } from "./errors";
 
 /**
  * Route-contract metadata. Each authored route in @splitch/contracts carries this

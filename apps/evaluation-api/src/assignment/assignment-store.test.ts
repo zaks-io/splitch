@@ -5,7 +5,7 @@ import {
   AssignmentStoreError,
   hashedAssignmentIdentity,
   serializeAssignmentValue,
-} from "./assignment-store.js";
+} from "./assignment-store";
 import {
   basePut,
   RAW_TARGETING_KEY,
@@ -13,9 +13,9 @@ import {
   RecordingKv,
   RecordingWriterNamespace,
   StaticSaltStore,
-} from "./assignment-store-test-fixtures.js";
-import type { AssignmentWriterNamespace } from "./kv-assignment-store.js";
-import { KvAssignmentStore } from "./kv-assignment-store.js";
+} from "./assignment-store-test-fixtures";
+import type { AssignmentWriterNamespace } from "./kv-assignment-store";
+import { KvAssignmentStore } from "./kv-assignment-store";
 
 const MINIFLARE_ASSIGNMENT_STORE_DO = `
 import { DurableObject } from "cloudflare:workers";

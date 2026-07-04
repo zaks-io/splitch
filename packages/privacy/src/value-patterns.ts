@@ -13,7 +13,7 @@
  * guessing them. The defaults are the universally-safe ones.
  */
 
-import { REDACTED } from "./redaction-rules.js";
+import { REDACTED } from "./redaction-rules";
 
 /** Email and phone-like shapes are PII wherever they appear, in any string. */
 const DEFAULT_VALUE_PATTERNS: readonly RegExp[] = [

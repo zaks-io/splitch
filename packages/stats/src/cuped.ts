@@ -1,11 +1,11 @@
 import type { CupedAttributeSource } from "@splitch/contracts";
-import { finiteValue, mean, sampleCovariance, sampleVariance } from "./variance-math.js";
+import { finiteValue, mean, sampleCovariance, sampleVariance } from "./variance-math";
 import type {
   CupedAdjustment,
   CupedCovariateRow,
   EntityAggregate,
   MetricComparisonEstimateInput,
-} from "./variance-estimator-types.js";
+} from "./variance-estimator-types";
 
 const DEFAULT_CUPED_COVERAGE_THRESHOLD_PCT = 70;
 const MIN_VARIANCE_REDUCTION = 1e-12;

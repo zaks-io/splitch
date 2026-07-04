@@ -5,7 +5,7 @@ import {
   runConfigKey,
 } from "@splitch/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { makeConfigStore } from "./config-store.js";
+import { makeConfigStore } from "./config-store";
 import {
   authedPatch,
   faultingCommitRepo,
@@ -21,7 +21,7 @@ import {
   replaceTargetingRules,
   setProdPolicy,
   token,
-} from "./config-store-test-harness.js";
+} from "./config-store-test-harness";
 
 let h: Harness;
 

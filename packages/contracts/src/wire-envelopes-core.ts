@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EvaluationContextSchema, VariantValueSchema } from "./leaf-schemas-runtime.js";
+import { EvaluationContextSchema, VariantValueSchema } from "./leaf-schemas-runtime";
 
 /**
  * Shared wire envelope conventions, composed from existing leaves.

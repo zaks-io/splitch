@@ -1,5 +1,5 @@
 import type { RateLimitClass } from "@splitch/contracts";
-import type { Principal } from "./principal.js";
+import type { Principal } from "./principal";
 
 /**
  * Decision returned by a rate-limit binding. `retryAfterMs` is required on a

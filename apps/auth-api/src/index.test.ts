@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { AuthApiEnv } from "./env.js";
-import worker from "./index.js";
-import { FIXTURE_OTP } from "./otp.js";
-import { type LocalBindings, makeLocalBindings } from "./test-fixtures.js";
-import { FIXTURE_TURNSTILE_TOKEN } from "./turnstile.js";
+import type { AuthApiEnv } from "./env";
+import worker from "./index";
+import { FIXTURE_OTP } from "./otp";
+import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
+import { FIXTURE_TURNSTILE_TOKEN } from "./turnstile";
 
 /**
  * Worker-entry (index.ts) WIRING test — proves the in-memory fixtures are MODULE

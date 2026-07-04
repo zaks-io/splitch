@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { verifyAccessToken } from "./access-token.js";
+import { verifyAccessToken } from "./access-token";
 
 /**
  * Focused guards on the access-token verifier (H1/H2): exp is REQUIRED, typ must

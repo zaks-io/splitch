@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { type EvaluateDeps, runEvaluate } from "./evaluate.js";
-import { SeenSet } from "./seen-set.js";
-import { FakeLogger, FakeTransport, httpError, ok } from "./test-fixtures.js";
+import { type EvaluateDeps, runEvaluate } from "./evaluate";
+import { SeenSet } from "./seen-set";
+import { FakeLogger, FakeTransport, httpError, ok } from "./test-fixtures";
 
 const T0 = 1_000_000;
 const TTL = 60_000;

@@ -17,7 +17,7 @@ import {
   type JsonRpcResponse,
   jsonRpcError,
   jsonRpcResult,
-} from "./json-rpc.js";
+} from "./json-rpc";
 
 const protocolVersion = "2025-06-18";
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";

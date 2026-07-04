@@ -6,7 +6,7 @@ import {
   FlagConfigKVSchema,
   kvEnvelope,
   LiveRunKVSchema,
-} from "./storage-schemas-kv.js";
+} from "./storage-schemas-kv";
 
 // AssignmentStoreValue is the CANONICAL Map<experimentId, { runId, variant }>
 // the holdover read path (S14/S22) consumes — serialized to a record in KV.

@@ -1,5 +1,5 @@
 import type { DeltaNudge } from "@splitch/contracts";
-import type { FlagConfig } from "./provider.js";
+import type { FlagConfig } from "./provider";
 
 /**
  * The Provider's ONLY state: an invalidatable cache of resolved flag config

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createControlPlaneSdk } from "./index.js";
+import { createControlPlaneSdk } from "./index";
 
 const flagPage = {
   items: [

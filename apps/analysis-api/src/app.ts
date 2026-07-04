@@ -7,8 +7,8 @@ import {
   type RegistrarDeps,
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
-import { makeResultsHandler, type ResultsDeps } from "./results.js";
-import { analysisRoute } from "./routes.js";
+import { makeResultsHandler, type ResultsDeps } from "./results";
+import { analysisRoute } from "./routes";
 
 const service = "splitch-analysis-api";
 

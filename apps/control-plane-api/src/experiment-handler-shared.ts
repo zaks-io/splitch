@@ -1,11 +1,11 @@
 import type { MetricRef, Variant } from "@splitch/contracts";
 import { appScope, envScope, type EnvScope, type Repository } from "@splitch/db";
-import { requireAppWrite } from "./app-authz.js";
-import { appNotFound } from "./app-environment-model.js";
-import type { ConfigStoreAccess } from "./config-store-do.js";
-import { equalAllocation, json, type ExperimentRow, type RunRow } from "./experiment-model.js";
-import { flagNotFound, validationError } from "./flag-definition-errors.js";
-import { pathParam } from "./handler-input.js";
+import { requireAppWrite } from "./app-authz";
+import { appNotFound } from "./app-environment-model";
+import type { ConfigStoreAccess } from "./config-store-do";
+import { equalAllocation, json, type ExperimentRow, type RunRow } from "./experiment-model";
+import { flagNotFound, validationError } from "./flag-definition-errors";
+import { pathParam } from "./handler-input";
 
 export interface ExperimentDeps {
   repo: Repository;

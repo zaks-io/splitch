@@ -1,4 +1,4 @@
-import type { AssembledExposure } from "./evaluate/exposure-assembly.js";
+import type { AssembledExposure } from "./evaluate/exposure-assembly";
 
 export interface ExposureSink {
   write(exposure: AssembledExposure): Promise<void>;

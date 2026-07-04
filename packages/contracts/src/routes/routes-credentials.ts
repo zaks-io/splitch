@@ -1,9 +1,9 @@
 import {
   CreateCredentialResponseSchema,
   ListCredentialsResponseSchema,
-} from "../resource-envelopes-account.js";
-import { ClientKeySchema } from "../leaf-schemas-runtime.js";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
+} from "../resource-envelopes-account";
+import { ClientKeySchema } from "../leaf-schemas-runtime";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   ApiKeyParams,
   ApiKeyRevokeResponseSchema,
@@ -12,7 +12,7 @@ import {
   EnvParams,
   PatchClientKeyRequestSchema,
   RevokeApiKeyRequestSchema,
-} from "./route-shapes.js";
+} from "./route-shapes";
 
 /**
  * SDK credential management (Client Key + API Key), per-Environment (ADR-0027).

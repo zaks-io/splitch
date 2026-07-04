@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { MetricKindSchema, MetricRefSchema } from "./leaf-schemas-experiment.js";
-import { CupedAttributeSourceSchema, DimensionClassSchema } from "./stats-result-contract.js";
+import { MetricKindSchema, MetricRefSchema } from "./leaf-schemas-experiment";
+import { CupedAttributeSourceSchema, DimensionClassSchema } from "./stats-result-contract";
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
 const TimestampSchema = z.string();

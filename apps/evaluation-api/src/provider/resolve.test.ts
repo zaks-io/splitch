@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { experimentConfigKV, flagConfigKV, runConfigKV } from "./fixtures.js";
-import { ProviderError } from "./provider.js";
-import { experimentConfigFromKV, flagConfigFromKV } from "./resolve.js";
+import { experimentConfigKV, flagConfigKV, runConfigKV } from "./fixtures";
+import { ProviderError } from "./provider";
+import { experimentConfigFromKV, flagConfigFromKV } from "./resolve";
 
 describe("flagConfigFromKV", () => {
   it("resolves defaultVariantId (id) into defaultVariant (name)", () => {

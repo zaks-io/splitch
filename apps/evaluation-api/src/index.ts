@@ -1,20 +1,20 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
-import type { RateLimiter } from "@splitch/worker-runtime";
 import { createWorkerObservability, wrapWorkerHandler } from "@splitch/observability/worker";
-import { AssignmentStoreDurableObject } from "./assignment/assignment-store-do.js";
-import { KvAssignmentStore } from "./assignment/kv-assignment-store.js";
-import { createApp } from "./app.js";
+import type { RateLimiter } from "@splitch/worker-runtime";
+import { AssignmentStoreDurableObject } from "./assignment/assignment-store-do";
+import { KvAssignmentStore } from "./assignment/kv-assignment-store";
+import { createApp } from "./app";
 import {
   makeControlPlaneAuthResolver,
   makeHttpJwksFetcher,
   makeJwksVerifier,
   makeSessionStore,
-} from "./control-plane-auth.js";
-import { makeDataPlaneAuthResolver } from "./data-plane-auth.js";
-import type { EvaluationApiEnv } from "./env.js";
-import { makeHttpExposureSink } from "./exposure-sink.js";
-import { makeEnvSaltStore } from "./local-salt-store.js";
-import { KvProvider } from "./provider/kv-provider.js";
+} from "./control-plane-auth";
+import { makeDataPlaneAuthResolver } from "./data-plane-auth";
+import type { EvaluationApiEnv } from "./env";
+import { makeHttpExposureSink } from "./exposure-sink";
+import { makeEnvSaltStore } from "./local-salt-store";
+import { KvProvider } from "./provider/kv-provider";
 
 const service = "splitch-evaluation-api";
 

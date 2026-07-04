@@ -1,10 +1,10 @@
 import { ExposureEventSchema } from "@splitch/contracts";
 import { computeTargetingKeyHash } from "@splitch/privacy";
 import { describe, expect, it } from "vitest";
-import { StaticSaltStore } from "../assignment/assignment-store-test-fixtures.js";
-import { evaluate, peekVariant, verify } from "./accessor-paths.js";
-import { assembleEvaluateExposures, type ExposureAssemblyDeps } from "./exposure-assembly.js";
-import type { FreshAssignmentEvaluateResult } from "./evaluate-path-types.js";
+import { StaticSaltStore } from "../assignment/assignment-store-test-fixtures";
+import { evaluate, peekVariant, verify } from "./accessor-paths";
+import { assembleEvaluateExposures, type ExposureAssemblyDeps } from "./exposure-assembly";
+import type { FreshAssignmentEvaluateResult } from "./evaluate-path-types";
 import {
   APP_ID,
   ENVIRONMENT_ID,
@@ -16,7 +16,7 @@ import {
   baseInput,
   experimentConfig,
   runConfig,
-} from "./evaluate-path-test-fixtures.js";
+} from "./evaluate-path-test-fixtures";
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;

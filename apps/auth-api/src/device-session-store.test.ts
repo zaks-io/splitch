@@ -1,7 +1,7 @@
 import { createRepository } from "@splitch/db";
 import { describe, expect, it } from "vitest";
-import { makeD1DeviceRefreshSessionStore } from "./device-session-store.js";
-import { makeLocalBindings } from "./test-fixtures.js";
+import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
+import { makeLocalBindings } from "./test-fixtures";
 
 const NOW_MS = 1_780_000_000_000;
 

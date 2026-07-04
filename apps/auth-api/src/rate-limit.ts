@@ -1,4 +1,4 @@
-import { OAuthError } from "./oauth-errors.js";
+import { OAuthError } from "./oauth-errors";
 
 /**
  * Anonymous-register + claim rate ceiling (ADR-0034 §4, auth-doors.md Door B).

@@ -2,9 +2,9 @@ import {
   DataPlaneEvaluateRequestSchema,
   DataPlaneEvaluateResponseSchema,
   PeekEvaluateResponseSchema,
-} from "../wire-envelopes-core.js";
-import { ResolutionDetailsSchema } from "../leaf-schemas-runtime.js";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
+} from "../wire-envelopes-core";
+import { ResolutionDetailsSchema } from "../leaf-schemas-runtime";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 
 /**
  * Public data-plane SDK endpoints on the Evaluation Worker. These carry NO
