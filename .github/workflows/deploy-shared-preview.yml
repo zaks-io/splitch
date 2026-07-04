@@ -103,12 +103,24 @@ jobs:
       - name: Deploy shared preview
         run: pnpm deploy:shared-preview
 
+      - name: Seed shared preview smoke data
+        run: pnpm shared-preview:seed-smoke
+
       - name: Smoke shared preview
         env:
-          SPLITCH_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/shared-preview-smoke.md
           SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
         run: |
           SPLITCH_SMOKE_COMMIT_SHA="$(git rev-parse HEAD)" pnpm shared-preview:smoke
+
+      - name: Upload Playwright smoke report
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: shared-preview-playwright-report
+          path: |
+            playwright-report/shared-preview
+            test-results/shared-preview
+          if-no-files-found: ignore
 
       - name: Summary
         if: always()
@@ -125,8 +137,5 @@ jobs:
             echo "- Evaluation API: https://edge.preview.splitch.dev/"
             echo "- Event Ingest API: https://ingest.preview.splitch.dev/"
             echo "- MCP: https://mcp.preview.splitch.dev/"
-            if [ -f "${RUNNER_TEMP}/shared-preview-smoke.md" ]; then
-              echo
-              cat "${RUNNER_TEMP}/shared-preview-smoke.md"
-            fi
+            echo "- Smoke: Playwright API tests (\`pnpm shared-preview:smoke\`)"
           } >> "$GITHUB_STEP_SUMMARY"
