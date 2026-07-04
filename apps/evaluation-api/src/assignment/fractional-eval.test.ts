@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fractionalEval, type Rollout } from "./fractional-eval.js";
+import { fractionalEval, type Rollout } from "./fractional-eval";
 
 const TWO_WAY: Rollout = [
   { variantName: "control", weight: 50 },

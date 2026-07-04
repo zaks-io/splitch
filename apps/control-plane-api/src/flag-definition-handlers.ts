@@ -5,9 +5,9 @@ import {
   getFlag,
   listFlags,
   updateFlag,
-} from "./flag-definition-flag-handlers.js";
-import { createVariant, deleteVariant, updateVariant } from "./flag-definition-variant-handlers.js";
-import type { FlagDefinitionDeps } from "./flag-definition-handler-utils.js";
+} from "./flag-definition-flag-handlers";
+import { createVariant, deleteVariant, updateVariant } from "./flag-definition-variant-handlers";
+import type { FlagDefinitionDeps } from "./flag-definition-handler-utils";
 
 export function makeFlagDefinitionHandlers(deps: FlagDefinitionDeps) {
   return {

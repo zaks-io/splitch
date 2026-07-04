@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildOpenApiDocument } from "./openapi-document.js";
-import { operationIds, routeRegistry } from "./route-registry.js";
+import { buildOpenApiDocument } from "./openapi-document";
+import { operationIds, routeRegistry } from "./route-registry";
 
 /**
  * The OpenAPI document is emitted on demand from the registry and proven HERE —

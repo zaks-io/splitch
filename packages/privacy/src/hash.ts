@@ -18,7 +18,7 @@
  * prefix that lets export/delete recompute the right hash per active salt.
  */
 
-import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store.js";
+import type { KeyVersion, SaltBytes, SaltStore } from "./salt-store";
 
 const HMAC_PARAMS = { name: "HMAC", hash: "SHA-256" } as const;
 

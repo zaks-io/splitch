@@ -5,13 +5,13 @@ import {
   PatchExperimentRequestSchema,
   RunResponseSchema,
   StartRunRequestSchema,
-} from "../resource-envelopes-experiment.js";
+} from "../resource-envelopes-experiment";
 import {
   CreateMetricRequestSchema,
   MetricResponseSchema,
   PatchMetricRequestSchema,
-} from "../resource-envelopes-account.js";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
+} from "../resource-envelopes-account";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   AppParams,
   EnvParams,
@@ -19,7 +19,7 @@ import {
   MetricParams,
   RunEndParams,
   RunParams,
-} from "./route-shapes.js";
+} from "./route-shapes";
 
 /**
  * Experiment draft/start lifecycle, Experiment Run reads + end, and Metric CRUD.

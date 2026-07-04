@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isContainerKey, isLeafPiiKey, isPiiKey, REDACTED } from "./redaction-rules.js";
+import { isContainerKey, isLeafPiiKey, isPiiKey, REDACTED } from "./redaction-rules";
 
 describe("redaction key policy", () => {
   it("exports the canonical redaction placeholder", () => {

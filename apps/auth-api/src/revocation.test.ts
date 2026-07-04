@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeKvRevocationStore } from "./revocation.js";
+import { makeKvRevocationStore } from "./revocation";
 
 function makeKv(): {
   kv: KVNamespace;

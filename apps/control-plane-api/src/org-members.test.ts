@@ -5,17 +5,12 @@ import type { RateLimiter } from "@splitch/worker-runtime";
 import { hc } from "hono/client";
 import type { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { makeControlPlaneAuthResolver } from "./auth-resolver.js";
-import { createApp } from "./app.js";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer.js";
-import { makeJwksVerifier } from "./jwks-verify.js";
-import { makeSessionStore } from "./session-store.js";
-import {
-  type LocalBindings,
-  makeLocalBindings,
-  seedOrgApp,
-  seedOrgMember,
-} from "./test-fixtures.js";
+import { makeControlPlaneAuthResolver } from "./auth-resolver";
+import { createApp } from "./app";
+import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
+import { makeJwksVerifier } from "./jwks-verify";
+import { makeSessionStore } from "./session-store";
+import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);

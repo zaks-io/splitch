@@ -3,19 +3,14 @@ import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { controlPlaneRegistrar, createApp } from "./app.js";
-import { appAdminScope } from "./scope-binding.js";
-import { makeControlPlaneAuthResolver } from "./auth-resolver.js";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer.js";
-import { makeJwksVerifier } from "./jwks-verify.js";
-import { withRequiredScopes, controlPlaneRoute } from "./routes.js";
-import { makeSessionStore, revocationKey } from "./session-store.js";
-import {
-  type LocalBindings,
-  makeLocalBindings,
-  seedOrgApp,
-  seedOrgMember,
-} from "./test-fixtures.js";
+import { controlPlaneRegistrar, createApp } from "./app";
+import { appAdminScope } from "./scope-binding";
+import { makeControlPlaneAuthResolver } from "./auth-resolver";
+import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
+import { makeJwksVerifier } from "./jwks-verify";
+import { withRequiredScopes, controlPlaneRoute } from "./routes";
+import { makeSessionStore, revocationKey } from "./session-store";
+import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
 
 /**
  * End-to-end auth-middleware proofs against the REAL mounted Worker: the

@@ -1,11 +1,8 @@
 import { z } from "@hono/zod-openapi";
-import {
-  TestEvaluationRequestSchema,
-  TestEvaluationResponseSchema,
-} from "../wire-envelopes-core.js";
-import { StatsOutputSchema } from "../stats-result-contract.js";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
-import { AppParams, EnvFlagParams, ExperimentParams } from "./route-shapes.js";
+import { TestEvaluationRequestSchema, TestEvaluationResponseSchema } from "../wire-envelopes-core";
+import { StatsOutputSchema } from "../stats-result-contract";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import { AppParams, EnvFlagParams, ExperimentParams } from "./route-shapes";
 
 /**
  * Control-plane-AUTHORIZED reads that do not all live on the Control Plane Worker:

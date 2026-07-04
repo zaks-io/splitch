@@ -5,11 +5,11 @@ import type {
   StatsInput,
   StatsResultStatus,
 } from "@splitch/contracts";
-import { FixedHorizonCI } from "./fixed-horizon-ci.js";
-import { metricTypesById } from "./metric-discovery.js";
-import { SequentialCI, type CIAdapter, type CIResult } from "./sequential-ci.js";
-import { estimateMetricComparison } from "./variance-estimators.js";
-import type { MetricArmEstimate, MetricComparisonEstimate } from "./variance-estimator-types.js";
+import { FixedHorizonCI } from "./fixed-horizon-ci";
+import { metricTypesById } from "./metric-discovery";
+import { SequentialCI, type CIAdapter, type CIResult } from "./sequential-ci";
+import { estimateMetricComparison } from "./variance-estimators";
+import type { MetricArmEstimate, MetricComparisonEstimate } from "./variance-estimator-types";
 
 export interface ArmResultAdapters {
   readonly sequentialCI: CIAdapter;

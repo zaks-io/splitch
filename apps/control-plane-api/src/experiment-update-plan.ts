@@ -1,8 +1,8 @@
 import type { EnvScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { nowIso } from "./app-environment-model.js";
-import { decisionLocked, experimentNotFound, runFrozen } from "./experiment-errors.js";
-import { json, type ExperimentRow } from "./experiment-model.js";
+import { nowIso } from "./app-environment-model";
+import { decisionLocked, experimentNotFound, runFrozen } from "./experiment-errors";
+import { json, type ExperimentRow } from "./experiment-model";
 import {
   draftPatch,
   loadFlagConfig,
@@ -12,9 +12,9 @@ import {
   runningRunForExperiment,
   validateMetricRefs,
   type ExperimentDeps,
-} from "./experiment-handler-shared.js";
-import { validationError } from "./flag-definition-errors.js";
-import { pathParam } from "./handler-input.js";
+} from "./experiment-handler-shared";
+import { validationError } from "./flag-definition-errors";
+import { pathParam } from "./handler-input";
 
 const ASSIGNMENT_FIELDS = [
   "flagId",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluatePath } from "./evaluate-path.js";
+import { evaluatePath } from "./evaluate-path";
 import {
   APP_ID,
   ENVIRONMENT_ID,
@@ -13,7 +13,7 @@ import {
   experimentConfig,
   runConfig,
   targetingRule,
-} from "./evaluate-path-test-fixtures.js";
+} from "./evaluate-path-test-fixtures";
 
 describe("evaluatePath idType validation", () => {
   it("idType mismatch fails loud before fresh assignment or Exposure", async () => {

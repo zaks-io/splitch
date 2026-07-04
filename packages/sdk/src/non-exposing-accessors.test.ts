@@ -1,6 +1,6 @@
 import { ResolutionDetailsSchema, type ResolutionDetails } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { createSplitchClient, type SplitchClient } from "./client.js";
+import { createSplitchClient, type SplitchClient } from "./client";
 import {
   FakeLogger,
   FakeTransport,
@@ -8,7 +8,7 @@ import {
   ok,
   verifyHttpError,
   verifyOk,
-} from "./test-fixtures.js";
+} from "./test-fixtures";
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -17,7 +17,7 @@ type Assert<T extends true> = T;
 const assertClientSurface: Assert<
   Equal<keyof SplitchClient, "evaluate" | "evaluateDetails" | "peekVariant" | "verify">
 > = true;
-type PublicModule = typeof import("./index.js");
+type PublicModule = typeof import("./index");
 const assertModuleSurface: Assert<Equal<keyof PublicModule, "createSplitchClient">> = true;
 
 const VERIFY_SPLIT: ResolutionDetails = {
@@ -137,7 +137,7 @@ describe("peekVariant: fail-loud errors without Default Variant fallback", () =>
 
 describe("public SDK surface guard", () => {
   it("exports only createSplitchClient plus the four client accessors", async () => {
-    const publicSdk = await import("./index.js");
+    const publicSdk = await import("./index");
     const fake = new FakeTransport([]);
     const client = createSplitchClient({
       apiKey: "ak_test",

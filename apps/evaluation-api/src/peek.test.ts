@@ -6,7 +6,7 @@ import {
   UNSCOPED_API_KEY,
   makeSdkRouteHarness,
   sdkRouteInit,
-} from "./sdk-route-test-fixtures.js";
+} from "./sdk-route-test-fixtures";
 
 const PATH = "/api/sdk/peek";
 

@@ -1,18 +1,18 @@
 import type { Repository } from "@splitch/db";
 import { Miniflare } from "miniflare";
-import type { ClaimDeps } from "./claim.js";
-import type { Jwks } from "./jwks.js";
+import type { ClaimDeps } from "./claim";
+import type { Jwks } from "./jwks";
 import {
   type IdempotencyStore,
   makeFixtureOtp,
   makeIdempotencyStore,
   type OtpVerifier,
-} from "./otp.js";
-import { makeRateLimiter, type RateLimitConfig } from "./rate-limit.js";
-import type { RegisterDeps } from "./register.js";
-import { makeTokenSigner, type TokenSigner } from "./token-exchange.js";
-import { makeFixtureTurnstile } from "./turnstile.js";
-import { makeFixtureWorkOs, type WorkOsPort } from "./workos.js";
+} from "./otp";
+import { makeRateLimiter, type RateLimitConfig } from "./rate-limit";
+import type { RegisterDeps } from "./register";
+import { makeTokenSigner, type TokenSigner } from "./token-exchange";
+import { makeFixtureTurnstile } from "./turnstile";
+import { makeFixtureWorkOs, type WorkOsPort } from "./workos";
 
 /** The standard test secrets/origins; every door test signs with the same set. */
 const TEST_SIGNER_CONFIG = {

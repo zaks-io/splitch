@@ -1,6 +1,6 @@
 import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { createdAt, updatedAt, userRef } from "./columns.js";
-import { apps, environments } from "./identity.js";
+import { createdAt, updatedAt, userRef } from "./columns";
+import { apps, environments } from "./identity";
 
 /**
  * Flag-domain D1 tables: App-level Flag DEFINITION, per-Environment Flag

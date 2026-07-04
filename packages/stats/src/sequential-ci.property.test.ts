@@ -3,8 +3,8 @@ import {
   meetsAlwaysValidBound,
   monteCarloTolerance,
   runRepeatedLookSimulation,
-} from "./sequential-ci-simulation.js";
-import { SequentialCI } from "./sequential-ci.js";
+} from "./sequential-ci-simulation";
+import { SequentialCI } from "./sequential-ci";
 
 const PROPERTY_ALPHA = 0.05;
 const PROPERTY_ITERATIONS = 300;

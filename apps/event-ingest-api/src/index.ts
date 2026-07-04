@@ -1,6 +1,6 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
-import { handleIngest } from "./ingest.js";
-import type { Env } from "./types.js";
+import { handleIngest } from "./ingest";
+import type { Env } from "./types";
 
 const service = "splitch-event-ingest-api";
 const ingestPath = "/api/internal/exposures";

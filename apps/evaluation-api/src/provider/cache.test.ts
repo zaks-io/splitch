@@ -1,8 +1,8 @@
 import type { DeltaNudge } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { FlagConfigCache } from "./cache.js";
-import { flagConfigFromKV } from "./resolve.js";
-import { flagConfigKV } from "./fixtures.js";
+import { FlagConfigCache } from "./cache";
+import { flagConfigFromKV } from "./resolve";
+import { flagConfigKV } from "./fixtures";
 
 const nudge: DeltaNudge = { type: "config.changed", entity: "flag", id: "flag-id-1", version: 2 };
 

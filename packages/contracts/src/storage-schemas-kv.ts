@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { ExperimentStatusSchema } from "./leaf-schemas-experiment.js";
-import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag.js";
+import { ExperimentStatusSchema } from "./leaf-schemas-experiment";
+import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
 
 /**
  * The one schema version every KV blob is written and read at. The envelope below

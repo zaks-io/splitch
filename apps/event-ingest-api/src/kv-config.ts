@@ -5,8 +5,8 @@ import {
   kvEnvelope,
   runConfigKey,
 } from "@splitch/contracts";
-import { emptyError, serviceUnavailable, validationError } from "./errors.js";
-import type { CredentialScope, Env, LiveRunConfig, Outcome } from "./types.js";
+import { emptyError, serviceUnavailable, validationError } from "./errors";
+import type { CredentialScope, Env, LiveRunConfig, Outcome } from "./types";
 
 const ExperimentConfigEnvelope = kvEnvelope(ExperimentConfigKVSchema);
 const RunConfigEnvelope = kvEnvelope(RunConfigKVSchema);

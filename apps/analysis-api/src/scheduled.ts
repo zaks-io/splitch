@@ -1,4 +1,4 @@
-import type { TinybirdCopyTransport } from "./tinybird.js";
+import type { TinybirdCopyTransport } from "./tinybird";
 
 const SNAPSHOT_COPY_PIPE = "cp_deduped_exposures";
 const SNAPSHOT_COPY_MODE = "replace";

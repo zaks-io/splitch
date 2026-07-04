@@ -1,12 +1,12 @@
-import { errorCodes, type ErrorCode } from "./errors.js";
-import type { ApiRouteContract } from "./openapi-route.js";
-import { accountRoutes } from "./routes/routes-account.js";
-import { analysisRoutes } from "./routes/routes-analysis.js";
-import { credentialRoutes } from "./routes/routes-credentials.js";
-import { dataPlaneRoutes } from "./routes/routes-data-plane.js";
-import { experimentRoutes } from "./routes/routes-experiments.js";
-import { flagRoutes } from "./routes/routes-flags.js";
-import { privacyRoutes } from "./routes/routes-privacy.js";
+import { errorCodes, type ErrorCode } from "./errors";
+import type { ApiRouteContract } from "./openapi-route";
+import { accountRoutes } from "./routes/routes-account";
+import { analysisRoutes } from "./routes/routes-analysis";
+import { credentialRoutes } from "./routes/routes-credentials";
+import { dataPlaneRoutes } from "./routes/routes-data-plane";
+import { experimentRoutes } from "./routes/routes-experiments";
+import { flagRoutes } from "./routes/routes-flags";
+import { privacyRoutes } from "./routes/routes-privacy";
 
 /**
  * THE single route registry every Worker mounts, the SDK infers from, and MCP

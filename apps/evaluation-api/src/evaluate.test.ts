@@ -10,8 +10,8 @@ import {
   REVOKED_CLIENT_KEY,
   makeSdkRouteHarness,
   sdkRouteInit,
-} from "./sdk-route-test-fixtures.js";
-import { ExposureSinkError } from "./exposure-sink.js";
+} from "./sdk-route-test-fixtures";
+import { ExposureSinkError } from "./exposure-sink";
 
 const PATH = "/api/sdk/evaluate";
 

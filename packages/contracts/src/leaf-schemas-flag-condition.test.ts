@@ -5,7 +5,7 @@ import {
   PercentageRolloutSchema,
   SegmentSchema,
   conditionOperators,
-} from "./leaf-schemas-flag.js";
+} from "./leaf-schemas-flag";
 
 const validCondition = {
   attribute: "plan",

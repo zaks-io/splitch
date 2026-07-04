@@ -1,5 +1,5 @@
-import { fractionalEval, type Rollout } from "./fractional-eval.js";
-import type { RunConfig } from "./run-config.js";
+import { fractionalEval, type Rollout } from "./fractional-eval";
+import type { RunConfig } from "./run-config";
 
 /**
  * Turn the name-keyed `allocation` record into an ordered weight set.

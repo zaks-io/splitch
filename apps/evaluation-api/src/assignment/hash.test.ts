@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hashToUnitInterval } from "./hash.js";
+import { hashToUnitInterval } from "./hash";
 
 /**
  * Golden raw-hash vectors. These are the cross-runtime PARITY anchors: any other

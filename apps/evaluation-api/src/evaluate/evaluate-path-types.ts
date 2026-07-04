@@ -1,6 +1,6 @@
 import type { ErrorCode, EvaluationContext, TestEvaluationReason } from "@splitch/contracts";
-import type { AssignmentStore } from "../assignment/assignment-store.js";
-import type { Provider } from "../provider/provider.js";
+import type { AssignmentStore } from "../assignment/assignment-store";
+import type { Provider } from "../provider/provider";
 
 type EvaluateKind =
   | "disabled"

@@ -1,14 +1,14 @@
 import { createRepository } from "@splitch/db";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import type { DeviceFlowPort } from "./device-flow.js";
+import type { DeviceFlowPort } from "./device-flow";
 import {
   type DeviceRefreshSessionStore,
   makeD1DeviceRefreshSessionStore,
-} from "./device-session-store.js";
-import { mountOAuthRoutes } from "./oauth-routes.js";
-import type { TokenSigner } from "./token-exchange.js";
-import { makeLocalBindings } from "./test-fixtures.js";
+} from "./device-session-store";
+import { mountOAuthRoutes } from "./oauth-routes";
+import type { TokenSigner } from "./token-exchange";
+import { makeLocalBindings } from "./test-fixtures";
 
 const tokenSigner = {
   mintIdentityAssertion: async () => "identity-assertion",

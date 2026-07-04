@@ -1,13 +1,13 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import { createApp } from "./app.js";
-import { makeControlPlaneAuthResolver } from "./auth-resolver.js";
-import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do.js";
-import type { ControlPlaneApiEnv } from "./env.js";
-import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify.js";
-import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache.js";
-import { rateLimiterForTarget } from "./rate-limit.js";
-import { makeSessionStore } from "./session-store.js";
+import { createApp } from "./app";
+import { makeControlPlaneAuthResolver } from "./auth-resolver";
+import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
+import type { ControlPlaneApiEnv } from "./env";
+import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
+import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
+import { rateLimiterForTarget } from "./rate-limit";
+import { makeSessionStore } from "./session-store";
 
 const service = "splitch-control-plane-api";
 

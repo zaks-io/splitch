@@ -1,4 +1,4 @@
-import type { MemberProfileResolver } from "./org-handlers.js";
+import type { MemberProfileResolver } from "./org-handlers";
 
 const MEMBER_PROFILE_PREFIX = "member-profile:";
 

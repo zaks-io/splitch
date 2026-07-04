@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SequentialCI } from "./sequential-ci.js";
+import { SequentialCI } from "./sequential-ci";
 
 const GOLDEN_TOLERANCE = 1e-12;
 

@@ -14,9 +14,9 @@
  * This file owns traversal only; redaction-rules.ts / value-patterns.ts own policy.
  */
 
-import { scrubEmbeddedJson } from "./embedded-json.js";
-import { isContainerKey, isLeafPiiKey, REDACTED } from "./redaction-rules.js";
-import { redactValuePatterns, type ValuePatternOptions } from "./value-patterns.js";
+import { scrubEmbeddedJson } from "./embedded-json";
+import { isContainerKey, isLeafPiiKey, REDACTED } from "./redaction-rules";
+import { redactValuePatterns, type ValuePatternOptions } from "./value-patterns";
 
 type Json = unknown;
 

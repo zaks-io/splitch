@@ -1,4 +1,4 @@
-import type { KvReader } from "./kv-provider.js";
+import type { KvReader } from "./kv-provider";
 
 /**
  * A fake KV for read-side tests ONLY. It holds pre-seeded raw STRING values

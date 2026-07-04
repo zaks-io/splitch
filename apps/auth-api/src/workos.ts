@@ -1,4 +1,4 @@
-import { normalizeEmail } from "./email.js";
+import { normalizeEmail } from "./email";
 
 /**
  * WorkOS user-store port.

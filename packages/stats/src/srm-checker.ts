@@ -4,13 +4,13 @@ import type {
   HealthMetrics,
   SrmResult,
 } from "@splitch/contracts";
-import { chiSquareUpperTail } from "./chi-square.js";
+import { chiSquareUpperTail } from "./chi-square";
 import {
   activatedExposureRows,
   dedupedExposureRowsForVariant,
   MULTIPLE_VARIANT,
-} from "./exposure-denominator.js";
-import { expectedCountsForOutput, safeRate, sumCounts, zeroCounts } from "./srm-counts.js";
+} from "./exposure-denominator";
+import { expectedCountsForOutput, safeRate, sumCounts, zeroCounts } from "./srm-counts";
 
 export const SRM_MISMATCH_P_VALUE = 0.001;
 

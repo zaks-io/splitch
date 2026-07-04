@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { MetricRefSchema } from "./leaf-schemas-experiment.js";
-import type { StatsInput } from "./stats-input-contract.js";
+import { MetricRefSchema } from "./leaf-schemas-experiment";
+import type { StatsInput } from "./stats-input-contract";
 
 const MetricIdSchema = MetricRefSchema.shape.metricId;
 const IntegerSchema = z.number().int();

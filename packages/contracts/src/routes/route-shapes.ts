@@ -1,6 +1,6 @@
 import { z } from "@hono/zod-openapi";
-import { ConditionSchema, TargetingRuleSchema } from "../leaf-schemas-flag.js";
-import { EnvironmentPolicySchema, UserRoleSchema } from "../leaf-schemas-runtime.js";
+import { ConditionSchema, TargetingRuleSchema } from "../leaf-schemas-flag";
+import { EnvironmentPolicySchema, UserRoleSchema } from "../leaf-schemas-runtime";
 
 /**
  * Path-param and route-local request/response shapes that have NO dedicated

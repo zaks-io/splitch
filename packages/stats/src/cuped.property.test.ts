@@ -1,7 +1,7 @@
 import type { DedupeExposureRow, PerEntityMetricRow } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import type { CupedCovariateRow } from "./variance-estimator-types.js";
-import { estimateMetricComparison } from "./variance-estimators.js";
+import type { CupedCovariateRow } from "./variance-estimator-types";
+import { estimateMetricComparison } from "./variance-estimators";
 
 const RUN_ID = "run_cuped_property";
 

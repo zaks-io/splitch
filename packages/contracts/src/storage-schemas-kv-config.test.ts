@@ -5,7 +5,7 @@ import {
   FlagConfigKVSchema,
   LiveRunKVSchema,
   RunConfigKVSchema,
-} from "./storage-schemas-kv.js";
+} from "./storage-schemas-kv";
 
 const validVariants = [
   { id: "var_1", name: "control", value: false },

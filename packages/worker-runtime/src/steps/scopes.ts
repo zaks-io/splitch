@@ -1,5 +1,5 @@
 import type { ErrorResponse, RouteContract } from "@splitch/contracts";
-import type { Principal } from "../principal.js";
+import type { Principal } from "../principal";
 
 /**
  * Step 5. Enforce required scopes, then Org/App/Environment co-scope (ADR-0027).

@@ -1,7 +1,7 @@
 import type { ResolutionDetails, VariantValue } from "@splitch/contracts";
-import { errorCodeForStatus, synthesizeDetails } from "./resolution.js";
-import type { SeenSet } from "./seen-set.js";
-import type { AttributeValue, Transport, TransportFailure, TransportRequest } from "./transport.js";
+import { errorCodeForStatus, synthesizeDetails } from "./resolution";
+import type { SeenSet } from "./seen-set";
+import type { AttributeValue, Transport, TransportFailure, TransportRequest } from "./transport";
 
 /**
  * Caller-facing evaluate options. `idType` defaults to `'user'` client-side (the

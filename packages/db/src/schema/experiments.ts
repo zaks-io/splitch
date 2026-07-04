@@ -1,7 +1,7 @@
 import { integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { createdAt, updatedAt, userRef } from "./columns.js";
-import { apps, environments } from "./identity.js";
-import { flags } from "./flags.js";
+import { createdAt, updatedAt, userRef } from "./columns";
+import { apps, environments } from "./identity";
+import { flags } from "./flags";
 
 /**
  * Experiment-domain D1 tables: Experiments (with the draft_* next-Run staging

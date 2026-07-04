@@ -1,4 +1,4 @@
-import { OAuthError } from "./oauth-errors.js";
+import { OAuthError } from "./oauth-errors";
 
 /**
  * Canonical email normalization for the claim ceremony.

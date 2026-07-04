@@ -5,9 +5,9 @@ import {
   OrganizationResponseSchema,
   PatchAppRequestSchema,
   PatchOrganizationRequestSchema,
-} from "../resource-envelopes-account.js";
-import { AppSchema, EnvironmentSchema, UserSchema } from "../leaf-schemas-runtime.js";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route.js";
+} from "../resource-envelopes-account";
+import { AppSchema, EnvironmentSchema, UserSchema } from "../leaf-schemas-runtime";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   AddMemberRequestSchema,
   AppParams,
@@ -18,7 +18,7 @@ import {
   OrgParams,
   PatchEnvironmentRequestSchema,
   UpdateMemberRequestSchema,
-} from "./route-shapes.js";
+} from "./route-shapes";
 
 /**
  * Organization, member, App, and Environment management routes — all on the

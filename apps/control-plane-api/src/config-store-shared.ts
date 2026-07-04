@@ -13,7 +13,7 @@ import {
   type Variant,
 } from "@splitch/contracts";
 import { appScope, type EnvScope, type Repository } from "@splitch/db";
-import { parseFlagConfigEnvelope, writeSnapshot } from "./config-store-kv.js";
+import { parseFlagConfigEnvelope, writeSnapshot } from "./config-store-kv";
 
 export interface FlagConfigResult {
   flagId: string;

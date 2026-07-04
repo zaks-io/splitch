@@ -1,10 +1,10 @@
 import { appScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { requireAppDelete, requireAppWrite } from "./app-authz.js";
+import { requireAppDelete, requireAppWrite } from "./app-authz";
 import {
   deleteEnvironmentCredentialRows,
   revokeEnvironmentCredentialCaches,
-} from "./app-environment-credentials.js";
+} from "./app-environment-credentials";
 import {
   ALLOW_POLICY,
   CONFIRM_POLICY,
@@ -21,10 +21,10 @@ import {
   organizationIdMismatch,
   organizationNotFound,
   provisionEnvironmentClientKeys,
-} from "./app-environment-model.js";
-import { randomHex } from "./credential-cache.js";
-import { objectBody, pathParam } from "./handler-input.js";
-import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, requireOrgRole } from "./org-authz.js";
+} from "./app-environment-model";
+import { randomHex } from "./credential-cache";
+import { objectBody, pathParam } from "./handler-input";
+import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, requireOrgRole } from "./org-authz";
 
 export function makeAppHandlers(deps: AppEnvironmentDeps) {
   return {

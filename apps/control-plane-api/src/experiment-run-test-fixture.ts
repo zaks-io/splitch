@@ -8,7 +8,7 @@ import {
   type RunConfigKV,
 } from "@splitch/contracts";
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
-import { makeConfigStore, type ConfigStoreWriter } from "./config-store.js";
+import { makeConfigStore, type ConfigStoreWriter } from "./config-store";
 import {
   appToken,
   createDefaultApp,
@@ -18,8 +18,8 @@ import {
   makeFlagDefinitionHarness,
   NOW_ISO,
   request,
-} from "./flag-definition-test-harness.js";
-import type { ConfigStoreAccess } from "./config-store-do.js";
+} from "./flag-definition-test-harness";
+import type { ConfigStoreAccess } from "./config-store-do";
 
 export type ExperimentRunHarness = {
   h: FlagDefinitionHarness;

@@ -11,7 +11,7 @@ import {
   PatchAppRequestSchema,
   PatchMetricRequestSchema,
   PatchOrganizationRequestSchema,
-} from "./resource-envelopes-account.js";
+} from "./resource-envelopes-account";
 
 describe("CreateMetricRequestSchema", () => {
   it("parses a binomial metric", () => {

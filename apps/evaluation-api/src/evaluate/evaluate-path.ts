@@ -1,11 +1,11 @@
 import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
-import { assign } from "../assignment/assign.js";
-import { AssignmentStoreError } from "../assignment/assignment-store.js";
-import { fractionalEval } from "../assignment/fractional-eval.js";
-import type { RunConfig } from "../assignment/run-config.js";
-import type { ExperimentConfig, FlagConfig } from "../provider/provider.js";
-import { matchesConditions } from "./conditions.js";
-import { EvaluatePathError, errorResult } from "./evaluate-errors.js";
+import { assign } from "../assignment/assign";
+import { AssignmentStoreError } from "../assignment/assignment-store";
+import { fractionalEval } from "../assignment/fractional-eval";
+import type { RunConfig } from "../assignment/run-config";
+import type { ExperimentConfig, FlagConfig } from "../provider/provider";
+import { matchesConditions } from "./conditions";
+import { EvaluatePathError, errorResult } from "./evaluate-errors";
 import type {
   EvaluatePathDeps,
   EvaluatePathInput,
@@ -15,9 +15,9 @@ import type {
   NoMatchEvaluateResult,
   NonExposingEvaluateResult,
   RuleMatchEvaluateResult,
-} from "./evaluate-path-types.js";
+} from "./evaluate-path-types";
 
-export type { EvaluatePathDeps, EvaluatePathInput, EvaluateResult } from "./evaluate-path-types.js";
+export type { EvaluatePathDeps, EvaluatePathInput, EvaluateResult } from "./evaluate-path-types";
 
 export async function evaluatePath(
   input: EvaluatePathInput,

@@ -1,10 +1,10 @@
-import { evaluatePath, type EvaluatePathDeps, type EvaluatePathInput } from "./evaluate-path.js";
+import { evaluatePath, type EvaluatePathDeps, type EvaluatePathInput } from "./evaluate-path";
 import {
   assembleEvaluateExposures,
   type AssembledExposure,
   type ExposureAssemblyDeps,
-} from "./exposure-assembly.js";
-import type { EvaluateResult } from "./evaluate-path-types.js";
+} from "./exposure-assembly";
+import type { EvaluateResult } from "./evaluate-path-types";
 
 export interface EvaluateAccessorResult {
   readonly result: EvaluateResult;

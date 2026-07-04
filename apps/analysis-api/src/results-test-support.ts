@@ -1,4 +1,4 @@
-import type { PipeParams, TinybirdReadTransport } from "./tinybird.js";
+import type { PipeParams, TinybirdReadTransport } from "./tinybird";
 
 export const APP_ID = "app_checkout";
 export const OTHER_APP_ID = "app_other";

@@ -1,4 +1,4 @@
-import { OAuthError } from "./oauth-errors.js";
+import { OAuthError } from "./oauth-errors";
 
 /**
  * Claim-ceremony OTP + idempotency-key dedup (auth-doors.md claim step 2). Both

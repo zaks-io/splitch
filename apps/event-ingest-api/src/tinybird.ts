@@ -1,6 +1,6 @@
 import { ExposureEventSchema, type ExposureEvent } from "@splitch/contracts";
-import { serviceUnavailable } from "./errors.js";
-import { stringField, stringValue } from "./payload.js";
+import { serviceUnavailable } from "./errors";
+import { stringField, stringValue } from "./payload";
 import type {
   CredentialScope,
   Env,
@@ -8,7 +8,7 @@ import type {
   Outcome,
   Payload,
   TinybirdDelivery,
-} from "./types.js";
+} from "./types";
 
 const rawEventsDatasource = "raw_events";
 

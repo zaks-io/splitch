@@ -1,15 +1,15 @@
 import { assignmentKey } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { serializeAssignmentValue } from "./assignment-store.js";
-import { AssignmentStoreWriter } from "./assignment-store-writer.js";
+import { serializeAssignmentValue } from "./assignment-store";
+import { AssignmentStoreWriter } from "./assignment-store-writer";
 import {
   basePut,
   MapStorage,
   RAW_TARGETING_KEY,
   RecordingKv,
   StaticSaltStore,
-} from "./assignment-store-test-fixtures.js";
-import { InMemoryAssignmentStore } from "./in-memory-assignment-store.js";
+} from "./assignment-store-test-fixtures";
+import { InMemoryAssignmentStore } from "./in-memory-assignment-store";
 
 describe("InMemoryAssignmentStore", () => {
   it("serializes concurrent puts to the same assignment key to one winner", async () => {

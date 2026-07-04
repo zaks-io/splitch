@@ -1,5 +1,5 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { routeRegistry } from "./route-registry.js";
+import { routeRegistry } from "./route-registry";
 
 /**
  * On-demand OpenAPI 3.1 document emission from THE single route registry

@@ -1,5 +1,5 @@
 import { envScope, type EnvScope } from "@splitch/db";
-import { promoteFlagConfig, replaceTargetingRules } from "./config-store-mutations.js";
+import { promoteFlagConfig, replaceTargetingRules } from "./config-store-mutations";
 import {
   buildExperimentSnapshotFromD1,
   buildSnapshotFromD1,
@@ -17,9 +17,9 @@ import {
   type PromoteFlagConfigResult,
   type ReplaceTargetingRulesInput,
   type Snapshot,
-} from "./config-store-shared.js";
+} from "./config-store-shared";
 
-export type { ConfigStoreDeps } from "./config-store-shared.js";
+export type { ConfigStoreDeps } from "./config-store-shared";
 
 export interface ConfigStoreWriter {
   readFlagConfig(

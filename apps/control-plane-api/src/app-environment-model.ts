@@ -7,8 +7,8 @@ import {
 } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
-import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning.js";
-import { randomHex } from "./credential-cache.js";
+import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning";
+import { randomHex } from "./credential-cache";
 
 export interface AppEnvironmentDeps {
   repo: Repository;

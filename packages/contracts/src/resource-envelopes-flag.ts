@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FlagSchema, VariantSchema } from "./leaf-schemas-flag.js";
+import { FlagSchema, VariantSchema } from "./leaf-schemas-flag";
 
 /**
  * Create/patch/response wire envelopes for App-level Flag definition and

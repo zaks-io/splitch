@@ -1,4 +1,4 @@
-import { OAuthError } from "./oauth-errors.js";
+import { OAuthError } from "./oauth-errors";
 
 /**
  * Cloudflare Turnstile siteverify port (ADR-0034 §4).

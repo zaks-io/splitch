@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { REDACTED } from "./redaction-rules.js";
-import { scrubValue } from "./scrubber.js";
+import { REDACTED } from "./redaction-rules";
+import { scrubValue } from "./scrubber";
 
 describe("scrubValue", () => {
   it("redacts a whole `context` (Evaluation Context) subtree, keeping the key", () => {
