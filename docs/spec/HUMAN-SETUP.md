@@ -40,6 +40,7 @@ Backlog work is intentionally not listed here. Check Linear Backlog only when ex
 | 10  | Attention-card numeric thresholds                           | 🟡 Decide later | Panel tuning (ship-then-tune)        |
 | 11  | Provisional-Org → real-account conversion UX                | 🟡 Decide later | Onboarding upgrade flow              |
 | 12  | Turborepo remote cache vendor token                         | 🔴 Active       | CI/deploy remote cache               |
+| 13  | Sentry source-map upload org/project slugs                  | ✅ Done         | Readable deployed Sentry stacks      |
 
 Everything else the spec calls "not provisioned" (Cloudflare resources, Tinybird Cloud +
 `shared_preview` branch, secret storage via `wrangler secret` / `gh secret`, Turborepo remote
@@ -64,6 +65,20 @@ then store it without exposing the value:
 
 **Recorded:** not present at repository scope when checked on 2026-07-03. Secret values were not read
 or printed.
+
+### 13. Sentry source-map upload org/project slugs
+
+**Done.** The Sentry organization and project slugs used for Worker source-map uploads are stored in
+GitHub repository variables:
+
+- `SENTRY_ORG=zaksio`
+- `SENTRY_PROJECT=splitch`
+
+**Recorded:** Sentry MCP returned organization slug `zaksio` and project slug `splitch` on
+2026-07-04. GitHub repository variables `SENTRY_ORG` and `SENTRY_PROJECT` were set on 2026-07-04.
+GitHub repository secrets `SENTRY_AUTH_TOKEN` and `SENTRY_DSN` were present when checked on
+2026-07-04. GitHub environment secrets `SENTRY_DSN` were present in `preview` and `production`.
+Secret values were not read or printed.
 
 ---
 

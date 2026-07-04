@@ -60,6 +60,7 @@
     "@biomejs/biome": "^2.5.0",
     "@cloudflare/workers-types": "^4.20260617.1",
     "@playwright/test": "^1.61.1",
+    "@sentry/cli": "^3.6.0",
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/typescript-checker": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",

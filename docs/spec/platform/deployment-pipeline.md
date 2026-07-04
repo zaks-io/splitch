@@ -220,6 +220,21 @@ or any Durable Object migration.
   Worker secrets. `TINYBIRD_API_URL` is non-secret Worker config and points at the Tinybird region API.
 - Secret rotation is its own release. Do not hide secret changes inside an unrelated code deploy.
 
+### Sentry source maps
+
+- Every deployable Worker Wrangler config enables `upload_source_maps` so Cloudflare can remap Worker
+  stack traces from uploaded source maps.
+- Worker package deploy scripts call `scripts/deploy-worker-with-sentry.mjs`, which runs
+  `wrangler deploy` with `.wrangler/sentry` as the bundle outdir, injects a per-Worker
+  `SENTRY_RELEASE`, creates the matching Sentry release when it does not already exist, and uploads
+  that bundle directory to Sentry with `sentry-cli sourcemaps upload`.
+- `SENTRY_RELEASE` is non-secret deploy metadata. It is injected at deploy time, not committed in
+  Wrangler `vars`.
+- Sentry upload credentials are CI-only and must not become Worker runtime secrets. Shared-preview
+  and production deploy jobs require `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT` before
+  deploy. `SENTRY_ORG` and `SENTRY_PROJECT` may be GitHub variables or secrets; prefer variables
+  because they are slugs, not credentials.
+
 ## Tinybird policy
 
 PR CI uses Tinybird Local, not Tinybird Cloud Branches. Run Tinybird Local as a GitHub Actions service
@@ -338,6 +353,7 @@ is compatible with current data.
 - [ ] Add Blacksmith-backed GitHub workflows for shared preview reset and rollback.
 - [x] Add a Blacksmith-backed `deploy-shared-preview` workflow.
 - [x] Add a Blacksmith-backed `deploy-production` workflow for Tinybird, D1, and Worker deploy legs.
+- [x] Add Cloudflare and Sentry source-map upload wiring for Worker deploys.
 - [ ] Configure GitHub `preview` and `production` environments and required production reviewers.
 - [x] Wire `TURBO_TOKEN`, `TURBO_TEAM`, and `TURBO_REMOTE_CACHE_SIGNATURE_KEY` into CI/deploy workflows
       for signed Turborepo remote caching.
@@ -348,6 +364,10 @@ is compatible with current data.
 - Cloudflare Wrangler configuration and environment docs:
   <https://developers.cloudflare.com/workers/wrangler/configuration/>,
   <https://developers.cloudflare.com/workers/wrangler/environments/>
+- Cloudflare Worker source maps:
+  <https://developers.cloudflare.com/workers/observability/source-maps/>
+- Sentry Cloudflare Wrangler source-map upload docs:
+  <https://docs.sentry.io/platforms/javascript/guides/cloudflare/sourcemaps/uploading/wrangler/>
 - Cloudflare Workers custom domains and route docs:
   <https://developers.cloudflare.com/workers/configuration/routing/custom-domains/>,
   <https://developers.cloudflare.com/workers/configuration/routing/routes/>

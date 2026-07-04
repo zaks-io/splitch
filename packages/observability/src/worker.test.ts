@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { __setSentryModuleForTests, createWorkerObservability, workerEmitter } from "./worker.js";
+import {
+  __setSentryModuleForTests,
+  createWorkerObservability,
+  workerEmitter,
+  workerSentryOptions,
+} from "./worker.js";
 
 const captureMessage = vi.fn();
 const addBreadcrumb = vi.fn();
@@ -129,5 +134,24 @@ describe("createWorkerObservability onError", () => {
 
     expect(structuredLogEvents).toHaveLength(1);
     expect(structuredLogEvents[0]?.[0]?.requestId).toBe("req-structured-log");
+  });
+});
+
+describe("workerSentryOptions", () => {
+  it("passes the deployed release through to Sentry", () => {
+    expect(
+      workerSentryOptions(
+        {
+          SENTRY_DSN: "https://example@sentry.io/1",
+          SENTRY_RELEASE: "splitch-auth-api@abc123",
+          SPLITCH_PLATFORM_TARGET: "production",
+        },
+        { surface: "auth-api" },
+        mockSentryModule(),
+      ),
+    ).toMatchObject({
+      environment: "production",
+      release: "splitch-auth-api@abc123",
+    });
   });
 });

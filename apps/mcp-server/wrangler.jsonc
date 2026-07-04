@@ -4,6 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-06-21",
   "compatibility_flags": ["nodejs_compat"],
+  "upload_source_maps": true,
   "observability": {
     "traces": {
       "enabled": true,
@@ -24,8 +25,7 @@
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "CONTROL_PLANE_API_ORIGIN": "http://127.0.0.1:8787",
-    "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788",
-    "ANALYSIS_API_ORIGIN": "http://127.0.0.1:8790"
+    "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788"
   },
   "env": {
     "shared-preview": {

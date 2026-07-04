@@ -15,6 +15,7 @@ import type { ObservabilitySurfaceId } from "./surfaces.js";
 
 type WorkerEnv = {
   SENTRY_DSN?: string;
+  SENTRY_RELEASE?: string;
   SPLITCH_PLATFORM_TARGET?: string;
 };
 
@@ -81,6 +82,7 @@ export function workerSentryOptions(
   return {
     dsn: secrets.sentryDsn,
     environment: secrets.environment,
+    release: env.SENTRY_RELEASE,
     tracesSampleRate: secrets.environment === "production" ? 0.1 : 1,
     beforeSend(event: SentryErrorEvent) {
       return scrubbedBeforeSend(event as unknown as SentryEventLike) as unknown as SentryErrorEvent;

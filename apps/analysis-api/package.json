@@ -6,8 +6,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist coverage",
-    "deploy": "wrangler deploy",
-    "deploy:dry-run": "wrangler deploy --dry-run",
+    "deploy": "node ../../scripts/deploy-worker-with-sentry.mjs",
+    "deploy:dry-run": "node ../../scripts/deploy-worker-with-sentry.mjs --dry-run",
     "dev": "wrangler dev --local --port 8790 --test-scheduled --show-interactive-dev-session=false",
     "lint": "biome lint src",
     "test": "vitest run --passWithNoTests",

@@ -31,6 +31,7 @@ const WORKER_SECRET_SYNC_NAMES = [
 ] as const;
 
 interface WranglerTarget {
+  upload_source_maps?: boolean;
   observability?: {
     traces?: {
       enabled?: boolean;
@@ -52,6 +53,7 @@ interface WranglerTarget {
 interface WranglerConfig {
   env?: Record<string, WranglerTarget | undefined>;
   secrets?: { required?: string[] };
+  upload_source_maps?: boolean;
   vars?: Record<string, unknown>;
 }
 
@@ -67,6 +69,7 @@ describe("Worker Wrangler observability secrets", () => {
 
       expect(requiredSecrets.includes("SENTRY_DSN") || sentryVar === SENTRY_DSN).toBe(true);
       expect(requiredSecrets).not.toContain("AXIOM_TOKEN");
+      expect(target?.vars?.SENTRY_RELEASE).toBeUndefined();
       expect(target?.vars?.AXIOM_TOKEN).toBeUndefined();
       expect(target?.vars?.AXIOM_DATASET).toBeUndefined();
     });
@@ -85,6 +88,18 @@ describe("Deploy workflow observability secrets", () => {
       expect(workflow).toContain(secretName);
     }
   });
+});
+
+describe("Worker Wrangler source maps", () => {
+  for (const [surfaceId, wranglerPath] of Object.entries(WORKER_WRANGLER_PATHS)) {
+    const config = readWranglerConfig(join(repoRoot, wranglerPath));
+
+    it.each(
+      wranglerTargets(config),
+    )(`${surfaceId} enables Cloudflare source map upload for %s`, (_target, target) => {
+      expect(target?.upload_source_maps ?? config.upload_source_maps).toBe(true);
+    });
+  }
 });
 
 describe("Worker Wrangler Cloudflare Observability destinations", () => {
