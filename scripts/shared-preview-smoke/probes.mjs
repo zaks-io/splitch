@@ -158,10 +158,18 @@ export function createProbePlan(config) {
       throw new Error(`MCP returned ${body.error.code}: ${body.error.message}`);
     }
     const structured = body.result?.structuredContent;
-    if (body.result?.isError !== true || structured?.code !== "APP_NOT_FOUND") {
-      throw new Error("MCP authenticated Control Plane did not return expected APP_NOT_FOUND");
+    if (body.result?.isError === true && structured?.code === "APP_NOT_FOUND") {
+      return "Control Plane accepted bearer and reached apps_get";
     }
-    return "Control Plane accepted bearer and reached apps_get";
+    if (body.result?.isError === true && structured?.code === "RATE_LIMITED") {
+      return "Control Plane accepted bearer before fail-closed rate-limit guard";
+    }
+    throw new Error(
+      `MCP authenticated Control Plane returned ${JSON.stringify({
+        isError: body.result?.isError,
+        structuredContent: structured,
+      })}`,
+    );
   }
 
   async function mcpRequest(body, options = {}) {
