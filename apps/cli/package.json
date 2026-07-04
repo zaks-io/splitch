@@ -19,12 +19,17 @@
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist coverage",
     "lint": "biome lint src",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@splitch/contracts": "workspace:*",
     "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/observability": "workspace:*",
+    "@splitch/sdk": "workspace:*",
     "tsx": "4.22.4"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
   }
 }
