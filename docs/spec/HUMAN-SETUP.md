@@ -108,8 +108,10 @@ will be exercised by the shared-preview / production auth smoke.
 `preview` and `production`; `TURNSTILE_SECRET` present as a GitHub environment secret in `preview`
 and `production`. Verified 2026-06-27 by listing GitHub environment variables and secret names.
 Secret values were not read or printed. Runtime Worker secret attachment via `wrangler secret put`
-is agent-doable once the Auth API Worker deploy target exists and will be exercised by
-shared-preview / production auth smoke.
+is complete for the Auth API Worker: `TURNSTILE_SECRET` was present by name on
+`splitch-auth-api-shared-preview` and `splitch-auth-api` when checked with
+`wrangler secret list` on 2026-07-04. Secret values were not read or printed. Real
+bot-challenge verification will be exercised by shared-preview / production auth smoke.
 
 ### 3. Production domains + DNS (`splitch.dev`)
 

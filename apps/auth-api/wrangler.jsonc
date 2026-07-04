@@ -36,14 +36,22 @@
   "env": {
     "shared-preview": {
       "name": "splitch-auth-api-shared-preview",
+      "secrets": {
+        "required": ["TURNSTILE_SECRET"]
+      },
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "shared-preview"
+        "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAADsCXVP9TRrC6c6N"
       }
     },
     "production": {
       "name": "splitch-auth-api",
+      "secrets": {
+        "required": ["TURNSTILE_SECRET"]
+      },
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "production"
+        "SPLITCH_PLATFORM_TARGET": "production",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAADsCY8JNBv2vrTFC"
       }
     }
   }
