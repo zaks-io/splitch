@@ -47,7 +47,7 @@ async function executeMeta(
     }
     case "login": {
       const { loginWithDeviceFlow } = await import("./auth.js");
-      const session = await loginWithDeviceFlow(deps, { pollIntervalMs: 0, maxAttempts: 1 });
+      const session = await loginWithDeviceFlow(deps);
       const payload = { principal: session.principal };
       emit(io, invocation.flags.json, payload);
       return { exitCode: EXIT_OK, payload };

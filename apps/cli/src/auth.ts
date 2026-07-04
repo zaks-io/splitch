@@ -16,10 +16,7 @@ export interface AuthDeps extends SdkFactoryOptions {
   readonly fetch?: typeof fetch;
 }
 
-export async function loginWithDeviceFlow(
-  deps: AuthDeps,
-  options: { readonly pollIntervalMs?: number; readonly maxAttempts?: number } = {},
-): Promise<AuthSession> {
+export async function loginWithDeviceFlow(deps: AuthDeps): Promise<AuthSession> {
   const fetchImpl = deps.fetch ?? fetch;
   const authBaseUrl = resolveAuthBaseUrl(deps);
   const auth = await formPost(fetchImpl, `${authBaseUrl}/oauth2/device_authorization`, {
@@ -40,7 +37,7 @@ export async function loginWithDeviceFlow(
   console.error(`Open ${verificationUrl} and enter code ${grant.user_code}`);
 
   const intervalMs = (grant.interval ?? 5) * 1000;
-  const maxAttempts = options.maxAttempts ?? 30;
+  const maxAttempts = 30;
   const tokenBody = await pollDeviceApproval(
     fetchImpl,
     authBaseUrl,
