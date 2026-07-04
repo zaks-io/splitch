@@ -204,7 +204,6 @@ jobs:
             echo "- Ref: \`$(git rev-parse HEAD)\`"
             echo "- Trigger: \`${{ github.event_name }}\`"
             echo "- Tinybird: \`pnpm tinybird:deploy:production\`"
-            echo "- D1 backup: \`pnpm d1:backup:production\`"
             echo "- D1: \`pnpm d1:migrate:production\`"
             echo "- Workers: \`pnpm deploy:cloudflare:production\`"
           } >> "$GITHUB_STEP_SUMMARY"
