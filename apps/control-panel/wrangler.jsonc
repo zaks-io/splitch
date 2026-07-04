@@ -5,8 +5,18 @@
   "compatibility_date": "2026-06-21",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
-    "enabled": true,
-    "head_sampling_rate": 1
+    "traces": {
+      "enabled": true,
+      "destinations": ["axiom-traces"],
+      "persist": false,
+      "head_sampling_rate": 1
+    },
+    "logs": {
+      "enabled": true,
+      "destinations": ["axiom-logs"],
+      "persist": false,
+      "head_sampling_rate": 1
+    }
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local"
@@ -15,6 +25,20 @@
     "shared-preview": {
       "name": "splitch-control-panel-shared-preview",
       "workers_dev": false,
+      "observability": {
+        "traces": {
+          "enabled": true,
+          "destinations": ["axiom-traces"],
+          "persist": false,
+          "head_sampling_rate": 1
+        },
+        "logs": {
+          "enabled": true,
+          "destinations": ["axiom-logs"],
+          "persist": false,
+          "head_sampling_rate": 1
+        }
+      },
       "routes": [{ "pattern": "app.preview.splitch.dev", "custom_domain": true }],
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview"
@@ -23,6 +47,20 @@
     "production": {
       "name": "splitch-control-panel",
       "workers_dev": false,
+      "observability": {
+        "traces": {
+          "enabled": true,
+          "destinations": ["axiom-traces"],
+          "persist": false,
+          "head_sampling_rate": 1
+        },
+        "logs": {
+          "enabled": true,
+          "destinations": ["axiom-logs"],
+          "persist": false,
+          "head_sampling_rate": 1
+        }
+      },
       "routes": [{ "pattern": "app.splitch.dev", "custom_domain": true }],
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production"

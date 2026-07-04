@@ -5,8 +5,18 @@
   "compatibility_date": "2026-06-21",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
-    "enabled": true,
-    "head_sampling_rate": 1
+    "traces": {
+      "enabled": true,
+      "destinations": ["axiom-traces"],
+      "persist": false,
+      "head_sampling_rate": 1
+    },
+    "logs": {
+      "enabled": true,
+      "destinations": ["axiom-logs"],
+      "persist": false,
+      "head_sampling_rate": 1
+    }
   },
   // D1 carries the trusted-IdP allow-list + Org membership (accessed only through
   // @splitch/db createRepository). KV backs the jti replay cache (`jti:{jti}`)
@@ -29,30 +39,41 @@
     }
   ],
   "secrets": {
-    "required": ["SENTRY_DSN", "AXIOM_TOKEN"]
+    "required": ["SENTRY_DSN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "AUTH_API_ORIGIN": "http://localhost:8791",
-    "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
-    "AXIOM_DATASET": "splitch-logs"
+    "CONTROL_PLANE_ORIGIN": "http://localhost:8787"
   },
   "env": {
     "shared-preview": {
       "name": "splitch-auth-api-shared-preview",
       "workers_dev": false,
+      "observability": {
+        "traces": {
+          "enabled": true,
+          "destinations": ["axiom-traces"],
+          "persist": false,
+          "head_sampling_rate": 1
+        },
+        "logs": {
+          "enabled": true,
+          "destinations": ["axiom-logs"],
+          "persist": false,
+          "head_sampling_rate": 1
+        }
+      },
       "routes": [{ "pattern": "auth.preview.splitch.dev", "custom_domain": true }],
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
         "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
-        "TURNSTILE_SITE_KEY": "0x4AAAAAADsCXVP9TRrC6c6N",
-        "AXIOM_DATASET": "splitch-logs"
+        "TURNSTILE_SITE_KEY": "0x4AAAAAADsCXVP9TRrC6c6N"
       },
       "secrets": {
         "required": [
           "SENTRY_DSN",
-          "AXIOM_TOKEN",
           "ACCESS_TOKEN_SECRET",
           "ASSERTION_SIGNING_SECRET",
           "TURNSTILE_SECRET",
@@ -75,18 +96,30 @@
     "production": {
       "name": "splitch-auth-api",
       "workers_dev": false,
+      "observability": {
+        "traces": {
+          "enabled": true,
+          "destinations": ["axiom-traces"],
+          "persist": false,
+          "head_sampling_rate": 1
+        },
+        "logs": {
+          "enabled": true,
+          "destinations": ["axiom-logs"],
+          "persist": false,
+          "head_sampling_rate": 1
+        }
+      },
       "routes": [{ "pattern": "auth.splitch.dev", "custom_domain": true }],
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "AUTH_API_ORIGIN": "https://auth.splitch.dev",
         "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
-        "TURNSTILE_SITE_KEY": "0x4AAAAAADsCY8JNBv2vrTFC",
-        "AXIOM_DATASET": "splitch-logs"
+        "TURNSTILE_SITE_KEY": "0x4AAAAAADsCY8JNBv2vrTFC"
       },
       "secrets": {
         "required": [
           "SENTRY_DSN",
-          "AXIOM_TOKEN",
           "ACCESS_TOKEN_SECRET",
           "ASSERTION_SIGNING_SECRET",
           "TURNSTILE_SECRET",

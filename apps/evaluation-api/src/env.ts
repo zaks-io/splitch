@@ -19,6 +19,4 @@ export interface EvaluationApiEnv {
   SPLITCH_PLATFORM_TARGET?: string;
   SPLITCH_SOURCE_ID?: string;
   SENTRY_DSN?: string;
-  AXIOM_TOKEN?: string;
-  AXIOM_DATASET?: string;
 }

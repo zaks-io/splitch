@@ -14,6 +14,11 @@ const TEST_ENV = {
   SPLITCH_PLATFORM_TARGET: "local",
 };
 
+const WORKER_TEST_ENV = {
+  SENTRY_DSN: TEST_ENV.SENTRY_DSN,
+  SPLITCH_PLATFORM_TARGET: TEST_ENV.SPLITCH_PLATFORM_TARGET,
+};
+
 type SurfaceEmitterFactory = (hooks: {
   onSentryEvent?: (event: Record<string, unknown>) => void;
   onAxiomEvents?: (events: Record<string, unknown>[]) => void;
@@ -27,12 +32,14 @@ type SurfaceEmitterFactory = (hooks: {
 };
 
 const SURFACE_EMITTERS: Record<ObservabilitySurfaceId, SurfaceEmitterFactory> = {
-  "control-plane-api": (hooks) => workerEmitter(TEST_ENV, { surface: "control-plane-api" }, hooks),
-  "evaluation-api": (hooks) => workerEmitter(TEST_ENV, { surface: "evaluation-api" }, hooks),
-  "event-ingest-api": (hooks) => workerEmitter(TEST_ENV, { surface: "event-ingest-api" }, hooks),
-  "analysis-api": (hooks) => workerEmitter(TEST_ENV, { surface: "analysis-api" }, hooks),
-  "auth-api": (hooks) => workerEmitter(TEST_ENV, { surface: "auth-api" }, hooks),
-  "mcp-server": (hooks) => workerEmitter(TEST_ENV, { surface: "mcp-server" }, hooks),
+  "control-plane-api": (hooks) =>
+    workerEmitter(WORKER_TEST_ENV, { surface: "control-plane-api" }, hooks),
+  "evaluation-api": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "evaluation-api" }, hooks),
+  "event-ingest-api": (hooks) =>
+    workerEmitter(WORKER_TEST_ENV, { surface: "event-ingest-api" }, hooks),
+  "analysis-api": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "analysis-api" }, hooks),
+  "auth-api": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "auth-api" }, hooks),
+  "mcp-server": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "mcp-server" }, hooks),
   cli: (hooks) => cliEmitter(TEST_ENV, hooks),
   "sdk-harness": (hooks) => sdkHarnessEmitter(TEST_ENV, hooks),
 };

@@ -5,15 +5,24 @@
   "compatibility_date": "2026-06-21",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
-    "enabled": true,
-    "head_sampling_rate": 1
+    "traces": {
+      "enabled": true,
+      "destinations": ["axiom-traces"],
+      "persist": false,
+      "head_sampling_rate": 1
+    },
+    "logs": {
+      "enabled": true,
+      "destinations": ["axiom-logs"],
+      "persist": false,
+      "head_sampling_rate": 1
+    }
   },
   "secrets": {
-    "required": ["SENTRY_DSN", "AXIOM_TOKEN", "SPLITCH_EVENT_INGEST_TOKEN"]
+    "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN"]
   },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local",
-    "AXIOM_DATASET": "splitch-logs"
+    "SPLITCH_PLATFORM_TARGET": "local"
   },
   "services": [
     {
@@ -61,20 +70,28 @@
     "shared-preview": {
       "name": "splitch-evaluation-api-shared-preview",
       "workers_dev": false,
+      "observability": {
+        "traces": {
+          "enabled": true,
+          "destinations": ["axiom-traces"],
+          "persist": false,
+          "head_sampling_rate": 1
+        },
+        "logs": {
+          "enabled": true,
+          "destinations": ["axiom-logs"],
+          "persist": false,
+          "head_sampling_rate": 1
+        }
+      },
       "routes": [{ "pattern": "edge.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": [
-          "SENTRY_DSN",
-          "AXIOM_TOKEN",
-          "EVALUATION_PRIVACY_SALT",
-          "SPLITCH_EVENT_INGEST_TOKEN"
-        ]
+        "required": ["SENTRY_DSN", "EVALUATION_PRIVACY_SALT", "SPLITCH_EVENT_INGEST_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
-        "AXIOM_DATASET": "splitch-logs"
+        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev"
       },
       "kv_namespaces": [
         { "binding": "ASSIGNMENTS_KV", "id": "c3a126c4617443869c0afd1c2c69c70c" },
@@ -106,20 +123,28 @@
     "production": {
       "name": "splitch-evaluation-api",
       "workers_dev": false,
+      "observability": {
+        "traces": {
+          "enabled": true,
+          "destinations": ["axiom-traces"],
+          "persist": false,
+          "head_sampling_rate": 1
+        },
+        "logs": {
+          "enabled": true,
+          "destinations": ["axiom-logs"],
+          "persist": false,
+          "head_sampling_rate": 1
+        }
+      },
       "routes": [{ "pattern": "edge.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": [
-          "SENTRY_DSN",
-          "AXIOM_TOKEN",
-          "EVALUATION_PRIVACY_SALT",
-          "SPLITCH_EVENT_INGEST_TOKEN"
-        ]
+        "required": ["SENTRY_DSN", "EVALUATION_PRIVACY_SALT", "SPLITCH_EVENT_INGEST_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
-        "AXIOM_DATASET": "splitch-logs"
+        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev"
       },
       "kv_namespaces": [
         { "binding": "ASSIGNMENTS_KV", "id": "cda6d6de2d974fef88e6e22d03551789" },
