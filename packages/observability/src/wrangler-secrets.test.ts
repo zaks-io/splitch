@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseConfigFileTextToJson } from "typescript";
 import { describe, expect, it } from "vitest";
-import { OBSERVABILITY_SURFACES } from "./surfaces.js";
 
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 
@@ -21,6 +20,8 @@ const WORKER_WRANGLER_PATHS: Record<string, string> = {
 const OBSERVABILITY_TARGETS = ["local", "shared-preview", "production"] as const;
 const AXIOM_TRACE_DESTINATION = "axiom-traces";
 const AXIOM_LOG_DESTINATION = "axiom-logs";
+const SENTRY_DSN =
+  "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048";
 
 interface WranglerTarget {
   observability?: {
@@ -48,26 +49,17 @@ interface WranglerConfig {
 }
 
 describe("Worker Wrangler observability secrets", () => {
-  for (const surface of OBSERVABILITY_SURFACES) {
-    if (surface.kind !== "worker") {
-      continue;
-    }
-
-    const wranglerPath = WORKER_WRANGLER_PATHS[surface.id];
-    if (!wranglerPath) {
-      continue;
-    }
-
+  for (const [surfaceId, wranglerPath] of Object.entries(WORKER_WRANGLER_PATHS)) {
     const config = readWranglerConfig(join(repoRoot, wranglerPath));
 
     it.each(
       wranglerTargets(config),
-    )(`${surface.id} keeps Sentry optional and Axiom token-free for %s`, (_target, target) => {
+    )(`${surfaceId} declares SENTRY_DSN and stays Axiom token-free for %s`, (_target, target) => {
       const requiredSecrets = target?.secrets?.required ?? [];
 
       expect(requiredSecrets).not.toContain("SENTRY_DSN");
       expect(requiredSecrets).not.toContain("AXIOM_TOKEN");
-      expect(target?.vars?.SENTRY_DSN).toBeUndefined();
+      expect(target?.vars?.SENTRY_DSN).toBe(SENTRY_DSN);
       expect(target?.vars?.AXIOM_TOKEN).toBeUndefined();
       expect(target?.vars?.AXIOM_DATASET).toBeUndefined();
     });
