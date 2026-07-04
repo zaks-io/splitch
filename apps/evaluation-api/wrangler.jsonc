@@ -8,9 +8,18 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  "secrets": {
+    "required": ["SPLITCH_EVENT_INGEST_TOKEN"]
+  },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local"
   },
+  "services": [
+    {
+      "binding": "EVENT_INGEST",
+      "service": "splitch-event-ingest-api"
+    }
+  ],
   "kv_namespaces": [
     {
       "binding": "ASSIGNMENTS_KV",
@@ -50,15 +59,33 @@
   "env": {
     "shared-preview": {
       "name": "splitch-evaluation-api-shared-preview",
+      "secrets": {
+        "required": ["SPLITCH_EVENT_INGEST_TOKEN"]
+      },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview"
-      }
+      },
+      "services": [
+        {
+          "binding": "EVENT_INGEST",
+          "service": "splitch-event-ingest-api-shared-preview"
+        }
+      ]
     },
     "production": {
       "name": "splitch-evaluation-api",
+      "secrets": {
+        "required": ["SPLITCH_EVENT_INGEST_TOKEN"]
+      },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production"
-      }
+      },
+      "services": [
+        {
+          "binding": "EVENT_INGEST",
+          "service": "splitch-event-ingest-api"
+        }
+      ]
     }
   }
 }

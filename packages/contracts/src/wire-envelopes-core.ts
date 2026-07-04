@@ -62,10 +62,15 @@ export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
 // null when the Flag is not found or disabled with no Default Variant.
 // ---------------------------------------------------------------------------
 
+const NonEmptyDataPlaneStringSchema = z.string().min(1);
+
 export const DataPlaneEvaluateRequestSchema = z.object({
-  flagKey: z.string(),
-  targetingKey: z.string(),
-  idType: z.string(),
+  // Optional assertion only. The Evaluation Worker scopes from the Client Key,
+  // rejects mismatches, and discards matches before Provider reads.
+  appId: NonEmptyDataPlaneStringSchema.optional(),
+  flagKey: NonEmptyDataPlaneStringSchema,
+  targetingKey: NonEmptyDataPlaneStringSchema,
+  idType: NonEmptyDataPlaneStringSchema,
   // Defaults to {} when the caller omits the attribute bag.
   attributes: EvaluationContextSchema.shape.attributes.default({}),
 });

@@ -11,11 +11,13 @@ import {
 describe("DataPlaneEvaluateRequestSchema", () => {
   it("parses a full request", () => {
     const req = DataPlaneEvaluateRequestSchema.parse({
+      appId: "app_123",
       flagKey: "feature-x",
       targetingKey: "user-1",
       idType: "user",
       attributes: { plan: "enterprise" },
     });
+    expect(req.appId).toBe("app_123");
     expect(req.flagKey).toBe("feature-x");
     expect(req.attributes.plan).toBe("enterprise");
   });
@@ -33,6 +35,24 @@ describe("DataPlaneEvaluateRequestSchema", () => {
     expect(
       DataPlaneEvaluateRequestSchema.safeParse({ targetingKey: "u", idType: "user" }).success,
     ).toBe(false);
+  });
+
+  it.each([
+    "appId",
+    "flagKey",
+    "targetingKey",
+    "idType",
+  ] as const)("rejects an empty %s", (field) => {
+    const request = {
+      appId: "app_123",
+      flagKey: "feature-x",
+      targetingKey: "user-1",
+      idType: "user",
+      attributes: {},
+      [field]: "",
+    };
+
+    expect(DataPlaneEvaluateRequestSchema.safeParse(request).success).toBe(false);
   });
 
   it("rejects a nested object attribute value", () => {
