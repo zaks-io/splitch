@@ -73,21 +73,18 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-          ref: refs/heads/main
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || 'refs/heads/main' }}
           persist-credentials: false
 
       - name: Verify checked out CI commit
+        if: github.event_name == 'workflow_run'
         env:
-          EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" != "workflow_run" ]; then
-            exit 0
-          fi
           checked_out_sha="$(git rev-parse HEAD)"
           if [ "$checked_out_sha" != "$WORKFLOW_RUN_HEAD_SHA" ]; then
-            echo "::error::main moved after CI completed; refusing to deploy $checked_out_sha instead of $WORKFLOW_RUN_HEAD_SHA"
+            echo "::error::checked out $checked_out_sha instead of CI head $WORKFLOW_RUN_HEAD_SHA"
             exit 1
           fi
 
@@ -146,21 +143,18 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-          ref: refs/heads/main
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || 'refs/heads/main' }}
           persist-credentials: false
 
       - name: Verify checked out CI commit
+        if: github.event_name == 'workflow_run'
         env:
-          EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" != "workflow_run" ]; then
-            exit 0
-          fi
           checked_out_sha="$(git rev-parse HEAD)"
           if [ "$checked_out_sha" != "$WORKFLOW_RUN_HEAD_SHA" ]; then
-            echo "::error::main moved after CI completed; refusing to deploy $checked_out_sha instead of $WORKFLOW_RUN_HEAD_SHA"
+            echo "::error::checked out $checked_out_sha instead of CI head $WORKFLOW_RUN_HEAD_SHA"
             exit 1
           fi
 
@@ -210,6 +204,7 @@ jobs:
             echo "- Ref: \`$(git rev-parse HEAD)\`"
             echo "- Trigger: \`${{ github.event_name }}\`"
             echo "- Tinybird: \`pnpm tinybird:deploy:production\`"
+            echo "- D1 backup: \`pnpm d1:backup:production\`"
             echo "- D1: \`pnpm d1:migrate:production\`"
             echo "- Workers: \`pnpm deploy:cloudflare:production\`"
           } >> "$GITHUB_STEP_SUMMARY"

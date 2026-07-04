@@ -6,6 +6,7 @@ dist/
 .env
 .env.*
 .turbo/
+.deploy-artifacts/
 .wrangler/
 .tinyb
 reports/mutation/

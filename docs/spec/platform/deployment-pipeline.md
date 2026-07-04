@@ -259,7 +259,7 @@ drift from the release path.
    be enabled.
 3. Run Tinybird deployment check with the environment-scoped production Tinybird token.
 4. Deploy Tinybird to Cloud main.
-5. Apply D1 migrations to production.
+5. Export a D1 SQL backup (`pnpm d1:backup:production`), then apply D1 migrations to production.
 6. Sync Worker secrets, then deploy Workers through Turborepo package deploy tasks. The Turbo graph
    enforces service-binding order where it matters: Evaluation deploy waits for Event Ingest deploy.
 7. Verify cron trigger registration on Control Plane API and Analysis Workers.
