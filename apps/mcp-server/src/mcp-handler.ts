@@ -23,6 +23,7 @@ const protocolVersion = "2025-06-18";
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
 const defaultEvaluationBaseUrl = "http://127.0.0.1:8788";
 const defaultAnalysisBaseUrl = "http://127.0.0.1:8790";
+const internalAnalysisBaseUrl = "https://analysis-api.internal";
 const tools = deriveMcpProtocolTools();
 const toolNames = new Set(tools.map((tool) => tool.name));
 type McpRoutableOwner = "control-plane-api" | "evaluation-api" | "analysis-api";
@@ -37,6 +38,7 @@ export interface McpServerRequestOptions {
   readonly evaluationBaseUrl?: string;
   readonly analysisBaseUrl?: string;
   readonly controlPlaneFetch?: typeof fetch;
+  readonly analysisFetch?: typeof fetch;
 }
 
 export async function handleMcpServerRequest(options: McpServerRequestOptions): Promise<Response> {
@@ -92,15 +94,31 @@ function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
       fetch: options.controlPlaneFetch,
     }),
     "analysis-api": createControlPlaneSdk({
-      baseUrl: apiBaseUrl(
-        "ANALYSIS_API_ORIGIN",
+      baseUrl: analysisApiBaseUrl(
         options.analysisBaseUrl,
-        defaultAnalysisBaseUrl,
         platformTarget,
+        options.analysisFetch !== undefined,
       ),
-      fetch: options.controlPlaneFetch,
+      fetch: options.analysisFetch ?? options.controlPlaneFetch,
     }),
   };
+}
+
+function analysisApiBaseUrl(
+  configured: string | undefined,
+  platformTarget: string,
+  hasServiceBinding: boolean,
+): string {
+  if (configured) {
+    return configured;
+  }
+  if (platformTarget === "local" || platformTarget === "pr-ci") {
+    return defaultAnalysisBaseUrl;
+  }
+  if (hasServiceBinding) {
+    return internalAnalysisBaseUrl;
+  }
+  throw new Error("mcp-server: ANALYSIS_API service binding is required for hosted targets");
 }
 
 function apiBaseUrl(

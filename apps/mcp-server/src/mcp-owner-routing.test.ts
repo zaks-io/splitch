@@ -108,6 +108,38 @@ describe("mcp server owner routing", () => {
     ]);
     expect(body.result.structuredContent).toEqual(auditLogPage);
   });
+
+  it("routes analysis-owned tools through the Analysis API service binding for hosted targets", async () => {
+    const analysisSeen: SeenRequest[] = [];
+    const response = await mcp(
+      "tools/call",
+      {
+        name: "audit_log_list",
+        arguments: {
+          appId: "app_local",
+          limit: "10",
+          environmentId: "env_prod",
+        },
+      },
+      {
+        platformTarget: "shared-preview",
+        controlPlaneBaseUrl: "https://api.preview.splitch.dev",
+        evaluationBaseUrl: "https://edge.preview.splitch.dev",
+        analysisFetch: analysisServiceFetch(analysisSeen),
+      },
+    );
+    const body = (await response.json()) as JsonRpcSuccess<ToolResult<typeof auditLogPage>>;
+
+    expect(analysisSeen).toEqual([
+      {
+        method: "GET",
+        path: "/apps/app_local/audit-log?limit=10&environmentId=env_prod",
+        authorization: token,
+        body: "",
+      },
+    ]);
+    expect(body.result.structuredContent).toEqual(auditLogPage);
+  });
 });
 
 interface SeenRequest {
@@ -134,10 +166,12 @@ type ApiHandler = (
 async function mcp(
   method: string,
   params: unknown,
-  baseUrls: {
+  options: {
     controlPlaneBaseUrl?: string;
     evaluationBaseUrl?: string;
     analysisBaseUrl?: string;
+    analysisFetch?: typeof fetch;
+    platformTarget?: string;
   },
 ): Promise<Response> {
   return handleMcpServerRequest({
@@ -147,9 +181,27 @@ async function mcp(
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     }),
     service,
-    platformTarget: "local",
-    ...baseUrls,
+    platformTarget: options.platformTarget ?? "local",
+    ...options,
   });
+}
+
+function analysisServiceFetch(seen: SeenRequest[]): typeof fetch {
+  return async (input, init) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    await recordFetchRequest(request, seen);
+    const url = new URL(request.url);
+    if (
+      request.method === "GET" &&
+      `${url.pathname}${url.search}` === "/apps/app_local/audit-log?limit=10&environmentId=env_prod"
+    ) {
+      return Response.json(auditLogPage);
+    }
+    return Response.json(
+      { code: "APP_NOT_FOUND", message: "not found", details: {} },
+      { status: 404 },
+    );
+  };
 }
 
 async function bootApi(seen: SeenRequest[], handler: ApiHandler): Promise<string> {
@@ -209,6 +261,16 @@ async function recordRequest(request: IncomingMessage, seen: SeenRequest[]): Pro
     path: request.url ?? "",
     authorization: request.headers.authorization ?? null,
     body: await readRequestBody(request),
+  });
+}
+
+async function recordFetchRequest(request: Request, seen: SeenRequest[]): Promise<void> {
+  const url = new URL(request.url);
+  seen.push({
+    method: request.method,
+    path: `${url.pathname}${url.search}`,
+    authorization: request.headers.get("authorization"),
+    body: await request.text(),
   });
 }
 

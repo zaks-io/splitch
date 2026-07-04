@@ -59,12 +59,36 @@
   "env": {
     "shared-preview": {
       "name": "splitch-evaluation-api-shared-preview",
+      "workers_dev": false,
+      "routes": [{ "pattern": "edge.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SPLITCH_EVENT_INGEST_TOKEN"]
+        "required": ["EVALUATION_PRIVACY_SALT", "SPLITCH_EVENT_INGEST_TOKEN"]
       },
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "shared-preview"
+        "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
+        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev"
       },
+      "kv_namespaces": [
+        { "binding": "ASSIGNMENTS_KV", "id": "c3a126c4617443869c0afd1c2c69c70c" },
+        { "binding": "CONFIG_STORE", "id": "70cc24e1592e4db4a5b37e8d0dd6d6af" },
+        { "binding": "CREDENTIAL_STORE", "id": "05f656eb41b54063aa0d2d23a6082c5b" },
+        { "binding": "SESSION_STORE", "id": "673d17e768eb45f5bfc5275fbd0e9320" }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "ASSIGNMENT_STORE_WRITER",
+            "class_name": "AssignmentStoreDurableObject"
+          }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_classes": ["AssignmentStoreDurableObject"]
+        }
+      ],
       "services": [
         {
           "binding": "EVENT_INGEST",
@@ -74,12 +98,36 @@
     },
     "production": {
       "name": "splitch-evaluation-api",
+      "workers_dev": false,
+      "routes": [{ "pattern": "edge.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SPLITCH_EVENT_INGEST_TOKEN"]
+        "required": ["EVALUATION_PRIVACY_SALT", "SPLITCH_EVENT_INGEST_TOKEN"]
       },
       "vars": {
-        "SPLITCH_PLATFORM_TARGET": "production"
+        "SPLITCH_PLATFORM_TARGET": "production",
+        "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
+        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev"
       },
+      "kv_namespaces": [
+        { "binding": "ASSIGNMENTS_KV", "id": "cda6d6de2d974fef88e6e22d03551789" },
+        { "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" },
+        { "binding": "CREDENTIAL_STORE", "id": "2c0082cdd2f4426f8cfeb4d2bbd62277" },
+        { "binding": "SESSION_STORE", "id": "bdfa1197123d4eef945c5a703d63a572" }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "ASSIGNMENT_STORE_WRITER",
+            "class_name": "AssignmentStoreDurableObject"
+          }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_classes": ["AssignmentStoreDurableObject"]
+        }
+      ],
       "services": [
         {
           "binding": "EVENT_INGEST",

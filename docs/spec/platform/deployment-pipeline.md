@@ -1,7 +1,8 @@
 # Deployment pipeline: PR CI, shared preview, production release, rollback
 
-Status: CI, local gates, and the Tinybird leg of production deploy are wired. Shared preview,
-Cloudflare production deploy, rollback, and real resource provisioning are still designed, not wired.
+Status: CI, local gates, shared-preview deploy, production deploy wiring, Worker secret sync, and
+Cloudflare D1/KV resource provisioning are in place. Rollback and smoke checks are still designed,
+not wired.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md). This document uses **platform target** for
 CI/deployment targets such as local, PR CI, shared preview, and production. A platform target is not a
 splitch product **Environment** under an App.
@@ -15,11 +16,14 @@ preview is a single shared target updated on demand. Production releases are que
 GitHub deployments that run migrations as part of the release, not as a side manual step.
 
 The scaffold has the `ci` workflow (with a range-scoped Gitleaks secret-scan step), the
-`deploy-production` workflow for Tinybird, Turborepo task graph, package scripts, Lefthook hooks, and
-placeholder Wrangler configs. It does not provision or deploy Cloudflare resources yet.
+`deploy-shared-preview` workflow, the `deploy-production` workflow, Turborepo task graph, package
+scripts, Lefthook hooks, and Wrangler configs. The deploy workflows do not synthesize Cloudflare
+resources at deploy time; D1 databases and shared KV namespaces are provisioned and committed as
+Wrangler source-of-truth config. Worker secret values stay in GitHub environments and Cloudflare
+Worker secrets, then sync from environment variables immediately before each Worker deploy.
 
-Do not use Cloudflare dashboard edits as the source of truth. Wrangler config, generated preview
-configs, Tinybird project files, and GitHub environment settings are the release contract.
+Do not use Cloudflare dashboard edits as the source of truth. Wrangler config, Tinybird project
+files, and GitHub environment settings are the release contract.
 
 ## Platform targets
 
@@ -78,42 +82,48 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 
 ## Required GitHub workflows
 
-| Workflow                | Trigger                                              | Concurrency                      | Required result                                                                                                                                      |
-| ----------------------- | ---------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci`                    | PR and push to main                                  | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks                        |
-| `gitleaks`              | PR and push                                          | none                             | wired: full git secret scan                                                                                                                          |
-| `deploy-shared-preview` | manual dispatch, or trusted maintainer label/comment | `shared-preview-deploy`, queued  | not wired: deploy selected ref to the one hosted preview target                                                                                      |
-| `reset-shared-preview`  | manual dispatch                                      | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                                        |
-| `deploy-production`     | manual dispatch from main                            | `production-deploy`, queued      | wired for Tinybird: `verify:ci` before the production gate, then `tb deploy --check` and `tb deploy --wait`; Cloudflare/D1/smoke legs remain pending |
-| `rollback-production`   | manual dispatch                                      | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                         |
+| Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                             |
+| ----------------------- | --------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks               |
+| `gitleaks`              | PR and push                                         | none                             | wired: full git secret scan                                                                                                                 |
+| `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, and Turborepo Worker deploy tasks |
+| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                               |
+| `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, and Turborepo Worker deploy tasks      |
+| `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
 
 ## Cloudflare resource contract
 
-Wrangler config is the source of truth. Use `wrangler.jsonc` for each deployable Worker and generate
-shared-preview configs from those checked-in configs. Do not deploy the root Worker accidentally; every
-deploy must specify a platform target.
+Wrangler config is the source of truth. Use `wrangler.jsonc` for each deployable Worker and checked-in
+named environment blocks for `shared-preview` and `production`. Do not deploy the root Worker
+accidentally; every deploy must specify a platform target.
 
 Public hostnames and per-Worker routes are fixed by
 [ADR-0038](../../adr/0038-public-hostnames-are-a-fixed-human-owned-subdomain-map.md) on the
 `splitch.dev` zone (subdomain per surface; Analysis is internal, no public host). Generate
 `wrangler.jsonc` routes from that table — do not invent hostnames.
 
+Workers that own the full hostname use Wrangler Custom Domains:
+`{ "pattern": "<hostname>", "custom_domain": true }`. Cloudflare creates the DNS record and edge
+certificate for those Custom Domains after deploy. Do not hand-create DNS records for these Worker
+hostnames. Plain Workers Routes are a different mechanism and require a pre-existing proxied DNS
+record; they are not the default for splitch's public Workers.
+
 Per-Worker configs must declare only the bindings owned by that Worker:
 
-| Worker                   | Binding rule                                                                                         |
-| ------------------------ | ---------------------------------------------------------------------------------------------------- |
-| Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update Durable Object binding |
-| MCP Worker               | No D1, KV, Tinybird, or Durable Object data bindings; calls through `@splitch/control-plane-sdk`     |
-| Evaluation Worker        | Provider/config KV, Assignment Store KV/DO, Event Ingest service binding                             |
-| Event Ingest Worker      | Queue, sharded ingest/dedup Durable Objects, Tinybird write secret                                   |
-| Analysis Worker          | Tinybird read secret; no SDK evaluate or ingest bindings                                             |
-| Auth API Worker          | Auth/session/token bindings only; no post-create App management bindings                             |
-| Control Panel Worker     | UI/session/client bindings only; no direct D1/KV/Tinybird access                                     |
-| Marketing Worker         | Static/public bindings only; no authenticated App data                                               |
-| Scheduled jobs           | Cron triggers stay on owning Workers: Control Plane API demo cleanup and Analysis snapshot refresh   |
+| Worker                   | Binding rule                                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update Durable Object binding                                                   |
+| MCP Worker               | No D1, KV, Tinybird, or Durable Object data bindings; calls public APIs by origin and Analysis by service binding through `@splitch/control-plane-sdk` |
+| Evaluation Worker        | Provider/config KV, Assignment Store KV/DO, Event Ingest service binding                                                                               |
+| Event Ingest Worker      | Queue, sharded ingest/dedup Durable Objects, Tinybird write secret                                                                                     |
+| Analysis Worker          | Tinybird read secret; no SDK evaluate or ingest bindings                                                                                               |
+| Auth API Worker          | Auth/session/token bindings only; no post-create App management bindings                                                                               |
+| Control Panel Worker     | UI/session/client bindings only; no direct D1/KV/Tinybird access                                                                                       |
+| Marketing Worker         | Static/public bindings only; no authenticated App data                                                                                                 |
+| Scheduled jobs           | Cron triggers stay on owning Workers: Control Plane API demo cleanup and Analysis snapshot refresh                                                     |
 
 ### Shared Cloudflare preview
 
@@ -121,10 +131,11 @@ Shared preview is provisioned once and updated on demand:
 
 1. Maintain one shared-preview D1 database, KV namespace set, Durable Object namespace set, Worker fleet,
    and Tinybird Branch.
-2. Generate a Wrangler config per Worker with shared-preview binding IDs, preview vars, service bindings
-   pointing at shared-preview Worker names, and no production routes.
+2. Use the checked-in Wrangler `shared-preview` environment blocks with binding IDs, preview vars,
+   service bindings pointing at shared-preview Worker names, and no production routes.
 3. Apply D1 migrations to the shared-preview D1 database before Worker deployment.
-4. Deploy Workers with `wrangler deploy` using the generated config.
+4. Sync Worker secrets, then deploy Workers through Turborepo package deploy tasks that call
+   `wrangler deploy --env shared-preview`.
 5. Run smoke checks against the shared-preview URL.
 6. Post the shared-preview URL, deployed ref, Tinybird branch name, migration list, and smoke results to
    the PR or workflow summary.
@@ -178,6 +189,13 @@ or any Durable Object migration.
 - Cloudflare deploy tokens are scoped as tightly as Cloudflare supports. Prefer separate preview and
   production API tokens.
 - Runtime secret names are declared in Wrangler config with `secrets.required`.
+- `scripts/sync-worker-secrets.mjs` reads each Worker's `secrets.required` list and performs
+  `wrangler secret bulk --env <target>` before deploy. CI sets
+  `SPLITCH_REQUIRE_WORKER_SECRET_ENV=1` so missing environment values fail loudly. Local deploys may
+  reuse already-attached Worker secrets when the environment value is not present.
+- The Auth API declares `WORKOS_CLIENT_ID` and `WORKOS_API_KEY` as required hosted Worker bindings so
+  hosted device flow cannot silently fall back to the local fixture adapter. `WORKOS_CLIENT_ID` is a
+  GitHub environment variable, not a repository-committed Wrangler value.
 - Event Ingest declares `SPLITCH_EVENT_INGEST_TOKEN` and `TINYBIRD_INGEST_TOKEN` as required
   Worker secrets. `TINYBIRD_API_URL` is non-secret Worker config and points at the Tinybird region API.
 - Secret rotation is its own release. Do not hide secret changes inside an unrelated code deploy.
@@ -210,17 +228,19 @@ Tinybird flow:
    cloud credentials are available.
 2. Shared preview creates or updates `shared_preview --last-partition`, then runs `tb --branch=shared_preview build`
    and endpoint smoke tests against that branch.
-3. Production release runs the manual `deploy-production` workflow. Its validation job runs
-   `verify:ci` before the production gate. Its deployment job waits for the GitHub `production`
-   environment, then runs `tb deploy --check` and `tb deploy --wait` through environment-scoped
-   `TB_TOKEN` and `TB_HOST`.
+3. Production release starts automatically after the `ci` workflow succeeds for a same-repository
+   push to `main`, or manually from `main`. The workflow checks out `refs/heads/main` and refuses to
+   deploy if it does not match the CI `head_sha`. Manual runs execute `verify:ci` before the
+   production gate. The deployment job then waits for the GitHub `production` environment, runs
+   `tb deploy --check` and `tb deploy --wait` through environment-scoped `TB_TOKEN` and `TB_HOST`,
+   applies D1 migrations, and deploys Workers through Turborepo package tasks.
 4. Destructive Tinybird deploys require explicit human approval and `--allow-destructive-operations`.
    They are not allowed in the default production deploy workflow.
 
 Current cloud setup: Tinybird workspaces `splitch_dev` and `splitch_prod` exist. Both have the
 committed datasource shape deployed and a `raw_events_ingest` APPEND token generated by the Tinybird
-datafile. Worker secret attachment is still a separate Cloudflare step; do not copy token values into
-the repository or docs.
+datafile. The `shared_preview` Tinybird Branch exists. GitHub environment secret names are present
+for preview and production deploys. Worker secret values remain outside the repository and docs.
 
 The splitch physical dedup Copy Pipe snapshot is separate from Tinybird Branch snapshots. Production
 runs the scheduled Tinybird snapshot refresh on the Analysis Worker. Shared preview runs Copy Pipes on
@@ -228,11 +248,11 @@ demand for smoke tests only; it does not schedule its own hourly snapshot job by
 
 ## Production deploy order
 
-Production deployments run from the default branch only. The current `deploy-production` workflow is
-manual-only. It runs `verify:ci` before the GitHub `production` environment gate, then uses the gated
-job's environment-scoped Tinybird token for `tb deploy --check` and `tb deploy --wait`. It wires
-Tinybird first so datafiles cannot drift from the release path while the Cloudflare/D1 production legs
-are still being built.
+Production deployments run from the default branch only. The `deploy-production` workflow starts after
+the `ci` workflow succeeds on `main` and can also be manually dispatched from `main`. It validates the
+exact CI head SHA before the GitHub `production` environment gate, then uses the gated job's
+environment-scoped Cloudflare and Tinybird credentials. Tinybird deploys first so datafiles cannot
+drift from the release path.
 
 1. Install dependencies and run `verify:ci`.
 2. Wait for GitHub `production` environment approval. Required reviewers and prevent-self-review should
@@ -240,14 +260,12 @@ are still being built.
 3. Run Tinybird deployment check with the environment-scoped production Tinybird token.
 4. Deploy Tinybird to Cloud main.
 5. Apply D1 migrations to production.
-6. Deploy stateful/internal Workers first: Event Ingest, Analysis, Control Plane API, Auth API.
-7. Deploy Evaluation Worker after Event Ingest is healthy.
-8. Deploy MCP Worker, Control Panel Worker, and Marketing Worker; verify cron trigger registration on
-   Control Plane API and Analysis Workers.
-9. Run smoke checks for public routes, service bindings, event ingest, analysis reads, and cron trigger
-   registration.
-10. Record Worker version IDs, D1 migration names, Tinybird deployment URL, commit SHA, and smoke results
-    in the GitHub deployment summary.
+6. Sync Worker secrets, then deploy Workers through Turborepo package deploy tasks. The Turbo graph
+   enforces service-binding order where it matters: Evaluation deploy waits for Event Ingest deploy.
+7. Verify cron trigger registration on Control Plane API and Analysis Workers.
+8. Run route and binding smoke checks before marking the GitHub deployment complete.
+9. Record Worker version IDs, D1 migration names, Tinybird deployment URL, commit SHA, and smoke results
+   in the GitHub deployment summary.
 
 Production smoke must assert `platformTarget = "production"` on every public Worker health or route
 probe that exposes it. A production deployment is not complete if the summary lacks route-level smoke
@@ -291,13 +309,15 @@ is compatible with current data.
       tasks.
 - [x] Add local hook wiring from [local-quality-gates.md](./local-quality-gates.md), including
       `verify:commit`, `verify:push`, Knip, and Gitleaks.
-- [ ] Add scripts for `shared-preview:deploy`, `shared-preview:smoke`, `shared-preview:reset`, and
+- [x] Add `deploy:shared-preview` and `deploy:production` scripts through Turborepo package tasks.
+- [ ] Add scripts for `shared-preview:smoke`, `shared-preview:reset`, and
       `rollback:production`.
 - [x] Add `deploy:production` and hook Tinybird deployment into it.
 - [x] Add Tinybird project files and `tinybird.config.json` with local-mode development.
 - [x] Add Blacksmith-backed GitHub workflows for CI and Gitleaks.
-- [ ] Add Blacksmith-backed GitHub workflows for shared preview deploy/reset and rollback.
-- [x] Add a Blacksmith-backed `deploy-production` workflow for the Tinybird production deploy leg.
+- [ ] Add Blacksmith-backed GitHub workflows for shared preview reset and rollback.
+- [x] Add a Blacksmith-backed `deploy-shared-preview` workflow.
+- [x] Add a Blacksmith-backed `deploy-production` workflow for Tinybird, D1, and Worker deploy legs.
 - [ ] Configure GitHub `preview` and `production` environments and required production reviewers.
 - [x] Wire `TURBO_TOKEN`, `TURBO_TEAM`, and `TURBO_REMOTE_CACHE_SIGNATURE_KEY` into CI/deploy workflows
       for signed Turborepo remote caching.
@@ -308,6 +328,9 @@ is compatible with current data.
 - Cloudflare Wrangler configuration and environment docs:
   <https://developers.cloudflare.com/workers/wrangler/configuration/>,
   <https://developers.cloudflare.com/workers/wrangler/environments/>
+- Cloudflare Workers custom domains and route docs:
+  <https://developers.cloudflare.com/workers/configuration/routing/custom-domains/>,
+  <https://developers.cloudflare.com/workers/configuration/routing/routes/>
 - Cloudflare Workers versions, deployments, previews, and rollback docs:
   <https://developers.cloudflare.com/workers/configuration/versions-and-deployments/>,
   <https://developers.cloudflare.com/workers/configuration/versions-and-deployments/rollbacks/>,

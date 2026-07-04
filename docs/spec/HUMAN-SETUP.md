@@ -92,8 +92,10 @@ None.
 `WORKOS_JWKS_URI` stored as GitHub environment variables in `preview` and `production`;
 `WORKOS_API_KEY` present as a GitHub environment secret in both environments. Metadata verified
 2026-06-27 via `/.well-known/oauth-authorization-server`; JWKS endpoint returned one key. Secret
-values were not read or printed. WorkOS dashboard redirect/callback settings are human-provided and
-will be exercised by the shared-preview / production auth smoke.
+values were not read or printed. Deploy workflows copy `WORKOS_CLIENT_ID` from the GitHub environment
+variable into the Auth API Worker binding during Worker secret sync so hosted device flow uses WorkOS
+without committing the client IDs in `wrangler.jsonc`. WorkOS dashboard redirect/callback settings
+are human-provided and will be exercised by the shared-preview / production auth smoke.
 
 ### 2. Cloudflare Turnstile widget (site key + secret)
 
@@ -119,6 +121,10 @@ bot-challenge verification will be exercised by shared-preview / production auth
 fixed by **[ADR-0038](../adr/0038-public-hostnames-are-a-fixed-human-owned-subdomain-map.md)**
 (human-owned; agents do not invent hostnames). What remains is agent-doable: route attachment in
 `wrangler.jsonc` per Worker, derived from the ADR table.
+
+Worker hostnames use Cloudflare Workers Custom Domains via Wrangler
+`routes[].custom_domain = true`. Cloudflare creates the DNS records and edge certificates after the
+Worker deploy; agents should not hand-create DNS records for those Worker hostnames.
 
 The hostnames also feed the WorkOS redirect URLs (item 1) and the Client-Key origin allow-list —
 take them from ADR-0038, not from a guess.
