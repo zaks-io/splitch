@@ -22,6 +22,10 @@ export interface ScrubbedEmitterConfig extends ObservabilitySecrets {
   readonly onSentryEvent?: (event: SentryEventLike) => void;
   /** Test hook: invoked with scrubbed Axiom rows immediately before ingest. */
   readonly onAxiomEvents?: (events: Record<string, unknown>[]) => void;
+  /** When set, delivers scrubbed exceptions to the surface Sentry client. */
+  readonly onSentryCaptureException?: (error: unknown, extra: Record<string, unknown>) => void;
+  /** Extends background work (e.g. Axiom flush) past the response when set. */
+  readonly scheduleBackgroundWork?: (work: Promise<unknown>) => void;
 }
 
 export interface ScrubbedEmitter {
@@ -46,18 +50,15 @@ export function createScrubbedEmitter(config: ScrubbedEmitterConfig): ScrubbedEm
   return {
     beforeSend,
     captureException(error, extra = {}) {
-      const event = beforeSend({
+      const scrubbedExtra = scrubValue(extra, scrubOptions) as Record<string, unknown>;
+      beforeSend({
         level: "error",
         message: error instanceof Error ? error.message : String(error),
-        extra: scrubValue(extra, scrubOptions) as Record<string, unknown>,
+        extra: scrubbedExtra,
         tags: { surface: config.surface },
         environment: config.environment,
       });
-      if (config.sentryDsn) {
-        // Real transport is wired by the surface-specific Sentry init; this path
-        // is for tests and for callers that only need the scrubbed event shape.
-        void event;
-      }
+      config.onSentryCaptureException?.(error, scrubbedExtra);
     },
     log(level, message, fields = {}) {
       const row = scrubValue(
@@ -73,7 +74,12 @@ export function createScrubbedEmitter(config: ScrubbedEmitterConfig): ScrubbedEm
       const events = [row];
       config.onAxiomEvents?.(events);
       if (config.axiomToken && config.axiomDataset) {
-        void ingestAxiomRows(config.axiomToken, config.axiomDataset, events);
+        const flush = ingestAxiomRows(config.axiomToken, config.axiomDataset, events);
+        if (config.scheduleBackgroundWork) {
+          config.scheduleBackgroundWork(flush);
+        } else {
+          void flush;
+        }
       }
     },
   };

@@ -66,9 +66,11 @@ describe("cross-surface observability wiring", () => {
         const root = WORKER_APP_ROOTS[surface.id];
         expect(root, `missing worker root for ${surface.id}`).toBeDefined();
         const indexSource = readFileSync(join(repoRoot, root as string, "src/index.ts"), "utf8");
-        expect(indexSource.includes(marker) || indexSource.includes("wrapWorkerHandler")).toBe(
-          true,
-        );
+        expect(
+          indexSource.includes(marker) ||
+            indexSource.includes("wrapWorkerHandler") ||
+            indexSource.includes("workerObservabilityWithWaitUntil"),
+        ).toBe(true);
         return;
       }
       if (surface.id === "cli") {

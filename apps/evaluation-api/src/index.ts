@@ -1,5 +1,9 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
-import { createWorkerObservability, wrapWorkerHandler } from "@splitch/observability/worker";
+import {
+  createWorkerObservability,
+  workerObservabilityWithWaitUntil,
+  wrapWorkerHandler,
+} from "@splitch/observability/worker";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import { AssignmentStoreDurableObject } from "./assignment/assignment-store-do";
 import { KvAssignmentStore } from "./assignment/kv-assignment-store";
@@ -21,7 +25,7 @@ const service = "splitch-evaluation-api";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 
 const handler = {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health" || url.pathname === "/") {
       return Response.json(
@@ -58,7 +62,10 @@ const handler = {
         token: env.SPLITCH_EVENT_INGEST_TOKEN,
       }),
       logger: console,
-      observability: createWorkerObservability(env, { surface: "evaluation-api" }),
+      observability: createWorkerObservability(
+        env,
+        workerObservabilityWithWaitUntil("evaluation-api", ctx),
+      ),
     });
     return app.fetch(request, env);
   },

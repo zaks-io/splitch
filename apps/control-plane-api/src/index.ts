@@ -3,6 +3,7 @@ import { createRepository } from "@splitch/db";
 import {
   createWorkerObservability,
   workerEmitter,
+  workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
 import { createApp } from "./app";
@@ -17,7 +18,7 @@ import { makeSessionStore } from "./session-store";
 const service = "splitch-control-plane-api";
 
 const handler = {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health" || url.pathname === "/") {
       return Response.json(
@@ -42,30 +43,41 @@ const handler = {
       credentialStore: env.CREDENTIAL_STORE,
       configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
       memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
-      observability: createWorkerObservability(env, { surface: "control-plane-api" }),
+      observability: createWorkerObservability(
+        env,
+        workerObservabilityWithWaitUntil("control-plane-api", ctx),
+      ),
     });
 
     return app.fetch(request, env);
   },
 
   scheduled(event, env, ctx): void {
-    ctx.waitUntil(runDemoReaper(env, event));
+    ctx.waitUntil(runDemoReaper(env, event, ctx));
   },
 } satisfies ExportedHandler<ControlPlaneApiEnv>;
 
 export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
 
-async function runDemoReaper(env: ControlPlaneApiEnv, event: ScheduledController): Promise<void> {
+async function runDemoReaper(
+  env: ControlPlaneApiEnv,
+  event: ScheduledController,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+): Promise<void> {
   const result = await createRepository(env.DB).identity.reapExpiredProvisionalOrganizations(
     new Date(event.scheduledTime).toISOString(),
   );
-  workerEmitter(env, { surface: "control-plane-api" }).log("info", "demo-reaper", {
-    service,
-    job: "demo-reaper",
-    cron: event.cron,
-    candidates: result.candidates,
-    reaped: result.reaped,
-  });
+  workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
+    "info",
+    "demo-reaper",
+    {
+      service,
+      job: "demo-reaper",
+      cron: event.cron,
+      candidates: result.candidates,
+      reaped: result.reaped,
+    },
+  );
 }
 
 export { ConfigStoreDurableObject };

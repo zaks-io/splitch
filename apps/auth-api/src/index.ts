@@ -1,6 +1,10 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
-import { createWorkerObservability, wrapWorkerHandler } from "@splitch/observability/worker";
+import {
+  createWorkerObservability,
+  workerObservabilityWithWaitUntil,
+  wrapWorkerHandler,
+} from "@splitch/observability/worker";
 import { createApp } from "./app";
 import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
@@ -23,9 +27,12 @@ const rateLimiter = makeRateLimiter();
 const idempotency = makeIdempotencyStore();
 
 const handler = {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
-    const observability = createWorkerObservability(env, { surface: "auth-api" });
+    const observability = createWorkerObservability(
+      env,
+      workerObservabilityWithWaitUntil("auth-api", ctx),
+    );
     if (url.pathname === "/health" || url.pathname === "/") {
       return Response.json(
         createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),

@@ -25,6 +25,18 @@ type SentryErrorEvent = import("@sentry/cloudflare").ErrorEvent;
 
 export interface WorkerObservabilityOptions {
   readonly surface: ObservabilitySurfaceId;
+  readonly scheduleBackgroundWork?: (work: Promise<unknown>) => void;
+}
+
+/** Bind Worker observability background work to `ctx.waitUntil`. */
+export function workerObservabilityWithWaitUntil(
+  surface: ObservabilitySurfaceId,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+): WorkerObservabilityOptions {
+  return {
+    surface,
+    scheduleBackgroundWork: (work) => ctx.waitUntil(work),
+  };
 }
 
 let sentryModule: SentryCloudflare | undefined;
@@ -192,6 +204,7 @@ export function workerEmitter(
   return createScrubbedEmitter({
     surface: options.surface,
     ...secrets,
+    scheduleBackgroundWork: options.scheduleBackgroundWork,
     ...hooks,
   });
 }

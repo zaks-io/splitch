@@ -5,6 +5,11 @@ import type { SentryEventLike } from "@splitch/privacy";
 
 let initialized = false;
 
+/** @internal Resets CLI Sentry init state between tests. */
+export function __resetCliObservabilityForTests(): void {
+  initialized = false;
+}
+
 export interface CliObservabilityEnv {
   SENTRY_DSN?: string;
   AXIOM_TOKEN?: string;
@@ -21,10 +26,9 @@ export function initCliObservability(
   env: CliObservabilityEnv = process.env as CliObservabilityEnv,
 ): ReturnType<typeof createScrubbedEmitter> {
   const secrets = secretsFromEnv(env);
-  const emitter = createScrubbedEmitter({ surface: "cli", ...secrets });
+  const scrubbedBeforeSend = createSentryBeforeSend({ surface: "cli" });
 
   if (!initialized && secrets.sentryDsn) {
-    const scrubbedBeforeSend = createSentryBeforeSend({ surface: "cli" });
     Sentry.init({
       dsn: secrets.sentryDsn,
       environment: secrets.environment,
@@ -35,7 +39,18 @@ export function initCliObservability(
     initialized = true;
   }
 
-  return emitter;
+  return createScrubbedEmitter({
+    surface: "cli",
+    ...secrets,
+    onSentryCaptureException: secrets.sentryDsn
+      ? (error, extra) => {
+          Sentry.captureException(error, {
+            extra,
+            tags: { surface: "cli" },
+          });
+        }
+      : undefined,
+  });
 }
 
 export function cliEmitter(

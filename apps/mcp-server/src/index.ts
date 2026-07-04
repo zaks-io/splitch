@@ -1,4 +1,8 @@
-import { createWorkerObservability, wrapWorkerHandler } from "@splitch/observability/worker";
+import {
+  createWorkerObservability,
+  workerObservabilityWithWaitUntil,
+  wrapWorkerHandler,
+} from "@splitch/observability/worker";
 import { handleMcpServerRequest } from "./mcp-handler";
 
 const service = "splitch-mcp-server";
@@ -14,8 +18,11 @@ type Env = {
 };
 
 const handler = {
-  async fetch(request, env): Promise<Response> {
-    const observability = createWorkerObservability(env, { surface: "mcp-server" });
+  async fetch(request, env, ctx): Promise<Response> {
+    const observability = createWorkerObservability(
+      env,
+      workerObservabilityWithWaitUntil("mcp-server", ctx),
+    );
     const url = new URL(request.url);
     observability.onRequest?.({
       requestId: request.headers.get("x-request-id") ?? "mcp-request",

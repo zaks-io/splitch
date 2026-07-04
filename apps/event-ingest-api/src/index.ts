@@ -1,5 +1,9 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
-import { createWorkerObservability, wrapWorkerHandler } from "@splitch/observability/worker";
+import {
+  createWorkerObservability,
+  workerObservabilityWithWaitUntil,
+  wrapWorkerHandler,
+} from "@splitch/observability/worker";
 import { handleIngest } from "./ingest";
 import type { Env } from "./types";
 
@@ -9,7 +13,10 @@ const ingestPath = "/api/internal/exposures";
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
-    const observability = createWorkerObservability(env, { surface: "event-ingest-api" });
+    const observability = createWorkerObservability(
+      env,
+      workerObservabilityWithWaitUntil("event-ingest-api", ctx),
+    );
 
     if (request.method === "GET" && url.pathname === "/") {
       return Response.json(

@@ -107,4 +107,29 @@ describe("createWorkerObservability onError", () => {
     expect(captureMessage).not.toHaveBeenCalled();
     expect(addBreadcrumb).not.toHaveBeenCalled();
   });
+
+  it("schedules Axiom flush through waitUntil when configured", () => {
+    const scheduled: Promise<unknown>[] = [];
+    const observability = createWorkerObservability(
+      {
+        AXIOM_TOKEN: "xaat-test-token",
+        AXIOM_DATASET: "splitch-logs",
+      },
+      {
+        surface: "evaluation-api",
+        scheduleBackgroundWork: (work) => {
+          scheduled.push(work);
+        },
+      },
+    );
+
+    observability.onRequest?.({
+      requestId: "req-axiom",
+      method: "GET",
+      path: "/health",
+    });
+
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0]).toBeInstanceOf(Promise);
+  });
 });
