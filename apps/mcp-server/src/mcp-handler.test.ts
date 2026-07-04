@@ -44,11 +44,11 @@ const validationError: ErrorResponse = {
   details: { issues: [{ path: ["body", "name"], message: "required" }] },
 };
 
-let cleanupServer: (() => Promise<void>) | undefined;
+let cleanupServers: (() => Promise<void>)[] = [];
 
 afterEach(async () => {
-  await cleanupServer?.();
-  cleanupServer = undefined;
+  await Promise.all(cleanupServers.map((cleanup) => cleanup()));
+  cleanupServers = [];
 });
 
 describe("mcp server Streamable HTTP transport", () => {
@@ -72,7 +72,7 @@ describe("mcp server Streamable HTTP transport", () => {
     const response = await mcp(
       "tools/call",
       { name: "flags_list", arguments: { appId: "app_local" } },
-      baseUrl,
+      { controlPlaneBaseUrl: baseUrl },
     );
     const body = (await response.json()) as JsonRpcSuccess<ToolResult<typeof flagPage>>;
 
@@ -117,7 +117,7 @@ describe("mcp server Streamable HTTP transport", () => {
           description: "Updated checkout",
         },
       },
-      baseUrl,
+      { controlPlaneBaseUrl: baseUrl },
     );
     const body = (await response.json()) as JsonRpcSuccess<ToolResult<typeof updatedFlag>>;
 
@@ -133,7 +133,9 @@ describe("mcp server Streamable HTTP transport", () => {
     });
     expect(body.result.structuredContent).toEqual(updatedFlag);
   });
+});
 
+describe("mcp server errors and config", () => {
   it("returns MCP method-not-found for an unknown tool name", async () => {
     const response = await mcp("tools/call", { name: "missing_tool", arguments: {} });
     const body = (await response.json()) as JsonRpcFailure;
@@ -156,7 +158,7 @@ describe("mcp server Streamable HTTP transport", () => {
           variants: [],
         },
       },
-      baseUrl,
+      { controlPlaneBaseUrl: baseUrl },
     );
     const body = (await response.json()) as JsonRpcSuccess<ToolResult<ErrorResponse>>;
 
@@ -201,7 +203,11 @@ interface ToolResult<T> {
 async function mcp(
   method: string,
   params?: unknown,
-  controlPlaneBaseUrl?: string,
+  baseUrls: {
+    controlPlaneBaseUrl?: string;
+    evaluationBaseUrl?: string;
+    analysisBaseUrl?: string;
+  } = {},
 ): Promise<Response> {
   return handleMcpServerRequest({
     request: new Request("https://mcp.test/mcp", {
@@ -211,7 +217,7 @@ async function mcp(
     }),
     service,
     platformTarget: "local",
-    controlPlaneBaseUrl,
+    ...baseUrls,
   });
 }
 
@@ -220,7 +226,7 @@ async function bootControlPlaneApi(seen: SeenRequest[]): Promise<string> {
     void handleControlPlaneRequest(request, response, seen);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  cleanupServer = () => new Promise<void>((resolve) => server.close(() => resolve()));
+  cleanupServers.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
   const address = server.address() as AddressInfo;
   return `http://127.0.0.1:${address.port}`;
 }

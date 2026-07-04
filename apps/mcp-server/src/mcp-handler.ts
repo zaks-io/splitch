@@ -2,7 +2,9 @@ import { createControlPlaneSdk } from "@splitch/control-plane-sdk";
 import {
   createHealthResponse,
   deriveMcpProtocolTools,
+  getRoute,
   parsePlatformTarget,
+  type RouteOwner,
 } from "@splitch/contracts";
 import {
   isJsonRpcRequest,
@@ -19,14 +21,21 @@ import {
 
 const protocolVersion = "2025-06-18";
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
+const defaultEvaluationBaseUrl = "http://127.0.0.1:8788";
+const defaultAnalysisBaseUrl = "http://127.0.0.1:8790";
 const tools = deriveMcpProtocolTools();
 const toolNames = new Set(tools.map((tool) => tool.name));
+type McpRoutableOwner = "control-plane-api" | "evaluation-api" | "analysis-api";
+type OperationSdk = ReturnType<typeof createControlPlaneSdk>;
+type OperationSdks = Record<McpRoutableOwner, OperationSdk>;
 
 export interface McpServerRequestOptions {
   readonly request: Request;
   readonly service: string;
   readonly platformTarget?: string;
   readonly controlPlaneBaseUrl?: string;
+  readonly evaluationBaseUrl?: string;
+  readonly analysisBaseUrl?: string;
   readonly controlPlaneFetch?: typeof fetch;
 }
 
@@ -52,12 +61,61 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
     return new Response(null, { status: 202, headers: corsHeaders() });
   }
 
-  const sdk = createControlPlaneSdk({
-    baseUrl: options.controlPlaneBaseUrl ?? defaultControlPlaneBaseUrl,
-    fetch: options.controlPlaneFetch,
-  });
-  const response = await dispatch(request.value, sdk, options.request.headers.get("authorization"));
+  const sdks = createOperationSdks(options);
+  const response = await dispatch(
+    request.value,
+    sdks,
+    options.request.headers.get("authorization"),
+  );
   return jsonResponse(response);
+}
+
+function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
+  const platformTarget = parsePlatformTarget(options.platformTarget);
+  return {
+    "control-plane-api": createControlPlaneSdk({
+      baseUrl: apiBaseUrl(
+        "CONTROL_PLANE_API_ORIGIN",
+        options.controlPlaneBaseUrl,
+        defaultControlPlaneBaseUrl,
+        platformTarget,
+      ),
+      fetch: options.controlPlaneFetch,
+    }),
+    "evaluation-api": createControlPlaneSdk({
+      baseUrl: apiBaseUrl(
+        "EVALUATION_API_ORIGIN",
+        options.evaluationBaseUrl,
+        defaultEvaluationBaseUrl,
+        platformTarget,
+      ),
+      fetch: options.controlPlaneFetch,
+    }),
+    "analysis-api": createControlPlaneSdk({
+      baseUrl: apiBaseUrl(
+        "ANALYSIS_API_ORIGIN",
+        options.analysisBaseUrl,
+        defaultAnalysisBaseUrl,
+        platformTarget,
+      ),
+      fetch: options.controlPlaneFetch,
+    }),
+  };
+}
+
+function apiBaseUrl(
+  envName: string,
+  configured: string | undefined,
+  localDefault: string,
+  platformTarget: string,
+): string {
+  if (configured) {
+    return configured;
+  }
+  if (platformTarget === "local" || platformTarget === "pr-ci") {
+    return localDefault;
+  }
+  throw new Error(`mcp-server: ${envName} is required for ${platformTarget}`);
 }
 
 function isHealthRequest(request: Request, url: URL): boolean {
@@ -95,7 +153,7 @@ async function readJsonRpcRequest(
 
 async function dispatch(
   request: JsonRpcRequest,
-  sdk: ReturnType<typeof createControlPlaneSdk>,
+  sdks: OperationSdks,
   authorization: string | null,
 ): Promise<JsonRpcResponse> {
   const id = request.id ?? null;
@@ -106,7 +164,7 @@ async function dispatch(
     return jsonRpcResult(id, { tools });
   }
   if (request.method === "tools/call") {
-    return callTool(id, request.params, sdk, authorization);
+    return callTool(id, request.params, sdks, authorization);
   }
   return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
 }
@@ -114,15 +172,20 @@ async function dispatch(
 async function callTool(
   id: JsonRpcId,
   params: unknown,
-  sdk: ReturnType<typeof createControlPlaneSdk>,
+  sdks: OperationSdks,
   authorization: string | null,
 ): Promise<JsonRpcResponse> {
   const call = parseToolCall(params);
   if (!call || !toolNames.has(call.name)) {
     return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
   }
+  const route = getRoute(call.name);
+  if (!route) {
+    return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
+  }
 
   try {
+    const sdk = sdkForOwner(sdks, route.owner);
     const result = await sdk.callOperation(call.name, call.arguments, { authorization });
     return jsonRpcResult(
       id,
@@ -133,6 +196,13 @@ async function callTool(
       message: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function sdkForOwner(sdks: OperationSdks, owner: RouteOwner): OperationSdk {
+  if (owner === "control-plane-api" || owner === "evaluation-api" || owner === "analysis-api") {
+    return sdks[owner];
+  }
+  throw new Error(`mcp-server: no API origin configured for route owner "${owner}"`);
 }
 
 function parseToolCall(params: unknown): { name: string; arguments: unknown } | null {
