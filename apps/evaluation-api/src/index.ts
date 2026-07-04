@@ -11,6 +11,7 @@ import {
 } from "./control-plane-auth.js";
 import { makeDataPlaneAuthResolver } from "./data-plane-auth.js";
 import type { EvaluationApiEnv } from "./env.js";
+import { makeHttpExposureSink } from "./exposure-sink.js";
 import { makeEnvSaltStore } from "./local-salt-store.js";
 import { KvProvider } from "./provider/kv-provider.js";
 
@@ -29,6 +30,7 @@ export default {
 
     const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
     const jwksUri = env.AUTH_JWKS_URI ?? `${controlPlaneAudience}/.well-known/jwks.json`;
+    const saltStore = makeEnvSaltStore(env);
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
         verifier: makeJwksVerifier({
@@ -43,8 +45,17 @@ export default {
       assignmentStore: new KvAssignmentStore(
         env.ASSIGNMENTS_KV,
         env.ASSIGNMENT_STORE_WRITER,
-        makeEnvSaltStore(env),
+        saltStore,
       ),
+      exposureAssembly: {
+        saltStore,
+        sourceId: env.SPLITCH_SOURCE_ID ?? "local",
+      },
+      exposureSink: makeHttpExposureSink({
+        endpoint: env.EVENT_INGEST_URL,
+        fetcher: env.EVENT_INGEST,
+        token: env.SPLITCH_EVENT_INGEST_TOKEN,
+      }),
       logger: console,
     });
     return app.fetch(request, env);

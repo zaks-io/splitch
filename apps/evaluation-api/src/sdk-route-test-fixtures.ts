@@ -10,8 +10,10 @@ import {
   type RunConfigKV,
 } from "@splitch/contracts";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
+import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures.js";
 import { createApp } from "./app.js";
 import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth.js";
+import type { AssembledExposure } from "./evaluate/exposure-assembly.js";
 import {
   APP_ID,
   ENVIRONMENT_ID,
@@ -39,7 +41,9 @@ const controlPlaneAuthResolver: AuthResolver = () => ({ ok: false, reason: "UNAU
 interface SdkRouteHarnessOptions {
   readonly liveRun?: boolean;
   readonly experimentOverrides?: Partial<ExperimentConfigKV>;
+  readonly exposureSink?: RecordingExposureSink;
   readonly flagOverrides?: Partial<FlagConfigKV>;
+  readonly holdovers?: Map<string, { runId: string; variant: string }>;
   readonly runOverrides?: Partial<RunConfigKV>;
 }
 
@@ -131,20 +135,29 @@ async function seededCredentialKv(): Promise<FakeKv> {
 export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) {
   const configKv = seededConfigKv(options);
   const credentialKv = await seededCredentialKv();
-  const assignmentStore = new RecordingAssignmentStore();
+  const assignmentStore = new RecordingAssignmentStore({ holdovers: options.holdovers });
+  const exposureSink = options.exposureSink ?? new RecordingExposureSink();
   const app = createApp({
     authResolver: controlPlaneAuthResolver,
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(credentialKv),
     rateLimiter: allowLimiter,
     provider: new KvProvider(configKv),
     assignmentStore,
+    exposureAssembly: {
+      saltStore: new StaticSaltStore(),
+      sourceId: "pop-route-test",
+      newEventId: () => "evt-route-1",
+      now: () => new Date("2026-07-03T00:00:00.000Z"),
+    },
+    exposureSink,
   });
-  return { app, assignmentStore, configKv, credentialKv };
+  return { app, assignmentStore, configKv, credentialKv, exposureSink };
 }
 
 export function sdkRouteInit(
   credential?: string,
   extraHeaders: Record<string, string> = {},
+  bodyOverrides: Record<string, unknown> = {},
 ): RequestInit {
   return {
     method: "POST",
@@ -158,6 +171,15 @@ export function sdkRouteInit(
       targetingKey: baseInput().evaluationContext.targetingKey,
       idType: baseInput().evaluationContext.idType,
       attributes: baseInput().evaluationContext.attributes,
+      ...bodyOverrides,
     }),
   };
+}
+
+export class RecordingExposureSink {
+  readonly writes: AssembledExposure[] = [];
+
+  async write(exposure: AssembledExposure): Promise<void> {
+    this.writes.push(exposure);
+  }
 }
