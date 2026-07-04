@@ -10,12 +10,19 @@ export function buildOperationInput(
   context: ResolvedContext,
 ): Record<string, unknown> {
   const input: Record<string, unknown> = {};
+  applyBodyJson(invocation.flags, input);
   applyContextFields(command, context, input);
   applyOrgFlag(invocation.flags, input);
   applyPositionalFields(command, invocation, input);
   applyNamedFlags(command, invocation.flags, input);
   applyCommandSpecificFields(command, invocation, input);
   return input;
+}
+
+function applyBodyJson(flags: ParsedGlobalFlags, input: Record<string, unknown>): void {
+  if (flags.bodyJson) {
+    Object.assign(input, JSON.parse(flags.bodyJson) as Record<string, unknown>);
+  }
 }
 
 function applyContextFields(
@@ -75,9 +82,6 @@ function applyNamedFlags(
   }
   if (flags.key) {
     input.key = flags.key;
-  }
-  if (flags.bodyJson) {
-    Object.assign(input, JSON.parse(flags.bodyJson) as Record<string, unknown>);
   }
   if (command.supportsConfirm && flags.confirm) {
     input.confirm = true;
