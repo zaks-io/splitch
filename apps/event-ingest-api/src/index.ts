@@ -18,7 +18,7 @@ const handler = {
       workerObservabilityWithWaitUntil("event-ingest-api", ctx),
     );
 
-    if (request.method === "GET" && url.pathname === "/") {
+    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
       return Response.json(
         createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
       );

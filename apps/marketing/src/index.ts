@@ -8,8 +8,13 @@ type Env = {
 };
 
 export default {
-  async fetch(_request, env): Promise<Response> {
+  async fetch(request, env): Promise<Response> {
+    const url = new URL(request.url);
     const health = createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET));
+
+    if (url.pathname === "/health") {
+      return Response.json(health);
+    }
 
     return new Response(
       `<!doctype html><html lang="en"><body><main><h1>splitch</h1><p class="${buttonClassName}">${health.service}</p></main></body></html>`,

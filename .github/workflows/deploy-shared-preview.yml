@@ -102,6 +102,12 @@ jobs:
       - name: Deploy shared preview
         run: pnpm deploy:shared-preview
 
+      - name: Smoke shared preview
+        env:
+          SPLITCH_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/shared-preview-smoke.md
+        run: |
+          SPLITCH_SMOKE_COMMIT_SHA="$(git rev-parse HEAD)" pnpm shared-preview:smoke
+
       - name: Summary
         if: always()
         run: |
@@ -117,4 +123,8 @@ jobs:
             echo "- Evaluation API: https://edge.preview.splitch.dev/"
             echo "- Event Ingest API: https://ingest.preview.splitch.dev/"
             echo "- MCP: https://mcp.preview.splitch.dev/"
+            if [ -f "${RUNNER_TEMP}/shared-preview-smoke.md" ]; then
+              echo
+              cat "${RUNNER_TEMP}/shared-preview-smoke.md"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
