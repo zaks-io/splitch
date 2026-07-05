@@ -24,6 +24,7 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 | [local-quality-gates.md](./local-quality-gates.md)               | Git hooks, CI-parity pre-push, Biome, TypeScript, Knip, Gitleaks, dependency-cruiser, local validation policy           |
 | [agent-verification.md](./agent-verification.md)                 | Slice-level Done proof, local Worker smoke, remote Cursor requirements, and verification ladder                         |
 | [deployment-pipeline.md](./deployment-pipeline.md)               | GitHub Actions on Blacksmith with Turborepo cache; PR CI with Tinybird Local; shared preview; production rollback rules |
+| [sdk-release.md](./sdk-release.md)                               | `@splitch/sdk` public npm release path: draft GitHub Release prep, trusted publish, tag namespace, provider setup       |
 
 Architecture map: [system-architecture.md](../../architecture/system-architecture.md) lays out the
 Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcement.

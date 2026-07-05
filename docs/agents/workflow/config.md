@@ -85,6 +85,9 @@ Simulation Smoke` runs package `stats:simulation -- --mode=smoke`.
   dispatched from `main`; Tinybird, D1, and Cloudflare Worker deploy legs are wired through
   Turborepo package tasks. See
   `docs/spec/platform/deployment-pipeline.md`.
+- SDK npm release: draft GitHub Release prep (`sdk-release` on Blacksmith) and trusted npm publish
+  (`sdk-publish` on GitHub-hosted runners) are specified in `docs/spec/platform/sdk-release.md`.
+  Publishing a GitHub Release is the only npm trigger; push tags alone do not publish.
 - Merge authority: Orchestrator may merge low/normal-risk PRs when the automation
   merge gate in `Pull Requests` passes. Human approval is required for the high-risk
   set named in `Pull Requests`, production deploys, and any PR with blocking review
@@ -117,9 +120,12 @@ real package API boundary.
 | `packages/ui`                | `@splitch/ui`                | shared UI primitive scaffold                |
 | `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files            |
 
-- All workspace packages are `version: 0.0.0`.
-- Apps and internal packages are private. `@splitch/sdk` is a public package scaffold with
-  `publishConfig.access = public`, but no npm publication workflow or credentials are configured.
+- All workspace packages are `version: 0.0.0` except `@splitch/sdk`, which carries the public npm
+  release version in `packages/sdk/package.json`.
+- Apps and internal packages are private. `@splitch/sdk` is the public data-plane SDK with
+  `publishConfig.access = public`. Release path is documented in
+  `docs/spec/platform/sdk-release.md`; workflow YAML is implemented in SPL-129 (`sdk-release`) and
+  SPL-130 (`sdk-publish`).
 
 ## Issue Tracker
 
@@ -382,9 +388,11 @@ real package API boundary.
       runs a real `wrangler d1 migrations apply --local` and is wired into
       `verify:push`; a malformed/duplicate-column migration fails the gate
       non-zero.
-- [ ] Public npm publishing workflow and credentials are unverified. `@splitch/sdk` exists as the
-      public data-plane SDK scaffold, but no package has been published. Verifier: create a release
-      slice with ownership, provenance, changelog, npm token/OIDC setup, and publish dry run.
+- [ ] SDK release workflows (`sdk-release`, `sdk-publish`) are specified in
+      `docs/spec/platform/sdk-release.md` but workflow YAML is not merged until SPL-129 and SPL-130
+      land. Verifier: merge SPL-129/130, run draft `sdk-release` on `main`, review artifacts, then
+      complete human-owned npm/GitHub provider setup from the first-release checklist before
+      publishing `@splitch/sdk@0.1.0`.
 - [x] Shared-preview and production deploy workflows are wired, Cloudflare
       D1/KV resource IDs are provisioned and committed, Worker secret sync is wired, hosted
       shared-preview smoke is wired, and the `shared_preview` Tinybird Branch exists. Rollback remains

@@ -89,6 +89,8 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 | `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                                             |
 | `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, and Turborepo Worker deploy tasks                    |
 | `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                              |
+| `sdk-release`           | manual dispatch                                     | per-workflow                     | specified: SDK draft GitHub Release prep on Blacksmith; no npm ([sdk-release.md](./sdk-release.md), SPL-129)                                              |
+| `sdk-publish`           | GitHub Release `published` for `sdk-v*` tags only   | GitHub-hosted npm job            | specified: npm trusted publishing with provenance; not on Blacksmith ([sdk-release.md](./sdk-release.md), SPL-130)                                        |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
@@ -351,6 +353,8 @@ is compatible with current data.
 - [x] Add Tinybird project files and `tinybird.config.json` with local-mode development.
 - [x] Add Blacksmith-backed GitHub workflows for CI and Gitleaks.
 - [ ] Add Blacksmith-backed GitHub workflows for shared preview reset and rollback.
+- [ ] Add Blacksmith-backed `sdk-release` and GitHub-hosted `sdk-publish` workflows (SPL-129,
+      SPL-130). Runbook: [sdk-release.md](./sdk-release.md).
 - [x] Add a Blacksmith-backed `deploy-shared-preview` workflow.
 - [x] Add a Blacksmith-backed `deploy-production` workflow for Tinybird, D1, and Worker deploy legs.
 - [x] Add Cloudflare and Sentry source-map upload wiring for Worker deploys.
