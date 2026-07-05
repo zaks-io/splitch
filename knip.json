@@ -1,12 +1,21 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreBinaries": ["gitleaks", "tb"],
+  "ignoreBinaries": ["gitleaks", "tb", "tsup"],
   "ignoreDependencies": ["cloudflare"],
   "stryker": {
     "config": ["stryker.base.json", "packages/*/stryker.config.json"]
   },
   "ignore": [".agents/skills/**"],
   "workspaces": {
+    "apps/control-panel": {
+      "vite": false,
+      "ignore": ["vite.config.ts"],
+      "ignoreDependencies": [
+        "@cloudflare/vite-plugin",
+        "@tailwindcss/vite",
+        "@vitejs/plugin-react"
+      ]
+    },
     "packages/sdk": {
       "ignoreDependencies": ["@splitch/contracts"]
     }
