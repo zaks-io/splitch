@@ -37,7 +37,7 @@ const MemberListResponse = z.object({ items: z.array(UserSchema) });
 const MemberResponse = UserSchema;
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
-export const accountRoutes: readonly ApiRouteContract[] = [
+export const accountRoutes = [
   defineApiRoute({
     operationId: "organizations_list",
     owner: OWNER,
@@ -283,4 +283,4 @@ export const accountRoutes: readonly ApiRouteContract[] = [
       "RESOURCE_NOT_EMPTY",
     ],
   }),
-];
+] as const satisfies readonly ApiRouteContract[];

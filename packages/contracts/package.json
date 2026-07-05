@@ -8,6 +8,14 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./route-types": {
+      "types": "./src/route-types.ts",
+      "default": "./src/route-types.ts"
+    },
+    "./client-app": {
+      "types": "./src/control-plane-client-app.ts",
+      "default": "./src/control-plane-client-app.ts"
     }
   },
   "files": [
@@ -23,6 +31,7 @@
   },
   "dependencies": {
     "@hono/zod-openapi": "^1.4.0",
+    "hono": "^4.12.27",
     "zod": "^4.4.3"
   }
 }

@@ -1,4 +1,4 @@
-import { createControlPlaneSdk } from "@splitch/control-plane-sdk";
+import { createMcpOperationAdapter } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import { parsePlatformTarget, type RouteOwner } from "@splitch/contracts";
 
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
@@ -7,7 +7,7 @@ const defaultAnalysisBaseUrl = "http://127.0.0.1:8790";
 const defaultAuthBaseUrl = "http://127.0.0.1:8789";
 
 type RoutableOwner = "control-plane-api" | "evaluation-api" | "analysis-api";
-export type OperationSdk = ReturnType<typeof createControlPlaneSdk>;
+export type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
 export type OperationSdks = Record<RoutableOwner, OperationSdk>;
 
 export interface SdkFactoryOptions {
@@ -22,7 +22,7 @@ export interface SdkFactoryOptions {
 export function createOperationSdks(options: SdkFactoryOptions = {}): OperationSdks {
   const platformTarget = parsePlatformTarget(options.platformTarget ?? "local");
   return {
-    "control-plane-api": createControlPlaneSdk({
+    "control-plane-api": createMcpOperationAdapter({
       baseUrl: apiBaseUrl(
         "CONTROL_PLANE_API_ORIGIN",
         options.controlPlaneBaseUrl,
@@ -31,7 +31,7 @@ export function createOperationSdks(options: SdkFactoryOptions = {}): OperationS
       ),
       fetch: options.fetch,
     }),
-    "evaluation-api": createControlPlaneSdk({
+    "evaluation-api": createMcpOperationAdapter({
       baseUrl: apiBaseUrl(
         "EVALUATION_API_ORIGIN",
         options.evaluationBaseUrl,
@@ -40,7 +40,7 @@ export function createOperationSdks(options: SdkFactoryOptions = {}): OperationS
       ),
       fetch: options.fetch,
     }),
-    "analysis-api": createControlPlaneSdk({
+    "analysis-api": createMcpOperationAdapter({
       baseUrl: apiBaseUrl(
         "ANALYSIS_API_ORIGIN",
         options.analysisBaseUrl,

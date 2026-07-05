@@ -52,7 +52,7 @@ const EntityPrivacyRequestSchema = z.object({
   targetingKey: z.string(),
 });
 
-export const privacyRoutes: readonly ApiRouteContract[] = [
+export const privacyRoutes = [
   defineApiRoute({
     operationId: "current_user_privacy_export",
     owner: OWNER,
@@ -142,4 +142,4 @@ export const privacyRoutes: readonly ApiRouteContract[] = [
     idempotency: "none",
     errors: ["PRIVACY_JOB_NOT_FOUND", "FORBIDDEN"],
   }),
-];
+] as const satisfies readonly ApiRouteContract[];
