@@ -1,4 +1,4 @@
-import { ResolutionDetailsSchema } from "@splitch/contracts";
+import { ResolutionDetailsSchema } from "./generated/contract-surface.js";
 import { describe, expect, it } from "vitest";
 import { errorCodeForStatus, synthesizeDetails } from "./resolution";
 import type { TransportResult } from "./transport";

@@ -3,7 +3,7 @@ import type {
   ResolutionDetails,
   ResolutionReason,
   VariantValue,
-} from "@splitch/contracts";
+} from "./generated/contract-surface.js";
 import type { TransportFailure, TransportResult } from "./transport";
 
 /**

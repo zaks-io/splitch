@@ -1,4 +1,4 @@
-import type { ErrorCode, ResolutionDetails, VariantValue } from "@splitch/contracts";
+import type { ErrorCode, ResolutionDetails, VariantValue } from "./generated/contract-surface.js";
 
 /**
  * Mirrors the contract's `EvaluationContext.attributes` value union

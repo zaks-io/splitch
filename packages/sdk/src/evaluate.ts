@@ -1,4 +1,4 @@
-import type { ResolutionDetails, VariantValue } from "@splitch/contracts";
+import type { ResolutionDetails, VariantValue } from "./generated/contract-surface.js";
 import { errorCodeForStatus, synthesizeDetails } from "./resolution";
 import type { SeenSet } from "./seen-set";
 import type { AttributeValue, Transport, TransportFailure, TransportRequest } from "./transport";

@@ -5,5 +5,10 @@
   "stryker": {
     "config": ["stryker.base.json", "packages/*/stryker.config.json"]
   },
-  "ignore": [".agents/skills/**"]
+  "ignore": [".agents/skills/**"],
+  "workspaces": {
+    "packages/sdk": {
+      "ignoreDependencies": ["@splitch/contracts"]
+    }
+  }
 }

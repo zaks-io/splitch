@@ -1,29 +1,42 @@
 {
   "name": "@splitch/sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Public JavaScript/TypeScript SDK for splitch data-plane evaluation",
   "type": "module",
   "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "files": [
-    "src"
+    "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "clean": "rm -rf dist coverage",
+    "generate": "tsup --config tsup.contract-surface.config.ts",
+    "build": "pnpm run generate && tsup --config tsup.config.ts",
+    "clean": "rm -rf dist coverage src/generated/contract-surface.js src/generated/contract-surface.d.ts",
     "lint": "biome lint src",
-    "test": "vitest run --passWithNoTests",
+    "test": "pnpm run generate && vitest run --passWithNoTests",
+    "test:consumer-smoke": "node scripts/consumer-smoke.mjs",
     "test:mutation": "stryker run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "pnpm run generate && tsc -p tsconfig.json --noEmit",
+    "pack:check": "pnpm run build && pnpm pack --dry-run",
+    "prepack": "pnpm run build && node scripts/sync-pack-manifest.mjs strip",
+    "postpack": "node scripts/sync-pack-manifest.mjs restore"
   },
   "publishConfig": {
     "access": "public"
   },
   "dependencies": {
-    "@splitch/contracts": "workspace:*"
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@splitch/contracts": "workspace:*",
+    "tsup": "^8.5.0"
   }
 }

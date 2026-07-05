@@ -36,7 +36,7 @@ module.exports = {
       severity: "error",
       comment:
         "@splitch/sdk is the public data-plane package. It must not import app code, control-plane transport, private contracts, or UI.",
-      from: { path: "^packages/sdk/" },
+      from: { path: "^packages/sdk/", pathNot: "^packages/sdk/scripts/" },
       to: { path: "^(apps|packages/(contracts|control-plane-sdk|ui))/" },
     },
     {
