@@ -5,7 +5,7 @@ import {
   ResolutionDetailsSchema,
   type ResolutionDetails,
   type VariantValue,
-} from "@splitch/contracts";
+} from "./generated/contract-surface.js";
 import type { EvaluateContext, EvaluateDeps, Logger } from "./evaluate";
 import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
 import { SeenSet } from "./seen-set";

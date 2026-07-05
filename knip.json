@@ -5,5 +5,18 @@
   "stryker": {
     "config": ["stryker.base.json", "packages/*/stryker.config.json"]
   },
-  "ignore": [".agents/skills/**"]
+  "ignore": [".agents/skills/**"],
+  "workspaces": {
+    "apps/control-panel": {
+      "vite": false,
+      "ignore": ["vite.config.ts"],
+      "ignoreDependencies": ["@cloudflare/vite-plugin", "@tailwindcss/vite", "@vitejs/plugin-react"]
+    },
+    "packages/contracts": {
+      "entry": ["src/sdk-data-plane-surface.ts", "src/leaves/**/*.ts"]
+    },
+    "packages/sdk": {
+      "entry": ["scripts/pack-release.mjs"]
+    }
+  }
 }

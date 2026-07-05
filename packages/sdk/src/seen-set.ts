@@ -1,4 +1,4 @@
-import type { VariantValue } from "@splitch/contracts";
+import type { VariantValue } from "./generated/contract-surface.js";
 
 /**
  * Per-instance in-memory Exposure dedup cache (docs/spec/sdk/seen-set.md). It is
