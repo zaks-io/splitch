@@ -1,3 +1,5 @@
+import { Toaster } from "@splitch/ui/components/sonner";
+import { TooltipProvider } from "@splitch/ui/components/tooltip";
 import { HeadContent, Link, Scripts, createRootRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import appCss from "../styles/app.css?url";
@@ -30,30 +32,42 @@ function RootDocument({ children }: { children: ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body className="min-h-screen bg-neutral-50 text-neutral-900 antialiased">
-        <div className="flex min-h-screen flex-col">
-          <header className="border-neutral-200 border-b bg-neutral-0">
-            <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-              <Link
-                to="/"
-                activeOptions={{ exact: true }}
-                activeProps={{ className: "text-brand-control-700" }}
-                className="font-semibold text-lg"
-              >
-                splitch
-              </Link>
-              <Link
-                to="/$orgSlug/$appSlug/$env"
-                params={demoScope}
-                activeProps={{ className: "border-brand-control-300 text-brand-control-700" }}
-                className="rounded-md border border-neutral-200 px-3 py-2 text-sm"
-              >
-                demo scope
-              </Link>
-            </nav>
-          </header>
-          <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">{children}</div>
-        </div>
+      <body className="min-h-screen bg-background text-foreground antialiased">
+        <TooltipProvider>
+          <div className="flex min-h-screen flex-col">
+            <header className="border-border border-b bg-card">
+              <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
+                <Link
+                  to="/"
+                  activeOptions={{ exact: true }}
+                  activeProps={{ className: "text-primary" }}
+                  className="font-semibold text-lg"
+                >
+                  splitch
+                </Link>
+                <div className="flex items-center gap-2">
+                  <Link
+                    to="/kitchen-sink"
+                    activeProps={{ className: "border-primary/40 text-primary" }}
+                    className="rounded-md border border-border px-3 py-2 text-sm"
+                  >
+                    kitchen sink
+                  </Link>
+                  <Link
+                    to="/$orgSlug/$appSlug/$env"
+                    params={demoScope}
+                    activeProps={{ className: "border-primary/40 text-primary" }}
+                    className="rounded-md border border-border px-3 py-2 text-sm"
+                  >
+                    demo scope
+                  </Link>
+                </div>
+              </nav>
+            </header>
+            <div className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">{children}</div>
+          </div>
+          <Toaster />
+        </TooltipProvider>
         <Scripts />
       </body>
     </html>

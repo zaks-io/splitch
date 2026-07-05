@@ -9,10 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as KitchenSinkRouteImport } from './routes/kitchen-sink'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as OrgSlugAppSlugEnvRouteImport } from './routes/$orgSlug.$appSlug.$env'
 
+const KitchenSinkRoute = KitchenSinkRouteImport.update({
+  id: '/kitchen-sink',
+  path: '/kitchen-sink',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HealthRoute = HealthRouteImport.update({
   id: '/health',
   path: '/health',
@@ -32,35 +38,46 @@ const OrgSlugAppSlugEnvRoute = OrgSlugAppSlugEnvRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
+  '/kitchen-sink': typeof KitchenSinkRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/health' | '/$orgSlug/$appSlug/$env'
+  fullPaths: '/' | '/health' | '/kitchen-sink' | '/$orgSlug/$appSlug/$env'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/health' | '/$orgSlug/$appSlug/$env'
-  id: '__root__' | '/' | '/health' | '/$orgSlug/$appSlug/$env'
+  to: '/' | '/health' | '/kitchen-sink' | '/$orgSlug/$appSlug/$env'
+  id: '__root__' | '/' | '/health' | '/kitchen-sink' | '/$orgSlug/$appSlug/$env'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HealthRoute: typeof HealthRoute
+  KitchenSinkRoute: typeof KitchenSinkRoute
   OrgSlugAppSlugEnvRoute: typeof OrgSlugAppSlugEnvRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/kitchen-sink': {
+      id: '/kitchen-sink'
+      path: '/kitchen-sink'
+      fullPath: '/kitchen-sink'
+      preLoaderRoute: typeof KitchenSinkRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/health': {
       id: '/health'
       path: '/health'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
+  KitchenSinkRoute: KitchenSinkRoute,
   OrgSlugAppSlugEnvRoute: OrgSlugAppSlugEnvRoute,
 }
 export const routeTree = rootRouteImport

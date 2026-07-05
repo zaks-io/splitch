@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "imports": {
+    "#components/*": "./src/components/*.tsx",
+    "#lib/*": "./src/lib/*.ts"
+  },
   "scripts": {
     "build": "vite build && tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist coverage .output .wrangler",

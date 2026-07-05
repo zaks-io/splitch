@@ -1,4 +1,4 @@
-@import "../../../../packages/ui/src/theme.css";
+@import "@splitch/ui/theme.css";
 
 @layer base {
   body {
