@@ -42,9 +42,11 @@ interface CloudflareTurnstileOptions {
   endpoint?: string;
   fetcher?: typeof fetch;
   secret: string;
+  timeoutMs?: number;
 }
 
 const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+const SITEVERIFY_TIMEOUT_MS = 5_000;
 const LOCAL_TEST_TARGETS = new Set<string | undefined>([undefined, "local", "pr-ci"]);
 const HOSTED_TARGETS = new Set<string | undefined>(["shared-preview", "production"]);
 
@@ -147,6 +149,7 @@ async function postSiteverify(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(siteverifyBody(options.secret, token, remoteIp)),
+      signal: timeoutSignal(options.timeoutMs ?? SITEVERIFY_TIMEOUT_MS),
     });
   } catch {
     throw new OAuthError("access_denied", "Turnstile verification failed");
@@ -166,4 +169,16 @@ function siteverifyBody(
 
 function isSiteverifyResponse(value: unknown): value is TurnstileSiteverifyResponse {
   return typeof value === "object" && value !== null;
+}
+
+function timeoutSignal(timeoutMs: number): AbortSignal {
+  const timeout = (AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal })
+    .timeout;
+  if (timeout) {
+    return timeout(timeoutMs);
+  }
+
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), timeoutMs);
+  return controller.signal;
 }

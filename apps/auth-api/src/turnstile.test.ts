@@ -79,6 +79,7 @@ describe("Cloudflare Turnstile siteverify adapter", () => {
     expect(init).toMatchObject({
       method: "POST",
       headers: { "content-type": "application/json" },
+      signal: expect.any(AbortSignal),
     });
     expect(JSON.parse(String(init?.body))).toEqual({
       secret: "turnstile-secret",
