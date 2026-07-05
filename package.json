@@ -14,7 +14,7 @@
     "duplicates": "jscpd --config .jscpd.json --exit-code --no-tips --no-colors apps packages scripts",
     "format:check": "biome format . && prettier --check \"**/*.md\"",
     "format:write": "biome format --write . && prettier --write \"**/*.md\"",
-    "knip": "knip --treat-config-hints-as-errors",
+    "knip": "pnpm --filter @splitch/sdk generate && knip --treat-config-hints-as-errors",
     "lint": "turbo run lint",
     "prepare": "lefthook install",
     "audit": "pnpm audit --audit-level=high",
