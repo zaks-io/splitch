@@ -24,18 +24,15 @@ try {
   run("npx", ["tsup", "--config", "tsup.contract-surface.config.ts"], { cwd: packageRoot });
   run("npx", ["tsup", "--config", "tsup.config.ts"], { cwd: packageRoot });
 
-  const packOutput = execFileSync("pnpm", ["pack", "--pack-destination", consumerRoot], {
+  const packOutput = execFileSync("node", ["scripts/pack-release.mjs", consumerRoot], {
     cwd: packageRoot,
     encoding: "utf8",
   });
-  const tarballLine = packOutput
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.endsWith(".tgz"));
-  if (!tarballLine) {
-    throw new Error(`pack did not report a tarball path:\n${packOutput}`);
+  const tarballName = packOutput.trim().split("\n").at(-1);
+  if (!tarballName?.endsWith(".tgz")) {
+    throw new Error(`pack-release did not report a tarball path:\n${packOutput}`);
   }
-  const tarballPath = resolve(consumerRoot, tarballLine);
+  const tarballPath = resolve(consumerRoot, tarballName);
 
   writeFileSync(
     join(consumerRoot, "package.json"),

@@ -14,7 +14,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.map"
   ],
   "scripts": {
     "generate": "node scripts/sync-pack-manifest.mjs restore && tsup --config tsup.contract-surface.config.ts",
@@ -25,9 +26,10 @@
     "test:consumer-smoke": "node scripts/consumer-smoke.mjs",
     "test:mutation": "stryker run",
     "typecheck": "pnpm run generate && tsc -p tsconfig.json --noEmit",
-    "pack:check": "pnpm run build && pnpm pack --dry-run",
-    "prepack": "pnpm run build && node scripts/sync-pack-manifest.mjs strip",
-    "postpack": "node scripts/sync-pack-manifest.mjs restore"
+    "pack:check": "node scripts/pack-check.mjs",
+    "prepack": "pnpm run build",
+    "prepublishOnly": "node scripts/sync-pack-manifest.mjs strip",
+    "postpublish": "node scripts/sync-pack-manifest.mjs restore"
   },
   "publishConfig": {
     "access": "public"

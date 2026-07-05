@@ -10,6 +10,6 @@ export default defineConfig({
   bundle: true,
   splitting: false,
   clean: true,
-  sourcemap: true,
+  sourcemap: false,
   external: ["zod"],
 });
