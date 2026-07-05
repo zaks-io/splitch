@@ -1,0 +1,198 @@
+import { describe, expect, it } from "vitest";
+import { OAUTH_STATE_COOKIE_NAME, consumeOAuthState, createOAuthState } from "./oauth-state";
+import {
+  SESSION_COOKIE_NAME,
+  type StoredSession,
+  createSession,
+  loadSessionFromCookieHeader,
+  sessionKey,
+} from "./session";
+
+const NOW = Date.UTC(2026, 6, 5, 12, 0, 0);
+
+describe("control-panel session cookie and KV validation", () => {
+  it("stores an opaque Secure HttpOnly session cookie that maps to one KV principal", async () => {
+    const kv = new MemoryKv();
+    const created = await createSession(kv.namespace(), sessionPrincipal(), NOW);
+
+    expect(created.cookie).toContain(`${SESSION_COOKIE_NAME}=spl_`);
+    expect(created.cookie).toContain("HttpOnly");
+    expect(created.cookie).toContain("Secure");
+    expect(created.cookie).toContain("SameSite=Lax");
+    expect(created.cookie).toContain("Path=/");
+    expect(created.cookie).not.toContain("user_1");
+    expect(created.cookie).not.toContain("app_1");
+
+    expect(kv.store.size).toBe(1);
+    expect(kv.store.has(sessionKey(created.tokenHash))).toBe(true);
+
+    const loaded = await loadSessionFromCookieHeader(kv.namespace(), created.cookie, NOW);
+    expect(loaded).toMatchObject({
+      ok: true,
+      session: {
+        userId: "user_1",
+        orgs: [
+          {
+            orgId: "org_1",
+            orgSlug: "acme",
+            apps: [{ appId: "app_1", appSlug: "checkout-api" }],
+          },
+        ],
+      },
+    });
+  });
+
+  it("rejects a tampered token without returning a principal", async () => {
+    const kv = new MemoryKv();
+    await createSession(kv.namespace(), sessionPrincipal(), NOW);
+
+    const tampered = `${SESSION_COOKIE_NAME}=spl_${"a".repeat(64)}`;
+
+    await expect(loadSessionFromCookieHeader(kv.namespace(), tampered, NOW)).resolves.toEqual({
+      ok: false,
+      reason: "tampered",
+    });
+  });
+
+  it("deletes expired sessions and fails loud", async () => {
+    const kv = new MemoryKv();
+    const created = await createSession(kv.namespace(), sessionPrincipal(), NOW);
+    kv.store.set(
+      sessionKey(created.tokenHash),
+      JSON.stringify({
+        ...created.session,
+        expiresAt: Math.floor(NOW / 1000) - 1,
+      }),
+    );
+
+    const loaded = await loadSessionFromCookieHeader(kv.namespace(), created.cookie, NOW);
+
+    expect(loaded).toEqual({ ok: false, reason: "expired" });
+    expect(kv.store.has(sessionKey(created.tokenHash))).toBe(false);
+  });
+
+  it("deletes malformed session principals with hidden scope fields", async () => {
+    const kv = new MemoryKv();
+    const created = await createSession(kv.namespace(), sessionPrincipal(), NOW);
+    const sessionWithNestedScope = structuredClone(created.session);
+    Object.assign(sessionWithNestedScope.orgs[0]?.apps[0] ?? {}, {
+      environmentId: "hidden-default-env",
+    });
+    kv.store.set(
+      sessionKey(created.tokenHash),
+      JSON.stringify({
+        ...sessionWithNestedScope,
+        appId: "hidden-default-app",
+      }),
+    );
+
+    const loaded = await loadSessionFromCookieHeader(kv.namespace(), created.cookie, NOW);
+
+    expect(loaded).toEqual({ ok: false, reason: "invalid" });
+    expect(kv.store.has(sessionKey(created.tokenHash))).toBe(false);
+  });
+});
+
+describe("OAuth state cookie", () => {
+  it("keeps returnTo server-side and requires callback state to match the cookie", async () => {
+    const kv = new MemoryKv();
+    const state = await createOAuthState(kv.namespace(), "/acme/checkout-api/dev", NOW);
+
+    expect(state.cookie).toContain(`${OAUTH_STATE_COOKIE_NAME}=spl_`);
+    expect(state.cookie).toContain("HttpOnly");
+    expect(state.cookie).toContain("Secure");
+    expect(state.cookie).not.toContain("checkout-api");
+
+    const request = new Request(`https://app.splitch.dev/auth/callback?state=${state.state}`, {
+      headers: { cookie: state.cookie },
+    });
+    const consumed = await consumeOAuthState(kv.namespace(), request, state.state, NOW);
+
+    expect(consumed).toMatchObject({
+      ok: true,
+      returnTo: "/acme/checkout-api/dev",
+    });
+    expect(kv.store.size).toBe(0);
+  });
+
+  it("rejects mismatched callback state", async () => {
+    const kv = new MemoryKv();
+    const state = await createOAuthState(kv.namespace(), "/", NOW);
+    const request = new Request("https://app.splitch.dev/auth/callback?state=wrong", {
+      headers: { cookie: state.cookie },
+    });
+
+    await expect(
+      consumeOAuthState(kv.namespace(), request, `spl_${"b".repeat(64)}`, NOW),
+    ).resolves.toMatchObject({
+      ok: false,
+    });
+  });
+
+  it("sanitizes the server-side return path again when state is consumed", async () => {
+    const kv = new MemoryKv();
+    const state = await createOAuthState(kv.namespace(), "/", NOW);
+    const [key] = kv.store.keys();
+    if (!key) {
+      throw new Error("expected OAuth state to be stored");
+    }
+    kv.store.set(
+      key,
+      JSON.stringify({
+        expiresAt: Math.floor(NOW / 1000) + 60,
+        returnTo: "https://evil.example/phish",
+      }),
+    );
+    const request = new Request(`https://app.splitch.dev/auth/callback?state=${state.state}`, {
+      headers: { cookie: state.cookie },
+    });
+
+    await expect(
+      consumeOAuthState(kv.namespace(), request, state.state, NOW),
+    ).resolves.toMatchObject({
+      ok: true,
+      returnTo: "/",
+    });
+  });
+});
+
+function sessionPrincipal(): Omit<StoredSession, "expiresAt"> {
+  return {
+    userId: "user_1",
+    workosSessionId: "workos_session_1",
+    orgs: [
+      {
+        orgId: "org_1",
+        orgRole: "admin",
+        orgSlug: "acme",
+        apps: [
+          {
+            appId: "app_1",
+            appSlug: "checkout-api",
+            role: "viewer",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+class MemoryKv {
+  readonly store = new Map<string, string>();
+
+  namespace(): KVNamespace {
+    return this as unknown as KVNamespace;
+  }
+
+  async get(key: string): Promise<string | null> {
+    return this.store.get(key) ?? null;
+  }
+
+  async put(key: string, value: string): Promise<void> {
+    this.store.set(key, value);
+  }
+
+  async delete(key: string): Promise<void> {
+    this.store.delete(key);
+  }
+}

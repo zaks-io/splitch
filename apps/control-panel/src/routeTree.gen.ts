@@ -12,6 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as KitchenSinkRouteImport } from './routes/kitchen-sink'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthLogoutRouteImport } from './routes/auth.logout'
+import { Route as AuthLoginRouteImport } from './routes/auth.login'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as OrgSlugAppSlugEnvRouteImport } from './routes/$orgSlug.$appSlug.$env'
 
 const KitchenSinkRoute = KitchenSinkRouteImport.update({
@@ -29,6 +32,21 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthLogoutRoute = AuthLogoutRouteImport.update({
+  id: '/auth/logout',
+  path: '/auth/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthLoginRoute = AuthLoginRouteImport.update({
+  id: '/auth/login',
+  path: '/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrgSlugAppSlugEnvRoute = OrgSlugAppSlugEnvRouteImport.update({
   id: '/$orgSlug/$appSlug/$env',
   path: '/$orgSlug/$appSlug/$env',
@@ -39,12 +57,18 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/logout': typeof AuthLogoutRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/logout': typeof AuthLogoutRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRoute
 }
 export interface FileRoutesById {
@@ -52,20 +76,48 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/logout': typeof AuthLogoutRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/health' | '/kitchen-sink' | '/$orgSlug/$appSlug/$env'
+  fullPaths:
+    | '/'
+    | '/health'
+    | '/kitchen-sink'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/logout'
+    | '/$orgSlug/$appSlug/$env'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/health' | '/kitchen-sink' | '/$orgSlug/$appSlug/$env'
-  id: '__root__' | '/' | '/health' | '/kitchen-sink' | '/$orgSlug/$appSlug/$env'
+  to:
+    | '/'
+    | '/health'
+    | '/kitchen-sink'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/logout'
+    | '/$orgSlug/$appSlug/$env'
+  id:
+    | '__root__'
+    | '/'
+    | '/health'
+    | '/kitchen-sink'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/logout'
+    | '/$orgSlug/$appSlug/$env'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HealthRoute: typeof HealthRoute
   KitchenSinkRoute: typeof KitchenSinkRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthLoginRoute: typeof AuthLoginRoute
+  AuthLogoutRoute: typeof AuthLogoutRoute
   OrgSlugAppSlugEnvRoute: typeof OrgSlugAppSlugEnvRoute
 }
 
@@ -92,6 +144,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/logout': {
+      id: '/auth/logout'
+      path: '/auth/logout'
+      fullPath: '/auth/logout'
+      preLoaderRoute: typeof AuthLogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/login': {
+      id: '/auth/login'
+      path: '/auth/login'
+      fullPath: '/auth/login'
+      preLoaderRoute: typeof AuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/$orgSlug/$appSlug/$env': {
       id: '/$orgSlug/$appSlug/$env'
       path: '/$orgSlug/$appSlug/$env'
@@ -106,6 +179,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
   KitchenSinkRoute: KitchenSinkRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
+  AuthLoginRoute: AuthLoginRoute,
+  AuthLogoutRoute: AuthLogoutRoute,
   OrgSlugAppSlugEnvRoute: OrgSlugAppSlugEnvRoute,
 }
 export const routeTree = rootRouteImport

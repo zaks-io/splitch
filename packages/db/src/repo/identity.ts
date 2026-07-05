@@ -88,6 +88,10 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
       return db.select().from(orgMemberships).where(eq(orgMemberships.orgId, orgId));
     },
 
+    listOrgMembershipsForUser(userId: string) {
+      return db.select().from(orgMemberships).where(eq(orgMemberships.userId, userId));
+    },
+
     getOrgMembership(orgId: string, userId: string) {
       return db
         .select()

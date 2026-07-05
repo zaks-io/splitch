@@ -4,12 +4,6 @@ import { HeadContent, Link, Scripts, createRootRoute } from "@tanstack/react-rou
 import type { ReactNode } from "react";
 import appCss from "../styles/app.css?url";
 
-const demoScope = {
-  orgSlug: "demo-org",
-  appSlug: "checkout-api",
-  env: "dev",
-};
-
 export const Route = createRootRoute({
   head: () => ({
     meta: [
@@ -53,14 +47,12 @@ function RootDocument({ children }: { children: ReactNode }) {
                   >
                     kitchen sink
                   </Link>
-                  <Link
-                    to="/$orgSlug/$appSlug/$env"
-                    params={demoScope}
-                    activeProps={{ className: "border-primary/40 text-primary" }}
+                  <a
                     className="rounded-md border border-border px-3 py-2 text-sm"
+                    href="/auth/logout"
                   >
-                    demo scope
-                  </Link>
+                    sign out
+                  </a>
                 </div>
               </nav>
             </header>
