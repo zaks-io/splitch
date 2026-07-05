@@ -13,3 +13,101 @@
       color var(--duration-fast) var(--ease-standard);
   }
 }
+
+@layer components {
+  .hero-shell {
+    min-height: 92vh;
+    color: var(--color-neutral-50);
+    background:
+      linear-gradient(90deg, rgb(37 99 217 / 0.24) 0 49.9%, rgb(180 240 0 / 0.18) 50.1% 100%),
+      radial-gradient(circle at 50% 50%, rgb(255 255 255 / 0.08), transparent 32rem),
+      var(--color-neutral-950);
+  }
+
+  .hero-split {
+    border: 1px solid rgb(255 255 255 / 0.1);
+    border-radius: var(--radius-lg);
+    background: rgb(255 255 255 / 0.045);
+    box-shadow: var(--shadow-lg);
+    padding: 1.25rem;
+  }
+
+  .cta-shell {
+    border-color: rgb(255 255 255 / 0.1);
+    color: var(--color-neutral-50);
+    background: var(--color-neutral-950);
+  }
+
+  .inverse-cta {
+    border-color: rgb(255 255 255 / 0.22);
+    background: rgb(255 255 255 / 0.08);
+    color: var(--color-neutral-50);
+  }
+
+  .inverse-cta:hover {
+    background: rgb(255 255 255 / 0.14);
+    color: var(--color-neutral-0);
+  }
+
+  .feature-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--card);
+    padding: 1.25rem;
+  }
+
+  .feature-index {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    place-items: center;
+    border-radius: var(--radius-md);
+    background: var(--accent);
+    color: var(--accent-foreground);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+  }
+
+  .rigor-panel,
+  .quickstart-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--card);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .rigor-panel {
+    padding: 1.5rem;
+  }
+
+  .rigor-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.75rem;
+    color: var(--foreground);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-normal);
+  }
+
+  .quickstart-card {
+    display: grid;
+    align-content: start;
+    gap: 0.75rem;
+    min-height: 13rem;
+    padding: 1.25rem;
+  }
+
+  @media (max-width: 640px) {
+    .hero-shell {
+      min-height: auto;
+    }
+
+    .feature-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}
