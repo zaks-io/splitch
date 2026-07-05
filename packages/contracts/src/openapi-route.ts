@@ -104,6 +104,28 @@ export type HonoToOpenApiPath<S extends string> =
       ? `${Head}/{${Name}}`
       : S;
 
+function buildOpenApiRequestConfig(
+  request: ApiRouteRequest | undefined,
+): RouteConfig["request"] | undefined {
+  if (!request) {
+    return undefined;
+  }
+  if (request.params) {
+    return {
+      params: request.params,
+      ...(request.query ? { query: request.query } : {}),
+      ...(request.body ? { body: { content: { [JSON_CONTENT]: { schema: request.body } } } } : {}),
+    };
+  }
+  if (request.query) {
+    return { query: request.query };
+  }
+  if (request.body) {
+    return { body: { content: { [JSON_CONTENT]: { schema: request.body } } } };
+  }
+  return undefined;
+}
+
 export function defineApiRoute<const Input extends DefineApiRouteInput>(input: Input) {
   const contract = defineRoute({
     id: input.operationId,
@@ -128,19 +150,7 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
       path: honoPathToOpenApiPath(input.path) as HonoToOpenApiPath<Input["path"]>,
       operationId: input.operationId,
       summary: input.summary,
-      request: input.request?.params
-        ? {
-            params: input.request.params,
-            ...(input.request.query ? { query: input.request.query } : {}),
-            ...(input.request.body
-              ? { body: { content: { [JSON_CONTENT]: { schema: input.request.body } } } }
-              : {}),
-          }
-        : input.request?.query
-          ? { query: input.request.query }
-          : input.request?.body
-            ? { body: { content: { [JSON_CONTENT]: { schema: input.request.body } } } }
-            : undefined,
+      request: buildOpenApiRequestConfig(input.request),
       responses: {
         200: {
           description: input.summary,

@@ -1,17 +1,17 @@
 import { z } from "@hono/zod-openapi";
 import {
-  CreateExperimentRequestSchema,
+  type CreateExperimentRequestSchema,
   ExperimentResponseSchema,
-  PatchExperimentRequestSchema,
+  type PatchExperimentRequestSchema,
   RunResponseSchema,
-  StartRunRequestSchema,
+  type StartRunRequestSchema,
 } from "./resource-envelopes-experiment";
 import {
-  CreateFlagRequestSchema,
+  type CreateFlagRequestSchema,
   FlagResponseSchema,
-  PatchFlagRequestSchema,
+  type PatchFlagRequestSchema,
 } from "./resource-envelopes-flag";
-import { AppParams, EnvParams, ExperimentParams, FlagParams } from "./routes/route-shapes";
+import type { AppParams, EnvParams, ExperimentParams, FlagParams } from "./routes/route-shapes";
 
 /**
  * Typed flat inputs/outputs for representative Control Plane operations.

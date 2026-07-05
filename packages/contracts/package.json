@@ -14,8 +14,8 @@
       "default": "./src/route-types.ts"
     },
     "./client-app": {
-      "types": "./src/client-app.ts",
-      "default": "./src/client-app.ts"
+      "types": "./src/control-plane-client-app.ts",
+      "default": "./src/control-plane-client-app.ts"
     }
   },
   "files": [
