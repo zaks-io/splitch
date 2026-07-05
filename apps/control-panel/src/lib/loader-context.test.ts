@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   AccessDeniedError,
-  ScopedNotFoundError,
   type EnvironmentResolver,
   resolveScopedLoaderContext,
 } from "./loader-context";
@@ -42,7 +41,23 @@ describe("scoped loader context", () => {
     expect(calls).toBe(0);
   });
 
-  it("returns 403 before environment lookup when app membership does not match", async () => {
+  it("returns 403 for a stale org slug after the Organization URL handle changes", async () => {
+    let calls = 0;
+    const resolver = resolverFor(null, () => {
+      calls += 1;
+    });
+
+    await expect(
+      resolveScopedLoaderContext(
+        sessionPrincipal({ orgSlug: "acme-renamed" }),
+        { orgSlug: "acme", appSlug: "checkout-api", env: "dev" },
+        resolver,
+      ),
+    ).rejects.toBeInstanceOf(AccessDeniedError);
+    expect(calls).toBe(0);
+  });
+
+  it("returns 404 before environment lookup when app slug is not under the org", async () => {
     let calls = 0;
     const resolver = resolverFor(null, () => {
       calls += 1;
@@ -54,11 +69,11 @@ describe("scoped loader context", () => {
         { orgSlug: "acme", appSlug: "billing-api", env: "dev" },
         resolver,
       ),
-    ).rejects.toBeInstanceOf(AccessDeniedError);
+    ).rejects.toMatchObject({ resource: "app", status: 404 });
     expect(calls).toBe(0);
   });
 
-  it("returns 404 only after the member App is resolved", async () => {
+  it("returns 404 only after the member App is resolved when the environment is missing", async () => {
     let calls = 0;
     const resolver = resolverFor(null, () => {
       calls += 1;
@@ -70,7 +85,7 @@ describe("scoped loader context", () => {
         { orgSlug: "acme", appSlug: "checkout-api", env: "prod" },
         resolver,
       ),
-    ).rejects.toBeInstanceOf(ScopedNotFoundError);
+    ).rejects.toMatchObject({ resource: "environment", status: 404 });
     expect(calls).toBe(1);
   });
 });
@@ -87,14 +102,14 @@ function resolverFor(
   };
 }
 
-function sessionPrincipal(): SessionPrincipal {
+function sessionPrincipal(overrides: { orgSlug?: string } = {}): SessionPrincipal {
   return {
     userId: "user_1",
     orgs: [
       {
         orgId: "org_1",
         orgRole: "member",
-        orgSlug: "acme",
+        orgSlug: overrides.orgSlug ?? "acme",
         apps: [
           {
             appId: "app_1",

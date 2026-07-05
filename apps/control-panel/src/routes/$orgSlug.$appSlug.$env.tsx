@@ -38,7 +38,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
     return <AppErrorPage description="Refresh the page or try again later." />;
   },
   notFoundComponent: () => (
-    <NotFoundPage description="The requested Environment was not found in this App." />
+    <NotFoundPage description="The requested App or Environment was not found." />
   ),
   component: ScopePlaceholderRoute,
 });

@@ -84,11 +84,16 @@ the Environment Policy at the commit seam, not a read-isolation check).
 The loader **never trusts client-supplied IDs**: slugs come from the URL, are resolved to memberships
 by these checks, and the resulting `AppMembership` (including `role`) is what child loaders receive.
 
-**Failure contract:** a 403 from `requireOrgAccess`/`requireAppAccess` is a **designed state** (user
-lacks membership, e.g. was removed from the Org/App, or navigated to a stale back-link). It MUST be
+Implementation note for the current D1 schema: Organizations do not yet have a persisted slug/key
+column. The Control Panel derives `orgSlug` from `organizations.name` at session materialization
+time; a rename intentionally makes old URLs stale (403), and duplicate derived handles fail session
+creation instead of choosing a silent default.
+
+**Failure contract:** a 403 from `requireOrgAccess` is a **designed state** (user lacks Org
+membership, e.g. was removed from the Org or navigated to a stale renamed-Org link). It MUST be
 caught by the segment error boundary at the `/{orgSlug}/{appSlug}` layout — not the root boundary —
-and must NOT generate a Sentry error (breadcrumb only). The `appId ∈ org` 404 is likewise a designed
-state. See [error-loading-tiers.md](./error-loading-tiers.md).
+and must NOT generate a Sentry error (breadcrumb only). The `appId ∈ org` / app-slug 404 is likewise
+a designed state. See [error-loading-tiers.md](./error-loading-tiers.md).
 
 ## Session issuer (WorkOS session issuer rule)
 

@@ -72,6 +72,11 @@ export function createEnvironmentResolver(repo: Repository): EnvironmentResolver
   };
 }
 
+/**
+ * Current D1 Organizations have no persisted URL handle. Until the schema grows
+ * one, session materialization derives the handle from the Organization name;
+ * renames intentionally invalidate stale URLs, and collisions fail loud above.
+ */
 export function organizationSlug(name: string, orgId: string): string {
   const slug = name
     .trim()

@@ -50,8 +50,9 @@ describe("session membership materialization", () => {
 });
 
 describe("organizationSlug", () => {
-  it("normalizes names for URL scope matching", () => {
+  it("normalizes names for URL scope matching and changes on rename", () => {
     expect(organizationSlug(" Àcme, Inc. ", "org_1")).toBe("acme-inc");
+    expect(organizationSlug("Acme Renamed", "org_1")).toBe("acme-renamed");
     expect(organizationSlug("   ", "org_1")).toBe("org_1");
   });
 });

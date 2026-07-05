@@ -43,7 +43,7 @@ export class AccessDeniedError extends Error {
 export class ScopedNotFoundError extends Error {
   readonly status = 404;
 
-  constructor(readonly resource: "environment") {
+  constructor(readonly resource: "app" | "environment") {
     super(`SPLITCH_${resource.toUpperCase()}_NOT_FOUND`);
     this.name = "ScopedNotFoundError";
   }
@@ -64,7 +64,7 @@ function requireOrgAccess(session: SessionPrincipal, orgSlug: string): OrgMember
 function requireAppAccess(org: OrgMembership, appSlug: string): AppMembership {
   const app = org.apps.find((membership) => membership.appSlug === appSlug);
   if (!app) {
-    throw new AccessDeniedError();
+    throw new ScopedNotFoundError("app");
   }
   return app;
 }
