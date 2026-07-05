@@ -45,6 +45,3 @@ export async function invokeExperimentsHcRoute<T>(
     route.output as { safeParse(input: unknown): { success: true; data: T } | { success: false } },
   );
 }
-
-/** @deprecated Use {@link invokeFlagsHcRoute} or {@link invokeExperimentsHcRoute}. */
-export const invokeHcRoute = invokeFlagsHcRoute;

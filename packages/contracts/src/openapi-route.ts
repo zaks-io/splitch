@@ -97,16 +97,13 @@ export function honoPathToOpenApiPath(path: string): string {
 }
 
 /** Type-level Hono `:param` → OpenAPI `{param}` conversion for literal route paths. */
-export type HonoToOpenApiPath<S extends string> =
-  S extends `${infer Head}/:${infer Name}/${infer Tail}`
-    ? `${Head}/{${Name}}/${HonoToOpenApiPath<Tail>}`
-    : S extends `${infer Head}/:${infer Name}`
-      ? `${Head}/{${Name}}`
-      : S;
+type HonoToOpenApiPath<S extends string> = S extends `${infer Head}/:${infer Name}/${infer Tail}`
+  ? `${Head}/{${Name}}/${HonoToOpenApiPath<Tail>}`
+  : S extends `${infer Head}/:${infer Name}`
+    ? `${Head}/{${Name}}`
+    : S;
 
-function buildOpenApiRequestConfig(
-  request: ApiRouteRequest | undefined,
-): RouteConfig["request"] | undefined {
+function buildOpenApiRequestConfig(request: ApiRouteRequest | undefined) {
   if (!request) {
     return undefined;
   }

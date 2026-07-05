@@ -17,9 +17,6 @@ export type FlagsHcClient = ReturnType<typeof createFlagsHcClient>;
 /** Hono `hc` client over the experiments emit-only app type. */
 export type ExperimentsHcClient = ReturnType<typeof createExperimentsHcClient>;
 
-/** @deprecated Prefer {@link FlagsHcClient} or {@link ExperimentsHcClient}. */
-export type ControlPlaneHcClient = FlagsHcClient;
-
 export function createFlagsHcClient(options: ControlPlaneHcOptions) {
   const headers = options.authorization ? { authorization: options.authorization } : undefined;
 
@@ -36,11 +33,6 @@ export function createExperimentsHcClient(options: ControlPlaneHcOptions) {
     fetch: options.fetch,
     ...(headers ? { headers } : {}),
   });
-}
-
-/** @deprecated Use {@link createFlagsHcClient} or {@link createExperimentsHcClient}. */
-export function createControlPlaneHcClient(options: ControlPlaneHcOptions) {
-  return createFlagsHcClient(options);
 }
 
 export function withAuthorization(
