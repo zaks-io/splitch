@@ -8,6 +8,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertReleaseBundleJs } from "./pack-staging.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const consumerRoot = mkdtempSync(join(tmpdir(), "splitch-sdk-consumer-"));
@@ -112,6 +113,17 @@ export async function smoke(): Promise<VariantValue> {
   if (declaration.includes("@splitch/contracts")) {
     throw new Error("packed declarations still import @splitch/contracts");
   }
+  if (packedManifest.devDependencies && Object.keys(packedManifest.devDependencies).length > 0) {
+    throw new Error(
+      `packed manifest must not ship devDependencies: ${Object.keys(packedManifest.devDependencies).join(", ")}`,
+    );
+  }
+
+  const bundleJs = readFileSync(
+    join(consumerRoot, "node_modules/@splitch/sdk/dist/index.js"),
+    "utf8",
+  );
+  assertReleaseBundleJs(bundleJs);
 
   console.log("consumer smoke passed");
 } finally {

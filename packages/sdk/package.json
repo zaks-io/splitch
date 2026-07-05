@@ -18,8 +18,8 @@
     "!dist/**/*.map"
   ],
   "scripts": {
-    "generate": "node scripts/sync-pack-manifest.mjs restore && tsup --config tsup.contract-surface.config.ts",
-    "build": "pnpm run generate && tsup --config tsup.config.ts",
+    "generate": "node scripts/sync-pack-manifest.mjs restore && npx tsup --config tsup.contract-surface.config.ts",
+    "build": "pnpm run generate && npx tsup --config tsup.config.ts",
     "clean": "rm -rf dist coverage src/generated/contract-surface.js src/generated/contract-surface.d.ts",
     "lint": "biome lint src",
     "test": "pnpm run generate && vitest run --passWithNoTests",
@@ -27,18 +27,12 @@
     "test:mutation": "stryker run",
     "typecheck": "pnpm run generate && tsc -p tsconfig.json --noEmit",
     "pack:check": "node scripts/pack-check.mjs",
-    "prepack": "pnpm run build",
-    "prepublishOnly": "node scripts/sync-pack-manifest.mjs strip",
-    "postpublish": "node scripts/sync-pack-manifest.mjs restore"
+    "prepack": "node scripts/prepack-build.mjs"
   },
   "publishConfig": {
     "access": "public"
   },
   "dependencies": {
     "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@splitch/contracts": "workspace:*",
-    "tsup": "^8.5.0"
   }
 }

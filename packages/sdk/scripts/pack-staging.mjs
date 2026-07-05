@@ -84,7 +84,31 @@ export function readTarballFile(tarballPath, entryPath) {
   return execFileSync("tar", ["-xOf", tarballPath, entryPath], { encoding: "utf8" });
 }
 
-export function assertReleaseTarballContents({ listing, manifestText, declarationText }) {
+/** Control-plane / test-eval schema names that must never ship in the public SDK bundle. */
+const FORBIDDEN_PUBLIC_BUNDLE_MARKERS = [
+  "OrganizationSchema",
+  "ClientKeySchema",
+  "APIKeySchema",
+  "TestEvaluationReasonSchema",
+  "TestEvaluationResponseSchema",
+  "TestEvaluationRequestSchema",
+  "EnvironmentSchema",
+  "ExposureEventSchema",
+  "ruleName",
+  "percentage_rollout",
+  "holdover_replay",
+  "variantWeights",
+];
+
+export function assertReleaseBundleJs(bundleJs) {
+  for (const marker of FORBIDDEN_PUBLIC_BUNDLE_MARKERS) {
+    if (bundleJs.includes(marker)) {
+      throw new Error(`release bundle must not contain internal marker: ${marker}`);
+    }
+  }
+}
+
+export function assertReleaseTarballContents({ listing, manifestText, declarationText, bundleJs }) {
   for (const file of listing) {
     if (file.endsWith(".map")) {
       throw new Error(`release tarball must not include sourcemaps: ${file}`);
@@ -107,6 +131,16 @@ export function assertReleaseTarballContents({ listing, manifestText, declaratio
 
   if (declarationText.includes("@splitch/contracts")) {
     throw new Error("release declarations still import @splitch/contracts");
+  }
+
+  if (manifest.devDependencies && Object.keys(manifest.devDependencies).length > 0) {
+    throw new Error(
+      `release manifest must not ship devDependencies: ${Object.keys(manifest.devDependencies).join(", ")}`,
+    );
+  }
+
+  if (bundleJs) {
+    assertReleaseBundleJs(bundleJs);
   }
 }
 
@@ -152,9 +186,11 @@ export function assertDryRunListing(packOutput) {
   }
 
   const releaseManifest = readReleaseManifest(getPackageRoot());
+  const bundleJs = readFileSync(join(getPackageRoot(), "dist/index.js"), "utf8");
   assertReleaseTarballContents({
     listing,
     manifestText: JSON.stringify(releaseManifest),
     declarationText: readFileSync(join(getPackageRoot(), "dist/index.d.ts"), "utf8"),
+    bundleJs,
   });
 }

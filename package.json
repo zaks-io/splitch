@@ -71,6 +71,7 @@
     "knip": "^6.17.1",
     "lefthook": "^2.1.9",
     "prettier": "^3.8.4",
+    "tsup": "^8.5.0",
     "turbo": "^2.9.18",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",

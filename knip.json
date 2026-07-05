@@ -12,9 +12,11 @@
       "ignore": ["vite.config.ts"],
       "ignoreDependencies": ["@cloudflare/vite-plugin", "@tailwindcss/vite", "@vitejs/plugin-react"]
     },
+    "packages/contracts": {
+      "entry": ["src/sdk-data-plane-surface.ts"]
+    },
     "packages/sdk": {
-      "entry": ["scripts/pack-release.mjs"],
-      "ignoreDependencies": ["@splitch/contracts"]
+      "entry": ["scripts/pack-release.mjs"]
     }
   }
 }

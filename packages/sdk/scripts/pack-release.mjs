@@ -22,7 +22,8 @@ try {
   const listing = listTarballFiles(tarballPath);
   const manifestText = readTarballFile(tarballPath, "package/package.json");
   const declarationText = readTarballFile(tarballPath, "package/dist/index.d.ts");
-  assertReleaseTarballContents({ listing, manifestText, declarationText });
+  const bundleJs = readTarballFile(tarballPath, "package/dist/index.js");
+  assertReleaseTarballContents({ listing, manifestText, declarationText, bundleJs });
   process.stdout.write(`${tarballName}\n`);
 } finally {
   rmSync(staging, { recursive: true, force: true });
