@@ -339,6 +339,12 @@ importers:
 
   packages/privacy: {}
 
+  packages/repo-lint:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.2
+        version: 24.13.2
+
   packages/sdk:
     dependencies:
       zod:

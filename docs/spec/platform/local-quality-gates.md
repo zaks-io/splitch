@@ -10,8 +10,9 @@ Vocabulary follows [CONTEXT.md](../../../CONTEXT.md).
 > explicit lockdown milestone (a launch prerequisite, see [ADR-0035](../../adr/0035-security-automation-and-supply-chain-integrity-are-an-enforced-ci-contract.md)),
 > not per-PR work.
 >
-> **Enforcing now (deterministic, your-code-only):** `format:check`, `lint`, `typecheck`, `knip`,
-> `gitleaks` — locally (commit + pre-push) and in CI. Plus `test` + `build` in CI.
+> **Enforcing now (deterministic, your-code-only):** `format:check`, `lint` (including
+> `@splitch/repo-lint` workspace publishing policy), `typecheck`, `knip`, `gitleaks` — locally
+> (commit + pre-push) and in CI. Plus `test` + `build` in CI.
 >
 > **Parked until lockdown:**
 >
@@ -57,27 +58,27 @@ reviewed exception, but normal tool upgrades wait until the package version sati
 
 The root `package.json` exposes these scripts:
 
-| Script                 | Command contract                                          |
-| ---------------------- | --------------------------------------------------------- |
-| `format:check`         | `biome format . && prettier --check "**/*.md"`            |
-| `format:write`         | `biome format --write . && prettier --write "**/*.md"`    |
-| `lint`                 | `turbo run lint`                                          |
-| `typecheck`            | `turbo run typecheck`                                     |
-| `test`                 | `turbo run test`                                          |
-| `build`                | `turbo run build`                                         |
-| `dev:api`              | API/MCP Worker local dev set on stable ports              |
-| `smoke:local`          | local Wrangler smoke for selected Workers                 |
-| `smoke:local:api`      | local Wrangler smoke for API/MCP Workers                  |
-| `shared-preview:smoke` | hosted shared-preview route, auth, MCP, and binding smoke |
-| `depcruise`            | `dependency-cruiser --config .dependency-cruiser.cjs`     |
-| `duplicates`           | `jscpd --config .jscpd.json --exit-code`                  |
-| `knip`                 | `knip --treat-config-hints-as-errors`                     |
-| `secrets:staged`       | `gitleaks git --redact --no-banner --staged .`            |
-| `secrets:range`        | scan only the change's commit range (CI/pre-push)         |
-| `secrets:git`          | `gitleaks git --redact --no-banner .` (full history)      |
-| `verify:commit`        | commit hook entrypoint                                    |
-| `verify:push`          | pre-push and local CI-parity entrypoint                   |
-| `verify:ci`            | CI entrypoint                                             |
+| Script                 | Command contract                                                   |
+| ---------------------- | ------------------------------------------------------------------ |
+| `format:check`         | `biome format . && prettier --check "**/*.md"`                     |
+| `format:write`         | `biome format --write . && prettier --write "**/*.md"`             |
+| `lint`                 | `turbo run lint` (includes `@splitch/repo-lint` publishing policy) |
+| `typecheck`            | `turbo run typecheck`                                              |
+| `test`                 | `turbo run test`                                                   |
+| `build`                | `turbo run build`                                                  |
+| `dev:api`              | API/MCP Worker local dev set on stable ports                       |
+| `smoke:local`          | local Wrangler smoke for selected Workers                          |
+| `smoke:local:api`      | local Wrangler smoke for API/MCP Workers                           |
+| `shared-preview:smoke` | hosted shared-preview route, auth, MCP, and binding smoke          |
+| `depcruise`            | `dependency-cruiser --config .dependency-cruiser.cjs`              |
+| `duplicates`           | `jscpd --config .jscpd.json --exit-code`                           |
+| `knip`                 | `knip --treat-config-hints-as-errors`                              |
+| `secrets:staged`       | `gitleaks git --redact --no-banner --staged .`                     |
+| `secrets:range`        | scan only the change's commit range (CI/pre-push)                  |
+| `secrets:git`          | `gitleaks git --redact --no-banner .` (full history)               |
+| `verify:commit`        | commit hook entrypoint                                             |
+| `verify:push`          | pre-push and local CI-parity entrypoint                            |
+| `verify:ci`            | CI entrypoint                                                      |
 
 Root scripts own repository-wide static analysis commands that do not belong to one runtime package.
 Biome formats code/config. Prettier formats Markdown only.

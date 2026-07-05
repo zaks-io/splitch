@@ -5,19 +5,19 @@ package contracts, and the toolchain/quality-gate stack.
 
 ## Toolchain
 
-| Concern                               | Tool                                                                      |
-| ------------------------------------- | ------------------------------------------------------------------------- |
-| Package manager                       | pnpm (workspaces)                                                         |
-| Build orchestration                   | Turborepo                                                                 |
-| Language                              | TypeScript strict                                                         |
-| Lint / format                         | Biome for code/config; Prettier for Markdown only                         |
-| Git hooks                             | Lefthook                                                                  |
-| Unused files / exports / dependencies | Knip                                                                      |
-| Secret scanning                       | Gitleaks                                                                  |
-| Unit tests                            | Vitest                                                                    |
-| Mutation testing                      | StrykerJS (advisory first; scoped to critical domains)                    |
-| Deploy                                | Wrangler + GitHub Actions                                                 |
-| Observability                         | Sentry (errors, distributed traces) + Axiom (structured logs, dashboards) |
+| Concern                               | Tool                                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Package manager                       | pnpm (workspaces)                                                                                       |
+| Build orchestration                   | Turborepo                                                                                               |
+| Language                              | TypeScript strict                                                                                       |
+| Lint / format                         | Biome for code/config; Prettier for Markdown only; `@splitch/repo-lint` for workspace publishing policy |
+| Git hooks                             | Lefthook                                                                                                |
+| Unused files / exports / dependencies | Knip                                                                                                    |
+| Secret scanning                       | Gitleaks                                                                                                |
+| Unit tests                            | Vitest                                                                                                  |
+| Mutation testing                      | StrykerJS (advisory first; scoped to critical domains)                                                  |
+| Deploy                                | Wrangler + GitHub Actions                                                                               |
+| Observability                         | Sentry (errors, distributed traces) + Axiom (structured logs, dashboards)                               |
 
 pnpm is also the supply-chain policy gate. Workspace installs require package versions to be at least
 3 days old, enforce that rule strictly for direct and transitive dependencies, fail when registry
@@ -74,6 +74,7 @@ packages/
   worker-runtime/      @splitch/worker-runtime      Contract-mounted Hono request guard and shared error/status helpers
   control-plane-sdk/   @splitch/control-plane-sdk   Hono hc transport SDK for control-plane consumers
   sdk/                 @splitch/sdk                 Public JS/TS data-plane SDK package
+  repo-lint/           @splitch/repo-lint           Private repo policy gates (package publishing)
   ui/                  @splitch/ui                  Design system tokens and primitives
 
 apps/
