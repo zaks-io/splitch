@@ -7,8 +7,8 @@ import type { ConfigStoreDurableObjectNamespace } from "./config-store-do";
  * membership, KV for the hot session-validation read) and never hands a raw
  * client to a route: D1 access goes through @splitch/db `createRepository`, KV
  * through the session-store helper. JWKS for control-plane-token verification is
- * fetched from the auth-api authorization-server metadata (HUMAN-SETUP S41 wires
- * the real WorkOS URL; until then the fetcher is injectable for fixtures).
+ * fetched from the auth-api authorization-server metadata. The URI comes from
+ * environment configuration; tests inject a fixture fetcher.
  */
 export interface ControlPlaneApiEnv {
   /** D1 binding — wrapped by createRepository, never used raw. */

@@ -172,7 +172,7 @@ a tracker estimate field, estimate labels, a body heading, or no estimates.
 - Worker environment labels are approval and routing metadata. They do not say
   whether the issue needs human refinement, whether dependencies are done, or
   whether Orchestrator may start it now.
-- Human setup, credentials, product judgment, provider approval, customer input,
+- External setup, credentials, product judgment, provider approval, customer input,
   and ADR decisions use `ready-for-human` or `needs-info`.
 - `ready-for-human` and other human-attention states are truthful claims that
   the only remaining work is the named human action. Unresolved agent-fixable

@@ -4,12 +4,11 @@ import type { Jwks } from "./jwks-verify";
  * Fixture RS256 signer for the auth-middleware tests.
  *
  * The real control-plane token is RS256-signed by the auth-api and verified
- * against its JWKS (HUMAN-SETUP S41 wires the real WorkOS/auth-api key). Tests
- * must NOT reach the network or hold a real key, so this fixture mints a local
- * RSA keypair, signs tokens with the private half, and exposes the public half as
- * a JWKS the JwksVerifier consumes through its injected fetcher. The verifier
- * under test runs the SAME RS256 path it runs in production — only the key source
- * is local.
+ * against its JWKS. Tests must NOT reach the network or hold a real key, so this
+ * fixture mints a local RSA keypair, signs tokens with the private half, and
+ * exposes the public half as a JWKS the JwksVerifier consumes through its
+ * injected fetcher. The verifier under test runs the SAME RS256 path it runs in
+ * production — only the key source is local.
  *
  * Lives in `src` (not a `.test.ts`) so the integration suite imports it; it is
  * not re-exported from the Worker entry and never reaches the production bundle.

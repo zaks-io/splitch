@@ -189,7 +189,7 @@ For each `kind-slice`:
   approval criteria are met; dependency state is not a reason to withhold it
 - apply `ready-for-agent` only when the slice is scoped to one PR, routed,
   type and risk labeled, estimated if required, and complete enough to verify
-- do not apply `ready-for-agent` when the body itself says human setup,
+- do not apply `ready-for-agent` when the body itself says external setup,
   credentials, provider decisions, or security judgment are still required
 - place ready `kind-slice` issues in the configured ready state, usually `Todo`,
   even when they are blocked by other tickets; do not park

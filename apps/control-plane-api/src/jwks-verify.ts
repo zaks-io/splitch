@@ -12,7 +12,7 @@
  *
  * The JWKS fetcher is a port: production GETs the auth-api JWKS URI; tests inject
  * a fixture whose public key matches the fixture signer (no network, no real
- * WorkOS — that wiring is HUMAN-SETUP S41).
+ * auth-api key).
  */
 
 interface VerifiedToken {

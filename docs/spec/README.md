@@ -112,11 +112,12 @@ Some topics are touched by more than one area, each from its own angle. The cano
   is the source of truth for proof commands, local Worker smoke, remote Cursor requirements, and what each
   slice must show before handoff.
 
-## Human setup
+## External configuration
 
-Most of the build is agent-doable. The setup that an agent **cannot** do for you — first-trust
-roots, external accounts, human approval gates, and open product decisions — is captured once in
-[`HUMAN-SETUP.md`](./HUMAN-SETUP.md). Do those once, record the outcome there, and don't re-derive.
+External provider/account configuration is tracked in Linear, not in a parallel setup runbook.
+Specs describe the target behavior; live setup status and remaining external blockers belong on the
+owning `kind-slice` ticket. Use [`../agents/workflow/config.md`](../agents/workflow/config.md) for
+tracker states, labels, and environment-safety rules.
 
 ## Next phase
 
