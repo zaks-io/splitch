@@ -1,0 +1,15 @@
+@import "@splitch/ui/theme.css";
+
+@layer base {
+  body {
+    margin: 0;
+  }
+
+  button,
+  a {
+    transition:
+      background-color var(--duration-fast) var(--ease-standard),
+      border-color var(--duration-fast) var(--ease-standard),
+      color var(--duration-fast) var(--ease-standard);
+  }
+}
