@@ -10,6 +10,10 @@ const backupPath = resolve(packageRoot, "package.json.pack-backup");
 const mode = process.argv[2];
 
 if (mode === "strip") {
+  if (existsSync(backupPath)) {
+    writeFileSync(manifestPath, readFileSync(backupPath));
+    unlinkSync(backupPath);
+  }
   writeFileSync(backupPath, readFileSync(manifestPath));
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   delete manifest.devDependencies;

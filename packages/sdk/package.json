@@ -17,7 +17,7 @@
     "dist"
   ],
   "scripts": {
-    "generate": "tsup --config tsup.contract-surface.config.ts",
+    "generate": "node scripts/sync-pack-manifest.mjs restore && tsup --config tsup.contract-surface.config.ts",
     "build": "pnpm run generate && tsup --config tsup.config.ts",
     "clean": "rm -rf dist coverage src/generated/contract-surface.js src/generated/contract-surface.d.ts",
     "lint": "biome lint src",
