@@ -1,4 +1,7 @@
-import { createControlPlaneClientApp, type ControlPlaneClientApp } from "@splitch/contracts";
+import type {
+  ExperimentsControlPlaneClientApp,
+  FlagsControlPlaneClientApp,
+} from "@splitch/contracts/client-app";
 import { hc } from "hono/client";
 import type { ControlPlaneOperationOptions } from "./operation-result";
 
@@ -8,17 +11,36 @@ export interface ControlPlaneHcOptions {
   readonly authorization?: string | null;
 }
 
-/** Hono `hc` client over the registry-derived emit-only app type. */
-export type ControlPlaneHcClient = ReturnType<typeof createControlPlaneHcClient>;
+/** Hono `hc` client over the flags emit-only app type. */
+export type FlagsHcClient = ReturnType<typeof createFlagsHcClient>;
 
-export function createControlPlaneHcClient(options: ControlPlaneHcOptions) {
-  const app = createControlPlaneClientApp();
+/** Hono `hc` client over the experiments emit-only app type. */
+export type ExperimentsHcClient = ReturnType<typeof createExperimentsHcClient>;
+
+/** @deprecated Prefer {@link FlagsHcClient} or {@link ExperimentsHcClient}. */
+export type ControlPlaneHcClient = FlagsHcClient;
+
+export function createFlagsHcClient(options: ControlPlaneHcOptions) {
   const headers = options.authorization ? { authorization: options.authorization } : undefined;
 
-  return hc<ControlPlaneClientApp>(options.baseUrl, {
+  return hc<FlagsControlPlaneClientApp>(options.baseUrl, {
     fetch: options.fetch,
     ...(headers ? { headers } : {}),
   });
+}
+
+export function createExperimentsHcClient(options: ControlPlaneHcOptions) {
+  const headers = options.authorization ? { authorization: options.authorization } : undefined;
+
+  return hc<ExperimentsControlPlaneClientApp>(options.baseUrl, {
+    fetch: options.fetch,
+    ...(headers ? { headers } : {}),
+  });
+}
+
+/** @deprecated Use {@link createFlagsHcClient} or {@link createExperimentsHcClient}. */
+export function createControlPlaneHcClient(options: ControlPlaneHcOptions) {
+  return createFlagsHcClient(options);
 }
 
 export function withAuthorization(

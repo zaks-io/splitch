@@ -13,13 +13,13 @@ import type {
   ExperimentsUpdateOutput,
 } from "@splitch/contracts/route-types";
 import {
-  createControlPlaneHcClient,
+  createExperimentsHcClient,
   hcRequestOptions,
-  type ControlPlaneHcClient,
+  type ExperimentsHcClient,
   type ControlPlaneHcOptions,
   withAuthorization,
 } from "./hc-client";
-import { invokeHcRoute } from "./hc-invoke";
+import { invokeExperimentsHcRoute } from "./hc-invoke";
 import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "./operation-result";
 
 export interface ExperimentsClient {
@@ -51,42 +51,43 @@ export interface ExperimentsClient {
 
 export function createExperimentsClient(
   hcOptions: ControlPlaneHcOptions,
-  client?: ControlPlaneHcClient,
+  client?: ExperimentsHcClient,
 ): ExperimentsClient {
-  const hcClient = client ?? createControlPlaneHcClient(hcOptions);
+  const hcClient = client ?? createExperimentsHcClient(hcOptions);
 
   return {
     list: (input, callOptions) =>
-      invokeHcRoute<ExperimentsListOutput>(
+      invokeExperimentsHcRoute<ExperimentsListOutput>(
         hcClient,
         withAuthorization(hcOptions, callOptions),
         "experiments_list",
-        (branch, requestOptions) =>
-          branch.apps[":appId"].envs[":environmentId"].experiments.$get(
+        (client, requestOptions) =>
+          client.apps[":appId"].envs[":environmentId"].experiments.$get(
             { param: { appId: input.appId, environmentId: input.environmentId } },
             { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
           ),
       ),
-    create: (input, callOptions) => {
-      const { appId, environmentId, ...body } = input;
-      return invokeHcRoute<ExperimentsCreateOutput>(
+    create: (input, callOptions) =>
+      invokeExperimentsHcRoute<ExperimentsCreateOutput>(
         hcClient,
         withAuthorization(hcOptions, callOptions),
         "experiments_create",
-        (branch, requestOptions) =>
-          branch.apps[":appId"].envs[":environmentId"].experiments.$post(
-            { param: { appId, environmentId }, json: body },
+        (client, requestOptions) =>
+          client.apps[":appId"].envs[":environmentId"].experiments.$post(
+            {
+              param: { appId: input.appId, environmentId: input.environmentId },
+              json: input,
+            } as never,
             { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
           ),
-      );
-    },
+      ),
     get: (input, callOptions) =>
-      invokeHcRoute<ExperimentsGetOutput>(
+      invokeExperimentsHcRoute<ExperimentsGetOutput>(
         hcClient,
         withAuthorization(hcOptions, callOptions),
         "experiments_get",
-        (branch, requestOptions) =>
-          branch.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].$get(
+        (client, requestOptions) =>
+          client.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].$get(
             {
               param: {
                 appId: input.appId,
@@ -99,37 +100,37 @@ export function createExperimentsClient(
       ),
     update: (input, callOptions) => {
       const { appId, environmentId, experimentId, ...body } = input;
-      return invokeHcRoute<ExperimentsUpdateOutput>(
+      return invokeExperimentsHcRoute<ExperimentsUpdateOutput>(
         hcClient,
         withAuthorization(hcOptions, callOptions),
         "experiments_update",
-        (branch, requestOptions) =>
-          branch.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].$patch(
-            { param: { appId, environmentId, experimentId }, json: body },
+        (client, requestOptions) =>
+          client.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].$patch(
+            { param: { appId, environmentId, experimentId }, json: body } as never,
             { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
           ),
       );
     },
     start: (input, callOptions) => {
       const { appId, environmentId, experimentId, ...body } = input;
-      return invokeHcRoute<ExperimentsStartOutput>(
+      return invokeExperimentsHcRoute<ExperimentsStartOutput>(
         hcClient,
         withAuthorization(hcOptions, callOptions),
         "experiments_start",
-        (branch, requestOptions) =>
-          branch.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].start.$post(
-            { param: { appId, environmentId, experimentId }, json: body },
+        (client, requestOptions) =>
+          client.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].start.$post(
+            { param: { appId, environmentId, experimentId }, json: body } as never,
             { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
           ),
       );
     },
     delete: (input, callOptions) =>
-      invokeHcRoute<ExperimentsDeleteOutput>(
+      invokeExperimentsHcRoute<ExperimentsDeleteOutput>(
         hcClient,
         withAuthorization(hcOptions, callOptions),
         "experiments_delete",
-        (branch, requestOptions) =>
-          branch.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].$delete(
+        (client, requestOptions) =>
+          client.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].$delete(
             {
               param: {
                 appId: input.appId,

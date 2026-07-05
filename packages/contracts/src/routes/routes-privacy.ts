@@ -142,4 +142,4 @@ export const privacyRoutes = [
     idempotency: "none",
     errors: ["PRIVACY_JOB_NOT_FOUND", "FORBIDDEN"],
   }),
-];
+] as const satisfies readonly ApiRouteContract[];

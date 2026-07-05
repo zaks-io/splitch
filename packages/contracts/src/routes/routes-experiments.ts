@@ -248,4 +248,4 @@ export const experimentRoutes = [
     idempotency: "none",
     errors: ["METRIC_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING"],
   }),
-];
+] as const satisfies readonly ApiRouteContract[];

@@ -1,25 +1,79 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { routeRegistry } from "./route-registry";
+import type { ApiRouteContract } from "./openapi-route";
+import { experimentRoutes } from "./routes/routes-experiments";
+import { flagRoutes } from "./routes/routes-flags";
 
 /**
- * Type-only OpenAPIHono built from THE route registry so `hc<ControlPlaneClientApp>()`
+ * Emit-only OpenAPIHono apps built from THE route registry so `hc<AppType>()`
  * infers per-route input/output from the same Zod schemas the Worker mounts and MCP
- * derives. The app is never served; it exists only to thread contract types into
+ * derives. Apps are never served; they exist only to thread contract types into
  * @splitch/control-plane-sdk without importing deployable Worker code.
+ *
+ * Split by domain (flags / experiments) so `hc` inference stays within TS limits.
  */
 
-/** `hc<ControlPlaneClientApp>()` generic — inferred from the registry, zero codegen. */
-export type ControlPlaneClientApp = OpenAPIHono;
+function emitOnlyHandler(
+  route: ApiRouteContract,
+): (c: { json: (body: unknown, status: number) => Response }) => Response {
+  return (c) => {
+    const empty = route.output.safeParse(undefined);
+    const body = empty.success ? empty.data : {};
+    return c.json(body, 200);
+  };
+}
 
-/** Build the emit-only Hono app every registered route is mounted on. */
-export function createControlPlaneClientApp(): ControlPlaneClientApp {
-  const app = new OpenAPIHono();
-  for (const route of routeRegistry) {
-    app.openapi(route.openapi, (c) => {
-      const empty = route.output.safeParse(undefined);
-      const body = empty.success ? empty.data : {};
-      return c.json(body, 200);
-    });
-  }
-  return app;
+const flagsSdkRoutes = [
+  flagRoutes[0],
+  flagRoutes[1],
+  flagRoutes[2],
+  flagRoutes[3],
+  flagRoutes[4],
+] as const;
+
+const experimentsSdkRoutes = [
+  experimentRoutes[0],
+  experimentRoutes[1],
+  experimentRoutes[2],
+  experimentRoutes[3],
+  experimentRoutes[4],
+  experimentRoutes[5],
+] as const;
+
+const flagsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
+  { route: flagsSdkRoutes[0].openapi, handler: emitOnlyHandler(flagsSdkRoutes[0]) },
+  { route: flagsSdkRoutes[1].openapi, handler: emitOnlyHandler(flagsSdkRoutes[1]) },
+  { route: flagsSdkRoutes[2].openapi, handler: emitOnlyHandler(flagsSdkRoutes[2]) },
+  { route: flagsSdkRoutes[3].openapi, handler: emitOnlyHandler(flagsSdkRoutes[3]) },
+  { route: flagsSdkRoutes[4].openapi, handler: emitOnlyHandler(flagsSdkRoutes[4]) },
+] as const);
+
+const experimentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
+  { route: experimentsSdkRoutes[0].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[0]) },
+  { route: experimentsSdkRoutes[1].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[1]) },
+  { route: experimentsSdkRoutes[2].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[2]) },
+  { route: experimentsSdkRoutes[3].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[3]) },
+  { route: experimentsSdkRoutes[4].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[4]) },
+  { route: experimentsSdkRoutes[5].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[5]) },
+] as const);
+
+/** `hc<FlagsControlPlaneClientApp>()` — flag route group client type. */
+export type FlagsControlPlaneClientApp = typeof flagsControlPlaneClientApp;
+
+/** `hc<ExperimentsControlPlaneClientApp>()` — experiment route group client type. */
+export type ExperimentsControlPlaneClientApp = typeof experimentsControlPlaneClientApp;
+
+/** Union of SDK emit-only apps; prefer domain-specific types for `hc`. */
+export type ControlPlaneClientApp = FlagsControlPlaneClientApp | ExperimentsControlPlaneClientApp;
+
+export function createFlagsControlPlaneClientApp(): FlagsControlPlaneClientApp {
+  return flagsControlPlaneClientApp;
+}
+
+export function createExperimentsControlPlaneClientApp(): ExperimentsControlPlaneClientApp {
+  return experimentsControlPlaneClientApp;
+}
+
+/** @deprecated Use {@link createFlagsControlPlaneClientApp} or {@link createExperimentsControlPlaneClientApp}. */
+export function createControlPlaneClientApp(): FlagsControlPlaneClientApp {
+  return flagsControlPlaneClientApp;
 }

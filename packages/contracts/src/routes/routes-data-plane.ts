@@ -93,4 +93,4 @@ export const dataPlaneRoutes = [
       "SERVICE_UNAVAILABLE",
     ],
   }),
-];
+] as const satisfies readonly ApiRouteContract[];

@@ -11,13 +11,13 @@ import type {
   FlagsUpdateOutput,
 } from "@splitch/contracts/route-types";
 import {
-  createControlPlaneHcClient,
+  createFlagsHcClient,
   hcRequestOptions,
-  type ControlPlaneHcClient,
+  type FlagsHcClient,
   type ControlPlaneHcOptions,
   withAuthorization,
 } from "./hc-client";
-import { invokeHcRoute } from "./hc-invoke";
+import { invokeFlagsHcRoute } from "./hc-invoke";
 import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "./operation-result";
 
 export interface FlagsClient {
@@ -45,66 +45,64 @@ export interface FlagsClient {
 
 export function createFlagsClient(
   hcOptions: ControlPlaneHcOptions,
-  client?: ControlPlaneHcClient,
+  client?: FlagsHcClient,
 ): FlagsClient {
-  const hcClient = client ?? createControlPlaneHcClient(hcOptions);
+  const hcClient = client ?? createFlagsHcClient(hcOptions);
 
   return {
     list: (input, callOptions) =>
-      invokeHcRoute<FlagsListOutput>(
+      invokeFlagsHcRoute<FlagsListOutput>(
         hcClient,
         withAuthorization(hcOptions, callOptions),
         "flags_list",
-        (branch, requestOptions) =>
-          branch.apps[":appId"].flags.$get(
+        (client, requestOptions) =>
+          client.apps[":appId"].flags.$get(
             { param: { appId: input.appId } },
             { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
           ),
       ),
-    create: (input, callOptions) => {
-      const { appId, ...body } = input;
-      return invokeHcRoute<FlagsCreateOutput>(
+    create: (input, callOptions) =>
+      invokeFlagsHcRoute<FlagsCreateOutput>(
         hcClient,
         withAuthorization(hcOptions, callOptions),
         "flags_create",
-        (branch, requestOptions) =>
-          branch.apps[":appId"].flags.$post(
-            { param: { appId }, json: body },
+        (client, requestOptions) =>
+          client.apps[":appId"].flags.$post(
+            { param: { appId: input.appId }, json: input } as never,
             { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
           ),
-      );
-    },
+      ),
     get: (input, callOptions) =>
-      invokeHcRoute<FlagsGetOutput>(
+      invokeFlagsHcRoute<FlagsGetOutput>(
         hcClient,
         withAuthorization(hcOptions, callOptions),
         "flags_get",
-        (branch, requestOptions) =>
-          branch.apps[":appId"].flags[":flagId"].$get(
+        (client, requestOptions) =>
+          client.apps[":appId"].flags[":flagId"].$get(
             { param: { appId: input.appId, flagId: input.flagId } },
             { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
           ),
       ),
     update: (input, callOptions) => {
       const { appId, flagId, ...body } = input;
-      return invokeHcRoute<FlagsUpdateOutput>(
+      return invokeFlagsHcRoute<FlagsUpdateOutput>(
         hcClient,
         withAuthorization(hcOptions, callOptions),
         "flags_update",
-        (branch, requestOptions) =>
-          branch.apps[":appId"].flags[":flagId"].$patch(
-            { param: { appId, flagId }, json: body },
+        (client, requestOptions) =>
+          client.apps[":appId"].flags[":flagId"].$patch(
+            { param: { appId, flagId }, json: body } as never,
             { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
           ),
       );
     },
     delete: (input, callOptions) =>
-      invokeHcRoute<FlagsDeleteOutput>(
+      invokeFlagsHcRoute<FlagsDeleteOutput>(
         hcClient,
         withAuthorization(hcOptions, callOptions),
         "flags_delete",
-        (branch, requestOptions) =>
-          branch.apps[":appId"].flags[":flagId"].$delete(
+        (client, requestOptions) =>
+          client.apps[":appId"].flags[":flagId"].$delete(
             { param: { appId: input.appId, flagId: input.flagId } },
             { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
           ),

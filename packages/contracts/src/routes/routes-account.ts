@@ -283,4 +283,4 @@ export const accountRoutes = [
       "RESOURCE_NOT_EMPTY",
     ],
   }),
-];
+] as const satisfies readonly ApiRouteContract[];

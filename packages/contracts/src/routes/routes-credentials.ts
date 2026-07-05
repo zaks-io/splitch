@@ -104,4 +104,4 @@ export const credentialRoutes = [
     idempotency: "none",
     errors: ["CREDENTIAL_NOT_FOUND", "FORBIDDEN"],
   }),
-];
+] as const satisfies readonly ApiRouteContract[];

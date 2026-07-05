@@ -91,44 +91,20 @@ function runtimeInput(request: ApiRouteRequest | undefined): z.ZodTypeAny {
   return z.object(shape);
 }
 
-/** Build the @hono/zod-openapi route config from the authored pieces. */
-function openapiConfig(input: DefineApiRouteInput): RouteConfig {
-  const request: NonNullable<RouteConfig["request"]> = {};
-  if (input.request?.params) {
-    request.params = input.request.params;
-  }
-  if (input.request?.query) {
-    request.query = input.request.query;
-  }
-  if (input.request?.body) {
-    request.body = {
-      content: { [JSON_CONTENT]: { schema: input.request.body } },
-    };
-  }
-
-  return {
-    method: input.method.toLowerCase() as Lowercase<HttpMethod>,
-    path: input.path,
-    operationId: input.operationId,
-    summary: input.summary,
-    request,
-    responses: {
-      200: {
-        description: input.summary,
-        content: { [JSON_CONTENT]: { schema: input.response } },
-      },
-    },
-  };
+/** OpenAPI `{param}` paths so @hono/zod-openapi + `hc` infer nested client routes. */
+export function honoPathToOpenApiPath(path: string): string {
+  return path.replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, "{$1}");
 }
 
-/**
- * Author one route once; get a registrar-mountable RouteContract and a derived
- * OpenAPI/MCP definition. Policy defaults (no scopes) match the safest baseline;
- * a route opts into stricter policy explicitly.
- */
-export function defineApiRoute<const Op extends string>(
-  input: DefineApiRouteInput & { operationId: Op },
-): ApiRouteContract & { operationId: Op } {
+/** Type-level Hono `:param` → OpenAPI `{param}` conversion for literal route paths. */
+export type HonoToOpenApiPath<S extends string> =
+  S extends `${infer Head}/:${infer Name}/${infer Tail}`
+    ? `${Head}/{${Name}}/${HonoToOpenApiPath<Tail>}`
+    : S extends `${infer Head}/:${infer Name}`
+      ? `${Head}/{${Name}}`
+      : S;
+
+export function defineApiRoute<const Input extends DefineApiRouteInput>(input: Input) {
   const contract = defineRoute({
     id: input.operationId,
     owner: input.owner,
@@ -147,7 +123,31 @@ export function defineApiRoute<const Op extends string>(
     ...contract,
     operationId: input.operationId,
     summary: input.summary,
-    openapi: createRoute(openapiConfig(input)),
+    openapi: createRoute({
+      method: input.method.toLowerCase() as Lowercase<HttpMethod>,
+      path: honoPathToOpenApiPath(input.path) as HonoToOpenApiPath<Input["path"]>,
+      operationId: input.operationId,
+      summary: input.summary,
+      request: input.request?.params
+        ? {
+            params: input.request.params,
+            ...(input.request.query ? { query: input.request.query } : {}),
+            ...(input.request.body
+              ? { body: { content: { [JSON_CONTENT]: { schema: input.request.body } } } }
+              : {}),
+          }
+        : input.request?.query
+          ? { query: input.request.query }
+          : input.request?.body
+            ? { body: { content: { [JSON_CONTENT]: { schema: input.request.body } } } }
+            : undefined,
+      responses: {
+        200: {
+          description: input.summary,
+          content: { [JSON_CONTENT]: { schema: input.response } },
+        },
+      },
+    } as const),
   };
 }
 

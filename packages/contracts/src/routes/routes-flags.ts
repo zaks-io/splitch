@@ -285,4 +285,4 @@ export const flagRoutes = [
     idempotency: "none",
     errors: ["SEGMENT_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING"],
   }),
-];
+] as const satisfies readonly ApiRouteContract[];

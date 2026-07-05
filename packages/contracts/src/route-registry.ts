@@ -73,7 +73,7 @@ export const routeRegistry = assertRegistry([
   ...analysisRoutes,
   ...privacyRoutes,
   ...dataPlaneRoutes,
-]);
+] as const);
 
 /** Lookup by operationId. Returns undefined when no route owns the id. */
 export function getRoute(operationId: string): ApiRouteContract | undefined {

@@ -117,4 +117,4 @@ export const analysisRoutes = [
     idempotency: "none",
     errors: [],
   }),
-];
+] as const satisfies readonly ApiRouteContract[];

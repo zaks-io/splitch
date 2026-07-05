@@ -1,8 +1,12 @@
 import type { HealthResponse } from "@splitch/contracts";
 import { HealthResponseSchema } from "@splitch/contracts";
-import { createControlPlaneHcClient, type ControlPlaneHcOptions } from "./hc-client";
 import { createExperimentsClient, type ExperimentsClient } from "./experiments-client";
 import { createFlagsClient, type FlagsClient } from "./flags-client";
+import {
+  type ControlPlaneHcOptions,
+  createExperimentsHcClient,
+  createFlagsHcClient,
+} from "./hc-client";
 
 export interface ControlPlaneSdkOptions {
   readonly baseUrl: string;
@@ -28,7 +32,8 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
     baseUrl: baseUrl.toString(),
     fetch: requestFetch,
   };
-  const hcClient = createControlPlaneHcClient(hcOptions);
+  const flagsHcClient = createFlagsHcClient(hcOptions);
+  const experimentsHcClient = createExperimentsHcClient(hcOptions);
 
   return {
     async health() {
@@ -40,15 +45,15 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
 
       return HealthResponseSchema.parse(await response.json());
     },
-    flags: createFlagsClient(hcOptions, hcClient),
-    experiments: createExperimentsClient(hcOptions, hcClient),
+    flags: createFlagsClient(hcOptions, flagsHcClient),
+    experiments: createExperimentsClient(hcOptions, experimentsHcClient),
   };
 }
 
+export type { RouteFlatInput, RouteInput, RouteOutput } from "@splitch/contracts/route-types";
+export type { ExperimentsClient } from "./experiments-client";
+export type { FlagsClient } from "./flags-client";
 export type {
   ControlPlaneOperationOptions,
   ControlPlaneOperationResult,
 } from "./operation-result";
-export type { ExperimentsClient } from "./experiments-client";
-export type { FlagsClient } from "./flags-client";
-export type { RouteFlatInput, RouteInput, RouteOutput } from "@splitch/contracts/route-types";

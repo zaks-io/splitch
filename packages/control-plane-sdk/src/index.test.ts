@@ -36,6 +36,27 @@ describe("control plane sdk typed route groups", () => {
     });
   });
 
+  it("flags.create sends appId in the JSON body for Worker validation", async () => {
+    let capturedBody: unknown;
+    const sdk = createControlPlaneSdk({
+      baseUrl: "https://control-plane.test",
+      fetch: async (_input, init) => {
+        capturedBody = init?.body ? JSON.parse(String(init.body)) : undefined;
+        return Response.json(flagPage.items[0]);
+      },
+    });
+
+    await sdk.flags.create({
+      appId: "app_local",
+      name: "Checkout",
+      key: "checkout",
+      schema: null,
+      variants: [{ name: "on", value: true, isDefault: true }],
+    });
+
+    expect(capturedBody).toMatchObject({ appId: "app_local", key: "checkout" });
+  });
+
   it("returns parsed experiments.list output", async () => {
     const experimentPage = {
       items: [
@@ -76,6 +97,57 @@ describe("control plane sdk typed route groups", () => {
       ok: true,
       status: 200,
       data: experimentPage,
+    });
+  });
+
+  it("experiments.create sends appId and environmentId in the JSON body", async () => {
+    let capturedBody: unknown;
+    const sdk = createControlPlaneSdk({
+      baseUrl: "https://control-plane.test",
+      fetch: async (_input, init) => {
+        capturedBody = init?.body ? JSON.parse(String(init.body)) : undefined;
+        return Response.json({
+          id: "exp_checkout",
+          appId: "app_local",
+          environmentId: "env_local",
+          key: "checkout-exp",
+          flagId: "flag_checkout",
+          name: "Checkout experiment",
+          status: "draft",
+          targetingKey: "user_id",
+          targetingKeyType: "string",
+          confidenceLevel: 0.95,
+          defaultVariantId: "var_on",
+          metrics: [],
+          guardrailMetrics: [],
+          conversionWindowMs: 0,
+          dimensions: [],
+          liveRunId: null,
+          createdAt: "2026-07-03T00:00:00.000Z",
+          updatedAt: "2026-07-03T00:00:00.000Z",
+        });
+      },
+    });
+
+    await sdk.experiments.create({
+      appId: "app_local",
+      environmentId: "env_local",
+      name: "Checkout experiment",
+      key: "checkout-exp",
+      flagId: "flag_checkout",
+      targetingKey: "user_id",
+      targetingKeyType: "string",
+      metrics: [{ metricId: "m_1" }],
+      guardrailMetrics: [],
+      confidenceLevel: 0.95,
+      conversionWindowMs: 0,
+      dimensions: [],
+    });
+
+    expect(capturedBody).toMatchObject({
+      appId: "app_local",
+      environmentId: "env_local",
+      key: "checkout-exp",
     });
   });
 });
