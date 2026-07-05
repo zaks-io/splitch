@@ -17,16 +17,6 @@ import { privacyRoutes } from "./routes/routes-privacy";
  * consumer). Importing this module is the guard.
  */
 
-const domainRouteLists: readonly (readonly ApiRouteContract[])[] = [
-  accountRoutes,
-  flagRoutes,
-  experimentRoutes,
-  credentialRoutes,
-  analysisRoutes,
-  privacyRoutes,
-  dataPlaneRoutes,
-];
-
 const OPERATION_ID_PATTERN = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
 const knownErrorCodes = new Set<ErrorCode>(errorCodes);
 
@@ -66,16 +56,26 @@ function assertRouteErrors(route: ApiRouteContract): void {
  * which bad value) so the failing route is obvious. Exported so the guard test
  * can prove a malformed registry (dup id, unknown code) throws.
  */
-export function assertRegistry(routes: readonly ApiRouteContract[]): readonly ApiRouteContract[] {
+export function assertRegistry<const T extends readonly ApiRouteContract[]>(
+  routes: T,
+): T {
   const seen = new Set<string>();
   for (const route of routes) {
     assertRouteIdentity(route, seen);
     assertRouteErrors(route);
   }
-  return Object.freeze([...routes]);
+  return Object.freeze([...routes]) as T;
 }
 
-export const routeRegistry: readonly ApiRouteContract[] = assertRegistry(domainRouteLists.flat());
+export const routeRegistry = assertRegistry([
+  ...accountRoutes,
+  ...flagRoutes,
+  ...experimentRoutes,
+  ...credentialRoutes,
+  ...analysisRoutes,
+  ...privacyRoutes,
+  ...dataPlaneRoutes,
+]);
 
 /** Lookup by operationId. Returns undefined when no route owns the id. */
 export function getRoute(operationId: string): ApiRouteContract | undefined {

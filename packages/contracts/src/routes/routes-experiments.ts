@@ -43,7 +43,7 @@ const StartRunResponseSchema = z.object({
   previousRunId: z.string().nullable(),
 });
 
-export const experimentRoutes: readonly ApiRouteContract[] = [
+export const experimentRoutes = [
   defineApiRoute({
     operationId: "experiments_list",
     owner: OWNER,

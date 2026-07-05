@@ -7,6 +7,9 @@ export default defineConfig({
       "@splitch/contracts": fileURLToPath(
         new URL("../../packages/contracts/src/index.ts", import.meta.url),
       ),
+      "@splitch/control-plane-sdk/mcp-operation-adapter": fileURLToPath(
+        new URL("../../packages/control-plane-sdk/src/mcp-operation-adapter.ts", import.meta.url),
+      ),
       "@splitch/control-plane-sdk": fileURLToPath(
         new URL("../../packages/control-plane-sdk/src/index.ts", import.meta.url),
       ),

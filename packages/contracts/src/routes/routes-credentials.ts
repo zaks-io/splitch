@@ -25,7 +25,7 @@ const OWNER = "control-plane-api" as const;
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-export const credentialRoutes: readonly ApiRouteContract[] = [
+export const credentialRoutes = [
   defineApiRoute({
     operationId: "client_key_get",
     owner: OWNER,

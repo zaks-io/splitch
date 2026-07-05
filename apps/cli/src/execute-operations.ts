@@ -49,7 +49,7 @@ export async function executeFlagsVerify(
   try {
     const clientKeyResult = await withAuthorizationRetry(deps, async (authorization) => {
       const sdks = createOperationSdks(deps);
-      const result = await sdks["control-plane-api"].callOperation(
+      const result = await sdks["control-plane-api"].callOperationById(
         "client_key_get",
         { appId: context.appId, environmentId: context.environmentId },
         { authorization },
@@ -134,7 +134,7 @@ export async function executeApiOperation(
       }
       const sdks = createOperationSdks(deps);
       const sdk = sdkForOwner(sdks, route.owner);
-      const result = await sdk.callOperation(operationId, input, { authorization });
+      const result = await sdk.callOperationById(operationId, input, { authorization });
       return { status: result.ok ? 200 : result.status, value: result };
     });
     if (!payload.ok) {

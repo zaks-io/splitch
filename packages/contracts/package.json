@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./route-types": {
+      "types": "./src/route-types.ts",
+      "default": "./src/route-types.ts"
     }
   },
   "files": [

@@ -23,7 +23,7 @@ import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 
 const OWNER = "evaluation-api" as const;
 
-export const dataPlaneRoutes: readonly ApiRouteContract[] = [
+export const dataPlaneRoutes = [
   defineApiRoute({
     operationId: "sdk_evaluate",
     owner: OWNER,

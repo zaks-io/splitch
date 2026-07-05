@@ -126,7 +126,9 @@ function openapiConfig(input: DefineApiRouteInput): RouteConfig {
  * OpenAPI/MCP definition. Policy defaults (no scopes) match the safest baseline;
  * a route opts into stricter policy explicitly.
  */
-export function defineApiRoute(input: DefineApiRouteInput): ApiRouteContract {
+export function defineApiRoute<const Op extends string>(
+  input: DefineApiRouteInput & { operationId: Op },
+): ApiRouteContract & { operationId: Op } {
   const contract = defineRoute({
     id: input.operationId,
     owner: input.owner,

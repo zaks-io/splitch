@@ -38,7 +38,7 @@ const FlagListResponse = z.object({ items: z.array(FlagResponseSchema) });
 const SegmentListResponse = z.object({ items: z.array(SegmentSchema) });
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
-export const flagRoutes: readonly ApiRouteContract[] = [
+export const flagRoutes = [
   defineApiRoute({
     operationId: "flags_list",
     owner: OWNER,
