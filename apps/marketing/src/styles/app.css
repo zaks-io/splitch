@@ -38,17 +38,6 @@
     background: var(--color-neutral-950);
   }
 
-  .inverse-cta {
-    border-color: rgb(255 255 255 / 0.22);
-    background: rgb(255 255 255 / 0.08);
-    color: var(--color-neutral-50);
-  }
-
-  .inverse-cta:hover {
-    background: rgb(255 255 255 / 0.14);
-    color: var(--color-neutral-0);
-  }
-
   .feature-row {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -109,5 +98,18 @@
     .feature-row {
       grid-template-columns: minmax(0, 1fr);
     }
+  }
+}
+
+@layer utilities {
+  .inverse-cta {
+    border-color: rgb(255 255 255 / 0.22);
+    background: var(--color-dark-raised-2);
+    color: var(--color-neutral-50);
+  }
+
+  .inverse-cta:hover {
+    background: var(--color-dark-hover);
+    color: var(--color-neutral-0);
   }
 }
