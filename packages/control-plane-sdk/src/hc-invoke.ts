@@ -1,9 +1,6 @@
 import { getRoute } from "@splitch/contracts";
 import type { ControlPlaneHcClient, ControlPlaneHcOptions } from "./hc-client";
-import {
-  parseControlPlaneResponse,
-  type ControlPlaneOperationResult,
-} from "./operation-result";
+import { parseControlPlaneResponse, type ControlPlaneOperationResult } from "./operation-result";
 
 export type HcBranch = {
   apps: {

@@ -7,10 +7,7 @@
  */
 import type { ApiRouteContract, ErrorResponse } from "@splitch/contracts";
 import { getRoute } from "@splitch/contracts";
-import {
-  type ControlPlaneHcOptions,
-  withAuthorization,
-} from "./hc-client";
+import { type ControlPlaneHcOptions, withAuthorization } from "./hc-client";
 import {
   parseControlPlaneResponse,
   type ControlPlaneOperationOptions,

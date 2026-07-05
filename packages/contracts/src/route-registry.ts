@@ -56,9 +56,7 @@ function assertRouteErrors(route: ApiRouteContract): void {
  * which bad value) so the failing route is obvious. Exported so the guard test
  * can prove a malformed registry (dup id, unknown code) throws.
  */
-export function assertRegistry<const T extends readonly ApiRouteContract[]>(
-  routes: T,
-): T {
+export function assertRegistry<const T extends readonly ApiRouteContract[]>(routes: T): T {
   const seen = new Set<string>();
   for (const route of routes) {
     assertRouteIdentity(route, seen);

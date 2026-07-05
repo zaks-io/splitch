@@ -1,7 +1,4 @@
-import {
-  createControlPlaneClientApp,
-  type ControlPlaneClientApp,
-} from "@splitch/contracts";
+import { createControlPlaneClientApp, type ControlPlaneClientApp } from "@splitch/contracts";
 import { hc } from "hono/client";
 import type { ControlPlaneOperationOptions } from "./operation-result";
 
@@ -34,8 +31,8 @@ export function withAuthorization(
   return { ...options, authorization: callOptions.authorization };
 }
 
-export function hcRequestOptions(
-  options: ControlPlaneHcOptions,
-): { headers?: Record<string, string> } {
+export function hcRequestOptions(options: ControlPlaneHcOptions): {
+  headers?: Record<string, string>;
+} {
   return options.authorization ? { headers: { authorization: options.authorization } } : {};
 }
