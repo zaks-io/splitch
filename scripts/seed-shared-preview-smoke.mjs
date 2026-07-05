@@ -11,6 +11,7 @@ const configPath = join(dbDir, "wrangler.jsonc");
 const now = new Date().toISOString();
 const transientSmokeAppKeyPattern = "playwright-smoke-app-%";
 const seedTimeoutMs = 60_000;
+const cleanupOnly = process.argv.includes("--cleanup-transient");
 
 const ids = {
   app: "app_shared_preview_smoke",
@@ -40,7 +41,7 @@ const confirmPolicy = JSON.stringify({
   startExperimentRun: "confirm",
 });
 
-const sql = `
+const cleanupSql = `
 DELETE FROM targeting_rules WHERE app_id IN (
   SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
 );
@@ -68,7 +69,9 @@ DELETE FROM app_memberships WHERE app_id IN (
   SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
 );
 DELETE FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}';
+`;
 
+const seedSql = `
 INSERT INTO organizations (id, name, plan, created_at, updated_at)
 VALUES ('${ids.org}', 'Shared Preview Smoke', 'free', '${now}', '${now}')
 ON CONFLICT(id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at;
@@ -173,6 +176,8 @@ VALUES (
 ON CONFLICT(id) DO UPDATE SET enabled = 1, available_variant_names = excluded.available_variant_names, updated_at = excluded.updated_at;
 `;
 
+const sql = cleanupOnly ? cleanupSql : `${cleanupSql}\n${seedSql}`;
+
 const tempDir = mkdtempSync(join(tmpdir(), "splitch-smoke-seed-"));
 const sqlPath = join(tempDir, "seed.sql");
 
@@ -208,7 +213,11 @@ try {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
-  console.log("seed-shared-preview-smoke: seeded shared-preview smoke Organization/App/Flag");
+  console.log(
+    cleanupOnly
+      ? "seed-shared-preview-smoke: removed transient shared-preview smoke Apps"
+      : "seed-shared-preview-smoke: seeded shared-preview smoke Organization/App/Flag",
+  );
 } finally {
   rmSync(tempDir, { recursive: true, force: true });
 }
