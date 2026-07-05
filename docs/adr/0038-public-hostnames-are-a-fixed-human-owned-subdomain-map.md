@@ -86,4 +86,5 @@ an amendment here), not an agent's choice.
   smoke ports and the internal-vs-public split.
 - [0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md](0034-edge-abuse-controls-are-a-cloudflare-enforced-product-contract.md)
   — origin-closed Client Keys (why per-host origin scoping matters).
-- [spec/HUMAN-SETUP.md](../spec/HUMAN-SETUP.md) — human setup runbook (item 4).
+- [../agents/workflow/config.md](../agents/workflow/config.md) — tracker workflow and
+  environment-safety contract for external setup tickets.

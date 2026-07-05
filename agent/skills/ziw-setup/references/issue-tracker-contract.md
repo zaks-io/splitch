@@ -146,7 +146,7 @@ multiple `kind-slice` issues. Do not mark a multi-PR scope as a ready slice.
 - Worker environment labels are approval and routing metadata. They do not say
   whether the issue needs human refinement, whether dependencies are done, or
   whether Orchestrator may start it now.
-- Human setup, credentials, product judgment, provider approval, customer input,
+- External setup, credentials, product judgment, provider approval, customer input,
   and ADR decisions use `ready-for-human` or `needs-info`.
 - Dependency order should be encoded with tracker relationships when the
   provider supports them. By default, if ticket A needs ticket B first, A is
