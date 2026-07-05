@@ -1,6 +1,6 @@
 # Agent Config
 
-Last updated: 2026-07-04
+Last updated: 2026-07-05
 
 Scaffold is in place. The repo is now a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
@@ -9,34 +9,38 @@ and Worker-shaped deploy units. The code host now exists: `main` is pushed to
 included) runs on every push. Shared-preview and production deploy workflows are wired through
 Tinybird, D1 migrations, and Turborepo Worker deploy tasks. Cloudflare D1/KV backing resources are
 provisioned and their Wrangler binding IDs are committed. The Linear repo-route label
-`zaks-io/splitch` now exists and current `splitch v1` Todo issues are routed
-with it.
+`zaks-io/splitch` exists. Live queue size and active issue counts are not stored
+in this config; refresh them from Linear during each workflow run.
 
 ## Verification
 
-- Scope: scaffold pass over the repo root.
+- Scope: workflow setup refresh over the repo root, project skills, Linear
+  metadata, GitHub workflow/check names, and environment safety.
 - Evidence sources: root `package.json`, `pnpm-workspace.yaml`, `README.md`,
   `turbo.json`, `lefthook.yml`, `.github/workflows/*`, workspace
   `package.json` files, Worker `wrangler.jsonc` files, `infra/tinybird/`, filesystem
   listing.
-- Safe commands run: `pnpm typecheck`, `pnpm format:check`, `pnpm lint`,
-  `pnpm build`, `pnpm test`, `pnpm depcruise`, `pnpm duplicates`, `pnpm knip`, and
-  `pnpm verify:ci` passed locally on 2026-06-21.
-- Linear tool calls: `list_teams` (query "splitch"), `get_team`,
-  `list_issue_statuses`, `list_issue_labels` (limit 250), `list_projects`,
-  `list_issues` — all against team `Splitch`
-  (`eba9c622-4d28-4db2-93fe-12c43bd218b0`). Team, statuses, and labels verified
-  live; current queue has project `splitch v1` with 75 `Todo` issues and no
-  active issues in In Progress, Blocked, In Review, Changes Requested, or Ready
-  to Merge.
-- Verified values: Linear issue key prefix `SPL-` from issues `SPL-1` through
-  `SPL-75`.
-- Verified hosted PR check name: `ci` (runs on push to `zaks-io/splitch`). Secret
-  scanning is a step inside `ci`; the standalone `gitleaks` workflow was removed.
-  See `Pull Requests`.
-- Critical unknowns: friction-intake fields remain unverified. Shared-preview reset, production
-  smoke, and rollback scripts remain unwired.
-  See `Unknowns`.
+- Safe commands run: local validation for this refresh: `pnpm format:check`.
+  Historical scaffold validation on 2026-06-21 ran `pnpm typecheck`,
+  `pnpm lint`, `pnpm build`, `pnpm test`, `pnpm depcruise`,
+  `pnpm duplicates`, `pnpm knip`, and `pnpm verify:ci`.
+- Linear tool calls: `list_issue_statuses`, `list_issue_labels` (limit 250),
+  `list_projects`, `list_issues`; all against team `Splitch`
+  (`eba9c622-4d28-4db2-93fe-12c43bd218b0`). Team, project, statuses, labels,
+  issue query shape, and active-state query shape verified live.
+- Verified values: Linear issue key prefix `SPL-`.
+- Explicit user instruction: `kind-slice` issues should include estimates on the
+  scale `0`, `1`, `2`, `4`, `8`, `16`.
+- GitHub read-only checks: `gh repo view`, `gh workflow list`, `gh pr list`,
+  `gh pr checks`, `gh run list`, and environment/branch-protection API reads.
+- Verified hosted PR check names: `Verify`, `Spec Lint`, and
+  `Stats Simulation Smoke` from the `ci` workflow. Secret scanning is a step
+  inside `Verify`; the standalone `gitleaks` workflow was removed. See
+  `Pull Requests`.
+- Critical unknowns: friction-intake fields remain unverified. Branch protection
+  is absent on `main`. The GitHub `production` environment currently has no
+  required-reviewer rule. Shared-preview reset, production smoke, and rollback
+  scripts remain unwired. See `Unknowns`.
 
 ## Repo
 
@@ -45,19 +49,30 @@ with it.
 - Branch prefix: `codex/` for Codex-created branches unless the user asks for
   another prefix
 - Package manager: pnpm@11.8.0 (`packageManager` in root `package.json`)
-- pnpm supply-chain policy: `minimumReleaseAge: 4320`, `minimumReleaseAgeStrict: true`,
-  `minimumReleaseAgeIgnoreMissingTime: false`, and `blockExoticSubdeps: true` in
-  `pnpm-workspace.yaml`
+- pnpm supply-chain install gates: parked in `pnpm-workspace.yaml` for the
+  build-fast phase. `allowBuilds` is active for `@sentry/cli`, `esbuild`,
+  `lefthook`, `sharp`, and `workerd`.
 - Install: `pnpm install`
 - Lockfile: `pnpm-lock.yaml`
-- Full local gate: `pnpm verify:push`, mirrored by `pnpm verify:ci` except hosted
-  smoke checks.
-- Commit gate: `pnpm verify:commit`
+- Full local pre-push gate: `pnpm verify:push` (`format:check`, `lint`,
+  `typecheck`, `knip`, `secrets:range`, `tinybird:local`,
+  `d1:migrate:local`).
+- CI gate: `.github/workflows/ci.yml` job `Verify` runs `pnpm verify:ci`
+  (`format:check`, `lint`, `typecheck`, `knip`, `spec:lint`, `test`,
+  `stats:golden`, `stats:property`, `build`) and then `pnpm secrets:range`.
+- Separate hosted PR checks: `Spec Lint` runs `pnpm spec:lint`; `Stats
+Simulation Smoke` runs package `stats:simulation -- --mode=smoke`.
+- Gate parity gap: `pnpm verify:push` runs `tinybird:local` and
+  `d1:migrate:local`, but `pnpm verify:ci` currently does not. Fix the repo
+  gate entrypoints before treating CI and pre-push as equivalent.
+- Commit gate: Lefthook runs `node scripts/check-file-size.mjs` and
+  `CI=true pnpm verify:commit`.
 - Build: `pnpm build`
 - Test: `pnpm test`
-- Lint / format / typecheck / Knip / duplicate-code / Gitleaks: wired through root scripts,
-  Turborepo, Lefthook, and GitHub Actions. See
-  `docs/spec/platform/local-quality-gates.md`.
+- Lint / format / typecheck / Knip / Gitleaks: wired through root scripts,
+  Turborepo, Lefthook, and GitHub Actions. Duplicate-code, SAST, audit,
+  CodeQL, OSV, Trivy, Scorecard, and pnpm install quarantine are parked until
+  lockdown unless run manually. See `docs/spec/platform/local-quality-gates.md`.
 - Generated artifacts: package-local `dist/**`, `.output/**`, `build/**`,
   coverage, `.turbo/`, and `.wrangler/` are ignored.
 - PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus
@@ -74,10 +89,10 @@ with it.
   merge gate in `Pull Requests` passes. Human approval is required for the high-risk
   set named in `Pull Requests`, production deploys, and any PR with blocking review
   findings.
-- Production approval required: controlled by the GitHub `production` environment. It gates the
-  deploy job itself, not traffic. The workflow starts automatically after CI passes on `main` or
-  from manual `main` dispatch. Automation merge authority never includes direct production resource
-  mutation.
+- Production approval policy: human approval is required before production
+  mutation. Current GitHub enforcement gap: the `production` environment has a
+  branch policy only and no required-reviewer protection. Automation merge
+  authority never includes direct production resource mutation.
 
 ## Workspaces
 
@@ -126,9 +141,9 @@ real package API boundary.
     `c78a35d2-97c6-4023-930e-0962a2de4376`
 - Query-safe names: team name `Splitch` or its UUID both resolve in Linear
   tools. Prefer the UUID for status/label/issue queries.
-- Verification query: `list_projects(team=<uuid>)` → project `splitch v1`;
-  `list_issues(team=<uuid>, state=Todo)` → 75 issues; active states queried
-  individually → 0 issues.
+- Verification query: `list_projects(team=<uuid>)` resolves project
+  `splitch v1`; `list_issues(team=<uuid>, state=Todo)` and active-state
+  queries are the live queue refresh shape. Do not store issue counts here.
 - Status field name: tools use `state` (type + name); status `type` values are
   triage / backlog / unstarted / started / completed / canceled / duplicate.
 - Dependency and blocker fields: Linear native blocker relationships (verify
@@ -197,9 +212,15 @@ real package API boundary.
   first-pass reviewer says "needs human review" while also reporting no blocking
   findings and the automation merge gate passes.
 - Readiness-label queries (`ready-for-agent` / `ready-for-human`) exclude Done.
+- Estimate field: Linear estimate points.
+- Estimate scale: `0`, `1`, `2`, `4`, `8`, `16`.
+- Estimate policy: To Issues and Issue Triage set an estimate on every
+  `kind-slice` before `ready-for-agent`. Use only the configured scale; `0` is
+  allowed for no-op or bookkeeping slices. If a slice is larger than `16`, split
+  it or route it to human planning instead of inventing a larger estimate.
 - Startable work criteria: `kind-slice` + Todo + `ready-for-agent` + complete
-  body + repo-route label (when issue-assigned) + no active blockers + no active
-  claim or open PR.
+  body + configured estimate + repo-route label (when issue-assigned) + no
+  active blockers + no active claim or open PR.
 - Status transition owner: Issue Triage reconciles verified stale states and
   promotes complete intake/Backlog tickets to Todo on request; Agent
   Orchestrator owns active workflow transitions.
@@ -233,14 +254,18 @@ real package API boundary.
   setup: `AGENTS.md` (workflow pointer) and `CLAUDE.md` (`@AGENTS.md` import).
 - Claude Code source of truth: `AGENTS.md`, imported by `CLAUDE.md`.
 - Claude Code symlinks: none required (no `.claude` skill paths to link).
-- Repo-local skills present: `agent/skills/ziw-*` and `.agents/skills/ziw-*`
-  (duplicate trees; both contain the `ziw-*` workflow skills).
+- Workflow skill distribution: project skills, committed generated copies from
+  `zaks-io/skills`.
+- Workflow skill lockfile: `skills-lock.json`.
+- Project skill paths: `.agents/skills/ziw-*`.
+- Generated shared skill copies: `.agents/skills/ziw-*` is the supported tree.
 - Review model policy: strongest configured path for orchestration/review;
   cheaper paths only for mechanical inventory reads.
 
 ## Pull Requests
 
-- PR CI workflow source: `.github/workflows/ci.yml`; verified hosted check name `ci`.
+- PR CI workflow source: `.github/workflows/ci.yml`; verified hosted check names:
+  `Verify`, `Spec Lint`, `Stats Simulation Smoke`.
 - Secret scanning lives in the `ci` workflow as dedicated `Install gitleaks` +
   `Scan for secrets` steps (the `Scan` step runs `pnpm secrets:range`, scoped to
   the PR/push commit range, not the whole tree). The standalone `gitleaks`
@@ -305,8 +330,8 @@ real package API boundary.
 - Git hooks: wired with Lefthook. `pre-commit` runs `pnpm verify:commit`;
   `pre-push` runs `pnpm verify:push`.
 - PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
-  Blacksmith. Tinybird Local and D1 local checks run local backing-resource
-  validators.
+  Blacksmith plus separate `Spec Lint` and `Stats Simulation Smoke` jobs. See
+  the gate parity gap above for Tinybird Local and D1 local validators.
 - Shared Preview / Production: workflows are wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
   resources plus one Tinybird Branch. Production starts automatically after
@@ -318,14 +343,14 @@ real package API boundary.
   Worker deploys that declare their migrations. Tinybird Cloud workspaces `splitch_dev` and
   `splitch_prod` exist; both have the committed datasources deployed, and production Tinybird deploy
   is wired through GitHub Actions.
-- Production: the deploy workflow is active once merged. GitHub environment secret names are present,
-  and the workflow syncs Worker secrets before deploying Workers.
-  Required reviewers and prevent-self-review are controlled by the GitHub
-  `production` environment when the plan supports them.
-- Hosted automation allowed without separate approval: CI, Gitleaks, shared-preview deploy, and the
-  production deploy workflow start. The production deploy job itself is gated by the GitHub
-  `production` environment when protection rules are configured; that environment does not control
-  traffic after Workers are deployed.
+- Production: the deploy workflow is active once merged. GitHub environment
+  secret names are present, and the workflow syncs Worker secrets before
+  deploying Workers. Current GitHub `production` environment enforcement has a
+  branch policy only and no required-reviewer rule.
+- Hosted automation allowed without separate approval: CI, Gitleaks,
+  shared-preview deploy, and production deploy workflow start. Production
+  resource mutation still requires explicit human approval by policy; the
+  current GitHub environment does not enforce that approval.
 
 ## Instruction Trust Boundaries
 
@@ -347,15 +372,16 @@ real package API boundary.
       Low/normal-risk automation merge authority, squash merge method, hosted
       required-check enforcement, and CodeRabbit-on-demand behavior are now set
       in `Pull Requests`.
-- [x] Hosted CI check name verified: `ci` (secret scanning is a step inside it;
-      the standalone `gitleaks` workflow was removed). See `Pull Requests`.
+- [x] Hosted CI check names verified: `Verify`, `Spec Lint`, and
+      `Stats Simulation Smoke`; secret scanning is a step inside `Verify`. See
+      `Pull Requests`.
 - [x] Tinybird datasource project files exist under `infra/tinybird`.
       `pnpm tinybird:local` validates datasource contracts and builds against
       Tinybird Local. Pipes, fixtures, and endpoint tests remain future work.
 - [x] Real D1 migrations exist (`@splitch/db`, SPL-9). `pnpm d1:migrate:local`
       runs a real `wrangler d1 migrations apply --local` and is wired into
-      `verify:push` and `verify:ci`; a malformed/duplicate-column migration fails
-      the gate non-zero.
+      `verify:push`; a malformed/duplicate-column migration fails the gate
+      non-zero.
 - [ ] Public npm publishing workflow and credentials are unverified. `@splitch/sdk` exists as the
       public data-plane SDK scaffold, but no package has been published. Verifier: create a release
       slice with ownership, provenance, changelog, npm token/OIDC setup, and publish dry run.
@@ -366,10 +392,10 @@ real package API boundary.
       `docs/spec/platform/deployment-pipeline.md` reset/rollback
       work, run workflow syntax checks, and confirm required GitHub environment
       secrets/vars.
-- [ ] Production environment protection is controlled by the GitHub
-      `production` environment. GitHub previously rejected required-reviewer and
-      prevent-self-review rules for this private repo with plan-support HTTP 422
-      errors, so revisit plan support or choose a different approval gate if
-      human approval is still required.
+- [ ] Production approval enforcement is not currently backed by GitHub
+      required-reviewer protection. The `production` environment has a branch
+      policy only. Revisit plan support or choose a different approval gate.
+- [ ] Gate parity gap: `verify:push` runs Tinybird Local and D1 local validators;
+      `verify:ci` currently does not.
 - [x] Shared preview branch provisioned. Verifier: Tinybird `shared_preview` Branch and matching
       non-production Cloudflare resources exist for hosted preview.
