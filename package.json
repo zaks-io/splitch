@@ -25,6 +25,7 @@
     "secrets:git": "gitleaks git --redact --no-banner .",
     "security": "pnpm sast && pnpm pins:check && pnpm audit",
     "security:full": "pnpm sast && pnpm pins:check && pnpm audit && pnpm secrets:git",
+    "shared-preview:cleanup-smoke": "node scripts/seed-shared-preview-smoke.mjs --cleanup-transient",
     "shared-preview:seed-smoke": "node scripts/seed-shared-preview-smoke.mjs",
     "shared-preview:smoke": "playwright test -c tests/shared-preview/playwright.config.ts",
     "smoke:ci": "node -e \"console.log('smoke:ci is deployment-workflow-only; run pnpm shared-preview:smoke against a deployed preview.')\"",
