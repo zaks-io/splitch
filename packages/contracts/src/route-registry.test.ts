@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { errorCodes } from "./errors";
+import { honoPathToOpenApiPath } from "./openapi-route";
 import { getRoute, operationIds, routeRegistry } from "./route-registry";
 import { authKinds, httpMethods, idempotencyModes, rateLimitClasses } from "./route-contract";
 
@@ -166,7 +167,7 @@ describe("route registry: per-route invariants", () => {
   it("every route carries a derived @hono/zod-openapi definition with a matching operationId", () => {
     for (const route of routeRegistry) {
       expect(route.openapi.operationId).toBe(route.operationId);
-      expect(route.openapi.path).toBe(route.path);
+      expect(route.openapi.path).toBe(honoPathToOpenApiPath(route.path));
       expect(route.openapi.method).toBe(route.method.toLowerCase());
     }
   });

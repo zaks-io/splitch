@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./mcp-operation-adapter": {
+      "types": "./src/mcp-operation-adapter.ts",
+      "default": "./src/mcp-operation-adapter.ts"
     }
   },
   "files": [
@@ -21,6 +25,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@splitch/contracts": "workspace:*"
+    "@splitch/contracts": "workspace:*",
+    "hono": "^4.12.27"
   }
 }

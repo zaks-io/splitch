@@ -26,7 +26,7 @@ const DEFAULT_INFO: OpenApiDocumentInfo = {
 };
 
 /** Handler the emitter never calls — the app exists only to emit, not to serve. */
-function unusedHandler(): Response {
+function unusedHandler(_c: { json: (body: unknown, status: number) => Response }): never {
   throw new Error("openapi-document: emit-only app must never handle a request");
 }
 

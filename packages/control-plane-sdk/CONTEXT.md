@@ -20,6 +20,8 @@ control-plane terminology exactly and should not introduce friendlier aliases.
 
 ## Behavior language
 
+- Normal consumers call typed route groups on `createControlPlaneSdk()` (`flags`, `experiments`, …) backed by Hono `hc<ControlPlaneClientApp>()`.
+- MCP and other dynamic tool executors import `@splitch/control-plane-sdk/mcp-operation-adapter` and call `callOperationById(operationId, input)` — operation-id dispatch is internal to that adapter, not the public SDK surface.
 - Creating an API Key may return its secret value once.
 - Listing or retrieving API Key records must not expose an existing secret value.
 - Client Keys are public and may be returned freely.

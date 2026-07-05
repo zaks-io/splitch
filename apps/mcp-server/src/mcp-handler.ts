@@ -1,4 +1,4 @@
-import { createControlPlaneSdk } from "@splitch/control-plane-sdk";
+import { createMcpOperationAdapter } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import {
   createHealthResponse,
   deriveMcpProtocolTools,
@@ -27,7 +27,7 @@ const internalAnalysisBaseUrl = "https://analysis-api.internal";
 const tools = deriveMcpProtocolTools();
 const toolNames = new Set(tools.map((tool) => tool.name));
 type McpRoutableOwner = "control-plane-api" | "evaluation-api" | "analysis-api";
-type OperationSdk = ReturnType<typeof createControlPlaneSdk>;
+type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
 type OperationSdkResolver = () => OperationSdk;
 type OperationSdks = Record<McpRoutableOwner, OperationSdkResolver>;
 
@@ -77,7 +77,7 @@ function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
   const platformTarget = parsePlatformTarget(options.platformTarget);
   return {
     "control-plane-api": createLazyOperationSdk(() =>
-      createControlPlaneSdk({
+      createMcpOperationAdapter({
         baseUrl: apiBaseUrl(
           "CONTROL_PLANE_API_ORIGIN",
           options.controlPlaneBaseUrl,
@@ -88,7 +88,7 @@ function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
       }),
     ),
     "evaluation-api": createLazyOperationSdk(() =>
-      createControlPlaneSdk({
+      createMcpOperationAdapter({
         baseUrl: apiBaseUrl(
           "EVALUATION_API_ORIGIN",
           options.evaluationBaseUrl,
@@ -99,7 +99,7 @@ function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
       }),
     ),
     "analysis-api": createLazyOperationSdk(() =>
-      createControlPlaneSdk({
+      createMcpOperationAdapter({
         baseUrl: analysisApiBaseUrl(
           options.analysisBaseUrl,
           platformTarget,
@@ -219,7 +219,7 @@ async function callTool(
 
   try {
     const sdk = sdkForOwner(sdks, route.owner);
-    const result = await sdk.callOperation(call.name, call.arguments, { authorization });
+    const result = await sdk.callOperationById(call.name, call.arguments, { authorization });
     return jsonRpcResult(
       id,
       result.ok ? toolResult(result.data) : toolResult(result.error, { isError: true }),

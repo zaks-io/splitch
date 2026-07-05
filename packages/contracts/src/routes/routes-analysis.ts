@@ -36,7 +36,7 @@ const AuditLogQuerySchema = z.object({
   environmentId: z.string().optional(),
 });
 
-export const analysisRoutes: readonly ApiRouteContract[] = [
+export const analysisRoutes = [
   defineApiRoute({
     operationId: "flags_test_eval",
     owner: "evaluation-api",
@@ -117,4 +117,4 @@ export const analysisRoutes: readonly ApiRouteContract[] = [
     idempotency: "none",
     errors: [],
   }),
-];
+] as const satisfies readonly ApiRouteContract[];
