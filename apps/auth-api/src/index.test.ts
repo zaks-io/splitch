@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthApiEnv } from "./env";
 import worker from "./index";
 import { FIXTURE_OTP } from "./otp";
@@ -37,13 +37,19 @@ beforeAll(async () => {
 });
 
 afterAll(() => local.dispose());
+afterEach(() => vi.unstubAllGlobals());
 
 const testCtx = {
   waitUntil() {},
   passThroughOnException() {},
 } as unknown as ExecutionContext;
 
-function call(body: unknown, ip: string, path = "/agent/identity"): Promise<Response> {
+function call(
+  body: unknown,
+  ip: string,
+  path = "/agent/identity",
+  requestEnv: AuthApiEnv = env,
+): Promise<Response> {
   const request = new Request(`https://auth.splitch.test${path}`, {
     method: "POST",
     headers: { "content-type": "application/json", "cf-connecting-ip": ip },
@@ -53,8 +59,13 @@ function call(body: unknown, ip: string, path = "/agent/identity"): Promise<Resp
   // a plain test Request lacks those edge-only props, so cast at the boundary —
   // the handler reads only headers/url/body, never `cf`.
   return Promise.resolve(
-    worker.fetch(request as unknown as Parameters<typeof worker.fetch>[0], env, testCtx),
+    worker.fetch(request as unknown as Parameters<typeof worker.fetch>[0], requestEnv, testCtx),
   );
+}
+
+async function rowCount(table: string): Promise<number> {
+  const row = await local.d1.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 let turnstileSeq = 0;
@@ -104,5 +115,31 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
       }
     }
     expect(lastError).toBe("too_many_requests");
+  });
+
+  it("shared-preview uses siteverify and rejects fixture-prefixed tokens before writes", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json({ success: false, "error-codes": ["invalid-input-response"] }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const beforeOrganizations = await rowCount("organizations");
+    const beforeApps = await rowCount("apps");
+
+    const res = await call(
+      { turnstile_token: `${FIXTURE_TURNSTILE_TOKEN}-hosted` },
+      "198.51.100.86",
+      "/agent/identity",
+      {
+        ...env,
+        SPLITCH_PLATFORM_TARGET: "shared-preview",
+        TURNSTILE_SECRET: "test-turnstile-secret",
+      },
+    );
+
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: string }).error).toBe("access_denied");
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(await rowCount("organizations")).toBe(beforeOrganizations);
+    expect(await rowCount("apps")).toBe(beforeApps);
   });
 });

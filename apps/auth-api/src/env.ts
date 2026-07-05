@@ -36,6 +36,8 @@ export interface AuthApiEnv {
   SPLITCH_SMOKE_USER_ID?: string;
   /** Space-delimited shared-preview smoke access-token scopes. */
   SPLITCH_SMOKE_SCOPES?: string;
+  /** Cloudflare Turnstile server-side validation secret. */
+  TURNSTILE_SECRET?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
 }

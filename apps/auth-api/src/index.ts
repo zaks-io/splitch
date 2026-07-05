@@ -15,7 +15,7 @@ import { makeFixtureOtp, makeIdempotencyStore } from "./otp";
 import { makeRateLimiter } from "./rate-limit";
 import { makeKvRevocationStore } from "./revocation";
 import { makeTokenSigner } from "./token-exchange";
-import { makeFixtureTurnstile } from "./turnstile";
+import { makeFixtureTurnstile, makeRuntimeTurnstile } from "./turnstile";
 import { makeFixtureWorkOs } from "./workos";
 import type { SmokeClientCredentials } from "./oauth-routes";
 
@@ -23,7 +23,7 @@ const service = "splitch-auth-api";
 
 const workos = makeFixtureWorkOs();
 const otp = makeFixtureOtp();
-const turnstile = makeFixtureTurnstile();
+const fixtureTurnstile = makeFixtureTurnstile();
 const rateLimiter = makeRateLimiter();
 const idempotency = makeIdempotencyStore();
 
@@ -34,6 +34,11 @@ const handler = {
       env,
       workerObservabilityWithWaitUntil("auth-api", ctx),
     );
+    const turnstile = makeRuntimeTurnstile({
+      fixture: fixtureTurnstile,
+      platformTarget: env.SPLITCH_PLATFORM_TARGET,
+      secret: env.TURNSTILE_SECRET,
+    });
     if (url.pathname === "/health" || url.pathname === "/") {
       return Response.json(
         createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
