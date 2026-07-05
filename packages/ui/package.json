@@ -19,5 +19,8 @@
     "lint": "biome lint src",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.3.2"
   }
 }
