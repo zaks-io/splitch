@@ -1,5 +1,19 @@
 import { z } from "zod";
-import { EvaluationContextSchema, VariantValueSchema } from "./leaf-schemas-runtime";
+import { EvaluationContextSchema } from "./leaf-schemas-runtime";
+import { VariantValueSchema } from "./leaves/variant-value";
+import {
+  DataPlaneEvaluateResponseSchema,
+  PeekEvaluateResponseSchema,
+  type DataPlaneEvaluateResponse,
+  type PeekEvaluateResponse,
+} from "./leaves/data-plane-evaluate-wire";
+
+export {
+  DataPlaneEvaluateResponseSchema,
+  PeekEvaluateResponseSchema,
+  type DataPlaneEvaluateResponse,
+  type PeekEvaluateResponse,
+};
 
 /**
  * Shared wire envelope conventions, composed from existing leaves.
@@ -76,19 +90,7 @@ export const DataPlaneEvaluateRequestSchema = z.object({
 });
 export type DataPlaneEvaluateRequest = z.infer<typeof DataPlaneEvaluateRequestSchema>;
 
-export const DataPlaneEvaluateResponseSchema = z
-  .object({
-    variant: VariantValueSchema.nullable(),
-  })
-  .strict();
-export type DataPlaneEvaluateResponse = z.infer<typeof DataPlaneEvaluateResponseSchema>;
-
-export const PeekEvaluateResponseSchema = z
-  .object({
-    variant: VariantValueSchema,
-  })
-  .strict();
-export type PeekEvaluateResponse = z.infer<typeof PeekEvaluateResponseSchema>;
+// Data-plane evaluate response leaves live in ./leaves/data-plane-evaluate-wire.ts.
 
 // ---------------------------------------------------------------------------
 // Test-evaluation (dry-run, control-plane token)

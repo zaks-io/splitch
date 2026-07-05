@@ -184,6 +184,21 @@
     },
     "wrangler:types": {
       "cache": false
+    },
+    "@splitch/sdk#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "../contracts/src/**"],
+      "outputs": ["dist/**", "src/generated/**"]
+    },
+    "@splitch/sdk#typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "../contracts/src/**"],
+      "outputs": ["src/generated/**"]
+    },
+    "@splitch/sdk#test": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "../contracts/src/**"],
+      "outputs": []
     }
   }
 }

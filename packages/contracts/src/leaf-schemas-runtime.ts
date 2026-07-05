@@ -1,5 +1,25 @@
 import { z } from "zod";
-import { ErrorCodeSchema } from "./errors";
+import {
+  ResolutionDetailsSchema,
+  type ResolutionDetails,
+  type VariantValue,
+} from "./leaves/resolution-details";
+import {
+  ResolutionReasonSchema,
+  resolutionReasons,
+  type ResolutionReason,
+} from "./leaves/resolution-reason";
+import { VariantValueSchema } from "./leaves/variant-value";
+
+export {
+  ResolutionDetailsSchema,
+  ResolutionReasonSchema,
+  VariantValueSchema,
+  resolutionReasons,
+  type ResolutionDetails,
+  type ResolutionReason,
+  type VariantValue,
+};
 
 /**
  * Canonical Zod leaf schemas for the runtime/identity glossary nouns:
@@ -69,68 +89,7 @@ export const ExposureEventSchema = z.object({
 });
 export type ExposureEvent = z.infer<typeof ExposureEventSchema>;
 
-// ---------------------------------------------------------------------------
-// ResolutionDetails (OpenFeature SDK return shape)
-//
-// Not a wire schema — the SDK synthesizes this from the wire value plus HTTP
-// status so the caller always gets a structured, fail-loud result (ADR-0036).
-// `errorCode` / `errorMessage` are present iff `reason === 'ERROR'`; a refinement
-// enforces both presence-when-ERROR and absence-otherwise loudly at parse time.
-// ---------------------------------------------------------------------------
-
-export const resolutionReasons = [
-  "SPLIT",
-  "TARGETING_MATCH",
-  "DEFAULT",
-  "DISABLED",
-  "CACHED",
-  "STALE",
-  "ERROR",
-] as const;
-
-export const ResolutionReasonSchema = z.enum(resolutionReasons);
-export type ResolutionReason = z.infer<typeof ResolutionReasonSchema>;
-
-// VariantValue = boolean | string | number | JsonObject
-// Exported so wire envelopes reuse this leaf rather than redefining the union.
-export const VariantValueSchema = z.union([
-  z.boolean(),
-  z.string(),
-  z.number(),
-  z.record(z.string(), z.unknown()),
-]);
-export type VariantValue = z.infer<typeof VariantValueSchema>;
-
-const BaseResolutionDetailsSchema = z.object({
-  value: VariantValueSchema,
-  variantName: z.string().nullable(),
-  reason: ResolutionReasonSchema,
-  ruleId: z.string().optional(),
-  errorCode: ErrorCodeSchema.optional(),
-  errorMessage: z.string().optional(),
-});
-
-export const ResolutionDetailsSchema = BaseResolutionDetailsSchema.refine(hasValidErrorFields, {
-  message: "errorCode/errorMessage are present iff reason === 'ERROR'",
-}).refine(hasValidRuleId, {
-  message: "ruleId is required iff reason === 'TARGETING_MATCH'",
-});
-export type ResolutionDetails = z.infer<typeof ResolutionDetailsSchema>;
-
-function hasValidErrorFields(d: z.infer<typeof BaseResolutionDetailsSchema>): boolean {
-  if (d.reason === "ERROR") {
-    // A failure-fallback ALWAYS carries an errorCode (ADR-0036).
-    return d.errorCode != null;
-  }
-  return d.errorCode == null && d.errorMessage == null;
-}
-
-function hasValidRuleId(d: z.infer<typeof BaseResolutionDetailsSchema>): boolean {
-  if (d.reason === "TARGETING_MATCH") {
-    return d.ruleId != null;
-  }
-  return d.ruleId == null;
-}
+// ResolutionDetails leaves are defined in ./leaves/* and re-exported above.
 
 // ---------------------------------------------------------------------------
 // Organization
