@@ -13,6 +13,7 @@
       "ignoreDependencies": ["@cloudflare/vite-plugin", "@tailwindcss/vite", "@vitejs/plugin-react"]
     },
     "packages/sdk": {
+      "entry": ["scripts/pack-release.mjs"],
       "ignoreDependencies": ["@splitch/contracts"]
     }
   }

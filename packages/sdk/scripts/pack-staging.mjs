@@ -10,7 +10,7 @@ export function getPackageRoot() {
 }
 
 /** Published manifest: workspace-only fields must not ship. */
-export function readReleaseManifest(packageRoot) {
+function readReleaseManifest(packageRoot) {
   const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
   const {
     devDependencies: _devDependencies,
