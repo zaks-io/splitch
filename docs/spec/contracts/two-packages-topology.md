@@ -16,10 +16,13 @@ free of transport code. (ADR-0025 "two packages".)
   `Metric`, `Exposure`, `EvaluationContext`, `Segment`, `ClientKey`, `APIKey`, etc.)
 - `z.infer<>` types derived from those schemas (never hand-written types)
 - `@hono/zod-openapi` route definitions for every control-plane endpoint
+- `ControlPlaneRpcApp` — the contract-owned Hono RPC App type for `hc<ControlPlaneRpcApp>()` (derived
+  from the route registry; resolves the SDK↔Worker typing tension without importing `apps/*`)
 - `ErrorResponse` discriminated union + `ErrorCode` enum
 - `TestEvaluationReason` discriminated union
 
-**Dependencies:** `zod`, `@hono/zod-openapi` only. No transport code. No `fetch`. No `node-fetch`.
+**Dependencies:** `zod`, `@hono/zod-openapi`, `hono` (for the exported RPC App type). No transport
+runtime. No `fetch`. No `node-fetch`.
 
 **Build step:** None. Zod schemas + types are source. Consumed directly as TypeScript.
 
@@ -37,7 +40,8 @@ free of transport code. (ADR-0025 "two packages".)
 
 **What it exports:**
 
-- Hono `hc<AppType>()` typed client inferred from the Control Plane API Worker's exported app type
+- Hono `hc<ControlPlaneRpcApp>()` typed client using the **contract-owned** App type from
+  `@splitch/contracts` (not the Worker implementation in `apps/*`)
 - Thin wrappers: auth header injection, credential management, error parsing (unwraps `ErrorResponse`)
 - Re-exports `@splitch/contracts` types for convenience
 
@@ -70,9 +74,10 @@ for non-browser environments. No other transport frameworks.
 
 ## `hc` client: type-inferred, zero codegen
 
-`@splitch/control-plane-sdk` wraps `hc<AppType>()` where `AppType` is the exported type of the Hono app from
-the Control Plane API Worker. A Worker change that adds, removes, or renames a route fails `tsc`
-immediately in every consumer — the client cannot drift from the Worker by construction.
+`@splitch/control-plane-sdk` wraps `hc<ControlPlaneRpcApp>()` where `ControlPlaneRpcApp` is exported
+by `@splitch/contracts` and derived from the same Zod route inputs as the route registry. A contract
+change that adds, removes, or renames a route fails `tsc` immediately in every consumer — the client
+cannot drift from the authored routes by construction, and the SDK never imports `apps/*` (dependency-cruiser).
 
 No codegen step. No OpenAPI-to-client generation. `hc` + `z.infer` cover every internal consumer.
 The OpenAPI document is served from a Worker route or produced in CI for documentation; it is never
