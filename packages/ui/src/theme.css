@@ -7,9 +7,20 @@
 @source "./layout";
 @source "./state";
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+/* dark: must match explicit dark and system dark. data-theme="light" opts out. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme]), :root:not([data-theme]) *) {
+      @slot;
+    }
+  }
+}
 
 @theme {
+  /* Control is cobalt/reference; Treatment is chartreuse/challenger. Do not swap. */
   --color-brand-control-50: #eef3fd;
   --color-brand-control-100: #d6e2fa;
   --color-brand-control-300: #7da0ee;
@@ -164,6 +175,7 @@
   --color-warning-muted: var(--warning-muted);
 }
 
+/* Theme selection: no data-theme follows OS; explicit dark/light wins over OS. */
 :root {
   color-scheme: light;
 
