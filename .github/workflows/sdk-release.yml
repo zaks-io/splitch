@@ -140,6 +140,9 @@ jobs:
           name: sdk-release-validation-${{ needs.validate.outputs.sdk_tag }}
           path: ${{ runner.temp }}/sdk-release-artifacts
 
+      - name: Build @splitch/sdk for release packaging
+        run: pnpm --filter @splitch/sdk build
+
       - name: Prepare release artifacts
         id: prepare
         env:

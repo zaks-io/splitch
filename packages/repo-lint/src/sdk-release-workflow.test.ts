@@ -39,6 +39,15 @@ describe("sdk-release workflow contract", () => {
     expect(workflow).toContain("does not publish to npm");
     expect(workflow).not.toContain("npm publish");
   });
+
+  it("builds @splitch/sdk in the prepare job before packaging", () => {
+    const prepareSection = workflow.split("  prepare:")[1]?.split("  draft-release:")[0] ?? "";
+    const buildIndex = prepareSection.indexOf("pnpm --filter @splitch/sdk build");
+    const packageIndex = prepareSection.indexOf("prepare-artifacts.mjs");
+    expect(buildIndex).toBeGreaterThan(-1);
+    expect(packageIndex).toBeGreaterThan(-1);
+    expect(buildIndex).toBeLessThan(packageIndex);
+  });
 });
 
 describe("sdk release target resolution", () => {
@@ -63,4 +72,16 @@ describe("sdk release target resolution", () => {
       packageName: "@splitch/sdk",
     });
   });
+
+  it("prepare-artifacts succeeds from a clean checkout without packages/sdk/dist", () => {
+    const output = execFileSync(
+      "node",
+      ["scripts/sdk-release/check-prepare-clean-checkout.mjs", repoRoot],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+      },
+    );
+    expect(output.trim()).toBe("prepare clean-checkout check passed");
+  }, 30_000);
 });

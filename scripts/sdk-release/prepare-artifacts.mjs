@@ -1,9 +1,35 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveSdkReleaseTarget, readSdkManifest } from "./resolve-version.mjs";
+
+/**
+ * @param {string} repoRoot
+ */
+export function ensureSdkBuilt(repoRoot) {
+  const sdkRoot = join(repoRoot, "packages/sdk");
+  const distIndex = join(sdkRoot, "dist/index.js");
+  if (existsSync(distIndex)) {
+    return;
+  }
+
+  execFileSync("node", ["scripts/prepack-build.mjs"], {
+    cwd: sdkRoot,
+    stdio: "inherit",
+    env: { ...process.env, CI: "true" },
+  });
+  execFileSync("npx", ["tsup", "--config", "tsup.config.ts"], {
+    cwd: sdkRoot,
+    stdio: "inherit",
+    env: { ...process.env, CI: "true" },
+  });
+
+  if (!existsSync(distIndex)) {
+    throw new Error("packages/sdk/dist/index.js is missing after @splitch/sdk build");
+  }
+}
 
 const repoRoot = process.argv[2] ?? process.cwd();
 const outputDir = process.argv[3] ?? join(repoRoot, ".sdk-release-artifacts");
@@ -13,6 +39,8 @@ mkdirSync(outputDir, { recursive: true });
 
 const target = resolveSdkReleaseTarget(repoRoot);
 const manifest = readSdkManifest(repoRoot);
+
+ensureSdkBuilt(repoRoot);
 
 const packOutput = execFileSync("node", ["scripts/pack-release.mjs", outputDir], {
   cwd: join(repoRoot, "packages/sdk"),
