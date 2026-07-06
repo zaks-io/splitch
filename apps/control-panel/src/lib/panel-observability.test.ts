@@ -1,4 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AppErrorPage } from "@splitch/ui/state/app-error-page";
+import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
+import { WidgetErrorState } from "@splitch/ui/state/widget-error-state";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { AccessDeniedError } from "./loader-context";
 import {
   boundaryLevel,
@@ -36,6 +41,53 @@ describe("control-panel observability tiers", () => {
     expect(captureException).toHaveBeenCalledWith(
       error,
       expect.objectContaining({
+        level,
+        tags: { boundary: tier, route },
+      }),
+    );
+  });
+
+  it.each([
+    {
+      tier: "app",
+      route: "__root__",
+      level: "error",
+      surface: createElement(AppErrorPage),
+      surfaceLabel: "Page unavailable",
+    },
+    {
+      tier: "section",
+      route: "/$orgSlug/$appSlug/$env/flags",
+      level: "error",
+      surface: createElement(SectionErrorPage, { title: "Flags unavailable" }),
+      surfaceLabel: "Flags unavailable",
+    },
+    {
+      tier: "widget",
+      route: "/$orgSlug/$appSlug/$env",
+      level: "warning",
+      surface: createElement(WidgetErrorState),
+      surfaceLabel: "Widget unavailable",
+    },
+  ] as const)("accepts thrown $tier route-loader errors with the correct surface and reporting", ({
+    tier,
+    route,
+    level,
+    surface,
+    surfaceLabel,
+  }) => {
+    const captureException = vi.fn();
+    setControlPanelSentryClientForTests({ captureException });
+
+    const loaderError = new Error(`${tier} route loader failed`);
+    reportRouteError(tier, loaderError, route);
+    const html = renderToStaticMarkup(surface);
+
+    expect(html).toContain(surfaceLabel);
+    expect(captureException).toHaveBeenCalledWith(
+      loaderError,
+      expect.objectContaining({
+        extra: { route },
         level,
         tags: { boundary: tier, route },
       }),
