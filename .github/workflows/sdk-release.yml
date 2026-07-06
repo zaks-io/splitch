@@ -1,0 +1,205 @@
+name: sdk-release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sdk-release
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+
+jobs:
+  validate:
+    name: Validate SDK Candidate
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 30
+    outputs:
+      sdk_version: ${{ steps.resolve.outputs.sdk_version }}
+      sdk_tag: ${{ steps.resolve.outputs.sdk_tag }}
+      commit_sha: ${{ steps.resolve.outputs.commit_sha }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Turbo remote cache inputs
+        run: node scripts/check-turbo-remote-cache-env.mjs
+
+      - name: Install Tinybird CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://tinybird.co | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve SDK release target
+        id: resolve
+        run: |
+          set -euo pipefail
+          target="$(node scripts/sdk-release/resolve-version.mjs "$GITHUB_WORKSPACE")"
+          sdk_version="$(printf '%s' "$target" | jq -r '.version')"
+          sdk_tag="$(printf '%s' "$target" | jq -r '.tag')"
+          {
+            echo "sdk_version=$sdk_version"
+            echo "sdk_tag=$sdk_tag"
+            echo "commit_sha=$GITHUB_SHA"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## SDK release target"
+            echo
+            echo "- Package: \`@splitch/sdk\`"
+            echo "- Version: \`$sdk_version\`"
+            echo "- Tag: \`$sdk_tag\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate SDK candidate
+        run: node scripts/sdk-release/validate-candidate.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts"
+
+      - name: Upload validation artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: sdk-release-validation-${{ steps.resolve.outputs.sdk_tag }}
+          path: ${{ runner.temp }}/sdk-release-artifacts/
+          retention-days: 30
+
+  prepare:
+    name: Prepare SDK Release Artifacts
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 20
+    needs: validate
+    outputs:
+      sdk_tag: ${{ needs.validate.outputs.sdk_tag }}
+      commit_sha: ${{ needs.validate.outputs.commit_sha }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Turbo remote cache inputs
+        run: node scripts/check-turbo-remote-cache-env.mjs
+
+      - name: Download validation artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: sdk-release-validation-${{ needs.validate.outputs.sdk_tag }}
+          path: ${{ runner.temp }}/sdk-release-artifacts
+
+      - name: Prepare release artifacts
+        id: prepare
+        env:
+          SDK_TAG: ${{ needs.validate.outputs.sdk_tag }}
+          COMMIT_SHA: ${{ needs.validate.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          manifest="$(node scripts/sdk-release/prepare-artifacts.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts" "$COMMIT_SHA")"
+          echo "$manifest" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: sdk-release-package-${{ needs.validate.outputs.sdk_tag }}
+          path: ${{ runner.temp }}/sdk-release-artifacts/
+          retention-days: 90
+
+  draft-release:
+    name: Create Or Update Draft Release
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    needs: [validate, prepare]
+    env:
+      SDK_TAG: ${{ needs.validate.outputs.sdk_tag }}
+      SDK_VERSION: ${{ needs.validate.outputs.sdk_version }}
+      COMMIT_SHA: ${{ needs.validate.outputs.commit_sha }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.validate.outputs.commit_sha }}
+          persist-credentials: true
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: sdk-release-package-${{ needs.validate.outputs.sdk_tag }}
+          path: ${{ runner.temp }}/sdk-release-artifacts
+
+      - name: Create or update draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_SHA: ${{ needs.validate.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          result="$(node scripts/sdk-release/publish-draft-release.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts" "$COMMIT_SHA")"
+          release_url="$(printf '%s' "$result" | jq -r '.url')"
+          {
+            echo "## Draft SDK release"
+            echo
+            echo "- Tag: \`$SDK_TAG\`"
+            echo "- Version: \`$SDK_VERSION\`"
+            echo "- Commit: \`$COMMIT_SHA\`"
+            echo "- Release: $release_url"
+            echo
+            echo "This workflow does not publish to npm."
+          } >> "$GITHUB_STEP_SUMMARY"
