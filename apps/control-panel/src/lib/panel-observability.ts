@@ -46,6 +46,11 @@ type RefetchFailure = {
   id: string;
   nextRetryMs?: number;
 };
+type NudgeRefetchFailureHandlerOptions = {
+  entity: string;
+  id: string;
+  onStaleData?: (failure: RefetchFailure) => void;
+};
 
 type SentryEventLike = Record<string, unknown>;
 
@@ -140,6 +145,18 @@ export function reportBackgroundRefetchFailure(failure: RefetchFailure): void {
     message: `nudge refetch failed for entity=${failure.entity} id=${failure.id}`,
     data: failure,
   });
+}
+
+export function createNudgeRefetchFailureHandler({
+  entity,
+  id,
+  onStaleData,
+}: NudgeRefetchFailureHandlerOptions) {
+  return (failure: Pick<RefetchFailure, "attempt" | "nextRetryMs">): void => {
+    const reportedFailure = { ...failure, entity, id };
+    reportBackgroundRefetchFailure(reportedFailure);
+    onStaleData?.(reportedFailure);
+  };
 }
 
 export function boundaryLevel(tier: BoundaryTier): SentryLevel {

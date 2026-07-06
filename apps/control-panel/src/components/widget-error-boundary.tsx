@@ -1,6 +1,6 @@
 import { Button } from "@splitch/ui/components/button";
 import { WidgetErrorState } from "@splitch/ui/state/widget-error-state";
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, Fragment, type ErrorInfo, type ReactNode } from "react";
 import { reportBoundaryError } from "#lib/panel-observability";
 
 type WidgetErrorBoundaryProps = {
@@ -10,12 +10,13 @@ type WidgetErrorBoundaryProps = {
 
 type WidgetErrorBoundaryState = {
   error: unknown;
+  retryKey: number;
 };
 
 class WidgetErrorBoundary extends Component<WidgetErrorBoundaryProps, WidgetErrorBoundaryState> {
-  override state: WidgetErrorBoundaryState = { error: null };
+  override state: WidgetErrorBoundaryState = { error: null, retryKey: 0 };
 
-  static getDerivedStateFromError(error: unknown): WidgetErrorBoundaryState {
+  static getDerivedStateFromError(error: unknown): Pick<WidgetErrorBoundaryState, "error"> {
     return { error };
   }
 
@@ -28,15 +29,19 @@ class WidgetErrorBoundary extends Component<WidgetErrorBoundaryProps, WidgetErro
       return (
         <WidgetErrorState
           action={
-            <Button onClick={() => this.setState({ error: null })} type="button" variant="outline">
+            <Button onClick={this.retry} type="button" variant="outline">
               Retry
             </Button>
           }
         />
       );
     }
-    return this.props.children;
+    return <Fragment key={this.state.retryKey}>{this.props.children}</Fragment>;
   }
+
+  private retry = () => {
+    this.setState((state) => ({ error: null, retryKey: state.retryKey + 1 }));
+  };
 }
 
 export { WidgetErrorBoundary };

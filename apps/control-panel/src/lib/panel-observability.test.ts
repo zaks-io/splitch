@@ -8,6 +8,7 @@ import { AccessDeniedError } from "./loader-context";
 import {
   boundaryLevel,
   configureControlPanelSentryScope,
+  createNudgeRefetchFailureHandler,
   createControlPanelSentryOptions,
   reportBackgroundRefetchFailure,
   reportRouteError,
@@ -127,6 +128,35 @@ describe("control-panel observability tiers", () => {
         category: "control-panel.refetch",
         level: "debug",
         data: expect.objectContaining({ attempt: 2, nextRetryMs: 4000 }),
+      }),
+    );
+  });
+
+  it("wires nudge refetch failures to the stale-data toast hook", () => {
+    const addBreadcrumb = vi.fn();
+    const onStaleData = vi.fn();
+    setControlPanelSentryClientForTests({ addBreadcrumb });
+
+    const handleFailure = createNudgeRefetchFailureHandler({
+      entity: "flag",
+      id: "flag_1",
+      onStaleData,
+    });
+
+    handleFailure({ attempt: 3, nextRetryMs: 8000 });
+
+    const expectedFailure = {
+      attempt: 3,
+      entity: "flag",
+      id: "flag_1",
+      nextRetryMs: 8000,
+    };
+    expect(onStaleData).toHaveBeenCalledWith(expectedFailure);
+    expect(addBreadcrumb).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: "control-panel.refetch",
+        data: expectedFailure,
+        level: "debug",
       }),
     );
   });
