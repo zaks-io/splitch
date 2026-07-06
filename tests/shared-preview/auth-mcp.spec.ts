@@ -26,6 +26,10 @@ test.describe("shared-preview auth and MCP", () => {
     expect(body.expires_in).toEqual(expect.any(Number));
   });
 
+  test("Auth API rejects local fixture Turnstile tokens", async ({ smoke }) => {
+    await smoke.assertFixtureTurnstileRejected();
+  });
+
   test("MCP lists agent tools from route contracts", async ({ smoke }) => {
     const tools = await smoke.listTools();
     const names = tools.map((tool) => tool.name);

@@ -25,6 +25,31 @@ export interface TurnstilePort {
   assertValid(token: string | undefined, remoteIp: string | undefined): Promise<void>;
 }
 
+interface TurnstileSiteverifyResponse {
+  success?: boolean;
+  "error-codes"?: string[];
+}
+
+interface RuntimeTurnstileOptions {
+  endpoint?: string;
+  fetcher?: typeof fetch;
+  fixture: TurnstilePort;
+  platformTarget: string | undefined;
+  secret: string | undefined;
+}
+
+interface CloudflareTurnstileOptions {
+  endpoint?: string;
+  fetcher?: typeof fetch;
+  secret: string;
+  timeoutMs?: number;
+}
+
+const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+const SITEVERIFY_TIMEOUT_MS = 5_000;
+const LOCAL_TEST_TARGETS = new Set<string | undefined>([undefined, "local", "pr-ci"]);
+const HOSTED_TARGETS = new Set<string | undefined>(["shared-preview", "production"]);
+
 /** The fixture's canonical passing token. */
 export const FIXTURE_TURNSTILE_TOKEN = "fixture-turnstile-ok";
 
@@ -59,4 +84,101 @@ export function makeFixtureTurnstile(): TurnstilePort {
       spent.add(token);
     },
   };
+}
+
+export function makeRuntimeTurnstile(options: RuntimeTurnstileOptions): TurnstilePort {
+  if (LOCAL_TEST_TARGETS.has(options.platformTarget)) {
+    return options.fixture;
+  }
+  if (!HOSTED_TARGETS.has(options.platformTarget)) {
+    throw new Error(
+      `auth-api: unsupported SPLITCH_PLATFORM_TARGET for Turnstile verifier: ${options.platformTarget}`,
+    );
+  }
+  if (!options.secret) {
+    throw new Error("auth-api: TURNSTILE_SECRET is required outside local/test targets");
+  }
+  return makeCloudflareTurnstile({
+    endpoint: options.endpoint,
+    fetcher: options.fetcher,
+    secret: options.secret,
+  });
+}
+
+export function makeCloudflareTurnstile(options: CloudflareTurnstileOptions): TurnstilePort {
+  return {
+    async assertValid(token, remoteIp) {
+      if (!token) {
+        throw new OAuthError("access_denied", "Turnstile token is required");
+      }
+      const result = await siteverify(options, token, remoteIp);
+      if (result.success !== true) {
+        throw new OAuthError("access_denied", "Turnstile verification failed");
+      }
+    },
+  };
+}
+
+async function siteverify(
+  options: CloudflareTurnstileOptions,
+  token: string,
+  remoteIp: string | undefined,
+): Promise<TurnstileSiteverifyResponse> {
+  const response = await postSiteverify(options, token, remoteIp);
+  if (!response.ok) {
+    throw new OAuthError("access_denied", "Turnstile verification failed");
+  }
+  try {
+    const result = await response.json();
+    if (!isSiteverifyResponse(result)) {
+      throw new OAuthError("access_denied", "Turnstile verification failed");
+    }
+    return result;
+  } catch {
+    throw new OAuthError("access_denied", "Turnstile verification failed");
+  }
+}
+
+async function postSiteverify(
+  options: CloudflareTurnstileOptions,
+  token: string,
+  remoteIp: string | undefined,
+): Promise<Response> {
+  try {
+    return await (options.fetcher ?? fetch)(options.endpoint ?? SITEVERIFY_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(siteverifyBody(options.secret, token, remoteIp)),
+      signal: timeoutSignal(options.timeoutMs ?? SITEVERIFY_TIMEOUT_MS),
+    });
+  } catch {
+    throw new OAuthError("access_denied", "Turnstile verification failed");
+  }
+}
+
+function siteverifyBody(
+  secret: string,
+  token: string,
+  remoteIp: string | undefined,
+): Record<string, string> {
+  if (!remoteIp) {
+    return { secret, response: token };
+  }
+  return { secret, response: token, remoteip: remoteIp };
+}
+
+function isSiteverifyResponse(value: unknown): value is TurnstileSiteverifyResponse {
+  return typeof value === "object" && value !== null;
+}
+
+function timeoutSignal(timeoutMs: number): AbortSignal {
+  const timeout = (AbortSignal as typeof AbortSignal & { timeout?: (ms: number) => AbortSignal })
+    .timeout;
+  if (timeout) {
+    return timeout(timeoutMs);
+  }
+
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), timeoutMs);
+  return controller.signal;
 }

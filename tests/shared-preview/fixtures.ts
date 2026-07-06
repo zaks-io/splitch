@@ -109,6 +109,16 @@ class SmokeClient {
     return String(body.access_token);
   }
 
+  async assertFixtureTurnstileRejected(): Promise<Record<string, unknown>> {
+    const response = await this.request.post(`${this.config.authBaseUrl}/agent/identity`, {
+      data: { turnstile_token: `fixture-turnstile-ok-${this.config.runId}` },
+    });
+    expect(response.status(), "fixture Turnstile token rejection").toBe(403);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ error: "access_denied" });
+    return body;
+  }
+
   async listTools(): Promise<Record<string, unknown>[]> {
     const envelope = await this.mcpRequest({
       jsonrpc: "2.0",
