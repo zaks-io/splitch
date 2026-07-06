@@ -14,12 +14,14 @@ how types, clients, and MCP schemas derive from one source. Avoids any second au
   Derived here (compile-time):
     - TypeScript types via z.infer (never hand-written)
     - OpenAPI document (generated; never committed to repo)
-  Dependencies: zod, @hono/zod-openapi only
+    - `ControlPlaneRpcApp` — the Hono RPC App type for `hc<ControlPlaneRpcApp>()` (contract-owned;
+      derived from the same route inputs as the registry; not imported from `apps/*`)
+  Dependencies: zod, @hono/zod-openapi, hono (types only for the RPC App export)
 
 @splitch/control-plane-sdk
-  Contains: Hono hc<AppType> instance
-  Derives: per-route input/output types from AppType (type-inferred, no codegen)
-  Dependencies: @splitch/contracts, hono/client
+  Contains: Hono `hc<ControlPlaneRpcApp>()` instance
+  Derives: per-route input/output types from `ControlPlaneRpcApp` exported by `@splitch/contracts`
+  Dependencies: `@splitch/contracts`, hono/client
 ```
 
 The OpenAPI document and MCP tool schemas are build-time outputs, never committed files.
@@ -34,7 +36,7 @@ Zod schema (authored, @splitch/contracts)
     → OpenAPI doc (build-time; served at /.well-known/openapi.json)
     → MCP tool inputSchema/outputSchema (derived at MCP server startup)
   → Worker Zod.parse() → runtime validation (same schema that authored the type)
-  → hc<AppType>() → typed client method (type-inferred; no codegen step)
+  → hc<ControlPlaneRpcApp>() → typed client method (type-inferred from contract-owned App type; no codegen step)
 ```
 
 ## Schema composition rules

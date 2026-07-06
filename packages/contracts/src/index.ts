@@ -33,6 +33,7 @@ export type {
 } from "./route-contract";
 export { defineApiRoute } from "./openapi-route";
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
+export { controlPlaneRpcApp, type ControlPlaneRpcApp } from "./openapi-rpc";
 export { getRoute, operationIds, routeRegistry } from "./route-registry";
 export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
 export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
