@@ -74,6 +74,18 @@ function routeApp(params: {
 }
 
 describe("OAuth access-token JWKS", () => {
+  it("advertises the access-token JWKS in authorization-server metadata", async () => {
+    const app = routeApp({});
+
+    const res = await app.request("/.well-known/oauth-authorization-server");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      issuer: "http://localhost",
+      jwks_uri: "http://localhost/.well-known/jwks.json",
+    });
+  });
+
   it("publishes the public access-token key when ACCESS_TOKEN_SECRET is an RSA private JWK", async () => {
     const app = routeApp({ accessSecret: await privateRsaJwkSecret() });
 
@@ -84,6 +96,15 @@ describe("OAuth access-token JWKS", () => {
     expect(body.keys).toHaveLength(1);
     expect(body.keys[0]).toMatchObject({ kty: "RSA", kid: "test-access-key", alg: "RS256" });
     expect(body.keys[0]?.d).toBeUndefined();
+  });
+
+  it("fails closed instead of publishing JWKS for a symmetric access-token secret", async () => {
+    const app = routeApp({ accessSecret: "test-access-secret" });
+
+    const res = await app.request("/.well-known/jwks.json");
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: "access-token JWKS is not configured" });
   });
 });
 

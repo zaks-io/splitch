@@ -53,6 +53,7 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
     const smokeEnabled = deps.smokeClientCredentials !== undefined;
     return Response.json({
       issuer,
+      jwks_uri: `${issuer}/.well-known/jwks.json`,
       token_endpoint: `${issuer}/oauth2/token`,
       revocation_endpoint: `${issuer}/oauth2/revoke`,
       device_authorization_endpoint: `${issuer}/oauth2/device_authorization`,

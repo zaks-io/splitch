@@ -20,7 +20,7 @@ export interface AuthApiEnv {
    * distinct from ACCESS_TOKEN_SECRET so an assertion can never verify as a Bearer.
    */
   ASSERTION_SIGNING_SECRET?: string;
-  /** HMAC secret for the control-plane access token (local fixture; distinct from above). */
+  /** RSA private JWK for hosted access tokens; local fixtures may use an HMAC secret. */
   ACCESS_TOKEN_SECRET?: string;
   /** WorkOS client id used by the device-flow proxy. */
   WORKOS_CLIENT_ID?: string;

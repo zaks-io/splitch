@@ -7,6 +7,7 @@ import {
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
 import { createApp } from "./app";
+import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
 import type { ControlPlaneApiEnv } from "./env";
@@ -27,7 +28,7 @@ const handler = {
     }
 
     const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
-    const jwksUri = env.AUTH_JWKS_URI ?? `${controlPlaneAudience}/.well-known/jwks.json`;
+    const jwksUri = authJwksUri(env);
     const verifier = makeJwksVerifier({
       fetchJwks: makeHttpJwksFetcher(jwksUri),
       controlPlaneAudience,

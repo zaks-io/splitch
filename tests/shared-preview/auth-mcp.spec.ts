@@ -5,6 +5,7 @@ test.describe("shared-preview auth and MCP", () => {
     const metadata = await smoke.authDiscovery();
 
     expect(metadata.issuer).toBe(smoke.config.authBaseUrl);
+    expect(metadata.jwks_uri).toBe(`${smoke.config.authBaseUrl}/.well-known/jwks.json`);
     expect(metadata.token_endpoint).toBe(`${smoke.config.authBaseUrl}/oauth2/token`);
     expect(metadata.device_authorization_endpoint).toBe(
       `${smoke.config.authBaseUrl}/oauth2/device_authorization`,
@@ -24,6 +25,15 @@ test.describe("shared-preview auth and MCP", () => {
     expect(body.verification_uri).toEqual(expect.stringMatching(/^https:\/\//));
     expect(String(body.verification_uri)).not.toContain(".test");
     expect(body.expires_in).toEqual(expect.any(Number));
+  });
+
+  test("Auth API publishes the hosted access-token JWKS", async ({ smoke }) => {
+    const jwks = await smoke.authJwks();
+    const keys = jwks.keys as Array<Record<string, unknown>>;
+
+    expect(keys).toHaveLength(1);
+    expect(keys[0]).toMatchObject({ kty: "RSA", alg: "RS256", use: "sig" });
+    expect(keys[0]?.d).toBeUndefined();
   });
 
   test("Auth API rejects local fixture Turnstile tokens", async ({ smoke }) => {
@@ -58,5 +68,43 @@ test.describe("shared-preview auth and MCP", () => {
       id: smoke.config.smokeAppId,
       organizationId: smoke.config.smokeOrgId,
     });
+  });
+
+  test("smoke token authenticates direct Control Plane reads", async ({ accessToken, smoke }) => {
+    const org = await smoke.controlPlaneGet<Record<string, unknown>>(
+      accessToken,
+      `/orgs/${smoke.config.smokeOrgId}`,
+    );
+    expect(org).toMatchObject({ id: smoke.config.smokeOrgId });
+
+    const apps = await smoke.controlPlaneGet<{ items: Array<Record<string, unknown>> }>(
+      accessToken,
+      `/orgs/${smoke.config.smokeOrgId}/apps`,
+    );
+    expect(apps.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: smoke.config.smokeAppId,
+          organizationId: smoke.config.smokeOrgId,
+        }),
+      ]),
+    );
+
+    const app = await smoke.controlPlaneGet<Record<string, unknown>>(
+      accessToken,
+      `/apps/${smoke.config.smokeAppId}`,
+    );
+    expect(app).toMatchObject({
+      id: smoke.config.smokeAppId,
+      organizationId: smoke.config.smokeOrgId,
+    });
+
+    const envs = await smoke.controlPlaneGet<{ items: Array<Record<string, unknown>> }>(
+      accessToken,
+      `/apps/${smoke.config.smokeAppId}/envs`,
+    );
+    expect(envs.items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: smoke.config.smokeEnvironmentId })]),
+    );
   });
 });
