@@ -3,7 +3,8 @@
 The control-plane access token shape and claims, the `app:{app_id}:{role}` scope format, the
 trusted-IdP allow-list table, the Worker responsibility split, and revocation.
 
-For how a principal authenticates (the three doors and claim ceremony), see [auth-doors.md](auth-doors.md).
+For how a principal authenticates (the three identity doors, claim ceremony, and shared-preview
+`client_credentials` smoke grant), see [auth-doors.md](auth-doors.md).
 
 ## Control-plane access token
 
@@ -28,6 +29,10 @@ JWK. HMAC access tokens are local/test fixtures only.
   auth_door: string        // "id_jag" | "anonymous" | "device_flow" | "client_credentials"
 }
 ```
+
+`client_credentials` is reserved for the shared-preview smoke client. It mints a short-lived
+control-plane token for the configured seeded smoke user and scopes; it is not a general user or
+agent onboarding path.
 
 **Scope format:** `app:{app_id}:{role}` where role is `owner`, `admin`, or `member`.
 A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-level operations require
@@ -70,9 +75,10 @@ only (seeded at deploy; not user-facing).
 
 - `/.well-known/oauth-protected-resource`
 - `/.well-known/oauth-authorization-server`
-- `POST /agent/identity` (all three door entry points)
+- `POST /agent/identity` (ID-JAG and anonymous door entry points)
 - `POST /agent/identity/claim`
 - `GET /claim` (human claim UI redirect)
+- `POST /oauth2/device_authorization`
 - `POST /oauth2/token`
 - `POST /oauth2/revoke` (RFC 7009)
 - `POST /agent/event/notify` (SET receiver)

@@ -1,20 +1,26 @@
-# Auth doors: three doors, one principal, claim ceremony
+# Auth doors: three identity doors, one principal, claim ceremony
 
-How a principal authenticates: the three authentication doors (ID-JAG, anonymous/pre-claim, device
-flow), the claim ceremony, the `interaction_required` error shape, and the provisional demo lifecycle.
+How a principal authenticates: the three identity doors (ID-JAG, anonymous/pre-claim, device flow),
+the shared-preview `client_credentials` smoke grant, the claim ceremony, the `interaction_required`
+error shape, and the provisional demo lifecycle.
 
 For the scopes enumeration, control-plane token shape, trusted-IdP table, and the Worker
 responsibility split, see [access-control-matrix.md](access-control-matrix.md).
 
-## One principal, three doors
+## One principal, three identity doors
 
 An agent is never a distinct principal. Every door produces a WorkOS user identity; authorization is
 single-sourced on D1 membership. Which door was used is audit-only and never branches an authz decision.
+The shared-preview `client_credentials` grant is the one non-interactive exception: it can only mint
+a scoped token for the configured seeded smoke WorkOS user, and it exists to exercise hosted Auth API
+to Control Plane verification in smoke tests.
 
 ```
 Door A: ID-JAG   ──┐
 Door B: Anonymous ─┼──► /oauth2/token ──► control-plane access token ──► D1 membership check
 Door C: Device flow┘
+
+Shared-preview smoke client_credentials ──► /oauth2/token ──► scoped smoke access token
 ```
 
 ## Door A: ID-JAG (agent-IdP-verified)
@@ -117,6 +123,37 @@ Org — all through the D1 data-access seam (app_id scoping enforced, never bypa
 
 WorkOS device flow. Auth-issuer Worker exposes the standard `device_authorization` and `token` endpoints
 as thin proxies to WorkOS. The CLI stores the resulting **refresh token** in keychain or `~/.splitch/credentials.json` (mode 0600). The MCP server does not touch disk; it holds its token in the transport session.
+
+## Shared-preview smoke grant: client_credentials
+
+**Endpoint:** `POST /oauth2/token` on the auth-api Worker
+
+**Availability:** shared-preview only, and only when `SPLITCH_SMOKE_CLIENT_SECRET` is configured.
+The grant is advertised in OAuth discovery only while enabled.
+
+**Request body:**
+
+```
+{
+  grant_type: "client_credentials",
+  client_id: string,
+  client_secret: string,
+  scope?: string
+}
+```
+
+**Flow:**
+
+1. Reject unless the shared-preview smoke client is configured.
+2. Compare `client_id` and `client_secret` against the configured smoke client.
+3. Resolve the principal to `SPLITCH_SMOKE_USER_ID` (default `user_shared_preview_smoke`).
+4. Use configured `SPLITCH_SMOKE_SCOPES`; an optional requested `scope` must be a subset.
+5. Mint a short-lived control-plane access token with `auth_door = "client_credentials"`.
+6. Hosted access tokens use the RS256/JWKS trust contract in
+   [access-control-matrix.md](access-control-matrix.md). No refresh token is issued.
+
+This grant is not a production user or agent auth path. It exists to validate the hosted
+Auth API to Control Plane trust contract with a seeded smoke Organization/App.
 
 ## Sources
 
