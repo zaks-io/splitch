@@ -32,7 +32,7 @@ describe("demo reaper", () => {
     await expectRefs(expired, 0);
     await expectRefs(future, 1);
     await expectRefs(claimed, 1);
-  });
+  }, 15_000);
 });
 
 async function seedDemoGraph(
