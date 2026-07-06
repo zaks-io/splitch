@@ -1,0 +1,45 @@
+export interface ControlPanelBindings {
+  DB: D1Database;
+  SESSION_STORE: KVNamespace;
+  WORKOS_API_KEY: string;
+  WORKOS_CLIENT_ID: string;
+  SPLITCH_PLATFORM_TARGET?: string;
+  SENTRY_DSN?: string;
+}
+
+export function controlPanelBindings(raw: unknown): ControlPanelBindings {
+  if (!isBindings(raw)) {
+    throw new Error("control-panel Worker bindings are unavailable");
+  }
+
+  return {
+    DB: raw.DB,
+    SESSION_STORE: raw.SESSION_STORE,
+    WORKOS_API_KEY: requiredString(raw.WORKOS_API_KEY, "WORKOS_API_KEY"),
+    WORKOS_CLIENT_ID: requiredString(raw.WORKOS_CLIENT_ID, "WORKOS_CLIENT_ID"),
+    SPLITCH_PLATFORM_TARGET: optionalString(raw.SPLITCH_PLATFORM_TARGET),
+    SENTRY_DSN: optionalString(raw.SENTRY_DSN),
+  };
+}
+
+function isBindings(value: unknown): value is {
+  DB: D1Database;
+  SESSION_STORE: KVNamespace;
+  WORKOS_API_KEY?: unknown;
+  WORKOS_CLIENT_ID?: unknown;
+  SPLITCH_PLATFORM_TARGET?: unknown;
+  SENTRY_DSN?: unknown;
+} {
+  return typeof value === "object" && value !== null && "DB" in value && "SESSION_STORE" in value;
+}
+
+function requiredString(value: unknown, name: string): string {
+  if (typeof value === "string" && value.length > 0) {
+    return value;
+  }
+  throw new Error(`control-panel missing required ${name} binding`);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}

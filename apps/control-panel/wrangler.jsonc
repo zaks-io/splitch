@@ -23,6 +23,22 @@
     "SPLITCH_PLATFORM_TARGET": "local",
     "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "splitch-d1",
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "SESSION_STORE",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+  "secrets": {
+    "required": ["WORKOS_API_KEY", "WORKOS_CLIENT_ID"]
+  },
   "env": {
     "shared-preview": {
       "name": "splitch-control-panel-shared-preview",
@@ -45,6 +61,22 @@
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "splitch-shared-preview-d1",
+          "database_id": "34971683-d76b-4fc0-9bc0-9e97f297fbec"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "SESSION_STORE",
+          "id": "673d17e768eb45f5bfc5275fbd0e9320"
+        }
+      ],
+      "secrets": {
+        "required": ["WORKOS_API_KEY", "WORKOS_CLIENT_ID"]
       }
     },
     "production": {
@@ -68,6 +100,22 @@
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "splitch-production-d1",
+          "database_id": "f419e372-d548-4afb-966f-40ff298303d8"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "SESSION_STORE",
+          "id": "bdfa1197123d4eef945c5a703d63a572"
+        }
+      ],
+      "secrets": {
+        "required": ["WORKOS_API_KEY", "WORKOS_CLIENT_ID"]
       }
     }
   }

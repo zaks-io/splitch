@@ -6,22 +6,25 @@ import {
   CardHeader,
   CardTitle,
 } from "@splitch/ui/components/card";
-import { Link, createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import type { SessionPrincipal } from "#lib/session";
+import { loadCurrentSession } from "#lib/session-functions";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 const service = "splitch-control-panel";
-const demoScope = {
-  orgSlug: "demo-org",
-  appSlug: "checkout-api",
-  env: "dev",
-};
 
 export const Route = createFileRoute("/")({
+  loader: async ({ location }): Promise<SessionPrincipal> => {
+    const result = await loadCurrentSession();
+    if (result.kind === "unauthenticated") {
+      throw loginRedirect(`${location.pathname}${location.search}${location.hash}`);
+    }
+    return result.session;
+  },
   component: IndexRoute,
 });
 
 function IndexRoute() {
-  const [clicks, setClicks] = useState(0);
+  const session = Route.useLoaderData();
 
   return (
     <main className="grid gap-6">
@@ -37,41 +40,54 @@ function IndexRoute() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Unauthenticated shell</CardTitle>
-          <CardDescription>
-            Organization, App, and Environment scope are URL-visible from the first route slice.
-          </CardDescription>
+          <CardTitle>Organizations</CardTitle>
+          <CardDescription>{session.userId}</CardDescription>
         </CardHeader>
 
         <CardContent className="grid gap-5">
-          <div
-            className="rounded-md border border-primary/30 bg-accent p-4 text-accent-foreground shadow-sm"
-            data-theme-token-smoke="primary"
-          >
-            <p className="font-medium text-sm">Control Variant</p>
-            <p className="text-sm">Reference Variant for preview.</p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <Button
-              data-hydration-counter={clicks}
-              onClick={() => setClicks((currentClicks) => currentClicks + 1)}
-              type="button"
-            >
-              Clicks {clicks}
-            </Button>
-            <Button
-              render={<Link params={demoScope} to="/$orgSlug/$appSlug/$env" />}
-              variant="outline"
-            >
-              Open demo scope
-            </Button>
-            <Button render={<Link to="/kitchen-sink" />} variant="secondary">
-              Open kitchen sink
-            </Button>
-          </div>
+          {session.orgs.length > 0 ? (
+            <div className="grid gap-3">
+              {session.orgs.map((org) => (
+                <section
+                  className="rounded-md border border-border p-4"
+                  key={org.orgId}
+                  data-org-slug={org.orgSlug}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="grid gap-1">
+                      <h2 className="font-semibold text-foreground text-lg">{org.orgSlug}</h2>
+                      <p className="font-mono text-muted-foreground text-xs uppercase tracking-wide">
+                        {org.orgRole}
+                      </p>
+                    </div>
+                    <Button render={<a href="/auth/logout">Sign out</a>} variant="outline" />
+                  </div>
+                  {org.apps.length > 0 ? (
+                    <dl className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {org.apps.map((app) => (
+                        <div className="rounded-md bg-muted p-3" key={app.appId}>
+                          <dt className="font-mono text-muted-foreground text-xs uppercase tracking-wide">
+                            {app.role}
+                          </dt>
+                          <dd className="font-medium text-foreground text-sm">{app.appSlug}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : null}
+                </section>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted-foreground text-sm">No organization memberships.</p>
+          )}
         </CardContent>
       </Card>
     </main>
   );
+}
+
+function loginRedirect(returnTo: string): ReturnType<typeof redirect> {
+  return redirect({
+    href: `/auth/login?returnTo=${encodeURIComponent(returnTo)}`,
+  });
 }

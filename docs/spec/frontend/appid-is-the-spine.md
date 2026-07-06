@@ -26,9 +26,9 @@ the isolation check, the cache root, and the live-update DO/socket are all scope
 ### 1. Isolation check
 
 The route loaders under `/{orgSlug}/{appSlug}/{env}/` resolve the slugs to IDs and validate the
-session's membership (`requireOrgAccess` then `requireAppAccess`) before doing any work. A mismatch
-returns 403; an `appId` not belonging to the `orgSlug` returns 404. This is the application-enforced
-`app_id` boundary of ADR-0018, made visible and auditable at the loader seam.
+session's membership (`requireOrgAccess` then `requireAppAccess`) before doing any work. Missing Org
+access returns 403; an `appSlug` / `appId` not available under the `orgSlug` returns 404. This is the
+application-enforced `app_id` boundary of ADR-0018, made visible and auditable at the loader seam.
 
 The check is mandatory, not optional. Every loader at or below the `/{orgSlug}/{appSlug}/{env}` layout
 must call `requireOrgAccess`/`requireAppAccess` or delegate to a parent loader that did.
