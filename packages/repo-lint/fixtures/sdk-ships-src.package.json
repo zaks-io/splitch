@@ -1,0 +1,23 @@
+{
+  "name": "@splitch/sdk",
+  "version": "0.1.0",
+  "description": "Public JavaScript/TypeScript SDK for splitch data-plane evaluation",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

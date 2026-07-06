@@ -2,6 +2,7 @@
   "name": "@splitch/sdk",
   "version": "0.1.0",
   "description": "Public JavaScript/TypeScript SDK for splitch data-plane evaluation",
+  "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
   "engines": {

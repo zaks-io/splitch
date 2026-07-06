@@ -113,6 +113,7 @@ real package API boundary.
 | `apps/auth-api`              | `@splitch/auth-api`          | Auth API Worker scaffold                    |
 | `packages/contracts`         | `@splitch/contracts`         | shared Zod/platform contracts scaffold      |
 | `packages/control-plane-sdk` | `@splitch/control-plane-sdk` | shared Control Plane SDK transport scaffold |
+| `packages/repo-lint`         | `@splitch/repo-lint`         | private workspace publishing policy gates   |
 | `packages/sdk`               | `@splitch/sdk`               | public JS/TS data-plane SDK scaffold        |
 | `packages/ui`                | `@splitch/ui`                | shared UI primitive scaffold                |
 | `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files            |
