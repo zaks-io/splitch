@@ -41,13 +41,14 @@ are defined by the branding guide. Placeholder token names are pinned here; valu
 [`docs/branding/design-tokens.md`](../../branding/design-tokens.md).
 
 Token categories (names pinned, values deferred to branding guide):
-| category | example tokens |
-|-------------|---------------------------------------------------|
-| color | `--color-brand-*`, `--color-neutral-*`, `--color-destructive-*`, `--color-success-*` |
-| spacing | `--spacing-*` (4 px grid) |
-| typography | `--font-family-*`, `--font-size-*`, `--font-weight-*`, `--line-height-*` |
-| radius | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-full` |
-| shadow | `--shadow-sm`, `--shadow-md`, `--shadow-lg` |
+
+| category   | example tokens                                                                       |
+| ---------- | ------------------------------------------------------------------------------------ |
+| color      | `--color-brand-*`, `--color-neutral-*`, `--color-destructive-*`, `--color-success-*` |
+| spacing    | `--spacing-*` (4 px grid)                                                            |
+| typography | `--font-family-*`, `--font-size-*`, `--font-weight-*`, `--line-height-*`             |
+| radius     | `--radius-sm`, `--radius-md`, `--radius-lg`, `--radius-full`                         |
+| shadow     | `--shadow-sm`, `--shadow-md`, `--shadow-lg`                                          |
 
 **Component API stability:** breaking changes to `ui` component props (removed props, renamed
 variants, changed slot layout) require sign-off from both consumer teams (Control Panel + Marketing

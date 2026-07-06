@@ -90,12 +90,13 @@ This single prefix call invalidates the list, detail, runs, and all sub-resource
 one operation — no enumeration of individual keys.
 
 Mapping table (nudge entity → invalidated prefix):
-| nudge `entity` | prefix invalidated |
-|------------------|-------------------------------------------------|
-| `experiment` | `keys.experiment.prefix(appId, environmentId)` |
-| `flag` | `keys.flag.prefix(appId, environmentId)` |
-| `metric` | `keys.metric.prefix(appId, environmentId)` |
-| `segment` | `keys.segment.prefix(appId, environmentId)` |
+
+| nudge `entity` | prefix invalidated                             |
+| -------------- | ---------------------------------------------- |
+| `experiment`   | `keys.experiment.prefix(appId, environmentId)` |
+| `flag`         | `keys.flag.prefix(appId, environmentId)`       |
+| `metric`       | `keys.metric.prefix(appId, environmentId)`     |
+| `segment`      | `keys.segment.prefix(appId, environmentId)`    |
 
 ## Version gating (no double-refetch for the editor)
 
