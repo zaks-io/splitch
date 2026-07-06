@@ -9,6 +9,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./emitter": {
+      "types": "./src/emitter.ts",
+      "default": "./src/emitter.ts"
+    },
     "./worker": {
       "types": "./src/worker.ts",
       "default": "./src/worker.ts"

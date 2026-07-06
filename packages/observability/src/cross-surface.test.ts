@@ -11,13 +11,14 @@ import {
 
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 
-const WORKER_APP_ROOTS: Record<string, string> = {
-  "control-plane-api": "apps/control-plane-api",
-  "evaluation-api": "apps/evaluation-api",
-  "event-ingest-api": "apps/event-ingest-api",
-  "analysis-api": "apps/analysis-api",
-  "auth-api": "apps/auth-api",
-  "mcp-server": "apps/mcp-server",
+const WORKER_APP_ENTRYPOINTS: Record<string, string> = {
+  "control-plane-api": "apps/control-plane-api/src/index.ts",
+  "evaluation-api": "apps/evaluation-api/src/index.ts",
+  "event-ingest-api": "apps/event-ingest-api/src/index.ts",
+  "analysis-api": "apps/analysis-api/src/index.ts",
+  "auth-api": "apps/auth-api/src/index.ts",
+  "control-panel": "apps/control-panel/src/server.ts",
+  "mcp-server": "apps/mcp-server/src/index.ts",
 };
 
 describe("cross-surface observability wiring", () => {
@@ -28,6 +29,7 @@ describe("cross-surface observability wiring", () => {
       "event-ingest-api",
       "analysis-api",
       "auth-api",
+      "control-panel",
       "mcp-server",
       "cli",
       "sdk-harness",
@@ -63,9 +65,9 @@ describe("cross-surface observability wiring", () => {
     it(`${surface.id} is wired in its owning workspace entrypoint`, () => {
       const marker = "@splitch/observability";
       if (surface.kind === "worker") {
-        const root = WORKER_APP_ROOTS[surface.id];
-        expect(root, `missing worker root for ${surface.id}`).toBeDefined();
-        const indexSource = readFileSync(join(repoRoot, root as string, "src/index.ts"), "utf8");
+        const entrypoint = WORKER_APP_ENTRYPOINTS[surface.id];
+        expect(entrypoint, `missing worker entrypoint for ${surface.id}`).toBeDefined();
+        const indexSource = readFileSync(join(repoRoot, entrypoint as string), "utf8");
         expect(
           indexSource.includes(marker) ||
             indexSource.includes("wrapWorkerHandler") ||

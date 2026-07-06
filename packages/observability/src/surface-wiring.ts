@@ -37,6 +37,7 @@ const SURFACE_EMITTERS: Record<ObservabilitySurfaceId, SurfaceEmitterFactory> = 
     workerEmitter(WORKER_TEST_ENV, { surface: "event-ingest-api" }, hooks),
   "analysis-api": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "analysis-api" }, hooks),
   "auth-api": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "auth-api" }, hooks),
+  "control-panel": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "control-panel" }, hooks),
   "mcp-server": (hooks) => workerEmitter(WORKER_TEST_ENV, { surface: "mcp-server" }, hooks),
   cli: (hooks) => cliEmitter(TEST_ENV, hooks),
   "sdk-harness": (hooks) => sdkHarnessEmitter(TEST_ENV, hooks),
