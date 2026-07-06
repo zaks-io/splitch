@@ -62,6 +62,7 @@ const handler = {
     const tokenSigner = makeTokenSigner({
       assertionSecret,
       accessSecret,
+      accessTokenTrustContract: accessTokenTrustContract(env.SPLITCH_PLATFORM_TARGET),
       issuer: origin,
       controlPlaneAudience,
     });
@@ -113,4 +114,8 @@ function sharedPreviewSmokeClient(env: AuthApiEnv): SmokeClientCredentials | und
       .split(/\s+/)
       .filter(Boolean),
   };
+}
+
+function accessTokenTrustContract(target: string | undefined): "local-hs256" | "rs256-jwks" {
+  return target === "shared-preview" || target === "production" ? "rs256-jwks" : "local-hs256";
 }

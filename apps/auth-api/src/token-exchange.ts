@@ -7,8 +7,8 @@ import { accessTokenPrivateJwkFromSecret } from "./access-token-key";
  * Door A returns an `identity_assertion` (the durable client-side artifact,
  * ADR-0022), which the agent presents at `/oauth2/token` for a short-lived
  * control-plane access token. No refresh token on the ID-JAG path. Both are
- * HMAC-SHA256-signed JWTs here (local fixture; production swaps the signer for
- * the real key).
+ * HMAC-SHA256-signed JWTs for local fixtures. Hosted access tokens are RS256
+ * JWTs backed by the Auth API JWKS route so downstream Workers can verify them.
  *
  * The two token classes are signed with SEPARATE secrets (`assertionSecret` vs
  * `accessSecret`) so an identity_assertion can NEVER verify as a control-plane
@@ -31,6 +31,8 @@ interface AssertionClaims {
 }
 
 type AccessTokenAuthDoor = "id_jag" | "anonymous" | "device_flow" | "client_credentials";
+
+export type AccessTokenTrustContract = "local-hs256" | "rs256-jwks";
 
 interface AccessTokenClaims {
   typ: "access_token";
@@ -101,8 +103,19 @@ async function signRs256Jwt(claims: object, secret: string): Promise<string | nu
   return `${signingInput}.${bytesToBase64Url(new Uint8Array(sig))}`;
 }
 
-async function signAccessJwt(claims: object, secret: string): Promise<string> {
-  return (await signRs256Jwt(claims, secret)) ?? signHmacJwt(claims, secret);
+async function signAccessJwt(
+  claims: object,
+  secret: string,
+  contract: AccessTokenTrustContract,
+): Promise<string> {
+  if (contract === "rs256-jwks") {
+    const jwt = await signRs256Jwt(claims, secret);
+    if (!jwt) {
+      throw new Error("ACCESS_TOKEN_SECRET must be an RSA private JWK for hosted access tokens");
+    }
+    return jwt;
+  }
+  return signHmacJwt(claims, secret);
 }
 
 function base64UrlToBytes(input: string): Uint8Array {
@@ -175,9 +188,11 @@ export interface TokenSigner {
 export function makeTokenSigner(opts: {
   assertionSecret: string;
   accessSecret: string;
+  accessTokenTrustContract?: AccessTokenTrustContract;
   issuer: string;
   controlPlaneAudience: string;
 }): TokenSigner {
+  const accessTokenTrustContract = opts.accessTokenTrustContract ?? "local-hs256";
   return {
     async mintIdentityAssertion(userId, scopes, nowSeconds) {
       const claims: AssertionClaims = {
@@ -211,7 +226,7 @@ export function makeTokenSigner(opts: {
         scopes,
         auth_door: "id_jag",
       };
-      return signAccessJwt(access, opts.accessSecret);
+      return signAccessJwt(access, opts.accessSecret, accessTokenTrustContract);
     },
 
     async verifyIdentityAssertion(assertion, nowSeconds) {
@@ -239,7 +254,7 @@ export function makeTokenSigner(opts: {
         scopes,
         auth_door: authDoor,
       };
-      return signAccessJwt(access, opts.accessSecret);
+      return signAccessJwt(access, opts.accessSecret, accessTokenTrustContract);
     },
   };
 }

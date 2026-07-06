@@ -79,6 +79,7 @@ describe("verifyAccessToken guards", () => {
     const signer = makeTokenSigner({
       assertionSecret: "test-assertion-secret",
       accessSecret,
+      accessTokenTrustContract: "rs256-jwks",
       issuer: "https://auth.splitch.test",
       controlPlaneAudience: CP_AUDIENCE,
     });
@@ -99,6 +100,25 @@ describe("verifyAccessToken guards", () => {
       userId: "user_shared_preview_smoke",
       scopes: ["app:smoke-auth-missing-app:member"],
     });
+  });
+
+  it("fails closed when hosted RS256/JWKS mode has a symmetric access secret", async () => {
+    const signer = makeTokenSigner({
+      assertionSecret: "test-assertion-secret",
+      accessSecret: ACCESS_SECRET,
+      accessTokenTrustContract: "rs256-jwks",
+      issuer: "https://auth.splitch.test",
+      controlPlaneAudience: CP_AUDIENCE,
+    });
+
+    await expect(
+      signer.mintAccessToken(
+        "user_shared_preview_smoke",
+        ["app:smoke-auth-missing-app:member"],
+        "client_credentials",
+        NOW,
+      ),
+    ).rejects.toThrow("ACCESS_TOKEN_SECRET must be an RSA private JWK");
   });
 
   it("returns null when ACCESS_TOKEN_SECRET contains malformed JWK JSON", async () => {

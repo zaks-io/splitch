@@ -80,6 +80,12 @@ class SmokeClient {
     return (await response.json()) as Record<string, unknown>;
   }
 
+  async authJwks(): Promise<Record<string, unknown>> {
+    const response = await this.request.get(`${this.config.authBaseUrl}/.well-known/jwks.json`);
+    await expect(response, "Auth API access-token JWKS").toBeOK();
+    return (await response.json()) as Record<string, unknown>;
+  }
+
   async deviceAuthorization(): Promise<Record<string, unknown>> {
     const response = await this.request.post(
       `${this.config.authBaseUrl}/oauth2/device_authorization`,
@@ -151,6 +157,14 @@ class SmokeClient {
     expect(result.isError).toBe(true);
     expectNoRateLimited(result);
     return result.structuredContent;
+  }
+
+  async controlPlaneGet<T>(token: string, path: string): Promise<T> {
+    const response = await this.request.get(`${this.config.controlPlaneBaseUrl}${path}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    await expect(response, `Control Plane GET ${path}`).toBeOK();
+    return (await response.json()) as T;
   }
 
   uniqueKey(prefix: string): string {

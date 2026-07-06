@@ -20,6 +20,17 @@ describe("Control Plane API Wrangler runtime config", () => {
   ])("declares the DB binding used by the demo reaper for %s", (_target, target) => {
     expect(target?.d1_databases).toContainEqual(expect.objectContaining({ binding: "DB" }));
   });
+
+  it.each([
+    [
+      "shared-preview",
+      config.env?.["shared-preview"],
+      "https://auth.preview.splitch.dev/.well-known/jwks.json",
+    ],
+    ["production", config.env?.production, "https://auth.splitch.dev/.well-known/jwks.json"],
+  ])("declares the Auth API JWKS trust root for %s", (_target, target, jwksUri) => {
+    expect(target?.vars?.AUTH_JWKS_URI).toBe(jwksUri);
+  });
 });
 
 interface WranglerConfig {
@@ -31,6 +42,7 @@ interface WranglerConfig {
 interface WranglerTarget {
   d1_databases?: unknown[];
   triggers?: { crons?: string[] };
+  vars?: Record<string, unknown>;
 }
 
 function effectiveCrons(target: WranglerTarget | undefined): string[] | undefined {

@@ -29,6 +29,14 @@ describe("Auth Worker Wrangler runtime config", () => {
     expect(target?.vars?.WORKOS_CLIENT_ID).toBeUndefined();
     expect(target?.vars?.WORKOS_API_KEY).toBeUndefined();
   });
+
+  it.each([
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("requires a hosted access-token signing key for %s", (_target, target) => {
+    expect(target?.secrets?.required).toContain("ACCESS_TOKEN_SECRET");
+    expect(target?.vars?.ACCESS_TOKEN_SECRET).toBeUndefined();
+  });
 });
 
 interface WranglerConfig {

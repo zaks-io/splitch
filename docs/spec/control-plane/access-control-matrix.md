@@ -9,6 +9,12 @@ For how a principal authenticates (the three doors and claim ceremony), see [aut
 
 Short-lived bearer token (JWT, default TTL 1h) issued by `/oauth2/token`.
 
+Hosted environments use one trust contract: Auth API signs access tokens with RS256 using
+`ACCESS_TOKEN_SECRET` as an RSA private JWK, serves the matching public key at
+`/.well-known/jwks.json`, and Control Plane verifies against its explicit `AUTH_JWKS_URI`. Auth API
+must fail closed instead of minting a hosted access token when the hosted secret is not an RSA private
+JWK. HMAC access tokens are local/test fixtures only.
+
 **Claims:**
 
 ```
@@ -19,7 +25,7 @@ Short-lived bearer token (JWT, default TTL 1h) issued by `/oauth2/token`.
   exp: number,             // unix timestamp
   iat: number,
   scopes: string[],        // e.g. ["app:app_abc123:admin"]
-  auth_door: string        // "id_jag" | "anonymous" | "device_flow"  (audit only, not authz)
+  auth_door: string        // "id_jag" | "anonymous" | "device_flow" | "client_credentials"
 }
 ```
 
@@ -29,7 +35,7 @@ A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-leve
 
 **Token validation on any control-plane-authorized Worker:**
 
-1. Verify JWT signature (JWKS from auth-api `/.well-known/oauth-authorization-server`)
+1. Verify JWT signature as RS256 against the configured Auth API `AUTH_JWKS_URI`
 2. Assert `aud` matches the control-plane protected resource
 3. Assert `exp` not passed
 4. Extract `scopes`; match against required scope for the requested operation

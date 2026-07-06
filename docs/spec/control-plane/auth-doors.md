@@ -43,7 +43,8 @@ Door C: Device flow┘
 9. Return: `{ identity_assertion: string, user_id: string }`
 
 **Follow-up exchange at `/oauth2/token`:** presents `identity_assertion`, receives short-lived
-control-plane access token. No refresh token on ID-JAG path.
+control-plane access token. No refresh token on ID-JAG path. Hosted access tokens use the
+RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md).
 
 ## Door B: Anonymous / pre-claim
 
