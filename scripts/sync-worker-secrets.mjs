@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { parseConfigFileTextToJson } from "typescript";
+import { parseWranglerConfigFile } from "./lib/wrangler-config.mjs";
 
 const target = process.argv[2];
 const requireEnv =
@@ -22,7 +22,7 @@ for (const entry of readdirSync(appsDir, { withFileTypes: true })) {
   const configPath = join(appDir, "wrangler.jsonc");
   let config;
   try {
-    config = readWranglerConfig(configPath);
+    config = parseWranglerConfigFile(configPath);
   } catch (error) {
     if (error.code === "ENOENT") continue;
     throw error;
@@ -52,14 +52,6 @@ for (const entry of readdirSync(appsDir, { withFileTypes: true })) {
 
 if (missing.length > 0) {
   fail(`missing required Worker secrets:\n${missing.map((name) => `- ${name}`).join("\n")}`);
-}
-
-function readWranglerConfig(path) {
-  const parsed = parseConfigFileTextToJson(path, readFileSync(path, "utf8"));
-  if (parsed.error) {
-    throw new Error(`${path}: ${parsed.error.messageText}`);
-  }
-  return parsed.config;
 }
 
 function requiredSecrets(config, envName) {

@@ -23,6 +23,7 @@ test("passes required Worker secrets to wrangler deploy as a temporary secrets f
   const result = runDeploy(fixture, ["--env", "production", "--strict"], {
     SENTRY_DSN: "https://example.invalid/1",
     SPLITCH_EVENT_INGEST_TOKEN: "fake-event-ingest-token",
+    SPLITCH_REQUIRE_WORKER_SECRET_ENV: "1",
   });
 
   assert.equal(result.status, 0, result.stderr);
@@ -33,6 +34,25 @@ test("passes required Worker secrets to wrangler deploy as a temporary secrets f
   assert.deepEqual(call.args.slice(0, 3), ["exec", "wrangler", "deploy"]);
   assert.deepEqual(call.args.slice(secretsFileIndex + 2), []);
   assert.deepEqual(Object.keys(call.secrets).sort(), ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN"]);
+  assert.equal(existsSync(call.secretsFile), false);
+});
+
+test("omits missing Worker secrets from the deploy secrets file when env values are optional", () => {
+  const fixture = createFixture({
+    requiredSecrets: ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN"],
+  });
+
+  const result = runDeploy(fixture, ["--env", "production"], {
+    SENTRY_DSN: "https://example.invalid/1",
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+
+  const [call] = readCalls(fixture.callsPath);
+  const secretsFileIndex = call.args.indexOf("--secrets-file");
+  assert.notEqual(secretsFileIndex, -1);
+  assert.deepEqual(Object.keys(call.secrets).sort(), ["SENTRY_DSN"]);
+  assert.equal(call.secrets.SPLITCH_EVENT_INGEST_TOKEN, undefined);
   assert.equal(existsSync(call.secretsFile), false);
 });
 
@@ -68,7 +88,9 @@ test("removes the deploy secrets file when wrangler deploy fails", () => {
 test("fails before wrangler deploy when CI requires a missing Worker secret", () => {
   const fixture = createFixture({ requiredSecrets: ["SENTRY_DSN"] });
 
-  const result = runDeploy(fixture, ["--env", "production"]);
+  const result = runDeploy(fixture, ["--env", "production"], {
+    SPLITCH_REQUIRE_WORKER_SECRET_ENV: "1",
+  });
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /missing Worker secret env: SENTRY_DSN/);
@@ -116,18 +138,32 @@ process.exit(Number(process.env.SPLITCH_FAKE_WRANGLER_EXIT || 0));
 }
 
 function runDeploy(fixture, args, extraEnv = {}, fakeWranglerExit = "0") {
+  const env = {
+    ...process.env,
+  };
+  for (const name of [
+    "SENTRY_AUTH_TOKEN",
+    "SENTRY_DSN",
+    "SENTRY_ORG",
+    "SENTRY_PROJECT",
+    "SPLITCH_EVENT_INGEST_TOKEN",
+    "SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV",
+    "SPLITCH_REQUIRE_WORKER_SECRET_ENV",
+  ]) {
+    delete env[name];
+  }
+  Object.assign(env, {
+    PATH: `${fixture.binDir}:${process.env.PATH}`,
+    SENTRY_RELEASE: "test-release",
+    SPLITCH_FAKE_WRANGLER_CALLS: fixture.callsPath,
+    SPLITCH_FAKE_WRANGLER_EXIT: fakeWranglerExit,
+  });
+  Object.assign(env, extraEnv);
+
   return spawnSync(process.execPath, [scriptPath, ...args], {
     cwd: fixture.root,
     encoding: "utf8",
-    env: {
-      ...process.env,
-      ...extraEnv,
-      PATH: `${fixture.binDir}:${process.env.PATH}`,
-      SENTRY_RELEASE: "test-release",
-      SPLITCH_FAKE_WRANGLER_CALLS: fixture.callsPath,
-      SPLITCH_FAKE_WRANGLER_EXIT: fakeWranglerExit,
-      SPLITCH_REQUIRE_WORKER_SECRET_ENV: "1",
-    },
+    env,
   });
 }
 

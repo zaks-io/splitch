@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseConfigFileTextToJson } from "typescript";
+import { parseWranglerConfigFile } from "./lib/wrangler-config.mjs";
 
 const OUT_DIR = ".wrangler/sentry";
 const REQUIRE_SENTRY_ENV = process.env.SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV === "1";
@@ -119,8 +119,8 @@ function resolveRelease() {
 }
 
 function readWorkerName() {
-  const parsed = readWranglerConfig();
-  const name = parsed.config?.name;
+  const config = readWranglerConfig();
+  const name = config?.name;
   if (typeof name !== "string" || name.length === 0) {
     fail("wrangler.jsonc must declare a Worker name");
   }
@@ -185,21 +185,18 @@ function workerSecretValues(envName) {
 }
 
 function requiredWorkerSecrets(envName) {
-  const config = readWranglerConfig().config;
+  const config = readWranglerConfig();
   const targetConfig = envName ? config.env?.[envName] : undefined;
   const names = targetConfig?.secrets?.required ?? config.secrets?.required ?? [];
   return [...new Set(names)].sort();
 }
 
 function readWranglerConfig() {
-  const parsed = parseConfigFileTextToJson(
-    "wrangler.jsonc",
-    readFileSync(join(process.cwd(), "wrangler.jsonc"), "utf8"),
-  );
-  if (parsed.error) {
-    fail(parsed.error.messageText.toString());
+  try {
+    return parseWranglerConfigFile(join(process.cwd(), "wrangler.jsonc"));
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
-  return parsed;
 }
 
 function readCloudflareEnv(inputArgs) {
