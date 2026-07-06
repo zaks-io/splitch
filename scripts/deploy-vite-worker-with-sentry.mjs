@@ -1,5 +1,9 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertNoPlaceholderHostedBindings, isHostedWranglerEnv } from "./lib/hosted-bindings.mjs";
+import { parseWranglerConfigFile } from "./lib/wrangler-config.mjs";
 
 const deployScript = fileURLToPath(new URL("./deploy-worker-with-sentry.mjs", import.meta.url));
 const { cloudflareEnv, deployArgs } = extractCloudflareEnv(
@@ -9,9 +13,11 @@ const commandEnv = { ...process.env };
 
 if (cloudflareEnv) {
   commandEnv.CLOUDFLARE_ENV = cloudflareEnv;
+  commandEnv.SPLITCH_GENERATED_WRANGLER_ENV = cloudflareEnv;
 }
 
 run("pnpm", ["build"], { env: commandEnv });
+validateGeneratedHostedConfig(cloudflareEnv);
 run("node", [deployScript, ...deployArgs], { env: commandEnv });
 
 function extractCloudflareEnv(args) {
@@ -58,6 +64,27 @@ function run(command, args, options = {}) {
   const result = spawnSync(command, args, { stdio: "inherit", ...options });
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
+  }
+}
+
+function validateGeneratedHostedConfig(cloudflareEnv) {
+  if (!isHostedWranglerEnv(cloudflareEnv)) {
+    return;
+  }
+
+  const configPath = join(process.cwd(), "dist/server/wrangler.json");
+  if (!existsSync(configPath)) {
+    fail(`missing generated Wrangler config at ${configPath} for ${cloudflareEnv}`);
+  }
+
+  try {
+    const config = parseWranglerConfigFile(configPath);
+    assertNoPlaceholderHostedBindings(
+      config,
+      `generated Wrangler config dist/server/wrangler.json for ${cloudflareEnv}`,
+    );
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
 }
 

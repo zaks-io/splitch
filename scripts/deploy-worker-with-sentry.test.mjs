@@ -97,7 +97,22 @@ test("fails before wrangler deploy when CI requires a missing Worker secret", ()
   assert.equal(existsSync(fixture.callsPath), false);
 });
 
-function createFixture({ requiredSecrets }) {
+test("fails before wrangler deploy when hosted env bindings contain placeholders", () => {
+  const fixture = createFixture({
+    bindings: {
+      kv_namespaces: [{ binding: "SESSION_STORE", id: "00000000000000000000000000000000" }],
+    },
+  });
+
+  const result = runDeploy(fixture, ["--env", "production"]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /wrangler\.jsonc env\.production/);
+  assert.match(result.stderr, /kv_namespaces\.SESSION_STORE\.id/);
+  assert.equal(existsSync(fixture.callsPath), false);
+});
+
+function createFixture({ requiredSecrets = [], bindings = {} }) {
   const root = mkdtempSync(join(tmpdir(), "splitch-worker-deploy-test-"));
   const binDir = join(root, "bin");
   const callsPath = join(root, "wrangler-deploy-calls.jsonl");
@@ -109,6 +124,7 @@ function createFixture({ requiredSecrets }) {
       name: "splitch-evaluation-api",
       env: {
         production: {
+          ...bindings,
           secrets: {
             required: requiredSecrets,
           },

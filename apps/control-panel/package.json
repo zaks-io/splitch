@@ -10,8 +10,8 @@
   "scripts": {
     "build": "vite build && tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist coverage .output .wrangler",
-    "deploy": "pnpm build && node ../../scripts/deploy-worker-with-sentry.mjs",
-    "deploy:dry-run": "pnpm build && node ../../scripts/deploy-worker-with-sentry.mjs --dry-run",
+    "deploy": "node ../../scripts/deploy-vite-worker-with-sentry.mjs",
+    "deploy:dry-run": "node ../../scripts/deploy-vite-worker-with-sentry.mjs --dry-run",
     "dev": "vite dev --host 127.0.0.1 --port 8793",
     "lint": "biome lint src vite.config.ts vitest.config.ts",
     "preview": "vite preview --host 127.0.0.1 --port 8793",

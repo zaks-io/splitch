@@ -2,6 +2,10 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  assertNoPlaceholderHostedBindings,
+  requireHostedWranglerEnvTarget,
+} from "./lib/hosted-bindings.mjs";
 import { parseWranglerConfigFile } from "./lib/wrangler-config.mjs";
 
 const OUT_DIR = ".wrangler/sentry";
@@ -9,7 +13,9 @@ const REQUIRE_SENTRY_ENV = process.env.SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV ===
 const REQUIRE_WORKER_SECRET_ENV = process.env.SPLITCH_REQUIRE_WORKER_SECRET_ENV === "1";
 const args = process.argv.slice(2).filter((arg) => arg !== "--");
 const isDryRun = args.includes("--dry-run");
-const cloudflareEnv = readCloudflareEnv(args);
+const cloudflareEnv = readCloudflareEnv(args) ?? process.env.SPLITCH_GENERATED_WRANGLER_ENV;
+const wranglerConfig = readWranglerConfig();
+validateHostedEnvBindings(wranglerConfig, cloudflareEnv);
 const release = resolveRelease();
 const missingSentryEnv = missingSentryUploadEnv();
 const wranglerArgs = [
@@ -119,8 +125,7 @@ function resolveRelease() {
 }
 
 function readWorkerName() {
-  const config = readWranglerConfig();
-  const name = config?.name;
+  const name = wranglerConfig?.name;
   if (typeof name !== "string" || name.length === 0) {
     fail("wrangler.jsonc must declare a Worker name");
   }
@@ -185,9 +190,8 @@ function workerSecretValues(envName) {
 }
 
 function requiredWorkerSecrets(envName) {
-  const config = readWranglerConfig();
-  const targetConfig = envName ? config.env?.[envName] : undefined;
-  const names = targetConfig?.secrets?.required ?? config.secrets?.required ?? [];
+  const targetConfig = envName ? wranglerConfig.env?.[envName] : undefined;
+  const names = targetConfig?.secrets?.required ?? wranglerConfig.secrets?.required ?? [];
   return [...new Set(names)].sort();
 }
 
@@ -210,6 +214,17 @@ function readCloudflareEnv(inputArgs) {
     }
   }
   return undefined;
+}
+
+function validateHostedEnvBindings(config, envName) {
+  try {
+    const targetConfig = requireHostedWranglerEnvTarget(config, envName, "wrangler.jsonc");
+    if (targetConfig) {
+      assertNoPlaceholderHostedBindings(targetConfig, `wrangler.jsonc env.${envName}`);
+    }
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
 }
 
 function run(command, commandArgs) {
