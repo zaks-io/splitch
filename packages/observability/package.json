@@ -29,8 +29,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@sentry/cloudflare": "^9.47.0",
-    "@sentry/node": "^9.47.0",
+    "@sentry/cloudflare": "^10.63.0",
+    "@sentry/node": "^10.63.0",
     "@splitch/contracts": "workspace:*",
     "@splitch/privacy": "workspace:*",
     "@splitch/worker-runtime": "workspace:*"
