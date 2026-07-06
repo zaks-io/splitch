@@ -18,7 +18,7 @@
     "@splitch/contracts": "workspace:*",
     "@splitch/db": "workspace:*",
     "@splitch/observability": "workspace:*",
-    "hono": "^4.12.27",
+    "hono": "^4.12.28",
     "zod": "^4.4.3"
   },
   "devDependencies": {
