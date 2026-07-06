@@ -89,6 +89,7 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 | `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                                             |
 | `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, and Turborepo Worker deploy tasks                    |
 | `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                              |
+| `sdk-release`           | manual dispatch                                     | `sdk-release`, queued            | wired: validate `@splitch/sdk`, prepare release artifacts, create or update draft GitHub Release for `sdk-v<version>`; does not publish to npm            |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
@@ -133,8 +134,9 @@ Shared preview is provisioned once and updated on demand:
 2. Use the checked-in Wrangler `shared-preview` environment blocks with binding IDs, preview vars,
    service bindings pointing at shared-preview Worker names, and no production routes.
 3. Apply D1 migrations to the shared-preview D1 database before Worker deployment.
-4. Sync Worker secrets, then deploy Workers through Turborepo package deploy tasks that call
-   `wrangler deploy --env shared-preview`.
+4. Deploy Workers through Turborepo package deploy tasks that call
+   `wrangler deploy --env shared-preview --secrets-file <temp-file>` when the Worker declares required
+   secrets.
 5. Run smoke checks against the shared-preview URL.
 6. Post the shared-preview URL, deployed ref, Tinybird branch name, migration list, and smoke results to
    the PR or workflow summary.
@@ -209,10 +211,14 @@ or any Durable Object migration.
 - Cloudflare deploy tokens are scoped as tightly as Cloudflare supports. Prefer separate preview and
   production API tokens.
 - Runtime secret names are declared in Wrangler config with `secrets.required`.
-- `scripts/sync-worker-secrets.mjs` reads each Worker's `secrets.required` list and performs
-  `wrangler secret bulk --env <target>` before deploy. CI sets
+- Worker deploy scripts read each Worker's `secrets.required` list and pass available secret values
+  through a temporary JSON file to `wrangler deploy --secrets-file`. The deploy uploads code and
+  secrets into the same Worker version, so there is no separate pre-deploy secret edit that can fail
+  when the latest Worker version is not currently deployed. CI sets
   `SPLITCH_REQUIRE_WORKER_SECRET_ENV=1` so missing environment values fail loudly. Local deploys may
   reuse already-attached Worker secrets when the environment value is not present.
+- `scripts/sync-worker-secrets.mjs` is for manual version-only secret uploads. It uses
+  `wrangler versions secret bulk --env <target>` and does not serve the created version to traffic.
 - The Auth API declares `WORKOS_CLIENT_ID` and `WORKOS_API_KEY` as required hosted Worker bindings so
   hosted device flow cannot silently fall back to the local fixture adapter. `WORKOS_CLIENT_ID` is a
   GitHub environment variable, not a repository-committed Wrangler value.
@@ -351,6 +357,7 @@ is compatible with current data.
 - [x] Add Tinybird project files and `tinybird.config.json` with local-mode development.
 - [x] Add Blacksmith-backed GitHub workflows for CI and Gitleaks.
 - [ ] Add Blacksmith-backed GitHub workflows for shared preview reset and rollback.
+- [x] Add a Blacksmith-backed `sdk-release` workflow for manual SDK draft release prep.
 - [x] Add a Blacksmith-backed `deploy-shared-preview` workflow.
 - [x] Add a Blacksmith-backed `deploy-production` workflow for Tinybird, D1, and Worker deploy legs.
 - [x] Add Cloudflare and Sentry source-map upload wiring for Worker deploys.

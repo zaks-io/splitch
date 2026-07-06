@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@sentry/cloudflare": "^10.63.0",
-    "@sentry/node": "^9.47.0",
+    "@sentry/node": "^10.63.0",
     "@splitch/contracts": "workspace:*",
     "@splitch/privacy": "workspace:*",
     "@splitch/worker-runtime": "workspace:*"

@@ -108,10 +108,11 @@ satisfy a confirm gate before an Environment-level write commits.
 
 ## User entity
 
-Users are identified by their WorkOS User ID. Persistent across all three auth doors. No separate splitch
-user table for user-data — user attributes (email, display name) are resolved from the WorkOS session
-token at login and cached in the control-plane token's claims; D1 stores only the `user_id` foreign key
-in membership tables.
+Users are identified by their WorkOS User ID. Persistent across all three identity doors. The
+shared-preview `client_credentials` grant resolves to a configured seeded WorkOS user, not a separate
+principal class. No separate splitch user table for user-data — user attributes (email, display name)
+are resolved from the WorkOS session token at login and cached in the control-plane token's claims;
+D1 stores only the `user_id` foreign key in membership tables.
 
 ## Isolation seam
 

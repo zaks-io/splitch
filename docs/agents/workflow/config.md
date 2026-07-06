@@ -58,8 +58,8 @@ in this config; refresh them from Linear during each workflow run.
   `typecheck`, `knip`, `secrets:range`, `tinybird:local`,
   `d1:migrate:local`).
 - CI gate: `.github/workflows/ci.yml` job `Verify` runs `pnpm verify:ci`
-  (`format:check`, `lint`, `typecheck`, `knip`, `spec:lint`, `test`,
-  `stats:golden`, `stats:property`, `build`) and then `pnpm secrets:range`.
+  (`format:check`, `lint`, `typecheck`, `knip`, `spec:lint`, `test:scripts`,
+  `test`, `stats:golden`, `stats:property`, `build`) and then `pnpm secrets:range`.
 - Separate hosted PR checks: `Spec Lint` runs `pnpm spec:lint`; `Stats
 Simulation Smoke` runs package `stats:simulation -- --mode=smoke`.
 - Gate parity gap: `pnpm verify:push` runs `tinybird:local` and

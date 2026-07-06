@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseConfigFileTextToJson } from "typescript";
+import { tmpdir } from "node:os";
+import { parseWranglerConfigFile } from "./lib/wrangler-config.mjs";
 
 const target = process.argv[2];
 const requireEnv =
@@ -21,7 +22,7 @@ for (const entry of readdirSync(appsDir, { withFileTypes: true })) {
   const configPath = join(appDir, "wrangler.jsonc");
   let config;
   try {
-    config = readWranglerConfig(configPath);
+    config = parseWranglerConfigFile(configPath);
   } catch (error) {
     if (error.code === "ENOENT") continue;
     throw error;
@@ -53,14 +54,6 @@ if (missing.length > 0) {
   fail(`missing required Worker secrets:\n${missing.map((name) => `- ${name}`).join("\n")}`);
 }
 
-function readWranglerConfig(path) {
-  const parsed = parseConfigFileTextToJson(path, readFileSync(path, "utf8"));
-  if (parsed.error) {
-    throw new Error(`${path}: ${parsed.error.messageText}`);
-  }
-  return parsed.config;
-}
-
 function requiredSecrets(config, envName) {
   const targetConfig = config.env?.[envName];
   const names = targetConfig?.secrets?.required ?? config.secrets?.required ?? [];
@@ -87,15 +80,30 @@ function listExistingSecrets(cwd, envName) {
 }
 
 function syncSecrets(cwd, envName, values) {
-  const result = spawnSync("pnpm", ["exec", "wrangler", "secret", "bulk", "--env", envName], {
-    cwd,
-    encoding: "utf8",
-    input: JSON.stringify(values),
-    stdio: ["pipe", "inherit", "inherit"],
-  });
+  const tempDir = mkdtempSync(join(tmpdir(), "splitch-worker-secrets-"));
+  const secretsFile = join(tempDir, "secrets.json");
+  let exitCode = 0;
 
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
+  try {
+    writeFileSync(secretsFile, JSON.stringify(values), { mode: 0o600 });
+
+    const result = spawnSync(
+      "pnpm",
+      ["exec", "wrangler", "versions", "secret", "bulk", secretsFile, "--env", envName],
+      {
+        cwd,
+        encoding: "utf8",
+        stdio: ["ignore", "inherit", "inherit"],
+      },
+    );
+
+    exitCode = result.status ?? 1;
+  } finally {
+    rmSync(tempDir, { force: true, recursive: true });
+  }
+
+  if (exitCode !== 0) {
+    process.exit(exitCode);
   }
 }
 

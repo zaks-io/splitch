@@ -100,6 +100,10 @@ a control-plane mutation happened; read surfaces show a deleted-user tombstone w
 privacy request ledger is retained for at least 24 months or the contracted audit period, whichever
 is longer. See [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md).
 
+`auth_door = "client_credentials"` is reserved for the shared-preview smoke grant. It still resolves
+to the configured seeded smoke WorkOS user and scoped smoke App/Organization; the value is audit
+provenance, not a different authorization model.
+
 **Audit event shape (row):**
 
 ```
@@ -109,7 +113,7 @@ is longer. See [../platform/privacy-data-lifecycle.md](../platform/privacy-data-
   environment_id: string | null  // co-scoped with app_id for per-Env actions (ADR-0027); null for App-level actions
   org_id:      string
   user_id:     string
-  auth_door:   string     // "id_jag" | "anonymous" | "device_flow"
+  auth_door:   string     // "id_jag" | "anonymous" | "device_flow" | "client_credentials"
   action:      string     // e.g. "flag.create", "run.start", "run.end", "flag_config.promote", "api_key.revoke"
   resource_id: string     // the ID of the affected entity
   resource_type: string   // "flag" | "experiment" | "run" | "environment" | "flag_config" | ...
