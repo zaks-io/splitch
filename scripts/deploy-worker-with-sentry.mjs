@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   assertNoPlaceholderHostedBindings,
+  isHostedWranglerEnv,
   requireHostedWranglerEnvTarget,
 } from "./lib/hosted-bindings.mjs";
 import { parseWranglerConfigFile } from "./lib/wrangler-config.mjs";
@@ -13,7 +14,7 @@ const REQUIRE_SENTRY_ENV = process.env.SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV ===
 const REQUIRE_WORKER_SECRET_ENV = process.env.SPLITCH_REQUIRE_WORKER_SECRET_ENV === "1";
 const args = process.argv.slice(2).filter((arg) => arg !== "--");
 const isDryRun = args.includes("--dry-run");
-const cloudflareEnv = readCloudflareEnv(args) ?? process.env.SPLITCH_GENERATED_WRANGLER_ENV;
+const cloudflareEnv = resolvedCloudflareEnv(args, process.env);
 const wranglerConfig = readWranglerConfig();
 validateHostedEnvBindings(wranglerConfig, cloudflareEnv);
 const release = resolveRelease();
@@ -211,6 +212,32 @@ function readCloudflareEnv(inputArgs) {
     }
     if (arg.startsWith("--env=")) {
       return arg.slice("--env=".length);
+    }
+  }
+  return undefined;
+}
+
+function resolvedCloudflareEnv(inputArgs, env) {
+  const explicitEnv = readCloudflareEnv(inputArgs) ?? env.SPLITCH_GENERATED_WRANGLER_ENV;
+  if (explicitEnv) {
+    return explicitEnv;
+  }
+
+  const hostedEnv = readHostedEnvFromProcessEnv(env);
+  if (hostedEnv) {
+    fail(
+      `hosted deploy target ${hostedEnv} requires --env or SPLITCH_GENERATED_WRANGLER_ENV before deploy`,
+    );
+  }
+
+  return undefined;
+}
+
+function readHostedEnvFromProcessEnv(env) {
+  for (const name of ["CLOUDFLARE_ENV", "SPLITCH_PLATFORM_TARGET"]) {
+    const value = env[name];
+    if (isHostedWranglerEnv(value)) {
+      return value;
     }
   }
   return undefined;

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PLACEHOLDER_KV_ID } from "./lib/hosted-bindings.mjs";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 const scriptPath = join(repoRoot, "scripts/deploy-worker-with-sentry.mjs");
@@ -100,7 +101,7 @@ test("fails before wrangler deploy when CI requires a missing Worker secret", ()
 test("fails before wrangler deploy when hosted env bindings contain placeholders", () => {
   const fixture = createFixture({
     bindings: {
-      kv_namespaces: [{ binding: "SESSION_STORE", id: "00000000000000000000000000000000" }],
+      kv_namespaces: [{ binding: "SESSION_STORE", id: PLACEHOLDER_KV_ID }],
     },
   });
 
@@ -112,7 +113,19 @@ test("fails before wrangler deploy when hosted env bindings contain placeholders
   assert.equal(existsSync(fixture.callsPath), false);
 });
 
-function createFixture({ requiredSecrets = [], bindings = {} }) {
+test("fails before wrangler deploy when hosted target is implied without a resolved env", () => {
+  const fixture = createFixture();
+
+  const result = runDeploy(fixture, ["--dry-run"], {
+    SPLITCH_PLATFORM_TARGET: "production",
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /hosted deploy target production requires --env/);
+  assert.equal(existsSync(fixture.callsPath), false);
+});
+
+function createFixture({ requiredSecrets = [], bindings = {} } = {}) {
   const root = mkdtempSync(join(tmpdir(), "splitch-worker-deploy-test-"));
   const binDir = join(root, "bin");
   const callsPath = join(root, "wrangler-deploy-calls.jsonl");
@@ -163,8 +176,11 @@ function runDeploy(fixture, args, extraEnv = {}, fakeWranglerExit = "0") {
     "SENTRY_ORG",
     "SENTRY_PROJECT",
     "SPLITCH_EVENT_INGEST_TOKEN",
+    "SPLITCH_GENERATED_WRANGLER_ENV",
+    "SPLITCH_PLATFORM_TARGET",
     "SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV",
     "SPLITCH_REQUIRE_WORKER_SECRET_ENV",
+    "CLOUDFLARE_ENV",
   ]) {
     delete env[name];
   }

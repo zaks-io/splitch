@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { PLACEHOLDER_KV_ID } from "./lib/hosted-bindings.mjs";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 const scriptPath = join(repoRoot, "scripts/deploy-vite-worker-with-sentry.mjs");
@@ -52,7 +53,7 @@ test("passes CLOUDFLARE_ENV to Vite build and deploys the generated hosted confi
 test("fails before deploy when the generated hosted config keeps placeholder bindings", () => {
   const fixture = createFixture({
     generatedConfig: hostedGeneratedConfig({
-      kvId: "00000000000000000000000000000000",
+      kvId: PLACEHOLDER_KV_ID,
       d1Id: "f419e372-d548-4afb-966f-40ff298303d8",
     }),
   });
@@ -63,6 +64,27 @@ test("fails before deploy when the generated hosted config keeps placeholder bin
   assert.match(result.stderr, /generated Wrangler config/);
   assert.match(result.stderr, /kv_namespaces\.SESSION_STORE\.id/);
   assert.equal(readCalls(fixture.callsPath).length, 1);
+});
+
+test("fails before deploy for package deploy invocation without --env when hosted target is selected", () => {
+  const fixture = createFixture({
+    generatedConfig: hostedGeneratedConfig({
+      kvId: PLACEHOLDER_KV_ID,
+      d1Id: "f419e372-d548-4afb-966f-40ff298303d8",
+    }),
+  });
+
+  const result = runDeploy(fixture, ["--dry-run"], { SPLITCH_PLATFORM_TARGET: "production" });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /generated Wrangler config/);
+  assert.match(result.stderr, /kv_namespaces\.SESSION_STORE\.id/);
+
+  const calls = readCalls(fixture.callsPath);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, "build");
+  assert.equal(calls[0].cloudflareEnv, "production");
+  assert.equal(calls[0].generatedWranglerEnv, "production");
 });
 
 function createFixture({ generatedConfig }) {
@@ -138,15 +160,25 @@ function hostedGeneratedConfig({ kvId, d1Id }) {
   };
 }
 
-function runDeploy(fixture, args) {
+function runDeploy(fixture, args, extraEnv = {}) {
   const env = {
     ...process.env,
+  };
+  for (const name of [
+    "CLOUDFLARE_ENV",
+    "SPLITCH_GENERATED_WRANGLER_ENV",
+    "SPLITCH_PLATFORM_TARGET",
+  ]) {
+    delete env[name];
+  }
+  Object.assign(env, {
     PATH: `${fixture.binDir}:${process.env.PATH}`,
     SENTRY_RELEASE: "test-release",
     SPLITCH_FAKE_CALLS: fixture.callsPath,
     SPLITCH_GENERATED_WRANGLER_CONFIG: JSON.stringify(fixture.generatedConfig),
     WORKOS_CLIENT_ID: "fake-workos-client-id",
-  };
+  });
+  Object.assign(env, extraEnv);
 
   return spawnSync(process.execPath, [scriptPath, ...args], {
     cwd: fixture.root,

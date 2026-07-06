@@ -1,5 +1,5 @@
 const HOSTED_WRANGLER_ENVS = new Set(["production", "shared-preview"]);
-const PLACEHOLDER_KV_ID = "00000000000000000000000000000000";
+export const PLACEHOLDER_KV_ID = "00000000000000000000000000000000";
 const PLACEHOLDER_D1_ID = "00000000-0000-0000-0000-000000000000";
 
 export function isHostedWranglerEnv(envName) {
