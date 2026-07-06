@@ -22,17 +22,19 @@ segment (navigation-and-ia.md). The org switcher lists `orgs`; each App switcher
 Org's Apps.
 
 `OrgMembership`:
-| field | type | req | meaning |
-|-----------|-----------------|-----|-------------------------------------------|
-| `orgId` | string | yes | Org the user belongs to |
-| `orgRole` | OrgRole | yes | `owner \| admin \| member` |
-| `apps` | AppMembership[] | yes | Apps in this Org the user can access |
+
+| field     | type            | req | meaning                              |
+| --------- | --------------- | --- | ------------------------------------ |
+| `orgId`   | string          | yes | Org the user belongs to              |
+| `orgRole` | OrgRole         | yes | `owner \| admin \| member`           |
+| `apps`    | AppMembership[] | yes | Apps in this Org the user can access |
 
 `AppMembership`:
-| field | type | req | meaning |
-|-----------|--------|-----|--------------------------------|
-| `appId` | string | yes | App the user is a member of |
-| `role` | AppRole| yes | `owner \| admin \| member \| viewer` |
+
+| field   | type    | req | meaning                              |
+| ------- | ------- | --- | ------------------------------------ |
+| `appId` | string  | yes | App the user is a member of          |
+| `role`  | AppRole | yes | `owner \| admin \| member \| viewer` |
 
 `OrgRole`: `owner | admin | member`
 
