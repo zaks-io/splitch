@@ -64,7 +64,10 @@ function getSentryWrappedHandler<E extends WorkerEnv>(
   if (cached) {
     return cached as ExportedHandler<E>;
   }
-  const wrapped = Sentry.withSentry((env) => workerSentryOptions(env, options, Sentry), handler);
+  const wrapped = Sentry.withSentry<E, unknown, unknown, ExportedHandler<E>>(
+    (env) => workerSentryOptions(env, options, Sentry),
+    handler,
+  );
   sentryHandlers.set(cacheKey, wrapped as ExportedHandler<WorkerEnv>);
   return wrapped;
 }
