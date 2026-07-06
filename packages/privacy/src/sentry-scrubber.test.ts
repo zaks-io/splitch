@@ -83,6 +83,8 @@ describe("scrubSentryEvent allow-list traversal", () => {
       },
     });
     expect(JSON.stringify(scrubbed.request).includes("leak@evil.com")).toBe(false);
+    expect(JSON.stringify(scrubbed.request).includes("abc")).toBe(false);
+    expect(JSON.stringify(scrubbed.request).includes("Bearer x")).toBe(false);
   });
 
   it("traverses the top-level message", () => {

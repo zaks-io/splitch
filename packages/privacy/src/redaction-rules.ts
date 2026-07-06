@@ -28,6 +28,9 @@ const CONTAINER_KEYS = ["targeting", "context", "evaluationcontext"] as const;
  * (email, phone, end-user identifiers, names, address-like fields).
  */
 const LEAF_PII_KEYS = [
+  "authorization",
+  "cookie",
+  "cookies",
   "targetingkey",
   "email",
   "phone",
@@ -39,6 +42,7 @@ const LEAF_PII_KEYS = [
   "username",
   "address",
   "ipaddress",
+  "setcookie",
   "ssn",
 ] as const;
 

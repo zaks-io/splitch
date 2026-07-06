@@ -13,6 +13,7 @@ export const OBSERVABILITY_SURFACES = [
   { id: "event-ingest-api", kind: "worker" },
   { id: "analysis-api", kind: "worker" },
   { id: "auth-api", kind: "worker" },
+  { id: "control-panel", kind: "worker" },
   { id: "mcp-server", kind: "worker" },
   { id: "cli", kind: "cli" },
   { id: "sdk-harness", kind: "sdk-harness" },
