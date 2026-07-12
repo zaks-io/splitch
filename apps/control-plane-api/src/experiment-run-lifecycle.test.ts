@@ -4,7 +4,7 @@ import {
   getRoute,
   liveRunKey,
 } from "@splitch/contracts";
-import { envScope } from "@splitch/db";
+import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { errorBody, NOW_ISO, request } from "./flag-definition-test-harness";
 import {
@@ -166,6 +166,36 @@ describe("control-plane Experiment Run lifecycle", () => {
       status: "ended",
       endedAt: NOW_ISO,
     });
+    expect(
+      await ctx.h.bindings.kv.get(liveRunKey(fx.appId, fx.environmentId, experiment.id), "text"),
+    ).toBe(null);
+  });
+});
+
+describe("control-plane Experiment Run start-time validation", () => {
+  it("fails loud on Start when a referenced Segment was deleted (no silent audience widening)", async () => {
+    const fx = await experimentFixture(ctx);
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "checkout-exp",
+      allocation: { control: 50, treatment: 50 },
+      salt: "run-salt-1",
+      segmentIds: [fx.segmentId],
+    });
+
+    // The Segment vanishes after the draft staged it (raced delete, cleanup, …).
+    await ctx.repo.flags.removeSegment(appScope(fx.appId), fx.segmentId);
+
+    const start = await request(
+      ctx.h,
+      "POST",
+      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experiment.id}/start`,
+      fx.jwt,
+    );
+
+    // Must reject rather than freeze a Run with no Segment rule.
+    expect(start.status).toBe(404);
+    expect((await errorBody(start)).code).toBe("SEGMENT_NOT_FOUND");
+    // No live run was written.
     expect(
       await ctx.h.bindings.kv.get(liveRunKey(fx.appId, fx.environmentId, experiment.id), "text"),
     ).toBe(null);

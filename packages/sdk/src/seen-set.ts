@@ -6,14 +6,17 @@ import type { VariantValue } from "./generated/contract-surface.js";
  * is to short-circuit a repeat `evaluate` for the same Entity/Run so no redundant
  * transport call and no redundant Exposure fire (`reason: CACHED`).
  *
- * Key = (flagKey, runId, targetingKey). `runId` is required so a Run-boundary
- * re-evaluation is NOT wrongly suppressed: a new Run stores a new triple, and the
- * prior entry no longer matches (seen-set.md §"Seen-set key").
+ * Key = (flagKey, runId, idType, targetingKey). `runId` is required so a
+ * Run-boundary re-evaluation is NOT wrongly suppressed: a new Run stores a new
+ * entry, and the prior one no longer matches (seen-set.md §"Seen-set key").
+ * `idType` is required because Entity identity is (idType, targetingKey) — two
+ * Entities of different types sharing a bare key ("user 42" vs "workspace 42")
+ * must not replay each other's Variant.
  *
  * Bounded optimistic suppression (the real guarantee for a pure HTTP client).
  * The bare wire body carries no runId, so the SDK cannot know the *current* runId
- * before a call — it can only remember the runId of the last resolution for a
- * (flagKey, targetingKey). If it short-circuited on that stale runId forever, a
+ * before a call — it can only remember the runId of the last resolution for an
+ * (flagKey, idType, targetingKey). If it short-circuited on that stale runId forever, a
  * long-lived instance (browser SPA, warm Worker) would NEVER detect a new Run and
  * would under-count the new Run's denominator. So each entry carries a timestamp
  * and a hit is valid only within a revalidation window (`ttlMs`): a same-Run
@@ -35,20 +38,27 @@ export const DEFAULT_REVALIDATE_MS = 60_000;
 
 export interface SeenEntry {
   readonly runId: string;
-  readonly value: VariantValue;
+  /**
+   * The WIRE variant of the cached resolution. `null` records a 200 no-match
+   * (reason DEFAULT) — the replay must re-apply the CURRENT call's Default
+   * Variant, never a previous caller's, so the caller-supplied default is not
+   * stored here.
+   */
+  readonly variant: VariantValue | null;
   /** Epoch ms when this entry was written; the TTL is measured from here. */
   readonly storedAt: number;
 }
 
-function pairId(flagKey: string, targetingKey: string): string {
-  // Joined with NUL (escaped): the one byte a flagKey / targetingKey will not
-  // contain, so no two distinct (flagKey, targetingKey) pairs can collide.
-  return `${flagKey}\u0000${targetingKey}`;
+function entryId(flagKey: string, idType: string, targetingKey: string): string {
+  // Joined with NUL (escaped): the one byte the components will not contain,
+  // so no two distinct (flagKey, idType, targetingKey) triples can collide.
+  return `${flagKey}\u0000${idType}\u0000${targetingKey}`;
 }
 
 export class SeenSet {
-  // Keyed by (flagKey, targetingKey); the entry carries the runId + storedAt so a
-  // lookup can confirm the run has not advanced AND the entry is still fresh.
+  // Keyed by (flagKey, idType, targetingKey); the entry carries the runId +
+  // storedAt so a lookup can confirm the run has not advanced AND the entry is
+  // still fresh.
   private readonly entries = new Map<string, SeenEntry>();
 
   constructor(
@@ -65,14 +75,14 @@ export class SeenSet {
   }
 
   /**
-   * The cached Variant for this (flagKey, targetingKey) when it is still within
-   * the revalidation window, or `undefined` on a miss (never seen, OR the entry
-   * has aged past `ttlMs` and must be revalidated against the server). A hit is an
-   * LRU touch. `now` is injected (the caller passes the clock) so the TTL is
-   * testable without real time.
+   * The cached entry for this (flagKey, idType, targetingKey) when it is still
+   * within the revalidation window, or `undefined` on a miss (never seen, OR the
+   * entry has aged past `ttlMs` and must be revalidated against the server). A
+   * hit is an LRU touch. `now` is injected (the caller passes the clock) so the
+   * TTL is testable without real time.
    */
-  get(flagKey: string, targetingKey: string, now: number): VariantValue | undefined {
-    const id = pairId(flagKey, targetingKey);
+  get(flagKey: string, idType: string, targetingKey: string, now: number): SeenEntry | undefined {
+    const id = entryId(flagKey, idType, targetingKey);
     const entry = this.entries.get(id);
     if (entry === undefined) {
       return undefined;
@@ -85,7 +95,7 @@ export class SeenSet {
     // Re-insert to move the key to the most-recently-used tail.
     this.entries.delete(id);
     this.entries.set(id, entry);
-    return entry.value;
+    return entry;
   }
 
   /**
@@ -96,13 +106,14 @@ export class SeenSet {
   set(
     flagKey: string,
     runId: string,
+    idType: string,
     targetingKey: string,
-    value: VariantValue,
+    variant: VariantValue | null,
     now: number,
   ): void {
-    const id = pairId(flagKey, targetingKey);
+    const id = entryId(flagKey, idType, targetingKey);
     this.entries.delete(id);
-    this.entries.set(id, { runId, value, storedAt: now });
+    this.entries.set(id, { runId, variant, storedAt: now });
     if (this.entries.size > this.maxSize) {
       const oldest = this.entries.keys().next().value;
       if (oldest !== undefined) {

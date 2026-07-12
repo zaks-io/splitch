@@ -150,4 +150,21 @@ describe("control plane sdk typed route groups", () => {
       key: "checkout-exp",
     });
   });
+
+  it("preserves a base URL path prefix for typed routes and health()", async () => {
+    const urls: string[] = [];
+    const sdk = createControlPlaneSdk({
+      baseUrl: "https://gateway.test/control-plane",
+      fetch: async (input) => {
+        urls.push(input instanceof Request ? input.url : String(input));
+        return Response.json(flagPage);
+      },
+    });
+
+    await sdk.flags.list({ appId: "app_local" });
+    await sdk.health().catch(() => undefined);
+
+    expect(urls[0]).toBe("https://gateway.test/control-plane/apps/app_local/flags");
+    expect(urls[1]).toBe("https://gateway.test/control-plane/health");
+  });
 });

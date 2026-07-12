@@ -61,6 +61,7 @@ const handler = {
         fetcher: env.EVENT_INGEST,
         token: env.SPLITCH_EVENT_INGEST_TOKEN,
       }),
+      waitUntil: (promise) => ctx.waitUntil(promise),
       logger: console,
       observability: createWorkerObservability(
         env,

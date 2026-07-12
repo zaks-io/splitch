@@ -77,7 +77,11 @@ export async function runningMetricReference(
   appId: string,
   metricId: string,
 ): Promise<RunningBlocker | null> {
-  return runningReference(deps, appId, (experiment) =>
+  // Metric references (activation/decision/guardrail) survive a Run start, so a
+  // running experiment can reference the Metric directly; a draft experiment's
+  // reference must block deletion too, else Start copies a dangling Metric into
+  // the frozen decision family.
+  return anyReference(deps, appId, (experiment) =>
     experimentReferencesMetric(experiment, metricId),
   );
 }
@@ -87,12 +91,16 @@ export async function runningSegmentReference(
   appId: string,
   segmentId: string,
 ): Promise<RunningBlocker | null> {
-  return runningReference(deps, appId, (experiment) =>
+  // Segment references live ONLY on draft experiments (Start NULLs
+  // `draftSegmentIds`), so scanning running experiments alone never matches —
+  // scan every experiment so a draft's Segment cannot be deleted out from under
+  // it (which would silently widen the audience at Start).
+  return anyReference(deps, appId, (experiment) =>
     jsonArray(experiment.draftSegmentIds).includes(segmentId),
   );
 }
 
-async function runningReference(
+async function anyReference(
   deps: MetricSegmentDeps,
   appId: string,
   references: (experiment: ExperimentRow) => boolean,
@@ -100,7 +108,7 @@ async function runningReference(
   const envs = await deps.repo.identity.listEnvironments(appScope(appId));
   for (const env of envs) {
     const scope = envScope(appId, env.id);
-    for (const experiment of await deps.repo.experiments.listRunningExperiments(scope)) {
+    for (const experiment of await deps.repo.experiments.listExperiments(scope)) {
       if (!references(experiment)) continue;
       const run = experiment.liveRunId
         ? await deps.repo.experiments.getRun(scope, experiment.liveRunId)

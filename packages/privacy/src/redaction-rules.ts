@@ -31,6 +31,15 @@ const LEAF_PII_KEYS = [
   "authorization",
   "cookie",
   "cookies",
+  // Credential-bearing keys: like `authorization`/`cookie`, a secret carried
+  // under one of these names must never reach Sentry/Axiom verbatim.
+  "password",
+  "secret",
+  "clientsecret",
+  "apikey",
+  "token",
+  "accesstoken",
+  "refreshtoken",
   "targetingkey",
   "email",
   "phone",

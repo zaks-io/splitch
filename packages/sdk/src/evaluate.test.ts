@@ -83,6 +83,44 @@ describe("Run boundary (SAME instance): past the TTL the SDK re-contacts the ser
   });
 });
 
+describe("Entity identity: the seen-set keys on (idType, targetingKey), not the bare key", () => {
+  it("a different idType with the same targetingKey is a MISS (its own resolution + Exposure)", async () => {
+    // "user 42" and "workspace 42" are different Entities and may bucket to
+    // different Variants — one must never replay the other's cached value.
+    const transport = new FakeTransport([ok("a", "run-1"), ok("b", "run-1")]);
+    const c = clock();
+    const bag = deps(transport, c.now);
+
+    const user = await runEvaluate(bag, "flag", { targetingKey: "42", idType: "user" });
+    expect(user.value).toBe("a");
+
+    c.advance(1);
+    const workspace = await runEvaluate(bag, "flag", { targetingKey: "42", idType: "workspace" });
+    expect(workspace.reason).toBe("SPLIT"); // NOT CACHED — a distinct Entity
+    expect(workspace.value).toBe("b");
+    expect(transport.calls).toHaveLength(2);
+  });
+});
+
+describe("a cached 200 no-match replays with the CURRENT call's Default Variant", () => {
+  it("does not leak one call site's defaultValue into another's CACHED replay", async () => {
+    // 200 with variant:null (reason DEFAULT) + a runId -> the no-match is cached.
+    const transport = new FakeTransport([ok(null, "run-1")]);
+    const c = clock();
+    const bag = deps(transport, c.now);
+
+    const first = await runEvaluate(bag, "flag", { targetingKey: "u1", defaultValue: "v1" });
+    expect(first.reason).toBe("DEFAULT");
+    expect(first.value).toBe("v1");
+
+    c.advance(1);
+    const second = await runEvaluate(bag, "flag", { targetingKey: "u1", defaultValue: "v2" });
+    expect(second.reason).toBe("CACHED");
+    expect(second.value).toBe("v2"); // THIS call's default, not the first caller's
+    expect(transport.calls).toHaveLength(1); // dedup preserved
+  });
+});
+
 describe("never cache an ERROR result", () => {
   it("an ERROR does not populate the seen-set; the next evaluate retries the wire (fresh resolution)", async () => {
     const transport = new FakeTransport([httpError(503), ok("treatment", "run-1")]);

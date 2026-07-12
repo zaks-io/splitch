@@ -89,6 +89,9 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const payload = objectBody(input);
       const userId = payload.userId as string;
       const role = UserRoleSchema.parse(payload.role);
+      const grantGuard = await requireOwnerToGrantOwner(deps, orgId, principal.id, role, requestId);
+      if (grantGuard) return grantGuard;
+
       const profile = await resolveProfile(deps, orgId, userId, request, requestId);
       if (profile instanceof Response) return profile;
 
@@ -142,6 +145,20 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       return Response.json({ deleted: true });
     },
   };
+}
+
+// Granting the owner role is owner-only, matching updateMember — otherwise an
+// admin could mint an owner they control and bypass the owner-only
+// role-change/removal gates. Returns a 403 Response to short-circuit, or null.
+async function requireOwnerToGrantOwner(
+  deps: OrgHandlerDeps,
+  orgId: string,
+  userId: string,
+  role: UserRole,
+  requestId: string,
+): Promise<Response | null> {
+  if (role !== "owner") return null;
+  return requireOrgRole(deps, orgId, userId, ORG_OWNER_ROLES, requestId);
 }
 
 function failedMemberUpdate(

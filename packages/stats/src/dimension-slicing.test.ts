@@ -45,6 +45,26 @@ describe("StatsEngine.analyze Dimension slicing", () => {
     expect(treatment.status).toBe("insufficient_n");
   });
 
+  it("ignores foreign-run exposures when slicing an ungated Dimension", async () => {
+    // Rows from a prior run (with the same dimension value) must not inflate the
+    // slice's sample size or suppress its low-N warning.
+    const base = fixedHorizonDimensionStatsInput();
+    const foreign = Array.from({ length: 500 }, (_unused, index) => ({
+      ...exposure("treatment", `foreign_${index}`),
+      run_id: "run_previous",
+      dimension_values: { country: "US" },
+    }));
+    const output = await analyzeStats({
+      ...base,
+      exposures: [...base.exposures, ...foreign],
+    });
+
+    const country = dimensionResult(output, "country", "US");
+    // 99 control + 99 treatment from THIS run only — the 500 foreign rows drop.
+    expect(country.sample_size_n).toBe(198);
+    expect(country.low_n_warning).toBe(true);
+  });
+
   it("fails loud when a Primary Dimension is not in the locked decision family", async () => {
     const input = {
       ...fixedHorizonDimensionStatsInput(),

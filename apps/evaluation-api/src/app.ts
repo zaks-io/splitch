@@ -19,6 +19,8 @@ export interface AppDeps extends EvaluatePathDeps {
   rateLimiter: RateLimiter;
   defaultHeaders?: Record<string, string>;
   observability?: RegistrarDeps["observability"];
+  /** `ctx.waitUntil` seam for the fire-and-forget Assignment Store write. */
+  waitUntil?: (promise: Promise<unknown>) => void;
 }
 
 export function createApp(deps: AppDeps): Hono {

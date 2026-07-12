@@ -40,7 +40,12 @@ export function dedupedExposureRowsForVariant(
 
 export function analysisExposureRows(input: AnalysisExposureInput): DedupeExposureRow[] {
   if (input.activation_rows === undefined) {
-    return [...input.exposures];
+    // Filter to THIS run and drop `__multiple__`, matching the activated branch:
+    // foreign-run rows would otherwise inflate dimension-slice sample sizes,
+    // suppress low-N warnings, and mint phantom slices from prior runs.
+    return input.exposures.filter(
+      (exposure) => exposure.run_id === input.run_id && exposure.variant !== MULTIPLE_VARIANT,
+    );
   }
 
   return activatedExposureRows({

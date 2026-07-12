@@ -6,17 +6,27 @@ import {
   runConfigKey,
 } from "@splitch/contracts";
 import { emptyError, serviceUnavailable, validationError } from "./errors";
-import type { CredentialScope, Env, LiveRunConfig, Outcome } from "./types";
+import type { CredentialScope, Env, Outcome, RunScope } from "./types";
 
 const ExperimentConfigEnvelope = kvEnvelope(ExperimentConfigKVSchema);
 const RunConfigEnvelope = kvEnvelope(RunConfigKVSchema);
 
-export async function loadLiveRun(
+/**
+ * Validate the FIRE-TIME run identity carried in the payload. `run_id` is
+ * stamped at SDK fire-time by the Evaluation Worker and is never inferred at
+ * ingest time (exposure-pipeline.md, edge-ingest-contract.md §run_id stamping):
+ * re-deriving it from the live-run pointer here would relabel an exposure that
+ * raced a Run boundary, contaminating the new Run's first-touch counts. Run
+ * config blobs persist after a Run ends (only the live-run pointer is
+ * deleted), so a legitimate late exposure still validates.
+ */
+export async function loadRunScope(
   env: Env,
   scope: CredentialScope,
   experimentId: string,
   idType: string,
-): Promise<Outcome<LiveRunConfig>> {
+  runId: string,
+): Promise<Outcome<RunScope>> {
   if (!env.CONFIG_STORE) {
     return { ok: false, error: serviceUnavailable("CONFIG_STORE binding is unavailable") };
   }
@@ -27,19 +37,14 @@ export async function loadLiveRun(
   if (experiment.value.targetingKeyType !== idType) {
     return {
       ok: false,
-      error: validationError("idType does not match the live Experiment Run", ["body", "idType"]),
+      error: validationError("idType does not match the Experiment", ["body", "idType"]),
     };
-  }
-
-  const runId = experiment.value.liveRunId;
-  if (runId === null) {
-    return { ok: false, error: emptyError("RUN_NOT_FOUND", "no live Run for Experiment") };
   }
 
   const run = await readRun(env.CONFIG_STORE, scope, runId);
   if (!run.ok) return run;
   if (run.value.experimentId !== experimentId) {
-    return { ok: false, error: emptyError("INTERNAL_SERVER_ERROR", "live Run scope mismatch") };
+    return { ok: false, error: emptyError("INTERNAL_SERVER_ERROR", "Run scope mismatch") };
   }
 
   return { ok: true, value: { runId, idType: experiment.value.targetingKeyType } };

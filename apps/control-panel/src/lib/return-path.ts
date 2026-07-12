@@ -6,7 +6,11 @@ export function safeReturnPath(value: string | null, requestUrl: string): string
   const origin = new URL(requestUrl).origin;
   try {
     if (value.startsWith("/")) {
-      if (value.startsWith("//")) {
+      // Reject protocol-relative (`//host`) AND backslash variants (`/\host`,
+      // `/\/host`): browsers normalize `\` to `/` for special schemes, so
+      // `Location: /\evil.com` resolves to `https://evil.com/` — an open
+      // redirect. A legitimate in-app path never contains a backslash.
+      if (value.startsWith("//") || value.includes("\\")) {
         return "/";
       }
       return isAuthPath(value) ? "/" : value;

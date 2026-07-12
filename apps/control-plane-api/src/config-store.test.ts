@@ -4,6 +4,7 @@ import {
   flagConfigKey,
   runConfigKey,
 } from "@splitch/contracts";
+import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeConfigStore } from "./config-store";
 import {
@@ -100,6 +101,21 @@ describe("config store write path", () => {
     expect(h.nudges).toEqual([]);
   });
 
+  it("accepts an owner token on the admin-gated write route (owner ⊇ admin)", async () => {
+    // The claim ceremony mints `app:{appId}:owner` — the only scope a claimed
+    // workspace's owner ever holds — so the admin gate must accept it.
+    const jwt = await token(h.signer, [`app:${ids.appId}:owner`]);
+    const res = await h.app.request(
+      `/apps/${ids.appId}/envs/${ids.environmentId}/flags/${ids.flagId}/config`,
+      {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json" },
+        body: JSON.stringify({ enabled: true }),
+      },
+    );
+    expect(res.status).toBe(200);
+  });
+
   it("rejects a member token before writing config", async () => {
     const jwt = await token(h.signer, [`app:${ids.appId}:member`]);
     const res = await h.app.request(
@@ -114,7 +130,7 @@ describe("config store write path", () => {
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({
       code: "INSUFFICIENT_SCOPES",
-      details: { requiredScopes: [`app:${ids.appId}:admin`] },
+      details: { requiredScopes: [`app:${ids.appId}:owner`, `app:${ids.appId}:admin`] },
     });
     expect(await h.kv.get(flagConfigKey(ids.appId, ids.environmentId, ids.flagKey), "text")).toBe(
       null,
@@ -162,6 +178,63 @@ describe("config store write path", () => {
       schemaVersion: CURRENT_KV_SCHEMA_VERSION,
       data: { enabled: false, availableVariantNames: ["control", "treatment"] },
     });
+  });
+});
+
+describe("config store variant catalog resync", () => {
+  it("resyncFlagConfig rebuilds the KV snapshot after an app-scoped Variant value change", async () => {
+    const store = makeConfigStore({
+      repo: h.repo,
+      kv: h.kv,
+      broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+      now: () => new Date(NOW_MS),
+    });
+    const key = flagConfigKey(ids.appId, ids.environmentId, ids.flagKey);
+
+    // Seed the KV snapshot, then change the treatment Variant's value in D1 only.
+    await store.resyncFlagConfig({
+      appId: ids.appId,
+      environmentId: ids.environmentId,
+      flagId: ids.flagId,
+    });
+    const before = (await kvJson(h.kv, key)) as {
+      data: { variants: Array<{ name: string; value: unknown }> };
+    };
+    expect(before.data.variants.find((v) => v.name === "treatment")?.value).toBe("on");
+
+    await h.repo.flags.updateVariant(appScope(ids.appId), ids.flagId, "treatment", {
+      value: JSON.stringify("changed"),
+    });
+
+    // Without a resync the KV blob would still read "on"; resync must rewrite it.
+    const result = await store.resyncFlagConfig({
+      appId: ids.appId,
+      environmentId: ids.environmentId,
+      flagId: ids.flagId,
+    });
+    expect(result.ok).toBe(true);
+
+    const after = (await kvJson(h.kv, key)) as {
+      data: { variants: Array<{ name: string; value: unknown }> };
+    };
+    expect(after.data.variants.find((v) => v.name === "treatment")?.value).toBe("changed");
+  });
+
+  it("resyncFlagConfig reports FLAG_NOT_FOUND when the Environment has no config for the Flag", async () => {
+    const store = makeConfigStore({
+      repo: h.repo,
+      kv: h.kv,
+      broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+      now: () => new Date(NOW_MS),
+    });
+
+    // No flag_config exists for an unknown flag, so there is nothing to resync.
+    const result = await store.resyncFlagConfig({
+      appId: ids.appId,
+      environmentId: ids.environmentId,
+      flagId: "flag_does_not_exist",
+    });
+    expect(result).toEqual({ ok: false, reason: "FLAG_NOT_FOUND" });
   });
 });
 

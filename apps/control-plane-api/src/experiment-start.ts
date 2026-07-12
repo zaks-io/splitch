@@ -1,7 +1,12 @@
 import type { Condition, MetricRef, TargetingRule, Variant } from "@splitch/contracts";
 import { appScope, type EnvScope, type Repository } from "@splitch/db";
 import { randomHex } from "./credential-cache";
-import { allocationInvalid, experimentNoDraft, variantNotAvailable } from "./experiment-errors";
+import {
+  allocationInvalid,
+  experimentNoDraft,
+  segmentReferenceMissing,
+  variantNotAvailable,
+} from "./experiment-errors";
 import {
   jsonArray,
   jsonArrayOrNull,
@@ -66,7 +71,9 @@ export async function prepareStart(
     };
   }
 
-  const targetingRules = await resolvedTargetingRules(repo, scope, experiment);
+  const resolved = await resolvedTargetingRules(repo, scope, experiment, requestId);
+  if (!resolved.ok) return resolved;
+  const targetingRules = resolved.value;
   const salt = experiment.draftSalt ?? `salt_${randomHex(12)}`;
   const configHash = await runConfigHash({
     salt,
@@ -134,18 +141,32 @@ async function resolvedTargetingRules(
   repo: Repository,
   scope: EnvScope,
   experiment: ExperimentRow,
-): Promise<TargetingRule[]> {
+  requestId: string,
+): Promise<Result<TargetingRule[]>> {
   const rules = jsonArray<TargetingRule>(experiment.draftTargetingRules);
   const segmentIds = jsonArrayOrNull<string>(experiment.draftSegmentIds) ?? [];
   const segments = await repo.flags.listSegmentsByIds(appScope(scope.appId), segmentIds);
-  return [
-    ...rules,
-    ...segments.map((segment, index) => ({
-      id: `rule_${segment.id}`,
-      flagId: experiment.flagId,
-      priority: rules.length + index,
-      conditions: jsonArray<Condition>(segment.conditions),
-      variantId: experiment.defaultVariantId ?? "",
-    })),
-  ];
+
+  // Fail loud on a dangling reference: `listSegmentsByIds` silently drops
+  // missing IDs, so a Segment deleted after the draft was staged would freeze a
+  // Run with NO segment rule — silently widening the audience to everyone.
+  const found = new Set(segments.map((segment) => segment.id));
+  const missing = segmentIds.filter((id) => !found.has(id));
+  if (missing.length > 0) {
+    return { ok: false, response: segmentReferenceMissing(experiment.id, missing, requestId) };
+  }
+
+  return {
+    ok: true,
+    value: [
+      ...rules,
+      ...segments.map((segment, index) => ({
+        id: `rule_${segment.id}`,
+        flagId: experiment.flagId,
+        priority: rules.length + index,
+        conditions: jsonArray<Condition>(segment.conditions),
+        variantId: experiment.defaultVariantId ?? "",
+      })),
+    ],
+  };
 }

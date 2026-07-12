@@ -48,5 +48,27 @@ export function withAuthorization(
 export function hcRequestOptions(options: ControlPlaneHcOptions): {
   headers?: Record<string, string>;
 } {
-  return options.authorization ? { headers: { authorization: options.authorization } } : {};
+  // `undefined` inherits whatever the hc client was constructed with; `null`
+  // must actively CLEAR a client-baked Authorization header (hono deep-merges
+  // per-request options over construction options, so an empty `{}` would leave
+  // the baked header in place). An empty value overrides it to "no credential".
+  if (options.authorization === undefined) {
+    return {};
+  }
+  return { headers: { authorization: options.authorization ?? "" } };
+}
+
+/**
+ * Join a route path onto a base URL the way hono `hc` does (mergePath):
+ * concatenation, preserving any path PREFIX on the base. `new URL(path, base)`
+ * would instead REPLACE the base path for an absolute `path`, so a
+ * prefix-mounted `baseUrl` (e.g. `https://host/control-plane`) would silently
+ * target the wrong server for `health()` and the MCP adapter.
+ */
+export function resolveControlPlaneUrl(baseUrl: URL, path: string): URL {
+  const basePath = baseUrl.pathname.replace(/\/+$/, "");
+  const suffix = path.startsWith("/") ? path : `/${path}`;
+  const url = new URL(baseUrl.toString());
+  url.pathname = `${basePath}${suffix}`;
+  return url;
 }

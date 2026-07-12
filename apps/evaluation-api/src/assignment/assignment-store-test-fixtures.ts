@@ -37,8 +37,11 @@ export class RecordingKv implements AssignmentKv {
   private readonly store = new Map<string, string>();
   readonly getCalls: string[] = [];
   readonly putCalls: string[] = [];
+  failPuts: boolean;
 
-  constructor(private readonly options: { failPuts?: boolean } = {}) {}
+  constructor(options: { failPuts?: boolean } = {}) {
+    this.failPuts = options.failPuts ?? false;
+  }
 
   putRaw(key: string, value: string): this {
     this.store.set(key, value);
@@ -56,7 +59,7 @@ export class RecordingKv implements AssignmentKv {
 
   async put(key: string, value: string): Promise<void> {
     this.putCalls.push(key);
-    if (this.options.failPuts) {
+    if (this.failPuts) {
       throw new Error("forced KV put failure");
     }
     this.store.set(key, value);

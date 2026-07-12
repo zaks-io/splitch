@@ -78,8 +78,14 @@ export async function hashedAssignmentIdentity(
   };
 }
 
-export function assignmentWriterName(input: HashedAssignmentPutInput): string {
-  return `${input.appId}:${input.experimentId}:${input.idType}:${input.targetingKeyHash}`;
+export function assignmentWriterName(
+  input: Pick<HashedAssignmentPutInput, "appId" | "idType" | "targetingKeyHash">,
+): string {
+  // One DO per ENTITY (not per entity+experiment): the entity-level KV blob is
+  // read-merge-written by the writer, so every write for an entity must pass
+  // through the same serialization point — per-experiment DOs racing on the
+  // shared blob would clobber each other's first-touch entries.
+  return `${input.appId}:${input.idType}:${input.targetingKeyHash}`;
 }
 
 export function assignmentValueToMap(
@@ -127,7 +133,16 @@ export async function readAssignmentValue(
   key: string,
   logger?: AssignmentStoreLogger,
 ): Promise<AssignmentStoreValue> {
-  const raw = await kv.get(key);
+  let raw: string | null;
+  try {
+    raw = await kv.get(key);
+  } catch (cause) {
+    // An infrastructure read failure must fail loud like a parse failure: if it
+    // surfaced as a raw error, preloadHoldovers would swallow it as "no
+    // holdovers" and silently re-assign an entity that holds an assignment.
+    logger?.error("assignment_store_kv_read_failed", { key, cause });
+    throw new AssignmentStoreError(`Assignment KV read failed for key "${key}"`, { cause });
+  }
   if (raw === null) {
     return {};
   }

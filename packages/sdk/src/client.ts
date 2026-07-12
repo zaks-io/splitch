@@ -165,11 +165,15 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
     }
   }
 
+  // The body read stays inside the timeout scope: a server that returns headers
+  // quickly but stalls the body would otherwise hang past `timeoutMs`, because
+  // the abort timer is cleared as soon as `call` settles.
   return {
     async evaluate(request: TransportRequest): Promise<TransportResult> {
       try {
-        const response = await withTimeout((signal) => post("evaluate", request, signal));
-        return await readEvaluateResponse(response);
+        return await withTimeout(async (signal) =>
+          readEvaluateResponse(await post("evaluate", request, signal)),
+        );
       } catch {
         // Network error or timeout (abort): a transport-level failure, status null.
         return { status: null, variant: null, runId: null };
@@ -177,16 +181,18 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
     },
     async peek(request: TransportRequest): Promise<TransportResult> {
       try {
-        const response = await withTimeout((signal) => post("peek", request, signal));
-        return await readPeekResponse(response);
+        return await withTimeout(async (signal) =>
+          readPeekResponse(await post("peek", request, signal)),
+        );
       } catch {
         return { status: null, variant: null, runId: null };
       }
     },
     async verify(request: TransportRequest): Promise<VerifyTransportResult> {
       try {
-        const response = await withTimeout((signal) => post("verify", request, signal));
-        return await readVerifyResponse(response);
+        return await withTimeout(async (signal) =>
+          readVerifyResponse(await post("verify", request, signal)),
+        );
       } catch {
         return { status: null, details: null };
       }

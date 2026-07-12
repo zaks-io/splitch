@@ -29,12 +29,27 @@ export interface ConfigStoreWriter {
   replaceTargetingRules(input: ReplaceTargetingRulesInput): Promise<FlagConfigWriteResult>;
   promoteFlagConfig(input: PromoteFlagConfigInput): Promise<PromoteFlagConfigResult>;
   syncExperimentConfig(input: ExperimentConfigSyncInput): Promise<FlagConfigWriteResult>;
+  /**
+   * Rebuild one Environment's KV Flag snapshot from D1 without mutating D1.
+   * Used after an app-scoped Variant catalog change (create/update/delete),
+   * whose new values/names must reach the data plane's KV blob — the blob embeds
+   * the full Variant catalog and is otherwise only rewritten on config writes.
+   * `FLAG_NOT_FOUND` here means the Environment simply has no config for the Flag
+   * (nothing to resync), not an error.
+   */
+  resyncFlagConfig(input: FlagConfigResyncInput): Promise<FlagConfigWriteResult>;
 }
 
 interface ExperimentConfigSyncInput {
   appId: string;
   environmentId: string;
   experimentId: string;
+}
+
+interface FlagConfigResyncInput {
+  appId: string;
+  environmentId: string;
+  flagId: string;
 }
 
 export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
@@ -60,6 +75,13 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
 
     async syncExperimentConfig(input) {
       return syncExperimentConfig(deps, input);
+    },
+
+    async resyncFlagConfig(input) {
+      const scope = envScope(input.appId, input.environmentId);
+      const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
+      if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
+      return writeSnapshotAndBroadcast(deps, scope, snapshot.flag.id, snapshot);
     },
   };
 }

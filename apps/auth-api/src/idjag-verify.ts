@@ -60,7 +60,7 @@ function assertAudience(
   }
 }
 
-/** Steps 5-6: exp not passed, auth_time fresh, and a verified email (or phone). */
+/** Steps 5-6: exp not passed, auth_time fresh, and a verified email. */
 function assertClaimsFresh(payload: Record<string, unknown>, now: number): void {
   const exp = requireNumber(payload, "exp");
   if (exp <= now) {
@@ -75,8 +75,12 @@ function assertClaimsFresh(payload: Record<string, unknown>, now: number): void 
   if (authTime - now > MAX_AUTH_TIME_FORWARD_SKEW_SECONDS) {
     throw new OAuthError("invalid_token", "ID-JAG auth_time is in the future");
   }
-  if (payload.email_verified !== true && payload.phone_verified !== true) {
-    throw new OAuthError("invalid_token", "ID-JAG email/phone is not verified");
+  // Step 8 resolves the WorkOS user by the `email` claim, so a token whose email
+  // is unverified must never reach it — even if the IdP verified a phone number,
+  // accepting it would bind the splitch identity to an email the presenter never
+  // proved control of.
+  if (payload.email_verified !== true) {
+    throw new OAuthError("invalid_token", "ID-JAG email is not verified");
   }
 }
 

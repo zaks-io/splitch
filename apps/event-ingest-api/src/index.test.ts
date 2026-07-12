@@ -7,6 +7,7 @@ const clientAppId = "app_from_client";
 const environmentId = "env_prod";
 const experimentId = "exp_checkout";
 const liveRunId = "run_live";
+const priorRunId = "run_prior";
 const fixedNow = "2026-07-01T12:34:56.789Z";
 afterEach(() => {
   vi.restoreAllMocks();
@@ -38,14 +39,15 @@ describe("Event Ingest Worker", () => {
     expect(String(row.dedup_key)).toMatch(/^sha256:[a-f0-9]{64}$/);
   });
 
-  it("logs Tinybird waitUntil append failures for Worker observability", async () => {
+  it("returns 503 (no ACK) and logs when the Tinybird append fails", async () => {
+    // The ACK is the at-least-once delivery receipt for the Evaluation Worker;
+    // a failed append must surface as SERVICE_UNAVAILABLE so the evaluate call
+    // fails loud and the SDK re-fires, never as a silent 202 drop.
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const calls = await postExposure({ tinybirdStatus: 500, awaitWaits: false });
+    const calls = await postExposure({ tinybirdStatus: 500 });
 
-    expect(calls.response.status).toBe(202);
-    await expect(Promise.all(calls.ctx.waits)).rejects.toThrow(
-      "Tinybird append failed with HTTP 500",
-    );
+    expect(calls.response.status).toBe(503);
+    await expect(calls.response.json()).resolves.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
     expect(error).toHaveBeenCalledWith(
       "event-ingest-api Tinybird append failed",
       expect.objectContaining({
@@ -54,6 +56,24 @@ describe("Event Ingest Worker", () => {
         errorMessage: "Tinybird append failed with HTTP 500",
       }),
     );
+  });
+
+  it("stamps the payload's fire-time runId even when a newer Run is live", async () => {
+    // Run-boundary skew: the exposure fired under the prior Run; relabeling it
+    // with the ingest-time live Run would corrupt the new Run's first-touch.
+    const calls = await postExposure({ payload: { runId: priorRunId } });
+    const row = expectRow(calls.rows);
+
+    expect(calls.response.status).toBe(202);
+    expect(row.run_id).toBe(priorRunId);
+  });
+
+  it("rejects a runId that names no Run config", async () => {
+    const calls = await postExposure({ payload: { runId: "run_never_existed" } });
+
+    expect(calls.response.status).toBe(404);
+    await expect(calls.response.json()).resolves.toMatchObject({ code: "RUN_NOT_FOUND" });
+    expect(calls.fetch).not.toHaveBeenCalled();
   });
 
   it("rejects an idType mismatch before Tinybird append", async () => {
@@ -180,7 +200,7 @@ function baseExposure(): ExposurePayload {
     appId: clientAppId,
     environmentId: "env_from_client",
     experimentId,
-    runId: "run_from_client",
+    runId: liveRunId,
     idType: "user",
     targetingKeyHash: "hmac:targeting-key",
     variantName: "treatment",
@@ -215,6 +235,22 @@ function seededConfigStore() {
       targetingKeyType: "user",
       status: "running",
       liveRunId,
+    }),
+  );
+  kv.set(
+    runConfigKey(appId, environmentId, priorRunId),
+    envelope({
+      id: priorRunId,
+      experimentId,
+      salt: "prior-salt",
+      allocation: { control: 50, treatment: 50 },
+      variantSet: [
+        { id: "var_control", name: "control", value: false },
+        { id: "var_treatment", name: "treatment", value: true },
+      ],
+      targetingRules: [],
+      configHash: "sha256:prior-config",
+      startedAt: "2026-05-01T00:00:00.000Z",
     }),
   );
   kv.set(

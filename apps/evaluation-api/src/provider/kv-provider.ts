@@ -31,7 +31,12 @@ import { experimentConfigFromKV, flagConfigFromKV } from "./resolve";
 /** The minimal KV read surface this adapter needs; a fake KV in tests satisfies it. */
 export interface KvReader {
   get(key: string): Promise<string | null>;
-  list(options: { prefix: string }): Promise<{ keys: { name: string }[] }>;
+  list(options: { prefix: string; cursor?: string }): Promise<{
+    keys: { name: string }[];
+    /** Real KVNamespace.list pages at 1000 keys; fakes may omit both fields. */
+    list_complete?: boolean;
+    cursor?: string;
+  }>;
 }
 
 /**
@@ -83,7 +88,7 @@ export class KvProvider implements Provider {
 
   async getFlags(appId: string, environmentId: string): Promise<FlagConfig[]> {
     const prefix = `app:${appId}:${environmentId}:flag:`;
-    const { keys } = await this.kv.list({ prefix });
+    const keys = await this.listAllKeys(prefix);
 
     return Promise.all(
       keys.map(async ({ name }) => {
@@ -125,6 +130,25 @@ export class KvProvider implements Provider {
   /** Invalidate one App's cached flag config on a WebSocket DeltaNudge (ADR-0019). */
   invalidate(appId: string, nudge: DeltaNudge): void {
     this.cache.invalidateApp(appId, nudge);
+  }
+
+  /**
+   * Drain every list page. KVNamespace.list returns at most 1000 keys per call;
+   * ignoring the cursor would silently truncate a >1000-flag environment to an
+   * arbitrary subset — fail loud instead if the cursor contract is violated.
+   */
+  private async listAllKeys(prefix: string): Promise<{ name: string }[]> {
+    const keys: { name: string }[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.kv.list({ prefix, ...(cursor === undefined ? {} : { cursor }) });
+      keys.push(...page.keys);
+      if (page.list_complete === false && page.cursor === undefined) {
+        throw new ProviderError(`KV list for prefix "${prefix}" is incomplete with no cursor`);
+      }
+      cursor = page.list_complete === false ? page.cursor : undefined;
+    } while (cursor !== undefined);
+    return keys;
   }
 
   /**

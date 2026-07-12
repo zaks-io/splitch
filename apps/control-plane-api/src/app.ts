@@ -45,6 +45,7 @@ export interface AppDeps {
   nowIso?: () => string;
   defaultHeaders?: Record<string, string>;
   observability?: RegistrarDeps["observability"];
+  logger?: Pick<Console, "warn">;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -73,6 +74,8 @@ export function createApp(deps: AppDeps): Hono {
   });
   const flagDefinitionHandlers = makeFlagDefinitionHandlers({
     repo: deps.repo,
+    configStore: deps.configStore,
+    logger: deps.logger,
     nowIso: deps.nowIso,
   });
   const metricSegmentHandlers = makeMetricSegmentHandlers({

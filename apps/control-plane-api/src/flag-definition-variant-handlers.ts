@@ -20,6 +20,7 @@ import {
   fail,
   loadWritableFlag,
   ok,
+  resyncFlagSnapshots,
 } from "./flag-definition-handler-utils";
 import { flagResponse, parseStoredSchema, pathBodyMismatch } from "./flag-definition-model";
 import { validateJsonSchema } from "./flag-definition-schema";
@@ -57,6 +58,7 @@ export async function createVariant(
         updatedBy: args.principal.id,
       })
     : loaded.value.flag;
+  await resyncFlagSnapshots(deps, loaded.value.appId, loaded.value.flag.id);
   return Response.json(
     await flagResponse(deps.repo, loaded.value.appId, updatedFlag ?? loaded.value.flag),
   );
@@ -95,6 +97,7 @@ export async function updateVariant(
       variantName,
       prepared.value.patch,
     );
+    await resyncFlagSnapshots(deps, loaded.value.appId, loaded.value.flag.id);
   }
 
   const updated = await deps.repo.flags.getFlag(loaded.value.scope, loaded.value.flag.id);
@@ -127,6 +130,7 @@ export async function deleteVariant(
   if (blocked) return blocked;
 
   await deps.repo.flags.removeVariant(loaded.value.scope, loaded.value.flag.id, variantName);
+  await resyncFlagSnapshots(deps, loaded.value.appId, loaded.value.flag.id);
   const updated = await deps.repo.flags.getFlag(loaded.value.scope, loaded.value.flag.id);
   if (!updated) return flagNotFound(args.requestId);
   return Response.json(await flagResponse(deps.repo, loaded.value.appId, updated));

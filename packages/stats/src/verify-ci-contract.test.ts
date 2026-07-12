@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const expectedVerifyCi =
-  "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm spec:lint && pnpm test && pnpm stats:golden && pnpm stats:property && pnpm build";
+  "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm spec:lint && pnpm test:scripts && pnpm test && pnpm stats:golden && pnpm stats:property && pnpm build";
 
 const packageJsonUrl = new URL("../../../package.json", import.meta.url);
 
