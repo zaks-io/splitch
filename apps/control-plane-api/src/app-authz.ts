@@ -13,7 +13,9 @@ export function requireAppAdmin(
   heldScopes: readonly string[],
   requestId: string,
 ): Response | null {
-  return requireAppRoleFromScopes(appId, heldScopes, ["admin"], requestId);
+  // owner ⊇ admin everywhere in the role lattice (APP_WRITE_ROLES); the claim
+  // ceremony mints `app:{appId}:owner`, so admin-gated routes must accept it.
+  return requireAppRoleFromScopes(appId, heldScopes, ["owner", "admin"], requestId);
 }
 
 export async function requireAppWrite(

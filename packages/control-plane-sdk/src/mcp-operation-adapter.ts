@@ -7,7 +7,7 @@
  */
 import type { ApiRouteContract, ErrorResponse } from "@splitch/contracts";
 import { getRoute } from "@splitch/contracts";
-import { type ControlPlaneHcOptions, withAuthorization } from "./hc-client";
+import { type ControlPlaneHcOptions, resolveControlPlaneUrl, withAuthorization } from "./hc-client";
 import {
   parseControlPlaneResponse,
   type ControlPlaneOperationOptions,
@@ -52,7 +52,7 @@ function buildRequest(
   input: unknown,
   authorization: string | null | undefined,
 ): Request {
-  const url = new URL(buildPath(route, input), baseUrl);
+  const url = resolveControlPlaneUrl(baseUrl, buildPath(route, input));
   appendQuery(url, route, input);
   const body = bodyForRoute(route, input);
   const headers = new Headers({ accept: "application/json" });

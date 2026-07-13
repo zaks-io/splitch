@@ -16,7 +16,7 @@ export const Route = createFileRoute("/")({
   loader: async ({ location }): Promise<SessionPrincipal> => {
     const result = await loadCurrentSession();
     if (result.kind === "unauthenticated") {
-      throw loginRedirect(`${location.pathname}${location.search}${location.hash}`);
+      throw loginRedirect(location.href);
     }
     return result.session;
   },

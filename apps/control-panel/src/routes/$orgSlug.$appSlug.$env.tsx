@@ -22,7 +22,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
   loader: async ({ location, params }): Promise<ScopedLoaderContext> => {
     const result = await loadScopedSession({ data: params });
     if (result.kind === "unauthenticated") {
-      throw loginRedirect(`${location.pathname}${location.search}${location.hash}`);
+      throw loginRedirect(location.href);
     }
     if (result.kind === "forbidden") {
       reportExpectedDomainFailure(403, location.pathname, { boundary: "section" });

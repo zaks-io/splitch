@@ -30,7 +30,7 @@ const handler = {
         method: request.method,
         path: url.pathname,
       });
-      return handleIngest(request, env, ctx);
+      return handleIngest(request, env);
     }
 
     return new Response("not found", { status: 404 });

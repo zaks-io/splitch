@@ -202,6 +202,20 @@ describe("Door A: fail-loud security paths", () => {
     expect(await errorOf(res)).toBe("invalid_token");
   });
 
+  it("rejects a phone-verified token whose email is unverified", async () => {
+    const app = buildApp();
+    const idJag = await signIdJag(
+      keys.privateKey,
+      validClaims({ email_verified: false, phone_verified: true }),
+    );
+    const res = await app.request("/agent/identity", {
+      method: "POST",
+      body: JSON.stringify({ id_jag: idJag }),
+    });
+    expect(res.status).toBe(401);
+    expect(await errorOf(res)).toBe("invalid_token");
+  });
+
   it("rejects an expired token", async () => {
     const app = buildApp();
     const idJag = await signIdJag(

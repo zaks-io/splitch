@@ -1,21 +1,14 @@
 import { ExposureEventSchema, type ExposureEvent } from "@splitch/contracts";
 import { serviceUnavailable } from "./errors";
 import { stringField, stringValue } from "./payload";
-import type {
-  CredentialScope,
-  Env,
-  LiveRunConfig,
-  Outcome,
-  Payload,
-  TinybirdDelivery,
-} from "./types";
+import type { CredentialScope, Env, RunScope, Outcome, Payload, TinybirdDelivery } from "./types";
 
 const rawEventsDatasource = "raw_events";
 
 export async function exposureEvent(
   payload: Payload,
   scope: CredentialScope,
-  liveRun: LiveRunConfig,
+  runScope: RunScope,
   env: Env,
 ): Promise<Outcome<ExposureEvent>> {
   const now = new Date(Date.now()).toISOString();
@@ -29,15 +22,15 @@ export async function exposureEvent(
     ...payload,
     appId: scope.appId,
     environmentId: scope.environmentId,
-    runId: liveRun.runId,
-    idType: liveRun.idType,
+    runId: runScope.runId,
+    idType: runScope.idType,
     sourceId,
     serverReceivedAt: now,
     ingestTs: now,
     dedupKey: await exposureDedupKey(
       payload,
       scope.appId,
-      liveRun,
+      runScope,
       eventId.value,
       eventType.value,
       sourceId,
@@ -116,7 +109,7 @@ export async function appendRawEvent(row: Record<string, unknown>, delivery: Tin
 async function exposureDedupKey(
   payload: Payload,
   appId: string,
-  liveRun: LiveRunConfig,
+  runScope: RunScope,
   eventId: string,
   type: string,
   sourceId: string,
@@ -127,8 +120,8 @@ async function exposureDedupKey(
     type,
     appId,
     experimentId,
-    liveRun.runId,
-    liveRun.idType,
+    runScope.runId,
+    runScope.idType,
     targetingKeyHash,
     sourceId,
     eventId,

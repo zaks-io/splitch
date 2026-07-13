@@ -20,7 +20,7 @@ import { KvAssignmentStore } from "./kv-assignment-store";
 const MINIFLARE_ASSIGNMENT_STORE_DO = `
 import { DurableObject } from "cloudflare:workers";
 
-const STORAGE_KEY = "assignment";
+const STORAGE_KEY_PREFIX = "assignment:";
 const CURRENT_KV_SCHEMA_VERSION = 1;
 
 export class AssignmentStoreDurableObject extends DurableObject {
@@ -30,13 +30,15 @@ export class AssignmentStoreDurableObject extends DurableObject {
     }
 
     const input = await request.json();
+    const storageKey = \`\${STORAGE_KEY_PREFIX}\${input.experimentId}\`;
     const result = await this.ctx.blockConcurrencyWhile(async () => {
-      const existing = await this.ctx.storage.get(STORAGE_KEY);
+      const existing = await this.ctx.storage.get(storageKey);
       if (existing !== undefined) {
+        this.ctx.waitUntil(writeThrough(this.env.ASSIGNMENTS_KV, existing));
         return { status: "existing", assignment: entryFrom(existing) };
       }
 
-      await this.ctx.storage.put(STORAGE_KEY, input);
+      await this.ctx.storage.put(storageKey, input);
       this.ctx.waitUntil(writeThrough(this.env.ASSIGNMENTS_KV, input));
       return { status: "stored", assignment: entryFrom(input) };
     });
@@ -48,10 +50,8 @@ async function writeThrough(kv, input) {
   const key = assignmentKey(input.appId, input.idType, input.targetingKeyHash);
   const raw = await kv.get(key);
   const current = raw === null ? {} : JSON.parse(raw).data;
-  const next =
-    current[input.experimentId] === undefined
-      ? { ...current, [input.experimentId]: entryFrom(input) }
-      : current;
+  if (current[input.experimentId] !== undefined) return;
+  const next = { ...current, [input.experimentId]: entryFrom(input) };
   await kv.put(key, JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data: next }));
 }
 
@@ -141,7 +141,7 @@ describe("KvAssignmentStore.put", () => {
     });
 
     expect(namespace.names).toHaveLength(1);
-    expect(namespace.names[0]).toContain("app-A:exp-checkout:user:v1:");
+    expect(namespace.names[0]).toContain("app-A:user:v1:");
     expect(namespace.names.join("|")).not.toContain(RAW_TARGETING_KEY);
     expect(JSON.stringify(namespace.bodies)).not.toContain(RAW_TARGETING_KEY);
   });

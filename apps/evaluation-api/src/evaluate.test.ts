@@ -40,7 +40,18 @@ describe("POST /api/sdk/evaluate", () => {
       type: "exposure",
       isHoldover: false,
     });
-    expect(assignmentStore.putCalls).toEqual([]);
+    // The first Exposure records the sticky first-touch winner in the
+    // Assignment Store (holdover-write-contract.md).
+    expect(assignmentStore.putCalls).toEqual([
+      {
+        appId: APP_ID,
+        idType: "user",
+        targetingKey: "user-1",
+        experimentId: EXPERIMENT_ID,
+        runId: "run-42",
+        variant: "treatment",
+      },
+    ]);
   });
 
   it("rejects missing, invalid, and revoked Client Keys before evaluation", async () => {
@@ -137,8 +148,8 @@ describe("POST /api/sdk/evaluate", () => {
     expect(exposureSink.writes[0]?.appId).toBe(APP_ID);
   });
 
-  it("returns SERVICE_UNAVAILABLE when Exposure ingest fails", async () => {
-    const { app } = await makeSdkRouteHarness({
+  it("returns SERVICE_UNAVAILABLE and writes NO holdover when Exposure ingest fails", async () => {
+    const { app, assignmentStore } = await makeSdkRouteHarness({
       exposureSink: new FailingExposureSink(),
       liveRun: true,
       runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
@@ -149,10 +160,17 @@ describe("POST /api/sdk/evaluate", () => {
 
     expect(res.status).toBe(503);
     expect(body.code).toBe("SERVICE_UNAVAILABLE");
+    // The holdover must NOT be recorded when the Exposure was not persisted:
+    // otherwise the SDK re-fire would hit the holdover-replay path (no Exposure)
+    // and the entity's Exposure would be lost for this Run. The re-fire instead
+    // re-assigns deterministically and re-attempts the Exposure.
+    expect(assignmentStore.putCalls).toEqual([]);
   });
+});
 
+describe("POST /api/sdk/evaluate: non-exposing outcomes", () => {
   it("returns a holdover Variant without firing another Exposure", async () => {
-    const { app, exposureSink } = await makeSdkRouteHarness({
+    const { app, assignmentStore, exposureSink } = await makeSdkRouteHarness({
       liveRun: true,
       holdovers: new Map([[EXPERIMENT_ID, { runId: "run-prior", variant: "control" }]]),
       runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
@@ -163,6 +181,8 @@ describe("POST /api/sdk/evaluate", () => {
     expect(res.status).toBe(200);
     await expect(res.json()).resolves.toEqual({ variant: false });
     expect(exposureSink.writes).toEqual([]);
+    // A replayed holdover never re-writes the Assignment Store.
+    expect(assignmentStore.putCalls).toEqual([]);
   });
 
   it.each([

@@ -21,6 +21,12 @@ type EvaluateInput = {
 interface EvaluateRouteDeps extends EvaluatePathDeps {
   readonly exposureAssembly: ExposureAssemblyDeps;
   readonly exposureSink: ExposureSink;
+  /**
+   * `ctx.waitUntil` seam for the fire-and-forget Assignment Store write
+   * (holdover-write-contract.md). When absent (unit harnesses), the write still
+   * fires but nothing keeps the runtime alive for it.
+   */
+  readonly waitUntil?: (promise: Promise<unknown>) => void;
 }
 
 interface CredentialScope {
@@ -103,6 +109,14 @@ async function evaluateResponse(
   const write = await writeExposures(output.exposures, deps);
   if (!write.ok) return renderError(write.error, { requestId });
 
+  // Only record the holdover AFTER the Exposure is accepted by ingest. If the
+  // holdover were written first and ingest then 503s, the SDK re-fires and hits
+  // the holdover-replay path (which fires NO Exposure) — so that entity's
+  // Exposure would never be persisted for this Run. Writing the holdover last
+  // means a 503 leaves no holdover, the re-fire re-assigns deterministically
+  // (same Variant, sticky experience preserved), and re-attempts the Exposure.
+  scheduleHoldoverWrite(output.result, deps);
+
   return Response.json(DataPlaneEvaluateResponseSchema.parse(body.value));
 }
 
@@ -120,6 +134,39 @@ function responseBody(
           `Variant "${value.variantName}" has no value`,
         ),
       };
+}
+
+/**
+ * The holdover write (holdover-write-contract.md): every result that fires an
+ * Exposure records its first-touch `(run_id, variant)` in the Assignment Store
+ * so a Run boundary replays the sticky Variant instead of re-assigning
+ * (ADR-0006). Fire-and-forget in `ctx.waitUntil` — the SDK caller never waits;
+ * a failed write self-heals on the next evaluate (the writer re-asserts KV).
+ * Holdover replays carry `exposure: null`, so they never re-write.
+ */
+function scheduleHoldoverWrite(result: EvaluateResult, deps: EvaluateRouteDeps): void {
+  const exposure = result.kind === "error" ? null : result.exposure;
+  if (exposure === null) return;
+
+  const write = deps.assignmentStore
+    .put({
+      appId: exposure.appId,
+      idType: exposure.idType,
+      targetingKey: exposure.targetingKey,
+      experimentId: exposure.experimentId,
+      runId: exposure.liveRunId,
+      variant: exposure.variant,
+    })
+    .then(
+      () => undefined,
+      (cause) => {
+        // Non-blocking per the failure contract: a missed holdover write is a
+        // cosmetic cross-POP miss (assign() is deterministic), retried on the
+        // next evaluate. Loud in logs so operators see repeated failures.
+        deps.logger?.error("assignment_store_put_failed", { cause });
+      },
+    );
+  deps.waitUntil?.(write);
 }
 
 async function writeExposures(

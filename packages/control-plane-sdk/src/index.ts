@@ -6,6 +6,7 @@ import {
   type ControlPlaneHcOptions,
   createExperimentsHcClient,
   createFlagsHcClient,
+  resolveControlPlaneUrl,
 } from "./hc-client";
 
 export interface ControlPlaneSdkOptions {
@@ -37,7 +38,7 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
 
   return {
     async health() {
-      const response = await requestFetch(new URL("/health", baseUrl));
+      const response = await requestFetch(resolveControlPlaneUrl(baseUrl, "/health"));
 
       if (!response.ok) {
         throw new Error(`splitch health check failed: ${response.status}`);

@@ -43,6 +43,7 @@ const handler = {
       repo: createRepository(env.DB),
       credentialStore: env.CREDENTIAL_STORE,
       configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
+      logger: console,
       memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
       observability: createWorkerObservability(
         env,

@@ -89,12 +89,15 @@ export async function runEvaluate(
   context: EvaluateContext,
 ): Promise<ResolutionDetails> {
   const { targetingKey } = context;
+  const idType = context.idType ?? DEFAULT_ID_TYPE;
   const defaultValue = context.defaultValue ?? FALLBACK_DEFAULT_VALUE;
 
-  const cached = deps.seenSet.get(flagKey, targetingKey, deps.now());
+  const cached = deps.seenSet.get(flagKey, idType, targetingKey, deps.now());
   if (cached !== undefined) {
     deps.logger.debug("[splitch] seen-set hit: suppress Exposure", { flagKey, targetingKey });
-    return { value: cached, variantName: null, reason: "CACHED" };
+    // A cached `variant: null` records a 200 no-match; re-apply THIS call's
+    // Default Variant rather than replaying a previous caller's.
+    return { value: cached.variant ?? defaultValue, variantName: null, reason: "CACHED" };
   }
 
   const result = await deps.transport.evaluate({
@@ -117,8 +120,10 @@ export async function runEvaluate(
 
   // A 200 carries a runId (transport contract). Without one the seen-set cannot
   // key the entry, so skip caching rather than guess — correctness over the cache.
+  // The WIRE variant is stored (null on a no-match), never the caller-supplied
+  // defaultValue — a per-call default must not leak into other call sites.
   if (result.runId !== null) {
-    deps.seenSet.set(flagKey, result.runId, targetingKey, details.value, deps.now());
+    deps.seenSet.set(flagKey, result.runId, idType, targetingKey, result.variant, deps.now());
   }
   return details;
 }

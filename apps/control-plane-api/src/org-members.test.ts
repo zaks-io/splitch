@@ -232,6 +232,28 @@ describe("control-plane org/member endpoints", () => {
     expect((await bodyOf(addMember)).code).toBe("FORBIDDEN");
   });
 
+  it("403s an admin-role token granting the owner role (owner grants are owner-only)", async () => {
+    const adminJwt = await token(ADMIN, PRIMARY.orgId, "admin");
+    const res = await memberRoute(client(adminJwt)).$post({
+      param: { orgId: PRIMARY.orgId },
+      json: { userId: NEW_MEMBER, role: "owner" },
+    });
+
+    expect(res.status).toBe(403);
+    expect((await bodyOf(res)).code).toBe("FORBIDDEN");
+  });
+
+  it("lets an owner-role token grant the owner role", async () => {
+    const ownerJwt = await token(OWNER, PRIMARY.orgId, "owner");
+    const res = await memberRoute(client(ownerJwt)).$post({
+      param: { orgId: PRIMARY.orgId },
+      json: { userId: NEW_MEMBER, role: "owner" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id: NEW_MEMBER, role: "owner" });
+  });
+
   it("does not let member add change an existing member role", async () => {
     const adminJwt = await token(ADMIN, PRIMARY.orgId, "admin");
     const res = await memberRoute(client(adminJwt)).$post({

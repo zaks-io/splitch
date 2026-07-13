@@ -111,8 +111,18 @@ function toParsedFlags(flags: Record<string, string | boolean>): ParsedGlobalFla
     contextJson: stringFlag(flags.contextJson),
     bodyJson: stringFlag(flags.bodyJson),
     fromEnvironmentId: stringFlag(flags.fromEnvironmentId),
-    enabled: flags.enabled === undefined ? undefined : flags.enabled === "true",
+    enabled: parseEnabledFlag(flags.enabled),
   };
+}
+
+// `--enabled` inverts a Flag's state, so a silent coerce of anything-but-"true"
+// to false would let `--enabled TRUE` (or a typo) DISABLE the Flag. Accept only
+// the two boolean literals; anything else is a loud usage error.
+function parseEnabledFlag(value: string | boolean | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  throw new Error(`splitch: --enabled must be "true" or "false", got "${String(value)}"`);
 }
 
 function stringFlag(value: string | boolean | undefined): string | undefined {

@@ -54,9 +54,7 @@ export const Route = createFileRoute("/kitchen-sink")({
     const result = await loadCurrentSession();
     if (result.kind === "unauthenticated") {
       throw redirect({
-        href: `/auth/login?returnTo=${encodeURIComponent(
-          `${location.pathname}${location.search}${location.hash}`,
-        )}`,
+        href: `/auth/login?returnTo=${encodeURIComponent(location.href)}`,
       });
     }
     return result.session;

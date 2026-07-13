@@ -79,6 +79,56 @@ describe("AssignmentStoreWriter", () => {
     });
   });
 
+  it("keeps per-experiment winners under one per-entity writer", async () => {
+    // The writer DO is per ENTITY; the same instance serializes first-touch
+    // puts for different Experiments without clobbering the shared KV blob.
+    const kv = new RecordingKv();
+    const waits: Promise<unknown>[] = [];
+    const writer = new AssignmentStoreWriter(new MapStorage(), kv, (promise) =>
+      waits.push(promise),
+    );
+
+    await writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" });
+    await writer.put({
+      ...basePut,
+      targetingKeyHash: "v1:hash-a",
+      experimentId: "exp-search",
+      runId: "run-9",
+      variant: "treatment",
+    });
+    await Promise.all(waits);
+
+    expect(JSON.parse(kv.raw(assignmentKey("app-A", "user", "v1:hash-a")) as string).data).toEqual({
+      "exp-checkout": { runId: "run-1", variant: "control" },
+      "exp-search": { runId: "run-9", variant: "treatment" },
+    });
+  });
+
+  it("re-asserts a failed write-through on the next put (self-healing)", async () => {
+    const key = assignmentKey("app-A", "user", "v1:hash-a");
+    const kv = new RecordingKv({ failPuts: true });
+    const waits: Promise<unknown>[] = [];
+    const writer = new AssignmentStoreWriter(new MapStorage(), kv, (promise) =>
+      waits.push(promise.catch(() => undefined)),
+    );
+
+    // First put: DO storage commits, the KV write-through fails (transient).
+    await writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" });
+    await Promise.all(waits);
+    expect(kv.raw(key)).toBeUndefined();
+
+    // Second put for the same assignment: still "existing", but the KV entry is
+    // re-asserted so the holdover becomes visible to getAll.
+    kv.failPuts = false;
+    await expect(writer.put({ ...basePut, targetingKeyHash: "v1:hash-a" })).resolves.toMatchObject({
+      status: "existing",
+    });
+    await Promise.all(waits);
+    expect(JSON.parse(kv.raw(key) as string).data).toEqual({
+      "exp-checkout": { runId: "run-1", variant: "control" },
+    });
+  });
+
   it("does not corrupt existing KV when fire-and-forget write-through fails", async () => {
     const key = assignmentKey("app-A", "user", "v1:hash-a");
     const kv = new RecordingKv({ failPuts: true }).putRaw(

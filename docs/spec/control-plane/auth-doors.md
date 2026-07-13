@@ -43,7 +43,8 @@ Shared-preview smoke client_credentials ──► /oauth2/token ──► scoped
 3. Fetch JWKS from `trusted_idps.jwks_uri`; verify JWT signature
 4. Assert `aud` matches splitch's auth-api origin
 5. Assert `exp` not passed; assert `auth_time` freshness (default: within 5 min)
-6. Assert `email_verified = true` (or `phone_verified = true`)
+6. Assert `email_verified = true` (step 8 resolves the user by `email`, so
+   phone-only verification is not sufficient)
 7. Check `jti` replay cache (KV key `jti:{jti}`, TTL = exp - now); reject if seen
 8. Resolve WorkOS user by `email`; create in WorkOS if first-seen. D1 stores membership references only.
 9. Return: `{ identity_assertion: string, user_id: string }`

@@ -20,8 +20,16 @@ The seen-set is:
 ## Seen-set key
 
 ```
-SeenKey = (flagKey, runId, targetingKey)
+SeenKey = (flagKey, runId, idType, targetingKey)
 ```
+
+`idType` is required in the key because Entity identity is `(idType, targetingKey)`:
+"user 42" and "workspace 42" are different Entities that may hold different Variants,
+so one must never replay the other's cached value.
+
+The cached value is the WIRE variant of the resolution; a 200 no-match is cached as
+an explicit no-match marker, and a replay re-applies the CURRENT call's Default
+Variant — one call site's local `defaultValue` must never leak into another's result.
 
 `runId` is required in the key. Without it, a Run-boundary event would be
 incorrectly suppressed:

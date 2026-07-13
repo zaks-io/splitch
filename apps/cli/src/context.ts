@@ -74,15 +74,13 @@ export async function writeNearestConfig(
   cwd: string,
   update: Partial<Pick<SplitchConfig, "app" | "environment">>,
 ): Promise<string> {
-  const path = join(cwd, ".splitch", "config.json");
-  let existing: SplitchConfig = { version: 1 };
-  try {
-    existing = JSON.parse(await readFile(path, "utf8")) as SplitchConfig;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
-  }
+  // Update the config the read path (discoverConfig) would resolve, walking
+  // ancestors so `splitch use` in a subdirectory edits the project config
+  // instead of shadowing it with a partial cwd-local file that silently drops
+  // the inherited App scope. Fall back to cwd only when none exists.
+  const discovered = await discoverConfig(cwd);
+  const path = discovered?.path ?? join(cwd, ".splitch", "config.json");
+  const existing: SplitchConfig = discovered?.config ?? { version: 1 };
   const next: SplitchConfig = {
     version: 1,
     app: update.app ?? existing.app,

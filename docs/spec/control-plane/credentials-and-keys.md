@@ -100,11 +100,16 @@ Environment's Flag Configuration — the key carries its Environment, so the cal
 
 **Write-through contract:**
 
-- On D1 create: write KV entry immediately with `valid_until = now + 1h` (default TTL)
+- On D1 create: write KV entry immediately. Until the data plane implements the D1 fallback
+  below, active entries are written **without an expiry** — the data plane rejects a KV miss as
+  UNAUTHORIZED, so an expiring active entry would brick a deployed SDK key one TTL after the
+  last control-plane touch. Revocation correctness comes from the explicit tombstone, never
+  from active-entry expiry.
 - On D1 revoke: write a **revoked tombstone** KV entry (`revoked: true`) with a short TTL, and
   **fail loud** if the write-through errors (see revoke contract below) — revoke is never best-effort
-- KV miss on hot path: fall back to D1 lookup. If D1 marks the key revoked, **re-assert the revoked
-  tombstone** in KV rather than treating the miss as "unknown / re-validate as valid", then reject
+- KV miss on hot path (future, requires a data-plane path to D1): fall back to D1 lookup. If D1
+  marks the key revoked, **re-assert the revoked tombstone** in KV rather than treating the miss
+  as "unknown / re-validate as valid", then reject
 
 **Failure contract (create):** If KV write-through fails on create, the D1 row is the system of record.
 The next request sees a KV miss, falls back to D1, and re-populates KV. No distributed transaction.

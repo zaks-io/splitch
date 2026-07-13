@@ -45,8 +45,15 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
 
       const current = await provisionClientKey(deps, ctx);
       const updates = clientKeyPatchValues(objectBody(input));
-      const updated =
-        (await deps.repo.credentials.updateClientKey(ctx.scope, current.keyId, updates)) ?? current;
+      // A zero-row UPDATE (the key vanished concurrently, e.g. a racing
+      // environment delete) must fail loud — fabricating a "current" row would
+      // report a patch that never reached D1.
+      const updated = await deps.repo.credentials.updateClientKey(
+        ctx.scope,
+        current.keyId,
+        updates,
+      );
+      if (!updated) return credentialNotFound(requestId);
       await writeClientKeyCache(deps, updated, false);
       return Response.json(clientKeyResponse(updated));
     },
@@ -63,12 +70,12 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
 
       const current = await ensureActiveClientKey(deps, ctx);
       const revokedAt = nowIso(deps);
-      const revoked = (await deps.repo.credentials.updateClientKey(ctx.scope, current.keyId, {
+      // Revoke is never best-effort: a zero-row UPDATE means the revocation did
+      // NOT land in D1, so the response must not claim it did.
+      const revoked = await deps.repo.credentials.updateClientKey(ctx.scope, current.keyId, {
         revokedAt,
-      })) ?? {
-        ...current,
-        revokedAt,
-      };
+      });
+      if (!revoked) return credentialNotFound(requestId);
       await writeClientKeyCache(deps, revoked, true, true);
 
       const next = await createClientKey(deps, ctx);
@@ -122,8 +129,13 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       const current = await deps.repo.credentials.getApiKey(ctx.scope, keyId);
       if (!current) return credentialNotFound(requestId);
 
+      // Revoke is never best-effort: a zero-row UPDATE (row deleted concurrently)
+      // must surface as an error, not a fabricated revoked row.
       const revoked =
-        current.revokedAt == null ? await revokeActiveApiKey(deps, ctx, current) : current;
+        current.revokedAt == null
+          ? await deps.repo.credentials.revokeApiKey(ctx.scope, current.keyId, nowIso(deps))
+          : current;
+      if (!revoked) return credentialNotFound(requestId);
       await writeApiKeyCache(deps, revoked, true, true);
       return Response.json({ keyId: revoked.keyId, revokedAt: revoked.revokedAt });
     },
@@ -162,21 +174,6 @@ async function credentialContext(
     );
   }
   return { appId, environmentId, scope: envScope(appId, environmentId) };
-}
-
-async function revokeActiveApiKey(
-  deps: CredentialHandlerDeps,
-  ctx: { scope: ReturnType<typeof envScope> },
-  current: ApiKeyRow,
-): Promise<ApiKeyRow> {
-  const revokedAt = nowIso(deps);
-  return (
-    (await deps.repo.credentials.revokeApiKey(ctx.scope, current.keyId, revokedAt)) ?? {
-      ...current,
-      revokedAt,
-      lastRotatedAt: revokedAt,
-    }
-  );
 }
 
 function apiKeyResponse(row: ApiKeyRow): APIKey {

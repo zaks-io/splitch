@@ -63,6 +63,44 @@ describe("buildOperationInput", () => {
     expect(input.enabled).toBe(true);
   });
 
+  it("parses --enabled false as a boolean false", () => {
+    const command = findCommand(["flag-config", "update"]);
+    const invocation = parseInvocation([
+      "flag-config",
+      "update",
+      "--app",
+      "app_cli",
+      "--env",
+      "env_cli",
+      "flag_cli",
+      "--enabled",
+      "false",
+    ]);
+
+    const input = buildOperationInput(command!, invocation, {
+      appId: "app_cli",
+      environmentId: "env_cli",
+    });
+
+    expect(input.enabled).toBe(false);
+  });
+
+  it("rejects a non-boolean --enabled value instead of silently disabling", () => {
+    expect(() =>
+      parseInvocation([
+        "flag-config",
+        "update",
+        "--app",
+        "app_cli",
+        "--env",
+        "env_cli",
+        "flag_cli",
+        "--enabled",
+        "TRUE",
+      ]),
+    ).toThrow(/--enabled must be "true" or "false"/);
+  });
+
   it("flags promote keeps explicit target environment over --body-json", () => {
     const command = findCommand(["flags", "promote"]);
     expect(command).toBeDefined();

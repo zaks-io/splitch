@@ -5,7 +5,6 @@ import {
   CURRENT_KV_SCHEMA_VERSION,
 } from "@splitch/contracts";
 
-const ACTIVE_CACHE_TTL_SECONDS = 60 * 60;
 const REVOKED_TOMBSTONE_TTL_SECONDS = 5 * 60;
 
 interface CredentialCacheDeps {
@@ -70,11 +69,16 @@ async function writeCredentialCache(
   value: CredentialCacheKV,
   failLoud: boolean,
 ): Promise<void> {
-  const ttl = value.revoked ? REVOKED_TOMBSTONE_TTL_SECONDS : ACTIVE_CACHE_TTL_SECONDS;
+  // Active entries are written WITHOUT an expiry: the data plane has no D1
+  // fallback on a KV miss (it rejects UNAUTHORIZED), so an expiring entry would
+  // brick a deployed SDK key one TTL after the last control-plane touch.
+  // Revocation correctness comes from the explicit tombstone below (written
+  // fail-loud by rotate/revoke), never from active-entry expiry.
+  const options = value.revoked ? { expirationTtl: REVOKED_TOMBSTONE_TTL_SECONDS } : undefined;
   try {
     const store = deps.credentialStore;
     if (!store) throw new Error("credential cache store is not configured");
-    await store.put(key, JSON.stringify(envelope(value)), { expirationTtl: ttl });
+    await store.put(key, JSON.stringify(envelope(value)), options);
   } catch (cause) {
     if (failLoud) throw cause;
   }

@@ -17,7 +17,7 @@ export interface CredentialScope {
   readonly environmentId: string;
 }
 
-export interface LiveRunConfig {
+export interface RunScope {
   readonly runId: string;
   readonly idType: string;
 }
