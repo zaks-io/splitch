@@ -106,10 +106,16 @@ async function evaluateResponse(
   const body = responseBody(provider.flag, output.result);
   if (!body.ok) return renderError(body.error, { requestId });
 
-  scheduleHoldoverWrite(output.result, deps);
-
   const write = await writeExposures(output.exposures, deps);
   if (!write.ok) return renderError(write.error, { requestId });
+
+  // Only record the holdover AFTER the Exposure is accepted by ingest. If the
+  // holdover were written first and ingest then 503s, the SDK re-fires and hits
+  // the holdover-replay path (which fires NO Exposure) — so that entity's
+  // Exposure would never be persisted for this Run. Writing the holdover last
+  // means a 503 leaves no holdover, the re-fire re-assigns deterministically
+  // (same Variant, sticky experience preserved), and re-attempts the Exposure.
+  scheduleHoldoverWrite(output.result, deps);
 
   return Response.json(DataPlaneEvaluateResponseSchema.parse(body.value));
 }

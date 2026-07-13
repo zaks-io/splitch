@@ -148,8 +148,8 @@ describe("POST /api/sdk/evaluate", () => {
     expect(exposureSink.writes[0]?.appId).toBe(APP_ID);
   });
 
-  it("returns SERVICE_UNAVAILABLE when Exposure ingest fails", async () => {
-    const { app } = await makeSdkRouteHarness({
+  it("returns SERVICE_UNAVAILABLE and writes NO holdover when Exposure ingest fails", async () => {
+    const { app, assignmentStore } = await makeSdkRouteHarness({
       exposureSink: new FailingExposureSink(),
       liveRun: true,
       runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
@@ -160,6 +160,11 @@ describe("POST /api/sdk/evaluate", () => {
 
     expect(res.status).toBe(503);
     expect(body.code).toBe("SERVICE_UNAVAILABLE");
+    // The holdover must NOT be recorded when the Exposure was not persisted:
+    // otherwise the SDK re-fire would hit the holdover-replay path (no Exposure)
+    // and the entity's Exposure would be lost for this Run. The re-fire instead
+    // re-assigns deterministically and re-attempts the Exposure.
+    expect(assignmentStore.putCalls).toEqual([]);
   });
 });
 
