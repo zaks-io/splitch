@@ -22,6 +22,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "miniflare": "^4.20260701.0"
+    "miniflare": "^4.20260708.1"
   }
 }
