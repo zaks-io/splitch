@@ -1,12 +1,17 @@
 export interface CompleteClaimInput {
   provisionalUserHash: string;
   emailHash: string;
+  organizationHash: string;
+  appHash: string;
+  verifiedUserHash: string;
   verificationId: string;
   consentAttemptId: string | null;
   keyHash: string;
   provisionalUserId: string;
   verifiedUserId: string;
   orgId: string;
+  appId: string;
+  acquisitionToken: string;
   now: string;
   expiresAt: string;
 }
@@ -32,8 +37,22 @@ export async function completeClaim(d1: D1Database, input: CompleteClaimInput): 
       ]
     : [input.verificationId, input.provisionalUserHash, input.emailHash, input.now];
   const invariants = `${verificationGuard} AND ${consentGuard}`;
+  const membershipGuard = `EXISTS (SELECT 1 FROM org_memberships
+    WHERE org_id = ? AND user_id = ?)
+    AND EXISTS (SELECT 1 FROM app_memberships
+      WHERE app_id = ? AND user_id = ?
+        AND EXISTS (SELECT 1 FROM apps
+          WHERE apps.id = app_memberships.app_id AND apps.organization_id = ?))`;
+  const membershipValues = [
+    input.orgId,
+    input.provisionalUserId,
+    input.appId,
+    input.provisionalUserId,
+    input.orgId,
+  ];
+  const acquisitionInvariants = `${invariants} AND ${membershipGuard}`;
   const acquiredGuard = `EXISTS (SELECT 1 FROM organizations
-    WHERE id = ? AND is_provisional = 0 AND claim_acquired_at = ?)
+    WHERE id = ? AND is_provisional = 0 AND claim_acquisition_token = ?)
     AND EXISTS (SELECT 1 FROM claim_verifications
       WHERE id = ? AND provisional_user_hash = ? AND email_hash = ?
         AND verified_at IS NOT NULL AND expires_at > ?)
@@ -46,7 +65,7 @@ export async function completeClaim(d1: D1Database, input: CompleteClaimInput): 
   const acquiredValues = input.consentAttemptId
     ? [
         input.orgId,
-        input.now,
+        input.acquisitionToken,
         input.verificationId,
         input.provisionalUserHash,
         input.emailHash,
@@ -56,7 +75,7 @@ export async function completeClaim(d1: D1Database, input: CompleteClaimInput): 
       ]
     : [
         input.orgId,
-        input.now,
+        input.acquisitionToken,
         input.verificationId,
         input.provisionalUserHash,
         input.emailHash,
@@ -66,10 +85,10 @@ export async function completeClaim(d1: D1Database, input: CompleteClaimInput): 
     d1
       .prepare(
         `UPDATE organizations SET is_provisional = 0, demo_expires_at = NULL,
-            claim_acquired_at = ?, updated_at = ?
-           WHERE id = ? AND is_provisional = 1 AND claim_acquired_at IS NULL AND ${invariants}`,
+            claim_acquisition_token = ?, updated_at = ?
+           WHERE id = ? AND is_provisional = 1 AND claim_acquisition_token IS NULL AND ${acquisitionInvariants}`,
       )
-      .bind(input.now, input.now, input.orgId, ...guardValues),
+      .bind(input.acquisitionToken, input.now, input.orgId, ...guardValues, ...membershipValues),
     d1
       .prepare(`DELETE FROM org_memberships WHERE user_id = ? AND org_id = ?
         AND EXISTS (SELECT 1 FROM org_memberships AS target WHERE target.org_id = org_memberships.org_id AND target.user_id = ?)
@@ -107,14 +126,18 @@ export async function completeClaim(d1: D1Database, input: CompleteClaimInput): 
     d1
       .prepare(
         `INSERT INTO claim_idempotency
-           (key_hash, verification_id, provisional_user_hash, email_hash, completed_at, expires_at)
-         SELECT ?, ?, ?, ?, ?, ? WHERE ${acquiredGuard}`,
+           (key_hash, verification_id, provisional_user_hash, email_hash,
+            organization_hash, app_hash, verified_user_hash, completed_at, expires_at)
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${acquiredGuard}`,
       )
       .bind(
         input.keyHash,
         input.verificationId,
         input.provisionalUserHash,
         input.emailHash,
+        input.organizationHash,
+        input.appHash,
+        input.verifiedUserHash,
         input.now,
         input.expiresAt,
         ...acquiredValues,

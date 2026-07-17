@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   assertNoPlaceholderHostedBindings,
+  assertHostedAuthOrigins,
   isHostedWranglerEnv,
   requireHostedWranglerEnvTarget,
 } from "./lib/hosted-bindings.mjs";
@@ -248,6 +249,10 @@ function validateHostedEnvBindings(config, envName) {
     const targetConfig = requireHostedWranglerEnvTarget(config, envName, "wrangler.jsonc");
     if (targetConfig) {
       assertNoPlaceholderHostedBindings(targetConfig, `wrangler.jsonc env.${envName}`);
+      assertHostedAuthOrigins(
+        { ...targetConfig, name: config.name },
+        `wrangler.jsonc env.${envName}`,
+      );
     }
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));

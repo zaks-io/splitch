@@ -5,6 +5,12 @@ export interface ClaimHashes {
   emailHash: string;
 }
 
+export interface ClaimIdentityHashes extends ClaimHashes {
+  organizationHash: string;
+  appHash: string;
+  verifiedUserHash: string;
+}
+
 export interface ClaimVerification extends ClaimHashes {
   id: string;
   expiresAt: string;
@@ -157,14 +163,24 @@ export function makeClaimStateRepo(d1: D1Database) {
       return row?.id ?? null;
     },
 
-    async completedClaim(input: ClaimHashes & { keyHash: string; now: string }) {
+    async completedClaim(input: ClaimIdentityHashes & { keyHash: string; now: string }) {
       return (
         (await d1
           .prepare(
             `SELECT 1 FROM claim_idempotency
-             WHERE key_hash = ? AND provisional_user_hash = ? AND email_hash = ? AND expires_at > ?`,
+             WHERE key_hash = ? AND provisional_user_hash = ? AND email_hash = ?
+               AND organization_hash = ? AND app_hash = ? AND verified_user_hash = ?
+               AND expires_at > ?`,
           )
-          .bind(input.keyHash, input.provisionalUserHash, input.emailHash, input.now)
+          .bind(
+            input.keyHash,
+            input.provisionalUserHash,
+            input.emailHash,
+            input.organizationHash,
+            input.appHash,
+            input.verifiedUserHash,
+            input.now,
+          )
           .first()) !== null
       );
     },

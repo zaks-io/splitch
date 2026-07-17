@@ -31,6 +31,7 @@ beforeAll(async () => {
     SESSION_STORE: local.sessionKv,
     AUTH_API_ORIGIN: "https://auth.splitch.test",
     CONTROL_PLANE_ORIGIN: "https://cp.splitch.test",
+    CONTROL_PANEL_ORIGIN: "https://app.splitch.test",
     ASSERTION_SIGNING_SECRET: "test-assertion-secret",
     ACCESS_TOKEN_SECRET: "test-access-secret",
   };
@@ -164,6 +165,26 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
 
     expect(res.status).toBe(500);
     expect(await res.json()).toMatchObject({ error: "server_error" });
+    expect(await rowCount("organizations")).toBe(beforeOrganizations);
+  });
+
+  it("hosted claims fail closed when the Control Panel origin is missing", async () => {
+    const beforeOrganizations = await rowCount("organizations");
+    const { CONTROL_PANEL_ORIGIN: _missing, ...withoutPanelOrigin } = env;
+    const res = await call(
+      { turnstile_token: turnstileToken() },
+      "198.51.100.92",
+      "/agent/identity",
+      {
+        ...withoutPanelOrigin,
+        SPLITCH_PLATFORM_TARGET: "production",
+        WORKOS_API_KEY: "test-workos-api-key",
+        WORKOS_CLIENT_ID: "test-workos-client-id",
+        TURNSTILE_SECRET: "test-turnstile-secret",
+      },
+    );
+
+    expect(res.status).toBe(500);
     expect(await rowCount("organizations")).toBe(beforeOrganizations);
   });
 });

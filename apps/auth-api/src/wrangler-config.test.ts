@@ -46,6 +46,14 @@ describe("Auth Worker Wrangler runtime config", () => {
     expect(target?.secrets?.required).toContain("ACCESS_TOKEN_SECRET");
     expect(target?.vars?.ACCESS_TOKEN_SECRET).toBeUndefined();
   });
+
+  it.each([
+    ["shared-preview", config.env?.["shared-preview"], "https://app.preview.splitch.dev"],
+    ["production", config.env?.production, "https://app.splitch.dev"],
+  ])("configures the hosted Control Panel origin for %s", (_target, target, origin) => {
+    expect(target?.vars?.CONTROL_PANEL_ORIGIN).toBe(origin);
+    expect(target?.vars?.CONTROL_PANEL_ORIGIN).not.toBe(target?.vars?.CONTROL_PLANE_ORIGIN);
+  });
 });
 
 interface WranglerConfig {

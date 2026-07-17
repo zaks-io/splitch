@@ -1,6 +1,13 @@
 import type { Repository } from "@splitch/db";
 import { consentRequired, createConsent } from "./claim-consent";
-import { normalizeEmail } from "./email";
+import {
+  assertClaimMemberships,
+  claimHashes,
+  hashIdentifier,
+  iso,
+  resolveIdentity,
+  type Provisional,
+} from "./claim-identity";
 import { OAuthError } from "./oauth-errors";
 import type { RateLimiter } from "./rate-limit";
 import type { TokenSigner } from "./token-exchange";
@@ -41,13 +48,6 @@ export interface ClaimResult {
   app_id: string;
 }
 
-interface Provisional {
-  userId: string;
-  orgId: string;
-  appId: string;
-  email: string;
-}
-
 export async function initiateClaim(
   deps: ClaimDeps,
   input: InitiateInput,
@@ -55,6 +55,7 @@ export async function initiateClaim(
   const now = deps.now();
   deps.rateLimiter.assertUnderCeiling(input.remoteIp ?? "unknown", now);
   const claimant = await resolveIdentity(deps, input.identityAssertion, input.email, now);
+  await assertClaimMemberships(deps, claimant);
   await assertStillProvisional(deps, claimant.orgId);
   const hashes = await claimHashes(claimant.userId, claimant.email);
   const verificationId = `cver_${crypto.randomUUID()}`;
@@ -87,14 +88,17 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
   const keyHash = await hashIdentifier(input.idempotencyKey);
   const nowIso = iso(now);
   const existing = await deps.workos.findVerifiedUserByEmail(claimant.email);
-  if (await deps.repo.claim.completedClaim({ ...hashes, keyHash, now: nowIso })) {
-    return tokenize(
-      deps,
-      claimant,
-      existing && existing !== claimant.userId ? existing : claimant.userId,
-      now,
-    );
+  const verifiedUserId = existing && existing !== claimant.userId ? existing : claimant.userId;
+  const identityHashes = {
+    ...hashes,
+    organizationHash: await hashIdentifier(claimant.orgId),
+    appHash: await hashIdentifier(claimant.appId),
+    verifiedUserHash: await hashIdentifier(verifiedUserId),
+  };
+  if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
+    return tokenize(deps, claimant, verifiedUserId, now);
   }
+  await assertClaimMemberships(deps, claimant);
   const verification = input.verificationId
     ? await deps.repo.claim.getVerification(input.verificationId)
     : await deps.repo.claim.getLatestVerification(hashes);
@@ -166,15 +170,16 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
       }
     }
   }
-  const verifiedUserId = existing && existing !== claimant.userId ? existing : claimant.userId;
   const transfer = {
-    ...hashes,
+    ...identityHashes,
     verificationId: verification.id,
     consentAttemptId: approvedConsent,
     keyHash,
     provisionalUserId: claimant.userId,
     verifiedUserId,
     orgId: claimant.orgId,
+    appId: claimant.appId,
+    acquisitionToken: crypto.randomUUID(),
     now: nowIso,
     expiresAt: iso(now + IDEMPOTENCY_TTL_MS),
   };
@@ -182,7 +187,7 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
   try {
     applied = await deps.repo.claim.completeClaim(transfer);
   } catch {
-    if (await deps.repo.claim.completedClaim({ ...hashes, keyHash, now: nowIso })) {
+    if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
       return tokenize(deps, claimant, verifiedUserId, now);
     }
     throw new OAuthError("invalid_request", "a claim with this idempotency_key is in progress");
@@ -229,31 +234,6 @@ export async function refuseClaimConsent(
   }
 }
 
-async function resolveIdentity(
-  deps: ClaimDeps,
-  assertion: string,
-  email: string,
-  now: number,
-): Promise<Provisional> {
-  const identity = await deps.tokenSigner.verifyIdentityAssertion(
-    assertion,
-    Math.floor(now / 1000),
-  );
-  const appId = identity.scopes
-    .map((scope) => scope.split(":"))
-    .find((part) => part.length === 3 && part[0] === "app")?.[1];
-  if (!appId)
-    throw new OAuthError("invalid_grant", "identity_assertion carries no pre-claim App scope");
-  const app = await deps.repo.identity.getApp(appId);
-  if (!app) throw new OAuthError("invalid_grant", "pre-claim App no longer exists");
-  return {
-    userId: identity.userId,
-    orgId: app.organizationId,
-    appId,
-    email: normalizeEmail(email),
-  };
-}
-
 async function assertStillProvisional(deps: ClaimDeps, orgId: string) {
   if (!(await deps.repo.identity.getOrg(orgId))?.isProvisional)
     throw new OAuthError("invalid_grant", "workspace is not awaiting a claim");
@@ -276,20 +256,4 @@ async function tokenize(
     org_id: claimant.orgId,
     app_id: claimant.appId,
   };
-}
-
-async function claimHashes(userId: string, email: string) {
-  return {
-    provisionalUserHash: await hashIdentifier(userId),
-    emailHash: await hashIdentifier(email),
-  };
-}
-
-async function hashIdentifier(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function iso(now: number) {
-  return new Date(now).toISOString();
 }

@@ -36,6 +36,7 @@ export const organizations = sqliteTable("organizations", {
   demoExpiresAt: text("demo_expires_at"),
   // Set only by the atomic Door B transfer acquisition batch.
   claimAcquiredAt: text("claim_acquired_at"),
+  claimAcquisitionToken: text("claim_acquisition_token"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -140,6 +141,9 @@ export const claimIdempotency = sqliteTable("claim_idempotency", {
     .references(() => claimVerifications.id),
   provisionalUserHash: text("provisional_user_hash").notNull(),
   emailHash: text("email_hash").notNull(),
+  organizationHash: text("organization_hash").notNull(),
+  appHash: text("app_hash").notNull(),
+  verifiedUserHash: text("verified_user_hash").notNull(),
   completedAt: text("completed_at").notNull(),
   expiresAt: text("expires_at").notNull(),
 });

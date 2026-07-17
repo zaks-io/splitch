@@ -28,7 +28,12 @@ export const EMAIL = "claimer@example.com";
 export interface ClaimHarness {
   deps(opts?: Parameters<typeof makeDoorBDeps>[2]): DoorBFixtures;
   /** Register a provisional identity and return its pre-claim assertion + ids. */
-  register(d: DoorBFixtures): Promise<{ assertion: string; orgId: string }>;
+  register(d: DoorBFixtures): Promise<{
+    assertion: string;
+    userId: string;
+    orgId: string;
+    appId: string;
+  }>;
   /** Drive a full happy ceremony: initiate (sends OTP) then verify (with the code). */
   fullClaim(d: DoorBFixtures, assertion: string, email?: string, key?: string): Promise<unknown>;
   isProvisional(orgId: string): Promise<boolean>;
@@ -36,6 +41,8 @@ export interface ClaimHarness {
     table: "claim_verifications" | "claim_consent_attempts" | "claim_idempotency",
   ): Promise<number>;
   setProvisional(orgId: string, provisional: boolean): Promise<void>;
+  removeMemberships(orgId: string, appId: string, userId: string): Promise<void>;
+  isConsumed(table: "claim_verifications" | "claim_consent_attempts", id: string): Promise<boolean>;
 }
 
 export function setupClaimHarness(): ClaimHarness {
@@ -85,7 +92,12 @@ export function setupClaimHarness(): ClaimHarness {
       turnstileToken: `fixture-turnstile-ok-${turnstileSeq}`,
       remoteIp: "1.2.3.4",
     });
-    return { assertion: reg.identity_assertion, orgId: reg.org_id };
+    return {
+      assertion: reg.identity_assertion,
+      userId: reg.user_id,
+      orgId: reg.org_id,
+      appId: reg.app_id,
+    };
   }
 
   async function fullClaim(d: DoorBFixtures, assertion: string, email = EMAIL, key = "idem-1") {
@@ -121,5 +133,33 @@ export function setupClaimHarness(): ClaimHarness {
       .run();
   }
 
-  return { deps, register, fullClaim, isProvisional, count, setProvisional };
+  async function removeMemberships(orgId: string, appId: string, userId: string) {
+    await local.d1
+      .prepare("DELETE FROM org_memberships WHERE org_id = ? AND user_id = ?")
+      .bind(orgId, userId)
+      .run();
+    await local.d1
+      .prepare("DELETE FROM app_memberships WHERE app_id = ? AND user_id = ?")
+      .bind(appId, userId)
+      .run();
+  }
+
+  async function isConsumed(table: "claim_verifications" | "claim_consent_attempts", id: string) {
+    const row = await local.d1
+      .prepare(`SELECT consumed_at FROM ${table} WHERE id = ?`)
+      .bind(id)
+      .first<{ consumed_at: string | null }>();
+    return row?.consumed_at !== null && row?.consumed_at !== undefined;
+  }
+
+  return {
+    deps,
+    register,
+    fullClaim,
+    isProvisional,
+    count,
+    setProvisional,
+    removeMemberships,
+    isConsumed,
+  };
 }

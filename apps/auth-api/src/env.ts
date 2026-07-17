@@ -15,6 +15,8 @@ export interface AuthApiEnv {
   AUTH_API_ORIGIN?: string;
   /** Control-plane protected-resource origin stamped as the access token `aud`. */
   CONTROL_PLANE_ORIGIN?: string;
+  /** Control Panel browser origin used for hosted claim consent URLs. */
+  CONTROL_PANEL_ORIGIN?: string;
   /**
    * HMAC secret for the short-lived identity_assertion (local fixture). DELIBERATELY
    * distinct from ACCESS_TOKEN_SECRET so an assertion can never verify as a Bearer.

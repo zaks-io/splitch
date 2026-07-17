@@ -148,5 +148,8 @@ describe("device refresh session storage", () => {
 describe("Door B transfer acquisition storage", () => {
   it("stores a nullable one-batch acquisition marker on Organizations", () => {
     expect(migrationSql).toContain("ALTER TABLE `organizations` ADD `claim_acquired_at` text");
+    expect(migrationSql).toContain(
+      "ALTER TABLE `organizations` ADD `claim_acquisition_token` text",
+    );
   });
 });

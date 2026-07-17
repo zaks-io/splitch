@@ -35,9 +35,9 @@ const handler = {
       env,
       workerObservabilityWithWaitUntil("auth-api", ctx),
     );
-    if (!hostedWorkOsConfigured(env)) {
+    if (!hostedWorkOsConfigured(env) || !hostedClaimConfigured(env)) {
       return Response.json(
-        { error: "server_error", error_description: "hosted WorkOS is not configured" },
+        { error: "server_error", error_description: "hosted auth configuration is incomplete" },
         { status: 500 },
       );
     }
@@ -57,7 +57,7 @@ const handler = {
     const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
     const assertionSecret = env.ASSERTION_SIGNING_SECRET ?? "local-dev-assertion-secret";
     const accessSecret = env.ACCESS_TOKEN_SECRET ?? "local-dev-access-secret";
-    const consentBaseUrl = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
+    const consentBaseUrl = env.CONTROL_PANEL_ORIGIN ?? "http://localhost:8787";
     const now = () => Date.now();
     const workos = hostedWorkOs(env);
     const deviceFlow = makeDeviceFlow(env);
@@ -149,6 +149,22 @@ function hostedWorkOsConfigured(env: AuthApiEnv): boolean {
     !isHostedTarget(env.SPLITCH_PLATFORM_TARGET) ||
     (Boolean(env.WORKOS_API_KEY) && Boolean(env.WORKOS_CLIENT_ID))
   );
+}
+
+function hostedClaimConfigured(env: AuthApiEnv): boolean {
+  if (!isHostedTarget(env.SPLITCH_PLATFORM_TARGET)) return true;
+  if (!env.CONTROL_PANEL_ORIGIN) return false;
+  try {
+    const origin = new URL(env.CONTROL_PANEL_ORIGIN);
+    return (
+      origin.protocol === "https:" &&
+      origin.pathname === "/" &&
+      origin.search === "" &&
+      origin.hash === ""
+    );
+  } catch {
+    return false;
+  }
 }
 
 function workosAccessTokenVerifier(env: AuthApiEnv) {
