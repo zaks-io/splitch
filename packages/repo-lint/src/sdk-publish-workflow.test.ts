@@ -101,6 +101,8 @@ describe("SDK live publish-state validation", () => {
         {
           tag_name: "sdk-v0.1.0",
           draft: false,
+          prerelease: false,
+          immutable: true,
           published_at: "2026-07-17T00:00:00Z",
           target_commitish: commit,
         },
@@ -119,6 +121,8 @@ describe("SDK live publish-state validation", () => {
           {
             tag_name: "sdk-v0.1.0",
             draft: false,
+            prerelease: false,
+            immutable: true,
             published_at: "2026-07-17T00:00:00Z",
             target_commitish: "fedcba9876543210fedcba9876543210fedcba98",
           },
@@ -137,6 +141,8 @@ describe("SDK live publish-state validation", () => {
           {
             tag_name: "sdk-v0.1.0",
             draft: false,
+            prerelease: false,
+            immutable: true,
             published_at: "2026-07-17T00:00:00Z",
             target_commitish: commit,
           },
@@ -145,6 +151,28 @@ describe("SDK live publish-state validation", () => {
         peeledTag: () => commit,
       }),
     ).rejects.toThrow("not publicly visible");
+  });
+
+  it.each([
+    ["prerelease", { prerelease: true, immutable: true }],
+    ["mutable", { prerelease: false, immutable: false }],
+  ])("fails closed when the live release is %s", async (_label, releaseState) => {
+    await expect(
+      validateLivePublishState(repoRoot, environment, {
+        fetcher: fetcher(
+          { private: false, visibility: "public" },
+          {
+            tag_name: "sdk-v0.1.0",
+            draft: false,
+            ...releaseState,
+            published_at: "2026-07-17T00:00:00Z",
+            target_commitish: commit,
+          },
+        ),
+        head: () => commit,
+        peeledTag: () => commit,
+      }),
+    ).rejects.toThrow("not a published immutable release");
   });
 });
 

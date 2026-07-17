@@ -78,7 +78,8 @@ Simulation Smoke` runs package `stats:simulation -- --mode=smoke`.
   coverage, `.turbo/`, and `.wrangler/` are ignored.
 - PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus
   a range-scoped Gitleaks secret scan.
-- npm SDK publish: `.github/workflows/sdk-publish.yml` is the explicit Blacksmith exception. It runs
+- npm SDK publish: the OIDC `.github/workflows/sdk-publish.yml` workflow is wired as the explicit
+  Blacksmith exception. It runs
   only after an SDK GitHub Release is published, on GitHub-hosted `ubuntu-24.04` because npm trusted
   publishing does not support Blacksmith, and carries no long-lived npm token. The package bootstrap,
   trusted-publisher configuration, and provider-side verification remain human-owned and unverified.
@@ -123,9 +124,11 @@ real package API boundary.
 | `packages/ui`                | `@splitch/ui`                | shared UI primitive scaffold                |
 | `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files            |
 
-- All workspace packages are `version: 0.0.0`.
+- Internal workspace packages remain `version: 0.0.0`; `@splitch/sdk` is the versioned public package
+  at `version: 0.1.0`.
 - Apps and internal packages are private. `@splitch/sdk` is a public package scaffold with
-  `publishConfig.access = public`, but no npm publication workflow or credentials are configured.
+  `publishConfig.access = public`; its OIDC `sdk-publish` workflow is wired, but npm bootstrap and
+  provider setup remain human-owned and unverified.
 
 ## Issue Tracker
 
@@ -394,7 +397,8 @@ real package API boundary.
       runs a real `wrangler d1 migrations apply --local` and is wired into
       `verify:push`; a malformed/duplicate-column migration fails the gate
       non-zero.
-- [ ] npm provider setup is unverified. `sdk-publish` is an OIDC-only GitHub-hosted workflow, but
+- [ ] npm bootstrap and provider setup are unverified. The OIDC `sdk-publish` workflow is wired as a
+      GitHub-hosted workflow, but
       `@splitch/sdk` does not yet exist on npm, so a human must bootstrap only
       `0.1.0-bootstrap.0`, configure the trusted publisher for `sdk-publish.yml`, remove temporary
       bootstrap publishing access, and verify the provider before the provenance-bearing `0.1.0`

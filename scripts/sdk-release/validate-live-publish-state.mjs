@@ -103,9 +103,13 @@ export async function validateLivePublishState(
   if (
     liveRelease.tag_name !== releaseTag ||
     liveRelease.draft !== false ||
+    liveRelease.prerelease !== false ||
+    liveRelease.immutable !== true ||
     !liveRelease.published_at
   ) {
-    throw new Error(`live GitHub Release metadata is not a published release for ${releaseTag}`);
+    throw new Error(
+      `live GitHub Release metadata is not a published immutable release for ${releaseTag}`,
+    );
   }
   if (!isCommitSha(liveRelease.target_commitish)) {
     throw new Error(
