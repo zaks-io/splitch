@@ -50,32 +50,45 @@ Each tick:
    mergeable state, unresolved review-thread counts, check rollups, and
    review verdicts as JSON. Reason over that snapshot instead of assembling
    the same state from many tool calls; it needs an authenticated `gh`, and
-   with `LINEAR_API_KEY` set plus `--linear-team <KEY>` it also returns the
-   open issue queue with unresolved `blockedBy` identifiers per issue. Never
-   dispatch an issue whose snapshot or tracker state shows an incomplete
-   blocker. Use tracker tooling for issue bodies and comments. Delegate the inventory read to an isolated triage
-   worker when the runtime has one; keep only the compact queue (ID, state,
-   readiness, blockers, PR, owner, next action) in the main context.
+   with `--linear-team <KEY>` plus either a `linear-graphql.mjs setup` credential
+   or `LINEAR_API_KEY`, it also returns the open issue queue with unresolved
+   `blockedBy` identifiers per issue. Then run
+   `node <skill-dir>/scripts/tick-plan.mjs <snapshot.json> --config <config.json> --state <queue-state.json>`
+   when compact queue/config JSON is available. The planner deterministically
+   returns active footprint, capacity action, collision-safe dispatch selection,
+   Linear DAG roots/frontier, dispatchable starts, ready-state promotions,
+   hosted-review actions, and human-merge PR label decisions. Use
+   `node <skill-dir>/scripts/linear-dag-start.mjs <snapshot.json> --config <config.json>`
+   when only the Linear dependency frontier is needed. Never dispatch an issue
+   whose snapshot or tracker state shows an incomplete blocker. Use tracker
+   tooling for issue bodies and comments. Delegate the inventory read to an
+   isolated triage worker when the runtime has one; keep only the compact queue
+   (ID, state, readiness, blockers, PR, owner, next action) in the main context.
 3. Reconcile the ledger against refreshed tracker and PR state. Trust external
    state; drop stale ledger entries; re-dispatch or escalate stuck workers.
 4. Refresh the repo-level active delivery footprint: open PRs, active PR-scoped
    previews, and implementation dispatches that have not yet produced a PR.
    Count repo/project preview capacity, not only the requested issue filter.
+   Open PRs include drafts. Draft state is not hidden work, and a draft PR that
+   has not synced to the tracker still consumes capacity and must be advanced or
+   repaired before redispatching that ticket.
    Count only agent- or human-delegated product PRs against the delivery cap;
    track bot dependency PRs (dependabot, renovate) as a separate drain count.
    Bot PRs are merge/close work to advance, not delegation slots — they must
    not starve new dispatch.
 5. Act on at most a bounded slice of work this tick: advance returned PRs, active
    previews, and stuck draft PRs first. Optimize delivery-slot turnover over
-   worker count: merge green PRs, route fixes, update branches after main moves,
-   and inspect previews before dispatching new work. Dispatch new startable work
-   only when the active PR/preview cap has headroom and active work has no near
-   term drain action. Before fanning out, compare predicted file footprints
-   against active PRs, active branches, and selected candidates; hold colliding or
-   unknown-footprint tickets for triage or a later tick instead of spending spare
-   slots. Draft state is an orchestration repair signal, not a code review
-   request, and capacity pressure is not a reason to close a draft or in-progress
-   PR.
+   worker count: merge green PRs, route fixes, run `gh pr update-branch <pr>` on
+   GitHub PRs after main moves, and inspect previews before dispatching new
+   work. Do not delegate routine branch updates; delegate only after the update
+   reports a merge conflict or equivalent manual conflict state. Dispatch new
+   startable work only when the active PR/preview cap has headroom and active
+   work has no near term drain action. Before fanning out, compare predicted
+   file footprints against active PRs, active branches, and selected candidates;
+   hold colliding or unknown-footprint tickets for triage or a later tick
+   instead of spending spare slots. Draft state is an orchestration repair
+   signal, not a code review request, and capacity pressure is not a reason to
+   close a draft or in-progress PR.
 6. Delegate every context-heavy step (implement, review, triage) to an isolated
    worker. Reduce each worker result into the compact queue and ledger before
    continuing.

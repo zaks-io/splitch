@@ -5,7 +5,7 @@
   "stryker": {
     "config": ["stryker.base.json", "packages/*/stryker.config.json"]
   },
-  "ignore": [".agents/skills/**"],
+  "ignore": [".agents/**"],
   "workspaces": {
     "apps/control-panel": {
       "vite": false,
