@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { apiKeys, clientKeys } from "../schema/index";
+import { apiKeys, apps, clientKeys } from "../schema/index";
 import type { Db } from "./client";
 import type { EnvScope } from "./scope";
 import { scopedTable } from "./scoped-table";
@@ -26,6 +26,22 @@ export function makeCredentialRepo(db: Db) {
       return apiKeysTable.findMany(scope);
     },
 
+    /** Global D1 authority used only by the schema-v1 credential cache backfill. */
+    listApiKeysForCacheBackfill() {
+      return db
+        .select({
+          keyId: apiKeys.keyId,
+          appId: apiKeys.appId,
+          environmentId: apiKeys.environmentId,
+          keyHash: apiKeys.keyHash,
+          scopes: apiKeys.scopes,
+          revokedAt: apiKeys.revokedAt,
+          organizationId: apps.organizationId,
+        })
+        .from(apiKeys)
+        .innerJoin(apps, eq(apps.id, apiKeys.appId));
+    },
+
     getApiKey(scope: EnvScope, keyId: string) {
       return apiKeysTable.findOne(scope, eq(apiKeys.keyId, keyId));
     },
@@ -41,6 +57,23 @@ export function makeCredentialRepo(db: Db) {
 
     listClientKeys(scope: EnvScope) {
       return clientKeysTable.findMany(scope);
+    },
+
+    /** Global D1 authority used only by the schema-v1 credential cache backfill. */
+    listClientKeysForCacheBackfill() {
+      return db
+        .select({
+          keyId: clientKeys.keyId,
+          appId: clientKeys.appId,
+          environmentId: clientKeys.environmentId,
+          keyMaterial: clientKeys.keyMaterial,
+          originAllowlist: clientKeys.originAllowlist,
+          rateLimitRps: clientKeys.rateLimitRps,
+          revokedAt: clientKeys.revokedAt,
+          organizationId: apps.organizationId,
+        })
+        .from(clientKeys)
+        .innerJoin(apps, eq(apps.id, clientKeys.appId));
     },
 
     getClientKey(scope: EnvScope, keyId: string) {

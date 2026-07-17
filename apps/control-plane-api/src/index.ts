@@ -10,6 +10,7 @@ import { createApp } from "./app";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
+import { backfillCredentialCaches } from "./credential-cache";
 import type { ControlPlaneApiEnv } from "./env";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
@@ -56,6 +57,7 @@ const handler = {
 
   scheduled(event, env, ctx): void {
     ctx.waitUntil(runDemoReaper(env, event, ctx));
+    ctx.waitUntil(runCredentialCacheBackfill(env));
   },
 } satisfies ExportedHandler<ControlPlaneApiEnv>;
 
@@ -80,6 +82,19 @@ async function runDemoReaper(
       reaped: result.reaped,
     },
   );
+}
+
+async function runCredentialCacheBackfill(env: ControlPlaneApiEnv): Promise<void> {
+  const credentials = createRepository(env.DB).credentials;
+  const [apiKeys, clientKeys] = await Promise.all([
+    credentials.listApiKeysForCacheBackfill(),
+    credentials.listClientKeysForCacheBackfill(),
+  ]);
+  const written = await backfillCredentialCaches(
+    { credentialStore: env.CREDENTIAL_STORE },
+    { apiKeys, clientKeys },
+  );
+  console.info("credential-cache-backfill", { written });
 }
 
 export { ConfigStoreDurableObject };

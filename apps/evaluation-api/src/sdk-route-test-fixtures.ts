@@ -1,31 +1,31 @@
 import {
   apiKeyCacheKey,
-  clientKeyCacheKey,
   CredentialCacheKVSchema,
   CredentialCacheKVSchemaV1,
-  experimentConfigKey,
-  flagConfigKey,
-  runConfigKey,
-  kvEnvelope,
+  clientKeyCacheKey,
   type ExperimentConfigKV,
+  experimentConfigKey,
   type FlagConfigKV,
+  flagConfigKey,
+  kvEnvelope,
   type RunConfigKV,
+  runConfigKey,
 } from "@splitch/contracts";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
-import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { createApp } from "./app";
+import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth";
-import type { AssembledExposure } from "./evaluate/exposure-assembly";
-import type { EvaluationUsageEvent, EvaluationUsageSink } from "./evaluation-usage-sink";
 import {
   APP_ID,
+  baseInput,
   ENVIRONMENT_ID,
   EXPERIMENT_ID,
   FLAG_KEY,
   RecordingAssignmentStore,
-  baseInput,
   targetingRule,
 } from "./evaluate/evaluate-path-test-fixtures";
+import type { AssembledExposure } from "./evaluate/exposure-assembly";
+import type { EvaluationUsageEvent, EvaluationUsageSink } from "./evaluation-usage-sink";
 import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV, runConfigKV } from "./provider/fixtures";
 import { KvProvider } from "./provider/kv-provider";
@@ -205,6 +205,7 @@ export function sdkRouteInit(
     headers: {
       ...(credential === undefined ? {} : { authorization: `Bearer ${credential}` }),
       "content-type": "application/json",
+      "idempotency-key": "test-logical-evaluation",
       ...extraHeaders,
     },
     body: JSON.stringify({

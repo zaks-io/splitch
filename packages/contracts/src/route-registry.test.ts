@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { errorCodes } from "./errors";
 import { honoPathToOpenApiPath } from "./openapi-route";
-import { getRoute, operationIds, routeRegistry } from "./route-registry";
 import { authKinds, httpMethods, idempotencyModes, rateLimitClasses } from "./route-contract";
+import { getRoute, operationIds, routeRegistry } from "./route-registry";
 
 /**
  * The registry is cross-cutting: every Worker mounts it, the SDK infers from it,
@@ -175,6 +175,10 @@ describe("route registry: per-route invariants", () => {
 });
 
 describe("route registry: lookup", () => {
+  it("requires a caller-owned logical identity for billable SDK Evaluation", () => {
+    expect(getRoute("sdk_evaluate")?.idempotency).toBe("required");
+  });
+
   it("getRoute finds a registered route by operationId", () => {
     const route = getRoute("flags_create");
     expect(route?.method).toBe("POST");

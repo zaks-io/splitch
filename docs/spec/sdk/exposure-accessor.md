@@ -13,11 +13,16 @@ EvaluationContext {
   targetingKey: string         -- required; the Entity identifier (CONTEXT.md: Targeting Key)
   idType?:      string         -- optional in the SDK; defaults to 'user'. Required on the wire,
                                -- so the SDK fills the default before sending (ADR-0036).
+  idempotencyKey: string       -- required for evaluate; caller-owned logical Evaluation identity
   [key: string]: unknown       -- arbitrary attributes for Targeting Rule Conditions
 }
 ```
 
-The hello-world call is therefore `sdk.evaluate(flagKey, { targetingKey })`. Override the
+The caller must create one stable `idempotencyKey` for each logical Evaluation and reuse it when
+retrying an uncertain request. The server cannot determine automatically whether two requests are
+retries. A missing key is rejected before evaluation, so it cannot create unscoped billing usage.
+
+The hello-world call is therefore `sdk.evaluate(flagKey, { targetingKey, idempotencyKey })`. Override the
 bucketing unit with `{ targetingKey, idType: 'workspace' }` when bucketing on something other
 than a user.
 
@@ -37,7 +42,7 @@ branch on `reason` / `errorCode` (e.g. surface a banner on `STALE`, throw in you
 
 **What happens inside:**
 
-1. Validates context (targetingKey required; idType defaulted to 'user' if omitted).
+1. Validates context (targetingKey and the caller-owned idempotencyKey are required; idType defaults to 'user' if omitted).
 2. Checks SDK seen-set for `(flagKey, runId, targetingKey)`. If present, returns cached
    Variant without an HTTP call and without a second Exposure (`reason: CACHED`).
 3. On seen-set miss: calls `POST /api/sdk/evaluate` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).

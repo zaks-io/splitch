@@ -13,12 +13,21 @@ import type { AttributeValue, Transport, TransportFailure, TransportRequest } fr
  * arrays only (no nested objects), so a nested-object attribute is a COMPILE error
  * here rather than a runtime 400 (DataPlaneEvaluateRequestSchema).
  */
+export interface EvaluationContext {
+  readonly targetingKey: string;
+  readonly idType?: string;
+  readonly attributes?: Readonly<Record<string, AttributeValue>>;
+  readonly defaultValue?: VariantValue;
+  /** Caller-owned identity reused for every retry of this logical Evaluation. */
+  readonly idempotencyKey: string;
+}
+
 export interface EvaluateContext {
   readonly targetingKey: string;
   readonly idType?: string;
   readonly attributes?: Readonly<Record<string, AttributeValue>>;
   readonly defaultValue?: VariantValue;
-  /** Stable across a caller retry of the same logical Evaluation. */
+  /** Optional because peek and verify do not write billable usage. */
   readonly idempotencyKey?: string;
 }
 
@@ -89,7 +98,7 @@ function requestFor(flagKey: string, context: EvaluateContext): TransportRequest
 export async function runEvaluate(
   deps: EvaluateDeps,
   flagKey: string,
-  context: EvaluateContext,
+  context: EvaluationContext,
 ): Promise<ResolutionDetails> {
   const { targetingKey } = context;
   const idType = context.idType ?? DEFAULT_ID_TYPE;

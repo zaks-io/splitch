@@ -5,6 +5,7 @@ import { FakeLogger, FakeTransport, httpError, ok } from "./test-fixtures";
 
 const T0 = 1_000_000;
 const TTL = 60_000;
+const EVALUATION_ID = "test-evaluation";
 
 /** A mutable injected clock so tests can advance time past the seen-set TTL. */
 function clock(start = T0) {
@@ -27,12 +28,18 @@ describe("seen-set short-circuit: repeat within a Run is CACHED, no call, no sec
     const c = clock();
     const bag = deps(transport, c.now);
 
-    const first = await runEvaluate(bag, "flag", { targetingKey: "u1" });
+    const first = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      idempotencyKey: EVALUATION_ID,
+    });
     expect(first.reason).toBe("SPLIT");
     expect(transport.calls).toHaveLength(1); // first call fires the Exposure
 
     c.advance(1); // still well within the TTL
-    const second = await runEvaluate(bag, "flag", { targetingKey: "u1" });
+    const second = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      idempotencyKey: EVALUATION_ID,
+    });
     expect(second.reason).toBe("CACHED");
     expect(second.value).toBe("treatment");
     // No transport call -> no second Exposure. Queue was length 1; a second call
@@ -52,7 +59,10 @@ describe("Run boundary (SAME instance): past the TTL the SDK re-contacts the ser
     const c = clock();
     const bag = deps(transport, c.now);
 
-    const r1 = await runEvaluate(bag, "flag", { targetingKey: "u1" });
+    const r1 = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      idempotencyKey: EVALUATION_ID,
+    });
     expect(r1.reason).toBe("SPLIT");
     expect(r1.value).toBe("a");
     expect(transport.calls).toHaveLength(1);
@@ -60,7 +70,10 @@ describe("Run boundary (SAME instance): past the TTL the SDK re-contacts the ser
     // BEFORE FIX this short-circuited to CACHED("a") forever (no second call).
     // AFTER FIX: past the revalidation window the entry is stale -> a fresh call.
     c.advance(TTL); // step to exactly the TTL boundary -> entry is stale
-    const r2 = await runEvaluate(bag, "flag", { targetingKey: "u1" });
+    const r2 = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      idempotencyKey: EVALUATION_ID,
+    });
     expect(r2.reason).toBe("SPLIT"); // a fresh resolution, NOT CACHED
     expect(r2.value).toBe("b");
     expect(transport.calls).toHaveLength(2); // fresh Exposure fired under run-2
@@ -71,12 +84,15 @@ describe("Run boundary (SAME instance): past the TTL the SDK re-contacts the ser
     const c = clock();
     const bag = deps(transport, c.now);
 
-    await runEvaluate(bag, "flag", { targetingKey: "u1" });
+    await runEvaluate(bag, "flag", { targetingKey: "u1", idempotencyKey: EVALUATION_ID });
     c.advance(TTL);
-    await runEvaluate(bag, "flag", { targetingKey: "u1" }); // re-cache under run-2
+    await runEvaluate(bag, "flag", { targetingKey: "u1", idempotencyKey: EVALUATION_ID }); // re-cache under run-2
 
     c.advance(1);
-    const repeat = await runEvaluate(bag, "flag", { targetingKey: "u1" });
+    const repeat = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      idempotencyKey: EVALUATION_ID,
+    });
     expect(repeat.reason).toBe("CACHED");
     expect(repeat.value).toBe("b");
     expect(transport.calls).toHaveLength(2); // no third call within the window
@@ -91,11 +107,19 @@ describe("Entity identity: the seen-set keys on (idType, targetingKey), not the 
     const c = clock();
     const bag = deps(transport, c.now);
 
-    const user = await runEvaluate(bag, "flag", { targetingKey: "42", idType: "user" });
+    const user = await runEvaluate(bag, "flag", {
+      targetingKey: "42",
+      idType: "user",
+      idempotencyKey: EVALUATION_ID,
+    });
     expect(user.value).toBe("a");
 
     c.advance(1);
-    const workspace = await runEvaluate(bag, "flag", { targetingKey: "42", idType: "workspace" });
+    const workspace = await runEvaluate(bag, "flag", {
+      targetingKey: "42",
+      idType: "workspace",
+      idempotencyKey: EVALUATION_ID,
+    });
     expect(workspace.reason).toBe("SPLIT"); // NOT CACHED — a distinct Entity
     expect(workspace.value).toBe("b");
     expect(transport.calls).toHaveLength(2);
@@ -109,12 +133,20 @@ describe("a cached 200 no-match replays with the CURRENT call's Default Variant"
     const c = clock();
     const bag = deps(transport, c.now);
 
-    const first = await runEvaluate(bag, "flag", { targetingKey: "u1", defaultValue: "v1" });
+    const first = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      defaultValue: "v1",
+      idempotencyKey: EVALUATION_ID,
+    });
     expect(first.reason).toBe("DEFAULT");
     expect(first.value).toBe("v1");
 
     c.advance(1);
-    const second = await runEvaluate(bag, "flag", { targetingKey: "u1", defaultValue: "v2" });
+    const second = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      defaultValue: "v2",
+      idempotencyKey: EVALUATION_ID,
+    });
     expect(second.reason).toBe("CACHED");
     expect(second.value).toBe("v2"); // THIS call's default, not the first caller's
     expect(transport.calls).toHaveLength(1); // dedup preserved
@@ -127,13 +159,19 @@ describe("never cache an ERROR result", () => {
     const c = clock();
     const bag = deps(transport, c.now);
 
-    const failed = await runEvaluate(bag, "flag", { targetingKey: "u1" });
+    const failed = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      idempotencyKey: EVALUATION_ID,
+    });
     expect(failed.reason).toBe("ERROR");
     expect(bag.seenSet.size).toBe(0); // nothing cached
 
     // The next evaluate is NOT served from cache (the error was never cached): a
     // NEW logical evaluate, not a retry of the failed one.
-    const recovered = await runEvaluate(bag, "flag", { targetingKey: "u1" });
+    const recovered = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      idempotencyKey: EVALUATION_ID,
+    });
     expect(recovered.reason).toBe("SPLIT");
     expect(transport.calls).toHaveLength(2);
   });

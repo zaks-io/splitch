@@ -1,18 +1,18 @@
 import {
   apiKeyCacheKey,
-  clientKeyCacheKey,
   type CredentialCacheKV,
   CURRENT_KV_SCHEMA_VERSION,
+  clientKeyCacheKey,
 } from "@splitch/contracts";
 
 const REVOKED_TOMBSTONE_TTL_SECONDS = 5 * 60;
 
-interface CredentialCacheDeps {
+export interface CredentialCacheDeps {
   credentialStore?: KVNamespace;
   nowIso?: () => string;
 }
 
-interface ClientKeyCacheRow {
+export interface ClientKeyCacheRow {
   appId: string;
   environmentId: string;
   keyMaterial: string;
@@ -20,7 +20,7 @@ interface ClientKeyCacheRow {
   rateLimitRps: number | null;
 }
 
-interface ApiKeyCacheRow {
+export interface ApiKeyCacheRow {
   appId: string;
   environmentId: string;
   keyHash: string;
@@ -56,6 +56,34 @@ export async function writeApiKeyCache(
     apiKeyCache(deps, row, revoked, organizationId),
     failLoud,
   );
+}
+
+export interface CredentialCacheBackfillRows {
+  readonly clientKeys: readonly (ClientKeyCacheRow & {
+    readonly organizationId: string;
+    readonly revokedAt: string | null;
+  })[];
+  readonly apiKeys: readonly (ApiKeyCacheRow & {
+    readonly organizationId: string;
+    readonly revokedAt: string | null;
+  })[];
+}
+
+/** Rewrites every D1 credential into the v2 cache shape using D1 App ownership. */
+export async function backfillCredentialCaches(
+  deps: CredentialCacheDeps,
+  rows: CredentialCacheBackfillRows,
+): Promise<number> {
+  let written = 0;
+  for (const row of rows.clientKeys) {
+    await writeClientKeyCache(deps, row, row.revokedAt !== null, row.organizationId, true);
+    written += 1;
+  }
+  for (const row of rows.apiKeys) {
+    await writeApiKeyCache(deps, row, row.revokedAt !== null, row.organizationId, true);
+    written += 1;
+  }
+  return written;
 }
 
 export async function sha256Hex(value: string): Promise<string> {

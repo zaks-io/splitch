@@ -23,17 +23,16 @@ SQL >
     FROM (
         SELECT
             dedup_key,
-            argMax(organization_id, server_received_at) AS dedup_organization_id,
-            argMax(app_id, server_received_at) AS dedup_app_id,
-            argMax(environment_id, server_received_at) AS dedup_environment_id,
-            argMax(evaluation_count, server_received_at) AS dedup_evaluation_count,
-            argMax(is_batch, server_received_at) AS dedup_is_batch,
-            argMax(is_cached, server_received_at) AS dedup_is_cached,
-            argMax(has_exposure, server_received_at) AS dedup_has_exposure
+            min(server_received_at) AS dedup_server_received_at,
+            argMin(organization_id, server_received_at) AS dedup_organization_id,
+            argMin(app_id, server_received_at) AS dedup_app_id,
+            argMin(environment_id, server_received_at) AS dedup_environment_id,
+            argMin(evaluation_count, server_received_at) AS dedup_evaluation_count,
+            argMin(is_batch, server_received_at) AS dedup_is_batch,
+            argMin(is_cached, server_received_at) AS dedup_is_cached,
+            argMin(has_exposure, server_received_at) AS dedup_has_exposure
         FROM raw_evaluations
         WHERE organization_id = {{String(organization_id)}}
-            AND server_received_at >= {{DateTime64(period_start)}}
-            AND server_received_at < {{DateTime64(period_end)}}
             AND isNotNull(evaluation_count)
             AND isNotNull(is_batch)
             AND isNotNull(is_cached)
@@ -41,6 +40,8 @@ SQL >
             AND evaluation_count >= 0
         GROUP BY dedup_key
     )
+    WHERE dedup_server_received_at >= {{DateTime64(period_start)}}
+        AND dedup_server_received_at < {{DateTime64(period_end)}}
     GROUP BY
         dedup_organization_id,
         dedup_app_id,

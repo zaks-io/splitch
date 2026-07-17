@@ -41,6 +41,10 @@ The **Environment is resolved from the Client Key**, not a request field: a Clie
 `(app_id, environment_id)` (ADR-0027), and the edge reads `environment_id` from the key's validation
 cache value to select which Environment's Flag Configuration and live Experiment Runs to serve.
 
+The Exposure-bearing route requires an `Idempotency-Key` header. The SDK's `idempotencyKey` is the
+caller-owned logical Evaluation identity and must be reused for a retry of that Evaluation. The
+server cannot infer retries automatically; a new key is a new Evaluation for billing purposes.
+
 **`app_id` authority — credential is the sole source.** The route carries no `:appId` path
 parameter (`/api/sdk/evaluate`, not `/apps/:appId/evaluate`): the only `app_id` that reaches
 Provider reads, Assignment Store keys, or the Exposure row is the one bound to the validated
@@ -232,10 +236,17 @@ import { createSplitchClient } from "@splitch/sdk";
 const splitch = createSplitchClient({ clientKey: "ck_live_..." });
 
 // Hello-world resolution (idType defaults to 'user'):
-const variant = await splitch.evaluate("new-checkout", { targetingKey: userId });
+const evaluationId = crypto.randomUUID(); // retain this value if the call must be retried
+const variant = await splitch.evaluate("new-checkout", {
+  targetingKey: userId,
+  idempotencyKey: evaluationId,
+});
 
 // Branch with details (fail-loud is one check):
-const d = await splitch.evaluateDetails("new-checkout", { targetingKey: userId });
+const d = await splitch.evaluateDetails("new-checkout", {
+  targetingKey: userId,
+  idempotencyKey: evaluationId,
+});
 if (d.reason === "ERROR") renderFallback(d.errorCode);
 else render(d.value);
 ```
@@ -250,8 +261,10 @@ else render(d.value);
   Default Variant with `reason: ERROR`; Provider unreachable → 503 + Default Variant with
   `reason: ERROR`. Every failure-fallback carries `reason: ERROR` + `errorCode` and is
   logged loudly — never a silent default. No distributed transaction (ADR-0006).
-- **Idempotency:** read-only except for the Exposure side effect; retrying a failed call may
-  produce a duplicate raw Exposure row, which is correct (at-least-once, pipeline deduplicates)
+- **Logical Evaluation identity:** `Idempotency-Key` is required on this Exposure-bearing route.
+  The caller owns its value and must reuse the same value for a retry of the same logical Evaluation.
+  The pipeline deduplicates usage rows by that key. The server does not infer retries from
+  `requestId`, Targeting Key, or request shape; a new key is a new billable Evaluation.
 
 ## Sources
 

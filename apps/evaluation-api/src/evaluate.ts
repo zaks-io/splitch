@@ -1,19 +1,19 @@
 import {
-  DataPlaneEvaluateResponseSchema,
   type DataPlaneEvaluateRequest,
-  type ErrorCode,
+  DataPlaneEvaluateResponseSchema,
   type ErrorResponse,
   type Variant,
 } from "@splitch/contracts";
-import { renderError, type HandlerArgs, type Principal } from "@splitch/worker-runtime";
+import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
 import { evaluate } from "./evaluate/accessor-paths";
-import type { AssembledExposure, ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
-import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
+import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
+import type { AssembledExposure, ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
+import { errorResponse } from "./evaluation-error-response";
+import { type EvaluationUsageScope, writeEvaluationUsage } from "./evaluation-usage";
+import type { EvaluationUsageSink } from "./evaluation-usage-sink";
 import type { ExposureSink } from "./exposure-sink";
 import { ExposureSinkError } from "./exposure-sink";
-import type { EvaluationUsageSink } from "./evaluation-usage-sink";
-import { writeEvaluationUsage, type EvaluationUsageScope } from "./evaluation-usage";
 import type { FlagConfig, Provider } from "./provider/provider";
 
 type EvaluateInput = {
@@ -119,12 +119,20 @@ async function evaluateResponse(
   const body = responseBody(provider.flag, output.result);
   if (!body.ok) return renderError(body.error, { requestId });
 
+  const logicalEvaluationId = request.headers.get("idempotency-key");
+  if (logicalEvaluationId === null) {
+    return renderError(
+      errorResponse("VALIDATION_ERROR", "Idempotency-Key is required for Evaluation usage"),
+      { requestId },
+    );
+  }
+
   const write = await writeExposures(output.exposures, deps);
   if (!write.ok) return renderError(write.error, { requestId });
 
   const usageWrite = await writeEvaluationUsage(
     output.exposures.length > 0,
-    request.headers.get("idempotency-key") ?? requestId,
+    logicalEvaluationId,
     evaluated.scope,
     deps,
     () => errorResponse("SERVICE_UNAVAILABLE", "Evaluation usage ingest is unavailable"),
@@ -280,20 +288,4 @@ function valueForVariant(
   return variant === undefined
     ? { ok: false, variantName: result.variant }
     : { ok: true, value: variant.value };
-}
-
-function errorResponse(code: ErrorCode, message: string): ErrorResponse {
-  if (code === "FLAG_NOT_FOUND") {
-    return { code, message: "flag not found", details: {} };
-  }
-  if (code === "VALIDATION_ERROR") {
-    return { code, message, details: { issues: [] } };
-  }
-  if (code === "INTERNAL_SERVER_ERROR") {
-    return { code, message: "evaluation failed", details: {} };
-  }
-  if (code === "SERVICE_UNAVAILABLE") {
-    return { code, message, details: { retryAfterMs: 1000 } };
-  }
-  return { code, message, details: {} } as ErrorResponse;
 }

@@ -74,6 +74,9 @@ A non-exposing evaluation path used for debugging and verification. It records n
 
 - Public clients do remote Evaluation. They do not receive Targeting Rules or local rule-evaluation
   snapshots.
+- Exposure-bearing `evaluate` and `evaluateDetails` require a caller-owned `idempotencyKey`, reused
+  for retries of the same logical Evaluation. The server cannot infer retries automatically; a new
+  key is a new billable Evaluation. `peek` and `verify` are non-billing and do not require one.
 - SDK caches may cache evaluated results. They must not cache or expose rule logic.
 - The SDK seen-set is a hot-path optimization only. Pipeline dedup is authoritative.
 - Reading through the exposing accessor fires Exposure.

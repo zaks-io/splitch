@@ -1,13 +1,13 @@
+import type { EvaluateContext, EvaluateDeps, EvaluationContext, Logger } from "./evaluate";
+import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
 import {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,
   PeekEvaluateResponseSchema,
-  ResolutionDetailsSchema,
   type ResolutionDetails,
+  ResolutionDetailsSchema,
   type VariantValue,
 } from "./generated/contract-surface.js";
-import type { EvaluateContext, EvaluateDeps, Logger } from "./evaluate";
-import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
 import { SeenSet } from "./seen-set";
 import type {
   Transport,
@@ -47,9 +47,9 @@ export interface SplitchClientOptions {
 
 export interface SplitchClient {
   /** Resolve a Flag and return the unwrapped Variant value. Fires an Exposure. */
-  evaluate(flagKey: string, context: EvaluateContext): Promise<VariantValue>;
+  evaluate(flagKey: string, context: EvaluationContext): Promise<VariantValue>;
   /** Resolve a Flag and return the full OpenFeature ResolutionDetails. Fires an Exposure. */
-  evaluateDetails(flagKey: string, context: EvaluateContext): Promise<ResolutionDetails>;
+  evaluateDetails(flagKey: string, context: EvaluationContext): Promise<ResolutionDetails>;
   /** Resolve a Flag without firing an Exposure. API Key only. */
   peekVariant(flagKey: string, context: EvaluateContext): Promise<VariantValue>;
   /** Verify setup without firing an Exposure. Client Key or API Key. */

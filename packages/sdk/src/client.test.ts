@@ -8,6 +8,7 @@ const REQ: TransportRequest = {
   targetingKey: "u1",
   idType: "user",
   attributes: {},
+  idempotencyKey: "logical-evaluation-1",
 };
 
 /** Build a stub `fetch` returning a scripted Response — no real network. */
@@ -52,7 +53,9 @@ describe("createSplitchClient: construction", () => {
 describe("evaluate / evaluateDetails: 200 success rows", () => {
   it("200 rule-resolved -> SPLIT + unwrapped variant value", async () => {
     const { client } = clientWith(new FakeTransport([ok("treatment", "run-1")]));
-    expect(await client.evaluate("checkout", { targetingKey: "u1" })).toBe("treatment");
+    expect(
+      await client.evaluate("checkout", { targetingKey: "u1", idempotencyKey: "eval-1" }),
+    ).toBe("treatment");
   });
 
   it("200 no-match (variant null) -> DEFAULT + Default Variant", async () => {
@@ -60,6 +63,7 @@ describe("evaluate / evaluateDetails: 200 success rows", () => {
     const details = await client.evaluateDetails("checkout", {
       targetingKey: "u1",
       defaultValue: "control",
+      idempotencyKey: "eval-2",
     });
     expect(details.reason).toBe("DEFAULT");
     expect(details.value).toBe("control");
@@ -70,7 +74,7 @@ describe("wire request: idType default", () => {
   it("omitted idType -> wire request carries idType 'user'", async () => {
     const fake = new FakeTransport([ok(true, "run-1")]);
     const { client } = clientWith(fake);
-    await client.evaluate("flag", { targetingKey: "u1" });
+    await client.evaluate("flag", { targetingKey: "u1", idempotencyKey: "eval-3" });
     expect(fake.calls).toHaveLength(1);
     expect(fake.calls[0]?.idType).toBe("user");
   });
@@ -78,7 +82,11 @@ describe("wire request: idType default", () => {
   it("explicit idType overrides the default and rides the wire", async () => {
     const fake = new FakeTransport([ok(true, "run-1")]);
     const { client } = clientWith(fake);
-    await client.evaluate("flag", { targetingKey: "ws1", idType: "workspace" });
+    await client.evaluate("flag", {
+      targetingKey: "ws1",
+      idType: "workspace",
+      idempotencyKey: "eval-4",
+    });
     expect(fake.calls[0]?.idType).toBe("workspace");
   });
 });
@@ -99,6 +107,7 @@ describe("fail-loud: every error row returns Default Variant + reason ERROR + no
       const details = await client.evaluateDetails("flag", {
         targetingKey: "u1",
         defaultValue: "control",
+        idempotencyKey: "eval-error",
       });
 
       expect(details.reason).toBe("ERROR");

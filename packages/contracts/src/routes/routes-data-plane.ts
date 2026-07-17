@@ -1,10 +1,10 @@
+import { ResolutionDetailsSchema } from "../leaf-schemas-runtime";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   DataPlaneEvaluateRequestSchema,
   DataPlaneEvaluateResponseSchema,
   PeekEvaluateResponseSchema,
 } from "../wire-envelopes-core";
-import { ResolutionDetailsSchema } from "../leaf-schemas-runtime";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 
 /**
  * Public data-plane SDK endpoints on the Evaluation Worker. These carry NO
@@ -34,7 +34,9 @@ export const dataPlaneRoutes = [
     response: DataPlaneEvaluateResponseSchema,
     auth: "client-key",
     rateLimit: "client-key",
-    idempotency: "optional",
+    // Evaluation usage is billed by this caller-owned logical Evaluation id.
+    // The server cannot infer whether two requests are a retry.
+    idempotency: "required",
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",

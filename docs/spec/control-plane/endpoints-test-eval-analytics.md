@@ -108,6 +108,10 @@ Organization path/auth context and reads the scoped Tinybird usage pipe. Callers
 different Organization or Tinybird scope. Responses contain identifiers and counts only; raw
 Targeting Keys are never returned.
 
+Usage rows are deduplicated by the caller-owned logical Evaluation identity before the UTC-month
+window is applied. The canonical first-received row owns the month, so a retry received after a
+month boundary cannot appear in both months.
+
 ## Schema discovery
 
 ### `GET /.well-known/openapi.json`
