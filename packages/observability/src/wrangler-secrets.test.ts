@@ -23,6 +23,13 @@ const AXIOM_LOG_DESTINATION = "axiom-logs";
 const SENTRY_DSN =
   "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048";
 const GITHUB_SENTRY_SECRET_REFERENCE = "SENTRY_DSN: $" + "{{ secrets.SENTRY_DSN }}";
+const GITHUB_LINEAR_SECRET_REFERENCE = "LINEAR_ACCESS_KEY: $" + "{{ secrets.LINEAR_ACCESS_KEY }}";
+const GITHUB_LINEAR_ACTION_INPUT = "access_key: $" + "{{ secrets.LINEAR_ACCESS_KEY }}";
+const GITHUB_RELEASE_VERSION_REFERENCE = "version: $" + "{{ env.SENTRY_RELEASE }}";
+const GITHUB_ACTIONS_LINK_REFERENCE =
+  "GitHub Actions=https://github.com/$" +
+  "{{ github.repository }}/actions/runs/$" +
+  "{{ github.run_id }}";
 const WORKER_SECRET_SYNC_NAMES = [
   "ACCESS_TOKEN_SECRET",
   "ASSERTION_SIGNING_SECRET",
@@ -87,6 +94,40 @@ describe("Deploy workflow observability secrets", () => {
     for (const secretName of WORKER_SECRET_SYNC_NAMES) {
       expect(workflow).toContain(secretName);
     }
+  });
+
+  it("uses one production release ID for Sentry and Linear", () => {
+    const workflow = readFileSync(
+      join(repoRoot, ".github/workflows/deploy-production.yml"),
+      "utf8",
+    );
+
+    expect(workflow).toContain(
+      "SENTRY_RELEASE: $" +
+        "{{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}",
+    );
+    expect(workflow).toContain(GITHUB_LINEAR_SECRET_REFERENCE);
+    expect(workflow).toContain(GITHUB_RELEASE_VERSION_REFERENCE);
+    expect(workflow).toContain(GITHUB_ACTIONS_LINK_REFERENCE);
+
+    const validateStart = workflow.indexOf("  validate:");
+    const deployStart = workflow.indexOf("  deploy:");
+    const releaseStart = workflow.indexOf("  release:");
+    const validateJob = workflow.slice(validateStart, deployStart);
+    const deployJob = workflow.slice(deployStart, releaseStart);
+    const releaseJob = workflow.slice(releaseStart);
+
+    expect(validateJob).toContain(GITHUB_LINEAR_SECRET_REFERENCE);
+    expect(deployJob).not.toContain("LINEAR_ACCESS_KEY");
+    expect(releaseJob).toContain(GITHUB_LINEAR_ACTION_INPUT);
+    expect(releaseJob).toContain("needs: deploy");
+    expect(releaseJob).not.toContain("environment: production");
+    expect(workflow.indexOf("Check release credentials")).toBeLessThan(
+      workflow.indexOf("Deploy production"),
+    );
+    expect(workflow.indexOf("Deploy production")).toBeLessThan(
+      workflow.indexOf("Sync Linear release"),
+    );
   });
 });
 
