@@ -58,11 +58,27 @@ describe("sdk-publish workflow contract", () => {
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("validate-publish-context.mjs");
     expect(workflow).toContain("RELEASE_TARGET_COMMITISH");
-    expect(workflow).toContain("Refresh live release state before publish");
+    expect(workflow).toContain("Refresh live release state before npm version check");
     expect(workflow).toContain("validate-live-publish-state.mjs");
     expect(workflow).toContain("GITHUB_TOKEN: ${{" + " github.token }}");
     expect(workflow).toContain("github.sha");
     expect(publishContextValidator).toContain("release target commitish must be a full commit SHA");
+  });
+
+  it("validates live release metadata before any idempotent npm-version skip", () => {
+    const liveValidation = workflow.indexOf(
+      "      - name: Refresh live release state before npm version check",
+    );
+    const npmVersionCheck = workflow.indexOf(
+      "      - name: Check whether SDK version is already published",
+    );
+
+    expect(liveValidation).toBeGreaterThan(-1);
+    expect(npmVersionCheck).toBeGreaterThan(liveValidation);
+    expect(workflow.slice(liveValidation, npmVersionCheck)).not.toContain("if:");
+    expect(workflow.slice(npmVersionCheck)).toContain(
+      "if: steps.npm-version.outputs.already_published != 'true'",
+    );
   });
 
   it("skips an exact immutable npm version and logs the decision", () => {
@@ -156,7 +172,14 @@ describe("SDK live publish-state validation", () => {
   it.each([
     ["prerelease", { prerelease: true, immutable: true }],
     ["mutable", { prerelease: false, immutable: false }],
-  ])("fails closed when the live release is %s", async (_label, releaseState) => {
+  ])("fails closed when the live release is %s even if npm already has the version", async (_label, releaseState) => {
+    expect(
+      checkPublishedVersion({
+        version: "0.1.0",
+        run: () => ({ status: 0, stdout: '"0.1.0"\n', stderr: "" }),
+      }),
+    ).toBe(true);
+
     await expect(
       validateLivePublishState(repoRoot, environment, {
         fetcher: fetcher(
@@ -175,7 +198,6 @@ describe("SDK live publish-state validation", () => {
     ).rejects.toThrow("not a published immutable release");
   });
 });
-
 describe("SDK trusted-publish validation behavior", () => {
   const commit = "0123456789abcdef0123456789abcdef01234567";
   const otherCommit = "fedcba9876543210fedcba9876543210fedcba98";

@@ -63,6 +63,12 @@ jobs:
           REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
         run: node scripts/sdk-release/validate-publish-context.mjs "$GITHUB_WORKSPACE"
 
+      - name: Refresh live release state before npm version check
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/sdk-release/validate-live-publish-state.mjs "$GITHUB_WORKSPACE"
+
       - name: Check whether SDK version is already published
         id: npm-version
         env:
@@ -91,13 +97,6 @@ jobs:
         run: |
           pnpm --filter @splitch/sdk pack --dry-run
           pnpm --filter @splitch/sdk pack:check
-
-      - name: Refresh live release state before publish
-        if: steps.npm-version.outputs.already_published != 'true'
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/sdk-release/validate-live-publish-state.mjs "$GITHUB_WORKSPACE"
 
       - name: Publish @splitch/sdk with provenance
         if: steps.npm-version.outputs.already_published != 'true'
