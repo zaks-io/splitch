@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CredentialCacheKVSchema,
+  CredentialCacheKVSchemaV1,
   ExperimentConfigKVSchema,
   FlagConfigKVSchema,
   LiveRunKVSchema,
@@ -142,6 +143,7 @@ describe("ExperimentConfigKVSchema", () => {
 const validCredentialCache = {
   appId: "app_1",
   environmentId: "env_prod",
+  credentialSchemaVersion: 2 as const,
   organizationId: "org_1",
   kind: "api_key" as const,
   scopes: ["data-plane:evaluate", "data-plane:write"],
@@ -177,6 +179,36 @@ describe("CredentialCacheKVSchema", () => {
   it("rejects a partial blob missing revoked (a revoke tombstone must be explicit)", () => {
     const { revoked: _revoked, ...partial } = validCredentialCache;
     expect(CredentialCacheKVSchema.safeParse(partial).success).toBe(false);
+  });
+
+  it("rejects an active cache entry without tenant scope", () => {
+    expect(
+      CredentialCacheKVSchema.safeParse({ ...validCredentialCache, organizationId: null }).success,
+    ).toBe(false);
+  });
+
+  it("allows an unscoped revoke tombstone because it cannot authorize evaluation", () => {
+    expect(
+      CredentialCacheKVSchema.safeParse({
+        ...validCredentialCache,
+        organizationId: null,
+        revoked: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("does not accept a schema-v1 payload as a new write", () => {
+    const { credentialSchemaVersion: _version, ...legacy } = validCredentialCache;
+    expect(CredentialCacheKVSchema.safeParse(legacy).success).toBe(false);
+  });
+
+  it("keeps schema-v1 payload compatibility explicit at the reader schema", () => {
+    const {
+      credentialSchemaVersion: _version,
+      organizationId: _organizationId,
+      ...legacy
+    } = validCredentialCache;
+    expect(CredentialCacheKVSchemaV1.safeParse(legacy).success).toBe(true);
   });
 });
 

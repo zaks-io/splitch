@@ -18,6 +18,8 @@ export interface EvaluateContext {
   readonly idType?: string;
   readonly attributes?: Readonly<Record<string, AttributeValue>>;
   readonly defaultValue?: VariantValue;
+  /** Stable across a caller retry of the same logical Evaluation. */
+  readonly idempotencyKey?: string;
 }
 
 /**
@@ -62,6 +64,7 @@ function requestFor(flagKey: string, context: EvaluateContext): TransportRequest
     targetingKey: context.targetingKey,
     idType: context.idType ?? DEFAULT_ID_TYPE,
     attributes: context.attributes ?? {},
+    ...(context.idempotencyKey === undefined ? {} : { idempotencyKey: context.idempotencyKey }),
   };
 }
 

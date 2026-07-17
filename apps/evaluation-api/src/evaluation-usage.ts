@@ -10,6 +10,7 @@ export interface EvaluationUsageScope {
 
 export async function writeEvaluationUsage(
   hasExposure: boolean,
+  idempotencyKey: string,
   scope: EvaluationUsageScope,
   deps: {
     readonly evaluationUsageSink: EvaluationUsageSink;
@@ -19,6 +20,7 @@ export async function writeEvaluationUsage(
 ): Promise<{ ok: true } | { ok: false; error: ErrorResponse }> {
   try {
     await deps.evaluationUsageSink.write({
+      idempotencyKey,
       organizationId: scope.organizationId,
       appId: scope.appId,
       environmentId: scope.environmentId,

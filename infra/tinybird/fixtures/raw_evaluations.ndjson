@@ -1,4 +1,5 @@
 {"dedup_key":"eval-1","event_id":"eval-1","organization_id":"org_a","app_id":"app_1","environment_id":"env_prod","server_received_at":"2026-07-03 10:00:00.000","evaluation_count":2,"is_batch":0,"is_cached":0,"has_exposure":1}
+{"dedup_key":"eval-1","event_id":"eval-1-retry","organization_id":"org_a","app_id":"app_1","environment_id":"env_prod","server_received_at":"2026-07-03 10:00:01.000","evaluation_count":2,"is_batch":0,"is_cached":0,"has_exposure":1}
 {"dedup_key":"eval-2","event_id":"eval-2","organization_id":"org_a","app_id":"app_1","environment_id":"env_prod","server_received_at":"2026-07-03 10:01:00.000","evaluation_count":3,"is_batch":1,"is_cached":0,"has_exposure":0}
 {"dedup_key":"eval-3","event_id":"eval-3","organization_id":"org_a","app_id":"app_2","environment_id":"env_dev","server_received_at":"2026-07-04 10:00:00.000","evaluation_count":0,"is_batch":1,"is_cached":1,"has_exposure":1}
 {"dedup_key":"eval-4","event_id":"eval-4","organization_id":"org_a","app_id":"app_2","environment_id":"env_dev","server_received_at":"2026-07-04 10:01:00.000","evaluation_count":0,"is_batch":0,"is_cached":1,"has_exposure":0}

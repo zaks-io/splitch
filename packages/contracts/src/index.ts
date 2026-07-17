@@ -199,6 +199,7 @@ export {
   AssignmentStoreEntrySchema,
   AssignmentStoreValueSchema,
   CredentialCacheKVSchema,
+  CredentialCacheKVSchemaV1,
   CredentialKindSchema,
   credentialKinds,
   CURRENT_KV_SCHEMA_VERSION,

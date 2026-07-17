@@ -86,6 +86,20 @@ describe("POST /api/sdk/evaluate", () => {
     expect(exposureSink.writes).toEqual([]);
   });
 
+  it("reads a schema-v1 credential but fails closed until tenant migration", async () => {
+    const { app, exposureSink, evaluationUsageSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      legacyClientKey: true,
+    });
+
+    const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
+
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
+    expect(exposureSink.writes).toEqual([]);
+    expect(evaluationUsageSink.writes).toEqual([]);
+  });
+
   it("enforces a Client Key origin allow-list before evaluation", async () => {
     const { app, assignmentStore, configKv, exposureSink } = await liveRunHarness();
 
@@ -182,6 +196,7 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
     expect(res.status).toBe(200);
     expect(evaluationUsageSink.writes).toEqual([
       {
+        idempotencyKey: expect.any(String),
         organizationId: "org_verify",
         appId: APP_ID,
         environmentId: "env-1",
@@ -216,6 +231,22 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
 
     expect(res.status).toBe(503);
     expect(((await res.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
+  });
+
+  it("reuses the Idempotency-Key for a client retry", async () => {
+    const { app, evaluationUsageSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
+    });
+
+    const init = sdkRouteInit(CLIENT_KEY, { "idempotency-key": "eval-retry-1" });
+    expect((await app.request(PATH, init)).status).toBe(200);
+    expect((await app.request(PATH, init)).status).toBe(200);
+
+    expect(evaluationUsageSink.writes.map((event) => event.idempotencyKey)).toEqual([
+      "eval-retry-1",
+      "eval-retry-1",
+    ]);
   });
 });
 

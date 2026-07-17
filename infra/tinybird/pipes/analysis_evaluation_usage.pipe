@@ -13,26 +13,38 @@ SQL >
     {{error('period_end is required')}}
     {% end %}
     SELECT
-        organization_id,
-        app_id,
-        environment_id,
-        if(is_batch = 1, 'batch', 'single') AS batch_mode,
-        if(is_cached = 1, 'cached', 'remote') AS evaluation_source,
-        if(has_exposure = 1, 'bearing', 'not_bearing') AS exposure_state,
-        sum(toUInt64(evaluation_count)) AS evaluations
-    FROM raw_evaluations
-    WHERE organization_id = {{String(organization_id)}}
-        AND server_received_at >= {{DateTime64(period_start)}}
-        AND server_received_at < {{DateTime64(period_end)}}
-        AND isNotNull(evaluation_count)
-        AND isNotNull(is_batch)
-        AND isNotNull(is_cached)
-        AND isNotNull(has_exposure)
-        AND evaluation_count >= 0
+        dedup_organization_id AS organization_id,
+        dedup_app_id AS app_id,
+        dedup_environment_id AS environment_id,
+        if(dedup_is_batch = 1, 'batch', 'single') AS batch_mode,
+        if(dedup_is_cached = 1, 'cached', 'remote') AS evaluation_source,
+        if(dedup_has_exposure = 1, 'bearing', 'not_bearing') AS exposure_state,
+        sum(toUInt64(dedup_evaluation_count)) AS evaluations
+    FROM (
+        SELECT
+            dedup_key,
+            argMax(organization_id, server_received_at) AS dedup_organization_id,
+            argMax(app_id, server_received_at) AS dedup_app_id,
+            argMax(environment_id, server_received_at) AS dedup_environment_id,
+            argMax(evaluation_count, server_received_at) AS dedup_evaluation_count,
+            argMax(is_batch, server_received_at) AS dedup_is_batch,
+            argMax(is_cached, server_received_at) AS dedup_is_cached,
+            argMax(has_exposure, server_received_at) AS dedup_has_exposure
+        FROM raw_evaluations
+        WHERE organization_id = {{String(organization_id)}}
+            AND server_received_at >= {{DateTime64(period_start)}}
+            AND server_received_at < {{DateTime64(period_end)}}
+            AND isNotNull(evaluation_count)
+            AND isNotNull(is_batch)
+            AND isNotNull(is_cached)
+            AND isNotNull(has_exposure)
+            AND evaluation_count >= 0
+        GROUP BY dedup_key
+    )
     GROUP BY
-        organization_id,
-        app_id,
-        environment_id,
+        dedup_organization_id,
+        dedup_app_id,
+        dedup_environment_id,
         batch_mode,
         evaluation_source,
         exposure_state

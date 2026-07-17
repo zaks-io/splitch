@@ -18,12 +18,17 @@ const scriptPath = join(repoRoot, "scripts/sync-worker-secrets.mjs");
 
 test("syncs hosted Worker secrets through Wrangler versions without deploying immediately", () => {
   const fixture = createFixture({
-    requiredSecrets: ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN"],
+    requiredSecrets: [
+      "SENTRY_DSN",
+      "SPLITCH_EVENT_INGEST_TOKEN",
+      "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN",
+    ],
   });
 
   const result = runSync(fixture, {
     SENTRY_DSN: "https://example.invalid/1",
     SPLITCH_EVENT_INGEST_TOKEN: "fake-event-ingest-token",
+    TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN: "fake-raw-evaluations-token",
   });
 
   assert.equal(result.status, 0, result.stderr);
@@ -32,7 +37,11 @@ test("syncs hosted Worker secrets through Wrangler versions without deploying im
   assert.deepEqual(call.args.slice(0, 5), ["exec", "wrangler", "versions", "secret", "bulk"]);
   assert.deepEqual(call.args.slice(6), ["--env", "production"]);
   assert.equal(call.cwd, realpathSync(join(fixture.root, "apps/evaluation-api")));
-  assert.deepEqual(Object.keys(call.secrets).sort(), ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN"]);
+  assert.deepEqual(Object.keys(call.secrets).sort(), [
+    "SENTRY_DSN",
+    "SPLITCH_EVENT_INGEST_TOKEN",
+    "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN",
+  ]);
   assert.equal(existsSync(call.secretsFile), false);
 });
 

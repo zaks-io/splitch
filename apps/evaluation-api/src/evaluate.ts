@@ -35,7 +35,12 @@ interface EvaluateRouteDeps extends EvaluatePathDeps {
 type CredentialScope = EvaluationUsageScope;
 
 export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
-  return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
+  return async ({
+    input,
+    principal,
+    requestId,
+    request,
+  }: HandlerArgs<unknown>): Promise<Response> => {
     const parsed = evaluateInput(input);
     const scope = credentialScope(principal);
     if (!scope.ok) return renderError(scope.error, { requestId });
@@ -44,7 +49,7 @@ export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
     if (assertionError !== null) return renderError(assertionError, { requestId });
 
     const evaluated = await evaluateWithCapture(parsed.body, scope.value, deps);
-    return evaluateResponse(evaluated, deps, requestId);
+    return evaluateResponse(evaluated, deps, requestId, request);
   };
 }
 
@@ -54,7 +59,7 @@ function credentialScope(
   if (principal.orgId === null || principal.appId === null || principal.environmentId === null) {
     return {
       ok: false,
-      error: errorResponse("INTERNAL_SERVER_ERROR", "credential is not fully scoped"),
+      error: errorResponse("SERVICE_UNAVAILABLE", "credential cache migration is required"),
     };
   }
   return {
@@ -97,6 +102,7 @@ async function evaluateResponse(
   evaluated: Awaited<ReturnType<typeof evaluateWithCapture>>,
   deps: EvaluateRouteDeps,
   requestId: string,
+  request: Request,
 ): Promise<Response> {
   const { output, provider } = evaluated;
   if (output.result.kind === "error") {
@@ -118,6 +124,7 @@ async function evaluateResponse(
 
   const usageWrite = await writeEvaluationUsage(
     output.exposures.length > 0,
+    request.headers.get("idempotency-key") ?? requestId,
     evaluated.scope,
     deps,
     () => errorResponse("SERVICE_UNAVAILABLE", "Evaluation usage ingest is unavailable"),

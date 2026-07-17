@@ -76,6 +76,11 @@ function validateSplitchDatasourceContracts(root) {
     "raw_evaluations must declare splitch DEDUP_KEY=dedup_key",
   );
   requireInstruction(
+    readFileSync(join(root, "pipes", "analysis_evaluation_usage.pipe"), "utf8"),
+    /GROUP BY dedup_key/,
+    "evaluation usage pipe must deduplicate logical Evaluation rows",
+  );
+  requireInstruction(
     rawEvents,
     /^ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, run_id, server_received_at, targeting_key_hash"$/m,
     "raw_events sorting key must be app_id-first",

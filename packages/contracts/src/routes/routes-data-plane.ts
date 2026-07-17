@@ -34,7 +34,7 @@ export const dataPlaneRoutes = [
     response: DataPlaneEvaluateResponseSchema,
     auth: "client-key",
     rateLimit: "client-key",
-    idempotency: "none",
+    idempotency: "optional",
     errors: [
       "UNAUTHORIZED",
       "CREDENTIAL_REVOKED",

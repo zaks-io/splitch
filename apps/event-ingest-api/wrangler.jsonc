@@ -20,7 +20,12 @@
     }
   },
   "secrets": {
-    "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+    "required": [
+      "SENTRY_DSN",
+      "SPLITCH_EVENT_INGEST_TOKEN",
+      "TINYBIRD_INGEST_TOKEN",
+      "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN"
+    ]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
@@ -52,7 +57,12 @@
       },
       "routes": [{ "pattern": "ingest.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+        "required": [
+          "SENTRY_DSN",
+          "SPLITCH_EVENT_INGEST_TOKEN",
+          "TINYBIRD_INGEST_TOKEN",
+          "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
@@ -79,7 +89,12 @@
       },
       "routes": [{ "pattern": "ingest.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"]
+        "required": [
+          "SENTRY_DSN",
+          "SPLITCH_EVENT_INGEST_TOKEN",
+          "TINYBIRD_INGEST_TOKEN",
+          "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",

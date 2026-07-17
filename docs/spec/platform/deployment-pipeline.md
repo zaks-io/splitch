@@ -222,8 +222,10 @@ or any Durable Object migration.
 - The Auth API declares `WORKOS_CLIENT_ID` and `WORKOS_API_KEY` as required hosted Worker bindings so
   hosted device flow cannot silently fall back to the local fixture adapter. `WORKOS_CLIENT_ID` is a
   GitHub environment variable, not a repository-committed Wrangler value.
-- Event Ingest declares `SPLITCH_EVENT_INGEST_TOKEN` and `TINYBIRD_INGEST_TOKEN` as required
-  Worker secrets. `TINYBIRD_API_URL` is non-secret Worker config and points at the Tinybird region API.
+- Event Ingest declares `SPLITCH_EVENT_INGEST_TOKEN`, `TINYBIRD_INGEST_TOKEN`, and the least-privilege
+  `TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN` as required Worker secrets. The first Tinybird token appends
+  Exposure/Activation rows; the second appends only `raw_evaluations`. `TINYBIRD_API_URL` is non-secret
+  Worker config and points at the Tinybird region API.
 - Secret rotation is its own release. Do not hide secret changes inside an unrelated code deploy.
 
 ### Sentry source maps

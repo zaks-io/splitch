@@ -114,6 +114,24 @@ describe("fail-loud: every error row returns Default Variant + reason ERROR + no
 });
 
 describe("createFetchTransport (real wire adapter): stub fetch, no network", () => {
+  it("forwards a caller's stable idempotency key on the wire", async () => {
+    let seenHeaders: Headers | undefined;
+    const t = transport(((url: URL | RequestInfo, init?: RequestInit) => {
+      void url;
+      seenHeaders = new Headers(init?.headers);
+      return Promise.resolve(
+        new Response(JSON.stringify({ variant: true }), {
+          status: 200,
+          headers: { "x-run-id": "run-42" },
+        }),
+      );
+    }) as typeof fetch);
+
+    await t.evaluate({ ...REQ, idempotencyKey: "logical-evaluation-1" });
+
+    expect(seenHeaders?.get("idempotency-key")).toBe("logical-evaluation-1");
+  });
+
   it("200 -> extracts variant from the bare body and runId from the X-Run-Id header", async () => {
     const t = transport(
       stubFetch(

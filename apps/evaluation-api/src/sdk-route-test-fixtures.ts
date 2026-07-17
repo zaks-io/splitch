@@ -2,9 +2,11 @@ import {
   apiKeyCacheKey,
   clientKeyCacheKey,
   CredentialCacheKVSchema,
+  CredentialCacheKVSchemaV1,
   experimentConfigKey,
   flagConfigKey,
   runConfigKey,
+  kvEnvelope,
   type ExperimentConfigKV,
   type FlagConfigKV,
   type RunConfigKV,
@@ -48,6 +50,7 @@ interface SdkRouteHarnessOptions {
   readonly flagOverrides?: Partial<FlagConfigKV>;
   readonly holdovers?: Map<string, { runId: string; variant: string }>;
   readonly runOverrides?: Partial<RunConfigKV>;
+  readonly legacyClientKey?: boolean;
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -72,13 +75,14 @@ function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
     : kv;
 }
 
-async function seededCredentialKv(): Promise<FakeKv> {
-  return new FakeKv()
+async function seededCredentialKv(options: SdkRouteHarnessOptions = {}): Promise<FakeKv> {
+  const credentialKv = new FakeKv()
     .put(
       clientKeyCacheKey(await sha256Hex(CLIENT_KEY)),
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        credentialSchemaVersion: 2,
         organizationId: ORGANIZATION_ID,
         kind: "client_key",
         scopes: ["data-plane:evaluate"],
@@ -93,6 +97,7 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        credentialSchemaVersion: 2,
         organizationId: ORGANIZATION_ID,
         kind: "client_key",
         scopes: ["data-plane:evaluate"],
@@ -107,6 +112,7 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        credentialSchemaVersion: 2,
         organizationId: ORGANIZATION_ID,
         kind: "api_key",
         scopes: ["data-plane:evaluate"],
@@ -119,6 +125,7 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        credentialSchemaVersion: 2,
         organizationId: ORGANIZATION_ID,
         kind: "api_key",
         scopes: [],
@@ -131,6 +138,7 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        credentialSchemaVersion: 2,
         organizationId: ORGANIZATION_ID,
         kind: "client_key",
         scopes: ["data-plane:evaluate"],
@@ -138,11 +146,34 @@ async function seededCredentialKv(): Promise<FakeKv> {
         cachedAt: "2026-07-02T00:00:00.000Z",
       }),
     );
+
+  if (options.legacyClientKey) {
+    credentialKv.putRaw(
+      clientKeyCacheKey(await sha256Hex(CLIENT_KEY)),
+      JSON.stringify(
+        kvEnvelope(CredentialCacheKVSchemaV1).parse({
+          schemaVersion: 1,
+          data: {
+            appId: APP_ID,
+            environmentId: ENVIRONMENT_ID,
+            kind: "client_key",
+            scopes: ["data-plane:evaluate"],
+            originAllowlist: null,
+            rateLimitRps: null,
+            revoked: false,
+            cachedAt: "2026-07-02T00:00:00.000Z",
+          },
+        }),
+      ),
+    );
+  }
+
+  return credentialKv;
 }
 
 export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) {
   const configKv = seededConfigKv(options);
-  const credentialKv = await seededCredentialKv();
+  const credentialKv = await seededCredentialKv(options);
   const assignmentStore = new RecordingAssignmentStore({ holdovers: options.holdovers });
   const exposureSink = options.exposureSink ?? new RecordingExposureSink();
   const evaluationUsageSink = options.evaluationUsageSink ?? new RecordingEvaluationUsageSink();

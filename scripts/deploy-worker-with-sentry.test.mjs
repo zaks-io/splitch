@@ -18,12 +18,17 @@ const scriptPath = join(repoRoot, "scripts/deploy-worker-with-sentry.mjs");
 
 test("passes required Worker secrets to wrangler deploy as a temporary secrets file", () => {
   const fixture = createFixture({
-    requiredSecrets: ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN"],
+    requiredSecrets: [
+      "SENTRY_DSN",
+      "SPLITCH_EVENT_INGEST_TOKEN",
+      "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN",
+    ],
   });
 
   const result = runDeploy(fixture, ["--env", "production", "--strict"], {
     SENTRY_DSN: "https://example.invalid/1",
     SPLITCH_EVENT_INGEST_TOKEN: "fake-event-ingest-token",
+    TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN: "fake-raw-evaluations-token",
     SPLITCH_REQUIRE_WORKER_SECRET_ENV: "1",
   });
 
@@ -34,7 +39,11 @@ test("passes required Worker secrets to wrangler deploy as a temporary secrets f
   assert.notEqual(secretsFileIndex, -1);
   assert.deepEqual(call.args.slice(0, 3), ["exec", "wrangler", "deploy"]);
   assert.deepEqual(call.args.slice(secretsFileIndex + 2), []);
-  assert.deepEqual(Object.keys(call.secrets).sort(), ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN"]);
+  assert.deepEqual(Object.keys(call.secrets).sort(), [
+    "SENTRY_DSN",
+    "SPLITCH_EVENT_INGEST_TOKEN",
+    "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN",
+  ]);
   assert.equal(existsSync(call.secretsFile), false);
 });
 
@@ -176,6 +185,7 @@ function runDeploy(fixture, args, extraEnv = {}, fakeWranglerExit = "0") {
     "SENTRY_ORG",
     "SENTRY_PROJECT",
     "SPLITCH_EVENT_INGEST_TOKEN",
+    "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN",
     "SPLITCH_GENERATED_WRANGLER_ENV",
     "SPLITCH_PLATFORM_TARGET",
     "SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV",

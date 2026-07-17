@@ -1,4 +1,5 @@
 export interface EvaluationUsageEvent {
+  readonly idempotencyKey: string;
   readonly organizationId: string;
   readonly appId: string;
   readonly environmentId: string;

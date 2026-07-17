@@ -4,6 +4,7 @@ import { stringField, stringValue } from "./payload";
 import type { CredentialScope, Env, RunScope, Outcome, Payload, TinybirdDelivery } from "./types";
 
 const rawEventsDatasource = "raw_events";
+const rawEvaluationsDatasource = "raw_evaluations";
 
 export interface EvaluationUsageEvent {
   readonly eventId: string;
@@ -96,10 +97,15 @@ export function evaluationUsageEvent(
   payload: Payload,
   scope: CredentialScope & { organizationId: string },
 ): Outcome<EvaluationUsageEvent> {
+  const idempotencyKey = stringField(payload, "idempotencyKey");
   const evaluationCount = payload.evaluationCount;
   const isBatch = payload.isBatch;
   const isCached = payload.isCached;
   const hasExposure = payload.hasExposure;
+  if (!idempotencyKey.ok) return idempotencyKey;
+  if (idempotencyKey.value.length > 255) {
+    return { ok: false, error: invalidEvaluationUsageField("idempotencyKey") };
+  }
   if (
     typeof evaluationCount !== "number" ||
     !Number.isInteger(evaluationCount) ||
@@ -122,7 +128,7 @@ export function evaluationUsageEvent(
   return {
     ok: true,
     value: {
-      eventId: crypto.randomUUID(),
+      eventId: idempotencyKey.value,
       organizationId: scope.organizationId,
       appId: scope.appId,
       environmentId: scope.environmentId,
@@ -154,7 +160,10 @@ export function tinybirdDelivery(
   env: Env,
   datasource = rawEventsDatasource,
 ): Outcome<TinybirdDelivery> {
-  const token = env.TINYBIRD_INGEST_TOKEN;
+  const token =
+    datasource === rawEvaluationsDatasource
+      ? env.TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN
+      : env.TINYBIRD_INGEST_TOKEN;
   if (!token) {
     return { ok: false, error: serviceUnavailable("Tinybird ingest token is unavailable") };
   }

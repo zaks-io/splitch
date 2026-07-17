@@ -76,6 +76,9 @@ async function writeCredentialCache(
   value: CredentialCacheKV,
   failLoud: boolean,
 ): Promise<void> {
+  if (!value.revoked && value.organizationId === null) {
+    throw new Error("credential cache active writes require an organizationId");
+  }
   // Active entries are written WITHOUT an expiry: the data plane has no D1
   // fallback on a KV miss (it rejects UNAUTHORIZED), so an expiring entry would
   // brick a deployed SDK key one TTL after the last control-plane touch.
@@ -101,6 +104,7 @@ function clientKeyCache(
   return {
     appId: row.appId,
     environmentId: row.environmentId,
+    credentialSchemaVersion: 2,
     organizationId,
     kind: "client_key",
     scopes: ["data-plane:evaluate"],
@@ -120,6 +124,7 @@ function apiKeyCache(
   return {
     appId: row.appId,
     environmentId: row.environmentId,
+    credentialSchemaVersion: 2,
     organizationId,
     kind: "api_key",
     scopes: JSON.parse(row.scopes) as string[],

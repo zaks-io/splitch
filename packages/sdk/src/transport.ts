@@ -30,6 +30,8 @@ export interface TransportRequest {
   readonly targetingKey: string;
   readonly idType: string;
   readonly attributes: Readonly<Record<string, AttributeValue>>;
+  /** Reused by a caller that retries an uncertain response. */
+  readonly idempotencyKey?: string;
 }
 
 export interface TransportFailure {

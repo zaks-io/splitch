@@ -57,6 +57,9 @@ describe("Evaluation usage ingest", () => {
     expect(calls.fetch.mock.calls[0]?.[0]).toBe(
       "https://tinybird.test/v0/events?name=raw_evaluations",
     );
+    expect(calls.fetch.mock.calls[0]?.[1]?.headers).toMatchObject({
+      authorization: "Bearer tb_raw_evaluations_ingest_secret",
+    });
     expect(row).toMatchObject({
       organization_id: organizationId,
       app_id: appId,
@@ -83,6 +86,14 @@ describe("Evaluation usage ingest", () => {
 
     expect(calls.response.status).toBe(202);
     expect(expectRow(calls.rows)).toMatchObject({ evaluation_count: 10, is_batch: 1 });
+  });
+
+  it("keeps the logical Evaluation id stable across retries", async () => {
+    const first = await postEvaluation();
+    const second = await postEvaluation();
+
+    expect(expectRow(first.rows).dedup_key).toBe("eval-request-1");
+    expect(expectRow(second.rows).dedup_key).toBe("eval-request-1");
   });
 });
 

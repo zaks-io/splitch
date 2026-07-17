@@ -142,6 +142,9 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
       headers: {
         authorization: `Bearer ${config.credential}`,
         "content-type": "application/json",
+        ...(request.idempotencyKey === undefined
+          ? {}
+          : { "idempotency-key": request.idempotencyKey }),
       },
       body: JSON.stringify({
         flagKey: request.flagKey,

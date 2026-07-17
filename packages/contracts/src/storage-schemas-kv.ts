@@ -123,14 +123,11 @@ export const credentialKinds = ["api_key", "client_key"] as const;
 export const CredentialKindSchema = z.enum(credentialKinds);
 export type CredentialKind = z.infer<typeof CredentialKindSchema>;
 
-export const CredentialCacheKVSchema = z
+/** Schema-v1 credential payloads remain readable during the backfill rollout. */
+export const CredentialCacheKVSchemaV1 = z
   .object({
     appId: z.string(),
     environmentId: z.string(),
-    // Active data-plane credentials are bound to an Organization so usage
-    // telemetry has an authenticated tenant scope. Revoked tombstones retain
-    // a nullable value because their only job is to reject the credential.
-    organizationId: z.string().nullable(),
     kind: CredentialKindSchema,
     scopes: z.array(z.string()),
     originAllowlist: z.array(z.string()).nullable().optional(),
@@ -139,6 +136,33 @@ export const CredentialCacheKVSchema = z
     cachedAt: z.string(),
   })
   .strict();
+
+export const CredentialCacheKVSchema = z
+  .object({
+    appId: z.string(),
+    environmentId: z.string(),
+    // Active data-plane credentials are bound to an Organization so usage
+    // telemetry has an authenticated tenant scope. Revoked tombstones retain
+    // a nullable value because their only job is to reject the credential.
+    credentialSchemaVersion: z.literal(2),
+    organizationId: z.string().nullable(),
+    kind: CredentialKindSchema,
+    scopes: z.array(z.string()),
+    originAllowlist: z.array(z.string()).nullable().optional(),
+    rateLimitRps: z.number().nullable().optional(),
+    revoked: z.boolean(),
+    cachedAt: z.string(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (!value.revoked && value.organizationId === null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["organizationId"],
+        message: "active credentials require an organizationId",
+      });
+    }
+  });
 export type CredentialCacheKV = z.infer<typeof CredentialCacheKVSchema>;
 
 // ---------------------------------------------------------------------------
