@@ -105,6 +105,44 @@ export const deviceRefreshSessions = sqliteTable("device_refresh_sessions", {
 });
 
 /**
+ * Bounded Door B workflow state. Identifiers are SHA-256 digests, never raw
+ * email addresses, WorkOS user ids, OTPs, or session tokens.
+ */
+export const claimVerifications = sqliteTable("claim_verifications", {
+  id: text("id").primaryKey(),
+  provisionalUserHash: text("provisional_user_hash").notNull(),
+  emailHash: text("email_hash").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  verifiedAt: text("verified_at"),
+  consumedAt: text("consumed_at"),
+  createdAt: createdAt(),
+});
+
+export const claimConsentAttempts = sqliteTable("claim_consent_attempts", {
+  id: text("id").primaryKey(),
+  verificationId: text("verification_id")
+    .notNull()
+    .references(() => claimVerifications.id),
+  existingUserHash: text("existing_user_hash").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  approvedAt: text("approved_at"),
+  consumedAt: text("consumed_at"),
+  createdAt: createdAt(),
+});
+
+export const claimIdempotency = sqliteTable("claim_idempotency", {
+  keyHash: text("key_hash").primaryKey(),
+  verificationId: text("verification_id")
+    .notNull()
+    .references(() => claimVerifications.id),
+  provisionalUserHash: text("provisional_user_hash").notNull(),
+  emailHash: text("email_hash").notNull(),
+  completedAt: text("completed_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+});
+
+/**
  * Trusted IdP allow-list for ID-JAG validation (access-control-matrix.md). Org
  * owner CRUD only; unknown `issuer` fails loud as `unknown_issuer`. `enabled = 0`
  * IdPs are rejected, never silently skipped.

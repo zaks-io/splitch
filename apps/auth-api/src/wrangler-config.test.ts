@@ -33,6 +33,15 @@ describe("Auth Worker Wrangler runtime config", () => {
   it.each([
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
+  ])("fails closed on missing WorkOS JWT verification configuration for %s", (_target, target) => {
+    expect(target?.secrets?.required).toEqual(
+      expect.arrayContaining(["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_AUTH_AUDIENCE"]),
+    );
+  });
+
+  it.each([
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
   ])("requires a hosted access-token signing key for %s", (_target, target) => {
     expect(target?.secrets?.required).toContain("ACCESS_TOKEN_SECRET");
     expect(target?.vars?.ACCESS_TOKEN_SECRET).toBeUndefined();

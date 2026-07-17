@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthLogoutRouteImport } from './routes/auth.logout'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as ClaimConsentAttemptIdRouteImport } from './routes/claim.consent.$attemptId'
 import { Route as OrgSlugAppSlugEnvRouteImport } from './routes/$orgSlug.$appSlug.$env'
 import { Route as OrgSlugAppSlugEnvSettingsRouteImport } from './routes/$orgSlug.$appSlug.$env.settings'
 import { Route as OrgSlugAppSlugEnvFlagsRouteImport } from './routes/$orgSlug.$appSlug.$env.flags'
@@ -50,6 +51,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ClaimConsentAttemptIdRoute = ClaimConsentAttemptIdRouteImport.update({
+  id: '/claim/consent/$attemptId',
+  path: '/claim/consent/$attemptId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrgSlugAppSlugEnvRoute = OrgSlugAppSlugEnvRouteImport.update({
   id: '/$orgSlug/$appSlug/$env',
   path: '/$orgSlug/$appSlug/$env',
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRouteWithChildren
+  '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
   '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
@@ -93,6 +100,7 @@ export interface FileRoutesByTo {
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRouteWithChildren
+  '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
   '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
@@ -106,6 +114,7 @@ export interface FileRoutesById {
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRouteWithChildren
+  '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
   '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
@@ -120,6 +129,7 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/auth/logout'
     | '/$orgSlug/$appSlug/$env'
+    | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
     | '/$orgSlug/$appSlug/$env/settings'
@@ -132,6 +142,7 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/auth/logout'
     | '/$orgSlug/$appSlug/$env'
+    | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
     | '/$orgSlug/$appSlug/$env/settings'
@@ -144,6 +155,7 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/auth/logout'
     | '/$orgSlug/$appSlug/$env'
+    | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
     | '/$orgSlug/$appSlug/$env/settings'
@@ -157,6 +169,7 @@ export interface RootRouteChildren {
   AuthLoginRoute: typeof AuthLoginRoute
   AuthLogoutRoute: typeof AuthLogoutRoute
   OrgSlugAppSlugEnvRoute: typeof OrgSlugAppSlugEnvRouteWithChildren
+  ClaimConsentAttemptIdRoute: typeof ClaimConsentAttemptIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -201,6 +214,13 @@ declare module '@tanstack/react-router' {
       path: '/auth/callback'
       fullPath: '/auth/callback'
       preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/claim/consent/$attemptId': {
+      id: '/claim/consent/$attemptId'
+      path: '/claim/consent/$attemptId'
+      fullPath: '/claim/consent/$attemptId'
+      preLoaderRoute: typeof ClaimConsentAttemptIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/$orgSlug/$appSlug/$env': {
@@ -257,6 +277,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthLoginRoute: AuthLoginRoute,
   AuthLogoutRoute: AuthLogoutRoute,
   OrgSlugAppSlugEnvRoute: OrgSlugAppSlugEnvRouteWithChildren,
+  ClaimConsentAttemptIdRoute: ClaimConsentAttemptIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

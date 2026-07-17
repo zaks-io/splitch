@@ -6,7 +6,7 @@ import { completeAuthKitCallback } from "./authkit";
 const NOW = Date.UTC(2026, 6, 5, 12, 0, 0);
 
 describe("WorkOS AuthKit callback materialization", () => {
-  it("stores a KV-backed principal from WorkOS user and session ids without persisting tokens", async () => {
+  it("stores the WorkOS JWT only in the KV-backed server session, never in the cookie", async () => {
     const kv = new MemoryKv();
     const accessToken = jwt({ sid: "workos_session_1" });
     let authRequest: Parameters<AuthKitClient["authenticateWithCode"]>[0] | undefined;
@@ -45,12 +45,13 @@ describe("WorkOS AuthKit callback materialization", () => {
     });
     expect(callback.cookie).toContain("HttpOnly");
     expect(callback.cookie).toContain("Secure");
+    expect(callback.cookie).not.toContain(accessToken);
 
     const stored = [...kv.store.values()].join("\n");
     expect(stored).toContain("workos_session_1");
     expect(stored).toContain("user_1");
     expect(stored).toContain("checkout-api");
-    expect(stored).not.toContain(accessToken);
+    expect(stored).toContain(accessToken);
   });
 });
 

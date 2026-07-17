@@ -16,12 +16,13 @@ import { makeRateLimiter } from "./rate-limit";
 import { makeKvRevocationStore } from "./revocation";
 import { makeTokenSigner } from "./token-exchange";
 import { makeFixtureTurnstile, makeRuntimeTurnstile } from "./turnstile";
-import { makeFixtureWorkOs } from "./workos";
+import { makeFixtureWorkOs, makeHostedWorkOs } from "./workos";
+import { makeWorkOsAccessTokenVerifier } from "./workos-access-token";
 import type { SmokeClientCredentials } from "./oauth-routes";
 
 const service = "splitch-auth-api";
 
-const workos = makeFixtureWorkOs();
+const fixtureWorkos = makeFixtureWorkOs();
 const otp = makeFixtureOtp();
 const fixtureTurnstile = makeFixtureTurnstile();
 const rateLimiter = makeRateLimiter();
@@ -52,6 +53,7 @@ const handler = {
     const accessSecret = env.ACCESS_TOKEN_SECRET ?? "local-dev-access-secret";
     const consentBaseUrl = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
     const now = () => Date.now();
+    const workos = hostedWorkOs(env);
     const deviceFlow = env.WORKOS_CLIENT_ID
       ? makeWorkOsDeviceFlow({
           clientId: env.WORKOS_CLIENT_ID,
@@ -82,6 +84,7 @@ const handler = {
       },
       register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },
       claim: { repo, workos, otp, idempotency, tokenSigner, rateLimiter, consentBaseUrl, now },
+      workosAccessTokens: workosAccessTokenVerifier(env),
       deviceFlow,
       deviceRefreshSessions: makeD1DeviceRefreshSessionStore(repo, {
         cache: env.SESSION_STORE,
@@ -114,6 +117,33 @@ function sharedPreviewSmokeClient(env: AuthApiEnv): SmokeClientCredentials | und
       .split(/\s+/)
       .filter(Boolean),
   };
+}
+
+function hostedWorkOs(env: AuthApiEnv) {
+  if (
+    env.SPLITCH_PLATFORM_TARGET !== "shared-preview" &&
+    env.SPLITCH_PLATFORM_TARGET !== "production"
+  ) {
+    return fixtureWorkos;
+  }
+  // Wrangler requires this binding for deployed targets. Keeping the local test
+  // harness fixture-capable lets Turnstile reject before any provider call.
+  if (!env.WORKOS_API_KEY) return fixtureWorkos;
+  return makeHostedWorkOs({ apiKey: env.WORKOS_API_KEY, baseUrl: env.WORKOS_API_BASE_URL });
+}
+
+function workosAccessTokenVerifier(env: AuthApiEnv) {
+  if (
+    env.SPLITCH_PLATFORM_TARGET !== "shared-preview" &&
+    env.SPLITCH_PLATFORM_TARGET !== "production"
+  )
+    return undefined;
+  if (!env.WORKOS_JWKS_URI || !env.WORKOS_ISSUER || !env.WORKOS_AUTH_AUDIENCE) return undefined;
+  return makeWorkOsAccessTokenVerifier({
+    jwksUri: env.WORKOS_JWKS_URI,
+    issuer: env.WORKOS_ISSUER,
+    audience: env.WORKOS_AUTH_AUDIENCE,
+  });
 }
 
 function accessTokenTrustContract(target: string | undefined): "local-hs256" | "rs256-jwks" {

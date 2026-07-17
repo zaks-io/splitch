@@ -15,7 +15,13 @@ const MAX_SESSION_TTL_SECONDS = 60 * 60 * 24;
 
 const ORG_ROLES = new Set(["owner", "admin", "member"]);
 const APP_ROLES = new Set(["owner", "admin", "member", "viewer"]);
-const STORED_SESSION_KEYS = new Set(["userId", "orgs", "expiresAt", "workosSessionId"]);
+const STORED_SESSION_KEYS = new Set([
+  "userId",
+  "orgs",
+  "expiresAt",
+  "workosSessionId",
+  "workosAccessToken",
+]);
 const ORG_MEMBERSHIP_KEYS = new Set(["orgId", "orgSlug", "orgRole", "apps"]);
 const APP_MEMBERSHIP_KEYS = new Set(["appId", "appSlug", "role"]);
 
@@ -43,6 +49,8 @@ export interface SessionPrincipal {
 export interface StoredSession extends SessionPrincipal {
   expiresAt: number;
   workosSessionId?: string;
+  /** Server-only proof forwarded to Auth API; never included in publicSession. */
+  workosAccessToken?: string;
 }
 
 export type SessionLoadResult =
@@ -185,6 +193,7 @@ function isStoredSession(value: Partial<StoredSession>): value is StoredSession 
     isNonEmptyString(value.userId) &&
     Number.isInteger(value.expiresAt) &&
     (value.workosSessionId === undefined || isNonEmptyString(value.workosSessionId)) &&
+    (value.workosAccessToken === undefined || isNonEmptyString(value.workosAccessToken)) &&
     Array.isArray(value.orgs) &&
     value.orgs.every(isOrgMembership)
   );

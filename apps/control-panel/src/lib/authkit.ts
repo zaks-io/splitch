@@ -83,7 +83,11 @@ export async function completeAuthKitCallback(input: CompleteAuthKitCallbackInpu
     workosSessionId,
   });
 
-  const session = await createSession(input.kv, sessionPrincipal, input.now);
+  const session = await createSession(
+    input.kv,
+    { ...sessionPrincipal, workosAccessToken: authentication.accessToken },
+    input.now,
+  );
   return { cookie: session.cookie };
 }
 

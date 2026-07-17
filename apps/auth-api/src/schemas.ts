@@ -35,6 +35,7 @@ export const ClaimRequestSchema = z.object({
   identity_assertion: z.string().min(1),
   email: z.string().min(1),
   otp: z.string().min(1).optional(),
+  verification_id: z.string().min(1).optional(),
   idempotency_key: z.string().min(1).optional(),
 });
 

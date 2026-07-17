@@ -81,7 +81,7 @@ export function makeFixtureOtp(): OtpVerifier {
 }
 
 /** A completed claim's result, replayed verbatim for a same-key retry. */
-export interface ClaimRecord {
+interface ClaimRecord {
   userId: string;
   orgId: string;
   appId: string;
