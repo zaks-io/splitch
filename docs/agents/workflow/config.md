@@ -141,7 +141,13 @@ real package API boundary.
     `5da0715b-c413-47d7-b3c7-e766fe8a1f77`, Duplicate
     `c78a35d2-97c6-4023-930e-0962a2de4376`
 - Query-safe names: team name `Splitch` or its UUID both resolve in Linear
-  tools. Prefer the UUID for status/label/issue queries.
+  tracker tools. Prefer the UUID for tracker-tool status/label/issue queries.
+- Workflow script team argument: pass the Linear team key `SPL` to
+  `tick-snapshot.mjs --linear-team`. The script filters by team key; passing the
+  team UUID returns an empty issue set and must not be treated as an empty
+  queue. For default triage, use
+  `--linear-team SPL --linear-states Todo,Triage`; add `Backlog` only when that
+  state is explicitly in scope.
 - Verification query: `list_projects(team=<uuid>)` resolves project
   `splitch v1`; `list_issues(team=<uuid>, state=Todo)` and active-state
   queries are the live queue refresh shape. Do not store issue counts here.
