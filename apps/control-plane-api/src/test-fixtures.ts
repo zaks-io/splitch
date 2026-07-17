@@ -11,7 +11,7 @@ import { Miniflare } from "miniflare";
  */
 
 const SCHEMA = [
-  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, claim_acquired_at TEXT, claim_acquisition_token TEXT, claim_acquisition_key_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
   `CREATE TABLE apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX apps_org_key_unique ON apps (organization_id, key)`,
@@ -38,6 +38,9 @@ const SCHEMA = [
   `CREATE UNIQUE INDEX metrics_app_key_unique ON metrics (app_id, key)`,
   `CREATE TABLE privacy_requests (request_id TEXT PRIMARY KEY NOT NULL, org_id TEXT NOT NULL, app_id TEXT, request_type TEXT NOT NULL, subject_type TEXT NOT NULL, subject_ref TEXT NOT NULL, requested_by TEXT NOT NULL, status TEXT NOT NULL, received_at TEXT NOT NULL, ack_due_at TEXT NOT NULL, response_due_at TEXT NOT NULL, completed_at TEXT, denial_reason TEXT)`,
   `CREATE TABLE entity_deletions (app_id TEXT NOT NULL, id_type TEXT NOT NULL, targeting_key_hash TEXT NOT NULL, delete_before_ts TEXT NOT NULL, requested_at TEXT NOT NULL, completed_at TEXT, PRIMARY KEY (app_id, id_type, targeting_key_hash, delete_before_ts))`,
+  `CREATE TABLE claim_verifications (id TEXT PRIMARY KEY NOT NULL, provisional_user_hash TEXT NOT NULL, email_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER DEFAULT 0 NOT NULL, verified_at TEXT, consumed_at TEXT, created_at TEXT NOT NULL)`,
+  `CREATE TABLE claim_consent_attempts (id TEXT PRIMARY KEY NOT NULL, verification_id TEXT NOT NULL, existing_user_hash TEXT NOT NULL, expires_at TEXT NOT NULL, approved_at TEXT, consumed_at TEXT, created_at TEXT NOT NULL)`,
+  `CREATE TABLE claim_idempotency (key_hash TEXT NOT NULL, verification_id TEXT NOT NULL, provisional_user_hash TEXT NOT NULL, email_hash TEXT NOT NULL, organization_hash TEXT NOT NULL, app_hash TEXT NOT NULL, verified_user_hash TEXT NOT NULL, completed_at TEXT, expires_at TEXT NOT NULL, PRIMARY KEY (key_hash, provisional_user_hash, email_hash, organization_hash, app_hash, verified_user_hash))`,
 ];
 
 export interface LocalBindings {

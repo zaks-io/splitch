@@ -134,41 +134,19 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
     );
     throw consentRequired(deps, consentId, verification.id, now);
   }
-  if (!verification.verifiedAt) {
-    if (collision) {
-      if (
-        !(await deps.repo.claim.markVerifiedFromConsent({
-          ...hashes,
-          id: verification.id,
-          consentAttemptId: approvedConsent as string,
-          now: nowIso,
-        }))
-      ) {
-        throw new OAuthError("server_error", "claim consent changed during confirmation");
-      }
-    } else {
-      if (!input.otp) {
-        throw new OAuthError("invalid_grant", "claim verification requires an OTP");
-      }
-      if (
-        !(await deps.repo.claim.incrementAttempt({
-          ...hashes,
-          id: verification.id,
-          now: nowIso,
-          maxAttempts: MAX_OTP_ATTEMPTS,
-        }))
-      ) {
-        throw new OAuthError("invalid_grant", "OTP attempt limit reached; request a new code");
-      }
-      try {
-        await deps.workos.confirmEmailVerification(claimant.userId, claimant.email, input.otp);
-      } catch {
-        throw new OAuthError("invalid_grant", "WorkOS rejected the email verification code");
-      }
-      if (!(await deps.repo.claim.markVerified({ ...hashes, id: verification.id, now: nowIso }))) {
-        throw new OAuthError("server_error", "claim verification changed during confirmation");
-      }
+  const reservation = {
+    ...identityHashes,
+    keyHash,
+    verificationId: verification.id,
+    expiresAt: iso(now + IDEMPOTENCY_TTL_MS),
+  };
+  // Reserve before WorkOS consumes the one-use OTP. A same-key loser therefore
+  // observes the durable reservation, never a provider-specific OTP failure.
+  if (!(await deps.repo.claim.reserveClaim(reservation))) {
+    if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
+      return tokenize(deps, claimant, verifiedUserId, now);
     }
+    throw new OAuthError("invalid_request", "a claim with this idempotency_key is in progress");
   }
   const transfer = {
     ...identityHashes,
@@ -182,31 +160,57 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
     acquisitionToken: crypto.randomUUID(),
     acquisitionKeyHash: keyHash,
     now: nowIso,
-    expiresAt: iso(now + IDEMPOTENCY_TTL_MS),
   };
-  let applied = false;
   try {
-    applied = await deps.repo.claim.completeClaim(transfer);
-  } catch {
-    if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
+    if (!verification.verifiedAt) {
+      if (collision) {
+        if (
+          !(await deps.repo.claim.markVerifiedFromConsent({
+            ...hashes,
+            id: verification.id,
+            consentAttemptId: approvedConsent as string,
+            now: nowIso,
+          }))
+        ) {
+          throw new OAuthError("server_error", "claim consent changed during confirmation");
+        }
+      } else {
+        if (!input.otp) {
+          throw new OAuthError("invalid_grant", "claim verification requires an OTP");
+        }
+        if (
+          !(await deps.repo.claim.incrementAttempt({
+            ...hashes,
+            id: verification.id,
+            now: nowIso,
+            maxAttempts: MAX_OTP_ATTEMPTS,
+          }))
+        ) {
+          throw new OAuthError("invalid_grant", "OTP attempt limit reached; request a new code");
+        }
+        try {
+          await deps.workos.confirmEmailVerification(claimant.userId, claimant.email, input.otp);
+        } catch {
+          throw new OAuthError("invalid_grant", "WorkOS rejected the email verification code");
+        }
+        if (
+          !(await deps.repo.claim.markVerified({ ...hashes, id: verification.id, now: nowIso }))
+        ) {
+          throw new OAuthError("server_error", "claim verification changed during confirmation");
+        }
+      }
+    }
+    if (await deps.repo.claim.completeClaim(transfer)) {
       return tokenize(deps, claimant, verifiedUserId, now);
     }
-    throw new OAuthError("invalid_request", "a claim with this idempotency_key is in progress");
-  }
-  if (!applied) {
     if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
       return tokenize(deps, claimant, verifiedUserId, now);
-    }
-    const acquisitionOwner = await deps.repo.claim.claimAcquisitionOwner({
-      orgId: claimant.orgId,
-      keyHash,
-    });
-    if (acquisitionOwner === "same_key") {
-      throw new OAuthError("invalid_request", "a claim with this idempotency_key is in progress");
     }
     throw new OAuthError("invalid_grant", "claim state changed during transfer");
+  } catch (cause) {
+    await deps.repo.claim.releaseClaimReservation(reservation);
+    throw cause;
   }
-  return tokenize(deps, claimant, verifiedUserId, now);
 }
 
 export async function approveClaimConsent(

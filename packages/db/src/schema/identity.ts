@@ -136,19 +136,35 @@ export const claimConsentAttempts = sqliteTable("claim_consent_attempts", {
   createdAt: createdAt(),
 });
 
-export const claimIdempotency = sqliteTable("claim_idempotency", {
-  keyHash: text("key_hash").primaryKey(),
-  verificationId: text("verification_id")
-    .notNull()
-    .references(() => claimVerifications.id),
-  provisionalUserHash: text("provisional_user_hash").notNull(),
-  emailHash: text("email_hash").notNull(),
-  organizationHash: text("organization_hash").notNull(),
-  appHash: text("app_hash").notNull(),
-  verifiedUserHash: text("verified_user_hash").notNull(),
-  completedAt: text("completed_at").notNull(),
-  expiresAt: text("expires_at").notNull(),
-});
+export const claimIdempotency = sqliteTable(
+  "claim_idempotency",
+  {
+    keyHash: text("key_hash").notNull(),
+    verificationId: text("verification_id")
+      .notNull()
+      .references(() => claimVerifications.id),
+    provisionalUserHash: text("provisional_user_hash").notNull(),
+    emailHash: text("email_hash").notNull(),
+    organizationHash: text("organization_hash").notNull(),
+    appHash: text("app_hash").notNull(),
+    verifiedUserHash: text("verified_user_hash").notNull(),
+    // NULL owns an in-flight ceremony; a timestamp makes its retry replayable.
+    completedAt: text("completed_at"),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [
+        t.keyHash,
+        t.provisionalUserHash,
+        t.emailHash,
+        t.organizationHash,
+        t.appHash,
+        t.verifiedUserHash,
+      ],
+    }),
+  ],
+);
 
 /**
  * Trusted IdP allow-list for ID-JAG validation (access-control-matrix.md). Org

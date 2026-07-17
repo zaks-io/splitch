@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   assertNoPlaceholderHostedBindings,
   assertHostedAuthOrigins,
+  assertHostedAuthVerifierBindings,
   isHostedWranglerEnv,
   requireHostedWranglerEnvTarget,
 } from "./lib/hosted-bindings.mjs";
@@ -250,6 +251,10 @@ function validateHostedEnvBindings(config, envName) {
     if (targetConfig) {
       assertNoPlaceholderHostedBindings(targetConfig, `wrangler.jsonc env.${envName}`);
       assertHostedAuthOrigins(
+        { ...targetConfig, name: config.name },
+        `wrangler.jsonc env.${envName}`,
+      );
+      assertHostedAuthVerifierBindings(
         { ...targetConfig, name: config.name },
         `wrangler.jsonc env.${envName}`,
       );

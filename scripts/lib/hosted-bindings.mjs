@@ -59,6 +59,21 @@ export function assertHostedAuthOrigins(config, source) {
   }
 }
 
+export function assertHostedAuthVerifierBindings(config, source) {
+  if (config?.name !== "splitch-auth-api") {
+    return;
+  }
+  const required = config?.secrets?.required;
+  const missing = ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_AUTH_AUDIENCE"].filter(
+    (name) => !Array.isArray(required) || !required.includes(name),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `${source} must require hosted WorkOS verifier bindings: ${missing.join(", ")}`,
+    );
+  }
+}
+
 function invalidKvBindings(namespaces) {
   if (!Array.isArray(namespaces)) {
     return [];

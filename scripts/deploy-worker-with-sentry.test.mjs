@@ -138,11 +138,31 @@ test("fails before auth Worker deploy when hosted Control Panel origin is missin
   assert.equal(existsSync(fixture.callsPath), false);
 });
 
+for (const missingVerifierBinding of ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_AUTH_AUDIENCE"]) {
+  test(`fails before auth Worker deploy when ${missingVerifierBinding} is not required`, () => {
+    const requiredSecrets = ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_AUTH_AUDIENCE"].filter(
+      (name) => name !== missingVerifierBinding,
+    );
+    const fixture = createFixture({
+      workerName: "splitch-auth-api",
+      targetVars: { CONTROL_PANEL_ORIGIN: "https://app.example.test" },
+      requiredSecrets,
+    });
+
+    const result = runDeploy(fixture, ["--env", "production"]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, new RegExp(missingVerifierBinding));
+    assert.equal(existsSync(fixture.callsPath), false);
+  });
+}
+
 function createFixture({
   requiredSecrets = [],
   bindings = {},
   workerName = "splitch-evaluation-api",
   vars = {},
+  targetVars = {},
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), "splitch-worker-deploy-test-"));
   const binDir = join(root, "bin");
@@ -157,6 +177,7 @@ function createFixture({
       env: {
         production: {
           ...bindings,
+          vars: targetVars,
           secrets: {
             required: requiredSecrets,
           },

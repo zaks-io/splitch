@@ -14,7 +14,6 @@ export interface CompleteClaimInput {
   acquisitionToken: string;
   acquisitionKeyHash: string;
   now: string;
-  expiresAt: string;
 }
 
 export async function completeClaim(d1: D1Database, input: CompleteClaimInput): Promise<boolean> {
@@ -133,21 +132,20 @@ export async function completeClaim(d1: D1Database, input: CompleteClaimInput): 
       : []),
     d1
       .prepare(
-        `INSERT INTO claim_idempotency
-           (key_hash, verification_id, provisional_user_hash, email_hash,
-            organization_hash, app_hash, verified_user_hash, completed_at, expires_at)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${acquiredGuard}`,
+        `UPDATE claim_idempotency SET completed_at = ?
+         WHERE key_hash = ? AND provisional_user_hash = ? AND email_hash = ?
+           AND organization_hash = ? AND app_hash = ? AND verified_user_hash = ?
+           AND verification_id = ? AND completed_at IS NULL AND ${acquiredGuard}`,
       )
       .bind(
+        input.now,
         input.keyHash,
-        input.verificationId,
         input.provisionalUserHash,
         input.emailHash,
         input.organizationHash,
         input.appHash,
         input.verifiedUserHash,
-        input.now,
-        input.expiresAt,
+        input.verificationId,
         ...acquiredValues,
       ),
     d1

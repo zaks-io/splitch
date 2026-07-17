@@ -1,25 +1,12 @@
-import { completeClaim, type CompleteClaimInput } from "./claim-transfer";
+import { makeClaimReservationRepo } from "./claim-reservation";
+import { purgeExpiredClaimArtifacts } from "./claim-retention";
+import { type CompleteClaimInput, completeClaim } from "./claim-transfer";
+import type { ClaimHashes, ClaimVerification } from "./claim-types";
 
-export interface ClaimHashes {
-  provisionalUserHash: string;
-  emailHash: string;
-}
-
-export interface ClaimIdentityHashes extends ClaimHashes {
-  organizationHash: string;
-  appHash: string;
-  verifiedUserHash: string;
-}
-
-export interface ClaimVerification extends ClaimHashes {
-  id: string;
-  expiresAt: string;
-  attempts: number;
-  verifiedAt: string | null;
-  consumedAt: string | null;
-}
+export type { ClaimHashes, ClaimVerification } from "./claim-types";
 
 export function makeClaimStateRepo(d1: D1Database) {
+  const reservations = makeClaimReservationRepo(d1);
   return {
     async createVerification(input: ClaimHashes & { id: string; expiresAt: string; now: string }) {
       await d1
@@ -163,53 +150,16 @@ export function makeClaimStateRepo(d1: D1Database) {
       return row?.id ?? null;
     },
 
-    async completedClaim(input: ClaimIdentityHashes & { keyHash: string; now: string }) {
-      return (
-        (await d1
-          .prepare(
-            `SELECT 1 FROM claim_idempotency
-             WHERE key_hash = ? AND provisional_user_hash = ? AND email_hash = ?
-               AND organization_hash = ? AND app_hash = ? AND verified_user_hash = ?
-               AND expires_at > ?`,
-          )
-          .bind(
-            input.keyHash,
-            input.provisionalUserHash,
-            input.emailHash,
-            input.organizationHash,
-            input.appHash,
-            input.verifiedUserHash,
-            input.now,
-          )
-          .first()) !== null
-      );
-    },
+    ...reservations,
 
-    claimAcquisitionOwner(input: { orgId: string; keyHash: string }) {
-      return getClaimAcquisitionOwner(d1, input);
+    purgeExpiredClaimArtifacts(input: { now: string; limit: number }) {
+      return purgeExpiredClaimArtifacts(d1, input);
     },
 
     completeClaim(d1Input: CompleteClaimInput) {
       return completeClaim(d1, d1Input);
     },
   };
-}
-
-async function getClaimAcquisitionOwner(d1: D1Database, input: { orgId: string; keyHash: string }) {
-  const row = await d1
-    .prepare(
-      `SELECT claim_acquisition_token, claim_acquisition_key_hash
-         FROM organizations WHERE id = ?`,
-    )
-    .bind(input.orgId)
-    .first<{
-      claim_acquisition_token: string | null;
-      claim_acquisition_key_hash: string | null;
-    }>();
-  if (!row?.claim_acquisition_token) return "none" as const;
-  return row.claim_acquisition_key_hash === input.keyHash
-    ? ("same_key" as const)
-    : ("other_key" as const);
 }
 
 function asVerification(row: Record<string, unknown>): ClaimVerification {

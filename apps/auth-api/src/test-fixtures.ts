@@ -102,7 +102,7 @@ const SCHEMA = [
   `CREATE TABLE device_refresh_sessions (refresh_token_hash TEXT PRIMARY KEY NOT NULL, provider_session_id TEXT NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE claim_verifications (id TEXT PRIMARY KEY NOT NULL, provisional_user_hash TEXT NOT NULL, email_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER DEFAULT 0 NOT NULL, verified_at TEXT, consumed_at TEXT, created_at TEXT NOT NULL)`,
   `CREATE TABLE claim_consent_attempts (id TEXT PRIMARY KEY NOT NULL, verification_id TEXT NOT NULL, existing_user_hash TEXT NOT NULL, expires_at TEXT NOT NULL, approved_at TEXT, consumed_at TEXT, created_at TEXT NOT NULL)`,
-  `CREATE TABLE claim_idempotency (key_hash TEXT PRIMARY KEY NOT NULL, verification_id TEXT NOT NULL, provisional_user_hash TEXT NOT NULL, email_hash TEXT NOT NULL, organization_hash TEXT NOT NULL, app_hash TEXT NOT NULL, verified_user_hash TEXT NOT NULL, completed_at TEXT NOT NULL, expires_at TEXT NOT NULL)`,
+  `CREATE TABLE claim_idempotency (key_hash TEXT NOT NULL, verification_id TEXT NOT NULL, provisional_user_hash TEXT NOT NULL, email_hash TEXT NOT NULL, organization_hash TEXT NOT NULL, app_hash TEXT NOT NULL, verified_user_hash TEXT NOT NULL, completed_at TEXT, expires_at TEXT NOT NULL, PRIMARY KEY (key_hash, provisional_user_hash, email_hash, organization_hash, app_hash, verified_user_hash))`,
 ];
 
 export interface LocalBindings {

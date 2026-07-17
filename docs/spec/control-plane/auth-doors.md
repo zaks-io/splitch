@@ -97,6 +97,13 @@ RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md
 6. After WorkOS verification or authenticated consent, one guarded D1 batch first acquires the still-provisional Organization only while the signed provisional User still has the matching Org and App memberships. Every membership mutation, state consumption, and idempotency insert is conditional on that acquisition. Retries after a pre-batch failure are safe.
 7. Return: `{ access_token, user_id, org_id, app_id }`.
 
+### Claim-state retention
+
+The daily Control Plane scheduled reaper purges expired claim artifacts in bounded batches of 100
+verifications. Consent attempts are deleted before their verification rows, and completed or abandoned
+idempotency reservations are retained for their full 24-hour replay window before those verification
+rows become eligible. This preserves one-use and replay behavior while keeping Door B state bounded.
+
 ### `interaction_required` error response
 
 Returned when the claiming email maps to an existing verified user (account-takeover prevention).

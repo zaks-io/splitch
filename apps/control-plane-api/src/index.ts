@@ -66,9 +66,10 @@ async function runDemoReaper(
   event: ScheduledController,
   ctx: Pick<ExecutionContext, "waitUntil">,
 ): Promise<void> {
-  const result = await createRepository(env.DB).identity.reapExpiredProvisionalOrganizations(
-    new Date(event.scheduledTime).toISOString(),
-  );
+  const now = new Date(event.scheduledTime).toISOString();
+  const repo = createRepository(env.DB);
+  const result = await repo.identity.reapExpiredProvisionalOrganizations(now);
+  const claimArtifacts = await repo.claim.purgeExpiredClaimArtifacts({ now, limit: 100 });
   workerEmitter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx)).log(
     "info",
     "demo-reaper",
@@ -78,6 +79,7 @@ async function runDemoReaper(
       cron: event.cron,
       candidates: result.candidates,
       reaped: result.reaped,
+      claimArtifacts,
     },
   );
 }

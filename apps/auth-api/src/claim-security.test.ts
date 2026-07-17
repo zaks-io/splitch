@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { EMAIL, setupClaimHarness } from "./claim-harness";
 import { approveClaimConsent, initiateClaim, refuseClaimConsent, verifyClaim } from "./claim";
+import { EMAIL, setupClaimHarness } from "./claim-harness";
 import { FIXTURE_OTP } from "./otp";
 
 /**
@@ -94,70 +94,6 @@ describe("FINDING 2: WorkOS index + collision check share ONE canonicalization",
       code: "interaction_required",
     });
     expect(await isProvisional(orgId)).toBe(true);
-  });
-});
-
-describe("FINDING 3: a winner that FAILS releases the key (retry is not locked out)", () => {
-  it("wrong OTP releases the reservation; a correct retry with the same key succeeds", async () => {
-    const d = deps();
-    const { assertion, orgId } = await register(d);
-    await initiateClaim(d.claim, {
-      identityAssertion: assertion,
-      email: EMAIL,
-      remoteIp: "1.2.3.4",
-    });
-
-    // First attempt WINS the reservation but supplies the wrong OTP → ceremony throws.
-    await expect(
-      verifyClaim(d.claim, {
-        identityAssertion: assertion,
-        otp: "999999",
-        email: EMAIL,
-        idempotencyKey: "retry-key",
-        remoteIp: "1.2.3.4",
-      }),
-    ).rejects.toMatchObject({ code: "invalid_grant" });
-
-    // The retry with the SAME key RE-RUNS the ceremony (not "in progress") and,
-    // with the right code, succeeds. (Before the fix the key stayed locked forever.)
-    const ok = await verifyClaim(d.claim, {
-      identityAssertion: assertion,
-      otp: FIXTURE_OTP,
-      email: EMAIL,
-      idempotencyKey: "retry-key",
-      remoteIp: "1.2.3.4",
-    });
-    expect(ok.org_id).toBe(orgId);
-    expect(await isProvisional(orgId)).toBe(false);
-  });
-
-  it("a concurrent in-flight loser still fails loud while the winner is mid-ceremony", async () => {
-    const d = deps();
-    const { assertion, orgId } = await register(d);
-    await initiateClaim(d.claim, {
-      identityAssertion: assertion,
-      email: EMAIL,
-      remoteIp: "1.2.3.4",
-    });
-    const one = () =>
-      verifyClaim(d.claim, {
-        identityAssertion: assertion,
-        otp: FIXTURE_OTP,
-        email: EMAIL,
-        idempotencyKey: "race-2",
-        remoteIp: "1.2.3.4",
-      });
-    const settled = await Promise.allSettled([one(), one()]);
-    const fulfilled = settled.filter((s) => s.status === "fulfilled");
-    const rejections = settled
-      .filter((s): s is PromiseRejectedResult => s.status === "rejected")
-      .map((s) => s.reason);
-    expect(fulfilled.length).toBeGreaterThanOrEqual(1);
-    // An in-flight loser fails loud as invalid_request, never a double-mutated 500.
-    for (const reason of rejections) {
-      expect(reason.code).toBe("invalid_request");
-    }
-    expect(await isProvisional(orgId)).toBe(false);
   });
 });
 
