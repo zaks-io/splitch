@@ -190,7 +190,7 @@ function principalFromCredential(hash: string, credential: CredentialCache): Pri
     kind: credential.kind === "client_key" ? "client-key" : "api-key",
     id: `${credential.kind}:${hash.slice(0, 16)}`,
     scopes: credential.scopes,
-    orgId: null,
+    orgId: credential.organizationId,
     appId: credential.appId,
     environmentId: credential.environmentId,
   };

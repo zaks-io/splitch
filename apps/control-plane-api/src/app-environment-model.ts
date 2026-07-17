@@ -62,6 +62,7 @@ export async function createEnvironmentRecord(
 export async function provisionEnvironmentClientKeys(
   deps: AppEnvironmentDeps,
   appId: string,
+  organizationId: string,
   environments: readonly EnvironmentRow[],
 ): Promise<[ClientKey, ClientKey]> {
   const keys = [];
@@ -69,6 +70,7 @@ export async function provisionEnvironmentClientKeys(
     const row = await provisionClientKey(deps, {
       appId,
       environmentId: env.id,
+      organizationId,
       scope: envScope(appId, env.id),
     });
     keys.push(clientKeyResponse(row));

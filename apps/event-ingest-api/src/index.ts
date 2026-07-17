@@ -4,11 +4,12 @@ import {
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
-import { handleIngest } from "./ingest";
+import { handleEvaluationIngest, handleIngest } from "./ingest";
 import type { Env } from "./types";
 
 const service = "splitch-event-ingest-api";
 const ingestPath = "/api/internal/exposures";
+const evaluationIngestPath = "/api/internal/evaluations";
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -31,6 +32,15 @@ const handler = {
         path: url.pathname,
       });
       return handleIngest(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === evaluationIngestPath) {
+      observability.onRequest?.({
+        requestId: request.headers.get("x-request-id") ?? "evaluation-ingest-request",
+        method: request.method,
+        path: url.pathname,
+      });
+      return handleEvaluationIngest(request, env);
     }
 
     return new Response("not found", { status: 404 });

@@ -12,6 +12,8 @@ import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-pa
 import type { EvaluateResult } from "./evaluate/evaluate-path";
 import type { ExposureSink } from "./exposure-sink";
 import { ExposureSinkError } from "./exposure-sink";
+import type { EvaluationUsageSink } from "./evaluation-usage-sink";
+import { writeEvaluationUsage, type EvaluationUsageScope } from "./evaluation-usage";
 import type { FlagConfig, Provider } from "./provider/provider";
 
 type EvaluateInput = {
@@ -21,6 +23,7 @@ type EvaluateInput = {
 interface EvaluateRouteDeps extends EvaluatePathDeps {
   readonly exposureAssembly: ExposureAssemblyDeps;
   readonly exposureSink: ExposureSink;
+  readonly evaluationUsageSink: EvaluationUsageSink;
   /**
    * `ctx.waitUntil` seam for the fire-and-forget Assignment Store write
    * (holdover-write-contract.md). When absent (unit harnesses), the write still
@@ -29,10 +32,7 @@ interface EvaluateRouteDeps extends EvaluatePathDeps {
   readonly waitUntil?: (promise: Promise<unknown>) => void;
 }
 
-interface CredentialScope {
-  readonly appId: string;
-  readonly environmentId: string;
-}
+type CredentialScope = EvaluationUsageScope;
 
 export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
@@ -51,13 +51,20 @@ export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
 function credentialScope(
   principal: Principal,
 ): { ok: true; value: CredentialScope } | { ok: false; error: ErrorResponse } {
-  if (principal.appId === null || principal.environmentId === null) {
+  if (principal.orgId === null || principal.appId === null || principal.environmentId === null) {
     return {
       ok: false,
-      error: errorResponse("INTERNAL_SERVER_ERROR", "credential is not environment-scoped"),
+      error: errorResponse("INTERNAL_SERVER_ERROR", "credential is not fully scoped"),
     };
   }
-  return { ok: true, value: { appId: principal.appId, environmentId: principal.environmentId } };
+  return {
+    ok: true,
+    value: {
+      organizationId: principal.orgId,
+      appId: principal.appId,
+      environmentId: principal.environmentId,
+    },
+  };
 }
 
 function appAssertionError(appId: string | undefined, scopedAppId: string): ErrorResponse | null {
@@ -83,7 +90,7 @@ async function evaluateWithCapture(
     },
   };
   const output = await evaluate(routeInput, { ...deps, provider }, deps.exposureAssembly);
-  return { output, provider };
+  return { output, provider, scope };
 }
 
 async function evaluateResponse(
@@ -108,6 +115,14 @@ async function evaluateResponse(
 
   const write = await writeExposures(output.exposures, deps);
   if (!write.ok) return renderError(write.error, { requestId });
+
+  const usageWrite = await writeEvaluationUsage(
+    output.exposures.length > 0,
+    evaluated.scope,
+    deps,
+    () => errorResponse("SERVICE_UNAVAILABLE", "Evaluation usage ingest is unavailable"),
+  );
+  if (!usageWrite.ok) return renderError(usageWrite.error, { requestId });
 
   // Only record the holdover AFTER the Exposure is accepted by ingest. If the
   // holdover were written first and ingest then 503s, the SDK re-fires and hits

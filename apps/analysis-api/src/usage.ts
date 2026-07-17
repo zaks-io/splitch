@@ -49,12 +49,13 @@ export async function readUsageFromTinybird(
     addCount(aggregate.byBatch, usageRow.mode, usageRow.evaluations);
     addCount(aggregate.bySource, usageRow.source, usageRow.evaluations);
     addCount(aggregate.byExposure, usageRow.exposure, usageRow.evaluations);
+    aggregate.rows += 1;
   }
 
   return {
     organizationId: scope.organizationId,
     period,
-    state: aggregate.evaluations === 0 ? "zero" : "populated",
+    state: aggregate.rows === 0 ? "zero" : "populated",
     evaluations: aggregate.evaluations,
     breakdown: {
       byApp: sortCounts(aggregate.byApp).map(([appId, evaluations]) => ({ appId, evaluations })),
@@ -166,6 +167,7 @@ interface UsageRow {
 
 interface UsageAggregate {
   evaluations: number;
+  rows: number;
   byApp: Map<string, number>;
   byEnvironment: Map<string, number>;
   byBatch: Map<UsageMode, number>;
@@ -176,6 +178,7 @@ interface UsageAggregate {
 function emptyAggregate(): UsageAggregate {
   return {
     evaluations: 0,
+    rows: 0,
     byApp: new Map(),
     byEnvironment: new Map(),
     byBatch: new Map(),

@@ -88,7 +88,10 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
         policy: CONFIRM_POLICY,
         actorId: principal.id,
       });
-      const clientKeys = await provisionEnvironmentClientKeys(deps, app.id, [dev, prod]);
+      const clientKeys = await provisionEnvironmentClientKeys(deps, app.id, app.organizationId, [
+        dev,
+        prod,
+      ]);
 
       return Response.json({
         app: appResponse(app),

@@ -7,11 +7,13 @@ import {
   EXPERIMENT_ID,
   LOCKED_CLIENT_KEY,
   RecordingExposureSink,
+  RecordingEvaluationUsageSink,
   REVOKED_CLIENT_KEY,
   makeSdkRouteHarness,
   sdkRouteInit,
 } from "./sdk-route-test-fixtures";
 import { ExposureSinkError } from "./exposure-sink";
+import { EvaluationUsageSinkError } from "./evaluation-usage-sink";
 
 const PATH = "/api/sdk/evaluate";
 
@@ -168,6 +170,55 @@ describe("POST /api/sdk/evaluate", () => {
   });
 });
 
+describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
+  it("records one remote Evaluation with its exposure dimension before returning success", async () => {
+    const { app, evaluationUsageSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
+    });
+
+    const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
+
+    expect(res.status).toBe(200);
+    expect(evaluationUsageSink.writes).toEqual([
+      {
+        organizationId: "org_verify",
+        appId: APP_ID,
+        environmentId: "env-1",
+        evaluationCount: 1,
+        isBatch: false,
+        isCached: false,
+        hasExposure: true,
+      },
+    ]);
+  });
+
+  it("records a non-Exposure Evaluation without changing Exposure behavior", async () => {
+    const { app, evaluationUsageSink, exposureSink } = await makeSdkRouteHarness({
+      flagOverrides: { enabled: false },
+    });
+
+    const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
+
+    expect(res.status).toBe(200);
+    expect(exposureSink.writes).toEqual([]);
+    expect(evaluationUsageSink.writes).toEqual([
+      expect.objectContaining({ evaluationCount: 1, hasExposure: false, isCached: false }),
+    ]);
+  });
+
+  it("maps Evaluation usage ingest failure before acknowledging a successful Evaluation", async () => {
+    const { app } = await makeSdkRouteHarness({
+      evaluationUsageSink: new FailingEvaluationUsageSink(),
+    });
+
+    const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
+
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
+  });
+});
+
 describe("POST /api/sdk/evaluate: non-exposing outcomes", () => {
   it("returns a holdover Variant without firing another Exposure", async () => {
     const { app, assignmentStore, exposureSink } = await makeSdkRouteHarness({
@@ -207,5 +258,11 @@ function liveRunHarness() {
 class FailingExposureSink extends RecordingExposureSink {
   override async write(): Promise<void> {
     throw new ExposureSinkError("forced failure");
+  }
+}
+
+class FailingEvaluationUsageSink extends RecordingEvaluationUsageSink {
+  override async write(): Promise<void> {
+    throw new EvaluationUsageSinkError("forced failure");
   }
 }

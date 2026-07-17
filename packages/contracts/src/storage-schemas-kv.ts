@@ -127,6 +127,10 @@ export const CredentialCacheKVSchema = z
   .object({
     appId: z.string(),
     environmentId: z.string(),
+    // Active data-plane credentials are bound to an Organization so usage
+    // telemetry has an authenticated tenant scope. Revoked tombstones retain
+    // a nullable value because their only job is to reject the credential.
+    organizationId: z.string().nullable(),
     kind: CredentialKindSchema,
     scopes: z.array(z.string()),
     originAllowlist: z.array(z.string()).nullable().optional(),

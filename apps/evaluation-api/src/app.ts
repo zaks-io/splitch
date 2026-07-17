@@ -10,12 +10,14 @@ import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./dat
 import { makePeekHandler } from "./peek";
 import { makeEvaluateHandler } from "./evaluate";
 import type { ExposureSink } from "./exposure-sink";
+import type { EvaluationUsageSink } from "./evaluation-usage-sink";
 
 export interface AppDeps extends EvaluatePathDeps {
   authResolver: AuthResolver;
   dataPlaneAuthResolver: AuthResolver;
   exposureAssembly: ExposureAssemblyDeps;
   exposureSink: ExposureSink;
+  evaluationUsageSink: EvaluationUsageSink;
   rateLimiter: RateLimiter;
   defaultHeaders?: Record<string, string>;
   observability?: RegistrarDeps["observability"];

@@ -142,6 +142,7 @@ describe("ExperimentConfigKVSchema", () => {
 const validCredentialCache = {
   appId: "app_1",
   environmentId: "env_prod",
+  organizationId: "org_1",
   kind: "api_key" as const,
   scopes: ["data-plane:evaluate", "data-plane:write"],
   revoked: false,

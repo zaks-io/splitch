@@ -1,9 +1,21 @@
-import { ExposureEventSchema, type ExposureEvent } from "@splitch/contracts";
+import { ExposureEventSchema, type ErrorResponse, type ExposureEvent } from "@splitch/contracts";
 import { serviceUnavailable } from "./errors";
 import { stringField, stringValue } from "./payload";
 import type { CredentialScope, Env, RunScope, Outcome, Payload, TinybirdDelivery } from "./types";
 
 const rawEventsDatasource = "raw_events";
+
+export interface EvaluationUsageEvent {
+  readonly eventId: string;
+  readonly organizationId: string;
+  readonly appId: string;
+  readonly environmentId: string;
+  readonly evaluationCount: number;
+  readonly isBatch: boolean;
+  readonly isCached: boolean;
+  readonly hasExposure: boolean;
+  readonly serverReceivedAt: string;
+}
 
 export async function exposureEvent(
   payload: Payload,
@@ -80,15 +92,84 @@ export function toTinybirdRow(event: ExposureEvent, payload: Payload): Record<st
   };
 }
 
-export function tinybirdDelivery(env: Env): Outcome<TinybirdDelivery> {
+export function evaluationUsageEvent(
+  payload: Payload,
+  scope: CredentialScope & { organizationId: string },
+): Outcome<EvaluationUsageEvent> {
+  const evaluationCount = payload.evaluationCount;
+  const isBatch = payload.isBatch;
+  const isCached = payload.isCached;
+  const hasExposure = payload.hasExposure;
+  if (
+    typeof evaluationCount !== "number" ||
+    !Number.isInteger(evaluationCount) ||
+    evaluationCount < 0 ||
+    evaluationCount > 4_294_967_295
+  ) {
+    return { ok: false, error: invalidEvaluationUsageField("evaluationCount") };
+  }
+  if (
+    typeof isBatch !== "boolean" ||
+    typeof isCached !== "boolean" ||
+    typeof hasExposure !== "boolean"
+  ) {
+    return { ok: false, error: invalidEvaluationUsageField("evaluation dimensions") };
+  }
+  if ((isCached && evaluationCount !== 0) || (!isCached && evaluationCount === 0)) {
+    return { ok: false, error: invalidEvaluationUsageField("evaluationCount") };
+  }
+
+  return {
+    ok: true,
+    value: {
+      eventId: crypto.randomUUID(),
+      organizationId: scope.organizationId,
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      evaluationCount,
+      isBatch,
+      isCached,
+      hasExposure,
+      serverReceivedAt: new Date(Date.now()).toISOString(),
+    },
+  };
+}
+
+export function toEvaluationUsageTinybirdRow(event: EvaluationUsageEvent): Record<string, unknown> {
+  return {
+    dedup_key: event.eventId,
+    event_id: event.eventId,
+    organization_id: event.organizationId,
+    app_id: event.appId,
+    environment_id: event.environmentId,
+    server_received_at: event.serverReceivedAt,
+    evaluation_count: event.evaluationCount,
+    is_batch: event.isBatch ? 1 : 0,
+    is_cached: event.isCached ? 1 : 0,
+    has_exposure: event.hasExposure ? 1 : 0,
+  };
+}
+
+export function tinybirdDelivery(
+  env: Env,
+  datasource = rawEventsDatasource,
+): Outcome<TinybirdDelivery> {
   const token = env.TINYBIRD_INGEST_TOKEN;
   if (!token) {
     return { ok: false, error: serviceUnavailable("Tinybird ingest token is unavailable") };
   }
 
   const url = new URL("/v0/events", env.TINYBIRD_API_URL ?? "https://api.tinybird.co");
-  url.searchParams.set("name", rawEventsDatasource);
+  url.searchParams.set("name", datasource);
   return { ok: true, value: { url: url.toString(), token } };
+}
+
+function invalidEvaluationUsageField(field: string): ErrorResponse {
+  return {
+    code: "VALIDATION_ERROR",
+    message: `${field} is invalid`,
+    details: { issues: [{ path: ["body", field], message: "invalid value" }] },
+  };
 }
 
 export async function appendRawEvent(row: Record<string, unknown>, delivery: TinybirdDelivery) {

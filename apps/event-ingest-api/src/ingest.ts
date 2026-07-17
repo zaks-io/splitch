@@ -1,8 +1,15 @@
 import { emptyError, renderError, serviceUnavailable } from "./errors";
 import { loadRunScope } from "./kv-config";
 import { readJsonObject, stringField } from "./payload";
-import { appendRawEvent, exposureEvent, tinybirdDelivery, toTinybirdRow } from "./tinybird";
-import type { CredentialScope, Env, Outcome } from "./types";
+import {
+  appendRawEvent,
+  evaluationUsageEvent,
+  exposureEvent,
+  tinybirdDelivery,
+  toEvaluationUsageTinybirdRow,
+  toTinybirdRow,
+} from "./tinybird";
+import type { CredentialScope, Env, EvaluationUsageScope, Outcome } from "./types";
 
 /** The three body fields that identify the fire-time Run scope. */
 function requiredIdentity(
@@ -72,6 +79,34 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
   );
 }
 
+export async function handleEvaluationIngest(request: Request, env: Env): Promise<Response> {
+  const scope = evaluationUsageScope(request, env);
+  if (!scope.ok) return renderError(scope.error);
+
+  const payload = await readJsonObject(request);
+  if (!payload.ok) return renderError(payload.error);
+
+  const event = evaluationUsageEvent(payload.value, scope.value);
+  if (!event.ok) return renderError(event.error);
+
+  const delivery = tinybirdDelivery(env, "raw_evaluations");
+  if (!delivery.ok) return renderError(delivery.error);
+
+  try {
+    await appendRawEvent(toEvaluationUsageTinybirdRow(event.value), delivery.value);
+  } catch (error) {
+    console.error("event-ingest-api Tinybird Evaluation append failed", {
+      organizationId: event.value.organizationId,
+      appId: event.value.appId,
+      environmentId: event.value.environmentId,
+      errorMessage: error instanceof Error ? error.message : "non-error rejection",
+    });
+    return renderError(serviceUnavailable("Evaluation usage append failed"));
+  }
+
+  return Response.json({ ok: true, eventId: event.value.eventId }, { status: 202 });
+}
+
 function credentialScope(request: Request, env: Env): Outcome<CredentialScope> {
   const internalToken = env.SPLITCH_EVENT_INGEST_TOKEN;
   if (!internalToken) {
@@ -92,4 +127,18 @@ function credentialScope(request: Request, env: Env): Outcome<CredentialScope> {
   }
 
   return { ok: true, value: { appId, environmentId } };
+}
+
+function evaluationUsageScope(request: Request, env: Env): Outcome<EvaluationUsageScope> {
+  const credential = credentialScope(request, env);
+  if (!credential.ok) return credential;
+
+  const organizationId = request.headers.get("x-splitch-organization-id");
+  if (!organizationId) {
+    return {
+      ok: false,
+      error: emptyError("UNAUTHORIZED", "missing internal Organization scope"),
+    };
+  }
+  return { ok: true, value: { ...credential.value, organizationId } };
 }

@@ -14,16 +14,16 @@ export type ClientKeyRow = Awaited<ReturnType<Repository["credentials"]["listCli
 
 export async function provisionClientKey(
   deps: ClientKeyDeps,
-  ctx: { appId: string; environmentId: string; scope: EnvScopeValue },
+  ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
 ): Promise<ClientKeyRow> {
   const key = await ensureActiveClientKey(deps, ctx);
-  await writeClientKeyCache(deps, key, false);
+  await writeClientKeyCache(deps, key, false, ctx.organizationId);
   return key;
 }
 
 export async function ensureActiveClientKey(
   deps: ClientKeyDeps,
-  ctx: { appId: string; environmentId: string; scope: EnvScopeValue },
+  ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
 ): Promise<ClientKeyRow> {
   const active = await findActiveClientKey(deps, ctx);
   if (active) return active;
@@ -39,7 +39,7 @@ export async function ensureActiveClientKey(
 
 export async function createClientKey(
   deps: ClientKeyDeps,
-  ctx: { appId: string; environmentId: string; scope: EnvScopeValue },
+  ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
 ): Promise<ClientKeyRow> {
   return deps.repo.credentials.clientKeys.insert(ctx.scope, {
     keyId: `ck_${randomHex(16)}`,

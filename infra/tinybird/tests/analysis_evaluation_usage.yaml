@@ -1,0 +1,9 @@
+- name: current_month_groups_consumed_and_cached_evaluations
+  description: Filters Organization and period, groups every reporting dimension, and retains zero-consumption cached rows.
+  parameters: "organization_id=org_a&period_start=2026-07-01+00%3A00%3A00.000&period_end=2026-08-01+00%3A00%3A00.000"
+  expected_http_status: 200
+  expected_result: |
+    {"organization_id":"org_a","app_id":"app_1","environment_id":"env_prod","batch_mode":"batch","evaluation_source":"remote","exposure_state":"not_bearing","evaluations":3}
+    {"organization_id":"org_a","app_id":"app_1","environment_id":"env_prod","batch_mode":"single","evaluation_source":"remote","exposure_state":"bearing","evaluations":2}
+    {"organization_id":"org_a","app_id":"app_2","environment_id":"env_dev","batch_mode":"batch","evaluation_source":"cached","exposure_state":"bearing","evaluations":0}
+    {"organization_id":"org_a","app_id":"app_2","environment_id":"env_dev","batch_mode":"single","evaluation_source":"cached","exposure_state":"not_bearing","evaluations":0}

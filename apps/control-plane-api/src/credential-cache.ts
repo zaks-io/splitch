@@ -31,22 +31,29 @@ export async function writeClientKeyCache(
   deps: CredentialCacheDeps,
   row: ClientKeyCacheRow,
   revoked: boolean,
+  organizationId: string | null = null,
   failLoud = false,
 ): Promise<void> {
   const key = clientKeyCacheKey(await sha256Hex(row.keyMaterial));
-  await writeCredentialCache(deps, key, clientKeyCache(deps, row, revoked), failLoud);
+  await writeCredentialCache(
+    deps,
+    key,
+    clientKeyCache(deps, row, revoked, organizationId),
+    failLoud,
+  );
 }
 
 export async function writeApiKeyCache(
   deps: CredentialCacheDeps,
   row: ApiKeyCacheRow,
   revoked: boolean,
+  organizationId: string | null = null,
   failLoud = false,
 ): Promise<void> {
   await writeCredentialCache(
     deps,
     apiKeyCacheKey(row.keyHash),
-    apiKeyCache(deps, row, revoked),
+    apiKeyCache(deps, row, revoked, organizationId),
     failLoud,
   );
 }
@@ -88,11 +95,13 @@ function clientKeyCache(
   deps: CredentialCacheDeps,
   row: ClientKeyCacheRow,
   revoked: boolean,
+  organizationId: string | null,
 ): CredentialCacheKV {
   const originAllowlist = parseOriginAllowlist(row.originAllowlist);
   return {
     appId: row.appId,
     environmentId: row.environmentId,
+    organizationId,
     kind: "client_key",
     scopes: ["data-plane:evaluate"],
     originAllowlist,
@@ -106,10 +115,12 @@ function apiKeyCache(
   deps: CredentialCacheDeps,
   row: ApiKeyCacheRow,
   revoked: boolean,
+  organizationId: string | null,
 ): CredentialCacheKV {
   return {
     appId: row.appId,
     environmentId: row.environmentId,
+    organizationId,
     kind: "api_key",
     scopes: JSON.parse(row.scopes) as string[],
     revoked,

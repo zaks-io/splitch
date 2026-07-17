@@ -33,6 +33,7 @@ try {
 
 function validateSplitchDatasourceContracts(root) {
   const rawEvents = readDatasource(root, "raw_events");
+  const rawEvaluations = readDatasource(root, "raw_evaluations");
   const dedupedExposures = readDatasource(root, "deduped_exposures");
 
   requireColumns(rawEvents, [
@@ -45,16 +46,34 @@ function validateSplitchDatasourceContracts(root) {
     "`sdk_version` Nullable(String)",
     "`is_holdover` UInt8",
     "`counterfactual` UInt8",
-    "`organization_id` Nullable(String)",
+  ]);
+  requireInstruction(
+    rawEvents,
+    /^ENGINE_PARTITION_KEY "toYYYYMM\(server_received_at\)"$/m,
+    "raw_events partition key must use server_received_at",
+  );
+
+  requireColumns(rawEvaluations, [
+    "`dedup_key`",
+    "`event_id`",
+    "`organization_id`",
+    "`app_id`",
+    "`environment_id`",
+    "`server_received_at` DateTime64(3)",
     "`evaluation_count` Nullable(UInt32)",
     "`is_batch` Nullable(UInt8)",
     "`is_cached` Nullable(UInt8)",
     "`has_exposure` Nullable(UInt8)",
   ]);
   requireInstruction(
-    rawEvents,
-    /^ENGINE_PARTITION_KEY "toYYYYMM\(server_received_at\)"$/m,
-    "raw_events partition key must use server_received_at",
+    rawEvaluations,
+    /^ENGINE_SORTING_KEY "organization_id, app_id, environment_id, server_received_at"$/m,
+    "raw_evaluations sorting key must start with organization_id",
+  );
+  requireInstruction(
+    rawEvaluations,
+    /^# DEDUP_KEY=dedup_key$/m,
+    "raw_evaluations must declare splitch DEDUP_KEY=dedup_key",
   );
   requireInstruction(
     rawEvents,

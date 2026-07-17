@@ -10,7 +10,8 @@ export {
   recommendedActions,
 } from "./errors";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
-export { OrganizationUsageResponseSchema, type OrganizationUsageResponse } from "./resource-envelopes-usage"; // biome-ignore format: keep the explicit public export within the barrel file-size limit
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped resource envelope API
+export * from "./resource-envelopes";
 export {
   AuthKindSchema,
   authKinds,
@@ -37,7 +38,8 @@ export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./o
 export { controlPlaneRpcApp, type ControlPlaneRpcApp } from "./openapi-rpc";
 export { getRoute, operationIds, routeRegistry } from "./route-registry";
 export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
-export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute, type McpProtocolToolDefinition, type McpToolDefinition } from "./mcp-tools"; // biome-ignore format: keep the existing explicit exports within the barrel file-size limit
+export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
+export type { McpProtocolToolDefinition, McpToolDefinition } from "./mcp-tools";
 export { DeltaNudgeEntitySchema, deltaNudgeEntities, DeltaNudgeSchema } from "./delta-nudge";
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export {
@@ -239,61 +241,3 @@ export type {
   TestEvaluationRequest,
   TestEvaluationResponse,
 } from "./wire-envelopes-core";
-export {
-  CreateFlagRequestSchema,
-  CreateVariantRequestSchema,
-  FlagResponseSchema,
-  PatchFlagRequestSchema,
-  PatchVariantRequestSchema,
-} from "./resource-envelopes-flag";
-export type {
-  CreateFlagRequest,
-  CreateVariantRequest,
-  FlagResponse,
-  PatchFlagRequest,
-  PatchVariantRequest,
-} from "./resource-envelopes-flag";
-export {
-  CreateExperimentRequestSchema,
-  ExperimentResponseSchema,
-  PatchExperimentRequestSchema,
-  PatchRunRequestSchema,
-  RunResponseSchema,
-  StartRunRequestSchema,
-} from "./resource-envelopes-experiment";
-export type {
-  CreateExperimentRequest,
-  ExperimentResponse,
-  PatchExperimentRequest,
-  PatchRunRequest,
-  RunResponse,
-  StartRunRequest,
-} from "./resource-envelopes-experiment";
-export {
-  AppResponseSchema,
-  CreateAppRequestSchema,
-  CreateAppResponseSchema,
-  CreateCredentialResponseSchema,
-  CreateMetricRequestSchema,
-  CredentialSchema,
-  ListCredentialsResponseSchema,
-  MetricResponseSchema,
-  OrganizationResponseSchema,
-  PatchAppRequestSchema,
-  PatchMetricRequestSchema,
-  PatchOrganizationRequestSchema,
-} from "./resource-envelopes-account";
-export type {
-  AppResponse,
-  CreateAppRequest,
-  CreateAppResponse,
-  CreateCredentialResponse,
-  CreateMetricRequest,
-  Credential,
-  ListCredentialsResponse,
-  MetricResponse,
-  OrganizationResponse,
-  PatchAppRequest,
-  PatchMetricRequest,
-  PatchOrganizationRequest,
-} from "./resource-envelopes-account";

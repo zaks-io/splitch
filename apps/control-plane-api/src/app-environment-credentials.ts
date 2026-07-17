@@ -49,9 +49,9 @@ async function writeRevokedTombstones(
   clientKeys: readonly ClientKeyRow[],
 ): Promise<void> {
   for (const row of apiKeys) {
-    await writeApiKeyCache(deps, row, true, true);
+    await writeApiKeyCache(deps, row, true, null, true);
   }
   for (const row of clientKeys) {
-    await writeClientKeyCache(deps, row, true, true);
+    await writeClientKeyCache(deps, row, true, null, true);
   }
 }

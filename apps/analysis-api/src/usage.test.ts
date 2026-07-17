@@ -3,7 +3,7 @@ import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runti
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { currentMonth, readUsageFromTinybird } from "./usage";
-import type { PipeParams, TinybirdReadTransport } from "./tinybird";
+import { TinybirdReadError, type PipeParams, type TinybirdReadTransport } from "./tinybird";
 
 const ORG_ID = "org_a";
 const OTHER_ORG_ID = "org_b";
@@ -18,6 +18,12 @@ class FakeTinybird implements TinybirdReadTransport {
   async readPipe(pipeName: string, params: PipeParams): Promise<readonly unknown[]> {
     this.calls.push({ pipeName, params: { ...params } });
     return this.rows;
+  }
+}
+
+class FailingTinybird implements TinybirdReadTransport {
+  async readPipe(): Promise<readonly unknown[]> {
+    throw new TinybirdReadError("forced outage");
   }
 }
 
@@ -75,27 +81,27 @@ describe("Organization Evaluation usage", () => {
         endsAt: "2026-08-01T00:00:00.000Z",
       },
       state: "populated",
-      evaluations: 10,
+      evaluations: 5,
       breakdown: {
         byApp: [
           { appId: "app_1", evaluations: 5 },
-          { appId: "app_2", evaluations: 5 },
+          { appId: "app_2", evaluations: 0 },
         ],
         byEnvironment: [
-          { environmentId: "env_dev", evaluations: 5 },
+          { environmentId: "env_dev", evaluations: 0 },
           { environmentId: "env_prod", evaluations: 5 },
         ],
         byBatch: [
-          { mode: "batch", evaluations: 7 },
-          { mode: "single", evaluations: 3 },
+          { mode: "batch", evaluations: 3 },
+          { mode: "single", evaluations: 2 },
         ],
         bySource: [
-          { source: "cached", evaluations: 5 },
+          { source: "cached", evaluations: 0 },
           { source: "remote", evaluations: 5 },
         ],
         byExposure: [
-          { exposure: "bearing", evaluations: 6 },
-          { exposure: "not_bearing", evaluations: 4 },
+          { exposure: "bearing", evaluations: 2 },
+          { exposure: "not_bearing", evaluations: 3 },
         ],
       },
     });
@@ -134,6 +140,44 @@ describe("Organization Evaluation usage", () => {
       },
     });
   });
+
+  it("keeps cached dimensions visible without adding cached reads to consumed Evaluations", async () => {
+    const { app } = makeHarness([usageRow("app_1", "env_prod", "single", "cached", "bearing", 0)]);
+
+    const response = await app.request(USAGE_PATH, {
+      headers: { authorization: "Bearer org-a" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      state: "populated",
+      evaluations: 0,
+      breakdown: {
+        bySource: [{ source: "cached", evaluations: 0 }],
+        byExposure: [{ exposure: "bearing", evaluations: 0 }],
+      },
+    });
+  });
+
+  it("maps a Tinybird outage to a retryable usage read failure", async () => {
+    const app = createApp({
+      authResolver,
+      rateLimiter: allowLimiter,
+      tinybird: new FailingTinybird(),
+      now: () => NOW,
+      platformTarget: "local",
+    });
+
+    const response = await app.request(USAGE_PATH, {
+      headers: { authorization: "Bearer org-a" },
+    });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+      details: { retryAfterMs: 30_000 },
+    });
+  });
 });
 
 describe("Organization Evaluation usage isolation", () => {
@@ -162,8 +206,8 @@ function usageRows(): readonly Record<string, unknown>[] {
   return [
     usageRow("app_1", "env_prod", "single", "remote", "bearing", 2),
     usageRow("app_1", "env_prod", "batch", "remote", "not_bearing", 3),
-    usageRow("app_2", "env_dev", "batch", "cached", "bearing", 4),
-    usageRow("app_2", "env_dev", "single", "cached", "not_bearing", 1),
+    usageRow("app_2", "env_dev", "batch", "cached", "bearing", 0),
+    usageRow("app_2", "env_dev", "single", "cached", "not_bearing", 0),
   ];
 }
 

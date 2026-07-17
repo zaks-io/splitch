@@ -17,6 +17,7 @@ import {
 import { makeDataPlaneAuthResolver } from "./data-plane-auth";
 import type { EvaluationApiEnv } from "./env";
 import { makeHttpExposureSink } from "./exposure-sink";
+import { makeHttpEvaluationUsageSink } from "./evaluation-usage-sink";
 import { makeEnvSaltStore } from "./local-salt-store";
 import { KvProvider } from "./provider/kv-provider";
 
@@ -57,6 +58,11 @@ const handler = {
         sourceId: env.SPLITCH_SOURCE_ID ?? "local",
       },
       exposureSink: makeHttpExposureSink({
+        endpoint: env.EVENT_INGEST_URL,
+        fetcher: env.EVENT_INGEST,
+        token: env.SPLITCH_EVENT_INGEST_TOKEN,
+      }),
+      evaluationUsageSink: makeHttpEvaluationUsageSink({
         endpoint: env.EVENT_INGEST_URL,
         fetcher: env.EVENT_INGEST,
         token: env.SPLITCH_EVENT_INGEST_TOKEN,

@@ -20,16 +20,23 @@ SQL >
         if(is_cached = 1, 'cached', 'remote') AS evaluation_source,
         if(has_exposure = 1, 'bearing', 'not_bearing') AS exposure_state,
         sum(toUInt64(evaluation_count)) AS evaluations
-    FROM raw_events
+    FROM raw_evaluations
     WHERE organization_id = {{String(organization_id)}}
         AND server_received_at >= {{DateTime64(period_start)}}
         AND server_received_at < {{DateTime64(period_end)}}
-        AND evaluation_count > 0
+        AND isNotNull(evaluation_count)
         AND isNotNull(is_batch)
         AND isNotNull(is_cached)
         AND isNotNull(has_exposure)
+        AND evaluation_count >= 0
     GROUP BY
         organization_id,
+        app_id,
+        environment_id,
+        batch_mode,
+        evaluation_source,
+        exposure_state
+    ORDER BY
         app_id,
         environment_id,
         batch_mode,

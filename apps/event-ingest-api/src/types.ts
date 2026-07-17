@@ -17,6 +17,10 @@ export interface CredentialScope {
   readonly environmentId: string;
 }
 
+export interface EvaluationUsageScope extends CredentialScope {
+  readonly organizationId: string;
+}
+
 export interface RunScope {
   readonly runId: string;
   readonly idType: string;

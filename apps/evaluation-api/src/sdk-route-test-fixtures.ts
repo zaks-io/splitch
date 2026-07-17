@@ -14,6 +14,7 @@ import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { createApp } from "./app";
 import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth";
 import type { AssembledExposure } from "./evaluate/exposure-assembly";
+import type { EvaluationUsageEvent, EvaluationUsageSink } from "./evaluation-usage-sink";
 import {
   APP_ID,
   ENVIRONMENT_ID,
@@ -37,11 +38,13 @@ export const REVOKED_CLIENT_KEY = "pk_verify_revoked";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 const controlPlaneAuthResolver: AuthResolver = () => ({ ok: false, reason: "UNAUTHORIZED" });
+const ORGANIZATION_ID = "org_verify";
 
 interface SdkRouteHarnessOptions {
   readonly liveRun?: boolean;
   readonly experimentOverrides?: Partial<ExperimentConfigKV>;
   readonly exposureSink?: RecordingExposureSink;
+  readonly evaluationUsageSink?: RecordingEvaluationUsageSink;
   readonly flagOverrides?: Partial<FlagConfigKV>;
   readonly holdovers?: Map<string, { runId: string; variant: string }>;
   readonly runOverrides?: Partial<RunConfigKV>;
@@ -76,6 +79,7 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        organizationId: ORGANIZATION_ID,
         kind: "client_key",
         scopes: ["data-plane:evaluate"],
         originAllowlist: null,
@@ -89,6 +93,7 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        organizationId: ORGANIZATION_ID,
         kind: "client_key",
         scopes: ["data-plane:evaluate"],
         originAllowlist: ["https://app.example.test"],
@@ -102,6 +107,7 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        organizationId: ORGANIZATION_ID,
         kind: "api_key",
         scopes: ["data-plane:evaluate"],
         revoked: false,
@@ -113,6 +119,7 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        organizationId: ORGANIZATION_ID,
         kind: "api_key",
         scopes: [],
         revoked: false,
@@ -124,6 +131,7 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        organizationId: ORGANIZATION_ID,
         kind: "client_key",
         scopes: ["data-plane:evaluate"],
         revoked: true,
@@ -137,6 +145,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
   const credentialKv = await seededCredentialKv();
   const assignmentStore = new RecordingAssignmentStore({ holdovers: options.holdovers });
   const exposureSink = options.exposureSink ?? new RecordingExposureSink();
+  const evaluationUsageSink = options.evaluationUsageSink ?? new RecordingEvaluationUsageSink();
   const app = createApp({
     authResolver: controlPlaneAuthResolver,
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(credentialKv),
@@ -150,8 +159,9 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
       now: () => new Date("2026-07-03T00:00:00.000Z"),
     },
     exposureSink,
+    evaluationUsageSink,
   });
-  return { app, assignmentStore, configKv, credentialKv, exposureSink };
+  return { app, assignmentStore, configKv, credentialKv, exposureSink, evaluationUsageSink };
 }
 
 export function sdkRouteInit(
@@ -181,5 +191,13 @@ export class RecordingExposureSink {
 
   async write(exposure: AssembledExposure): Promise<void> {
     this.writes.push(exposure);
+  }
+}
+
+export class RecordingEvaluationUsageSink implements EvaluationUsageSink {
+  readonly writes: EvaluationUsageEvent[] = [];
+
+  async write(event: EvaluationUsageEvent): Promise<void> {
+    this.writes.push(event);
   }
 }

@@ -50,6 +50,7 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       await provisionClientKey(deps, {
         appId,
         environmentId: environment.id,
+        organizationId: app.organizationId,
         scope: envScope(appId, environment.id),
       });
       return Response.json(environmentResponse(environment));

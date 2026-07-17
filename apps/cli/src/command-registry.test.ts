@@ -44,6 +44,15 @@ describe("cli command parity", () => {
     }
   });
 
+  it("derives the Organization usage read command from the shared route", () => {
+    expect(findCommand(["organization-usage", "get"])).toMatchObject({
+      operationId: "organization_usage_get",
+      needsApp: false,
+      needsEnvironment: false,
+      kind: "api",
+    });
+  });
+
   it("exposes presentation aliases for env-policy and flags verify", () => {
     expect(findCommand(["env-policy", "get"])?.operationId).toBe("environments_get");
     expect(findCommand(["env-policy", "set"])?.operationId).toBe("environments_update");

@@ -16,12 +16,7 @@ SCHEMA >
     `ingest_ts` DateTime64(3) `json:$.ingest_ts`,
     `activation_ts` Nullable(DateTime64(3)) `json:$.activation_ts`,
     `is_holdover` UInt8 `json:$.is_holdover`,
-    `sdk_version` Nullable(String) `json:$.sdk_version`,
-    `organization_id` Nullable(String) `json:$.organization_id`,
-    `evaluation_count` Nullable(UInt32) `json:$.evaluation_count`,
-    `is_batch` Nullable(UInt8) `json:$.is_batch`,
-    `is_cached` Nullable(UInt8) `json:$.is_cached`,
-    `has_exposure` Nullable(UInt8) `json:$.has_exposure`
+    `sdk_version` Nullable(String) `json:$.sdk_version`
 
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(server_received_at)"
