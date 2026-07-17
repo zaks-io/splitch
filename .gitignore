@@ -12,3 +12,6 @@ reports/mutation/
 .stryker-tmp/
 playwright-report/
 .sdk-release-artifacts/
+.claude/
+.codex/
+agent/
