@@ -17,6 +17,8 @@ describe("session membership materialization", () => {
           orgId: "org_1",
           orgRole: "admin",
           orgSlug: "acme-inc",
+          isProvisional: false,
+          demoExpiresAt: null,
           apps: [
             {
               appId: "app_1",

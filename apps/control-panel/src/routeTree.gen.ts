@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthLogoutRouteImport } from './routes/auth.logout'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as OrgSlugClaimRouteImport } from './routes/$orgSlug.claim'
 import { Route as ClaimConsentAttemptIdRouteImport } from './routes/claim.consent.$attemptId'
 import { Route as OrgSlugAppSlugEnvRouteImport } from './routes/$orgSlug.$appSlug.$env'
 import { Route as OrgSlugAppSlugEnvSettingsRouteImport } from './routes/$orgSlug.$appSlug.$env.settings'
@@ -51,6 +52,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrgSlugClaimRoute = OrgSlugClaimRouteImport.update({
+  id: '/$orgSlug/claim',
+  path: '/$orgSlug/claim',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClaimConsentAttemptIdRoute = ClaimConsentAttemptIdRouteImport.update({
   id: '/claim/consent/$attemptId',
   path: '/claim/consent/$attemptId',
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/$orgSlug/claim': typeof OrgSlugClaimRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/$orgSlug/claim': typeof OrgSlugClaimRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/health': typeof HealthRoute
   '/kitchen-sink': typeof KitchenSinkRoute
+  '/$orgSlug/claim': typeof OrgSlugClaimRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/kitchen-sink'
+    | '/$orgSlug/claim'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/kitchen-sink'
+    | '/$orgSlug/claim'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
@@ -151,6 +162,7 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/kitchen-sink'
+    | '/$orgSlug/claim'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
@@ -165,6 +177,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HealthRoute: typeof HealthRoute
   KitchenSinkRoute: typeof KitchenSinkRoute
+  OrgSlugClaimRoute: typeof OrgSlugClaimRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthLogoutRoute: typeof AuthLogoutRoute
@@ -214,6 +227,13 @@ declare module '@tanstack/react-router' {
       path: '/auth/callback'
       fullPath: '/auth/callback'
       preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$orgSlug/claim': {
+      id: '/$orgSlug/claim'
+      path: '/$orgSlug/claim'
+      fullPath: '/$orgSlug/claim'
+      preLoaderRoute: typeof OrgSlugClaimRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/claim/consent/$attemptId': {
@@ -273,6 +293,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
   KitchenSinkRoute: KitchenSinkRoute,
+  OrgSlugClaimRoute: OrgSlugClaimRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthLogoutRoute: AuthLogoutRoute,

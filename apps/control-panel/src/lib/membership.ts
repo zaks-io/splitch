@@ -45,6 +45,8 @@ export async function buildSessionPrincipal(
       orgId: org.id,
       orgSlug,
       orgRole: orgRole(orgMembership.role),
+      isProvisional: org.isProvisional,
+      demoExpiresAt: org.demoExpiresAt,
       apps: appMemberships,
     });
   }

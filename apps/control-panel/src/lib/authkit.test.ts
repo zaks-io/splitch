@@ -54,6 +54,7 @@ describe("WorkOS AuthKit callback materialization", () => {
     expect(stored).toContain("checkout-api");
     expect(stored).toContain(accessToken);
     expect(stored).toContain(`"expiresAt":${expiresAt}`);
+    expect(stored).toContain("isProvisional");
     expect(callback.cookie).toContain("Max-Age=300");
   });
 

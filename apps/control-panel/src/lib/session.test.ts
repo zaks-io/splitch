@@ -5,6 +5,7 @@ import {
   type StoredSession,
   createSession,
   loadSessionFromCookieHeader,
+  refreshSession,
   sessionKey,
 } from "./session";
 
@@ -91,6 +92,29 @@ describe("control-panel session cookie and KV validation", () => {
     expect(loaded).toEqual({ ok: false, reason: "invalid" });
     expect(kv.store.has(sessionKey(created.tokenHash))).toBe(false);
   });
+
+  it("refreshes the same session after a claim so provisional state is not stale", async () => {
+    const kv = new MemoryKv();
+    const created = await createSession(kv.namespace(), sessionPrincipal(), NOW);
+    const claimed = structuredClone(created.session);
+    const organization = claimed.orgs[0];
+    if (!organization) {
+      throw new Error("expected an Organization in the test session");
+    }
+    organization.isProvisional = false;
+    organization.demoExpiresAt = null;
+
+    await refreshSession(kv.namespace(), created.tokenHash, claimed, NOW);
+
+    await expect(loadSessionFromCookieHeader(kv.namespace(), created.cookie, NOW)).resolves.toEqual(
+      expect.objectContaining({
+        ok: true,
+        session: expect.objectContaining({
+          orgs: [expect.objectContaining({ demoExpiresAt: null, isProvisional: false })],
+        }),
+      }),
+    );
+  });
 });
 
 describe("OAuth state cookie", () => {
@@ -165,6 +189,8 @@ function sessionPrincipal(): Omit<StoredSession, "expiresAt"> {
         orgId: "org_1",
         orgRole: "admin",
         orgSlug: "acme",
+        isProvisional: false,
+        demoExpiresAt: null,
         apps: [
           {
             appId: "app_1",

@@ -110,6 +110,8 @@ function sessionPrincipal(overrides: { orgSlug?: string } = {}): SessionPrincipa
         orgId: "org_1",
         orgRole: "member",
         orgSlug: overrides.orgSlug ?? "acme",
+        isProvisional: false,
+        demoExpiresAt: null,
         apps: [
           {
             appId: "app_1",

@@ -22,7 +22,14 @@ const STORED_SESSION_KEYS = new Set([
   "workosSessionId",
   "workosAccessToken",
 ]);
-const ORG_MEMBERSHIP_KEYS = new Set(["orgId", "orgSlug", "orgRole", "apps"]);
+const ORG_MEMBERSHIP_KEYS = new Set([
+  "orgId",
+  "orgSlug",
+  "orgRole",
+  "isProvisional",
+  "demoExpiresAt",
+  "apps",
+]);
 const APP_MEMBERSHIP_KEYS = new Set(["appId", "appSlug", "role"]);
 
 export type OrgRole = "owner" | "admin" | "member";
@@ -38,6 +45,8 @@ export interface OrgMembership {
   orgId: string;
   orgSlug: string;
   orgRole: OrgRole;
+  isProvisional: boolean;
+  demoExpiresAt: string | null;
   apps: Array<AppMembership>;
 }
 
@@ -140,6 +149,20 @@ export async function destroySession(
   return { session: null, cookie: clearHttpOnlyCookie(SESSION_COOKIE_NAME) };
 }
 
+export async function refreshSession(
+  kv: KVNamespace,
+  tokenHash: string,
+  session: StoredSession,
+  now = Date.now(),
+): Promise<void> {
+  assertStoredSession(session, now);
+  const ttl = ttlSeconds(session.expiresAt, now);
+  if (ttl <= 0) {
+    throw new Error("control-panel session expired before it could be refreshed");
+  }
+  await kv.put(sessionKey(tokenHash), JSON.stringify(session), { expirationTtl: ttl });
+}
+
 export function sessionKey(tokenHash: string): string {
   return `${SESSION_KEY_PREFIX}${tokenHash}`;
 }
@@ -212,6 +235,8 @@ function isOrgMembership(value: unknown): value is OrgMembership {
     isNonEmptyString(candidate.orgSlug) &&
     typeof candidate.orgRole === "string" &&
     ORG_ROLES.has(candidate.orgRole) &&
+    typeof candidate.isProvisional === "boolean" &&
+    (candidate.demoExpiresAt === null || isNonEmptyString(candidate.demoExpiresAt)) &&
     Array.isArray(candidate.apps) &&
     candidate.apps.every(isAppMembership)
   );
