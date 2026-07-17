@@ -126,9 +126,9 @@ describe("credential invariants", () => {
 });
 
 describe("full table corpus", () => {
-  it("emits all 22 D1 tables", () => {
+  it("emits all 23 D1 tables", () => {
     const createCount = (migrationSql.match(/CREATE TABLE /g) ?? []).length;
-    expect(createCount).toBe(22);
+    expect(createCount).toBe(23);
   });
 });
 
