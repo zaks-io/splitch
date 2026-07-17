@@ -12,11 +12,13 @@ export async function writeEvaluationUsage(
   hasExposure: boolean,
   idempotencyKey: string,
   scope: EvaluationUsageScope,
+  dimensions: { readonly flagKey: string; readonly sdkRuntime: string },
   deps: {
     readonly evaluationUsageSink: EvaluationUsageSink;
     readonly logger?: Pick<Console, "error">;
   },
   serviceUnavailable: () => ErrorResponse,
+  isCached = false,
 ): Promise<{ ok: true } | { ok: false; error: ErrorResponse }> {
   try {
     await deps.evaluationUsageSink.write({
@@ -24,9 +26,11 @@ export async function writeEvaluationUsage(
       organizationId: scope.organizationId,
       appId: scope.appId,
       environmentId: scope.environmentId,
-      evaluationCount: 1,
+      flagKey: dimensions.flagKey,
+      sdkRuntime: dimensions.sdkRuntime,
+      evaluationCount: isCached ? 0 : 1,
       isBatch: false,
-      isCached: false,
+      isCached,
       hasExposure,
     });
     return { ok: true };

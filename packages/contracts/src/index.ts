@@ -222,6 +222,8 @@ export type {
 export {
   DataPlaneEvaluateRequestSchema,
   DataPlaneEvaluateResponseSchema,
+  CachedEvaluationTelemetryRequestSchema,
+  CachedEvaluationTelemetryResponseSchema,
   PAGINATION_DEFAULT_LIMIT,
   PAGINATION_MAX_LIMIT,
   PaginationQuerySchema,

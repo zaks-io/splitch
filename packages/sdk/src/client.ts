@@ -130,6 +130,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
     evaluate: new URL("/api/sdk/evaluate", config.endpoint),
     peek: new URL("/api/sdk/peek", config.endpoint),
     verify: new URL("/api/sdk/verify", config.endpoint),
+    telemetry: new URL("/api/sdk/evaluation-telemetry", config.endpoint),
   };
 
   async function post(
@@ -145,6 +146,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
         ...(request.idempotencyKey === undefined
           ? {}
           : { "idempotency-key": request.idempotencyKey }),
+        "x-splitch-sdk-runtime": "javascript",
       },
       body: JSON.stringify({
         flagKey: request.flagKey,
@@ -199,6 +201,22 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
       } catch {
         return { status: null, details: null };
       }
+    },
+    async recordCachedEvaluation(event) {
+      const response = await withTimeout((signal) =>
+        config.fetchImpl(urls.telemetry, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${config.credential}`,
+            "content-type": "application/json",
+            "x-splitch-sdk-runtime": "javascript",
+          },
+          body: JSON.stringify(event),
+          signal,
+        }),
+      );
+      if (!response.ok)
+        throw new Error(`cached Evaluation telemetry failed: HTTP ${response.status}`);
     },
   };
 }

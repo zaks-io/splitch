@@ -49,6 +49,24 @@ describe("seen-set short-circuit: repeat within a Run is CACHED, no call, no sec
     expect(logger.debugs).toHaveLength(1);
     expect(logger.debugs[0]?.message).toContain("seen-set hit");
   });
+
+  it("reports a cache hit without billing, exposure, or Targeting Key telemetry", async () => {
+    const transport = new FakeTransport([ok("treatment", "run-1")]);
+    const cached = [] as { flagKey: string; idempotencyKey: string }[];
+    transport.recordCachedEvaluation = async (event) => {
+      cached.push(event);
+    };
+    const c = clock();
+    const bag = deps(transport, c.now);
+
+    await runEvaluate(bag, "flag", { targetingKey: "private-user", idempotencyKey: EVALUATION_ID });
+    c.advance(1);
+    await runEvaluate(bag, "flag", { targetingKey: "private-user", idempotencyKey: EVALUATION_ID });
+    await Promise.resolve();
+
+    expect(cached).toEqual([{ flagKey: "flag", idempotencyKey: EVALUATION_ID }]);
+    expect(JSON.stringify(cached)).not.toContain("private-user");
+  });
 });
 
 describe("Run boundary (SAME instance): past the TTL the SDK re-contacts the server and fires a fresh Exposure", () => {

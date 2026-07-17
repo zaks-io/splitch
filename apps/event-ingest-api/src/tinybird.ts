@@ -1,16 +1,19 @@
-import { ExposureEventSchema, type ErrorResponse, type ExposureEvent } from "@splitch/contracts";
+import { type ErrorResponse, type ExposureEvent, ExposureEventSchema } from "@splitch/contracts";
 import { serviceUnavailable } from "./errors";
 import { stringField, stringValue } from "./payload";
-import type { CredentialScope, Env, RunScope, Outcome, Payload, TinybirdDelivery } from "./types";
+import type { CredentialScope, Env, Outcome, Payload, RunScope, TinybirdDelivery } from "./types";
 
 const rawEventsDatasource = "raw_events";
 const rawEvaluationsDatasource = "raw_evaluations";
+const EVALUATION_IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export interface EvaluationUsageEvent {
   readonly eventId: string;
   readonly organizationId: string;
   readonly appId: string;
   readonly environmentId: string;
+  readonly flagKey: string;
+  readonly sdkRuntime: string;
   readonly evaluationCount: number;
   readonly isBatch: boolean;
   readonly isCached: boolean;
@@ -93,19 +96,64 @@ export function toTinybirdRow(event: ExposureEvent, payload: Payload): Record<st
   };
 }
 
-export function evaluationUsageEvent(
+export async function evaluationUsageEvent(
   payload: Payload,
   scope: CredentialScope & { organizationId: string },
-): Outcome<EvaluationUsageEvent> {
+): Promise<Outcome<EvaluationUsageEvent>> {
+  const dimensions = usageDimensions(payload);
+  if (!dimensions.ok) return dimensions;
+  const evaluation = evaluationUsageValues(payload);
+  if (!evaluation.ok) return evaluation;
+
+  const serverReceivedAt = new Date(Date.now()).toISOString();
+  return {
+    ok: true,
+    value: {
+      eventId: await evaluationUsageDedupKey(
+        scope,
+        dimensions.value.idempotencyKey,
+        serverReceivedAt,
+      ),
+      organizationId: scope.organizationId,
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      flagKey: dimensions.value.flagKey,
+      sdkRuntime: dimensions.value.sdkRuntime,
+      ...evaluation.value,
+      serverReceivedAt,
+    },
+  };
+}
+
+function usageDimensions(
+  payload: Payload,
+): Outcome<{ idempotencyKey: string; flagKey: string; sdkRuntime: string }> {
   const idempotencyKey = stringField(payload, "idempotencyKey");
-  const evaluationCount = payload.evaluationCount;
-  const isBatch = payload.isBatch;
-  const isCached = payload.isCached;
-  const hasExposure = payload.hasExposure;
+  const flagKey = stringField(payload, "flagKey");
+  const sdkRuntime = stringField(payload, "sdkRuntime");
   if (!idempotencyKey.ok) return idempotencyKey;
+  if (!flagKey.ok) return flagKey;
+  if (!sdkRuntime.ok) return sdkRuntime;
   if (idempotencyKey.value.length > 255) {
     return { ok: false, error: invalidEvaluationUsageField("idempotencyKey") };
   }
+  if (flagKey.value.length > 255 || sdkRuntime.value.length > 64) {
+    return { ok: false, error: invalidEvaluationUsageField("usage dimensions") };
+  }
+  return {
+    ok: true,
+    value: {
+      idempotencyKey: idempotencyKey.value,
+      flagKey: flagKey.value,
+      sdkRuntime: sdkRuntime.value,
+    },
+  };
+}
+
+function evaluationUsageValues(
+  payload: Payload,
+): Outcome<{ evaluationCount: number; isBatch: boolean; isCached: boolean; hasExposure: boolean }> {
+  const { evaluationCount, isBatch, isCached, hasExposure } = payload;
   if (
     typeof evaluationCount !== "number" ||
     !Number.isInteger(evaluationCount) ||
@@ -124,21 +172,7 @@ export function evaluationUsageEvent(
   if ((isCached && evaluationCount !== 0) || (!isCached && evaluationCount === 0)) {
     return { ok: false, error: invalidEvaluationUsageField("evaluationCount") };
   }
-
-  return {
-    ok: true,
-    value: {
-      eventId: idempotencyKey.value,
-      organizationId: scope.organizationId,
-      appId: scope.appId,
-      environmentId: scope.environmentId,
-      evaluationCount,
-      isBatch,
-      isCached,
-      hasExposure,
-      serverReceivedAt: new Date(Date.now()).toISOString(),
-    },
-  };
+  return { ok: true, value: { evaluationCount, isBatch, isCached, hasExposure } };
 }
 
 export function toEvaluationUsageTinybirdRow(event: EvaluationUsageEvent): Record<string, unknown> {
@@ -148,12 +182,34 @@ export function toEvaluationUsageTinybirdRow(event: EvaluationUsageEvent): Recor
     organization_id: event.organizationId,
     app_id: event.appId,
     environment_id: event.environmentId,
+    flag_key: event.flagKey,
+    sdk_runtime: event.sdkRuntime,
     server_received_at: event.serverReceivedAt,
     evaluation_count: event.evaluationCount,
     is_batch: event.isBatch ? 1 : 0,
     is_cached: event.isCached ? 1 : 0,
     has_exposure: event.hasExposure ? 1 : 0,
   };
+}
+
+/**
+ * Caller idempotency is valid only for one UTC 24-hour window and never reaches
+ * analytics raw. The authenticated credential scope prevents a shared caller
+ * key from suppressing another Organization, App, or Environment.
+ */
+async function evaluationUsageDedupKey(
+  scope: CredentialScope & { organizationId: string },
+  idempotencyKey: string,
+  serverReceivedAt: string,
+): Promise<string> {
+  const windowStart = Math.floor(
+    new Date(serverReceivedAt).getTime() / EVALUATION_IDEMPOTENCY_WINDOW_MS,
+  );
+  return `sha256:${await sha256Hex(
+    [scope.organizationId, scope.appId, scope.environmentId, windowStart, idempotencyKey].join(
+      "\u001f",
+    ),
+  )}`;
 }
 
 export function tinybirdDelivery(

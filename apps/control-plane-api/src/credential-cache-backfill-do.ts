@@ -1,5 +1,5 @@
-import { createRepository } from "@splitch/db";
 import { DurableObject } from "cloudflare:workers";
+import { createRepository } from "@splitch/db";
 import { backfillCredentialCaches } from "./credential-cache";
 import { durableCredentialCacheWriterAccess } from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
@@ -21,9 +21,16 @@ export interface CredentialCacheBackfillDurableObjectNamespace {
 
 /** Durable, bounded migration of legacy cache rows. One alarm processes one keyset page. */
 export class CredentialCacheBackfillDurableObject extends DurableObject<ControlPlaneApiEnv> {
-  override async fetch(): Promise<Response> {
+  override async fetch(request: Request): Promise<Response> {
+    const pathname = new URL(request.url).pathname;
+    if (request.method === "GET" && pathname === "/status") {
+      return Response.json(await this.checkpoint());
+    }
+    if (request.method !== "POST" || pathname !== "/run") {
+      return new Response("not found", { status: 404 });
+    }
     await this.runBatch();
-    return new Response(null, { status: 204 });
+    return Response.json(await this.checkpoint());
   }
 
   override async alarm(): Promise<void> {
@@ -31,9 +38,7 @@ export class CredentialCacheBackfillDurableObject extends DurableObject<ControlP
   }
 
   private async runBatch(): Promise<void> {
-    const checkpoint = (await this.ctx.storage.get<Checkpoint>(CHECKPOINT_KEY)) ?? {
-      kind: "client",
-    };
+    const checkpoint = await this.checkpoint();
     if (checkpoint.kind === "done") return;
     const credentials = createRepository(this.env.DB).credentials;
     const writer = {
@@ -51,6 +56,10 @@ export class CredentialCacheBackfillDurableObject extends DurableObject<ControlP
     const rows = await credentials.listApiKeysForCacheBackfill(checkpoint.afterKeyId, BATCH_SIZE);
     await backfillCredentialCaches(writer, { clientKeys: [], apiKeys: rows });
     await this.advance(checkpoint, rows.at(-1)?.keyId);
+  }
+
+  private async checkpoint(): Promise<Checkpoint> {
+    return (await this.ctx.storage.get<Checkpoint>(CHECKPOINT_KEY)) ?? { kind: "client" };
   }
 
   private async advance(checkpoint: Checkpoint, lastKeyId: string | undefined): Promise<void> {

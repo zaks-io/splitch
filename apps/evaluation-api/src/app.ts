@@ -1,16 +1,17 @@
-import type { RateLimiter, AuthResolver, RegistrarDeps } from "@splitch/worker-runtime";
+import type { AuthResolver, RateLimiter, RegistrarDeps } from "@splitch/worker-runtime";
 import { createRegistrar } from "@splitch/worker-runtime";
 import { Hono } from "hono";
+import { makeCachedEvaluationTelemetryHandler } from "./cached-evaluation-telemetry";
+import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./data-plane-auth";
+import { makeEvaluateHandler } from "./evaluate";
 import type { EvaluatePathDeps } from "./evaluate/evaluate-path";
 import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
-import { makeTestEvaluationHandler } from "./test-evaluation";
-import { evaluationRoute } from "./routes";
-import { makeVerifyHandler } from "./verify";
-import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./data-plane-auth";
-import { makePeekHandler } from "./peek";
-import { makeEvaluateHandler } from "./evaluate";
-import type { ExposureSink } from "./exposure-sink";
 import type { EvaluationUsageSink } from "./evaluation-usage-sink";
+import type { ExposureSink } from "./exposure-sink";
+import { makePeekHandler } from "./peek";
+import { evaluationRoute } from "./routes";
+import { makeTestEvaluationHandler } from "./test-evaluation";
+import { makeVerifyHandler } from "./verify";
 
 export interface AppDeps extends EvaluatePathDeps {
   authResolver: AuthResolver;
@@ -40,6 +41,11 @@ export function createApp(deps: AppDeps): Hono {
   });
 
   registrar.mount(app, evaluationRoute("sdk_evaluate"), makeEvaluateHandler(deps));
+  registrar.mount(
+    app,
+    evaluationRoute("sdk_cached_evaluation_telemetry"),
+    makeCachedEvaluationTelemetryHandler(deps),
+  );
   registrar.mount(app, evaluationRoute("sdk_peek"), makePeekHandler(deps));
   registrar.mount(app, evaluationRoute("sdk_verify"), makeVerifyHandler(deps));
   registrar.mount(app, evaluationRoute("flags_test_eval"), makeTestEvaluationHandler(deps));

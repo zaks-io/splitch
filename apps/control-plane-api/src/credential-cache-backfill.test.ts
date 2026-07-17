@@ -21,6 +21,7 @@ describe("credential cache schema-v1 backfill", () => {
     const rows: CredentialCacheBackfillRows = {
       clientKeys: [
         {
+          keyId: "ck_a",
           appId: "app_a",
           environmentId: "env_a",
           keyMaterial: "pk_a",
@@ -57,6 +58,7 @@ describe("credential cache schema-v1 backfill", () => {
       clientKeys: [],
       apiKeys: [
         {
+          keyId: "ak_a",
           appId: "app_a",
           environmentId: "env_a",
           keyHash: "hash_a",
@@ -82,6 +84,7 @@ describe("credential cache schema-v1 backfill", () => {
     const rows: CredentialCacheBackfillRows = {
       clientKeys: [
         {
+          keyId: "ck_race",
           appId: "app_a",
           environmentId: "env_a",
           keyMaterial: "pk_race",
@@ -115,6 +118,7 @@ describe("credential cache schema-v1 backfill", () => {
     const writes = new Map<string, string>();
     const writer = new SerialWriter(writes);
     const stale = {
+      keyId: "ck_restrict",
       appId: "app_a",
       environmentId: "env_a",
       keyMaterial: "pk_restrict",
@@ -145,17 +149,64 @@ describe("credential cache schema-v1 backfill", () => {
   });
 });
 
+describe("credential cache backfill authoritative ordering", () => {
+  it("rejects a stale active backfill after revocation has already serialized", async () => {
+    const writes = new Map<string, string>();
+    const writer = new AuthoritativeSerialWriter(writes);
+    const row = {
+      keyId: "ck_revocation_first",
+      appId: "app_a",
+      environmentId: "env_a",
+      keyMaterial: "pk_revocation_first",
+      originAllowlist: null,
+      rateLimitRps: null,
+      organizationId: "org_a",
+      revokedAt: null,
+    };
+
+    writer.revoked = true;
+    await writeClientKeyCache(
+      { credentialCacheWriter: writerAccess(writer) },
+      row,
+      true,
+      "org_a",
+      true,
+    );
+    await expect(
+      backfillCredentialCaches(
+        { credentialCacheWriter: writerAccess(writer) },
+        { clientKeys: [row], apiKeys: [] },
+      ),
+    ).rejects.toThrow("revocation state is stale");
+
+    const raw = writes.get(clientKeyCacheKey(await sha256Hex(row.keyMaterial)));
+    expect(cacheEnvelope.parse(JSON.parse(raw as string)).data.revoked).toBe(true);
+  });
+});
+
 class SerialWriter implements CredentialCacheWriter {
   private tail = Promise.resolve();
 
   constructor(private readonly writes: Map<string, string>) {}
 
-  put(key: string, value: string): Promise<void> {
+  put({ key, value }: Parameters<CredentialCacheWriter["put"]>[0]): Promise<void> {
     const write = this.tail.then(() => {
       this.writes.set(key, value);
     });
     this.tail = write;
     return write;
+  }
+}
+
+class AuthoritativeSerialWriter extends SerialWriter {
+  revoked = false;
+
+  override async put(write: Parameters<CredentialCacheWriter["put"]>[0]): Promise<void> {
+    const candidate = cacheEnvelope.parse(JSON.parse(write.value)).data;
+    if (candidate.revoked !== this.revoked) {
+      throw new Error("credential cache write rejected: revocation state is stale");
+    }
+    await super.put(write);
   }
 }
 

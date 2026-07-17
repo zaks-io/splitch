@@ -16,6 +16,8 @@ SQL >
         dedup_organization_id AS organization_id,
         dedup_app_id AS app_id,
         dedup_environment_id AS environment_id,
+        dedup_flag_key AS flag_key,
+        dedup_sdk_runtime AS sdk_runtime,
         if(dedup_is_batch = 1, 'batch', 'single') AS batch_mode,
         if(dedup_is_cached = 1, 'cached', 'remote') AS evaluation_source,
         if(dedup_has_exposure = 1, 'bearing', 'not_bearing') AS exposure_state,
@@ -27,6 +29,8 @@ SQL >
             argMin(organization_id, server_received_at) AS dedup_organization_id,
             argMin(app_id, server_received_at) AS dedup_app_id,
             argMin(environment_id, server_received_at) AS dedup_environment_id,
+            argMin(flag_key, server_received_at) AS dedup_flag_key,
+            argMin(sdk_runtime, server_received_at) AS dedup_sdk_runtime,
             argMin(evaluation_count, server_received_at) AS dedup_evaluation_count,
             argMin(is_batch, server_received_at) AS dedup_is_batch,
             argMin(is_cached, server_received_at) AS dedup_is_cached,
@@ -37,6 +41,8 @@ SQL >
             AND isNotNull(is_batch)
             AND isNotNull(is_cached)
             AND isNotNull(has_exposure)
+            AND notEmpty(flag_key)
+            AND notEmpty(sdk_runtime)
             AND evaluation_count >= 0
         GROUP BY dedup_key
     )
@@ -46,12 +52,16 @@ SQL >
         dedup_organization_id,
         dedup_app_id,
         dedup_environment_id,
+        dedup_flag_key,
+        dedup_sdk_runtime,
         batch_mode,
         evaluation_source,
         exposure_state
     ORDER BY
         app_id,
         environment_id,
+        flag_key,
+        sdk_runtime,
         batch_mode,
         evaluation_source,
         exposure_state

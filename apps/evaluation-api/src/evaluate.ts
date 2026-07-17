@@ -134,6 +134,7 @@ async function evaluateResponse(
     output.exposures.length > 0,
     logicalEvaluationId,
     evaluated.scope,
+    { flagKey: provider.flag.flagKey, sdkRuntime: sdkRuntime(request) },
     deps,
     () => errorResponse("SERVICE_UNAVAILABLE", "Evaluation usage ingest is unavailable"),
   );
@@ -148,6 +149,11 @@ async function evaluateResponse(
   scheduleHoldoverWrite(output.result, deps);
 
   return Response.json(DataPlaneEvaluateResponseSchema.parse(body.value));
+}
+
+function sdkRuntime(request: Request): string {
+  const value = request.headers.get("x-splitch-sdk-runtime");
+  return value && value.length <= 64 ? value : "unknown";
 }
 
 function responseBody(

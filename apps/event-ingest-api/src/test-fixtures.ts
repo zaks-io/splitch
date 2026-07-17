@@ -46,9 +46,26 @@ export async function postEvaluation(
     isBatch: boolean;
     isCached: boolean;
     hasExposure: boolean;
+    flagKey: string;
+    sdkRuntime: string;
   }> = {},
 ) {
-  vi.spyOn(Date, "now").mockReturnValue(new Date(fixedNow).getTime());
+  return postEvaluationAt(fixedNow, payload);
+}
+
+export async function postEvaluationAt(
+  now: string,
+  payload: Partial<{
+    evaluationCount: number;
+    isBatch: boolean;
+    isCached: boolean;
+    hasExposure: boolean;
+    flagKey: string;
+    sdkRuntime: string;
+  }> = {},
+  scope = { appId, environmentId, organizationId },
+) {
+  vi.spyOn(Date, "now").mockReturnValue(new Date(now).getTime());
   const fetch = mockTinybirdFetch();
   const ctx = new TestExecutionContext();
   const response = await worker.fetch(
@@ -57,15 +74,17 @@ export async function postEvaluation(
       headers: {
         authorization: "Bearer internal_ingest_secret",
         "content-type": "application/json",
-        "x-splitch-app-id": appId,
-        "x-splitch-environment-id": environmentId,
-        "x-splitch-organization-id": organizationId,
+        "x-splitch-app-id": scope.appId,
+        "x-splitch-environment-id": scope.environmentId,
+        "x-splitch-organization-id": scope.organizationId,
       },
       body: JSON.stringify({
         evaluationCount: 1,
         isBatch: false,
         isCached: false,
         hasExposure: false,
+        flagKey: "checkout",
+        sdkRuntime: "javascript",
         idempotencyKey: "eval-request-1",
         ...payload,
       }),

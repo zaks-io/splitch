@@ -107,6 +107,17 @@ export async function runEvaluate(
   const cached = deps.seenSet.get(flagKey, idType, targetingKey, deps.now());
   if (cached !== undefined) {
     deps.logger.debug("[splitch] seen-set hit: suppress Exposure", { flagKey, targetingKey });
+    const recordCachedEvaluation = deps.transport.recordCachedEvaluation;
+    if (recordCachedEvaluation) {
+      void recordCachedEvaluation({ flagKey, idempotencyKey: context.idempotencyKey }).catch(
+        (cause) => {
+          deps.logger.error("[splitch] cached Evaluation telemetry failed-loud", {
+            flagKey,
+            errorMessage: cause instanceof Error ? cause.message : "non-error rejection",
+          });
+        },
+      );
+    }
     // A cached `variant: null` records a 200 no-match; re-apply THIS call's
     // Default Variant rather than replaying a previous caller's.
     return { value: cached.variant ?? defaultValue, variantName: null, reason: "CACHED" };

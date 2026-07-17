@@ -18,14 +18,16 @@ const toolNames = new Set(tools.map((tool) => tool.name));
 // leaking into the tool set fails loudly here.
 const NON_TOOL_OPERATION_IDS = [
   "sdk_evaluate",
+  "sdk_cached_evaluation_telemetry",
   "sdk_peek",
   "sdk_verify",
   "openapi_document_get",
 ] as const;
 
 describe("mcp tools: surface isolation (CRITICAL)", () => {
-  it("derives NO tool for the data-plane evaluate/peek/verify endpoints", () => {
+  it("derives NO tool for the data-plane Evaluation endpoints", () => {
     expect(toolNames.has("sdk_evaluate")).toBe(false);
+    expect(toolNames.has("sdk_cached_evaluation_telemetry")).toBe(false);
     expect(toolNames.has("sdk_peek")).toBe(false);
     expect(toolNames.has("sdk_verify")).toBe(false);
   });
@@ -96,7 +98,7 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
     expect(tools.length).toBe(controlPlaneIds.length);
   });
 
-  it("covers a non-trivial number of tools (N > 0) and excludes the 4 non-tools", () => {
+  it("covers a non-trivial number of tools (N > 0) and excludes non-tools", () => {
     expect(tools.length).toBeGreaterThan(0);
     expect(tools.length).toBe(routeRegistry.length - NON_TOOL_OPERATION_IDS.length);
   });

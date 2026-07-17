@@ -4,6 +4,8 @@ SCHEMA >
     `organization_id` String `json:$.organization_id`,
     `app_id` String `json:$.app_id`,
     `environment_id` String `json:$.environment_id`,
+    `flag_key` String `json:$.flag_key`,
+    `sdk_runtime` String `json:$.sdk_runtime`,
     `server_received_at` DateTime64(3) `json:$.server_received_at`,
     `evaluation_count` Nullable(UInt32) `json:$.evaluation_count`,
     `is_batch` Nullable(UInt8) `json:$.is_batch`,

@@ -86,7 +86,7 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
   const payload = await readJsonObject(request);
   if (!payload.ok) return renderError(payload.error);
 
-  const event = evaluationUsageEvent(payload.value, scope.value);
+  const event = await evaluationUsageEvent(payload.value, scope.value);
   if (!event.ok) return renderError(event.error);
 
   const delivery = tinybirdDelivery(env, "raw_evaluations");

@@ -43,7 +43,10 @@ cache value to select which Environment's Flag Configuration and live Experiment
 
 The Exposure-bearing route requires an `Idempotency-Key` header. The SDK's `idempotencyKey` is the
 caller-owned logical Evaluation identity and must be reused for a retry of that Evaluation. The
-server cannot infer retries automatically; a new key is a new Evaluation for billing purposes.
+server cannot infer retries automatically; a new key is a new Evaluation for billing purposes. The
+pipeline hashes this caller value with its authenticated Organization/App/Environment scope and a UTC
+24-hour replay window before storing it. A replay only deduplicates within that scope and window; the
+raw caller value never reaches Tinybird.
 
 **`app_id` authority — credential is the sole source.** The route carries no `:appId` path
 parameter (`/api/sdk/evaluate`, not `/apps/:appId/evaluate`): the only `app_id` that reaches
@@ -133,7 +136,9 @@ SRM-invisible read under a public key is an allocation oracle. This public endpo
 
 - SDK instantiation succeeds immediately; no flag config is fetched at init time.
 - The first `evaluate(flagKey)` call fetches from the endpoint and caches the resolved Variant
-  in memory for subsequent calls within the session/instance (`reason: CACHED` on hits).
+  in memory for subsequent calls within the session/instance (`reason: CACHED` on hits). A cache hit
+  asynchronously posts privacy-minimal, non-billable telemetry so cached/local reporting dimensions
+  remain visible. Its failure is loud in the SDK logger and never changes the cached result.
 - If the endpoint is unreachable and no cached value exists, the SDK returns the **Default
   Variant** (CONTEXT.md) with `reason: ERROR` + an `errorCode`, fires **no** Exposure, and
   emits a loud error log / error hook (ADR-0036). **This is never silent** — the caller can
@@ -263,7 +268,8 @@ else render(d.value);
   logged loudly — never a silent default. No distributed transaction (ADR-0006).
 - **Logical Evaluation identity:** `Idempotency-Key` is required on this Exposure-bearing route.
   The caller owns its value and must reuse the same value for a retry of the same logical Evaluation.
-  The pipeline deduplicates usage rows by that key. The server does not infer retries from
+  The pipeline deduplicates usage rows by a scoped hash of that key for one UTC 24-hour replay window.
+  The server does not infer retries from
   `requestId`, Targeting Key, or request shape; a new key is a new billable Evaluation.
 
 ## Sources

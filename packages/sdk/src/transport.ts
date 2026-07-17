@@ -54,8 +54,15 @@ export interface VerifyTransportResult extends TransportFailure {
   readonly details: ResolutionDetails | null;
 }
 
+export interface CachedEvaluationTelemetry {
+  readonly flagKey: string;
+  readonly idempotencyKey: string;
+}
+
 export interface Transport {
   evaluate(request: TransportRequest): Promise<TransportResult>;
   peek(request: TransportRequest): Promise<TransportResult>;
   verify(request: TransportRequest): Promise<VerifyTransportResult>;
+  /** Best-effort non-billable telemetry for a local cache result. */
+  recordCachedEvaluation?(event: CachedEvaluationTelemetry): Promise<void>;
 }

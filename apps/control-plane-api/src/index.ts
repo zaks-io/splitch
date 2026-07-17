@@ -31,6 +31,9 @@ const handler = {
         createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
       );
     }
+    if (url.pathname.startsWith("/internal/credential-cache-backfill")) {
+      return handleCredentialCacheBackfillGate(request, env, url);
+    }
 
     const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
     const jwksUri = authJwksUri(env);
@@ -93,6 +96,30 @@ async function runCredentialCacheBackfill(env: ControlPlaneApiEnv): Promise<void
   await env.CREDENTIAL_CACHE_BACKFILL.getByName("schema-v1").fetch("https://backfill/run", {
     method: "POST",
   });
+}
+
+async function handleCredentialCacheBackfillGate(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  url: URL,
+): Promise<Response> {
+  if (
+    !env.SPLITCH_DEPLOY_GATE_TOKEN ||
+    request.headers.get("authorization") !== `Bearer ${env.SPLITCH_DEPLOY_GATE_TOKEN}`
+  ) {
+    return new Response("not found", { status: 404 });
+  }
+  const suffix = url.pathname.replace("/internal/credential-cache-backfill", "") || "/status";
+  if (
+    (suffix !== "/run" && suffix !== "/status") ||
+    (suffix === "/run" && request.method !== "POST")
+  ) {
+    return new Response("not found", { status: 404 });
+  }
+  return env.CREDENTIAL_CACHE_BACKFILL.getByName("schema-v1").fetch(
+    new URL(suffix, "https://backfill.internal"),
+    suffix === "/run" ? { method: "POST" } : undefined,
+  );
 }
 
 export {

@@ -64,7 +64,7 @@ function makeHarness(rows?: readonly unknown[]) {
 }
 
 describe("Organization Evaluation usage", () => {
-  it("aggregates the current month across all five ADR-0033 reporting dimensions", async () => {
+  it("aggregates the current month across all seven ADR-0033 reporting dimensions", async () => {
     const { app, tinybird } = makeHarness();
 
     const response = await app.request(USAGE_PATH, {
@@ -90,6 +90,14 @@ describe("Organization Evaluation usage", () => {
         byEnvironment: [
           { environmentId: "env_dev", evaluations: 0 },
           { environmentId: "env_prod", evaluations: 5 },
+        ],
+        byFlag: [
+          { flagKey: "flag_1", evaluations: 5 },
+          { flagKey: "flag_2", evaluations: 0 },
+        ],
+        bySdkRuntime: [
+          { sdkRuntime: "javascript", evaluations: 5 },
+          { sdkRuntime: "unknown", evaluations: 0 },
         ],
         byBatch: [
           { mode: "batch", evaluations: 3 },
@@ -134,6 +142,8 @@ describe("Organization Evaluation usage", () => {
       breakdown: {
         byApp: [],
         byEnvironment: [],
+        byFlag: [],
+        bySdkRuntime: [],
         byBatch: [],
         bySource: [],
         byExposure: [],
@@ -223,6 +233,8 @@ function usageRow(
     organization_id: ORG_ID,
     app_id: appId,
     environment_id: environmentId,
+    flag_key: appId === "app_1" ? "flag_1" : "flag_2",
+    sdk_runtime: appId === "app_1" ? "javascript" : "unknown",
     batch_mode: mode,
     evaluation_source: source,
     exposure_state: exposure,

@@ -102,9 +102,12 @@ App ownership, not request input. During rollout, the Evaluation Worker can pars
 but treats it as unscoped and returns `503 SERVICE_UNAVAILABLE` for the billing-bearing `evaluate`
 route. It never guesses an Organization or writes usage without one.
 
-The control-plane daily scheduled job is the backfill path. It joins every D1 Client Key and API Key
-to `apps.organization_id` and rewrites its KV entry as schema v2. The write is fail-loud and
-idempotent, so the next scheduled run retries an incomplete migration. Once the v2 entry exists,
+The control-plane daily scheduled job is the steady-state backfill path. During a hosted rollout, the
+deployment workflow first deploys the Control Plane compatibility writer, drives its protected backfill
+gate to `done`, and verifies that checkpoint before it deploys an Evaluation Worker that requires v2.
+This is CI-owned automation, never a manual production deploy. The backfill joins every D1 Client Key
+and API Key to `apps.organization_id` and rewrites its KV entry as schema v2. The write is fail-loud
+and idempotent, so the next scheduled run retries an incomplete migration. Once the v2 entry exists,
 the data plane supplies that authenticated Organization scope to Evaluation usage ingest.
 
 The `environment_id` in the cache value is how the edge resolves an evaluation to the correct

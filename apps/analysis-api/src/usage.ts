@@ -1,5 +1,5 @@
 import { type ErrorResponse, OrganizationUsageResponseSchema } from "@splitch/contracts";
-import { renderError, type HandlerArgs } from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { scopedUsagePipeParams, TinybirdReadError, type TinybirdReadTransport } from "./tinybird";
 
 const USAGE_PIPE = "analysis_evaluation_usage";
@@ -46,6 +46,8 @@ export async function readUsageFromTinybird(
     aggregate.evaluations += usageRow.evaluations;
     addCount(aggregate.byApp, usageRow.appId, usageRow.evaluations);
     addCount(aggregate.byEnvironment, usageRow.environmentId, usageRow.evaluations);
+    addCount(aggregate.byFlag, usageRow.flagKey, usageRow.evaluations);
+    addCount(aggregate.bySdkRuntime, usageRow.sdkRuntime, usageRow.evaluations);
     addCount(aggregate.byBatch, usageRow.mode, usageRow.evaluations);
     addCount(aggregate.bySource, usageRow.source, usageRow.evaluations);
     addCount(aggregate.byExposure, usageRow.exposure, usageRow.evaluations);
@@ -61,6 +63,14 @@ export async function readUsageFromTinybird(
       byApp: sortCounts(aggregate.byApp).map(([appId, evaluations]) => ({ appId, evaluations })),
       byEnvironment: sortCounts(aggregate.byEnvironment).map(([environmentId, evaluations]) => ({
         environmentId,
+        evaluations,
+      })),
+      byFlag: sortCounts(aggregate.byFlag).map(([flagKey, evaluations]) => ({
+        flagKey,
+        evaluations,
+      })),
+      bySdkRuntime: sortCounts(aggregate.bySdkRuntime).map(([sdkRuntime, evaluations]) => ({
+        sdkRuntime,
         evaluations,
       })),
       byBatch: sortCounts(aggregate.byBatch).map(([mode, evaluations]) => ({
@@ -124,6 +134,8 @@ function materializeUsageRow(row: unknown, scope: UsageScope): UsageRow {
   return {
     appId: stringField(source, "app_id"),
     environmentId: stringField(source, "environment_id"),
+    flagKey: stringField(source, "flag_key"),
+    sdkRuntime: stringField(source, "sdk_runtime"),
     mode,
     source: usageSource,
     exposure,
@@ -159,6 +171,8 @@ type UsageExposure = "bearing" | "not_bearing";
 interface UsageRow {
   appId: string;
   environmentId: string;
+  flagKey: string;
+  sdkRuntime: string;
   mode: UsageMode;
   source: UsageSource;
   exposure: UsageExposure;
@@ -170,6 +184,8 @@ interface UsageAggregate {
   rows: number;
   byApp: Map<string, number>;
   byEnvironment: Map<string, number>;
+  byFlag: Map<string, number>;
+  bySdkRuntime: Map<string, number>;
   byBatch: Map<UsageMode, number>;
   bySource: Map<UsageSource, number>;
   byExposure: Map<UsageExposure, number>;
@@ -181,6 +197,8 @@ function emptyAggregate(): UsageAggregate {
     rows: 0,
     byApp: new Map(),
     byEnvironment: new Map(),
+    byFlag: new Map(),
+    bySdkRuntime: new Map(),
     byBatch: new Map(),
     bySource: new Map(),
     byExposure: new Map(),

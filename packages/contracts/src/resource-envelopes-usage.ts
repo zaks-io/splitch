@@ -16,6 +16,20 @@ const EnvironmentUsageSchema = z
   })
   .strict();
 
+const FlagUsageSchema = z
+  .object({
+    flagKey: z.string(),
+    evaluations: EvaluationCountSchema,
+  })
+  .strict();
+
+const SdkRuntimeUsageSchema = z
+  .object({
+    sdkRuntime: z.string(),
+    evaluations: EvaluationCountSchema,
+  })
+  .strict();
+
 const BatchUsageSchema = z
   .object({
     mode: z.enum(["single", "batch"]),
@@ -55,6 +69,8 @@ export const OrganizationUsageResponseSchema = z
       .object({
         byApp: z.array(AppUsageSchema),
         byEnvironment: z.array(EnvironmentUsageSchema),
+        byFlag: z.array(FlagUsageSchema),
+        bySdkRuntime: z.array(SdkRuntimeUsageSchema),
         byBatch: z.array(BatchUsageSchema),
         bySource: z.array(SourceUsageSchema),
         byExposure: z.array(ExposureUsageSchema),

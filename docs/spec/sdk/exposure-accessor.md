@@ -43,8 +43,10 @@ branch on `reason` / `errorCode` (e.g. surface a banner on `STALE`, throw in you
 **What happens inside:**
 
 1. Validates context (targetingKey and the caller-owned idempotencyKey are required; idType defaults to 'user' if omitted).
-2. Checks SDK seen-set for `(flagKey, runId, targetingKey)`. If present, returns cached
-   Variant without an HTTP call and without a second Exposure (`reason: CACHED`).
+2. Checks SDK seen-set for `(flagKey, runId, targetingKey)`. If present, returns the cached
+   Variant without a second Exposure (`reason: CACHED`) and asynchronously sends only the Flag Key,
+   caller-owned idempotency key, and SDK/runtime to non-billable cache telemetry. That telemetry never
+   carries a Targeting Key; a telemetry failure is logged loudly but cannot change the cached result.
 3. On seen-set miss: calls `POST /api/sdk/evaluate` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
 4. Worker fires Exposure to raw log (server-side; client does not send a separate track call).
 5. SDK updates seen-set with `(flagKey, runId, targetingKey) -> VariantValue`.

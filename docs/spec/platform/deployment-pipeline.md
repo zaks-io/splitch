@@ -283,7 +283,11 @@ Tinybird flow:
    runs execute `verify:ci` before the production gate. The deployment job then waits for the GitHub
    `production` environment, runs
    `tb deploy --check` and `tb deploy --wait` through environment-scoped `TB_TOKEN` and `TB_HOST`,
-   applies D1 migrations, and deploys Workers through Turborepo package tasks.
+   applies D1 migrations, deploys the backward-compatible Control Plane Worker, then uses its
+   CI-only backfill gate to run and verify every credential-cache v2 rewrite before deploying the
+   Evaluation Worker or any v2-only billing behavior. The gate is bearer-protected by the hosted
+   `SPLITCH_DEPLOY_GATE_TOKEN`, reports only migration checkpoints, and fails the release instead
+   of allowing a partial rollout. Remaining Workers deploy only after that verification.
 4. Destructive Tinybird deploys require explicit human approval and `--allow-destructive-operations`.
    They are not allowed in the default production deploy workflow.
 

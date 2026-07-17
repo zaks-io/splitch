@@ -12,6 +12,7 @@ import {
   mockTinybirdFetch,
   organizationId,
   postEvaluation,
+  postEvaluationAt,
   postExposure,
   priorRunId,
   TestExecutionContext,
@@ -64,6 +65,8 @@ describe("Evaluation usage ingest", () => {
       organization_id: organizationId,
       app_id: appId,
       environment_id: environmentId,
+      flag_key: "checkout",
+      sdk_runtime: "javascript",
       evaluation_count: 1,
       is_batch: 0,
       is_cached: 0,
@@ -88,12 +91,35 @@ describe("Evaluation usage ingest", () => {
     expect(expectRow(calls.rows)).toMatchObject({ evaluation_count: 10, is_batch: 1 });
   });
 
-  it("keeps the logical Evaluation id stable across retries", async () => {
+  it("deduplicates retries without storing the caller's raw Evaluation id", async () => {
     const first = await postEvaluation();
     const second = await postEvaluation();
 
-    expect(expectRow(first.rows).dedup_key).toBe("eval-request-1");
-    expect(expectRow(second.rows).dedup_key).toBe("eval-request-1");
+    expect(expectRow(first.rows).dedup_key).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(expectRow(second.rows).dedup_key).toBe(expectRow(first.rows).dedup_key);
+    expect(expectRow(first.rows).dedup_key).not.toContain("eval-request-1");
+  });
+
+  it("does not let a shared caller idempotency key deduplicate another App or Organization", async () => {
+    const first = await postEvaluation();
+    const other = await postEvaluationAt(
+      fixedNow,
+      {},
+      {
+        appId: "app_other",
+        environmentId: "env_other",
+        organizationId: "org_other",
+      },
+    );
+
+    expect(expectRow(other.rows).dedup_key).not.toBe(expectRow(first.rows).dedup_key);
+  });
+
+  it("expires an Evaluation idempotency key after its 24-hour replay window", async () => {
+    const first = await postEvaluation();
+    const second = await postEvaluationAt("2026-07-02T12:34:56.789Z");
+
+    expect(expectRow(second.rows).dedup_key).not.toBe(expectRow(first.rows).dedup_key);
   });
 });
 

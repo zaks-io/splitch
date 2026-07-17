@@ -55,6 +55,8 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
         organizationId: "org_verify",
         appId: APP_ID,
         environmentId: "env-1",
+        flagKey: "checkout-banner",
+        sdkRuntime: "unknown",
         evaluationCount: 1,
         isBatch: false,
         isCached: false,
@@ -73,7 +75,13 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
     expect(res.status).toBe(200);
     expect(exposureSink.writes).toEqual([]);
     expect(evaluationUsageSink.writes).toEqual([
-      expect.objectContaining({ evaluationCount: 1, hasExposure: false, isCached: false }),
+      expect.objectContaining({
+        evaluationCount: 1,
+        hasExposure: false,
+        isCached: false,
+        flagKey: "checkout-banner",
+        sdkRuntime: "unknown",
+      }),
     ]);
   });
 
@@ -102,6 +110,32 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
       "eval-retry-1",
       "eval-retry-1",
     ]);
+  });
+
+  it("records cache telemetry as non-billable and does not expose a Targeting Key", async () => {
+    const { app, evaluationUsageSink } = await makeSdkRouteHarness();
+    const res = await app.request("/api/sdk/evaluation-telemetry", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${CLIENT_KEY}`,
+        "content-type": "application/json",
+        "idempotency-key": "cache-hit-1",
+        "x-splitch-sdk-runtime": "javascript",
+      },
+      body: JSON.stringify({ flagKey: "checkout-banner", idempotencyKey: "cache-hit-1" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(evaluationUsageSink.writes).toEqual([
+      expect.objectContaining({
+        evaluationCount: 0,
+        isCached: true,
+        hasExposure: false,
+        flagKey: "checkout-banner",
+        sdkRuntime: "javascript",
+      }),
+    ]);
+    expect(JSON.stringify(evaluationUsageSink.writes)).not.toContain("targetingKey");
   });
 });
 

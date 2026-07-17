@@ -3,9 +3,11 @@ export interface EvaluationUsageEvent {
   readonly organizationId: string;
   readonly appId: string;
   readonly environmentId: string;
-  readonly evaluationCount: 1;
+  readonly flagKey: string;
+  readonly sdkRuntime: string;
+  readonly evaluationCount: 0 | 1;
   readonly isBatch: false;
-  readonly isCached: false;
+  readonly isCached: boolean;
   readonly hasExposure: boolean;
 }
 

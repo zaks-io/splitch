@@ -1,6 +1,8 @@
 import { ResolutionDetailsSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
+  CachedEvaluationTelemetryRequestSchema,
+  CachedEvaluationTelemetryResponseSchema,
   DataPlaneEvaluateRequestSchema,
   DataPlaneEvaluateResponseSchema,
   PeekEvaluateResponseSchema,
@@ -43,6 +45,26 @@ export const dataPlaneRoutes = [
       "APP_MISMATCH",
       "ORIGIN_NOT_ALLOWED",
       "FLAG_NOT_FOUND",
+      "VALIDATION_ERROR",
+      "RATE_LIMITED",
+      "SERVICE_UNAVAILABLE",
+    ],
+  }),
+  defineApiRoute({
+    operationId: "sdk_cached_evaluation_telemetry",
+    owner: OWNER,
+    method: "POST",
+    path: "/api/sdk/evaluation-telemetry",
+    summary: "Record a non-billable, cache-hit Evaluation dimension.",
+    request: { body: CachedEvaluationTelemetryRequestSchema },
+    response: CachedEvaluationTelemetryResponseSchema,
+    auth: "client-key",
+    rateLimit: "client-key",
+    idempotency: "required",
+    errors: [
+      "UNAUTHORIZED",
+      "CREDENTIAL_REVOKED",
+      "ORIGIN_NOT_ALLOWED",
       "VALIDATION_ERROR",
       "RATE_LIMITED",
       "SERVICE_UNAVAILABLE",

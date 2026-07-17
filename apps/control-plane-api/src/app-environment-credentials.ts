@@ -26,7 +26,7 @@ export async function revokeEnvironmentCredentialCaches(
     deps.repo.credentials.listClientKeys(scope),
   ]);
 
-  await writeRevokedTombstones(deps, apiKeys, clientKeys);
+  await writeRevokedTombstones(deps, scope, apiKeys, clientKeys);
 }
 
 export async function deleteEnvironmentCredentialRows(
@@ -50,13 +50,28 @@ export async function deleteEnvironmentCredentials(
 
 async function writeRevokedTombstones(
   deps: CredentialDeleteDeps,
+  scope: ReturnType<typeof envScope>,
   apiKeys: readonly ApiKeyRow[],
   clientKeys: readonly ClientKeyRow[],
 ): Promise<void> {
   for (const row of apiKeys) {
-    await writeApiKeyCache(deps, row, true, null, true);
+    const revoked =
+      row.revokedAt === null
+        ? await deps.repo.credentials.revokeApiKey(scope, row.keyId, nowIso(deps))
+        : row;
+    if (!revoked) throw new Error("credential revoke did not reach D1");
+    await writeApiKeyCache(deps, revoked, true, null, true);
   }
   for (const row of clientKeys) {
-    await writeClientKeyCache(deps, row, true, null, true);
+    const revoked =
+      row.revokedAt === null
+        ? await deps.repo.credentials.updateClientKey(scope, row.keyId, { revokedAt: nowIso(deps) })
+        : row;
+    if (!revoked) throw new Error("credential revoke did not reach D1");
+    await writeClientKeyCache(deps, revoked, true, null, true);
   }
+}
+
+function nowIso(deps: CredentialDeleteDeps): string {
+  return deps.nowIso?.() ?? new Date().toISOString();
 }

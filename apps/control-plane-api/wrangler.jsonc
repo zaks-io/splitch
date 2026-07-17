@@ -61,7 +61,7 @@
     }
   ],
   "secrets": {
-    "required": ["SENTRY_DSN"]
+    "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local"
@@ -86,7 +86,7 @@
       },
       "routes": [{ "pattern": "api.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN"]
+        "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
@@ -145,7 +145,7 @@
       },
       "routes": [{ "pattern": "api.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN"]
+        "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",

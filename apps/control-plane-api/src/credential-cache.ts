@@ -14,7 +14,15 @@ export interface CredentialCacheDeps {
 }
 
 export interface CredentialCacheWriter {
-  put(key: string, value: string, options?: KVNamespacePutOptions): Promise<void>;
+  put(write: CredentialCacheWrite): Promise<void>;
+}
+
+export interface CredentialCacheWrite {
+  readonly key: string;
+  readonly value: string;
+  readonly options?: KVNamespacePutOptions;
+  /** The D1 row the key-addressed writer must validate before replacing KV. */
+  readonly credential: { readonly kind: "client_key" | "api_key"; readonly keyId: string };
 }
 
 export interface CredentialCacheWriterAccess {
@@ -22,6 +30,7 @@ export interface CredentialCacheWriterAccess {
 }
 
 export interface ClientKeyCacheRow {
+  keyId: string;
   appId: string;
   environmentId: string;
   keyMaterial: string;
@@ -30,6 +39,7 @@ export interface ClientKeyCacheRow {
 }
 
 export interface ApiKeyCacheRow {
+  keyId: string;
   appId: string;
   environmentId: string;
   keyHash: string;
@@ -49,6 +59,7 @@ export async function writeClientKeyCache(
     key,
     clientKeyCache(deps, row, revoked, organizationId),
     failLoud,
+    { kind: "client_key", keyId: row.keyId },
   );
 }
 
@@ -64,6 +75,7 @@ export async function writeApiKeyCache(
     apiKeyCacheKey(row.keyHash),
     apiKeyCache(deps, row, revoked, organizationId),
     failLoud,
+    { kind: "api_key", keyId: row.keyId },
   );
 }
 
@@ -112,6 +124,7 @@ async function writeCredentialCache(
   key: string,
   value: CredentialCacheKV,
   failLoud: boolean,
+  credential: CredentialCacheWrite["credential"],
 ): Promise<void> {
   if (!value.revoked && value.organizationId === null) {
     throw new Error("credential cache active writes require an organizationId");
@@ -123,9 +136,18 @@ async function writeCredentialCache(
   // fail-loud by rotate/revoke), never from active-entry expiry.
   const options = value.revoked ? { expirationTtl: REVOKED_TOMBSTONE_TTL_SECONDS } : undefined;
   try {
-    const store = deps.credentialCacheWriter?.writerFor(key) ?? deps.credentialStore;
-    if (!store) throw new Error("credential cache store is not configured");
-    await store.put(key, JSON.stringify(envelope(value)), options);
+    const writer = deps.credentialCacheWriter?.writerFor(key);
+    if (writer) {
+      await writer.put({
+        key,
+        value: JSON.stringify(envelope(value)),
+        ...(options === undefined ? {} : { options }),
+        credential,
+      });
+      return;
+    }
+    if (!deps.credentialStore) throw new Error("credential cache store is not configured");
+    await deps.credentialStore.put(key, JSON.stringify(envelope(value)), options);
   } catch (cause) {
     if (failLoud) throw cause;
   }
