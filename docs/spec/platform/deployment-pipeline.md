@@ -82,14 +82,14 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 
 ## Required GitHub workflows
 
-| Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                                           |
-| ----------------------- | --------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks                             |
-| `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke |
-| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                                             |
-| `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, and Turborepo Worker deploy tasks                    |
-| `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                              |
-| `sdk-release`           | manual dispatch                                     | `sdk-release`, queued            | wired: validate `@splitch/sdk`, prepare release artifacts, create or update draft GitHub Release for `sdk-v<version>`; does not publish to npm            |
+| Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                                             |
+| ----------------------- | --------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks                               |
+| `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke   |
+| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                                               |
+| `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, Turborepo Worker deploy tasks, and Linear release sync |
+| `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                                |
+| `sdk-release`           | manual dispatch                                     | `sdk-release`, queued            | wired: validate `@splitch/sdk`, prepare release artifacts, create or update draft GitHub Release for `sdk-v<version>`; does not publish to npm              |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
@@ -231,9 +231,15 @@ or any Durable Object migration.
 - Every deployable Worker Wrangler config enables `upload_source_maps` so Cloudflare can remap Worker
   stack traces from uploaded source maps.
 - Worker package deploy scripts call `scripts/deploy-worker-with-sentry.mjs`, which runs
-  `wrangler deploy` with `.wrangler/sentry` as the bundle outdir, injects a per-Worker
-  `SENTRY_RELEASE`, creates the matching Sentry release when it does not already exist, and uploads
+  `wrangler deploy` with `.wrangler/sentry` as the bundle outdir, injects `SENTRY_RELEASE`, creates
+  the matching Sentry release when it does not already exist, and uploads
   that bundle directory to Sentry with `sentry-cli sourcemaps upload`.
+- Production pins `SENTRY_RELEASE` to the exact deployed commit SHA and passes the same value to
+  Linear Release as its version. A validation step requires the Linear access key before any
+  production mutation. The Linear sync runs in a separate post-deploy job with no production
+  credentials, so one immutable release ID joins the deployed code, Sentry events, source maps, and
+  Linear issues discovered from the deployed commit range without exposing deploy secrets to the
+  release action.
 - `SENTRY_RELEASE` is non-secret deploy metadata. It is injected at deploy time, not committed in
   Wrangler `vars`.
 - Sentry upload credentials are CI-only and must not become Worker runtime secrets. Shared-preview
@@ -270,9 +276,10 @@ Tinybird flow:
 2. Shared preview creates or updates `shared_preview --last-partition`, then runs `tb --branch=shared_preview build`
    and endpoint smoke tests against that branch.
 3. Production release starts automatically after the `ci` workflow succeeds for a same-repository
-   push to `main`, or manually from `main`. The workflow checks out `refs/heads/main` and refuses to
-   deploy if it does not match the CI `head_sha`. Manual runs execute `verify:ci` before the
-   production gate. The deployment job then waits for the GitHub `production` environment, runs
+   push to `main`, or manually from `main`. Automatic runs use the CI `head_sha`; manual runs use the
+   dispatch event's `github.sha`. Both paths check out and verify that immutable release SHA. Manual
+   runs execute `verify:ci` before the production gate. The deployment job then waits for the GitHub
+   `production` environment, runs
    `tb deploy --check` and `tb deploy --wait` through environment-scoped `TB_TOKEN` and `TB_HOST`,
    applies D1 migrations, and deploys Workers through Turborepo package tasks.
 4. Destructive Tinybird deploys require explicit human approval and `--allow-destructive-operations`.
@@ -307,6 +314,7 @@ drift from the release path.
 8. Run route and binding smoke checks before marking the GitHub deployment complete.
 9. Record Worker version IDs, D1 migration names, Tinybird deployment URL, commit SHA, and smoke results
    in the GitHub deployment summary.
+10. Sync the completed release to Linear in a separate job using the same commit SHA as Sentry.
 
 Production smoke must assert `platformTarget = "production"` on every public Worker health or route
 probe that exposes it. A production deployment is not complete if the summary lacks route-level smoke
