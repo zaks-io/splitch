@@ -9,7 +9,8 @@ splitch product **Environment** under an App.
 
 ## Decision
 
-Use GitHub Actions on Blacksmith runners as the orchestrator, Turborepo as the monorepo task graph
+Use GitHub Actions on Blacksmith runners as the orchestrator, except `sdk-publish`, which must run on
+GitHub-hosted infrastructure for npm trusted publishing. Use Turborepo as the monorepo task graph
 and task-output cache, Wrangler as the Cloudflare source of truth, and Tinybird CLI deployments for
 analytics resources. Every non-doc PR gets local validation against disposable CI services. Hosted
 preview is a single shared target updated on demand. Production releases are queued, approval-gated
@@ -44,7 +45,9 @@ routes, DNS, or GitHub environment configuration.
 
 ## Runner policy
 
-- All GitHub Actions jobs use Blacksmith runner tags, starting with `blacksmith-2vcpu-ubuntu-2404`.
+- All GitHub Actions jobs use Blacksmith runner tags, starting with `blacksmith-2vcpu-ubuntu-2404`,
+  except `sdk-publish`. npm trusted publishing supports GitHub-hosted runners, not Blacksmith, so that
+  release-published workflow uses `ubuntu-24.04` and must not receive an npm token.
 - Use larger Blacksmith Linux runners only for measured bottlenecks, for example large build or test
   shards.
 - Keep upstream cache actions such as `actions/cache` and `actions/setup-node`; Blacksmith redirects
@@ -82,18 +85,36 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 
 ## Required GitHub workflows
 
-| Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                                             |
-| ----------------------- | --------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks                               |
-| `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke   |
-| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                                               |
-| `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, Turborepo Worker deploy tasks, and Linear release sync |
-| `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                                |
-| `sdk-release`           | manual dispatch                                     | `sdk-release`, queued            | wired: validate `@splitch/sdk`, prepare release artifacts, create or update draft GitHub Release for `sdk-v<version>`; does not publish to npm              |
-| `sdk-publish`           | published GitHub Release                            | `sdk-publish`, queued            | wired: validate public `@splitch/sdk` release tag/version/commit, then use GitHub-hosted npm trusted publishing with provenance or skip an existing version |
+| Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                                                              |
+| ----------------------- | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks                                                |
+| `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                    |
+| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                                                                |
+| `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, Turborepo Worker deploy tasks, and Linear release sync                  |
+| `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                                                 |
+| `sdk-release`           | manual dispatch                                     | `sdk-release`, queued            | wired: validate `@splitch/sdk`, prepare release artifacts, create or update draft GitHub Release for `sdk-v<version>`; does not publish to npm                               |
+| `sdk-publish`           | published GitHub Release                            | `sdk-publish`, queued            | wired: validate fresh public repository/release/remote-tag SHA evidence immediately before GitHub-hosted npm trusted publishing with provenance, or skip an existing version |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
+
+### SDK publish bootstrap prerequisite
+
+`@splitch/sdk` cannot use npm trusted publishing until the package already exists on npm. Before the
+first stable `sdk-v0.1.0` release, a human with npm organization write access and 2FA must explicitly
+approve and perform this one-time bootstrap outside `sdk-publish`:
+
+1. Publish only the disposable prerelease `@splitch/sdk@0.1.0-bootstrap.0` manually with dist-tag
+   `bootstrap`; do not consume `0.1.0`, `latest`, or the stable release tag. This bootstrap package
+   does not carry the stable release's provenance claim.
+2. Configure the package's sole trusted publisher for `zaks-io/splitch`, workflow
+   `sdk-publish.yml`, and the `npm publish` action. Verify the configured provider before proceeding.
+3. Remove any temporary bootstrap publishing access. The normal `sdk-publish` path has no npm token
+   and must remain OIDC-only.
+
+Provider setup is intentionally not verified by repository code or this workflow. A missing or
+mismatched trusted publisher makes the stable release fail closed at `npm publish`; it is a human
+approval/setup blocker, not a reason to add a long-lived token.
 
 ## Cloudflare resource contract
 

@@ -27,17 +27,6 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Fail closed for private repositories
-        env:
-          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
-        run: |
-          set -euo pipefail
-          if [ "$REPOSITORY_PRIVATE" != "false" ]; then
-            echo "Refusing npm publish: repository.private=$REPOSITORY_PRIVATE"
-            exit 1
-          fi
-          echo "Repository visibility check passed: public"
-
       - name: Checkout release tag
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -103,13 +92,12 @@ jobs:
           pnpm --filter @splitch/sdk pack --dry-run
           pnpm --filter @splitch/sdk pack:check
 
-      - name: Revalidate source before publish
+      - name: Refresh live release state before publish
         if: steps.npm-version.outputs.already_published != 'true'
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_TARGET_COMMITISH: ${{ github.event.release.target_commitish }}
-          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
-        run: node scripts/sdk-release/validate-publish-context.mjs "$GITHUB_WORKSPACE"
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/sdk-release/validate-live-publish-state.mjs "$GITHUB_WORKSPACE"
 
       - name: Publish @splitch/sdk with provenance
         if: steps.npm-version.outputs.already_published != 'true'

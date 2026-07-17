@@ -10,6 +10,9 @@ const { checkPublishedVersion } = await import(
 const { validatePublishContext } = await import(
   pathToFileURL(path.join(repoRoot, "scripts/sdk-release/validate-publish-context.mjs")).href
 );
+const { validateLivePublishState } = await import(
+  pathToFileURL(path.join(repoRoot, "scripts/sdk-release/validate-live-publish-state.mjs")).href
+);
 const workflow = readFileSync(path.join(repoRoot, ".github/workflows/sdk-publish.yml"), "utf8");
 const publishedVersionChecker = readFileSync(
   path.join(repoRoot, "scripts/sdk-release/check-published-version.mjs"),
@@ -55,8 +58,9 @@ describe("sdk-publish workflow contract", () => {
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("validate-publish-context.mjs");
     expect(workflow).toContain("RELEASE_TARGET_COMMITISH");
-    expect(workflow).toContain("REPOSITORY_PRIVATE");
-    expect(workflow).toContain("repository.private=$REPOSITORY_PRIVATE");
+    expect(workflow).toContain("Refresh live release state before publish");
+    expect(workflow).toContain("validate-live-publish-state.mjs");
+    expect(workflow).toContain("GITHUB_TOKEN: ${{" + " github.token }}");
     expect(workflow).toContain("github.sha");
     expect(publishContextValidator).toContain("release target commitish must be a full commit SHA");
   });
@@ -69,6 +73,78 @@ describe("sdk-publish workflow contract", () => {
     expect(workflow).toContain("skip-already-published");
     expect(workflow).toContain("Decision: ");
     expect(workflow).toContain("Runner: ubuntu-24.04 (GitHub-hosted)");
+  });
+});
+
+describe("SDK live publish-state validation", () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const environment = {
+    GITHUB_SHA: commit,
+    GITHUB_REPOSITORY: "zaks-io/splitch",
+    GITHUB_TOKEN: "ephemeral-github-token",
+    RELEASE_TAG: "sdk-v0.1.0",
+  };
+
+  function fetcher(repository: Record<string, unknown>, release: Record<string, unknown>) {
+    return async (url: string) => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify(url.endsWith("/releases/tags/sdk-v0.1.0") ? release : repository),
+    });
+  }
+
+  it("requires fresh public repository, release, remote tag, and checked-out SHA evidence", async () => {
+    const result = await validateLivePublishState(repoRoot, environment, {
+      fetcher: fetcher(
+        { private: false, visibility: "public" },
+        {
+          tag_name: "sdk-v0.1.0",
+          draft: false,
+          published_at: "2026-07-17T00:00:00Z",
+          target_commitish: commit,
+        },
+      ),
+      head: () => commit,
+      peeledTag: () => commit,
+    });
+    expect(result.remote_peeled_tag).toBe(commit);
+  });
+
+  it("fails closed when any live source disagrees with GITHUB_SHA", async () => {
+    await expect(
+      validateLivePublishState(repoRoot, environment, {
+        fetcher: fetcher(
+          { private: false, visibility: "public" },
+          {
+            tag_name: "sdk-v0.1.0",
+            draft: false,
+            published_at: "2026-07-17T00:00:00Z",
+            target_commitish: "fedcba9876543210fedcba9876543210fedcba98",
+          },
+        ),
+        head: () => commit,
+        peeledTag: () => commit,
+      }),
+    ).rejects.toThrow("live release source SHAs disagree");
+  });
+
+  it("fails closed when the current repository visibility is not public", async () => {
+    await expect(
+      validateLivePublishState(repoRoot, environment, {
+        fetcher: fetcher(
+          { private: true, visibility: "private" },
+          {
+            tag_name: "sdk-v0.1.0",
+            draft: false,
+            published_at: "2026-07-17T00:00:00Z",
+            target_commitish: commit,
+          },
+        ),
+        head: () => commit,
+        peeledTag: () => commit,
+      }),
+    ).rejects.toThrow("not publicly visible");
   });
 });
 
