@@ -180,6 +180,7 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
     orgId: claimant.orgId,
     appId: claimant.appId,
     acquisitionToken: crypto.randomUUID(),
+    acquisitionKeyHash: keyHash,
     now: nowIso,
     expiresAt: iso(now + IDEMPOTENCY_TTL_MS),
   };
@@ -192,7 +193,19 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
     }
     throw new OAuthError("invalid_request", "a claim with this idempotency_key is in progress");
   }
-  if (!applied) throw new OAuthError("invalid_grant", "claim state changed during transfer");
+  if (!applied) {
+    if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
+      return tokenize(deps, claimant, verifiedUserId, now);
+    }
+    const acquisitionOwner = await deps.repo.claim.claimAcquisitionOwner({
+      orgId: claimant.orgId,
+      keyHash,
+    });
+    if (acquisitionOwner === "same_key") {
+      throw new OAuthError("invalid_request", "a claim with this idempotency_key is in progress");
+    }
+    throw new OAuthError("invalid_grant", "claim state changed during transfer");
+  }
   return tokenize(deps, claimant, verifiedUserId, now);
 }
 

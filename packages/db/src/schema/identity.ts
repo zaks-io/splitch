@@ -37,6 +37,8 @@ export const organizations = sqliteTable("organizations", {
   // Set only by the atomic Door B transfer acquisition batch.
   claimAcquiredAt: text("claim_acquired_at"),
   claimAcquisitionToken: text("claim_acquisition_token"),
+  // Cleared on completion; identifies same-key losers while the batch is in flight.
+  claimAcquisitionKeyHash: text("claim_acquisition_key_hash"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

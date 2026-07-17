@@ -185,10 +185,31 @@ export function makeClaimStateRepo(d1: D1Database) {
       );
     },
 
+    claimAcquisitionOwner(input: { orgId: string; keyHash: string }) {
+      return getClaimAcquisitionOwner(d1, input);
+    },
+
     completeClaim(d1Input: CompleteClaimInput) {
       return completeClaim(d1, d1Input);
     },
   };
+}
+
+async function getClaimAcquisitionOwner(d1: D1Database, input: { orgId: string; keyHash: string }) {
+  const row = await d1
+    .prepare(
+      `SELECT claim_acquisition_token, claim_acquisition_key_hash
+         FROM organizations WHERE id = ?`,
+    )
+    .bind(input.orgId)
+    .first<{
+      claim_acquisition_token: string | null;
+      claim_acquisition_key_hash: string | null;
+    }>();
+  if (!row?.claim_acquisition_token) return "none" as const;
+  return row.claim_acquisition_key_hash === input.keyHash
+    ? ("same_key" as const)
+    : ("other_key" as const);
 }
 
 function asVerification(row: Record<string, unknown>): ClaimVerification {

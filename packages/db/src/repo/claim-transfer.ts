@@ -12,6 +12,7 @@ export interface CompleteClaimInput {
   orgId: string;
   appId: string;
   acquisitionToken: string;
+  acquisitionKeyHash: string;
   now: string;
   expiresAt: string;
 }
@@ -85,10 +86,17 @@ export async function completeClaim(d1: D1Database, input: CompleteClaimInput): 
     d1
       .prepare(
         `UPDATE organizations SET is_provisional = 0, demo_expires_at = NULL,
-            claim_acquisition_token = ?, updated_at = ?
+            claim_acquisition_token = ?, claim_acquisition_key_hash = ?, updated_at = ?
            WHERE id = ? AND is_provisional = 1 AND claim_acquisition_token IS NULL AND ${acquisitionInvariants}`,
       )
-      .bind(input.acquisitionToken, input.now, input.orgId, ...guardValues, ...membershipValues),
+      .bind(
+        input.acquisitionToken,
+        input.acquisitionKeyHash,
+        input.now,
+        input.orgId,
+        ...guardValues,
+        ...membershipValues,
+      ),
     d1
       .prepare(`DELETE FROM org_memberships WHERE user_id = ? AND org_id = ?
         AND EXISTS (SELECT 1 FROM org_memberships AS target WHERE target.org_id = org_memberships.org_id AND target.user_id = ?)
@@ -142,6 +150,12 @@ export async function completeClaim(d1: D1Database, input: CompleteClaimInput): 
         input.expiresAt,
         ...acquiredValues,
       ),
+    d1
+      .prepare(
+        `UPDATE organizations SET claim_acquisition_key_hash = NULL
+           WHERE id = ? AND claim_acquisition_token = ?`,
+      )
+      .bind(input.orgId, input.acquisitionToken),
   ];
   const results = await d1.batch(statements);
   return results[0]?.meta.changes === 1;
