@@ -8,11 +8,12 @@ import {
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning";
-import { randomHex } from "./credential-cache";
+import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
 
 export interface AppEnvironmentDeps {
   repo: Repository;
   credentialStore?: KVNamespace;
+  credentialCacheWriter?: CredentialCacheWriterAccess;
   nowIso?: () => string;
 }
 

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { asc, gt, eq } from "drizzle-orm";
 import { apiKeys, apps, clientKeys } from "../schema/index";
 import type { Db } from "./client";
 import type { EnvScope } from "./scope";
@@ -27,7 +27,7 @@ export function makeCredentialRepo(db: Db) {
     },
 
     /** Global D1 authority used only by the schema-v1 credential cache backfill. */
-    listApiKeysForCacheBackfill() {
+    listApiKeysForCacheBackfill(afterKeyId?: string, limit = 25) {
       return db
         .select({
           keyId: apiKeys.keyId,
@@ -39,7 +39,10 @@ export function makeCredentialRepo(db: Db) {
           organizationId: apps.organizationId,
         })
         .from(apiKeys)
-        .innerJoin(apps, eq(apps.id, apiKeys.appId));
+        .innerJoin(apps, eq(apps.id, apiKeys.appId))
+        .where(afterKeyId === undefined ? undefined : gt(apiKeys.keyId, afterKeyId))
+        .orderBy(asc(apiKeys.keyId))
+        .limit(limit);
     },
 
     getApiKey(scope: EnvScope, keyId: string) {
@@ -60,7 +63,7 @@ export function makeCredentialRepo(db: Db) {
     },
 
     /** Global D1 authority used only by the schema-v1 credential cache backfill. */
-    listClientKeysForCacheBackfill() {
+    listClientKeysForCacheBackfill(afterKeyId?: string, limit = 25) {
       return db
         .select({
           keyId: clientKeys.keyId,
@@ -73,7 +76,10 @@ export function makeCredentialRepo(db: Db) {
           organizationId: apps.organizationId,
         })
         .from(clientKeys)
-        .innerJoin(apps, eq(apps.id, clientKeys.appId));
+        .innerJoin(apps, eq(apps.id, clientKeys.appId))
+        .where(afterKeyId === undefined ? undefined : gt(clientKeys.keyId, afterKeyId))
+        .orderBy(asc(clientKeys.keyId))
+        .limit(limit);
     },
 
     getClientKey(scope: EnvScope, keyId: string) {

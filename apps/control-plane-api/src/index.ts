@@ -10,7 +10,11 @@ import { createApp } from "./app";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
-import { backfillCredentialCaches } from "./credential-cache";
+import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
+import {
+  CredentialCacheWriterDurableObject,
+  durableCredentialCacheWriterAccess,
+} from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
@@ -43,6 +47,7 @@ const handler = {
       rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET),
       repo: createRepository(env.DB),
       credentialStore: env.CREDENTIAL_STORE,
+      credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
       configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
       logger: console,
       memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
@@ -85,16 +90,13 @@ async function runDemoReaper(
 }
 
 async function runCredentialCacheBackfill(env: ControlPlaneApiEnv): Promise<void> {
-  const credentials = createRepository(env.DB).credentials;
-  const [apiKeys, clientKeys] = await Promise.all([
-    credentials.listApiKeysForCacheBackfill(),
-    credentials.listClientKeysForCacheBackfill(),
-  ]);
-  const written = await backfillCredentialCaches(
-    { credentialStore: env.CREDENTIAL_STORE },
-    { apiKeys, clientKeys },
-  );
-  console.info("credential-cache-backfill", { written });
+  await env.CREDENTIAL_CACHE_BACKFILL.getByName("schema-v1").fetch("https://backfill/run", {
+    method: "POST",
+  });
 }
 
-export { ConfigStoreDurableObject };
+export {
+  ConfigStoreDurableObject,
+  CredentialCacheBackfillDurableObject,
+  CredentialCacheWriterDurableObject,
+};

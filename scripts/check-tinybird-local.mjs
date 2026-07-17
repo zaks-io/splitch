@@ -121,7 +121,7 @@ function hasTinybirdTests(path) {
   if (!existsSync(path)) {
     return false;
   }
-  return readdirSync(path).some((file) => file.endsWith(".test"));
+  return readdirSync(path).some((file) => file.endsWith(".yaml") || file.endsWith(".yml"));
 }
 
 function requireColumns(contents, columns) {

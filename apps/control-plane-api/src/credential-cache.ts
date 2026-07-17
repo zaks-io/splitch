@@ -9,7 +9,16 @@ const REVOKED_TOMBSTONE_TTL_SECONDS = 5 * 60;
 
 export interface CredentialCacheDeps {
   credentialStore?: KVNamespace;
+  credentialCacheWriter?: CredentialCacheWriterAccess;
   nowIso?: () => string;
+}
+
+export interface CredentialCacheWriter {
+  put(key: string, value: string, options?: KVNamespacePutOptions): Promise<void>;
+}
+
+export interface CredentialCacheWriterAccess {
+  writerFor(key: string): CredentialCacheWriter;
 }
 
 export interface ClientKeyCacheRow {
@@ -114,7 +123,7 @@ async function writeCredentialCache(
   // fail-loud by rotate/revoke), never from active-entry expiry.
   const options = value.revoked ? { expirationTtl: REVOKED_TOMBSTONE_TTL_SECONDS } : undefined;
   try {
-    const store = deps.credentialStore;
+    const store = deps.credentialCacheWriter?.writerFor(key) ?? deps.credentialStore;
     if (!store) throw new Error("credential cache store is not configured");
     await store.put(key, JSON.stringify(envelope(value)), options);
   } catch (cause) {

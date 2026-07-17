@@ -6,6 +6,12 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 describe("Tinybird local validator", () => {
+  it("runs Tinybird YAML tests when present", () => {
+    const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
+    const script = readFileSync(join(repoRoot, "scripts/check-tinybird-local.mjs"), "utf8");
+    expect(script).toMatch(/file\.endsWith\("\.yaml"\)/);
+  });
+
   it("fails loudly when raw_events loses its dedup key contract", () => {
     const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
     const tempRoot = mkdtempSync(join(tmpdir(), "splitch-tinybird-bad-"));

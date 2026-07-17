@@ -1,6 +1,7 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { EvaluationUsageSinkError } from "./evaluation-usage-sink";
+import { makeHttpEvaluationUsageSink } from "./evaluation-usage-sink";
 import {
   APP_ID,
   CLIENT_KEY,
@@ -28,6 +29,17 @@ describe("POST /api/sdk/evaluate: logical Evaluation identity", () => {
 });
 
 describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
+  it("maps a rejected usage service binding fetch to a retryable failure", async () => {
+    const { app } = await makeSdkRouteHarness({
+      evaluationUsageSink: new RejectingFetcherEvaluationUsageSink(),
+    });
+
+    const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
+
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
+  });
+
   it("records one remote Evaluation with its exposure dimension before returning success", async () => {
     const { app, evaluationUsageSink } = await makeSdkRouteHarness({
       liveRun: true,
@@ -96,5 +108,16 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
 class FailingEvaluationUsageSink extends RecordingEvaluationUsageSink {
   override async write(): Promise<void> {
     throw new EvaluationUsageSinkError("forced failure");
+  }
+}
+
+class RejectingFetcherEvaluationUsageSink extends RecordingEvaluationUsageSink {
+  private readonly sink = makeHttpEvaluationUsageSink({
+    token: "test-token",
+    fetcher: { fetch: async () => Promise.reject(new Error("binding unavailable")) },
+  });
+
+  override async write(event: Parameters<RecordingEvaluationUsageSink["write"]>[0]): Promise<void> {
+    await this.sink.write(event);
   }
 }

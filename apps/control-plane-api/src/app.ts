@@ -8,6 +8,7 @@ import {
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import type { ConfigStoreAccess } from "./config-store-do";
+import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
@@ -40,6 +41,7 @@ export interface AppDeps {
   rateLimiter: RateLimiter;
   repo: Repository;
   credentialStore?: KVNamespace;
+  credentialCacheWriter?: CredentialCacheWriterAccess;
   configStore?: ConfigStoreAccess;
   memberProfileResolver?: MemberProfileResolver;
   nowIso?: () => string;
@@ -70,6 +72,7 @@ export function createApp(deps: AppDeps): Hono {
   const credentialHandlers = makeCredentialHandlers({
     repo: deps.repo,
     credentialStore: deps.credentialStore,
+    credentialCacheWriter: deps.credentialCacheWriter,
     nowIso: deps.nowIso,
   });
   const flagDefinitionHandlers = makeFlagDefinitionHandlers({
@@ -90,6 +93,7 @@ export function createApp(deps: AppDeps): Hono {
   const appEnvironmentHandlers = makeAppEnvironmentHandlers({
     repo: deps.repo,
     credentialStore: deps.credentialStore,
+    credentialCacheWriter: deps.credentialCacheWriter,
     nowIso: deps.nowIso,
   });
   const registrar = controlPlaneRegistrar(deps);

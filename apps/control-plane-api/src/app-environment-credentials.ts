@@ -1,9 +1,14 @@
 import { envScope, type Repository } from "@splitch/db";
-import { writeApiKeyCache, writeClientKeyCache } from "./credential-cache";
+import {
+  type CredentialCacheWriterAccess,
+  writeApiKeyCache,
+  writeClientKeyCache,
+} from "./credential-cache";
 
 interface CredentialDeleteDeps {
   repo: Pick<Repository, "credentials">;
   credentialStore?: KVNamespace;
+  credentialCacheWriter?: CredentialCacheWriterAccess;
   nowIso?: () => string;
 }
 

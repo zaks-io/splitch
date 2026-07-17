@@ -45,6 +45,19 @@ describe("openapi document: validity", () => {
 });
 
 describe("openapi document: full route coverage", () => {
+  it("derives required Idempotency-Key headers into OpenAPI", () => {
+    const operation = doc.paths?.["/api/sdk/evaluate"]?.post as {
+      parameters?: Array<{ in?: string; name?: string; required?: boolean }>;
+    };
+    expect(operation.parameters).toContainEqual(
+      expect.objectContaining({
+        in: "header",
+        name: "Idempotency-Key",
+        required: true,
+      }),
+    );
+  });
+
   it("emits the Organization usage endpoint from its route contract", () => {
     const operation = documentOperations().find(
       (entry) => entry.operationId === "organization_usage_get",

@@ -40,17 +40,22 @@ export function makeHttpEvaluationUsageSink(options: {
         throw new EvaluationUsageSinkError("Evaluation usage ingest binding is unavailable");
       }
 
-      const response = await callFetcher(fetcherFor(options), requestUrl(options), {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${options.token}`,
-          "content-type": "application/json",
-          "x-splitch-app-id": event.appId,
-          "x-splitch-environment-id": event.environmentId,
-          "x-splitch-organization-id": event.organizationId,
-        },
-        body: JSON.stringify(event),
-      });
+      let response: Response;
+      try {
+        response = await callFetcher(fetcherFor(options), requestUrl(options), {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${options.token}`,
+            "content-type": "application/json",
+            "x-splitch-app-id": event.appId,
+            "x-splitch-environment-id": event.environmentId,
+            "x-splitch-organization-id": event.organizationId,
+          },
+          body: JSON.stringify(event),
+        });
+      } catch (cause) {
+        throw new EvaluationUsageSinkError("Evaluation usage ingest transport failed", { cause });
+      }
 
       if (!response.ok) {
         throw new EvaluationUsageSinkError(

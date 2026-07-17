@@ -10,12 +10,19 @@ import {
   ensureActiveClientKey,
   provisionClientKey,
 } from "./client-key-provisioning";
-import { randomHex, sha256Hex, writeApiKeyCache, writeClientKeyCache } from "./credential-cache";
+import {
+  type CredentialCacheWriterAccess,
+  randomHex,
+  sha256Hex,
+  writeApiKeyCache,
+  writeClientKeyCache,
+} from "./credential-cache";
 import { objectBody, pathParam } from "./handler-input";
 
 interface CredentialHandlerDeps {
   repo: Repository;
   credentialStore?: KVNamespace;
+  credentialCacheWriter?: CredentialCacheWriterAccess;
   nowIso?: () => string;
 }
 

@@ -1,10 +1,15 @@
 import type { ClientKey } from "@splitch/contracts";
 import type { envScope, Repository } from "@splitch/db";
-import { randomHex, writeClientKeyCache } from "./credential-cache";
+import {
+  type CredentialCacheWriterAccess,
+  randomHex,
+  writeClientKeyCache,
+} from "./credential-cache";
 
 interface ClientKeyDeps {
   repo: Repository;
   credentialStore?: KVNamespace;
+  credentialCacheWriter?: CredentialCacheWriterAccess;
   nowIso?: () => string;
 }
 

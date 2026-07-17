@@ -44,10 +44,21 @@
     }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" }]
+    "bindings": [
+      { "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" },
+      { "name": "CREDENTIAL_CACHE_WRITER", "class_name": "CredentialCacheWriterDurableObject" },
+      { "name": "CREDENTIAL_CACHE_BACKFILL", "class_name": "CredentialCacheBackfillDurableObject" }
+    ]
   },
   "migrations": [
-    { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] }
+    { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] },
+    {
+      "tag": "v2_credential_cache_backfill",
+      "new_sqlite_classes": [
+        "CredentialCacheWriterDurableObject",
+        "CredentialCacheBackfillDurableObject"
+      ]
+    }
   ],
   "secrets": {
     "required": ["SENTRY_DSN"]
@@ -95,10 +106,24 @@
         { "binding": "CREDENTIAL_STORE", "id": "05f656eb41b54063aa0d2d23a6082c5b" }
       ],
       "durable_objects": {
-        "bindings": [{ "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" }]
+        "bindings": [
+          { "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" },
+          { "name": "CREDENTIAL_CACHE_WRITER", "class_name": "CredentialCacheWriterDurableObject" },
+          {
+            "name": "CREDENTIAL_CACHE_BACKFILL",
+            "class_name": "CredentialCacheBackfillDurableObject"
+          }
+        ]
       },
       "migrations": [
-        { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] }
+        { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] },
+        {
+          "tag": "v2_credential_cache_backfill",
+          "new_sqlite_classes": [
+            "CredentialCacheWriterDurableObject",
+            "CredentialCacheBackfillDurableObject"
+          ]
+        }
       ]
     },
     "production": {
@@ -140,10 +165,24 @@
         { "binding": "CREDENTIAL_STORE", "id": "2c0082cdd2f4426f8cfeb4d2bbd62277" }
       ],
       "durable_objects": {
-        "bindings": [{ "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" }]
+        "bindings": [
+          { "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" },
+          { "name": "CREDENTIAL_CACHE_WRITER", "class_name": "CredentialCacheWriterDurableObject" },
+          {
+            "name": "CREDENTIAL_CACHE_BACKFILL",
+            "class_name": "CredentialCacheBackfillDurableObject"
+          }
+        ]
       },
       "migrations": [
-        { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] }
+        { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] },
+        {
+          "tag": "v2_credential_cache_backfill",
+          "new_sqlite_classes": [
+            "CredentialCacheWriterDurableObject",
+            "CredentialCacheBackfillDurableObject"
+          ]
+        }
       ]
     }
   }
