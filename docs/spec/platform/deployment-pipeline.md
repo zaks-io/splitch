@@ -90,6 +90,7 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 | `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, Turborepo Worker deploy tasks, and Linear release sync |
 | `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                                |
 | `sdk-release`           | manual dispatch                                     | `sdk-release`, queued            | wired: validate `@splitch/sdk`, prepare release artifacts, create or update draft GitHub Release for `sdk-v<version>`; does not publish to npm              |
+| `sdk-publish`           | published GitHub Release                            | `sdk-publish`, queued            | wired: validate public `@splitch/sdk` release tag/version/commit, then use GitHub-hosted npm trusted publishing with provenance or skip an existing version |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
@@ -366,6 +367,7 @@ is compatible with current data.
 - [x] Add Blacksmith-backed GitHub workflows for CI and Gitleaks.
 - [ ] Add Blacksmith-backed GitHub workflows for shared preview reset and rollback.
 - [x] Add a Blacksmith-backed `sdk-release` workflow for manual SDK draft release prep.
+- [x] Add a GitHub-hosted `sdk-publish` workflow for release-published npm trusted publishing with provenance.
 - [x] Add a Blacksmith-backed `deploy-shared-preview` workflow.
 - [x] Add a Blacksmith-backed `deploy-production` workflow for Tinybird, D1, and Worker deploy legs.
 - [x] Add Cloudflare and Sentry source-map upload wiring for Worker deploys.
