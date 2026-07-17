@@ -17,6 +17,7 @@ export function makeWorkOsAccessTokenVerifier(input: {
       const { sub, iss, aud, exp } = decoded.payload;
       if (
         typeof sub !== "string" ||
+        sub.length === 0 ||
         iss !== input.issuer ||
         !matchesAudience(aud, input.audience) ||
         typeof exp !== "number" ||

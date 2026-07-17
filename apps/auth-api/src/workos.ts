@@ -79,6 +79,7 @@ export function makeFixtureWorkOs(): WorkOsPort {
 
 /** Hosted WorkOS adapter. OTP values only transit to WorkOS; they are never logged or persisted. */
 export function makeHostedWorkOs(input: { apiKey: string; baseUrl?: string }): WorkOsPort {
+  if (!input.apiKey) throw new Error("WORKOS_API_KEY is required for the hosted WorkOS adapter");
   const baseUrl = input.baseUrl ?? "https://api.workos.com";
   return {
     async resolveOrCreateUser(email) {

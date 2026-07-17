@@ -1,4 +1,5 @@
 import type { Repository } from "@splitch/db";
+import { consentRequired, createConsent } from "./claim-consent";
 import { normalizeEmail } from "./email";
 import { OAuthError } from "./oauth-errors";
 import type { RateLimiter } from "./rate-limit";
@@ -6,7 +7,6 @@ import type { TokenSigner } from "./token-exchange";
 import type { WorkOsPort } from "./workos";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
-const CONSENT_TTL_MS = 15 * 60 * 1000;
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_OTP_ATTEMPTS = 5;
 
@@ -29,7 +29,7 @@ export interface InitiateInput {
 }
 
 export interface VerifyInput extends InitiateInput {
-  otp: string;
+  otp?: string;
   verificationId?: string;
   idempotencyKey: string;
 }
@@ -58,13 +58,18 @@ export async function initiateClaim(
   await assertStillProvisional(deps, claimant.orgId);
   const hashes = await claimHashes(claimant.userId, claimant.email);
   const verificationId = `cver_${crypto.randomUUID()}`;
-  await deps.workos.sendEmailVerification(claimant.userId, claimant.email);
+  const existing = await deps.workos.findVerifiedUserByEmail(claimant.email);
   await deps.repo.claim.createVerification({
     ...hashes,
     id: verificationId,
     expiresAt: iso(now + OTP_TTL_MS),
     now: iso(now),
   });
+  if (existing && existing !== claimant.userId) {
+    const consentId = await createConsent(deps, verificationId, existing, now, hashIdentifier);
+    throw consentRequired(deps, consentId, verificationId, now);
+  }
+  await deps.workos.sendEmailVerification(claimant.userId, claimant.email);
   return {
     otp_required: true,
     verification_id: verificationId,
@@ -106,47 +111,60 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
     );
   }
   const existingHash = existing ? await hashIdentifier(existing) : null;
-  if (!verification.verifiedAt) {
-    if (
-      !(await deps.repo.claim.incrementAttempt({
-        ...hashes,
-        id: verification.id,
-        now: nowIso,
-        maxAttempts: MAX_OTP_ATTEMPTS,
-      }))
-    ) {
-      throw new OAuthError("invalid_grant", "OTP attempt limit reached; request a new code");
-    }
-    try {
-      await deps.workos.confirmEmailVerification(claimant.userId, claimant.email, input.otp);
-    } catch {
-      throw new OAuthError("invalid_grant", "WorkOS rejected the email verification code");
-    }
-    if (!(await deps.repo.claim.markVerified({ ...hashes, id: verification.id, now: nowIso }))) {
-      throw new OAuthError("server_error", "claim verification changed during confirmation");
-    }
-  }
+  const collision = Boolean(existing && existing !== claimant.userId);
   const approvedConsent =
-    existing && existing !== claimant.userId
+    collision && existingHash
       ? await deps.repo.claim.getApprovedConsent({
           verificationId: verification.id,
-          existingUserHash: existingHash as string,
+          existingUserHash: existingHash,
           now: nowIso,
         })
       : null;
-  if (existing && existing !== claimant.userId && !approvedConsent) {
-    const consentId = `ccons_${crypto.randomUUID()}`;
-    await deps.repo.claim.createConsentAttempt({
-      id: consentId,
-      verificationId: verification.id,
-      existingUserHash: existingHash as string,
-      expiresAt: iso(now + CONSENT_TTL_MS),
-      now: nowIso,
-    });
-    throw new OAuthError("interaction_required", "the email owner must approve linking", {
-      consent_url: `${deps.consentBaseUrl}/claim/consent/${consentId}`,
-      consent_expires_at: iso(now + CONSENT_TTL_MS),
-    });
+  if (collision && !approvedConsent) {
+    const consentId = await createConsent(
+      deps,
+      verification.id,
+      existing as string,
+      now,
+      hashIdentifier,
+    );
+    throw consentRequired(deps, consentId, verification.id, now);
+  }
+  if (!verification.verifiedAt) {
+    if (collision) {
+      if (
+        !(await deps.repo.claim.markVerifiedFromConsent({
+          ...hashes,
+          id: verification.id,
+          consentAttemptId: approvedConsent as string,
+          now: nowIso,
+        }))
+      ) {
+        throw new OAuthError("server_error", "claim consent changed during confirmation");
+      }
+    } else {
+      if (!input.otp) {
+        throw new OAuthError("invalid_grant", "claim verification requires an OTP");
+      }
+      if (
+        !(await deps.repo.claim.incrementAttempt({
+          ...hashes,
+          id: verification.id,
+          now: nowIso,
+          maxAttempts: MAX_OTP_ATTEMPTS,
+        }))
+      ) {
+        throw new OAuthError("invalid_grant", "OTP attempt limit reached; request a new code");
+      }
+      try {
+        await deps.workos.confirmEmailVerification(claimant.userId, claimant.email, input.otp);
+      } catch {
+        throw new OAuthError("invalid_grant", "WorkOS rejected the email verification code");
+      }
+      if (!(await deps.repo.claim.markVerified({ ...hashes, id: verification.id, now: nowIso }))) {
+        throw new OAuthError("server_error", "claim verification changed during confirmation");
+      }
+    }
   }
   const verifiedUserId = existing && existing !== claimant.userId ? existing : claimant.userId;
   const transfer = {
@@ -180,6 +198,25 @@ export async function approveClaimConsent(
 ): Promise<void> {
   if (
     !(await deps.repo.claim.approveConsent({
+      id: consentAttemptId,
+      existingUserHash: await hashIdentifier(workosUserId),
+      now: iso(deps.now()),
+    }))
+  ) {
+    throw new OAuthError(
+      "invalid_grant",
+      "claim consent is expired or does not belong to this user",
+    );
+  }
+}
+
+export async function refuseClaimConsent(
+  deps: ClaimDeps,
+  consentAttemptId: string,
+  workosUserId: string,
+): Promise<void> {
+  if (
+    !(await deps.repo.claim.refuseConsent({
       id: consentAttemptId,
       existingUserHash: await hashIdentifier(workosUserId),
       now: iso(deps.now()),

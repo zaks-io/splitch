@@ -35,6 +35,12 @@ const handler = {
       env,
       workerObservabilityWithWaitUntil("auth-api", ctx),
     );
+    if (!hostedWorkOsConfigured(env)) {
+      return Response.json(
+        { error: "server_error", error_description: "hosted WorkOS is not configured" },
+        { status: 500 },
+      );
+    }
     const turnstile = makeRuntimeTurnstile({
       fixture: fixtureTurnstile,
       platformTarget: env.SPLITCH_PLATFORM_TARGET,
@@ -54,13 +60,7 @@ const handler = {
     const consentBaseUrl = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
     const now = () => Date.now();
     const workos = hostedWorkOs(env);
-    const deviceFlow = env.WORKOS_CLIENT_ID
-      ? makeWorkOsDeviceFlow({
-          clientId: env.WORKOS_CLIENT_ID,
-          apiKey: env.WORKOS_API_KEY,
-          baseUrl: env.WORKOS_API_BASE_URL,
-        })
-      : makeFixtureDeviceFlow();
+    const deviceFlow = makeDeviceFlow(env);
     const tokenSigner = makeTokenSigner({
       assertionSecret,
       accessSecret,
@@ -120,16 +120,35 @@ function sharedPreviewSmokeClient(env: AuthApiEnv): SmokeClientCredentials | und
 }
 
 function hostedWorkOs(env: AuthApiEnv) {
-  if (
-    env.SPLITCH_PLATFORM_TARGET !== "shared-preview" &&
-    env.SPLITCH_PLATFORM_TARGET !== "production"
-  ) {
+  if (!isHostedTarget(env.SPLITCH_PLATFORM_TARGET)) {
     return fixtureWorkos;
   }
-  // Wrangler requires this binding for deployed targets. Keeping the local test
-  // harness fixture-capable lets Turnstile reject before any provider call.
-  if (!env.WORKOS_API_KEY) return fixtureWorkos;
+  if (!env.WORKOS_API_KEY) {
+    throw new Error("WORKOS_API_KEY is required for hosted targets");
+  }
   return makeHostedWorkOs({ apiKey: env.WORKOS_API_KEY, baseUrl: env.WORKOS_API_BASE_URL });
+}
+
+function makeDeviceFlow(env: AuthApiEnv) {
+  if (!isHostedTarget(env.SPLITCH_PLATFORM_TARGET) && !env.WORKOS_CLIENT_ID) {
+    return makeFixtureDeviceFlow();
+  }
+  return makeWorkOsDeviceFlow({
+    clientId: env.WORKOS_CLIENT_ID as string,
+    apiKey: env.WORKOS_API_KEY,
+    baseUrl: env.WORKOS_API_BASE_URL,
+  });
+}
+
+function isHostedTarget(target: string | undefined): boolean {
+  return target === "shared-preview" || target === "production";
+}
+
+function hostedWorkOsConfigured(env: AuthApiEnv): boolean {
+  return (
+    !isHostedTarget(env.SPLITCH_PLATFORM_TARGET) ||
+    (Boolean(env.WORKOS_API_KEY) && Boolean(env.WORKOS_CLIENT_ID))
+  );
 }
 
 function workosAccessTokenVerifier(env: AuthApiEnv) {

@@ -32,6 +32,10 @@ export interface ClaimHarness {
   /** Drive a full happy ceremony: initiate (sends OTP) then verify (with the code). */
   fullClaim(d: DoorBFixtures, assertion: string, email?: string, key?: string): Promise<unknown>;
   isProvisional(orgId: string): Promise<boolean>;
+  count(
+    table: "claim_verifications" | "claim_consent_attempts" | "claim_idempotency",
+  ): Promise<number>;
+  setProvisional(orgId: string, provisional: boolean): Promise<void>;
 }
 
 export function setupClaimHarness(): ClaimHarness {
@@ -56,6 +60,9 @@ export function setupClaimHarness(): ClaimHarness {
   beforeEach(async () => {
     for (const t of [
       "environments",
+      "claim_idempotency",
+      "claim_consent_attempts",
+      "claim_verifications",
       "app_memberships",
       "apps",
       "org_memberships",
@@ -100,5 +107,19 @@ export function setupClaimHarness(): ClaimHarness {
     return row?.is_provisional === 1;
   }
 
-  return { deps, register, fullClaim, isProvisional };
+  async function count(
+    table: "claim_verifications" | "claim_consent_attempts" | "claim_idempotency",
+  ) {
+    const row = await local.d1.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>();
+    return row?.n ?? 0;
+  }
+
+  async function setProvisional(orgId: string, provisional: boolean) {
+    await local.d1
+      .prepare("UPDATE organizations SET is_provisional = ? WHERE id = ?")
+      .bind(provisional ? 1 : 0, orgId)
+      .run();
+  }
+
+  return { deps, register, fullClaim, isProvisional, count, setProvisional };
 }

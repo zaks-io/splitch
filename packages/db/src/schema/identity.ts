@@ -34,6 +34,8 @@ export const organizations = sqliteTable("organizations", {
   // is_provisional = 1 implies demo_expires_at IS NOT NULL (enforced in the seam).
   isProvisional: integer("is_provisional", { mode: "boolean" }).notNull().default(false),
   demoExpiresAt: text("demo_expires_at"),
+  // Set only by the atomic Door B transfer acquisition batch.
+  claimAcquiredAt: text("claim_acquired_at"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

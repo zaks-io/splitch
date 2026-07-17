@@ -1,3 +1,5 @@
+import { completeClaim, type CompleteClaimInput } from "./claim-transfer";
+
 export interface ClaimHashes {
   provisionalUserHash: string;
   emailHash: string;
@@ -11,7 +13,6 @@ export interface ClaimVerification extends ClaimHashes {
   consumedAt: string | null;
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: claim writes must stay visibly within one D1 repository transaction seam.
 export function makeClaimStateRepo(d1: D1Database) {
   return {
     async createVerification(input: ClaimHashes & { id: string; expiresAt: string; now: string }) {
@@ -72,6 +73,32 @@ export function makeClaimStateRepo(d1: D1Database) {
       return result.meta.changes === 1;
     },
 
+    async markVerifiedFromConsent(
+      input: ClaimHashes & { id: string; consentAttemptId: string; now: string },
+    ) {
+      const result = await d1
+        .prepare(
+          `UPDATE claim_verifications SET verified_at = ?
+             WHERE id = ? AND provisional_user_hash = ? AND email_hash = ?
+               AND verified_at IS NULL AND consumed_at IS NULL AND expires_at > ?
+               AND EXISTS (SELECT 1 FROM claim_consent_attempts
+                 WHERE id = ? AND verification_id = ? AND approved_at IS NOT NULL
+                   AND consumed_at IS NULL AND expires_at > ?)`,
+        )
+        .bind(
+          input.now,
+          input.id,
+          input.provisionalUserHash,
+          input.emailHash,
+          input.now,
+          input.consentAttemptId,
+          input.id,
+          input.now,
+        )
+        .run();
+      return result.meta.changes === 1;
+    },
+
     async createConsentAttempt(input: {
       id: string;
       verificationId: string;
@@ -92,8 +119,21 @@ export function makeClaimStateRepo(d1: D1Database) {
     async approveConsent(input: { id: string; existingUserHash: string; now: string }) {
       const result = await d1
         .prepare(
-          `UPDATE claim_consent_attempts SET approved_at = COALESCE(approved_at, ?)
-             WHERE id = ? AND existing_user_hash = ? AND consumed_at IS NULL AND expires_at > ?`,
+          `UPDATE claim_consent_attempts SET approved_at = ?
+             WHERE id = ? AND existing_user_hash = ? AND approved_at IS NULL
+               AND consumed_at IS NULL AND expires_at > ?`,
+        )
+        .bind(input.now, input.id, input.existingUserHash, input.now)
+        .run();
+      return result.meta.changes === 1;
+    },
+
+    async refuseConsent(input: { id: string; existingUserHash: string; now: string }) {
+      const result = await d1
+        .prepare(
+          `UPDATE claim_consent_attempts SET consumed_at = ?
+             WHERE id = ? AND existing_user_hash = ? AND approved_at IS NULL
+               AND consumed_at IS NULL AND expires_at > ?`,
         )
         .bind(input.now, input.id, input.existingUserHash, input.now)
         .run();
@@ -129,97 +169,8 @@ export function makeClaimStateRepo(d1: D1Database) {
       );
     },
 
-    async completeClaim(
-      input: ClaimHashes & {
-        verificationId: string;
-        consentAttemptId: string | null;
-        keyHash: string;
-        provisionalUserId: string;
-        verifiedUserId: string;
-        orgId: string;
-        now: string;
-        expiresAt: string;
-      },
-    ) {
-      const consentGuard = input.consentAttemptId
-        ? `EXISTS (SELECT 1 FROM claim_consent_attempts
-                    WHERE id = ? AND verification_id = ? AND approved_at IS NOT NULL
-                      AND consumed_at IS NULL AND expires_at > ?)`
-        : "1 = 1";
-      const guard = `EXISTS (SELECT 1 FROM claim_verifications
-        WHERE id = ? AND provisional_user_hash = ? AND email_hash = ?
-          AND verified_at IS NOT NULL AND consumed_at IS NULL AND expires_at > ?)
-        AND ${consentGuard}`;
-      const guardValues = () =>
-        input.consentAttemptId
-          ? [
-              input.verificationId,
-              input.provisionalUserHash,
-              input.emailHash,
-              input.now,
-              input.consentAttemptId,
-              input.verificationId,
-              input.now,
-            ]
-          : [input.verificationId, input.provisionalUserHash, input.emailHash, input.now];
-      const statements = [
-        d1
-          .prepare(`DELETE FROM org_memberships WHERE user_id = ? AND org_id = ?
-            AND EXISTS (SELECT 1 FROM org_memberships AS target WHERE target.org_id = org_memberships.org_id AND target.user_id = ?)
-            AND ${guard}`)
-          .bind(input.provisionalUserId, input.orgId, input.verifiedUserId, ...guardValues()),
-        d1
-          .prepare(
-            `UPDATE org_memberships SET user_id = ? WHERE user_id = ? AND org_id = ? AND ${guard}`,
-          )
-          .bind(input.verifiedUserId, input.provisionalUserId, input.orgId, ...guardValues()),
-        d1
-          .prepare(`DELETE FROM app_memberships WHERE user_id = ? AND app_id IN (SELECT id FROM apps WHERE organization_id = ?)
-            AND EXISTS (SELECT 1 FROM app_memberships AS target WHERE target.app_id = app_memberships.app_id AND target.user_id = ?)
-            AND ${guard}`)
-          .bind(input.provisionalUserId, input.orgId, input.verifiedUserId, ...guardValues()),
-        d1
-          .prepare(
-            `UPDATE app_memberships SET user_id = ? WHERE user_id = ? AND app_id IN (SELECT id FROM apps WHERE organization_id = ?) AND ${guard}`,
-          )
-          .bind(input.verifiedUserId, input.provisionalUserId, input.orgId, ...guardValues()),
-        d1
-          .prepare(
-            `UPDATE organizations SET is_provisional = 0, demo_expires_at = NULL, updated_at = ? WHERE id = ? AND is_provisional = 1 AND ${guard}`,
-          )
-          .bind(input.now, input.orgId, ...guardValues()),
-        d1
-          .prepare(
-            `UPDATE claim_verifications SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL AND ${guard}`,
-          )
-          .bind(input.now, input.verificationId, ...guardValues()),
-        ...(input.consentAttemptId
-          ? [
-              d1
-                .prepare(
-                  `UPDATE claim_consent_attempts SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL`,
-                )
-                .bind(input.now, input.consentAttemptId),
-            ]
-          : []),
-        d1
-          .prepare(
-            `INSERT INTO claim_idempotency
-               (key_hash, verification_id, provisional_user_hash, email_hash, completed_at, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-          )
-          .bind(
-            input.keyHash,
-            input.verificationId,
-            input.provisionalUserHash,
-            input.emailHash,
-            input.now,
-            input.expiresAt,
-          ),
-      ];
-      const results = await d1.batch(statements);
-      const orgResult = results[4];
-      return orgResult?.meta.changes === 1;
+    completeClaim(d1Input: CompleteClaimInput) {
+      return completeClaim(d1, d1Input);
     },
   };
 }

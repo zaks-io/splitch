@@ -25,8 +25,9 @@ export const AnonymousIdentityRequestSchema = z.object({
  * POST /agent/identity/claim (and POST /claim): the claim ceremony body.
  *
  * Two-step: an INITIATE call carries only {identity_assertion, email} (no otp) and
- * triggers an OTP send to that email; a VERIFY call adds {otp, idempotency_key}.
- * The presence of `otp` selects the step. `email` is only shape-validated here
+ * either triggers an OTP send or returns durable collision consent state; a VERIFY
+ * call adds {otp, idempotency_key} for OTP or {verification_id, idempotency_key}
+ * after consent. `email` is only shape-validated here
  * (min length); the canonical validation + normalization is single-sourced in
  * email.ts so the same canonical string feeds the OTP binding, the collision
  * lookup, and the verify-email write (they can never disagree).
@@ -37,6 +38,10 @@ export const ClaimRequestSchema = z.object({
   otp: z.string().min(1).optional(),
   verification_id: z.string().min(1).optional(),
   idempotency_key: z.string().min(1).optional(),
+});
+
+export const ClaimConsentRequestSchema = z.object({
+  decision: z.enum(["approve", "deny"]),
 });
 
 /** POST /oauth2/token: token-exchange of an identity_assertion. */

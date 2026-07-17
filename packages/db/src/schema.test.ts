@@ -144,3 +144,9 @@ describe("device refresh session storage", () => {
     expect(block).not.toContain("`refresh_token`");
   });
 });
+
+describe("Door B transfer acquisition storage", () => {
+  it("stores a nullable one-batch acquisition marker on Organizations", () => {
+    expect(migrationSql).toContain("ALTER TABLE `organizations` ADD `claim_acquired_at` text");
+  });
+});

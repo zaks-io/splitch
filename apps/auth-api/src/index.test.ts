@@ -133,6 +133,8 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
         ...env,
         SPLITCH_PLATFORM_TARGET: "shared-preview",
         TURNSTILE_SECRET: "test-turnstile-secret",
+        WORKOS_API_KEY: "test-workos-api-key",
+        WORKOS_CLIENT_ID: "test-workos-client-id",
       },
     );
 
@@ -141,5 +143,27 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
     expect(fetcher).toHaveBeenCalledOnce();
     expect(await rowCount("organizations")).toBe(beforeOrganizations);
     expect(await rowCount("apps")).toBe(beforeApps);
+  });
+
+  it.each([
+    "shared-preview",
+    "production",
+  ])("%s fails closed without WORKOS_API_KEY instead of using fixture WorkOS", async (target) => {
+    const beforeOrganizations = await rowCount("organizations");
+    const res = await call(
+      { turnstile_token: turnstileToken() },
+      `198.51.100.${target === "shared-preview" ? "90" : "91"}`,
+      "/agent/identity",
+      {
+        ...env,
+        SPLITCH_PLATFORM_TARGET: target,
+        WORKOS_CLIENT_ID: "workos-client",
+        TURNSTILE_SECRET: "test-turnstile-secret",
+      },
+    );
+
+    expect(res.status).toBe(500);
+    expect(await res.json()).toMatchObject({ error: "server_error" });
+    expect(await rowCount("organizations")).toBe(beforeOrganizations);
   });
 });

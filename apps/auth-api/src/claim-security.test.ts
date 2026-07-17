@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EMAIL, setupClaimHarness } from "./claim-harness";
-import { initiateClaim, verifyClaim } from "./claim";
+import { approveClaimConsent, initiateClaim, refuseClaimConsent, verifyClaim } from "./claim";
 import { FIXTURE_OTP } from "./otp";
 
 /**
@@ -16,7 +16,12 @@ import { FIXTURE_OTP } from "./otp";
  *     reservation, so a legitimate retry re-runs instead of seeing "in progress".
  */
 
-const { deps, register, fullClaim, isProvisional } = setupClaimHarness();
+const { deps, register, fullClaim, isProvisional, count, setProvisional } = setupClaimHarness();
+
+type ClaimConsentError = {
+  code: string;
+  extra: { consent_url?: string; verification_id?: string };
+};
 
 describe("FINDING 1: idempotency replay is RE-AUTHENTICATED (no key-only token mint)", () => {
   it("a replay with a DIFFERENT user's valid assertion is rejected (no token minted)", async () => {
@@ -153,5 +158,136 @@ describe("FINDING 3: a winner that FAILS releases the key (retry is not locked o
       expect(reason.code).toBe("invalid_request");
     }
     expect(await isProvisional(orgId)).toBe(false);
+  });
+});
+
+describe("SPL-137 transfer guards and consent one-use semantics", () => {
+  it("does not consume state or mint idempotency when the Organization acquisition guard fails", async () => {
+    const d = deps();
+    const { assertion, orgId } = await register(d);
+    await initiateClaim(d.claim, {
+      identityAssertion: assertion,
+      email: EMAIL,
+      remoteIp: "1.2.3.4",
+    });
+    await setProvisional(orgId, false);
+
+    await expect(
+      verifyClaim(d.claim, {
+        identityAssertion: assertion,
+        otp: FIXTURE_OTP,
+        email: EMAIL,
+        idempotencyKey: "guard-failure",
+        remoteIp: "1.2.3.4",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+    expect(await count("claim_idempotency")).toBe(0);
+    expect(await count("claim_consent_attempts")).toBe(0);
+  });
+
+  it("rejects a competing idempotency key after the one-use transfer completed", async () => {
+    const d = deps();
+    const { assertion, orgId } = await register(d);
+    await fullClaim(d, assertion, EMAIL, "winner");
+
+    await expect(
+      verifyClaim(d.claim, {
+        identityAssertion: assertion,
+        otp: FIXTURE_OTP,
+        email: EMAIL,
+        idempotencyKey: "competitor",
+        remoteIp: "1.2.3.4",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+    expect(await count("claim_idempotency")).toBe(1);
+    expect(await isProvisional(orgId)).toBe(false);
+  });
+
+  it("requires the existing AuthKit principal, refuses a second principal, and consumes consent once", async () => {
+    const d = deps();
+    const owner = await d.workos.resolveOrCreateUser("owner@example.com");
+    const { assertion, orgId } = await register(d);
+    let error: ClaimConsentError | undefined;
+    try {
+      await initiateClaim(d.claim, {
+        identityAssertion: assertion,
+        email: "owner@example.com",
+        remoteIp: "1.2.3.4",
+      });
+    } catch (cause) {
+      error = cause as ClaimConsentError;
+    }
+    const consentError = error as ClaimConsentError;
+    const attemptId = new URL(consentError.extra.consent_url as string).pathname
+      .split("/")
+      .at(-1) as string;
+    const verificationId = consentError.extra.verification_id as string;
+
+    await expect(approveClaimConsent(d.claim, attemptId, "user_wrong")).rejects.toMatchObject({
+      code: "invalid_grant",
+    });
+    await approveClaimConsent(d.claim, attemptId, owner);
+    await expect(approveClaimConsent(d.claim, attemptId, owner)).rejects.toMatchObject({
+      code: "invalid_grant",
+    });
+
+    const result = await verifyClaim(d.claim, {
+      identityAssertion: assertion,
+      verificationId,
+      email: "owner@example.com",
+      idempotencyKey: "consent-once",
+      remoteIp: "1.2.3.4",
+    });
+    expect(result.user_id).toBe(owner);
+    expect(await isProvisional(orgId)).toBe(false);
+  });
+
+  it("refusal and expiry cannot be reused", async () => {
+    const d = deps();
+    const owner = await d.workos.resolveOrCreateUser("owner@example.com");
+    const { assertion } = await register(d);
+    let error: ClaimConsentError | undefined;
+    try {
+      await initiateClaim(d.claim, {
+        identityAssertion: assertion,
+        email: "owner@example.com",
+        remoteIp: "1.2.3.4",
+      });
+    } catch (cause) {
+      error = cause as ClaimConsentError;
+    }
+    const consentError = error as ClaimConsentError;
+    const attemptId = new URL(consentError.extra.consent_url as string).pathname
+      .split("/")
+      .at(-1) as string;
+    await refuseClaimConsent(d.claim, attemptId, owner);
+    await expect(approveClaimConsent(d.claim, attemptId, owner)).rejects.toMatchObject({
+      code: "invalid_grant",
+    });
+
+    const expired = deps();
+    const expiredOwner = await expired.workos.resolveOrCreateUser("expired@example.com");
+    const { assertion: expiredAssertion } = await register(expired);
+    let expiredError: ClaimConsentError | undefined;
+    try {
+      await initiateClaim(expired.claim, {
+        identityAssertion: expiredAssertion,
+        email: "expired@example.com",
+        remoteIp: "1.2.3.4",
+      });
+    } catch (cause) {
+      expiredError = cause as ClaimConsentError;
+    }
+    const expiredConsentError = expiredError as ClaimConsentError;
+    const expiredAttempt = new URL(expiredConsentError.extra.consent_url as string).pathname
+      .split("/")
+      .at(-1) as string;
+    await expect(
+      approveClaimConsent(
+        { ...expired.claim, now: () => 1_780_000_000_000 + 16 * 60 * 1000 },
+        expiredAttempt,
+        expiredOwner,
+      ),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
   });
 });
