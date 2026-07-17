@@ -9,10 +9,11 @@ import {
 import { Hono } from "hono";
 import { makeResultsHandler, type ResultsDeps } from "./results";
 import { analysisRoute } from "./routes";
+import { makeUsageHandler, type UsageDeps } from "./usage";
 
 const service = "splitch-analysis-api";
 
-export interface AnalysisAppDeps extends ResultsDeps {
+export interface AnalysisAppDeps extends ResultsDeps, UsageDeps {
   authResolver: AuthResolver;
   rateLimiter: RateLimiter;
   platformTarget?: string;
@@ -26,11 +27,13 @@ export function createApp(deps: AnalysisAppDeps): Hono {
     Response.json(createHealthResponse(service, parsePlatformTarget(deps.platformTarget)));
   const registrar = analysisRegistrar(deps);
   const resultsHandler = makeResultsHandler(deps);
+  const usageHandler = makeUsageHandler(deps);
 
   app.get("/", health);
   app.get("/health", health);
   registrar.mount(app, analysisRoute("experiment_results_get"), resultsHandler);
   registrar.mount(app, analysisRoute("experiment_results_post"), resultsHandler);
+  registrar.mount(app, analysisRoute("organization_usage_get"), usageHandler);
 
   return app;
 }

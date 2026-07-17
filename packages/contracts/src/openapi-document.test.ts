@@ -45,6 +45,18 @@ describe("openapi document: validity", () => {
 });
 
 describe("openapi document: full route coverage", () => {
+  it("emits the Organization usage endpoint from its route contract", () => {
+    const operation = documentOperations().find(
+      (entry) => entry.operationId === "organization_usage_get",
+    );
+
+    expect(operation).toEqual({
+      operationId: "organization_usage_get",
+      path: "/orgs/{orgId}/usage",
+      method: "get",
+    });
+  });
+
   it("emits one operationId per registered route, no more no less", () => {
     const emittedIds = documentOperations()
       .map((op) => op.operationId)

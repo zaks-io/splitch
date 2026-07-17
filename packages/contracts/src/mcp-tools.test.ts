@@ -79,6 +79,17 @@ describe("mcp tools: surface isolation (CRITICAL)", () => {
 });
 
 describe("mcp tools: 1:1 parity with control-plane routes", () => {
+  it("derives the Organization usage read tool and its flat Org input", () => {
+    const usage = tools.find((tool) => tool.name === "organization_usage_get");
+    const route = getRoute("organization_usage_get");
+    const ok = route?.openapi.responses[200];
+    const schema = ok && "content" in ok ? ok.content?.["application/json"]?.schema : undefined;
+
+    expect(usage).toBeDefined();
+    expect(objectShape(usage?.inputSchema)).toHaveProperty("orgId");
+    expect(usage?.outputSchema).toBe(schema);
+  });
+
   it("derives exactly one tool per control-plane route", () => {
     const controlPlaneIds = routeRegistry.filter(isMcpToolRoute).map((route) => route.operationId);
     expect([...toolNames].sort()).toEqual([...controlPlaneIds].sort());

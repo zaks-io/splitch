@@ -94,6 +94,19 @@ Returns cursor-paginated audit events for the App (`?limit=50&cursor=<opaque>`, 
 each event carries its `environment_id` (null for App-level definition changes). Filter with
 `?environment_id=`.
 
+### `GET /orgs/{org_id}/usage`
+
+Returns the Organization's current UTC-month Evaluation usage through the Analysis Worker. The
+response is one Organization-wide pool with reporting-only breakdowns by App, Environment,
+batch-vs-single, remote-vs-cached, and Exposure-bearing-vs-not. These dimensions do not create
+separate meters or quotas. An empty month returns `state: "zero"` with zero counts and empty
+breakdown arrays; it is not represented as a missing response.
+
+The Analysis Worker injects `organization_id`, `period_start`, and `period_end` from the validated
+Organization path/auth context and reads the scoped Tinybird usage pipe. Callers cannot supply a
+different Organization or Tinybird scope. Responses contain identifiers and counts only; raw
+Targeting Keys are never returned.
+
 ## Schema discovery
 
 ### `GET /.well-known/openapi.json`

@@ -42,6 +42,18 @@ export function scopedPipeParams(input: {
   };
 }
 
+export function scopedUsagePipeParams(input: {
+  organizationId: string | null | undefined;
+  periodStart: string;
+  periodEnd: string;
+}): PipeParams {
+  return {
+    organization_id: requiredParam(input.organizationId, "organization_id"),
+    period_start: requiredParam(input.periodStart, "period_start"),
+    period_end: requiredParam(input.periodEnd, "period_end"),
+  };
+}
+
 export function createTinybirdReadTransport(
   env: AnalysisApiEnv,
   opts: { fetchFn?: typeof fetch; timeoutMs?: number } = {},
@@ -52,7 +64,7 @@ export function createTinybirdReadTransport(
 
   return {
     async readPipe(pipeName, params) {
-      assertAppScoped(params);
+      assertScoped(params);
       const response = await fetchWithTimeout(
         fetchFn,
         pipeUrl(apiUrl, pipeName, params),
@@ -141,7 +153,20 @@ function parseRows(body: { data?: unknown }): readonly unknown[] {
   return body.data;
 }
 
-function assertAppScoped(params: PipeParams): void {
+function assertScoped(params: PipeParams): void {
+  if (
+    params.organization_id !== undefined ||
+    params.period_start !== undefined ||
+    params.period_end !== undefined
+  ) {
+    if (params.app_id !== undefined || params.environment_id !== undefined) {
+      throw new TinybirdReadError("Tinybird pipe scopes cannot mix Organization and App axes");
+    }
+    requiredParam(params.organization_id, "organization_id");
+    requiredParam(params.period_start, "period_start");
+    requiredParam(params.period_end, "period_end");
+    return;
+  }
   requiredParam(params.app_id, "app_id");
   requiredParam(params.environment_id, "environment_id");
 }

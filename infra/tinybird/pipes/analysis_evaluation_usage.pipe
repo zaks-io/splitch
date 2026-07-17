@@ -1,0 +1,39 @@
+DESCRIPTION Returns the current-month Evaluation usage rows for one Organization.
+
+NODE usage
+SQL >
+    %
+    {% if not defined(organization_id) %}
+    {{error('organization_id is required')}}
+    {% end %}
+    {% if not defined(period_start) %}
+    {{error('period_start is required')}}
+    {% end %}
+    {% if not defined(period_end) %}
+    {{error('period_end is required')}}
+    {% end %}
+    SELECT
+        organization_id,
+        app_id,
+        environment_id,
+        if(is_batch = 1, 'batch', 'single') AS batch_mode,
+        if(is_cached = 1, 'cached', 'remote') AS evaluation_source,
+        if(has_exposure = 1, 'bearing', 'not_bearing') AS exposure_state,
+        sum(toUInt64(evaluation_count)) AS evaluations
+    FROM raw_events
+    WHERE organization_id = {{String(organization_id)}}
+        AND server_received_at >= {{DateTime64(period_start)}}
+        AND server_received_at < {{DateTime64(period_end)}}
+        AND evaluation_count > 0
+        AND isNotNull(is_batch)
+        AND isNotNull(is_cached)
+        AND isNotNull(has_exposure)
+    GROUP BY
+        organization_id,
+        app_id,
+        environment_id,
+        batch_mode,
+        evaluation_source,
+        exposure_state
+
+TYPE ENDPOINT

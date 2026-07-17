@@ -45,6 +45,11 @@ function validateSplitchDatasourceContracts(root) {
     "`sdk_version` Nullable(String)",
     "`is_holdover` UInt8",
     "`counterfactual` UInt8",
+    "`organization_id` Nullable(String)",
+    "`evaluation_count` Nullable(UInt32)",
+    "`is_batch` Nullable(UInt8)",
+    "`is_cached` Nullable(UInt8)",
+    "`has_exposure` Nullable(UInt8)",
   ]);
   requireInstruction(
     rawEvents,

@@ -10,6 +10,7 @@ export {
   recommendedActions,
 } from "./errors";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
+export { OrganizationUsageResponseSchema, type OrganizationUsageResponse } from "./resource-envelopes-usage"; // biome-ignore format: keep the explicit public export within the barrel file-size limit
 export {
   AuthKindSchema,
   authKinds,
@@ -36,8 +37,7 @@ export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./o
 export { controlPlaneRpcApp, type ControlPlaneRpcApp } from "./openapi-rpc";
 export { getRoute, operationIds, routeRegistry } from "./route-registry";
 export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
-export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
-export type { McpProtocolToolDefinition, McpToolDefinition } from "./mcp-tools";
+export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute, type McpProtocolToolDefinition, type McpToolDefinition } from "./mcp-tools"; // biome-ignore format: keep the existing explicit exports within the barrel file-size limit
 export { DeltaNudgeEntitySchema, deltaNudgeEntities, DeltaNudgeSchema } from "./delta-nudge";
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export {
