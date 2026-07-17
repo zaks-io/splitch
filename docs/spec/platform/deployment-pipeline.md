@@ -104,7 +104,7 @@ workflow that runs trusted workflow code with repository secrets.
 first stable `sdk-v0.1.0` release, a human with npm organization write access and 2FA must explicitly
 approve and perform this one-time bootstrap outside `sdk-publish`:
 
-1. Publish only the disposable prerelease `@splitch/sdk@0.1.0-bootstrap.0` manually with dist-tag
+1. Manually release only the disposable prerelease `@splitch/sdk@0.1.0-bootstrap.0` with dist-tag
    `bootstrap`; do not consume `0.1.0`, `latest`, or the stable release tag. This bootstrap package
    does not carry the stable release's provenance claim.
 2. Configure the package's sole trusted publisher for `zaks-io/splitch`, workflow
