@@ -19,6 +19,8 @@ import { Route as OrgSlugClaimRouteImport } from './routes/$orgSlug.claim'
 import { Route as ClaimConsentAttemptIdRouteImport } from './routes/claim.consent.$attemptId'
 import { Route as OrgSlugAppSlugEnvRouteImport } from './routes/$orgSlug.$appSlug.$env'
 import { Route as OrgSlugAppSlugEnvSettingsRouteImport } from './routes/$orgSlug.$appSlug.$env.settings'
+import { Route as OrgSlugAppSlugEnvSegmentsRouteImport } from './routes/$orgSlug.$appSlug.$env.segments'
+import { Route as OrgSlugAppSlugEnvMetricsRouteImport } from './routes/$orgSlug.$appSlug.$env.metrics'
 import { Route as OrgSlugAppSlugEnvFlagsRouteImport } from './routes/$orgSlug.$appSlug.$env.flags'
 import { Route as OrgSlugAppSlugEnvExperimentsRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments'
 import { Route as OrgSlugAppSlugEnvFlagsFlagIdRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.$flagId'
@@ -74,6 +76,18 @@ const OrgSlugAppSlugEnvSettingsRoute =
     path: '/settings',
     getParentRoute: () => OrgSlugAppSlugEnvRoute,
   } as any)
+const OrgSlugAppSlugEnvSegmentsRoute =
+  OrgSlugAppSlugEnvSegmentsRouteImport.update({
+    id: '/segments',
+    path: '/segments',
+    getParentRoute: () => OrgSlugAppSlugEnvRoute,
+  } as any)
+const OrgSlugAppSlugEnvMetricsRoute =
+  OrgSlugAppSlugEnvMetricsRouteImport.update({
+    id: '/metrics',
+    path: '/metrics',
+    getParentRoute: () => OrgSlugAppSlugEnvRoute,
+  } as any)
 const OrgSlugAppSlugEnvFlagsRoute = OrgSlugAppSlugEnvFlagsRouteImport.update({
   id: '/flags',
   path: '/flags',
@@ -104,6 +118,8 @@ export interface FileRoutesByFullPath {
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
   '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
+  '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
+  '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
   '/$orgSlug/$appSlug/$env/flags/$flagId': typeof OrgSlugAppSlugEnvFlagsFlagIdRoute
 }
@@ -119,6 +135,8 @@ export interface FileRoutesByTo {
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
   '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
+  '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
+  '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
   '/$orgSlug/$appSlug/$env/flags/$flagId': typeof OrgSlugAppSlugEnvFlagsFlagIdRoute
 }
@@ -135,6 +153,8 @@ export interface FileRoutesById {
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
   '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
+  '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
+  '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
   '/$orgSlug/$appSlug/$env/flags/$flagId': typeof OrgSlugAppSlugEnvFlagsFlagIdRoute
 }
@@ -152,6 +172,8 @@ export interface FileRouteTypes {
     | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
+    | '/$orgSlug/$appSlug/$env/metrics'
+    | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
     | '/$orgSlug/$appSlug/$env/flags/$flagId'
   fileRoutesByTo: FileRoutesByTo
@@ -167,6 +189,8 @@ export interface FileRouteTypes {
     | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
+    | '/$orgSlug/$appSlug/$env/metrics'
+    | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
     | '/$orgSlug/$appSlug/$env/flags/$flagId'
   id:
@@ -182,6 +206,8 @@ export interface FileRouteTypes {
     | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
+    | '/$orgSlug/$appSlug/$env/metrics'
+    | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
     | '/$orgSlug/$appSlug/$env/flags/$flagId'
   fileRoutesById: FileRoutesById
@@ -270,6 +296,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvSettingsRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvRoute
     }
+    '/$orgSlug/$appSlug/$env/segments': {
+      id: '/$orgSlug/$appSlug/$env/segments'
+      path: '/segments'
+      fullPath: '/$orgSlug/$appSlug/$env/segments'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvSegmentsRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
+    }
+    '/$orgSlug/$appSlug/$env/metrics': {
+      id: '/$orgSlug/$appSlug/$env/metrics'
+      path: '/metrics'
+      fullPath: '/$orgSlug/$appSlug/$env/metrics'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvMetricsRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
+    }
     '/$orgSlug/$appSlug/$env/flags': {
       id: '/$orgSlug/$appSlug/$env/flags'
       path: '/flags'
@@ -311,12 +351,16 @@ const OrgSlugAppSlugEnvFlagsRouteWithChildren =
 interface OrgSlugAppSlugEnvRouteChildren {
   OrgSlugAppSlugEnvExperimentsRoute: typeof OrgSlugAppSlugEnvExperimentsRoute
   OrgSlugAppSlugEnvFlagsRoute: typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
+  OrgSlugAppSlugEnvMetricsRoute: typeof OrgSlugAppSlugEnvMetricsRoute
+  OrgSlugAppSlugEnvSegmentsRoute: typeof OrgSlugAppSlugEnvSegmentsRoute
   OrgSlugAppSlugEnvSettingsRoute: typeof OrgSlugAppSlugEnvSettingsRoute
 }
 
 const OrgSlugAppSlugEnvRouteChildren: OrgSlugAppSlugEnvRouteChildren = {
   OrgSlugAppSlugEnvExperimentsRoute: OrgSlugAppSlugEnvExperimentsRoute,
   OrgSlugAppSlugEnvFlagsRoute: OrgSlugAppSlugEnvFlagsRouteWithChildren,
+  OrgSlugAppSlugEnvMetricsRoute: OrgSlugAppSlugEnvMetricsRoute,
+  OrgSlugAppSlugEnvSegmentsRoute: OrgSlugAppSlugEnvSegmentsRoute,
   OrgSlugAppSlugEnvSettingsRoute: OrgSlugAppSlugEnvSettingsRoute,
 }
 

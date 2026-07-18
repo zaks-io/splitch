@@ -71,6 +71,60 @@ test.describe("Control Panel local full-stack harness", () => {
     ).resolves.toBe(true);
   });
 
+  test("renders the URL-derived App shell and preserves the section across Environment switches", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/acme-labs/checkout-api/dev/flags");
+
+    const shell = page.locator("[data-app-shell='ready']");
+    await expect(shell).toHaveAttribute("data-hydrated", "true");
+    await expect(shell).toHaveAttribute("data-app-id", "app_checkout_e2e");
+    await expect(shell).toHaveAttribute("data-environment-id", "env_checkout_dev_e2e");
+    await expect(page.getByRole("navigation", { name: "App sections" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Segments App-level" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Metrics App-level" })).toBeVisible();
+
+    await chooseScope(page, "Environment", "/acme-labs/checkout-api/prod/flags");
+    await expect(page).toHaveURL("/acme-labs/checkout-api/prod/flags");
+    await expect(shell).toHaveAttribute("data-environment-id", "env_checkout_prod_e2e");
+    await expect(shell).not.toHaveAttribute("data-environment-id", "env_checkout_dev_e2e");
+
+    await captureThemeScreenshots(page, testInfo, "app-shell");
+  });
+
+  test("uses explicit App and Organization destinations without an implicit Environment", async ({
+    page,
+  }) => {
+    await page.goto("/acme-labs/checkout-api/dev");
+
+    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await chooseScope(page, "App", "/acme-labs/billing-api/prod");
+    await expect(page).toHaveURL("/acme-labs/billing-api/prod");
+    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute(
+      "data-app-id",
+      "app_billing_e2e",
+    );
+
+    await chooseScope(page, "Organization", "/orbit-tools/agent-console/prod");
+    await expect(page).toHaveURL("/orbit-tools/agent-console/prod");
+  });
+
+  test("cold deep links match client-side navigation for the same shell URL", async ({ page }) => {
+    const target = "/acme-labs/checkout-api/prod/metrics";
+    await page.goto(target);
+    const coldShell = await page.locator("[data-app-shell='ready']").innerText();
+
+    await page.goto("/acme-labs/checkout-api/dev/metrics");
+    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await chooseScope(page, "Environment", target);
+    await expect(page).toHaveURL(target);
+    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute(
+      "data-environment-id",
+      "env_checkout_prod_e2e",
+    );
+    expect(await page.locator("[data-app-shell='ready']").innerText()).toBe(coldShell);
+  });
+
   test("surfaces stale data after server loss and clears it only after refetch recovery", async ({
     page,
   }, testInfo) => {
@@ -89,6 +143,12 @@ test.describe("Control Panel local full-stack harness", () => {
     expect(response.ok()).toBe(true);
   });
 });
+
+async function chooseScope(page: import("@playwright/test").Page, label: string, href: string) {
+  const switcher = page.locator("details").filter({ has: page.getByText(label, { exact: true }) });
+  await switcher.locator("summary").click();
+  await switcher.locator(`a[href='${href}']`).click();
+}
 
 async function setLiveUpdateServer(
   testInfo: { project: { metadata: Record<string, unknown> } },

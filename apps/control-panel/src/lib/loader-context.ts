@@ -11,14 +11,28 @@ export interface ScopeParams {
 interface EnvironmentScope {
   environmentId: string;
   env: string;
+  name: string;
 }
 
 export interface EnvironmentResolver {
-  findEnvironmentByKey(appId: string, env: string): Promise<EnvironmentScope | null>;
+  listEnvironments(appId: string): Promise<readonly EnvironmentScope[]>;
+}
+
+interface ScopeNavigation {
+  orgs: Array<{
+    orgId: string;
+    orgSlug: string;
+    apps: Array<{
+      appId: string;
+      appSlug: string;
+      environments: readonly EnvironmentScope[];
+    }>;
+  }>;
 }
 
 export interface ScopedLoaderContext {
   session: SessionPrincipal;
+  navigation: ScopeNavigation;
   scope: {
     orgId: string;
     orgSlug: string;
@@ -76,12 +90,31 @@ export async function resolveScopedLoaderContext(
 ): Promise<ScopedLoaderContext> {
   const org = requireOrgAccess(session, params.orgSlug);
   const app = requireAppAccess(org, params.appSlug);
-  const environment = await resolver.findEnvironmentByKey(app.appId, params.env);
+  const navigation: ScopeNavigation = {
+    orgs: await Promise.all(
+      session.orgs.map(async (membership) => ({
+        orgId: membership.orgId,
+        orgSlug: membership.orgSlug,
+        apps: await Promise.all(
+          membership.apps.map(async (candidate) => ({
+            appId: candidate.appId,
+            appSlug: candidate.appSlug,
+            environments: await resolver.listEnvironments(candidate.appId),
+          })),
+        ),
+      })),
+    ),
+  };
+  const currentApp = navigation.orgs
+    .find((candidate) => candidate.orgId === org.orgId)
+    ?.apps.find((candidate) => candidate.appId === app.appId);
+  const environment = currentApp?.environments.find((candidate) => candidate.env === params.env);
   if (!environment) {
     throw new ScopedNotFoundError("environment");
   }
 
   return {
+    navigation,
     session,
     scope: {
       orgId: org.orgId,
