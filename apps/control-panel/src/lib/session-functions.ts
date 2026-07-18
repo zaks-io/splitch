@@ -9,7 +9,7 @@ import {
   type ScopeParams,
   resolveScopedLoaderContext,
 } from "./loader-context";
-import { createEnvironmentResolver } from "./membership";
+import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
 import { type SessionPrincipal, loadSessionFromRequest, publicSession } from "./session";
 
 export type CurrentSessionResult =
@@ -32,7 +32,14 @@ export const loadCurrentSession = createServerFn({ method: "GET" }).handler(
     if (!loaded.ok) {
       return { kind: "unauthenticated" };
     }
-    return { kind: "authenticated", session: publicSession(loaded.session) };
+    const repo = createRepository(bindings.DB);
+    const session = await rehydrateLegacySession(
+      repo,
+      bindings.SESSION_STORE,
+      loaded.tokenHash,
+      loaded.session,
+    );
+    return { kind: "authenticated", session: publicSession(session) };
   },
 );
 
@@ -46,11 +53,17 @@ export const loadScopedSession = createServerFn({ method: "GET" })
     }
 
     const repo = createRepository(bindings.DB);
+    const session = await rehydrateLegacySession(
+      repo,
+      bindings.SESSION_STORE,
+      loaded.tokenHash,
+      loaded.session,
+    );
     try {
       return {
         kind: "ok",
         context: await resolveScopedLoaderContext(
-          publicSession(loaded.session),
+          publicSession(session),
           data,
           createEnvironmentResolver(repo),
         ),

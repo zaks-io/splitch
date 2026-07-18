@@ -1,4 +1,5 @@
 import { Button } from "@splitch/ui/components/button";
+import { ProvisionalOrgBanner } from "#components/provisional-org-banner";
 import {
   Card,
   CardContent,
@@ -53,6 +54,12 @@ function IndexRoute() {
                   key={org.orgId}
                   data-org-slug={org.orgSlug}
                 >
+                  {org.isProvisional && org.demoExpiresAt ? (
+                    <ProvisionalOrgBanner
+                      claimHref={`/${org.orgSlug}/claim`}
+                      demoExpiresAt={org.demoExpiresAt}
+                    />
+                  ) : null}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="grid gap-1">
                       <h2 className="font-semibold text-foreground text-lg">{org.orgSlug}</h2>

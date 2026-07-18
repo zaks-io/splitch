@@ -1,6 +1,7 @@
 import type { Repository } from "@splitch/db";
 import { describe, expect, it } from "vitest";
-import { buildSessionPrincipal, organizationSlug } from "./membership";
+import { buildSessionPrincipal, organizationSlug, rehydrateLegacySession } from "./membership";
+import type { StoredSession } from "./session";
 
 describe("session membership materialization", () => {
   it("materializes Organization and App memberships without an Environment default", async () => {
@@ -17,6 +18,8 @@ describe("session membership materialization", () => {
           orgId: "org_1",
           orgRole: "admin",
           orgSlug: "acme-inc",
+          isProvisional: false,
+          demoExpiresAt: null,
           apps: [
             {
               appId: "app_1",
@@ -46,6 +49,36 @@ describe("session membership materialization", () => {
         workosSessionId: "workos_session_1",
       }),
     ).rejects.toThrow("duplicate organization URL handle");
+  });
+
+  it("rehydrates a v1 session from D1 and writes the current version back to KV", async () => {
+    const kv = new MemoryKv();
+    const session: StoredSession = {
+      expiresAt: Math.floor(Date.now() / 1000) + 300,
+      orgs: [
+        {
+          apps: [],
+          demoExpiresAt: null,
+          isProvisional: false,
+          orgId: "org_stale",
+          orgRole: "member",
+          orgSlug: "stale",
+        },
+      ],
+      userId: "user_1",
+      version: 1,
+      workosAccessToken: "workos-access-token",
+      workosSessionId: "workos_session_1",
+    };
+
+    const rehydrated = await rehydrateLegacySession(repository(), kv.namespace(), "token", session);
+
+    expect(rehydrated).toMatchObject({
+      version: 2,
+      workosAccessToken: "workos-access-token",
+      orgs: [expect.objectContaining({ orgId: "org_1", orgSlug: "acme-inc" })],
+    });
+    expect(kv.store.get("session:token")).toContain('"version":2');
   });
 });
 
@@ -103,4 +136,16 @@ function repository(
       listOrgMembershipsForUser: async () => orgMemberships,
     },
   } as unknown as Repository;
+}
+
+class MemoryKv {
+  readonly store = new Map<string, string>();
+
+  namespace(): KVNamespace {
+    return this as unknown as KVNamespace;
+  }
+
+  async put(key: string, value: string): Promise<void> {
+    this.store.set(key, value);
+  }
 }
