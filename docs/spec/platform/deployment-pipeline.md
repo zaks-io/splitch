@@ -109,12 +109,16 @@ approve and perform this one-time bootstrap outside `sdk-publish`:
    does not carry the stable release's provenance claim.
 2. Configure the package's sole trusted publisher for `zaks-io/splitch`, workflow
    `sdk-publish.yml`, and the `npm publish` action. Verify the configured provider before proceeding.
-3. Remove any temporary bootstrap publishing access. The normal `sdk-publish` path has no npm token
-   and must remain OIDC-only.
+3. Revoke every temporary bootstrap token and publishing grant, then set the npm package's Publishing
+   Access to disallow token-based publishing. Retain provider evidence for the revocation and package
+   setting. The normal `sdk-publish` path has no npm token and must remain OIDC-only.
 
 Provider setup is intentionally not verified by repository code or this workflow. A missing or
 mismatched trusted publisher makes the stable release fail closed at `npm publish`; it is a human
 approval/setup blocker, not a reason to add a long-lived token.
+
+The operational procedure, including the required tag ruleset and immutable-release setup, is in
+[sdk-release.md](./sdk-release.md).
 
 ## Cloudflare resource contract
 
