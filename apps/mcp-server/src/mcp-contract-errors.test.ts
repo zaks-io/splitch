@@ -32,9 +32,49 @@ describe("MCP contract errors", () => {
       structuredContent: { code: "UNAUTHORIZED" satisfies ErrorResponse["code"] },
     });
   });
+
+  it("keeps member and unrelated-principal authorization errors typed", async () => {
+    const controlPlaneFetch: typeof fetch = async () =>
+      Response.json(
+        {
+          code: "FORBIDDEN",
+          message: "credential is not allowed for this operation",
+          details: {},
+        },
+        { status: 403 },
+      );
+    const inputs = [
+      ["organizations_delete", { orgId: "org_forbidden" }],
+      ["organization_privacy_export", { orgId: "org_forbidden" }],
+      ["app_privacy_export", { appId: "app_forbidden" }],
+      [
+        "entity_privacy_export",
+        { appId: "app_forbidden", idType: "user", targetingKey: "subject_forbidden" },
+      ],
+      [
+        "entity_privacy_delete",
+        { appId: "app_forbidden", idType: "user", targetingKey: "subject_forbidden" },
+      ],
+      ["privacy_requests_get", { requestId: "privacy_request_forbidden" }],
+    ] as const;
+
+    for (const _principal of ["member", "unrelated"]) {
+      for (const [name, arguments_] of inputs) {
+        const result = await callTool(name, controlPlaneFetch, arguments_);
+        expect(result.result).toMatchObject({
+          isError: true,
+          structuredContent: { code: "FORBIDDEN" satisfies ErrorResponse["code"] },
+        });
+      }
+    }
+  });
 });
 
-async function callTool(name: string, controlPlaneFetch: typeof fetch): Promise<ToolCallResult> {
+async function callTool(
+  name: string,
+  controlPlaneFetch: typeof fetch,
+  arguments_: Record<string, unknown> = {},
+): Promise<ToolCallResult> {
   const response = await handleMcpServerRequest({
     request: new Request("https://mcp.test/mcp", {
       method: "POST",
@@ -43,7 +83,7 @@ async function callTool(name: string, controlPlaneFetch: typeof fetch): Promise<
         jsonrpc: "2.0",
         id: 1,
         method: "tools/call",
-        params: { name, arguments: {} },
+        params: { name, arguments: arguments_ },
       }),
     }),
     service,

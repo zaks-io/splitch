@@ -188,12 +188,16 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("api_keys_list"), credentialHandlers.listApiKeys);
   registrar.mount(app, controlPlaneRoute("api_keys_create"), credentialHandlers.createApiKey);
   registrar.mount(app, controlPlaneRoute("api_keys_revoke"), credentialHandlers.revokeApiKey);
-  mountUnavailableControlPlaneRoutes(app, registrar);
+  mountUnavailableControlPlaneRoutes(app, registrar, deps.repo);
 
   return app;
 }
 
-function mountUnavailableControlPlaneRoutes(app: Hono, registrar: Registrar): void {
+function mountUnavailableControlPlaneRoutes(
+  app: Hono,
+  registrar: Registrar,
+  repo: Repository,
+): void {
   for (const operationId of [
     "organizations_delete",
     "current_user_privacy_export",
@@ -203,8 +207,12 @@ function mountUnavailableControlPlaneRoutes(app: Hono, registrar: Registrar): vo
     "entity_privacy_export",
     "entity_privacy_delete",
     "privacy_requests_get",
-  ]) {
-    registrar.mount(app, controlPlaneRoute(operationId), unavailableControlPlaneOperation);
+  ] as const) {
+    registrar.mount(
+      app,
+      controlPlaneRoute(operationId),
+      unavailableControlPlaneOperation({ repo }, operationId),
+    );
   }
 }
 

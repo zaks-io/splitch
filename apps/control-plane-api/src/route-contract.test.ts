@@ -28,6 +28,11 @@ const SECONDARY = {
   appKey: "secondary",
 };
 const USER = "user_route_contract";
+const ORG_OWNER = "user_route_contract_owner";
+const APP_ADMIN = "user_route_contract_app_admin";
+const REQUESTER = "user_route_contract_requester";
+const OUTSIDER = "user_route_contract_outsider";
+const PRIVACY_REQUEST_ID = "privacy_request_route_contract";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 
 interface Harness {
@@ -44,6 +49,14 @@ beforeEach(async () => {
   await seedOrgApp(bindings.d1, SECONDARY);
   await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: USER, role: "member" });
   await seedOrgMember(bindings.d1, { orgId: SECONDARY.orgId, userId: USER, role: "member" });
+  await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: ORG_OWNER, role: "owner" });
+  await seedAppMember(bindings, PRIMARY.appId, APP_ADMIN, "admin");
+  await seedPrivacyRequest(bindings, {
+    requestId: PRIVACY_REQUEST_ID,
+    orgId: PRIMARY.orgId,
+    appId: PRIMARY.appId,
+    requestedBy: REQUESTER,
+  });
 
   const signer = await makeFixtureSigner();
   h = {
@@ -119,16 +132,132 @@ describe("control-plane route contract", () => {
     expect(privacy.status).toBe(503);
     expect(((await privacy.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
   });
+
+  it("enforces owner and admin gates before unavailable Org and App operations", async () => {
+    const ownerJwt = await token([`org:${PRIMARY.orgId}:owner`], ORG_OWNER);
+    const adminJwt = await token([appAdminScope(PRIMARY.appId)], APP_ADMIN);
+
+    const ownerResponses = await Promise.all([
+      request("DELETE", `/orgs/${PRIMARY.orgId}`, ownerJwt),
+      request("POST", `/orgs/${PRIMARY.orgId}/privacy/export`, ownerJwt),
+    ]);
+    const adminResponses = await Promise.all([
+      request("POST", `/apps/${PRIMARY.appId}/privacy/export`, adminJwt),
+      request("POST", `/apps/${PRIMARY.appId}/privacy/entities/export`, adminJwt, entityBody()),
+      request("POST", `/apps/${PRIMARY.appId}/privacy/entities/delete`, adminJwt, entityBody()),
+    ]);
+
+    for (const response of [...ownerResponses, ...adminResponses]) {
+      expect(response.status).toBe(503);
+      expect(((await response.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
+    }
+  });
+
+  it("rejects members and unrelated principals before unavailable Org and App operations", async () => {
+    const memberOrgJwt = await token([`org:${PRIMARY.orgId}:member`]);
+    const outsiderOrgJwt = await token([`org:${PRIMARY.orgId}:owner`], OUTSIDER);
+    const memberAppJwt = await token([`app:${PRIMARY.appId}:member`]);
+    const outsiderAppJwt = await token([appAdminScope(PRIMARY.appId)], OUTSIDER);
+
+    for (const jwt of [memberOrgJwt, outsiderOrgJwt]) {
+      for (const response of await Promise.all([
+        request("DELETE", `/orgs/${PRIMARY.orgId}`, jwt),
+        request("POST", `/orgs/${PRIMARY.orgId}/privacy/export`, jwt),
+      ])) {
+        expect(response.status).toBe(403);
+        expect(((await response.json()) as ErrorResponse).code).toBe("FORBIDDEN");
+      }
+    }
+    for (const jwt of [memberAppJwt, outsiderAppJwt]) {
+      for (const response of await Promise.all([
+        request("POST", `/apps/${PRIMARY.appId}/privacy/export`, jwt),
+        request("POST", `/apps/${PRIMARY.appId}/privacy/entities/export`, jwt, entityBody()),
+        request("POST", `/apps/${PRIMARY.appId}/privacy/entities/delete`, jwt, entityBody()),
+      ])) {
+        expect(response.status).toBe(403);
+        expect(((await response.json()) as ErrorResponse).code).toBe("INSUFFICIENT_SCOPES");
+      }
+    }
+  });
+
+  it("limits unavailable privacy request status to its requester, owner, or App admin", async () => {
+    const requesterJwt = await token([], REQUESTER);
+    const ownerJwt = await token([`org:${PRIMARY.orgId}:owner`], ORG_OWNER);
+    const adminJwt = await token([appAdminScope(PRIMARY.appId)], APP_ADMIN);
+
+    for (const jwt of [requesterJwt, ownerJwt, adminJwt]) {
+      const response = await request("GET", `/privacy/requests/${PRIVACY_REQUEST_ID}`, jwt);
+      expect(response.status).toBe(503);
+      expect(((await response.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
+    }
+
+    for (const jwt of [await token([]), await token([], OUTSIDER)]) {
+      const response = await request("GET", `/privacy/requests/${PRIVACY_REQUEST_ID}`, jwt);
+      expect(response.status).toBe(403);
+      expect(((await response.json()) as ErrorResponse).code).toBe("FORBIDDEN");
+    }
+  });
 });
 
-function token(scopes: string[]): Promise<string> {
+function token(scopes: string[], userId = USER): Promise<string> {
   const now = Math.floor(NOW_MS / 1000);
   return h.signer.sign({
-    sub: USER,
+    sub: userId,
     iss: "https://auth.splitch.test",
     aud: AUDIENCE,
     iat: now,
     exp: now + 3600,
     scopes,
   });
+}
+
+function request(method: string, path: string, jwt: string, body?: Record<string, string>) {
+  return h.app.request(path, {
+    method,
+    headers: {
+      authorization: `Bearer ${jwt}`,
+      ...(body ? { "content-type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+function entityBody(): Record<string, string> {
+  return { idType: "user", targetingKey: "subject_route_contract" };
+}
+
+async function seedAppMember(
+  bindings: LocalBindings,
+  appId: string,
+  userId: string,
+  role: "owner" | "admin" | "member",
+): Promise<void> {
+  await bindings.d1
+    .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
+    .bind(appId, userId, role, "2026-07-18T12:00:00.000Z")
+    .run();
+}
+
+async function seedPrivacyRequest(
+  bindings: LocalBindings,
+  values: { requestId: string; orgId: string; appId: string; requestedBy: string },
+): Promise<void> {
+  await bindings.d1
+    .prepare(
+      "INSERT INTO privacy_requests (request_id, org_id, app_id, request_type, subject_type, subject_ref, requested_by, status, received_at, ack_due_at, response_due_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    )
+    .bind(
+      values.requestId,
+      values.orgId,
+      values.appId,
+      "export",
+      "app",
+      values.appId,
+      values.requestedBy,
+      "received",
+      "2026-07-18T12:00:00.000Z",
+      "2026-07-19T12:00:00.000Z",
+      "2026-08-18T12:00:00.000Z",
+    )
+    .run();
 }

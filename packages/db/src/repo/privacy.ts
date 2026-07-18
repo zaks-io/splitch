@@ -57,6 +57,17 @@ export function makePrivacyRepo(db: Db) {
       return rows[0] ?? null;
     },
 
+    async getPrivacyRequestById(
+      requestId: string,
+    ): Promise<typeof privacyRequests.$inferSelect | null> {
+      const rows = await db
+        .select()
+        .from(privacyRequests)
+        .where(eq(privacyRequests.requestId, requestId))
+        .limit(1);
+      return rows[0] ?? null;
+    },
+
     // --- Trusted IdP allow-list (two-tier: global seeds + per-tenant) ----------
 
     /**
