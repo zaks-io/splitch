@@ -116,6 +116,9 @@ Provider setup is intentionally not verified by repository code or this workflow
 mismatched trusted publisher makes the stable release fail closed at `npm publish`; it is a human
 approval/setup blocker, not a reason to add a long-lived token.
 
+The operational procedure, including the required tag ruleset and immutable-release setup, is in
+[sdk-release.md](./sdk-release.md).
+
 ## Cloudflare resource contract
 
 Wrangler config is the source of truth. Use `wrangler.jsonc` for each deployable Worker and checked-in
