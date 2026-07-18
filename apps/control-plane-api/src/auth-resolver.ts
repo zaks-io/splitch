@@ -40,6 +40,11 @@ export interface ControlPlaneAuthDeps {
   now?: () => number;
 }
 
+export interface ControlPlaneAuthOptions {
+  /** Only the named Control Panel Worker entrypoint may redeem panel sessions. */
+  allowPanelSession?: boolean;
+}
+
 function extractBearer(header: string | null): string | null {
   if (!header?.startsWith(BEARER_PREFIX)) {
     return null;
@@ -48,11 +53,14 @@ function extractBearer(header: string | null): string | null {
   return token.length > 0 ? token : null;
 }
 
-export function makeControlPlaneAuthResolver(deps: ControlPlaneAuthDeps): AuthResolver {
+export function makeControlPlaneAuthResolver(
+  deps: ControlPlaneAuthDeps,
+  options: ControlPlaneAuthOptions = {},
+): AuthResolver {
   const nowSeconds = () => Math.floor((deps.now?.() ?? Date.now()) / 1000);
 
   return async (request) => {
-    if (request.headers.get("authorization") === null) {
+    if (options.allowPanelSession && request.headers.get("authorization") === null) {
       const panelPrincipal = await resolvePanelAppsCreatePrincipal(
         request,
         deps.sessions,

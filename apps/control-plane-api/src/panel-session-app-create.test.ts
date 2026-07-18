@@ -34,6 +34,7 @@ const UNRELATED = "user_panel_unrelated";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 
 let app: Hono;
+let publicApp: Hono;
 let bindings: LocalBindings;
 
 beforeEach(async () => {
@@ -45,25 +46,47 @@ beforeEach(async () => {
   await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: MEMBER, role: "member" });
 
   const signer = await makeFixtureSigner();
-  app = createApp({
-    authResolver: makeControlPlaneAuthResolver({
-      verifier: makeJwksVerifier({
-        fetchJwks: async () => signer.jwks,
-        controlPlaneAudience: AUDIENCE,
-      }),
-      sessions: makeSessionStore(bindings.kv),
-      now: () => NOW_MS,
+  const authDeps = {
+    verifier: makeJwksVerifier({
+      fetchJwks: async () => signer.jwks,
+      controlPlaneAudience: AUDIENCE,
     }),
+    sessions: makeSessionStore(bindings.kv),
+    now: () => NOW_MS,
+  };
+  const appDeps = {
     rateLimiter: allowLimiter,
     repo: createRepository(bindings.d1),
     credentialStore: bindings.credentialKv,
     nowIso: () => new Date(NOW_MS).toISOString(),
+  };
+  app = createApp({
+    ...appDeps,
+    authResolver: makeControlPlaneAuthResolver(authDeps, { allowPanelSession: true }),
+  });
+  publicApp = createApp({
+    ...appDeps,
+    authResolver: makeControlPlaneAuthResolver(authDeps),
   });
 });
 
 afterEach(async () => bindings.dispose());
 
 describe("Control Panel server session transport for apps_create", () => {
+  it("rejects panel session handles at the public Control Plane boundary", async () => {
+    const tokenHash = await storePanelSession(OWNER, "0");
+    const response = await createAppRequest(
+      PRIMARY.orgId,
+      tokenHash,
+      "public-replay",
+      {},
+      publicApp,
+    );
+
+    expect(response.status).toBe(401);
+    expect((await response.json()) satisfies ErrorResponse).toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
   it.each([
     ["owner", OWNER, "a"],
     ["admin", ADMIN, "b"],
@@ -138,8 +161,9 @@ async function createAppRequest(
   tokenHash: string,
   key: string,
   headers: Record<string, string> = {},
+  targetApp = app,
 ): Promise<Response> {
-  return app.request(`/orgs/${orgId}/apps`, {
+  return targetApp.request(`/orgs/${orgId}/apps`, {
     method: "POST",
     headers: {
       [PANEL_SESSION_HEADER]: tokenHash,

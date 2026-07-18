@@ -10,10 +10,17 @@ describe("Control Panel Control Plane service binding", () => {
     const config = JSON.parse(
       readFileSync(new URL("../../wrangler.jsonc", import.meta.url), "utf8"),
     ) as {
-      services?: Array<{ binding: string; service: string }>;
-      env?: Record<string, { services?: Array<{ binding: string; service: string }> }>;
+      services?: Array<{ binding: string; service: string; entrypoint: string }>;
+      env?: Record<
+        string,
+        { services?: Array<{ binding: string; service: string; entrypoint: string }> }
+      >;
     };
     const services = target === "local" ? config.services : config.env?.[target]?.services;
-    expect(services).toContainEqual({ binding: "CONTROL_PLANE_API", service });
+    expect(services).toContainEqual({
+      binding: "CONTROL_PLANE_API",
+      service,
+      entrypoint: "ControlPanelEntrypoint",
+    });
   });
 });
