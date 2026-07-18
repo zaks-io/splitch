@@ -27,6 +27,10 @@
     "CONTROL_PLANE_API_ORIGIN": "http://127.0.0.1:8787",
     "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788"
   },
+  "durable_objects": {
+    "bindings": [{ "name": "MCP_SESSIONS", "class_name": "McpSessionDurableObject" }]
+  },
+  "migrations": [{ "tag": "v1", "new_classes": ["McpSessionDurableObject"] }],
   "env": {
     "shared-preview": {
       "name": "splitch-mcp-server-shared-preview",
@@ -54,6 +58,10 @@
         "CONTROL_PLANE_API_ORIGIN": "https://api.preview.splitch.dev",
         "EVALUATION_API_ORIGIN": "https://edge.preview.splitch.dev"
       },
+      "durable_objects": {
+        "bindings": [{ "name": "MCP_SESSIONS", "class_name": "McpSessionDurableObject" }]
+      },
+      "migrations": [{ "tag": "v1", "new_classes": ["McpSessionDurableObject"] }],
       "services": [{ "binding": "ANALYSIS_API", "service": "splitch-analysis-api-shared-preview" }]
     },
     "production": {
@@ -82,6 +90,10 @@
         "CONTROL_PLANE_API_ORIGIN": "https://api.splitch.dev",
         "EVALUATION_API_ORIGIN": "https://edge.splitch.dev"
       },
+      "durable_objects": {
+        "bindings": [{ "name": "MCP_SESSIONS", "class_name": "McpSessionDurableObject" }]
+      },
+      "migrations": [{ "tag": "v1", "new_classes": ["McpSessionDurableObject"] }],
       "services": [{ "binding": "ANALYSIS_API", "service": "splitch-analysis-api" }]
     }
   }
