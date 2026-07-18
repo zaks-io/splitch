@@ -50,6 +50,7 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       await provisionClientKey(deps, {
         appId,
         environmentId: environment.id,
+        organizationId: app.organizationId,
         scope: envScope(appId, environment.id),
       });
       return Response.json(environmentResponse(environment));
@@ -127,7 +128,9 @@ async function deleteEnvironmentAfterAuth(
   if (blocker) return blocker;
 
   await deleteEnvironmentCredentials(deps, appId, environmentId);
-  await deps.repo.identity.deleteEnvironment(scope, environmentId);
+  if ((await deps.repo.identity.deleteEnvironment(scope, environmentId)) !== 1) {
+    throw new Error("environment delete did not reach D1");
+  }
   return Response.json({ deleted: true });
 }
 

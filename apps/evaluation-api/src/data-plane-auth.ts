@@ -2,6 +2,7 @@ import {
   apiKeyCacheKey,
   clientKeyCacheKey,
   CredentialCacheKVSchema,
+  CredentialCacheKVSchemaV1,
   type ErrorResponse,
   kvEnvelope,
 } from "@splitch/contracts";
@@ -12,6 +13,7 @@ interface CredentialReader {
 }
 
 const credentialEnvelope = kvEnvelope(CredentialCacheKVSchema);
+const legacyCredentialEnvelope = kvEnvelope(CredentialCacheKVSchemaV1);
 
 export function makeDataPlaneAuthResolver(credentialStore: CredentialReader): AuthResolver {
   return async (request) => {
@@ -177,20 +179,28 @@ async function readCredential(
   }
 
   const parsed = credentialEnvelope.safeParse(json);
-  if (!parsed.success) {
-    throw new Error(`evaluation-api: invalid credential cache blob: ${parsed.error.message}`);
+  if (parsed.success) return { ...parsed.data.data, legacy: false };
+
+  const legacy = legacyCredentialEnvelope.safeParse(json);
+  if (legacy.success) {
+    return { ...legacy.data.data, organizationId: null, legacy: true };
   }
-  return parsed.data.data;
+  throw new Error(`evaluation-api: invalid credential cache blob: ${parsed.error.message}`);
 }
 
-type CredentialCache = (typeof CredentialCacheKVSchema)["_output"];
+type CredentialCache =
+  | ((typeof CredentialCacheKVSchema)["_output"] & { legacy: false })
+  | ((typeof CredentialCacheKVSchemaV1)["_output"] & {
+      organizationId: null;
+      legacy: true;
+    });
 
 function principalFromCredential(hash: string, credential: CredentialCache): Principal {
   return {
     kind: credential.kind === "client_key" ? "client-key" : "api-key",
     id: `${credential.kind}:${hash.slice(0, 16)}`,
     scopes: credential.scopes,
-    orgId: null,
+    orgId: credential.organizationId,
     appId: credential.appId,
     environmentId: credential.environmentId,
   };

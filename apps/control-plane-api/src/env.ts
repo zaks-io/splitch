@@ -1,4 +1,6 @@
 import type { ConfigStoreDurableObjectNamespace } from "./config-store-do";
+import type { CredentialCacheBackfillDurableObjectNamespace } from "./credential-cache-backfill-do";
+import type { CredentialCacheWriterDurableObjectNamespace } from "./credential-cache-writer-do";
 
 /**
  * Control Plane API Worker bindings.
@@ -21,6 +23,10 @@ export interface ControlPlaneApiEnv {
   CREDENTIAL_STORE: KVNamespace;
   /** Per-App/Environment config writer and live-update nudge fan-out. */
   CONFIG_STORE_WRITER: ConfigStoreDurableObjectNamespace;
+  CREDENTIAL_CACHE_WRITER: CredentialCacheWriterDurableObjectNamespace;
+  CREDENTIAL_CACHE_BACKFILL: CredentialCacheBackfillDurableObjectNamespace;
+  /** CI-only bearer token for the hosted credential-cache rollout gate. */
+  SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */
   CONTROL_PLANE_ORIGIN?: string;
   /** Auth-api JWKS endpoint the control-plane token signature is verified against. */

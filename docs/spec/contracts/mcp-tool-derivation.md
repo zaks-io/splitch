@@ -184,6 +184,7 @@ the credential their code holds.
 
 | Tool                      | Method | Path                                                                 |
 | ------------------------- | ------ | -------------------------------------------------------------------- |
+| `organization_usage_get`  | GET    | `/orgs/:orgId/usage`                                                 |
 | `experiment_results_get`  | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results` |
 | `experiment_results_post` | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results` |
 | `audit_log_list`          | GET    | `/apps/:appId/audit-log`                                             |

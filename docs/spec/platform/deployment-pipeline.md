@@ -244,8 +244,10 @@ or any Durable Object migration.
 - The Auth API declares `WORKOS_CLIENT_ID` and `WORKOS_API_KEY` as required hosted Worker bindings so
   hosted device flow cannot silently fall back to the local fixture adapter. `WORKOS_CLIENT_ID` is a
   GitHub environment variable, not a repository-committed Wrangler value.
-- Event Ingest declares `SPLITCH_EVENT_INGEST_TOKEN` and `TINYBIRD_INGEST_TOKEN` as required
-  Worker secrets. `TINYBIRD_API_URL` is non-secret Worker config and points at the Tinybird region API.
+- Event Ingest declares `SPLITCH_EVENT_INGEST_TOKEN`, `TINYBIRD_INGEST_TOKEN`, and the least-privilege
+  `TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN` as required Worker secrets. The first Tinybird token appends
+  Exposure/Activation rows; the second appends only `raw_evaluations`. `TINYBIRD_API_URL` is non-secret
+  Worker config and points at the Tinybird region API.
 - Secret rotation is its own release. Do not hide secret changes inside an unrelated code deploy.
 
 ### Sentry source maps
@@ -303,7 +305,11 @@ Tinybird flow:
    runs execute `verify:ci` before the production gate. The deployment job then waits for the GitHub
    `production` environment, runs
    `tb deploy --check` and `tb deploy --wait` through environment-scoped `TB_TOKEN` and `TB_HOST`,
-   applies D1 migrations, and deploys Workers through Turborepo package tasks.
+   applies D1 migrations, deploys the backward-compatible Control Plane Worker, then uses its
+   CI-only backfill gate to run and verify every credential-cache v2 rewrite before deploying the
+   Evaluation Worker or any v2-only billing behavior. The gate is bearer-protected by the hosted
+   `SPLITCH_DEPLOY_GATE_TOKEN`, reports only migration checkpoints, and fails the release instead
+   of allowing a partial rollout. Remaining Workers deploy only after that verification.
 4. Destructive Tinybird deploys require explicit human approval and `--allow-destructive-operations`.
    They are not allowed in the default production deploy workflow.
 

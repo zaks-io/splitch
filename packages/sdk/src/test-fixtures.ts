@@ -4,6 +4,7 @@ import type {
   TransportRequest,
   TransportResult,
   VerifyTransportResult,
+  CachedEvaluationTelemetry,
 } from "./transport";
 
 /**
@@ -21,6 +22,7 @@ export class FakeTransport implements Transport {
   readonly calls: TransportRequest[] = [];
   readonly peekCalls: TransportRequest[] = [];
   readonly verifyCalls: TransportRequest[] = [];
+  recordCachedEvaluation?: (event: CachedEvaluationTelemetry) => Promise<void>;
   private readonly queue: TransportResult[];
   private readonly peekQueue: TransportResult[];
   private readonly verifyQueue: VerifyTransportResult[];

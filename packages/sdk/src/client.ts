@@ -1,13 +1,13 @@
+import type { EvaluateContext, EvaluateDeps, EvaluationContext, Logger } from "./evaluate";
+import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
 import {
   DataPlaneEvaluateResponseSchema,
   ErrorCodeSchema,
   PeekEvaluateResponseSchema,
-  ResolutionDetailsSchema,
   type ResolutionDetails,
+  ResolutionDetailsSchema,
   type VariantValue,
 } from "./generated/contract-surface.js";
-import type { EvaluateContext, EvaluateDeps, Logger } from "./evaluate";
-import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
 import { SeenSet } from "./seen-set";
 import type {
   Transport,
@@ -47,9 +47,9 @@ export interface SplitchClientOptions {
 
 export interface SplitchClient {
   /** Resolve a Flag and return the unwrapped Variant value. Fires an Exposure. */
-  evaluate(flagKey: string, context: EvaluateContext): Promise<VariantValue>;
+  evaluate(flagKey: string, context: EvaluationContext): Promise<VariantValue>;
   /** Resolve a Flag and return the full OpenFeature ResolutionDetails. Fires an Exposure. */
-  evaluateDetails(flagKey: string, context: EvaluateContext): Promise<ResolutionDetails>;
+  evaluateDetails(flagKey: string, context: EvaluationContext): Promise<ResolutionDetails>;
   /** Resolve a Flag without firing an Exposure. API Key only. */
   peekVariant(flagKey: string, context: EvaluateContext): Promise<VariantValue>;
   /** Verify setup without firing an Exposure. Client Key or API Key. */
@@ -130,6 +130,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
     evaluate: new URL("/api/sdk/evaluate", config.endpoint),
     peek: new URL("/api/sdk/peek", config.endpoint),
     verify: new URL("/api/sdk/verify", config.endpoint),
+    telemetry: new URL("/api/sdk/evaluation-telemetry", config.endpoint),
   };
 
   async function post(
@@ -142,6 +143,10 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
       headers: {
         authorization: `Bearer ${config.credential}`,
         "content-type": "application/json",
+        ...(request.idempotencyKey === undefined
+          ? {}
+          : { "idempotency-key": request.idempotencyKey }),
+        "x-splitch-sdk-runtime": "javascript",
       },
       body: JSON.stringify({
         flagKey: request.flagKey,
@@ -196,6 +201,23 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
       } catch {
         return { status: null, details: null };
       }
+    },
+    async recordCachedEvaluation(event) {
+      const response = await withTimeout((signal) =>
+        config.fetchImpl(urls.telemetry, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${config.credential}`,
+            "content-type": "application/json",
+            "idempotency-key": event.idempotencyKey,
+            "x-splitch-sdk-runtime": "javascript",
+          },
+          body: JSON.stringify(event),
+          signal,
+        }),
+      );
+      if (!response.ok)
+        throw new Error(`cached Evaluation telemetry failed: HTTP ${response.status}`);
     },
   };
 }

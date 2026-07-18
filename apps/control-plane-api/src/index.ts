@@ -10,6 +10,11 @@ import { createApp } from "./app";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
+import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
+import {
+  CredentialCacheWriterDurableObject,
+  durableCredentialCacheWriterAccess,
+} from "./credential-cache-writer-do";
 import type { ControlPlaneApiEnv } from "./env";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
@@ -25,6 +30,9 @@ const handler = {
       return Response.json(
         createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
       );
+    }
+    if (url.pathname.startsWith("/internal/credential-cache-backfill")) {
+      return handleCredentialCacheBackfillGate(request, env, url);
     }
 
     const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
@@ -42,6 +50,7 @@ const handler = {
       rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET),
       repo: createRepository(env.DB),
       credentialStore: env.CREDENTIAL_STORE,
+      credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
       configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
       logger: console,
       memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
@@ -56,6 +65,7 @@ const handler = {
 
   scheduled(event, env, ctx): void {
     ctx.waitUntil(runDemoReaper(env, event, ctx));
+    ctx.waitUntil(runCredentialCacheBackfill(env));
   },
 } satisfies ExportedHandler<ControlPlaneApiEnv>;
 
@@ -82,4 +92,38 @@ async function runDemoReaper(
   );
 }
 
-export { ConfigStoreDurableObject };
+async function runCredentialCacheBackfill(env: ControlPlaneApiEnv): Promise<void> {
+  await env.CREDENTIAL_CACHE_BACKFILL.getByName("schema-v1").fetch("https://backfill/run", {
+    method: "POST",
+  });
+}
+
+async function handleCredentialCacheBackfillGate(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  url: URL,
+): Promise<Response> {
+  if (
+    !env.SPLITCH_DEPLOY_GATE_TOKEN ||
+    request.headers.get("authorization") !== `Bearer ${env.SPLITCH_DEPLOY_GATE_TOKEN}`
+  ) {
+    return new Response("not found", { status: 404 });
+  }
+  const suffix = url.pathname.replace("/internal/credential-cache-backfill", "") || "/status";
+  if (
+    (suffix !== "/run" && suffix !== "/status") ||
+    (suffix === "/run" && request.method !== "POST")
+  ) {
+    return new Response("not found", { status: 404 });
+  }
+  return env.CREDENTIAL_CACHE_BACKFILL.getByName("schema-v1").fetch(
+    new URL(suffix, "https://backfill.internal"),
+    suffix === "/run" ? { method: "POST" } : undefined,
+  );
+}
+
+export {
+  ConfigStoreDurableObject,
+  CredentialCacheBackfillDurableObject,
+  CredentialCacheWriterDurableObject,
+};

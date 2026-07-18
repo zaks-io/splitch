@@ -1,8 +1,9 @@
 import { z } from "@hono/zod-openapi";
 import { TestEvaluationRequestSchema, TestEvaluationResponseSchema } from "../wire-envelopes-core";
+import { OrganizationUsageResponseSchema } from "../resource-envelopes-usage";
 import { StatsOutputSchema } from "../stats-result-contract";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
-import { AppParams, EnvFlagParams, ExperimentParams } from "./route-shapes";
+import { AppParams, EnvFlagParams, ExperimentParams, OrgParams } from "./route-shapes";
 
 /**
  * Control-plane-AUTHORIZED reads that do not all live on the Control Plane Worker:
@@ -91,6 +92,19 @@ export const analysisRoutes = [
       "SERVICE_UNAVAILABLE",
       "INTERNAL_SERVER_ERROR",
     ],
+  }),
+  defineApiRoute({
+    operationId: "organization_usage_get",
+    owner: "analysis-api",
+    method: "GET",
+    path: "/orgs/:orgId/usage",
+    summary: "Get an Organization's current-month Evaluation usage breakdown.",
+    request: { params: OrgParams },
+    response: OrganizationUsageResponseSchema,
+    auth: AUTH,
+    rateLimit: RATE,
+    idempotency: "none",
+    errors: ["UNAUTHORIZED", "FORBIDDEN", "SERVICE_UNAVAILABLE", "INTERNAL_SERVER_ERROR"],
   }),
   defineApiRoute({
     operationId: "audit_log_list",

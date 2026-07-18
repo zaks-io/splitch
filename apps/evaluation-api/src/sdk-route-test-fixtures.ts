@@ -1,28 +1,32 @@
 import {
   apiKeyCacheKey,
-  clientKeyCacheKey,
   CredentialCacheKVSchema,
-  experimentConfigKey,
-  flagConfigKey,
-  runConfigKey,
+  CredentialCacheKVSchemaV1,
+  clientKeyCacheKey,
   type ExperimentConfigKV,
+  experimentConfigKey,
   type FlagConfigKV,
+  flagConfigKey,
+  kvEnvelope,
   type RunConfigKV,
+  runConfigKey,
 } from "@splitch/contracts";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
-import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { createApp } from "./app";
+import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth";
-import type { AssembledExposure } from "./evaluate/exposure-assembly";
 import {
   APP_ID,
+  baseInput,
   ENVIRONMENT_ID,
   EXPERIMENT_ID,
   FLAG_KEY,
   RecordingAssignmentStore,
-  baseInput,
   targetingRule,
 } from "./evaluate/evaluate-path-test-fixtures";
+import type { AssembledExposure } from "./evaluate/exposure-assembly";
+import type { EvaluationCommitEvent, EvaluationCommitSink } from "./evaluation-commit-sink";
+import type { EvaluationUsageEvent, EvaluationUsageSink } from "./evaluation-usage-sink";
 import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV, runConfigKV } from "./provider/fixtures";
 import { KvProvider } from "./provider/kv-provider";
@@ -37,14 +41,17 @@ export const REVOKED_CLIENT_KEY = "pk_verify_revoked";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 const controlPlaneAuthResolver: AuthResolver = () => ({ ok: false, reason: "UNAUTHORIZED" });
+const ORGANIZATION_ID = "org_verify";
 
 interface SdkRouteHarnessOptions {
   readonly liveRun?: boolean;
   readonly experimentOverrides?: Partial<ExperimentConfigKV>;
-  readonly exposureSink?: RecordingExposureSink;
+  readonly evaluationCommitSink?: EvaluationCommitSink;
+  readonly evaluationUsageSink?: RecordingEvaluationUsageSink;
   readonly flagOverrides?: Partial<FlagConfigKV>;
   readonly holdovers?: Map<string, { runId: string; variant: string }>;
   readonly runOverrides?: Partial<RunConfigKV>;
+  readonly legacyClientKey?: boolean;
 }
 
 function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
@@ -69,13 +76,15 @@ function seededConfigKv(options: SdkRouteHarnessOptions = {}): FakeKv {
     : kv;
 }
 
-async function seededCredentialKv(): Promise<FakeKv> {
-  return new FakeKv()
+async function seededCredentialKv(options: SdkRouteHarnessOptions = {}): Promise<FakeKv> {
+  const credentialKv = new FakeKv()
     .put(
       clientKeyCacheKey(await sha256Hex(CLIENT_KEY)),
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        credentialSchemaVersion: 2,
+        organizationId: ORGANIZATION_ID,
         kind: "client_key",
         scopes: ["data-plane:evaluate"],
         originAllowlist: null,
@@ -89,6 +98,8 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        credentialSchemaVersion: 2,
+        organizationId: ORGANIZATION_ID,
         kind: "client_key",
         scopes: ["data-plane:evaluate"],
         originAllowlist: ["https://app.example.test"],
@@ -102,6 +113,8 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        credentialSchemaVersion: 2,
+        organizationId: ORGANIZATION_ID,
         kind: "api_key",
         scopes: ["data-plane:evaluate"],
         revoked: false,
@@ -113,6 +126,8 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        credentialSchemaVersion: 2,
+        organizationId: ORGANIZATION_ID,
         kind: "api_key",
         scopes: [],
         revoked: false,
@@ -124,19 +139,48 @@ async function seededCredentialKv(): Promise<FakeKv> {
       CredentialCacheKVSchema.parse({
         appId: APP_ID,
         environmentId: ENVIRONMENT_ID,
+        credentialSchemaVersion: 2,
+        organizationId: ORGANIZATION_ID,
         kind: "client_key",
         scopes: ["data-plane:evaluate"],
         revoked: true,
         cachedAt: "2026-07-02T00:00:00.000Z",
       }),
     );
+
+  if (options.legacyClientKey) {
+    credentialKv.putRaw(
+      clientKeyCacheKey(await sha256Hex(CLIENT_KEY)),
+      JSON.stringify(
+        kvEnvelope(CredentialCacheKVSchemaV1).parse({
+          schemaVersion: 1,
+          data: {
+            appId: APP_ID,
+            environmentId: ENVIRONMENT_ID,
+            kind: "client_key",
+            scopes: ["data-plane:evaluate"],
+            originAllowlist: null,
+            rateLimitRps: null,
+            revoked: false,
+            cachedAt: "2026-07-02T00:00:00.000Z",
+          },
+        }),
+      ),
+    );
+  }
+
+  return credentialKv;
 }
 
 export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) {
   const configKv = seededConfigKv(options);
-  const credentialKv = await seededCredentialKv();
+  const credentialKv = await seededCredentialKv(options);
   const assignmentStore = new RecordingAssignmentStore({ holdovers: options.holdovers });
-  const exposureSink = options.exposureSink ?? new RecordingExposureSink();
+  const exposureSink = new RecordingExposureSink();
+  const evaluationUsageSink = options.evaluationUsageSink ?? new RecordingEvaluationUsageSink();
+  const evaluationCommitSink =
+    options.evaluationCommitSink ??
+    new RecordingEvaluationCommitSink(exposureSink, evaluationUsageSink);
   const app = createApp({
     authResolver: controlPlaneAuthResolver,
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(credentialKv),
@@ -149,9 +193,10 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
       newEventId: () => "evt-route-1",
       now: () => new Date("2026-07-03T00:00:00.000Z"),
     },
-    exposureSink,
+    evaluationCommitSink,
+    evaluationUsageSink,
   });
-  return { app, assignmentStore, configKv, credentialKv, exposureSink };
+  return { app, assignmentStore, configKv, credentialKv, exposureSink, evaluationUsageSink };
 }
 
 export function sdkRouteInit(
@@ -164,6 +209,7 @@ export function sdkRouteInit(
     headers: {
       ...(credential === undefined ? {} : { authorization: `Bearer ${credential}` }),
       "content-type": "application/json",
+      "idempotency-key": "test-logical-evaluation",
       ...extraHeaders,
     },
     body: JSON.stringify({
@@ -181,5 +227,28 @@ export class RecordingExposureSink {
 
   async write(exposure: AssembledExposure): Promise<void> {
     this.writes.push(exposure);
+  }
+}
+
+export class RecordingEvaluationUsageSink implements EvaluationUsageSink {
+  readonly writes: EvaluationUsageEvent[] = [];
+
+  async write(event: EvaluationUsageEvent): Promise<void> {
+    this.writes.push(event);
+  }
+}
+
+export class RecordingEvaluationCommitSink implements EvaluationCommitSink {
+  readonly writes: EvaluationCommitEvent[] = [];
+
+  constructor(
+    private readonly exposureSink: RecordingExposureSink,
+    private readonly evaluationUsageSink: RecordingEvaluationUsageSink,
+  ) {}
+
+  async write(event: EvaluationCommitEvent): Promise<void> {
+    this.writes.push(event);
+    for (const exposure of event.exposures) await this.exposureSink.write(exposure);
+    await this.evaluationUsageSink.write(event.usage);
   }
 }

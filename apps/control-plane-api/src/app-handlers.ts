@@ -1,10 +1,7 @@
 import { appScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
-import {
-  deleteEnvironmentCredentialRows,
-  revokeEnvironmentCredentialCaches,
-} from "./app-environment-credentials";
+import { deleteEnvironmentCredentials } from "./app-environment-credentials";
 import {
   ALLOW_POLICY,
   CONFIRM_POLICY,
@@ -88,7 +85,10 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
         policy: CONFIRM_POLICY,
         actorId: principal.id,
       });
-      const clientKeys = await provisionEnvironmentClientKeys(deps, app.id, [dev, prod]);
+      const clientKeys = await provisionEnvironmentClientKeys(deps, app.id, app.organizationId, [
+        dev,
+        prod,
+      ]);
 
       return Response.json({
         app: appResponse(app),
@@ -143,7 +143,6 @@ async function deleteAppAfterAuth(
   const blocker = await appDeleteBlocker(deps, app, environments, requestId);
   if (blocker) return blocker;
 
-  await revokeAppCredentialCaches(deps, app.id, environments);
   await deleteAppRows(deps, app.id, environments);
   return Response.json({ deleted: true });
 }
@@ -160,16 +159,6 @@ async function appDeleteBlocker(
   );
 }
 
-async function revokeAppCredentialCaches(
-  deps: AppEnvironmentDeps,
-  appId: string,
-  environments: readonly EnvironmentRow[],
-): Promise<void> {
-  for (const env of environments) {
-    await revokeEnvironmentCredentialCaches(deps, appId, env.id);
-  }
-}
-
 async function deleteAppRows(
   deps: AppEnvironmentDeps,
   appId: string,
@@ -177,9 +166,13 @@ async function deleteAppRows(
 ): Promise<void> {
   const scope = appScope(appId);
   for (const env of environments) {
-    await deleteEnvironmentCredentialRows(deps, appId, env.id);
-    await deps.repo.identity.deleteEnvironment(scope, env.id);
+    await deleteEnvironmentCredentials(deps, appId, env.id);
+    if ((await deps.repo.identity.deleteEnvironment(scope, env.id)) !== 1) {
+      throw new Error("environment delete did not reach D1");
+    }
   }
   await deps.repo.identity.deleteAppMemberships(scope);
-  await deps.repo.identity.deleteApp(appId);
+  if ((await deps.repo.identity.deleteApp(appId)) !== 1) {
+    throw new Error("app delete did not reach D1");
+  }
 }

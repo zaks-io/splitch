@@ -50,6 +50,7 @@ function makeApp(
   bindings: LocalBindings,
   signer: FixtureSigner,
   repo: Repository = createRepository(bindings.d1),
+  credentialStore: KVNamespace = bindings.credentialKv,
 ) {
   const verifier = makeJwksVerifier({
     fetchJwks: async () => signer.jwks,
@@ -63,7 +64,7 @@ function makeApp(
     }),
     rateLimiter: allowLimiter,
     repo,
-    credentialStore: bindings.credentialKv,
+    credentialStore,
     nowIso: () => new Date(NOW_MS).toISOString(),
   });
 }
@@ -122,4 +123,70 @@ describe("control-plane Client Key provisioning", () => {
     const rows = await realRepo.credentials.listClientKeys(envScope(APP.appId, ENV.environmentId));
     expect(rows.filter((row) => !row.revokedAt)).toHaveLength(1);
   });
+
+  it("fails loud when provisioning cannot write through to KV", async () => {
+    const jwt = await token();
+    h.app = makeApp(h.bindings, h.signer, createRepository(h.bindings.d1), faultingKv());
+
+    const response = await request(jwt);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+  });
+
+  it("fails loud when rotation cannot write the replacement through to KV", async () => {
+    const jwt = await token();
+    expect((await request(jwt)).status).toBe(200);
+
+    let writes = 0;
+    const store = faultingKv(() => {
+      writes += 1;
+      if (writes === 2) throw new Error("KV unavailable");
+    });
+    h.app = makeApp(h.bindings, h.signer, createRepository(h.bindings.d1), store);
+
+    const response = await clientKeyRequest("POST", "/revoke", jwt, {});
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    expect(writes).toBe(2);
+  });
+
+  it("fails loud when a restriction cache write throws", async () => {
+    const jwt = await token();
+    expect((await request(jwt)).status).toBe(200);
+    h.app = makeApp(h.bindings, h.signer, createRepository(h.bindings.d1), faultingKv());
+
+    const response = await clientKeyRequest("PATCH", "", jwt, {
+      originAllowlist: ["https://app.example.test"],
+      rateLimitRps: 25,
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+  });
 });
+
+async function clientKeyRequest(
+  method: string,
+  suffix: string,
+  jwt: string,
+  body?: Record<string, unknown>,
+): Promise<Response> {
+  return h.app.request(`/apps/${APP.appId}/envs/${ENV.environmentId}/client-key${suffix}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${jwt}`,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+function faultingKv(
+  onPut: () => void = () => {
+    throw new Error("KV unavailable");
+  },
+): KVNamespace {
+  return { put: async () => onPut() } as unknown as KVNamespace;
+}

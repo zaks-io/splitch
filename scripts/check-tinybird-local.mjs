@@ -33,6 +33,7 @@ try {
 
 function validateSplitchDatasourceContracts(root) {
   const rawEvents = readDatasource(root, "raw_events");
+  const rawEvaluations = readDatasource(root, "raw_evaluations");
   const dedupedExposures = readDatasource(root, "deduped_exposures");
 
   requireColumns(rawEvents, [
@@ -50,6 +51,34 @@ function validateSplitchDatasourceContracts(root) {
     rawEvents,
     /^ENGINE_PARTITION_KEY "toYYYYMM\(server_received_at\)"$/m,
     "raw_events partition key must use server_received_at",
+  );
+
+  requireColumns(rawEvaluations, [
+    "`dedup_key`",
+    "`event_id`",
+    "`organization_id`",
+    "`app_id`",
+    "`environment_id`",
+    "`server_received_at` DateTime64(3)",
+    "`evaluation_count` Nullable(UInt32)",
+    "`is_batch` Nullable(UInt8)",
+    "`is_cached` Nullable(UInt8)",
+    "`has_exposure` Nullable(UInt8)",
+  ]);
+  requireInstruction(
+    rawEvaluations,
+    /^ENGINE_SORTING_KEY "organization_id, app_id, environment_id, server_received_at"$/m,
+    "raw_evaluations sorting key must start with organization_id",
+  );
+  requireInstruction(
+    rawEvaluations,
+    /^# DEDUP_KEY=dedup_key$/m,
+    "raw_evaluations must declare splitch DEDUP_KEY=dedup_key",
+  );
+  requireInstruction(
+    readFileSync(join(root, "pipes", "analysis_evaluation_usage.pipe"), "utf8"),
+    /GROUP BY dedup_key/,
+    "evaluation usage pipe must deduplicate logical Evaluation rows",
   );
   requireInstruction(
     rawEvents,
@@ -92,7 +121,7 @@ function hasTinybirdTests(path) {
   if (!existsSync(path)) {
     return false;
   }
-  return readdirSync(path).some((file) => file.endsWith(".test"));
+  return readdirSync(path).some((file) => file.endsWith(".yaml") || file.endsWith(".yml"));
 }
 
 function requireColumns(contents, columns) {

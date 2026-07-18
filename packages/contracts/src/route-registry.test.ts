@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { errorCodes } from "./errors";
 import { honoPathToOpenApiPath } from "./openapi-route";
-import { getRoute, operationIds, routeRegistry } from "./route-registry";
 import { authKinds, httpMethods, idempotencyModes, rateLimitClasses } from "./route-contract";
+import { getRoute, operationIds, routeRegistry } from "./route-registry";
 
 /**
  * The registry is cross-cutting: every Worker mounts it, the SDK infers from it,
@@ -86,6 +86,7 @@ const CANONICAL_OPERATION_IDS = [
   "flags_test_eval",
   "experiment_results_get",
   "experiment_results_post",
+  "organization_usage_get",
   "audit_log_list",
   "openapi_document_get",
   // Privacy
@@ -98,6 +99,7 @@ const CANONICAL_OPERATION_IDS = [
   "privacy_requests_get",
   // Data-plane SDK (not MCP tools)
   "sdk_evaluate",
+  "sdk_cached_evaluation_telemetry",
   "sdk_peek",
   "sdk_verify",
 ] as const;
@@ -174,6 +176,10 @@ describe("route registry: per-route invariants", () => {
 });
 
 describe("route registry: lookup", () => {
+  it("requires a caller-owned logical identity for billable SDK Evaluation", () => {
+    expect(getRoute("sdk_evaluate")?.idempotency).toBe("required");
+  });
+
   it("getRoute finds a registered route by operationId", () => {
     const route = getRoute("flags_create");
     expect(route?.method).toBe("POST");

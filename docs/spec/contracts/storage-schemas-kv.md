@@ -115,14 +115,28 @@ evaluation and ingest readers still use the `ExperimentConfigKV` → `RunConfigK
 
 ### CredentialCacheKV
 
+New writes use payload version 2. Active credentials must carry the owning
+Organization so data-plane Evaluation usage cannot infer tenant scope from a
+request. Revoked tombstones may retain `organizationId: null` because they only
+reject the credential. The evaluation reader accepts the schema-v1 payload during
+rollout, marks it unscoped, and fails closed for billing-bearing Evaluation.
+
+The control-plane scheduled credential-cache backfill is the compatibility path. It reads every
+credential from D1, joins its App to the owning Organization, and rewrites the v2 KV entry using
+that D1 value. It never accepts an Organization from the request or guesses from an App name. The
+data plane may resume the credential only after the v2 entry is present; a failed or incomplete
+backfill therefore remains a visible 503 instead of becoming an unscoped billing write.
+
 ```
 {
-  appId:         string
-  environmentId: string  // credentials are per-Environment (ADR-0027)
-  kind:          'api_key' | 'client_key'
-  scopes:        string[]
-  revoked:       boolean
-  cachedAt:      string  // ISO 8601
+  appId:                   string
+  environmentId:           string  // credentials are per-Environment (ADR-0027)
+  credentialSchemaVersion: 2
+  organizationId:           string | null
+  kind:                     'api_key' | 'client_key'
+  scopes:                   string[]
+  revoked:                  boolean
+  cachedAt:                 string  // ISO 8601
 }
 ```
 

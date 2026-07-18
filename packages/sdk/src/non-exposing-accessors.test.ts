@@ -1,6 +1,6 @@
-import { ResolutionDetailsSchema, type ResolutionDetails } from "./generated/contract-surface.js";
 import { describe, expect, it } from "vitest";
 import { createSplitchClient, type SplitchClient } from "./client";
+import { type ResolutionDetails, ResolutionDetailsSchema } from "./generated/contract-surface.js";
 import {
   FakeLogger,
   FakeTransport,
@@ -49,7 +49,9 @@ describe("peekVariant / verify: non-exposing accessors", () => {
     expect(fake.peekCalls).toHaveLength(1);
     expect(fake.evaluateCalls).toHaveLength(0);
 
-    await expect(client.evaluate("checkout", { targetingKey: "u1" })).resolves.toBe("exposed");
+    await expect(
+      client.evaluate("checkout", { targetingKey: "u1", idempotencyKey: "eval-peek" }),
+    ).resolves.toBe("exposed");
     expect(fake.evaluateCalls).toHaveLength(1);
   });
 
@@ -63,7 +65,9 @@ describe("peekVariant / verify: non-exposing accessors", () => {
     expect(fake.verifyCalls).toHaveLength(1);
     expect(fake.evaluateCalls).toHaveLength(0);
 
-    await expect(client.evaluate("checkout", { targetingKey: "u1" })).resolves.toBe("exposed");
+    await expect(
+      client.evaluate("checkout", { targetingKey: "u1", idempotencyKey: "eval-verify" }),
+    ).resolves.toBe("exposed");
     expect(fake.evaluateCalls).toHaveLength(1);
   });
 });

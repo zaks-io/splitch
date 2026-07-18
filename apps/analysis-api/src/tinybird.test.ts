@@ -2,11 +2,39 @@ import { describe, expect, it } from "vitest";
 import {
   createTinybirdCopyTransport,
   createTinybirdReadTransport,
+  scopedUsagePipeParams,
   TinybirdCopyError,
   TinybirdReadError,
 } from "./tinybird";
 
 describe("Tinybird read transport", () => {
+  it("requires the full Organization usage scope at the read chokepoint", async () => {
+    const transport = createTinybirdReadTransport({
+      TINYBIRD_API_URL: "https://tinybird.test",
+      TINYBIRD_READ_TOKEN: "test-token",
+    });
+
+    await expect(
+      transport.readPipe("analysis_evaluation_usage", { organization_id: "org_1" }),
+    ).rejects.toThrow(/period_start/);
+  });
+
+  it("rejects mixed Organization and App scopes at the read chokepoint", async () => {
+    const transport = createTinybirdReadTransport({
+      TINYBIRD_API_URL: "https://tinybird.test",
+      TINYBIRD_READ_TOKEN: "test-token",
+    });
+
+    await expect(
+      transport.readPipe("analysis_evaluation_usage", {
+        organization_id: "org_1",
+        period_start: "2026-07-01T00:00:00.000Z",
+        period_end: "2026-08-01T00:00:00.000Z",
+        app_id: "app_1",
+      }),
+    ).rejects.toThrow(/cannot mix/);
+  });
+
   it("requires app_id and environment_id at the read chokepoint", async () => {
     const transport = createTinybirdReadTransport({
       TINYBIRD_API_URL: "https://tinybird.test",
@@ -65,6 +93,20 @@ describe("Tinybird read transport", () => {
     expect(rows).toEqual([{ run_id: "run_1" }]);
     expect(calledSearch.get("app_id")).toBe("app_1");
     expect(calledSearch.get("environment_id")).toBe("env_prod");
+  });
+
+  it("builds the Organization usage scope without accepting a caller-selected app", () => {
+    expect(
+      scopedUsagePipeParams({
+        organizationId: "org_1",
+        periodStart: "2026-07-01T00:00:00.000Z",
+        periodEnd: "2026-08-01T00:00:00.000Z",
+      }),
+    ).toEqual({
+      organization_id: "org_1",
+      period_start: "2026-07-01T00:00:00.000Z",
+      period_end: "2026-08-01T00:00:00.000Z",
+    });
   });
 });
 

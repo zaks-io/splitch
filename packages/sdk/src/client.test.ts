@@ -8,6 +8,7 @@ const REQ: TransportRequest = {
   targetingKey: "u1",
   idType: "user",
   attributes: {},
+  idempotencyKey: "logical-evaluation-1",
 };
 
 /** Build a stub `fetch` returning a scripted Response — no real network. */
@@ -52,7 +53,9 @@ describe("createSplitchClient: construction", () => {
 describe("evaluate / evaluateDetails: 200 success rows", () => {
   it("200 rule-resolved -> SPLIT + unwrapped variant value", async () => {
     const { client } = clientWith(new FakeTransport([ok("treatment", "run-1")]));
-    expect(await client.evaluate("checkout", { targetingKey: "u1" })).toBe("treatment");
+    expect(
+      await client.evaluate("checkout", { targetingKey: "u1", idempotencyKey: "eval-1" }),
+    ).toBe("treatment");
   });
 
   it("200 no-match (variant null) -> DEFAULT + Default Variant", async () => {
@@ -60,6 +63,7 @@ describe("evaluate / evaluateDetails: 200 success rows", () => {
     const details = await client.evaluateDetails("checkout", {
       targetingKey: "u1",
       defaultValue: "control",
+      idempotencyKey: "eval-2",
     });
     expect(details.reason).toBe("DEFAULT");
     expect(details.value).toBe("control");
@@ -70,7 +74,7 @@ describe("wire request: idType default", () => {
   it("omitted idType -> wire request carries idType 'user'", async () => {
     const fake = new FakeTransport([ok(true, "run-1")]);
     const { client } = clientWith(fake);
-    await client.evaluate("flag", { targetingKey: "u1" });
+    await client.evaluate("flag", { targetingKey: "u1", idempotencyKey: "eval-3" });
     expect(fake.calls).toHaveLength(1);
     expect(fake.calls[0]?.idType).toBe("user");
   });
@@ -78,7 +82,11 @@ describe("wire request: idType default", () => {
   it("explicit idType overrides the default and rides the wire", async () => {
     const fake = new FakeTransport([ok(true, "run-1")]);
     const { client } = clientWith(fake);
-    await client.evaluate("flag", { targetingKey: "ws1", idType: "workspace" });
+    await client.evaluate("flag", {
+      targetingKey: "ws1",
+      idType: "workspace",
+      idempotencyKey: "eval-4",
+    });
     expect(fake.calls[0]?.idType).toBe("workspace");
   });
 });
@@ -99,6 +107,7 @@ describe("fail-loud: every error row returns Default Variant + reason ERROR + no
       const details = await client.evaluateDetails("flag", {
         targetingKey: "u1",
         defaultValue: "control",
+        idempotencyKey: "eval-error",
       });
 
       expect(details.reason).toBe("ERROR");
@@ -114,6 +123,24 @@ describe("fail-loud: every error row returns Default Variant + reason ERROR + no
 });
 
 describe("createFetchTransport (real wire adapter): stub fetch, no network", () => {
+  it("forwards a caller's stable idempotency key on the wire", async () => {
+    let seenHeaders: Headers | undefined;
+    const t = transport(((url: URL | RequestInfo, init?: RequestInit) => {
+      void url;
+      seenHeaders = new Headers(init?.headers);
+      return Promise.resolve(
+        new Response(JSON.stringify({ variant: true }), {
+          status: 200,
+          headers: { "x-run-id": "run-42" },
+        }),
+      );
+    }) as typeof fetch);
+
+    await t.evaluate({ ...REQ, idempotencyKey: "logical-evaluation-1" });
+
+    expect(seenHeaders?.get("idempotency-key")).toBe("logical-evaluation-1");
+  });
+
   it("200 -> extracts variant from the bare body and runId from the X-Run-Id header", async () => {
     const t = transport(
       stubFetch(
@@ -127,6 +154,41 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
     expect(result.status).toBe(200);
     expect(result.variant).toBe("treatment");
     expect(result.runId).toBe("run-42");
+  });
+
+  it("sends cache telemetry with the same Idempotency-Key in its header and body", async () => {
+    const requests: { path: string; headers: Headers; body: unknown }[] = [];
+    const client = createSplitchClient({
+      clientKey: "ck_test",
+      fetch: ((url: URL | RequestInfo, init?: RequestInit) => {
+        const request = {
+          path: new URL(String(url)).pathname,
+          headers: new Headers(init?.headers),
+          body: JSON.parse(String(init?.body)),
+        };
+        requests.push(request);
+        return Promise.resolve(
+          request.path === "/api/sdk/evaluate"
+            ? new Response(JSON.stringify({ variant: "treatment" }), {
+                status: 200,
+                headers: { "x-run-id": "run-42" },
+              })
+            : new Response(JSON.stringify({ ok: true }), { status: 200 }),
+        );
+      }) as typeof fetch,
+    });
+
+    await client.evaluate("checkout", { targetingKey: "u1", idempotencyKey: "cache-hit-1" });
+    await client.evaluate("checkout", { targetingKey: "u1", idempotencyKey: "cache-hit-1" });
+    await Promise.resolve();
+
+    expect(requests).toHaveLength(2);
+    const telemetry = requests[1];
+    expect(telemetry).toMatchObject({
+      path: "/api/sdk/evaluation-telemetry",
+      body: { flagKey: "checkout", idempotencyKey: "cache-hit-1" },
+    });
+    expect(telemetry?.headers.get("idempotency-key")).toBe("cache-hit-1");
   });
 
   it("non-2xx -> surfaces the status, no variant, no runId", async () => {

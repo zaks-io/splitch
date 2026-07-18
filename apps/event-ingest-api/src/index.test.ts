@@ -1,14 +1,24 @@
-import { CURRENT_KV_SCHEMA_VERSION, experimentConfigKey, runConfigKey } from "@splitch/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "./index";
-
-const appId = "app_credential";
-const clientAppId = "app_from_client";
-const environmentId = "env_prod";
-const experimentId = "exp_checkout";
-const liveRunId = "run_live";
-const priorRunId = "run_prior";
-const fixedNow = "2026-07-01T12:34:56.789Z";
+import {
+  appId,
+  clientAppId,
+  environmentId,
+  expectRow,
+  experimentId,
+  fixedNow,
+  liveRunId,
+  makeEnv,
+  mockTinybirdFetch,
+  organizationId,
+  postEvaluation,
+  postEvaluationCommit,
+  postEvaluationAt,
+  postExposure,
+  priorRunId,
+  TestExecutionContext,
+  workerRequest,
+} from "./test-fixtures";
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -38,7 +48,134 @@ describe("Event Ingest Worker", () => {
     });
     expect(String(row.dedup_key)).toMatch(/^sha256:[a-f0-9]{64}$/);
   });
+});
 
+describe("Evaluation usage ingest", () => {
+  it("appends a non-Exposure Evaluation to its separate raw datasource", async () => {
+    const calls = await postEvaluation();
+    const row = expectRow(calls.rows);
+
+    expect(calls.response.status).toBe(202);
+    expect(calls.fetch.mock.calls[0]?.[0]).toBe(
+      "https://tinybird.test/v0/events?name=raw_evaluations",
+    );
+    expect(calls.fetch.mock.calls[0]?.[1]?.headers).toMatchObject({
+      authorization: "Bearer tb_raw_evaluations_ingest_secret",
+    });
+    expect(row).toMatchObject({
+      organization_id: organizationId,
+      app_id: appId,
+      environment_id: environmentId,
+      flag_key: "checkout",
+      sdk_runtime: "javascript",
+      evaluation_count: 1,
+      is_batch: 0,
+      is_cached: 0,
+      has_exposure: 0,
+      server_received_at: fixedNow,
+    });
+    expect(row).not.toHaveProperty("targeting_key_hash");
+  });
+
+  it("rejects cached rows that claim consumed Evaluations", async () => {
+    const calls = await postEvaluation({ evaluationCount: 1, isCached: true });
+
+    expect(calls.response.status).toBe(400);
+    await expect(calls.response.json()).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(calls.fetch).not.toHaveBeenCalled();
+  });
+
+  it("preserves a batch's consumed Evaluation count", async () => {
+    const calls = await postEvaluation({ evaluationCount: 10, isBatch: true });
+
+    expect(calls.response.status).toBe(202);
+    expect(expectRow(calls.rows)).toMatchObject({ evaluation_count: 10, is_batch: 1 });
+  });
+
+  it("deduplicates retries without storing the caller's raw Evaluation id", async () => {
+    const env = makeEnv();
+    const first = await postEvaluationAt(fixedNow, {}, undefined, env);
+    const second = await postEvaluationAt(fixedNow, {}, undefined, env);
+
+    expect(expectRow(first.rows).dedup_key).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(expectRow(second.rows).dedup_key).toBe(expectRow(first.rows).dedup_key);
+    expect(expectRow(first.rows).dedup_key).not.toContain("eval-request-1");
+  });
+
+  it("does not let a shared caller idempotency key deduplicate another App or Organization", async () => {
+    const first = await postEvaluation();
+    const other = await postEvaluationAt(
+      fixedNow,
+      {},
+      {
+        appId: "app_other",
+        environmentId: "env_other",
+        organizationId: "org_other",
+      },
+    );
+
+    expect(expectRow(other.rows).dedup_key).not.toBe(expectRow(first.rows).dedup_key);
+  });
+
+  it("keeps cached telemetry from preclaiming the replay identity of a remote Evaluation", async () => {
+    const env = makeEnv();
+    const cached = await postEvaluationAt(
+      fixedNow,
+      { evaluationCount: 0, isCached: true },
+      undefined,
+      env,
+    );
+    const remote = await postEvaluationAt(fixedNow, {}, undefined, env);
+
+    expect(expectRow(cached.rows).dedup_key).not.toBe(expectRow(remote.rows).dedup_key);
+    expect(expectRow(remote.rows)).toMatchObject({ evaluation_count: 1, is_cached: 0 });
+  });
+
+  it("expires an Evaluation idempotency key after its 24-hour replay window", async () => {
+    const env = makeEnv();
+    const first = await postEvaluationAt(fixedNow, {}, undefined, env);
+    const second = await postEvaluationAt("2026-07-02T12:34:56.789Z", {}, undefined, env);
+
+    expect(expectRow(second.rows).dedup_key).not.toBe(expectRow(first.rows).dedup_key);
+  });
+
+  it("keeps a retry across midnight inside the first receipt's 24-hour replay window", async () => {
+    const env = makeEnv();
+    const first = await postEvaluationAt("2026-07-01T23:59:59.999Z", {}, undefined, env);
+    const retry = await postEvaluationAt("2026-07-02T00:00:00.001Z", {}, undefined, env);
+
+    expect(expectRow(retry.rows).dedup_key).toBe(expectRow(first.rows).dedup_key);
+  });
+});
+
+describe("Evaluation commit ingest", () => {
+  it("replays one durable usage and Exposure commit after the Exposure append fails", async () => {
+    const env = makeEnv();
+    const first = await postEvaluationCommit({ statuses: [202, 500], env });
+    const retry = await postEvaluationCommit({ env });
+
+    expect(first.response.status).toBe(503);
+    expect(first.rows).toHaveLength(2);
+    expect(first.rows[0]).toMatchObject({ evaluation_count: 1, has_exposure: 1 });
+    expect(retry.response.status).toBe(202);
+    expect(retry.rows).toHaveLength(2);
+    expect(retry.rows[0]?.dedup_key).toBe(first.rows[0]?.dedup_key);
+    expect(retry.rows[1]?.dedup_key).toBe(first.rows[1]?.dedup_key);
+  });
+
+  it("acks a delivered commit without appending a second usage or Exposure row", async () => {
+    const env = makeEnv();
+    const first = await postEvaluationCommit({ env });
+    const retry = await postEvaluationCommit({ env });
+
+    expect(first.response.status).toBe(202);
+    expect(first.rows).toHaveLength(2);
+    expect(retry.response.status).toBe(202);
+    expect(retry.rows).toHaveLength(0);
+  });
+});
+
+describe("Exposure ingest", () => {
   it("returns 503 (no ACK) and logs when the Tinybird append fails", async () => {
     // The ACK is the at-least-once delivery receipt for the Evaluation Worker;
     // a failed append must surface as SERVICE_UNAVAILABLE so the evaluate call
@@ -155,181 +292,3 @@ describe("Event Ingest Worker", () => {
     expect(ctx.waits).toHaveLength(0);
   });
 });
-
-async function postExposure(
-  options: {
-    payload?: Partial<ExposurePayload>;
-    tinybirdStatus?: number;
-    awaitWaits?: boolean;
-  } = {},
-) {
-  vi.spyOn(Date, "now").mockReturnValue(new Date(fixedNow).getTime());
-  const fetch = mockTinybirdFetch(options.tinybirdStatus);
-  const ctx = new TestExecutionContext();
-  const response = await worker.fetch(
-    workerRequest("https://event-ingest.test/api/internal/exposures", {
-      method: "POST",
-      headers: {
-        authorization: "Bearer internal_ingest_secret",
-        "content-type": "application/json",
-        "x-splitch-app-id": appId,
-        "x-splitch-environment-id": environmentId,
-      },
-      body: JSON.stringify({ ...baseExposure(), ...options.payload }),
-    }),
-    makeEnv(),
-    ctx,
-  );
-
-  if (options.awaitWaits !== false) await Promise.all(ctx.waits);
-
-  return {
-    ctx,
-    fetch,
-    response,
-    rows: fetch.mock.calls.map(
-      (call) => JSON.parse(String(call[1]?.body)) as Record<string, unknown>,
-    ),
-  };
-}
-
-function baseExposure(): ExposurePayload {
-  return {
-    dedupKey: "client_dedup_key_is_ignored",
-    eventId: "evt_retry_1",
-    appId: clientAppId,
-    environmentId: "env_from_client",
-    experimentId,
-    runId: liveRunId,
-    idType: "user",
-    targetingKeyHash: "hmac:targeting-key",
-    variantName: "treatment",
-    type: "exposure",
-    sourceId: "pop-sjc",
-    counterfactual: false,
-    clientTimestamp: "2026-07-01T12:00:00.000Z",
-    serverReceivedAt: "2000-01-01T00:00:00.000Z",
-    ingestTs: "2000-01-01T00:00:00.000Z",
-    sdkVersion: "sdk-test",
-  };
-}
-
-function makeEnv() {
-  return {
-    CONFIG_STORE: seededConfigStore() as unknown as KVNamespace,
-    SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
-    TINYBIRD_API_URL: "https://tinybird.test",
-    TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
-  };
-}
-
-function seededConfigStore() {
-  const kv = new MemoryKV();
-  kv.set(
-    experimentConfigKey(appId, environmentId, experimentId),
-    envelope({
-      id: experimentId,
-      environmentId,
-      flagId: "flag_checkout",
-      targetingKey: "userId",
-      targetingKeyType: "user",
-      status: "running",
-      liveRunId,
-    }),
-  );
-  kv.set(
-    runConfigKey(appId, environmentId, priorRunId),
-    envelope({
-      id: priorRunId,
-      experimentId,
-      salt: "prior-salt",
-      allocation: { control: 50, treatment: 50 },
-      variantSet: [
-        { id: "var_control", name: "control", value: false },
-        { id: "var_treatment", name: "treatment", value: true },
-      ],
-      targetingRules: [],
-      configHash: "sha256:prior-config",
-      startedAt: "2026-05-01T00:00:00.000Z",
-    }),
-  );
-  kv.set(
-    runConfigKey(appId, environmentId, liveRunId),
-    envelope({
-      id: liveRunId,
-      experimentId,
-      salt: "run-salt",
-      allocation: { control: 50, treatment: 50 },
-      variantSet: [
-        { id: "var_control", name: "control", value: false },
-        { id: "var_treatment", name: "treatment", value: true },
-      ],
-      targetingRules: [],
-      configHash: "sha256:config",
-      startedAt: "2026-07-01T00:00:00.000Z",
-    }),
-  );
-  return kv;
-}
-
-function envelope(data: unknown) {
-  return JSON.stringify({ schemaVersion: CURRENT_KV_SCHEMA_VERSION, data });
-}
-
-function mockTinybirdFetch(status = 202) {
-  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status }));
-  vi.stubGlobal("fetch", fetch);
-  return fetch;
-}
-
-function workerRequest(input: string, init?: RequestInit): Parameters<typeof worker.fetch>[0] {
-  return new Request(input, init) as Parameters<typeof worker.fetch>[0];
-}
-
-function expectRow(rows: Record<string, unknown>[]): Record<string, unknown> {
-  const row = rows[0];
-  expect(row).toBeDefined();
-  return row as Record<string, unknown>;
-}
-
-class TestExecutionContext {
-  readonly props = {};
-  waits: Promise<unknown>[] = [];
-
-  waitUntil(promise: Promise<unknown>): void {
-    this.waits.push(promise);
-  }
-
-  passThroughOnException(): void {}
-}
-
-class MemoryKV {
-  readonly values = new Map<string, string>();
-
-  set(key: string, value: string): void {
-    this.values.set(key, value);
-  }
-
-  async get(key: string): Promise<string | null> {
-    return this.values.get(key) ?? null;
-  }
-}
-
-interface ExposurePayload {
-  dedupKey: string;
-  eventId: string;
-  appId: string;
-  environmentId: string;
-  experimentId: string;
-  runId: string;
-  idType: string;
-  targetingKeyHash: string;
-  variantName: string;
-  type: "exposure";
-  sourceId: string;
-  counterfactual: boolean;
-  clientTimestamp: string;
-  serverReceivedAt: string;
-  ingestTs: string;
-  sdkVersion: string;
-}

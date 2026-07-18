@@ -10,12 +10,19 @@ import {
   ensureActiveClientKey,
   provisionClientKey,
 } from "./client-key-provisioning";
-import { randomHex, sha256Hex, writeApiKeyCache, writeClientKeyCache } from "./credential-cache";
+import {
+  type CredentialCacheWriterAccess,
+  randomHex,
+  sha256Hex,
+  writeApiKeyCache,
+  writeClientKeyCache,
+} from "./credential-cache";
 import { objectBody, pathParam } from "./handler-input";
 
 interface CredentialHandlerDeps {
   repo: Repository;
   credentialStore?: KVNamespace;
+  credentialCacheWriter?: CredentialCacheWriterAccess;
   nowIso?: () => string;
 }
 
@@ -54,7 +61,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
         updates,
       );
       if (!updated) return credentialNotFound(requestId);
-      await writeClientKeyCache(deps, updated, false);
+      await writeClientKeyCache(deps, updated, false, ctx.organizationId, true);
       return Response.json(clientKeyResponse(updated));
     },
 
@@ -76,10 +83,10 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
         revokedAt,
       });
       if (!revoked) return credentialNotFound(requestId);
-      await writeClientKeyCache(deps, revoked, true, true);
+      await writeClientKeyCache(deps, revoked, true, ctx.organizationId, true);
 
       const next = await createClientKey(deps, ctx);
-      await writeClientKeyCache(deps, next, false);
+      await writeClientKeyCache(deps, next, false, ctx.organizationId, true);
       return Response.json({
         newKey: { keyId: next.keyId, keyMaterial: next.keyMaterial },
         revokedKeyId: revoked.keyId,
@@ -115,7 +122,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
         createdAt: nowIso(deps),
         createdBy: principal.id,
       });
-      await writeApiKeyCache(deps, row, false);
+      await writeApiKeyCache(deps, row, false, ctx.organizationId);
       return Response.json({ credential: apiKeyResponse(row), value: secret });
     },
 
@@ -136,7 +143,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
           ? await deps.repo.credentials.revokeApiKey(ctx.scope, current.keyId, nowIso(deps))
           : current;
       if (!revoked) return credentialNotFound(requestId);
-      await writeApiKeyCache(deps, revoked, true, true);
+      await writeApiKeyCache(deps, revoked, true, ctx.organizationId, true);
       return Response.json({ keyId: revoked.keyId, revokedAt: revoked.revokedAt });
     },
   };
@@ -158,6 +165,7 @@ async function credentialContext(
   | {
       appId: string;
       environmentId: string;
+      organizationId: string;
       scope: ReturnType<typeof envScope>;
     }
   | Response
@@ -166,14 +174,22 @@ async function credentialContext(
 
   const appId = pathParam(input, "appId");
   const environmentId = pathParam(input, "environmentId");
-  const environment = await deps.repo.identity.getEnvironment(appScope(appId), environmentId);
-  if (!environment) {
+  const [app, environment] = await Promise.all([
+    deps.repo.identity.getApp(appId),
+    deps.repo.identity.getEnvironment(appScope(appId), environmentId),
+  ]);
+  if (!app || !environment) {
     return renderError(
       { code: "APP_NOT_FOUND", message: "app environment not found", details: {} },
       { requestId },
     );
   }
-  return { appId, environmentId, scope: envScope(appId, environmentId) };
+  return {
+    appId,
+    environmentId,
+    organizationId: app.organizationId,
+    scope: envScope(appId, environmentId),
+  };
 }
 
 function apiKeyResponse(row: ApiKeyRow): APIKey {

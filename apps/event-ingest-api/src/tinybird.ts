@@ -1,9 +1,29 @@
-import { ExposureEventSchema, type ExposureEvent } from "@splitch/contracts";
+import { type ErrorResponse, type ExposureEvent, ExposureEventSchema } from "@splitch/contracts";
 import { serviceUnavailable } from "./errors";
+import { claimEvaluationUsageEventId } from "./evaluation-usage-replay";
+import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import { stringField, stringValue } from "./payload";
-import type { CredentialScope, Env, RunScope, Outcome, Payload, TinybirdDelivery } from "./types";
+import type { CredentialScope, Env, Outcome, Payload, RunScope, TinybirdDelivery } from "./types";
 
 const rawEventsDatasource = "raw_events";
+const rawEvaluationsDatasource = "raw_evaluations";
+export interface EvaluationUsageEvent {
+  readonly eventId: string;
+  readonly organizationId: string;
+  readonly appId: string;
+  readonly environmentId: string;
+  readonly flagKey: string;
+  readonly sdkRuntime: string;
+  readonly evaluationCount: number;
+  readonly isBatch: boolean;
+  readonly isCached: boolean;
+  readonly hasExposure: boolean;
+  readonly serverReceivedAt: string;
+}
+
+export type EvaluationUsageEventInput = Omit<EvaluationUsageEvent, "eventId"> & {
+  readonly idempotencyKey: string;
+};
 
 export async function exposureEvent(
   payload: Payload,
@@ -80,15 +100,151 @@ export function toTinybirdRow(event: ExposureEvent, payload: Payload): Record<st
   };
 }
 
-export function tinybirdDelivery(env: Env): Outcome<TinybirdDelivery> {
-  const token = env.TINYBIRD_INGEST_TOKEN;
+export async function evaluationUsageEvent(
+  payload: Payload,
+  scope: CredentialScope & { organizationId: string },
+  replayWindow: EvaluationUsageReplayWindow | undefined,
+): Promise<Outcome<EvaluationUsageEvent>> {
+  const usage = evaluationUsagePayload(payload, scope);
+  if (!usage.ok) return usage;
+
+  if (replayWindow === undefined) {
+    return {
+      ok: false,
+      error: serviceUnavailable("Evaluation usage replay window is unavailable"),
+    };
+  }
+  let eventId: string;
+  try {
+    eventId = await claimEvaluationUsageEventId(
+      scope,
+      usage.value.idempotencyKey,
+      replayWindow,
+      usage.value.isCached ? "cached" : "remote",
+    );
+  } catch {
+    return {
+      ok: false,
+      error: serviceUnavailable("Evaluation usage replay window is unavailable"),
+    };
+  }
+  return { ok: true, value: { eventId, ...usage.value } };
+}
+
+export function evaluationUsagePayload(
+  payload: Payload,
+  scope: CredentialScope & { organizationId: string },
+): Outcome<EvaluationUsageEventInput> {
+  const dimensions = usageDimensions(payload);
+  if (!dimensions.ok) return dimensions;
+  const evaluation = evaluationUsageValues(payload);
+  if (!evaluation.ok) return evaluation;
+  const serverReceivedAt = new Date(Date.now()).toISOString();
+  return {
+    ok: true,
+    value: {
+      idempotencyKey: dimensions.value.idempotencyKey,
+      organizationId: scope.organizationId,
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      flagKey: dimensions.value.flagKey,
+      sdkRuntime: dimensions.value.sdkRuntime,
+      ...evaluation.value,
+      serverReceivedAt,
+    },
+  };
+}
+
+function usageDimensions(
+  payload: Payload,
+): Outcome<{ idempotencyKey: string; flagKey: string; sdkRuntime: string }> {
+  const idempotencyKey = stringField(payload, "idempotencyKey");
+  const flagKey = stringField(payload, "flagKey");
+  const sdkRuntime = stringField(payload, "sdkRuntime");
+  if (!idempotencyKey.ok) return idempotencyKey;
+  if (!flagKey.ok) return flagKey;
+  if (!sdkRuntime.ok) return sdkRuntime;
+  if (idempotencyKey.value.length > 255) {
+    return { ok: false, error: invalidEvaluationUsageField("idempotencyKey") };
+  }
+  if (flagKey.value.length > 255 || sdkRuntime.value.length > 64) {
+    return { ok: false, error: invalidEvaluationUsageField("usage dimensions") };
+  }
+  return {
+    ok: true,
+    value: {
+      idempotencyKey: idempotencyKey.value,
+      flagKey: flagKey.value,
+      sdkRuntime: sdkRuntime.value,
+    },
+  };
+}
+
+function evaluationUsageValues(
+  payload: Payload,
+): Outcome<{ evaluationCount: number; isBatch: boolean; isCached: boolean; hasExposure: boolean }> {
+  const { evaluationCount, isBatch, isCached, hasExposure } = payload;
+  if (
+    typeof evaluationCount !== "number" ||
+    !Number.isInteger(evaluationCount) ||
+    evaluationCount < 0 ||
+    evaluationCount > 4_294_967_295
+  ) {
+    return { ok: false, error: invalidEvaluationUsageField("evaluationCount") };
+  }
+  if (
+    typeof isBatch !== "boolean" ||
+    typeof isCached !== "boolean" ||
+    typeof hasExposure !== "boolean"
+  ) {
+    return { ok: false, error: invalidEvaluationUsageField("evaluation dimensions") };
+  }
+  if ((isCached && evaluationCount !== 0) || (!isCached && evaluationCount === 0)) {
+    return { ok: false, error: invalidEvaluationUsageField("evaluationCount") };
+  }
+  return { ok: true, value: { evaluationCount, isBatch, isCached, hasExposure } };
+}
+
+export function toEvaluationUsageTinybirdRow(event: EvaluationUsageEvent): Record<string, unknown> {
+  return {
+    dedup_key: event.eventId,
+    event_id: event.eventId,
+    organization_id: event.organizationId,
+    app_id: event.appId,
+    environment_id: event.environmentId,
+    flag_key: event.flagKey,
+    sdk_runtime: event.sdkRuntime,
+    server_received_at: event.serverReceivedAt,
+    evaluation_count: event.evaluationCount,
+    is_batch: event.isBatch ? 1 : 0,
+    is_cached: event.isCached ? 1 : 0,
+    has_exposure: event.hasExposure ? 1 : 0,
+  };
+}
+
+export function tinybirdDelivery(
+  env: Env,
+  datasource = rawEventsDatasource,
+): Outcome<TinybirdDelivery> {
+  const token =
+    datasource === rawEvaluationsDatasource
+      ? env.TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN
+      : env.TINYBIRD_INGEST_TOKEN;
   if (!token) {
     return { ok: false, error: serviceUnavailable("Tinybird ingest token is unavailable") };
   }
 
   const url = new URL("/v0/events", env.TINYBIRD_API_URL ?? "https://api.tinybird.co");
-  url.searchParams.set("name", rawEventsDatasource);
+  url.searchParams.set("name", datasource);
   return { ok: true, value: { url: url.toString(), token } };
+}
+
+function invalidEvaluationUsageField(field: string): ErrorResponse {
+  return {
+    code: "VALIDATION_ERROR",
+    message: `${field} is invalid`,
+    details: { issues: [{ path: ["body", field], message: "invalid value" }] },
+  };
 }
 
 export async function appendRawEvent(row: Record<string, unknown>, delivery: TinybirdDelivery) {

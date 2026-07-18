@@ -1,17 +1,18 @@
 import {
-  DataPlaneEvaluateResponseSchema,
   type DataPlaneEvaluateRequest,
-  type ErrorCode,
+  DataPlaneEvaluateResponseSchema,
   type ErrorResponse,
-  type Variant,
 } from "@splitch/contracts";
-import { renderError, type HandlerArgs, type Principal } from "@splitch/worker-runtime";
+import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
 import { evaluate } from "./evaluate/accessor-paths";
-import type { AssembledExposure, ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
-import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
 import type { EvaluateResult } from "./evaluate/evaluate-path";
-import type { ExposureSink } from "./exposure-sink";
-import { ExposureSinkError } from "./exposure-sink";
+import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
+import type { AssembledExposure, ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
+import { errorResponse } from "./evaluation-error-response";
+import type { EvaluationCommitSink } from "./evaluation-commit-sink";
+import { EvaluationCommitSinkError } from "./evaluation-commit-sink";
+import type { EvaluationUsageScope } from "./evaluation-usage";
+import { responseBody, sdkRuntime } from "./evaluate-response";
 import type { FlagConfig, Provider } from "./provider/provider";
 
 type EvaluateInput = {
@@ -20,7 +21,7 @@ type EvaluateInput = {
 
 interface EvaluateRouteDeps extends EvaluatePathDeps {
   readonly exposureAssembly: ExposureAssemblyDeps;
-  readonly exposureSink: ExposureSink;
+  readonly evaluationCommitSink: EvaluationCommitSink;
   /**
    * `ctx.waitUntil` seam for the fire-and-forget Assignment Store write
    * (holdover-write-contract.md). When absent (unit harnesses), the write still
@@ -29,13 +30,15 @@ interface EvaluateRouteDeps extends EvaluatePathDeps {
   readonly waitUntil?: (promise: Promise<unknown>) => void;
 }
 
-interface CredentialScope {
-  readonly appId: string;
-  readonly environmentId: string;
-}
+type CredentialScope = EvaluationUsageScope;
 
 export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
-  return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
+  return async ({
+    input,
+    principal,
+    requestId,
+    request,
+  }: HandlerArgs<unknown>): Promise<Response> => {
     const parsed = evaluateInput(input);
     const scope = credentialScope(principal);
     if (!scope.ok) return renderError(scope.error, { requestId });
@@ -44,20 +47,27 @@ export function makeEvaluateHandler(deps: EvaluateRouteDeps) {
     if (assertionError !== null) return renderError(assertionError, { requestId });
 
     const evaluated = await evaluateWithCapture(parsed.body, scope.value, deps);
-    return evaluateResponse(evaluated, deps, requestId);
+    return evaluateResponse(evaluated, deps, requestId, request);
   };
 }
 
 function credentialScope(
   principal: Principal,
 ): { ok: true; value: CredentialScope } | { ok: false; error: ErrorResponse } {
-  if (principal.appId === null || principal.environmentId === null) {
+  if (principal.orgId === null || principal.appId === null || principal.environmentId === null) {
     return {
       ok: false,
-      error: errorResponse("INTERNAL_SERVER_ERROR", "credential is not environment-scoped"),
+      error: errorResponse("SERVICE_UNAVAILABLE", "credential cache migration is required"),
     };
   }
-  return { ok: true, value: { appId: principal.appId, environmentId: principal.environmentId } };
+  return {
+    ok: true,
+    value: {
+      organizationId: principal.orgId,
+      appId: principal.appId,
+      environmentId: principal.environmentId,
+    },
+  };
 }
 
 function appAssertionError(appId: string | undefined, scopedAppId: string): ErrorResponse | null {
@@ -83,13 +93,14 @@ async function evaluateWithCapture(
     },
   };
   const output = await evaluate(routeInput, { ...deps, provider }, deps.exposureAssembly);
-  return { output, provider };
+  return { output, provider, scope };
 }
 
 async function evaluateResponse(
   evaluated: Awaited<ReturnType<typeof evaluateWithCapture>>,
   deps: EvaluateRouteDeps,
   requestId: string,
+  request: Request,
 ): Promise<Response> {
   const { output, provider } = evaluated;
   if (output.result.kind === "error") {
@@ -106,34 +117,34 @@ async function evaluateResponse(
   const body = responseBody(provider.flag, output.result);
   if (!body.ok) return renderError(body.error, { requestId });
 
-  const write = await writeExposures(output.exposures, deps);
-  if (!write.ok) return renderError(write.error, { requestId });
+  const logicalEvaluationId = request.headers.get("idempotency-key");
+  if (logicalEvaluationId === null) {
+    return renderError(
+      errorResponse("VALIDATION_ERROR", "Idempotency-Key is required for Evaluation usage"),
+      { requestId },
+    );
+  }
 
-  // Only record the holdover AFTER the Exposure is accepted by ingest. If the
-  // holdover were written first and ingest then 503s, the SDK re-fires and hits
-  // the holdover-replay path (which fires NO Exposure) — so that entity's
-  // Exposure would never be persisted for this Run. Writing the holdover last
-  // means a 503 leaves no holdover, the re-fire re-assigns deterministically
-  // (same Variant, sticky experience preserved), and re-attempts the Exposure.
+  const commit = await writeEvaluationCommit(
+    output.exposures,
+    logicalEvaluationId,
+    evaluated.scope,
+    { flagKey: provider.flag.flagKey, sdkRuntime: sdkRuntime(request) },
+    deps,
+  );
+  if (!commit.ok) return renderError(commit.error, { requestId });
+
+  // Only record the holdover AFTER the Exposure is accepted by ingest. Writing it
+  // first and then returning 503 would make the SDK retry hit holdover replay
+  // without another Exposure, dropping the event. Writing it last lets retries
+  // re-attempt the Exposure.
   scheduleHoldoverWrite(output.result, deps);
 
-  return Response.json(DataPlaneEvaluateResponseSchema.parse(body.value));
-}
-
-function responseBody(
-  flag: FlagConfig,
-  result: Exclude<EvaluateResult, { kind: "error" }>,
-): { ok: true; value: { variant: Variant["value"] | null } } | { ok: false; error: ErrorResponse } {
-  const value = valueForVariant(flag.variants, result);
-  return value.ok
-    ? { ok: true, value: { variant: value.value } }
-    : {
-        ok: false,
-        error: errorResponse(
-          "INTERNAL_SERVER_ERROR",
-          `Variant "${value.variantName}" has no value`,
-        ),
-      };
+  const response = Response.json(DataPlaneEvaluateResponseSchema.parse(body.value));
+  if (output.result.liveRunId !== null) {
+    response.headers.set("x-run-id", output.result.liveRunId);
+  }
+  return response;
 }
 
 /**
@@ -169,23 +180,38 @@ function scheduleHoldoverWrite(result: EvaluateResult, deps: EvaluateRouteDeps):
   deps.waitUntil?.(write);
 }
 
-async function writeExposures(
+async function writeEvaluationCommit(
   exposures: readonly AssembledExposure[],
+  idempotencyKey: string,
+  scope: EvaluationUsageScope,
+  dimensions: { readonly flagKey: string; readonly sdkRuntime: string },
   deps: EvaluateRouteDeps,
 ): Promise<{ ok: true } | { ok: false; error: ErrorResponse }> {
   try {
-    for (const exposure of exposures) {
-      await deps.exposureSink.write(exposure);
-    }
+    await deps.evaluationCommitSink.write({
+      usage: {
+        idempotencyKey,
+        organizationId: scope.organizationId,
+        appId: scope.appId,
+        environmentId: scope.environmentId,
+        flagKey: dimensions.flagKey,
+        sdkRuntime: dimensions.sdkRuntime,
+        evaluationCount: 1,
+        isBatch: false,
+        isCached: false,
+        hasExposure: exposures.length > 0,
+      },
+      exposures,
+    });
     return { ok: true };
   } catch (cause) {
-    if (!(cause instanceof ExposureSinkError)) {
+    if (!(cause instanceof EvaluationCommitSinkError)) {
       throw cause;
     }
-    deps.logger?.error("exposure_sink_failed", { cause });
+    deps.logger?.error("evaluation_commit_sink_failed", { cause });
     return {
       ok: false,
-      error: errorResponse("SERVICE_UNAVAILABLE", "Exposure ingest is unavailable"),
+      error: errorResponse("SERVICE_UNAVAILABLE", "Evaluation commit ingest is unavailable"),
     };
   }
 }
@@ -245,33 +271,4 @@ class CapturingProvider implements Provider {
   getFlags(...args: Parameters<Provider["getFlags"]>) {
     return this.inner.getFlags(...args);
   }
-}
-
-function valueForVariant(
-  variants: readonly Variant[],
-  result: Exclude<EvaluateResult, { kind: "error" }>,
-): { ok: true; value: Variant["value"] | null } | { ok: false; variantName: string | null } {
-  if (result.variant === null) {
-    return { ok: true, value: null };
-  }
-  const variant = variants.find((item) => item.name === result.variant);
-  return variant === undefined
-    ? { ok: false, variantName: result.variant }
-    : { ok: true, value: variant.value };
-}
-
-function errorResponse(code: ErrorCode, message: string): ErrorResponse {
-  if (code === "FLAG_NOT_FOUND") {
-    return { code, message: "flag not found", details: {} };
-  }
-  if (code === "VALIDATION_ERROR") {
-    return { code, message, details: { issues: [] } };
-  }
-  if (code === "INTERNAL_SERVER_ERROR") {
-    return { code, message: "evaluation failed", details: {} };
-  }
-  if (code === "SERVICE_UNAVAILABLE") {
-    return { code, message, details: { retryAfterMs: 1000 } };
-  }
-  return { code, message, details: {} } as ErrorResponse;
 }

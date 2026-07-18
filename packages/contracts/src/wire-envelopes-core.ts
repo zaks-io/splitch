@@ -1,18 +1,18 @@
 import { z } from "zod";
 import { EvaluationContextSchema } from "./leaf-schemas-runtime";
-import { VariantValueSchema } from "./leaves/variant-value";
 import {
-  DataPlaneEvaluateResponseSchema,
-  PeekEvaluateResponseSchema,
   type DataPlaneEvaluateResponse,
+  DataPlaneEvaluateResponseSchema,
   type PeekEvaluateResponse,
+  PeekEvaluateResponseSchema,
 } from "./leaves/data-plane-evaluate-wire";
+import { VariantValueSchema } from "./leaves/variant-value";
 
 export {
-  DataPlaneEvaluateResponseSchema,
-  PeekEvaluateResponseSchema,
   type DataPlaneEvaluateResponse,
+  DataPlaneEvaluateResponseSchema,
   type PeekEvaluateResponse,
+  PeekEvaluateResponseSchema,
 };
 
 /**
@@ -89,6 +89,15 @@ export const DataPlaneEvaluateRequestSchema = z.object({
   attributes: EvaluationContextSchema.shape.attributes.default({}),
 });
 export type DataPlaneEvaluateRequest = z.infer<typeof DataPlaneEvaluateRequestSchema>;
+
+/** Non-billable, privacy-minimal SDK cache-hit telemetry. */
+export const CachedEvaluationTelemetryRequestSchema = z
+  .object({
+    flagKey: NonEmptyDataPlaneStringSchema,
+    idempotencyKey: NonEmptyDataPlaneStringSchema.max(255),
+  })
+  .strict();
+export const CachedEvaluationTelemetryResponseSchema = z.object({ ok: z.literal(true) }).strict();
 
 // Data-plane evaluate response leaves live in ./leaves/data-plane-evaluate-wire.ts.
 

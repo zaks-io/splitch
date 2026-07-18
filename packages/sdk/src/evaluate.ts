@@ -13,11 +13,22 @@ import type { AttributeValue, Transport, TransportFailure, TransportRequest } fr
  * arrays only (no nested objects), so a nested-object attribute is a COMPILE error
  * here rather than a runtime 400 (DataPlaneEvaluateRequestSchema).
  */
+export interface EvaluationContext {
+  readonly targetingKey: string;
+  readonly idType?: string;
+  readonly attributes?: Readonly<Record<string, AttributeValue>>;
+  readonly defaultValue?: VariantValue;
+  /** Caller-owned identity reused for every retry of this logical Evaluation. */
+  readonly idempotencyKey: string;
+}
+
 export interface EvaluateContext {
   readonly targetingKey: string;
   readonly idType?: string;
   readonly attributes?: Readonly<Record<string, AttributeValue>>;
   readonly defaultValue?: VariantValue;
+  /** Optional because peek and verify do not write billable usage. */
+  readonly idempotencyKey?: string;
 }
 
 /**
@@ -62,6 +73,7 @@ function requestFor(flagKey: string, context: EvaluateContext): TransportRequest
     targetingKey: context.targetingKey,
     idType: context.idType ?? DEFAULT_ID_TYPE,
     attributes: context.attributes ?? {},
+    ...(context.idempotencyKey === undefined ? {} : { idempotencyKey: context.idempotencyKey }),
   };
 }
 
@@ -86,7 +98,7 @@ function requestFor(flagKey: string, context: EvaluateContext): TransportRequest
 export async function runEvaluate(
   deps: EvaluateDeps,
   flagKey: string,
-  context: EvaluateContext,
+  context: EvaluationContext,
 ): Promise<ResolutionDetails> {
   const { targetingKey } = context;
   const idType = context.idType ?? DEFAULT_ID_TYPE;
@@ -95,6 +107,17 @@ export async function runEvaluate(
   const cached = deps.seenSet.get(flagKey, idType, targetingKey, deps.now());
   if (cached !== undefined) {
     deps.logger.debug("[splitch] seen-set hit: suppress Exposure", { flagKey, targetingKey });
+    const recordCachedEvaluation = deps.transport.recordCachedEvaluation;
+    if (recordCachedEvaluation) {
+      void recordCachedEvaluation({ flagKey, idempotencyKey: context.idempotencyKey }).catch(
+        (cause) => {
+          deps.logger.error("[splitch] cached Evaluation telemetry failed-loud", {
+            flagKey,
+            errorMessage: cause instanceof Error ? cause.message : "non-error rejection",
+          });
+        },
+      );
+    }
     // A cached `variant: null` records a 200 no-match; re-apply THIS call's
     // Default Variant rather than replaying a previous caller's.
     return { value: cached.variant ?? defaultValue, variantName: null, reason: "CACHED" };

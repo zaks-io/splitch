@@ -26,6 +26,7 @@ import {
 
 /** The OpenAPI content-type every splitch route speaks. */
 const JSON_CONTENT = "application/json";
+const IDEMPOTENCY_HEADER = "Idempotency-Key";
 
 /**
  * Request pieces for a route, in @hono/zod-openapi terms. `params`/`query` must
@@ -123,6 +124,19 @@ function buildOpenApiRequestConfig(request: ApiRouteRequest | undefined) {
   return undefined;
 }
 
+function idempotencyHeader(mode: IdempotencyMode) {
+  if (mode === "none") return undefined;
+  return z.object({
+    [IDEMPOTENCY_HEADER]: z
+      .string()
+      .min(1)
+      .openapi({
+        param: { name: IDEMPOTENCY_HEADER, in: "header", required: mode === "required" },
+        example: "logical-evaluation-123",
+      }),
+  });
+}
+
 export function defineApiRoute<const Input extends DefineApiRouteInput>(input: Input) {
   const contract = defineRoute({
     id: input.operationId,
@@ -147,7 +161,12 @@ export function defineApiRoute<const Input extends DefineApiRouteInput>(input: I
       path: honoPathToOpenApiPath(input.path) as HonoToOpenApiPath<Input["path"]>,
       operationId: input.operationId,
       summary: input.summary,
-      request: buildOpenApiRequestConfig(input.request),
+      request: {
+        ...(buildOpenApiRequestConfig(input.request) ?? {}),
+        ...(idempotencyHeader(input.idempotency)
+          ? { headers: idempotencyHeader(input.idempotency) }
+          : {}),
+      },
       responses: {
         200: {
           description: input.summary,

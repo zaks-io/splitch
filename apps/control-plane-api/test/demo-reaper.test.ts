@@ -43,7 +43,13 @@ async function runScheduled(): Promise<void> {
       scheduledTime: NOW_MS,
       noRetry: vi.fn(),
     } as ScheduledController,
-    { ...env, SPLITCH_PLATFORM_TARGET: "local" } as ControlPlaneApiEnv,
+    {
+      ...env,
+      CREDENTIAL_CACHE_BACKFILL: {
+        getByName: () => ({ fetch: async () => new Response(null, { status: 204 }) }),
+      },
+      SPLITCH_PLATFORM_TARGET: "local",
+    } as ControlPlaneApiEnv,
     {
       waitUntil: (promise) => waits.push(promise),
     } as unknown as ExecutionContext,

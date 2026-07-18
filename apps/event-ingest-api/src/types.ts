@@ -1,4 +1,12 @@
 import type { ErrorResponse } from "@splitch/contracts";
+import type {
+  EvaluationUsageReplayWindow,
+  EvaluationUsageReplayWindowNamespace,
+} from "./evaluation-usage-replay-window";
+import type {
+  EvaluationCommitOutbox,
+  EvaluationCommitOutboxNamespace,
+} from "./evaluation-commit-outbox";
 
 export type Env = {
   CONFIG_STORE?: KVNamespace;
@@ -7,6 +15,11 @@ export type Env = {
   SPLITCH_SOURCE_ID?: string;
   TINYBIRD_API_URL?: string;
   TINYBIRD_INGEST_TOKEN?: string;
+  TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN?: string;
+  EVALUATION_USAGE_REPLAY_WINDOW?:
+    | EvaluationUsageReplayWindow
+    | EvaluationUsageReplayWindowNamespace;
+  EVALUATION_COMMIT_OUTBOX?: EvaluationCommitOutbox | EvaluationCommitOutboxNamespace;
   SENTRY_DSN?: string;
 };
 
@@ -15,6 +28,10 @@ export type Payload = Record<string, unknown>;
 export interface CredentialScope {
   readonly appId: string;
   readonly environmentId: string;
+}
+
+export interface EvaluationUsageScope extends CredentialScope {
+  readonly organizationId: string;
 }
 
 export interface RunScope {

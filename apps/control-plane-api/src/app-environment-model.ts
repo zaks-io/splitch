@@ -8,11 +8,12 @@ import {
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning";
-import { randomHex } from "./credential-cache";
+import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
 
 export interface AppEnvironmentDeps {
   repo: Repository;
   credentialStore?: KVNamespace;
+  credentialCacheWriter?: CredentialCacheWriterAccess;
   nowIso?: () => string;
 }
 
@@ -62,6 +63,7 @@ export async function createEnvironmentRecord(
 export async function provisionEnvironmentClientKeys(
   deps: AppEnvironmentDeps,
   appId: string,
+  organizationId: string,
   environments: readonly EnvironmentRow[],
 ): Promise<[ClientKey, ClientKey]> {
   const keys = [];
@@ -69,6 +71,7 @@ export async function provisionEnvironmentClientKeys(
     const row = await provisionClientKey(deps, {
       appId,
       environmentId: env.id,
+      organizationId,
       scope: envScope(appId, env.id),
     });
     keys.push(clientKeyResponse(row));

@@ -10,6 +10,8 @@ export {
   recommendedActions,
 } from "./errors";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped resource envelope API
+export * from "./resource-envelopes";
 export {
   AuthKindSchema,
   authKinds,
@@ -197,6 +199,7 @@ export {
   AssignmentStoreEntrySchema,
   AssignmentStoreValueSchema,
   CredentialCacheKVSchema,
+  CredentialCacheKVSchemaV1,
   CredentialKindSchema,
   credentialKinds,
   CURRENT_KV_SCHEMA_VERSION,
@@ -219,6 +222,8 @@ export type {
 export {
   DataPlaneEvaluateRequestSchema,
   DataPlaneEvaluateResponseSchema,
+  CachedEvaluationTelemetryRequestSchema,
+  CachedEvaluationTelemetryResponseSchema,
   PAGINATION_DEFAULT_LIMIT,
   PAGINATION_MAX_LIMIT,
   PaginationQuerySchema,
@@ -239,61 +244,3 @@ export type {
   TestEvaluationRequest,
   TestEvaluationResponse,
 } from "./wire-envelopes-core";
-export {
-  CreateFlagRequestSchema,
-  CreateVariantRequestSchema,
-  FlagResponseSchema,
-  PatchFlagRequestSchema,
-  PatchVariantRequestSchema,
-} from "./resource-envelopes-flag";
-export type {
-  CreateFlagRequest,
-  CreateVariantRequest,
-  FlagResponse,
-  PatchFlagRequest,
-  PatchVariantRequest,
-} from "./resource-envelopes-flag";
-export {
-  CreateExperimentRequestSchema,
-  ExperimentResponseSchema,
-  PatchExperimentRequestSchema,
-  PatchRunRequestSchema,
-  RunResponseSchema,
-  StartRunRequestSchema,
-} from "./resource-envelopes-experiment";
-export type {
-  CreateExperimentRequest,
-  ExperimentResponse,
-  PatchExperimentRequest,
-  PatchRunRequest,
-  RunResponse,
-  StartRunRequest,
-} from "./resource-envelopes-experiment";
-export {
-  AppResponseSchema,
-  CreateAppRequestSchema,
-  CreateAppResponseSchema,
-  CreateCredentialResponseSchema,
-  CreateMetricRequestSchema,
-  CredentialSchema,
-  ListCredentialsResponseSchema,
-  MetricResponseSchema,
-  OrganizationResponseSchema,
-  PatchAppRequestSchema,
-  PatchMetricRequestSchema,
-  PatchOrganizationRequestSchema,
-} from "./resource-envelopes-account";
-export type {
-  AppResponse,
-  CreateAppRequest,
-  CreateAppResponse,
-  CreateCredentialResponse,
-  CreateMetricRequest,
-  Credential,
-  ListCredentialsResponse,
-  MetricResponse,
-  OrganizationResponse,
-  PatchAppRequest,
-  PatchMetricRequest,
-  PatchOrganizationRequest,
-} from "./resource-envelopes-account";

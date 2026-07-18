@@ -11,8 +11,8 @@ import { routeRegistry } from "./route-registry";
  *
  * Surface isolation (CRITICAL): MCP exposes the CONTROL PLANE, not the data plane.
  * The discriminator is the route's auth kind. Control-plane routes authenticate
- * with `control-plane-token`; the data-plane SDK endpoints (sdk_evaluate via
- * Client Key, sdk_peek via API Key, sdk_verify via Client/API Key) and the public discovery doc
+ * with `control-plane-token`; the data-plane SDK endpoints (evaluate/cache telemetry via Client Key,
+ * peek via API Key, verify via Client/API Key) and the public discovery doc
  * (openapi_document_get) do NOT, so they derive no tool. An agent verifies via the
  * control-plane `flags_test_eval`, never the data-plane evaluate/peek/verify
  * (mcp-tool-derivation.md "Authorization").
