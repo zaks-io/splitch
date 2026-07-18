@@ -141,13 +141,13 @@ Per-Worker configs must declare only the bindings owned by that Worker:
 
 | Worker                   | Binding rule                                                                                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update Durable Object binding                                                   |
+| Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update and D1-backed Durable Object bindings                                    |
 | MCP Worker               | No D1, KV, Tinybird, or Durable Object data bindings; calls public APIs by origin and Analysis by service binding through `@splitch/control-plane-sdk` |
 | Evaluation Worker        | Provider/config KV, Assignment Store KV/DO, Event Ingest service binding                                                                               |
 | Event Ingest Worker      | Queue, sharded ingest/dedup Durable Objects, Tinybird write secret                                                                                     |
 | Analysis Worker          | Tinybird read secret; no SDK evaluate or ingest bindings                                                                                               |
-| Auth API Worker          | Auth/session/token bindings only; no post-create App management bindings                                                                               |
-| Control Panel Worker     | UI/session/client bindings only; no direct D1/KV/Tinybird access                                                                                       |
+| Auth API Worker          | D1 identity/session binding plus auth/session/token bindings; no post-create App management bindings                                                   |
+| Control Panel Worker     | D1 binding for server-side auth, session, and claim flows plus UI/session/client bindings; no direct KV/Tinybird access                                |
 | Marketing Worker         | Static/public bindings only; no authenticated App data                                                                                                 |
 | Scheduled jobs           | Cron triggers stay on owning Workers: Control Plane API demo cleanup and Analysis snapshot refresh                                                     |
 
@@ -390,14 +390,22 @@ migrations.
   forwarded outside that Workflow.
 - D1 export can make the database unavailable to other requests. The daily export therefore runs in a
   declared production maintenance window with a ten-minute planned-unavailability budget. Before the
-  export starts, the owning control-plane service fences new D1-dependent operations and returns an
-  explicit maintenance error with retry guidance; it does not claim zero downtime or allow a D1 error
-  to look like successful product behavior. The fence remains until a direct D1 readiness check proves
-  requests are served again. An export still running at ten minutes breaches the budget: stop polling
-  so the provider cancels the unpolled export, keep the fence until readiness returns, alert the
-  incident owner, and disable later scheduled exports until the cause is resolved. Provisioning must
-  prove the budget with production-size synthetic data before enabling the schedule. Any non-blocking
-  replacement requires verified provider support and a policy update.
+  export starts, the Workflow enables one shared D1 maintenance gate that is independent of D1. Every
+  route capable of D1 access in the Auth API Worker, Control Panel Worker, and Control Plane API Worker
+  must consult that gate before constructing a repository or otherwise touching D1. Every Durable
+  Object entrypoint capable of D1 access, including the Control Plane API credential-cache writer,
+  credential-cache backfill, and config-store Durable Objects, must use the same guard before touching
+  D1. A fenced gate, an unreadable gate, or a timed-out gate fails closed with the standard `503`
+  `SERVICE_UNAVAILABLE` response and `Retry-After`; it cannot fall through to D1 or look like successful
+  product behavior. Static or public paths proven not to touch D1 may remain available.
+- The Workflow may initiate the export only after the shared gate reports fenced and maintenance probes
+  for all three D1-bound Workers and the D1-using Durable Object entrypoints confirm the guarded path.
+  The fence remains set until the export has stopped and a direct D1 readiness check proves requests are
+  served again; only then may the Workflow clear it. An export still running at ten minutes breaches the
+  budget: stop polling so the provider cancels the unpolled export, keep the fence until readiness
+  returns, alert the incident owner, and disable later scheduled exports until the cause is resolved.
+  Provisioning must prove the budget with production-size synthetic data before enabling the schedule.
+  Any non-blocking replacement requires verified provider support and a policy update.
 - The recovery bucket has no public `r2.dev` access, public custom domain, or public-read policy. No
   recovery object, signed URL, token, SQL content, or restore command enters GitHub, the repository,
   CI logs, deployment summaries, test artifacts, chat, or normal application logs.
@@ -474,11 +482,15 @@ evidence is not a successful recovery program.
 
 A separate, approval-gated provisioning slice must create the dedicated private R2 bucket, recovery
 prefix, lifecycle and bucket-lock rules, scoped identities, and Cloudflare Workflow/API integration. It
-must add the schedule-only mediator, maintenance fence/readiness behavior, production-size synthetic
-duration test, restricted evidence storage, alerting, permission verification, allowlist tests, and
-automated non-production drill coverage. It must not add R2 creation, exports, restores, recovery
-credentials, or a restore action to normal production deploy workflows. The implementation must keep
-all production data and recovery material out of Git, GitHub, logs, and build artifacts.
+must add the schedule-only mediator, shared fail-closed maintenance gate, guarded D1 access and
+readiness behavior, production-size synthetic duration test, restricted evidence storage, alerting,
+permission verification, allowlist tests, and automated non-production drill coverage. Route-level
+tests must prove that D1-dependent Auth API, Control Panel, and Control Plane API routes each return the
+standard maintenance contract while fenced and resume only after direct D1 readiness succeeds and the
+gate is cleared. Tests for every D1-using Durable Object entrypoint must prove the same fail-closed and
+resume ordering. It must not add R2 creation, exports, restores, recovery credentials, or a restore
+action to normal production deploy workflows. The implementation must keep all production data and
+recovery material out of Git, GitHub, logs, and build artifacts.
 
 ## Rollback
 
