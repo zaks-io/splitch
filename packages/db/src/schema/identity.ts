@@ -150,6 +150,9 @@ export const claimIdempotency = sqliteTable(
     verifiedUserHash: text("verified_user_hash").notNull(),
     // NULL owns an in-flight ceremony; a timestamp makes its retry replayable.
     completedAt: text("completed_at"),
+    // Set before the one-use provider confirmation so a retry can reconcile an
+    // interrupted response from WorkOS without guessing that the OTP failed.
+    providerConfirmationStartedAt: text("provider_confirmation_started_at"),
     expiresAt: text("expires_at").notNull(),
   },
   (t) => [

@@ -6,16 +6,16 @@ import {
   hashIdentifier,
   iso,
   resolveIdentity,
-  type Provisional,
 } from "./claim-identity";
 import { OAuthError } from "./oauth-errors";
 import type { RateLimiter } from "./rate-limit";
 import type { TokenSigner } from "./token-exchange";
 import type { WorkOsPort } from "./workos";
+import { verifyClaim } from "./claim-verify";
 
-const OTP_TTL_MS = 10 * 60 * 1000;
-const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
-const MAX_OTP_ATTEMPTS = 5;
+export { verifyClaim };
+
+const CLAIM_CEREMONY_TTL_MS = 15 * 60 * 1000;
 
 export interface ClaimDeps {
   repo: Repository;
@@ -63,7 +63,7 @@ export async function initiateClaim(
   await deps.repo.claim.createVerification({
     ...hashes,
     id: verificationId,
-    expiresAt: iso(now + OTP_TTL_MS),
+    expiresAt: iso(now + CLAIM_CEREMONY_TTL_MS),
     now: iso(now),
   });
   if (existing && existing !== claimant.userId) {
@@ -77,140 +77,6 @@ export async function initiateClaim(
     user_id: claimant.userId,
     org_id: claimant.orgId,
   };
-}
-
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the ordered security gates are deliberately kept in one auditable ceremony.
-export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<ClaimResult> {
-  const now = deps.now();
-  deps.rateLimiter.assertUnderCeiling(input.remoteIp ?? "unknown", now);
-  const claimant = await resolveIdentity(deps, input.identityAssertion, input.email, now);
-  const hashes = await claimHashes(claimant.userId, claimant.email);
-  const keyHash = await hashIdentifier(input.idempotencyKey);
-  const nowIso = iso(now);
-  const existing = await deps.workos.findVerifiedUserByEmail(claimant.email);
-  const verifiedUserId = existing && existing !== claimant.userId ? existing : claimant.userId;
-  const identityHashes = {
-    ...hashes,
-    organizationHash: await hashIdentifier(claimant.orgId),
-    appHash: await hashIdentifier(claimant.appId),
-    verifiedUserHash: await hashIdentifier(verifiedUserId),
-  };
-  if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
-    return tokenize(deps, claimant, verifiedUserId, now);
-  }
-  await assertClaimMemberships(deps, claimant);
-  const verification = input.verificationId
-    ? await deps.repo.claim.getVerification(input.verificationId)
-    : await deps.repo.claim.getLatestVerification(hashes);
-  if (
-    !verification ||
-    verification.provisionalUserHash !== hashes.provisionalUserHash ||
-    verification.emailHash !== hashes.emailHash ||
-    verification.consumedAt ||
-    verification.expiresAt <= nowIso
-  ) {
-    throw new OAuthError(
-      "invalid_grant",
-      "claim verification is expired or does not match this identity",
-    );
-  }
-  const existingHash = existing ? await hashIdentifier(existing) : null;
-  const collision = Boolean(existing && existing !== claimant.userId);
-  const approvedConsent =
-    collision && existingHash
-      ? await deps.repo.claim.getApprovedConsent({
-          verificationId: verification.id,
-          existingUserHash: existingHash,
-          now: nowIso,
-        })
-      : null;
-  if (collision && !approvedConsent) {
-    const consentId = await createConsent(
-      deps,
-      verification.id,
-      existing as string,
-      now,
-      hashIdentifier,
-    );
-    throw consentRequired(deps, consentId, verification.id, now);
-  }
-  const reservation = {
-    ...identityHashes,
-    keyHash,
-    verificationId: verification.id,
-    expiresAt: iso(now + IDEMPOTENCY_TTL_MS),
-  };
-  // Reserve before WorkOS consumes the one-use OTP. A same-key loser therefore
-  // observes the durable reservation, never a provider-specific OTP failure.
-  if (!(await deps.repo.claim.reserveClaim(reservation))) {
-    if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
-      return tokenize(deps, claimant, verifiedUserId, now);
-    }
-    throw new OAuthError("invalid_request", "a claim with this idempotency_key is in progress");
-  }
-  const transfer = {
-    ...identityHashes,
-    verificationId: verification.id,
-    consentAttemptId: approvedConsent,
-    keyHash,
-    provisionalUserId: claimant.userId,
-    verifiedUserId,
-    orgId: claimant.orgId,
-    appId: claimant.appId,
-    acquisitionToken: crypto.randomUUID(),
-    acquisitionKeyHash: keyHash,
-    now: nowIso,
-  };
-  try {
-    if (!verification.verifiedAt) {
-      if (collision) {
-        if (
-          !(await deps.repo.claim.markVerifiedFromConsent({
-            ...hashes,
-            id: verification.id,
-            consentAttemptId: approvedConsent as string,
-            now: nowIso,
-          }))
-        ) {
-          throw new OAuthError("server_error", "claim consent changed during confirmation");
-        }
-      } else {
-        if (!input.otp) {
-          throw new OAuthError("invalid_grant", "claim verification requires an OTP");
-        }
-        if (
-          !(await deps.repo.claim.incrementAttempt({
-            ...hashes,
-            id: verification.id,
-            now: nowIso,
-            maxAttempts: MAX_OTP_ATTEMPTS,
-          }))
-        ) {
-          throw new OAuthError("invalid_grant", "OTP attempt limit reached; request a new code");
-        }
-        try {
-          await deps.workos.confirmEmailVerification(claimant.userId, claimant.email, input.otp);
-        } catch {
-          throw new OAuthError("invalid_grant", "WorkOS rejected the email verification code");
-        }
-        if (
-          !(await deps.repo.claim.markVerified({ ...hashes, id: verification.id, now: nowIso }))
-        ) {
-          throw new OAuthError("server_error", "claim verification changed during confirmation");
-        }
-      }
-    }
-    if (await deps.repo.claim.completeClaim(transfer)) {
-      return tokenize(deps, claimant, verifiedUserId, now);
-    }
-    if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
-      return tokenize(deps, claimant, verifiedUserId, now);
-    }
-    throw new OAuthError("invalid_grant", "claim state changed during transfer");
-  } catch (cause) {
-    await deps.repo.claim.releaseClaimReservation(reservation);
-    throw cause;
-  }
 }
 
 export async function approveClaimConsent(
@@ -254,23 +120,4 @@ export async function refuseClaimConsent(
 async function assertStillProvisional(deps: ClaimDeps, orgId: string) {
   if (!(await deps.repo.identity.getOrg(orgId))?.isProvisional)
     throw new OAuthError("invalid_grant", "workspace is not awaiting a claim");
-}
-
-async function tokenize(
-  deps: ClaimDeps,
-  claimant: Provisional,
-  userId: string,
-  now: number,
-): Promise<ClaimResult> {
-  return {
-    access_token: await deps.tokenSigner.mintAccessToken(
-      userId,
-      [`app:${claimant.appId}:owner`],
-      "anonymous",
-      Math.floor(now / 1000),
-    ),
-    user_id: userId,
-    org_id: claimant.orgId,
-    app_id: claimant.appId,
-  };
 }

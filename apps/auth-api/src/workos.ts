@@ -32,6 +32,8 @@ export interface WorkOsPort {
   /** WorkOS owns delivery and verification of the OTP. */
   sendEmailVerification(userId: string, email: string): Promise<void>;
   confirmEmailVerification(userId: string, email: string, otp: string): Promise<void>;
+  /** Read the provider's durable result when a confirmation response was interrupted. */
+  isEmailVerified(userId: string, email: string): Promise<boolean>;
 }
 
 /** Stable, opaque user id from a canonical email (deterministic so re-auth returns the same id). */
@@ -74,6 +76,10 @@ export function makeFixtureWorkOs(): WorkOsPort {
       const canonical = normalizeEmail(email);
       if (!verifiedByEmail.has(canonical)) verifiedByEmail.set(canonical, userId);
     },
+
+    async isEmailVerified(userId, email) {
+      return verifiedByEmail.get(normalizeEmail(email)) === userId;
+    },
   };
 }
 
@@ -115,6 +121,15 @@ export function makeHostedWorkOs(input: { apiKey: string; baseUrl?: string }): W
         `/user_management/users/${encodeURIComponent(userId)}/email_verification/confirm`,
         "POST",
         { code: otp },
+      );
+    },
+    async isEmailVerified(userId, email) {
+      const response = await request(`/user_management/users/${encodeURIComponent(userId)}`, "GET");
+      return (
+        response?.id === userId &&
+        response.email_verified === true &&
+        typeof response.email === "string" &&
+        normalizeEmail(response.email) === normalizeEmail(email)
       );
     },
   };
