@@ -200,16 +200,18 @@ const startableKindMatches = (issue, config = {}) => {
   return kindLabels.has(explicitKind) || labels.some((label) => kindLabels.has(label));
 };
 
-const hasActiveClaim = (issue) =>
-  Boolean(
+const hasActiveClaim = (issue) => {
+  const claim =
     issue?.activeClaim ??
-      issue?.claimed ??
-      issue?.delegated ??
-      issue?.assignedWorker ??
-      issue?.workerSession ??
-      issue?.agentSession ??
-      issue?.assignee,
-  );
+    issue?.claimed ??
+    issue?.delegated ??
+    issue?.assignedWorker ??
+    issue?.workerSession ??
+    issue?.agentSession ??
+    issue?.assignee;
+
+  return Boolean(claim);
+};
 
 const isOpenPr = (pr) => {
   if (typeof pr === "string") return true;
@@ -360,6 +362,10 @@ export function linearDagStart(issuesInput = [], config = {}) {
     .filter((node) => node.unblocked && node.ready && node.startableState)
     .map((node) => node.id);
 
+  const outOfScopeBlockers = [...nodes.values()].flatMap((node) =>
+    node.externalBlockedBy.map((blocker) => ({ ticket: node.id, blocker })),
+  );
+
   return {
     totalIssues: nodes.size,
     roots,
@@ -368,9 +374,10 @@ export function linearDagStart(issuesInput = [], config = {}) {
     readyStarts,
     layers,
     cycles,
-    missingBlockers: [...nodes.values()].flatMap((node) =>
-      node.externalBlockedBy.map((blocker) => ({ ticket: node.id, blocker })),
-    ),
+    outOfScopeBlockers,
+    // Backward-compatible alias. These relations exist in Linear; the blocker
+    // ticket is merely outside this bounded snapshot.
+    missingBlockers: outOfScopeBlockers,
     missingEstimates: [...nodes.values()]
       .filter((node) => node.requiresEstimate && !node.hasEstimate)
       .map((node) => ({ ticket: node.id })),
@@ -406,9 +413,16 @@ const main = () => {
 
   const input = readJson(positional[0], "input");
   const config = { ...(input.config ?? {}), ...readJson(argValue("--config"), "--config") };
-  process.stdout.write(
-    `${JSON.stringify(linearDagStart(extractLinearIssues(input), config), null, 2)}\n`,
-  );
+  const result = linearDagStart(extractLinearIssues(input), config);
+  if (result.totalIssues === 0) {
+    console.error(
+      "linear-dag-start: DAG has zero live issues. That is either a bug in the query/input or a drained scope. " +
+        "Do not act on this result: verify the queue directly with the tracker MCP tools or a fresh tick-snapshot " +
+        "before treating the scope as empty or done.",
+    );
+    process.exit(2);
+  }
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
