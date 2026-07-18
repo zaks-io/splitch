@@ -7,30 +7,13 @@ import {
   serializeHttpOnlyCookie,
   tokenHash as hashOpaqueToken,
 } from "./session-cookie";
+import { parseStoredSession } from "./session-schema";
 
 export const SESSION_COOKIE_NAME = "__session";
 
 const SESSION_KEY_PREFIX = "session:";
 const MAX_SESSION_TTL_SECONDS = 60 * 60 * 24;
-
-const ORG_ROLES = new Set(["owner", "admin", "member"]);
-const APP_ROLES = new Set(["owner", "admin", "member", "viewer"]);
-const STORED_SESSION_KEYS = new Set([
-  "userId",
-  "orgs",
-  "expiresAt",
-  "workosSessionId",
-  "workosAccessToken",
-]);
-const ORG_MEMBERSHIP_KEYS = new Set([
-  "orgId",
-  "orgSlug",
-  "orgRole",
-  "isProvisional",
-  "demoExpiresAt",
-  "apps",
-]);
-const APP_MEMBERSHIP_KEYS = new Set(["appId", "appSlug", "role"]);
+const CURRENT_SESSION_VERSION = 2;
 
 export type OrgRole = "owner" | "admin" | "member";
 export type AppRole = "owner" | "admin" | "member" | "viewer";
@@ -57,6 +40,8 @@ export interface SessionPrincipal {
 
 export interface StoredSession extends SessionPrincipal {
   expiresAt: number;
+  /** v1 sessions predate provisional Organization fields and are rehydrated from D1. */
+  version?: 1 | 2;
   workosSessionId?: string;
   /** Server-only proof forwarded to Auth API; never included in publicSession. */
   workosAccessToken?: string;
@@ -85,7 +70,7 @@ export async function createSession(
     throw new Error("control-panel session expires before it can be stored");
   }
 
-  const stored: StoredSession = { ...session, expiresAt };
+  const stored: StoredSession = { ...session, expiresAt, version: CURRENT_SESSION_VERSION };
   assertStoredSession(stored, now);
 
   const token = generateOpaqueToken();
@@ -155,12 +140,13 @@ export async function refreshSession(
   session: StoredSession,
   now = Date.now(),
 ): Promise<void> {
-  assertStoredSession(session, now);
-  const ttl = ttlSeconds(session.expiresAt, now);
+  const stored: StoredSession = { ...session, version: CURRENT_SESSION_VERSION };
+  assertStoredSession(stored, now);
+  const ttl = ttlSeconds(stored.expiresAt, now);
   if (ttl <= 0) {
     throw new Error("control-panel session expired before it could be refreshed");
   }
-  await kv.put(sessionKey(tokenHash), JSON.stringify(session), { expirationTtl: ttl });
+  await kv.put(sessionKey(tokenHash), JSON.stringify(stored), { expirationTtl: ttl });
 }
 
 export function sessionKey(tokenHash: string): string {
@@ -173,37 +159,6 @@ function sessionCookie(token: string, maxAgeSeconds: number): string {
   });
 }
 
-function parseStoredSession(
-  raw: string,
-  now: number,
-): { ok: true; session: StoredSession } | { ok: false; reason: "expired" | "invalid" } {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { ok: false, reason: "invalid" };
-  }
-
-  if (!isPlainObject(parsed)) {
-    return { ok: false, reason: "invalid" };
-  }
-
-  if (!hasOnlyKeys(parsed, STORED_SESSION_KEYS)) {
-    return { ok: false, reason: "invalid" };
-  }
-
-  const session = parsed as Partial<StoredSession>;
-  if (!isStoredSession(session)) {
-    return { ok: false, reason: "invalid" };
-  }
-
-  if (session.expiresAt <= nowSeconds(now)) {
-    return { ok: false, reason: "expired" };
-  }
-
-  return { ok: true, session };
-}
-
 function assertStoredSession(session: StoredSession, now: number): void {
   const parsed = parseStoredSession(JSON.stringify(session), now);
   if (!parsed.ok) {
@@ -211,65 +166,6 @@ function assertStoredSession(session: StoredSession, now: number): void {
   }
 }
 
-function isStoredSession(value: Partial<StoredSession>): value is StoredSession {
-  return (
-    isNonEmptyString(value.userId) &&
-    Number.isInteger(value.expiresAt) &&
-    (value.workosSessionId === undefined || isNonEmptyString(value.workosSessionId)) &&
-    (value.workosAccessToken === undefined || isNonEmptyString(value.workosAccessToken)) &&
-    Array.isArray(value.orgs) &&
-    value.orgs.every(isOrgMembership)
-  );
-}
-
-function isOrgMembership(value: unknown): value is OrgMembership {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  if (!hasOnlyKeys(value, ORG_MEMBERSHIP_KEYS)) {
-    return false;
-  }
-  const candidate = value as Partial<OrgMembership>;
-  return (
-    isNonEmptyString(candidate.orgId) &&
-    isNonEmptyString(candidate.orgSlug) &&
-    typeof candidate.orgRole === "string" &&
-    ORG_ROLES.has(candidate.orgRole) &&
-    typeof candidate.isProvisional === "boolean" &&
-    (candidate.demoExpiresAt === null || isNonEmptyString(candidate.demoExpiresAt)) &&
-    Array.isArray(candidate.apps) &&
-    candidate.apps.every(isAppMembership)
-  );
-}
-
-function isAppMembership(value: unknown): value is AppMembership {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  if (!hasOnlyKeys(value, APP_MEMBERSHIP_KEYS)) {
-    return false;
-  }
-  const candidate = value as Partial<AppMembership>;
-  return (
-    isNonEmptyString(candidate.appId) &&
-    isNonEmptyString(candidate.appSlug) &&
-    typeof candidate.role === "string" &&
-    APP_ROLES.has(candidate.role)
-  );
-}
-
 function ttlSeconds(expiresAt: number, now: number): number {
   return Math.min(MAX_SESSION_TTL_SECONDS, expiresAt - nowSeconds(now));
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasOnlyKeys(value: Record<string, unknown>, allowedKeys: Set<string>): boolean {
-  return Object.keys(value).every((key) => allowedKeys.has(key));
 }

@@ -17,16 +17,24 @@ export const Route = createFileRoute("/$orgSlug/claim")({
       throw redirect({ href: `/auth/login?returnTo=${encodeURIComponent(location.href)}` });
     }
     const organization = result.session.orgs.find((org) => org.orgSlug === params.orgSlug);
-    if (!organization) {
-      throw redirect({ to: "/" });
-    }
-    return organization;
+    return organization ?? null;
   },
   component: ClaimRoute,
 });
 
 function ClaimRoute() {
   const organization = Route.useLoaderData();
+
+  if (!organization) {
+    return (
+      <main className="mx-auto grid max-w-xl gap-6">
+        <Alert variant="destructive">
+          <AlertTitle>access_denied</AlertTitle>
+          <AlertDescription>You are not a member of this Organization.</AlertDescription>
+        </Alert>
+      </main>
+    );
+  }
 
   if (!organization.isProvisional) {
     return (

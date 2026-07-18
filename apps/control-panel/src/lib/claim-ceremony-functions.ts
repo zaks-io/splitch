@@ -3,13 +3,19 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { env as workerEnv } from "cloudflare:workers";
 import { controlPanelBindings } from "./bindings";
-import { assertClaimActor, ClaimCeremonyError, postClaimCeremony } from "./claim-ceremony";
-import { buildSessionPrincipal } from "./membership";
-import { loadSessionFromRequest, refreshSession } from "./session";
+import {
+  assertClaimInitiator,
+  claimCompletionKind,
+  ClaimCeremonyError,
+  postClaimCeremony,
+} from "./claim-ceremony";
+import { buildSessionPrincipal, rehydrateLegacySession } from "./membership";
+import { loadSessionFromRequest, refreshSession, sessionKey } from "./session";
 
 export type ClaimActionResult =
   | { kind: "otp_required" }
   | { kind: "claimed" }
+  | { kind: "handoff_required" }
   | {
       kind: "error";
       code: string;
@@ -23,12 +29,17 @@ interface ClaimActionInput {
   identityAssertion: string;
   email: string;
   otp?: string;
-  idempotencyKey?: string;
+  completeTransfer?: boolean;
 }
 
 interface PendingClaim {
+  version: 1;
+  userId: string;
+  orgId: string;
   email: string;
   identityAssertion: string;
+  verificationId: string;
+  idempotencyKey: string;
 }
 
 const CLAIM_INTENT_TTL_SECONDS = 10 * 60;
@@ -38,13 +49,22 @@ export const submitClaimCeremony = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<ClaimActionResult> => {
     const bindings = controlPanelBindings(workerEnv);
     const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
-    const context = claimContext(loaded, data.orgSlug);
+    if (!loaded.ok) return error("unauthenticated", "Sign in before claiming this Organization.");
+
+    const repo = createRepository(bindings.DB);
+    const session = await rehydrateLegacySession(
+      repo,
+      bindings.SESSION_STORE,
+      loaded.tokenHash,
+      loaded.session,
+    );
+    const context = claimContext({ ...loaded, session }, data.orgSlug);
     if ("kind" in context) {
       return context;
     }
 
     try {
-      if (data.otp === undefined) {
+      if (data.otp === undefined && !data.completeTransfer) {
         return await startClaimCeremony(bindings, context, data);
       }
       return await verifyClaimCeremony(bindings, context, data);
@@ -61,6 +81,7 @@ type ClaimContext = {
   userId: string;
   orgId: string;
   workosSessionId: string;
+  workosAccessToken?: string;
   expiresAt: number;
 };
 
@@ -89,6 +110,7 @@ function claimContext(
     userId: loaded.session.userId,
     orgId: organization.orgId,
     workosSessionId: loaded.session.workosSessionId,
+    workosAccessToken: loaded.session.workosAccessToken,
     expiresAt: loaded.session.expiresAt,
   };
 }
@@ -98,22 +120,36 @@ async function startClaimCeremony(
   context: ClaimContext,
   data: ClaimActionInput,
 ): Promise<ClaimActionResult> {
-  const response = assertClaimActor(
-    await postClaimCeremony(bindings.AUTH_API_ORIGIN, {
+  try {
+    const response = await postClaimCeremony(bindings.AUTH_API_ORIGIN, {
       identityAssertion: data.identityAssertion,
       email: data.email,
-    }),
-    context,
-  );
-  if (!("otpRequired" in response)) {
-    return error("invalid_grant", "This Organization has already been claimed.");
+    });
+    if (!("otpRequired" in response)) {
+      return error("invalid_grant", "This Organization has already been claimed.");
+    }
+    assertClaimInitiator(response, context);
+    await storePendingClaim(bindings.SESSION_STORE, context, {
+      email: data.email,
+      identityAssertion: data.identityAssertion,
+      verificationId: response.verificationId,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    return { kind: "otp_required" };
+  } catch (cause) {
+    if (cause instanceof ClaimCeremonyError && cause.code === "interaction_required") {
+      if (!cause.verificationId) {
+        return error("server_error", "Auth API omitted the durable claim verification identifier.");
+      }
+      await storePendingClaim(bindings.SESSION_STORE, context, {
+        email: data.email,
+        identityAssertion: data.identityAssertion,
+        verificationId: cause.verificationId,
+        idempotencyKey: crypto.randomUUID(),
+      });
+    }
+    throw cause;
   }
-  await bindings.SESSION_STORE.put(
-    claimIntentKey(context.tokenHash, context.orgId),
-    JSON.stringify({ email: data.email, identityAssertion: data.identityAssertion }),
-    { expirationTtl: CLAIM_INTENT_TTL_SECONDS },
-  );
-  return { kind: "otp_required" };
 }
 
 async function verifyClaimCeremony(
@@ -121,34 +157,36 @@ async function verifyClaimCeremony(
   context: ClaimContext,
   data: ClaimActionInput,
 ): Promise<ClaimActionResult> {
-  if (!data.idempotencyKey) {
-    return error("invalid_request", "A claim idempotency key is required to verify the password.");
-  }
   const pendingKey = claimIntentKey(context.tokenHash, context.orgId);
-  const pending = await loadPendingClaim(bindings.SESSION_STORE, pendingKey);
+  const pending = await loadPendingClaim(bindings.SESSION_STORE, pendingKey, context);
   if (!pending) {
     return error(
       "invalid_grant",
       "Start the claim ceremony again before entering the one-time password.",
     );
   }
-  const response = assertClaimActor(
-    await postClaimCeremony(bindings.AUTH_API_ORIGIN, {
-      identityAssertion: pending.identityAssertion,
-      email: pending.email,
-      otp: data.otp,
-      idempotencyKey: data.idempotencyKey,
-    }),
-    context,
-  );
+  const response = await postClaimCeremony(bindings.AUTH_API_ORIGIN, {
+    identityAssertion: pending.identityAssertion,
+    email: pending.email,
+    otp: data.otp,
+    verificationId: pending.verificationId,
+    idempotencyKey: pending.idempotencyKey,
+  });
   if ("otpRequired" in response) {
     return error("server_error", "Auth API did not complete the claim ceremony.");
   }
+  if (claimCompletionKind(response, context) === "transferred") {
+    await bindings.SESSION_STORE.delete(sessionKey(context.tokenHash));
+    await bindings.SESSION_STORE.delete(pendingKey);
+    return { kind: "handoff_required" };
+  }
+
   const repo = createRepository(bindings.DB);
   const refreshedPrincipal = await buildSessionPrincipal(repo, context);
   await refreshSession(bindings.SESSION_STORE, context.tokenHash, {
     ...refreshedPrincipal,
     expiresAt: context.expiresAt,
+    workosAccessToken: context.workosAccessToken,
   });
   await bindings.SESSION_STORE.delete(pendingKey);
   return { kind: "claimed" };
@@ -167,14 +205,18 @@ function claimIntentKey(tokenHash: string, orgId: string): string {
   return `claim-intent:${tokenHash}:${orgId}`;
 }
 
-async function loadPendingClaim(kv: KVNamespace, key: string): Promise<PendingClaim | null> {
+async function loadPendingClaim(
+  kv: KVNamespace,
+  key: string,
+  context: ClaimContext,
+): Promise<PendingClaim | null> {
   const raw = await kv.get(key, "text");
   if (!raw) {
     return null;
   }
   try {
     const value = JSON.parse(raw) as unknown;
-    if (isPendingClaim(value)) {
+    if (isPendingClaim(value, context)) {
       return value;
     }
   } catch {
@@ -183,14 +225,33 @@ async function loadPendingClaim(kv: KVNamespace, key: string): Promise<PendingCl
   return null;
 }
 
-function isPendingClaim(value: unknown): value is PendingClaim {
+function isPendingClaim(value: unknown, context: ClaimContext): value is PendingClaim {
   return (
     typeof value === "object" &&
     value !== null &&
     !Array.isArray(value) &&
+    (value as PendingClaim).version === 1 &&
+    (value as PendingClaim).userId === context.userId &&
+    (value as PendingClaim).orgId === context.orgId &&
     typeof (value as PendingClaim).email === "string" &&
     (value as PendingClaim).email.length > 0 &&
     typeof (value as PendingClaim).identityAssertion === "string" &&
-    (value as PendingClaim).identityAssertion.length > 0
+    (value as PendingClaim).identityAssertion.length > 0 &&
+    typeof (value as PendingClaim).verificationId === "string" &&
+    (value as PendingClaim).verificationId.length > 0 &&
+    typeof (value as PendingClaim).idempotencyKey === "string" &&
+    (value as PendingClaim).idempotencyKey.length > 0
+  );
+}
+
+async function storePendingClaim(
+  kv: KVNamespace,
+  context: ClaimContext,
+  pending: Omit<PendingClaim, "version" | "userId" | "orgId">,
+): Promise<void> {
+  await kv.put(
+    claimIntentKey(context.tokenHash, context.orgId),
+    JSON.stringify({ version: 1, userId: context.userId, orgId: context.orgId, ...pending }),
+    { expirationTtl: CLAIM_INTENT_TTL_SECONDS },
   );
 }

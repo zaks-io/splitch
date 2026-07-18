@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { assertClaimActor, ClaimCeremonyError, postClaimCeremony } from "./claim-ceremony";
+import {
+  assertClaimInitiator,
+  claimCompletionKind,
+  ClaimCeremonyError,
+  postClaimCeremony,
+} from "./claim-ceremony";
 
 const request = {
   email: "claim@example.com",
@@ -9,6 +14,43 @@ const request = {
 };
 
 describe("claim ceremony Auth API bridge", () => {
+  it("retains the durable verification identifier across the initiation and verification calls", async () => {
+    const requestFn = async (_url: URL | RequestInfo, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        verification_id: "cver_123",
+        idempotency_key: "stable-key",
+      });
+      return Response.json({
+        access_token: "access-token",
+        app_id: "app_1",
+        org_id: "org_1",
+        user_id: "user_1",
+      });
+    };
+
+    await postClaimCeremony(
+      "https://auth.splitch.test",
+      { ...request, verificationId: "cver_123", idempotencyKey: "stable-key" },
+      requestFn,
+    );
+  });
+
+  it("reads the durable verification identifier from interaction_required", async () => {
+    await expect(
+      postClaimCeremony("https://auth.splitch.test", request, async () =>
+        Response.json(
+          {
+            consent_url: "https://app.splitch.test/claim/consent/ccons_123",
+            error: "interaction_required",
+            error_description: "the email owner must approve linking",
+            verification_id: "cver_123",
+          },
+          { status: 401 },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "interaction_required", verificationId: "cver_123" });
+  });
+
   it("returns the Worker's completed-claim identity without treating it as a panel success state", async () => {
     const result = await postClaimCeremony("https://auth.splitch.test", request, async () =>
       Response.json({
@@ -54,8 +96,13 @@ describe("claim ceremony Auth API bridge", () => {
 
   it("refuses an assertion for a second user before the panel can verify a claim", () => {
     try {
-      assertClaimActor(
-        { otpRequired: true, userId: "user_attacker", orgId: "org_attacker" },
+      assertClaimInitiator(
+        {
+          otpRequired: true,
+          verificationId: "cver_attacker",
+          userId: "user_attacker",
+          orgId: "org_attacker",
+        },
         { userId: "user_victim", orgId: "org_victim" },
       );
       throw new Error("expected an actor-binding rejection");
@@ -65,5 +112,14 @@ describe("claim ceremony Auth API bridge", () => {
         message: "The claim identity does not match this Organization member.",
       });
     }
+  });
+
+  it("accepts a completed collision transfer only for the same Organization", () => {
+    expect(
+      claimCompletionKind(
+        { accessToken: "token", appId: "app_1", orgId: "org_1", userId: "user_existing" },
+        { orgId: "org_1", userId: "user_provisional" },
+      ),
+    ).toBe("transferred");
   });
 });

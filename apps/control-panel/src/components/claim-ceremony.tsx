@@ -8,8 +8,7 @@ export function ClaimCeremony({ orgSlug }: { orgSlug: string }) {
   const [identityAssertion, setIdentityAssertion] = useState("");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
-  const [step, setStep] = useState<"email" | "verify">("email");
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [step, setStep] = useState<"email" | "verify" | "consent">("email");
   const [result, setResult] = useState<ClaimActionResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,7 +23,7 @@ export function ClaimCeremony({ orgSlug }: { orgSlug: string }) {
           identityAssertion,
           email,
           otp: step === "verify" ? otp : undefined,
-          idempotencyKey: step === "verify" ? idempotencyKey : undefined,
+          completeTransfer: step === "consent",
         },
       });
       applyResponse(response);
@@ -48,6 +47,13 @@ export function ClaimCeremony({ orgSlug }: { orgSlug: string }) {
     if (response.kind === "claimed") {
       window.location.assign("/");
       return;
+    }
+    if (response.kind === "handoff_required") {
+      window.location.assign("/auth/login?returnTo=%2F");
+      return;
+    }
+    if (response.kind === "error" && response.code === "interaction_required") {
+      setStep("consent");
     }
     setResult(response);
   }
@@ -93,7 +99,7 @@ export function ClaimCeremony({ orgSlug }: { orgSlug: string }) {
             autoComplete="one-time-code"
             id="claim-otp"
             onChange={(event) => setOtp(event.target.value)}
-            required
+            required={step === "verify"}
             value={otp}
           />
         </label>
@@ -101,9 +107,11 @@ export function ClaimCeremony({ orgSlug }: { orgSlug: string }) {
       <Button disabled={submitting} type="submit">
         {submitting
           ? "Submitting"
-          : step === "verify"
-            ? "Claim Organization"
-            : "Send one-time password"}
+          : step === "consent"
+            ? "Finish approved transfer"
+            : step === "verify"
+              ? "Claim Organization"
+              : "Send one-time password"}
       </Button>
     </form>
   );

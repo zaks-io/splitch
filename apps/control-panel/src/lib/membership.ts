@@ -1,6 +1,13 @@
 import { appScope, type Repository } from "@splitch/db";
 import type { EnvironmentResolver } from "./loader-context";
-import type { AppMembership, AppRole, OrgMembership, OrgRole, StoredSession } from "./session";
+import {
+  refreshSession,
+  type AppMembership,
+  type AppRole,
+  type OrgMembership,
+  type OrgRole,
+  type StoredSession,
+} from "./session";
 
 export interface SessionPrincipalInput {
   userId: string;
@@ -56,6 +63,32 @@ export async function buildSessionPrincipal(
     workosSessionId: input.workosSessionId,
     orgs,
   };
+}
+
+/** Upgrade v1 sessions from D1 instead of treating a new membership field as a global logout. */
+export async function rehydrateLegacySession(
+  repo: Repository,
+  kv: KVNamespace,
+  tokenHash: string,
+  session: StoredSession,
+): Promise<StoredSession> {
+  if (session.version !== 1) {
+    return session;
+  }
+  if (!session.workosSessionId) {
+    throw new Error("legacy control-panel session is missing its WorkOS session identifier");
+  }
+  const principal = await buildSessionPrincipal(repo, {
+    userId: session.userId,
+    workosSessionId: session.workosSessionId,
+  });
+  const rehydrated: StoredSession = {
+    ...principal,
+    expiresAt: session.expiresAt,
+    workosAccessToken: session.workosAccessToken,
+  };
+  await refreshSession(kv, tokenHash, rehydrated);
+  return { ...rehydrated, version: 2 };
 }
 
 export function createEnvironmentResolver(repo: Repository): EnvironmentResolver {

@@ -2,11 +2,13 @@ export interface ClaimCeremonyRequest {
   identityAssertion: string;
   email: string;
   otp?: string;
+  verificationId?: string;
   idempotencyKey?: string;
 }
 
 export interface ClaimInitiated {
   otpRequired: true;
+  verificationId: string;
   userId: string;
   orgId: string;
 }
@@ -29,6 +31,7 @@ export class ClaimCeremonyError extends Error {
     message: string,
     readonly consentUrl?: string,
     readonly consentExpiresAt?: string,
+    readonly verificationId?: string,
   ) {
     super(message);
     this.name = "ClaimCeremonyError";
@@ -47,6 +50,7 @@ export async function postClaimCeremony(
       identity_assertion: request.identityAssertion,
       email: request.email,
       otp: request.otp,
+      verification_id: request.verificationId,
       idempotency_key: request.idempotencyKey,
     }),
   });
@@ -56,7 +60,12 @@ export async function postClaimCeremony(
     throw errorFromBody(body, response.status);
   }
   if (isClaimInitiated(body)) {
-    return { otpRequired: true, userId: body.user_id, orgId: body.org_id };
+    return {
+      otpRequired: true,
+      verificationId: body.verification_id,
+      userId: body.user_id,
+      orgId: body.org_id,
+    };
   }
   if (isClaimCompleted(body)) {
     return {
@@ -74,10 +83,7 @@ export async function postClaimCeremony(
  * ceremony. The Worker remains authoritative for the assertion itself; the
  * panel must never let an assertion for another member reach the verify step.
  */
-export function assertClaimActor<T extends ClaimInitiated | ClaimCompleted>(
-  response: T,
-  actor: ClaimActor,
-): T {
+export function assertClaimInitiator(response: ClaimInitiated, actor: ClaimActor): ClaimInitiated {
   if (response.userId !== actor.userId || response.orgId !== actor.orgId) {
     throw new ClaimCeremonyError(
       "invalid_grant",
@@ -85,6 +91,20 @@ export function assertClaimActor<T extends ClaimInitiated | ClaimCompleted>(
     );
   }
   return response;
+}
+
+/** A consent transfer intentionally replaces the provisional user with the authenticated owner. */
+export function claimCompletionKind(
+  response: ClaimCompleted,
+  actor: ClaimActor,
+): "same_user" | "transferred" {
+  if (response.orgId !== actor.orgId) {
+    throw new ClaimCeremonyError(
+      "invalid_grant",
+      "The claim result does not match this Organization.",
+    );
+  }
+  return response.userId === actor.userId ? "same_user" : "transferred";
 }
 
 async function readBody(response: Response): Promise<unknown> {
@@ -106,6 +126,7 @@ function errorFromBody(body: unknown, status: number): ClaimCeremonyError {
       body.error_description,
       stringOrUndefined(body.consent_url),
       stringOrUndefined(body.consent_expires_at),
+      stringOrUndefined(body.verification_id),
     );
   }
   return new ClaimCeremonyError("server_error", `Auth API claim request failed (${status})`);
@@ -113,12 +134,14 @@ function errorFromBody(body: unknown, status: number): ClaimCeremonyError {
 
 function isClaimInitiated(value: unknown): value is {
   otp_required: true;
+  verification_id: string;
   user_id: string;
   org_id: string;
 } {
   return (
     isRecord(value) &&
     value.otp_required === true &&
+    typeof value.verification_id === "string" &&
     typeof value.user_id === "string" &&
     typeof value.org_id === "string"
   );

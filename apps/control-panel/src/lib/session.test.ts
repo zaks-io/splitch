@@ -95,7 +95,11 @@ describe("control-panel session cookie and KV validation", () => {
 
   it("refreshes the same session after a claim so provisional state is not stale", async () => {
     const kv = new MemoryKv();
-    const created = await createSession(kv.namespace(), sessionPrincipal(), NOW);
+    const created = await createSession(
+      kv.namespace(),
+      { ...sessionPrincipal(), workosAccessToken: "workos-access-token" },
+      NOW,
+    );
     const claimed = structuredClone(created.session);
     const organization = claimed.orgs[0];
     if (!organization) {
@@ -111,9 +115,37 @@ describe("control-panel session cookie and KV validation", () => {
         ok: true,
         session: expect.objectContaining({
           orgs: [expect.objectContaining({ demoExpiresAt: null, isProvisional: false })],
+          workosAccessToken: "workos-access-token",
+          version: 2,
         }),
       }),
     );
+  });
+
+  it("accepts a v1 session and marks it for server-side membership rehydration", async () => {
+    const kv = new MemoryKv();
+    const created = await createSession(kv.namespace(), sessionPrincipal(), NOW);
+    kv.store.set(
+      sessionKey(created.tokenHash),
+      JSON.stringify({
+        userId: created.session.userId,
+        expiresAt: created.session.expiresAt,
+        workosSessionId: created.session.workosSessionId,
+        orgs: created.session.orgs.map(
+          ({ isProvisional: _isProvisional, demoExpiresAt: _demo, ...org }) => org,
+        ),
+      }),
+    );
+
+    await expect(
+      loadSessionFromCookieHeader(kv.namespace(), created.cookie, NOW),
+    ).resolves.toMatchObject({
+      ok: true,
+      session: {
+        version: 1,
+        orgs: [expect.objectContaining({ demoExpiresAt: null, isProvisional: false })],
+      },
+    });
   });
 });
 
