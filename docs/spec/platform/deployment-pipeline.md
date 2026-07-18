@@ -213,8 +213,9 @@ or any Durable Object migration.
 - Shared preview applies migrations remotely to the shared-preview D1 database before Worker deployment.
 - Production applies migrations remotely as part of `deploy-production`, after approval and before code
   that requires the new schema is serving traffic.
-- Production D1 migration recovery policy is tracked separately in SPL-82. Do not add backup,
-  export, restore, or time-travel automation until the security and retention boundaries are decided.
+- Production D1 recovery follows the [recovery policy and runbook](#production-d1-recovery-policy-and-runbook).
+  Its private R2 export provisioning is a separate, approval-gated slice; normal deploy workflows do
+  not create recovery resources or initiate backup, export, restore, or Time Travel actions.
 - Failed migrations roll back the failed migration and leave prior successful migrations applied.
 - Schema changes follow expand/contract. Additive migrations and backward-compatible reads ship first;
   destructive cleanup ships in a later release with an explicit runbook.
@@ -365,6 +366,92 @@ deployment. For any Durable Object migration, use `wrangler deploy`.
 - Destructive data changes, secret rotations, and binding deletions require an explicit runbook and are
   separate from normal feature deploys.
 
+## Production D1 recovery policy and runbook
+
+Production D1 recovery has two deliberately separate windows. **D1 Time Travel** is the short-window
+point-in-time recovery mechanism. It is always on for D1 databases on the supported storage subsystem;
+the production plan must provide its 30-day window, and the provisioner must fail the recovery setup if
+the database is not eligible. **Private R2 exports** are the longer-retention recovery mechanism.
+They are recovery material, not build output, release artifacts, or a substitute for reversible
+migrations.
+
+### Recovery policy
+
+- Roll forward is the default for a failed migration. A restore is an incident operation only when a
+  compatible forward migration cannot safely correct the data or schema.
+- Time Travel is the first recovery option while the required point is still within the provider's
+  available window. The operator records the proposed timestamp or bookmark in the restricted
+  incident record before acting. A Time Travel restore is destructive even though Cloudflare returns a
+  previous bookmark that can be used to undo it.
+- Longer-lived recovery points are full D1 SQL exports written only to a dedicated, private R2 bucket.
+  A Cloudflare Workflow runs once every 24 hours, initiates and polls the D1 export API, then writes
+  the returned export directly to R2. This sets the R2 recovery-point objective at 24 hours; the signed
+  export URL is transient transport material and is never persisted, displayed, or forwarded outside
+  that Workflow.
+- The recovery bucket has no public `r2.dev` access, public custom domain, or public-read policy. No
+  recovery object, signed URL, token, SQL content, or restore command enters GitHub, the repository,
+  CI logs, deployment summaries, test artifacts, chat, or normal application logs.
+- R2's provider encryption at rest and TLS in transit are the minimum transport and storage controls.
+  The export path must not create a plaintext local staging file. Any future customer-managed-key or
+  cross-account copy requirement needs its own security decision.
+- The recovery bucket lifecycle retains each completed export for 90 days. A 90-day bucket-lock rule
+  covers the recovery-object prefix, so lifecycle expiry cannot shorten the promised retention. Failed,
+  partial, or unverified exports are not recovery points: they use a separate private failure prefix
+  and expire after seven days. Changing the export cadence, retention, or lock rules is a production
+  security change, not routine workflow maintenance.
+
+### Access and evidence
+
+Use separate least-privilege identities. The export Workflow may initiate/poll an export for the named
+production D1 database and write to the dedicated recovery prefix. It does not receive general D1
+query, restore, R2 read, list, delete, bucket-policy, or public-access authority. A restore operator
+receives time-bounded, incident-only authority for the named database and recovery object; it is not
+the scheduled export identity. Long-lived account-wide tokens, shared credentials, and Global API keys
+are prohibited.
+
+An export succeeds only after the Workflow records restricted, non-content evidence: database identity,
+source bookmark, export run time, object key, size, checksum or ETag when available, retention/lock
+configuration version, and a successful object-readability or import-readiness check. Evidence lives in
+the access-controlled recovery/incident system, not in GitHub or application telemetry. The scheduled
+workflow must alert on a missed, failed, or unverified recovery point; it must not silently continue.
+
+### Restore authority and drills
+
+Only a human incident owner may request a production restore, and a separate human with production
+approval authority must approve it before the restore operation begins. Normal deploy workflows,
+scheduled exports, and agents cannot restore production. The incident record must identify the target
+time or recovery object, affected database, approvers, rollback/undo point, and the expected privacy
+and service impact before the destructive action.
+
+Every restore follows this runbook boundary:
+
+1. Stop or fence the affected write path, capture restricted incident evidence, and evaluate a
+   forward migration first.
+2. Verify the selected Time Travel point or R2 object against its restricted evidence. Do not treat
+   the existence of an export alone as recoverability proof.
+3. Obtain the separate production approval, perform the restore with the incident-only identity, and
+   retain the provider's undo point in the restricted incident record.
+4. Before traffic or analytics resume, replay privacy deletion tombstones and validate migration state,
+   tenant isolation, and the affected Worker smoke paths. This extends the privacy restore contract in
+   [privacy-data-lifecycle.md](./privacy-data-lifecycle.md).
+5. Record the outcome and any data-loss window in the restricted incident record, then roll forward to
+   the compatible desired schema and application version.
+
+Run restore drills at least quarterly using synthetic or non-production data. A drill must exercise
+object selection, integrity/readiness verification, tombstone replay, and post-restore validation. A
+drill that restores production is itself a destructive production operation and needs the same separate
+human approval and incident record as a real restore. A successful export without this recoverability
+evidence is not a successful recovery program.
+
+### Follow-up implementation boundary
+
+A separate, approval-gated provisioning slice must create the dedicated private R2 bucket, recovery
+prefix, lifecycle and bucket-lock rules, scoped identities, and Cloudflare Workflow/API integration. It
+must add restricted evidence storage, alerting, and automated non-production drill coverage. It must
+not add R2 creation, exports, restores, recovery credentials, or a restore action to normal production
+deploy workflows. The implementation must keep all production data and recovery material out of Git,
+GitHub, logs, and build artifacts.
+
 ## Rollback
 
 Worker code-only rollback:
@@ -427,6 +514,14 @@ is compatible with current data.
   <https://developers.cloudflare.com/d1/wrangler-commands/>,
   <https://developers.cloudflare.com/d1/reference/migrations/>,
   <https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/>
+- Cloudflare D1 Time Travel, export, and Workflows guidance:
+  <https://developers.cloudflare.com/d1/reference/time-travel/>,
+  <https://developers.cloudflare.com/workflows/examples/backup-d1/>,
+  <https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/export/>
+- Cloudflare R2 recovery-object controls:
+  <https://developers.cloudflare.com/r2/reference/data-security/>,
+  <https://developers.cloudflare.com/r2/buckets/bucket-locks/>,
+  <https://developers.cloudflare.com/r2/buckets/public-buckets/>
 - Tinybird branches, CI/CD, deployment, and limits docs:
   <https://www.tinybird.co/docs/forward/core-concepts/branches>,
   <https://www.tinybird.co/docs/forward/development-workflow/cicd>,
