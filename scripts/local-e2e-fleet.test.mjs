@@ -1,28 +1,34 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { createServer } from "node:http";
 import test from "node:test";
 import {
+  bootFleet,
   failOnWorkerStop,
-  listen,
   waitForFleetReady,
   waitForHealth,
   watchWorker,
 } from "./local-e2e-fleet.mjs";
 
-test("local E2E fleet readiness binding fails loud on a port collision", async () => {
-  const owner = createServer();
-  const contender = createServer();
-  try {
-    await listen(owner, 0);
-    const address = owner.address();
-    assert.notEqual(address, null);
-    assert.equal(typeof address, "object");
-    await assert.rejects(listen(contender, address.port), /EADDRINUSE/);
-  } finally {
-    owner.close();
-    contender.close();
-  }
+test("a readiness port collision prevents fixture seeding and Worker launch", async () => {
+  let seeded = false;
+  let launched = false;
+  await assert.rejects(
+    bootFleet("collision-run", {
+      listenImpl: async () => {
+        throw new Error("listen EADDRINUSE: address already in use 127.0.0.1:18799");
+      },
+      seed: () => {
+        seeded = true;
+      },
+      launch: () => {
+        launched = true;
+        return [];
+      },
+    }),
+    /EADDRINUSE/,
+  );
+  assert.equal(seeded, false);
+  assert.equal(launched, false);
 });
 
 test("local E2E fleet health checks fail loud", async () => {

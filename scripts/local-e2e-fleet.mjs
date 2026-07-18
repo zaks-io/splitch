@@ -131,7 +131,7 @@ function createReadinessServer(runId) {
   };
 }
 
-export function listen(server, port = 18799) {
+function listen(server, port = 18799) {
   return new Promise((resolveListen, rejectListen) => {
     server.once("error", rejectListen);
     server.listen(port, "127.0.0.1", resolveListen);
@@ -193,12 +193,47 @@ function seedLocalResources() {
   ]);
 }
 
+function launchWorkers(runId) {
+  return workers.map((worker) => {
+    const args =
+      worker.name === "control-plane-api"
+        ? [...worker.args, "--var", `SPLITCH_LOCAL_E2E_RUN_ID:${runId}`]
+        : worker.args;
+    const child = spawn(worker.command, args, {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        ...localBindings,
+        ...worker.env,
+        CI: "true",
+        SPLITCH_LOCAL_E2E_RUN_ID: runId,
+      },
+      stdio: "inherit",
+    });
+    const runningWorker = { ...worker, process: child };
+    return { ...runningWorker, stopped: watchWorker(runningWorker) };
+  });
+}
+
+export async function bootFleet(
+  runId,
+  { listenImpl = listen, seed = seedLocalResources, launch = launchWorkers } = {},
+) {
+  const readiness = createReadinessServer(runId);
+  await listenImpl(readiness.server);
+  try {
+    seed();
+    return { readiness, running: launch(runId) };
+  } catch (error) {
+    readiness.server.close();
+    throw error;
+  }
+}
+
 async function main() {
   const runId = process.argv[2];
   if (!runId) throw new Error("missing local E2E run ID");
-  const readiness = createReadinessServer(runId);
-  await listen(readiness.server);
-  let running = [];
+  const { readiness, running } = await bootFleet(runId);
 
   const stop = () => {
     for (const worker of running) worker.process.kill("SIGTERM");
@@ -207,26 +242,6 @@ async function main() {
   process.once("SIGTERM", stop);
 
   try {
-    seedLocalResources();
-    running = workers.map((worker) => {
-      const args =
-        worker.name === "control-plane-api"
-          ? [...worker.args, "--var", `SPLITCH_LOCAL_E2E_RUN_ID:${runId}`]
-          : worker.args;
-      const child = spawn(worker.command, args, {
-        cwd: repoRoot,
-        env: {
-          ...process.env,
-          ...localBindings,
-          ...worker.env,
-          CI: "true",
-          SPLITCH_LOCAL_E2E_RUN_ID: runId,
-        },
-        stdio: "inherit",
-      });
-      const runningWorker = { ...worker, process: child };
-      return { ...runningWorker, stopped: watchWorker(runningWorker) };
-    });
     await waitForFleetReady(running, { runId });
     readiness.markReady();
     console.log(`local-e2e-fleet: healthy (${running.map((worker) => worker.name).join(", ")})`);
