@@ -384,10 +384,20 @@ migrations.
   incident record before acting. A Time Travel restore is destructive even though Cloudflare returns a
   previous bookmark that can be used to undo it.
 - Longer-lived recovery points are full D1 SQL exports written only to a dedicated, private R2 bucket.
-  A Cloudflare Workflow runs once every 24 hours, initiates and polls the D1 export API, then writes
-  the returned export directly to R2. This sets the R2 recovery-point objective at 24 hours; the signed
-  export URL is transient transport material and is never persisted, displayed, or forwarded outside
-  that Workflow.
+  A Cloudflare Workflow runs once every 24 hours, initiates and continuously polls the D1 export API,
+  then writes the returned export directly to R2. This sets the R2 recovery-point objective at 24
+  hours; the signed export URL is transient transport material and is never persisted, displayed, or
+  forwarded outside that Workflow.
+- D1 export can make the database unavailable to other requests. The daily export therefore runs in a
+  declared production maintenance window with a ten-minute planned-unavailability budget. Before the
+  export starts, the owning control-plane service fences new D1-dependent operations and returns an
+  explicit maintenance error with retry guidance; it does not claim zero downtime or allow a D1 error
+  to look like successful product behavior. The fence remains until a direct D1 readiness check proves
+  requests are served again. An export still running at ten minutes breaches the budget: stop polling
+  so the provider cancels the unpolled export, keep the fence until readiness returns, alert the
+  incident owner, and disable later scheduled exports until the cause is resolved. Provisioning must
+  prove the budget with production-size synthetic data before enabling the schedule. Any non-blocking
+  replacement requires verified provider support and a policy update.
 - The recovery bucket has no public `r2.dev` access, public custom domain, or public-read policy. No
   recovery object, signed URL, token, SQL content, or restore command enters GitHub, the repository,
   CI logs, deployment summaries, test artifacts, chat, or normal application logs.
@@ -402,12 +412,29 @@ migrations.
 
 ### Access and evidence
 
-Use separate least-privilege identities. The export Workflow may initiate/poll an export for the named
-production D1 database and write to the dedicated recovery prefix. It does not receive general D1
-query, restore, R2 read, list, delete, bucket-policy, or public-access authority. A restore operator
-receives time-bounded, incident-only authority for the named database and recovery object; it is not
-the scheduled export identity. Long-lived account-wide tokens, shared credentials, and Global API keys
-are prohibited.
+Use separate least-privilege identities, but do not claim controls the provider does not offer.
+Cloudflare's public D1 token model exposes account-level D1 permissions rather than an export-only,
+single-database permission, and an R2 Worker binding grants a Worker bucket capability rather than
+prefix-scoped write-only IAM. The scheduled Workflow is therefore the mandatory mediator:
+
+- It has no public route or caller-controlled entrypoint. Only its configured schedule can start an
+  export, and code plus configuration allowlist the exact production account ID, database UUID,
+  dedicated recovery bucket binding, and completed/failure object-key prefixes.
+- Its API token uses the least account-level D1 permission the export endpoint accepts. Provisioning
+  must verify the permission against the export endpoint; if Cloudflare requires `D1 Edit`, record that
+  broader provider grant as accepted residual risk. The mediator implements only initiate/poll export
+  calls and contains no general query, import, delete, or Time Travel restore client path.
+- Its R2 access is a Worker binding to the dedicated recovery bucket, not an account-wide R2 token. The
+  binding technically exposes bucket reads, writes, lists, and deletes; the mediator exposes only
+  writes to its two allowlisted prefixes and the exact-object read needed for recoverability evidence.
+  Bucket isolation, no public route, reviewed allowlists, and bucket lock compensate for the missing
+  write-only and prefix-level provider grants.
+- It receives no bucket-policy or public-access administration authority. Provisioning and lifecycle or
+  lock administration use a separate production-approved identity that is absent from the runtime.
+
+A restore operator receives time-bounded, incident-only authority for the named database and recovery
+object; it is not the scheduled export identity. Long-lived account-wide tokens, shared credentials,
+and Global API keys are prohibited.
 
 An export succeeds only after the Workflow records restricted, non-content evidence: database identity,
 source bookmark, export run time, object key, size, checksum or ETag when available, retention/lock
@@ -447,10 +474,11 @@ evidence is not a successful recovery program.
 
 A separate, approval-gated provisioning slice must create the dedicated private R2 bucket, recovery
 prefix, lifecycle and bucket-lock rules, scoped identities, and Cloudflare Workflow/API integration. It
-must add restricted evidence storage, alerting, and automated non-production drill coverage. It must
-not add R2 creation, exports, restores, recovery credentials, or a restore action to normal production
-deploy workflows. The implementation must keep all production data and recovery material out of Git,
-GitHub, logs, and build artifacts.
+must add the schedule-only mediator, maintenance fence/readiness behavior, production-size synthetic
+duration test, restricted evidence storage, alerting, permission verification, allowlist tests, and
+automated non-production drill coverage. It must not add R2 creation, exports, restores, recovery
+credentials, or a restore action to normal production deploy workflows. The implementation must keep
+all production data and recovery material out of Git, GitHub, logs, and build artifacts.
 
 ## Rollback
 
@@ -516,12 +544,17 @@ is compatible with current data.
   <https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/>
 - Cloudflare D1 Time Travel, export, and Workflows guidance:
   <https://developers.cloudflare.com/d1/reference/time-travel/>,
+  <https://developers.cloudflare.com/d1/best-practices/import-export-data/>,
   <https://developers.cloudflare.com/workflows/examples/backup-d1/>,
   <https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/export/>
 - Cloudflare R2 recovery-object controls:
   <https://developers.cloudflare.com/r2/reference/data-security/>,
+  <https://developers.cloudflare.com/r2/api/tokens/>,
+  <https://developers.cloudflare.com/r2/api/workers/workers-api-reference/>,
   <https://developers.cloudflare.com/r2/buckets/bucket-locks/>,
   <https://developers.cloudflare.com/r2/buckets/public-buckets/>
+- Cloudflare account API token permissions:
+  <https://developers.cloudflare.com/fundamentals/api/reference/permissions/>
 - Tinybird branches, CI/CD, deployment, and limits docs:
   <https://www.tinybird.co/docs/forward/core-concepts/branches>,
   <https://www.tinybird.co/docs/forward/development-workflow/cicd>,
