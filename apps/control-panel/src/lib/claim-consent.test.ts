@@ -33,7 +33,7 @@ describe("claim consent browser ceremony", () => {
     const session = await createSession(
       kv.namespace(),
       { userId: "user_existing", orgs: [], workosAccessToken: "workos-jwt" },
-      Date.UTC(2026, 6, 17),
+      Date.now(),
     );
     const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetcher);
@@ -64,7 +64,7 @@ describe("claim consent browser ceremony", () => {
     const session = await createSession(
       kv.namespace(),
       { userId: "user_existing", orgs: [], workosAccessToken: "workos-jwt" },
-      Date.UTC(2026, 6, 17),
+      Date.now(),
     );
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
