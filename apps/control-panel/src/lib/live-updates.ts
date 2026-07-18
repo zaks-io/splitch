@@ -100,14 +100,9 @@ export async function handleNudge(
 ): Promise<void> {
   const parsed = parseNudge(rawPayload);
   if (!parsed) return;
-  if (!isInvalidatableEntity(parsed.entity)) {
-    console.warn(`Ignoring live-update nudge for unsupported entity "${parsed.entity}"`);
-    return;
-  }
 
-  const detail = queryClient.getQueryData<{ version?: number }>(
-    queryKeys[parsed.entity].detail(scope.appId, scope.environmentId, parsed.id),
-  );
+  const detailKey = nudgeDetailKey(parsed, scope);
+  const detail = detailKey ? queryClient.getQueryData<{ version?: number }>(detailKey) : undefined;
   if (detail?.version !== undefined && detail.version >= parsed.version) return;
 
   await invalidateNudgeWithRetry(parsed, scope, queryClient, options.onStaleData);
@@ -133,10 +128,7 @@ async function invalidateNudgeWithRetry(
   queryClient: QueryClient,
   onStaleData: (() => void) | undefined,
 ): Promise<void> {
-  const prefix = nudgeInvalidationPrefix[nudge.entity as InvalidatableNudgeEntity](
-    scope.appId,
-    scope.environmentId,
-  );
+  const prefix = nudgeInvalidationPrefix[nudge.entity](scope.appId, scope.environmentId);
   const reportFailure = createNudgeRefetchFailureHandler({
     entity: nudge.entity,
     id: nudge.id,
@@ -149,7 +141,7 @@ async function invalidateNudgeWithRetry(
 /** Initial refetch plus three retries after 2s, 4s, and 8s. */
 async function invalidateWithRetry(
   queryClient: QueryClient,
-  queryKey: ReturnType<(typeof nudgeInvalidationPrefix)[InvalidatableNudgeEntity]>,
+  queryKey: ReturnType<(typeof nudgeInvalidationPrefix)[DeltaNudge["entity"]]>,
   onRetry?: (failure: { attempt: number; nextRetryMs: number }) => void,
   refetchRoute?: () => Promise<void>,
 ): Promise<boolean> {
@@ -168,10 +160,17 @@ async function invalidateWithRetry(
   return false;
 }
 
-type InvalidatableNudgeEntity = Extract<DeltaNudge["entity"], keyof typeof nudgeInvalidationPrefix>;
-
-function isInvalidatableEntity(entity: DeltaNudge["entity"]): entity is InvalidatableNudgeEntity {
-  return entity in nudgeInvalidationPrefix;
+function nudgeDetailKey(nudge: DeltaNudge, scope: AppEnvironmentScope): readonly string[] | null {
+  switch (nudge.entity) {
+    case "experiment":
+      return queryKeys.experiment.detail(scope.appId, scope.environmentId, nudge.id);
+    case "flag":
+      return queryKeys.flag.detail(scope.appId, scope.environmentId, nudge.id);
+    case "run":
+      return null;
+    case "segment":
+      return queryKeys.segment.detail(scope.appId, scope.environmentId, nudge.id);
+  }
 }
 
 function parseNudge(rawPayload: unknown): DeltaNudge | null {

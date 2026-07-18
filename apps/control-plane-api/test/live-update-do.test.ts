@@ -93,6 +93,25 @@ describe("live-update Durable Object", () => {
     await expect(closed).resolves.toMatchObject({ code: 1008 });
   });
 
+  it("closes a silent expired panel session after hibernation", async () => {
+    const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${ids.environmentId}:expired`);
+    const context = await seededLiveUpdateContext({
+      expiresInSeconds: 1,
+      sessionTokenHash: "b".repeat(64),
+    });
+    const response = await stub.fetch("https://live.test/connect", {
+      headers: { upgrade: "websocket", [LIVE_UPDATE_CONTEXT_HEADER]: JSON.stringify(context) },
+    });
+    const socket = response.webSocket;
+    expect(socket).not.toBeNull();
+    socket?.accept();
+    const closed = waitForClose(socket as WebSocket);
+
+    await evictDurableObject(stub);
+    await expect(closed).resolves.toMatchObject({ code: 1008 });
+    expect(await runDurableObjectAlarm(stub)).toBe(false);
+  });
+
   it("rejects a WebSocket scoped to App A before it can attach to DO(B)", async () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
@@ -216,9 +235,11 @@ async function hashToken(token: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function seededLiveUpdateContext() {
-  const sessionTokenHash = "a".repeat(64);
-  const expiresAt = Math.floor(Date.now() / 1_000) + 3_600;
+async function seededLiveUpdateContext(
+  options: { expiresInSeconds?: number; sessionTokenHash?: string } = {},
+) {
+  const sessionTokenHash = options.sessionTokenHash ?? "a".repeat(64);
+  const expiresAt = Math.floor(Date.now() / 1_000) + (options.expiresInSeconds ?? 3_600);
   await env.SESSION_STORE.put(
     `session:${sessionTokenHash}`,
     JSON.stringify({

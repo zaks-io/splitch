@@ -39,6 +39,25 @@ describe("live updates", () => {
     );
   });
 
+  it("invalidates the Experiment prefix for a canonical Run nudge", async () => {
+    const queryClient = queryClientStub();
+
+    await handleNudge(
+      JSON.stringify({ type: "config.changed", entity: "run", id: "run_1", version: 3 }),
+      scope,
+      queryClient.client,
+    );
+
+    expect(queryClient.getQueryData).not.toHaveBeenCalled();
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith(
+      {
+        queryKey: queryKeys.experiment.prefix(scope.appId, scope.environmentId),
+        refetchType: "all",
+      },
+      { throwOnError: true },
+    );
+  });
+
   it("does not react to a nudge from a detached Environment socket", async () => {
     const sockets: FakeSocket[] = [];
     const queryClient = queryClientStub();

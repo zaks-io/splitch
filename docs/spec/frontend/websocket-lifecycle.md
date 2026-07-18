@@ -91,7 +91,7 @@ The DO broadcasts a small, schema-opaque signal. The panel consumes:
 ```
 NudgePayload {
   type:    string    // e.g. 'config.changed'
-  entity:  string    // 'experiment' | 'flag' | 'metric' | 'segment'
+  entity:  string    // 'experiment' | 'flag' | 'run' | 'segment'
   id:      string    // entity ID
   version: number    // monotone counter on the entity
 }
