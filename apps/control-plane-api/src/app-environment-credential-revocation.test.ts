@@ -1,170 +1,23 @@
-import {
-  apiKeyCacheKey,
-  clientKeyCacheKey,
-  CredentialCacheKVSchema,
-  kvEnvelope,
-  type ErrorResponse,
-} from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
-import type { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { sha256Hex } from "./credential-cache";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
-import { makeSessionStore } from "./session-store";
-import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
+import {
+  ORG,
+  appToken,
+  bodyOf,
+  clientCacheKey,
+  createApiKey,
+  createDefaultApp,
+  faultingPutKv,
+  h,
+  makeApp,
+  readCache,
+  request,
+  setup,
+  teardown,
+} from "./app-environment-credential-revocation.fixtures";
 
-const AUDIENCE = "https://cp.splitch.test";
-const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
-const ORG = {
-  orgId: "org_app_env_credential_revoke",
-  orgName: "App Env Credential Revoke Co",
-  appId: "app_existing_credential_revoke",
-  appName: "Existing Credential Revoke App",
-  appKey: "existing-credential-revoke",
-};
-const OWNER = "user_app_env_credential_revoke_owner";
-
-const allowLimiter: RateLimiter = () => ({ limited: false });
-const cacheEnvelope = kvEnvelope(CredentialCacheKVSchema);
-const nowSeconds = () => Math.floor(NOW_MS / 1000);
-const nowIso = () => new Date(NOW_MS).toISOString();
-
-interface Harness {
-  app: Hono;
-  signer: FixtureSigner;
-  bindings: LocalBindings;
-}
-
-let h: Harness;
-
-beforeEach(async () => {
-  const bindings = await makeLocalBindings();
-  await seedOrgApp(bindings.d1, ORG);
-  await seedOrgMember(bindings.d1, {
-    orgId: ORG.orgId,
-    userId: OWNER,
-    role: "owner",
-  });
-
-  const signer = await makeFixtureSigner();
-  h = { app: makeApp(bindings, signer, bindings.credentialKv), signer, bindings };
-});
-
-afterEach(async () => h.bindings.dispose());
-
-function makeApp(bindings: LocalBindings, signer: FixtureSigner, credentialStore: KVNamespace) {
-  const verifier = makeJwksVerifier({
-    fetchJwks: async () => signer.jwks,
-    controlPlaneAudience: AUDIENCE,
-  });
-  return createApp({
-    authResolver: makeControlPlaneAuthResolver({
-      verifier,
-      sessions: makeSessionStore(bindings.kv),
-      now: () => NOW_MS,
-    }),
-    rateLimiter: allowLimiter,
-    repo: createRepository(bindings.d1),
-    credentialStore,
-    nowIso,
-  });
-}
-
-function orgToken(): Promise<string> {
-  return h.signer.sign({
-    sub: OWNER,
-    iss: "https://auth.splitch.test",
-    aud: AUDIENCE,
-    iat: nowSeconds(),
-    exp: nowSeconds() + 3600,
-    scopes: [`org:${ORG.orgId}:owner`],
-  });
-}
-
-function appToken(appId: string, role: "owner" | "admin" = "owner"): Promise<string> {
-  return h.signer.sign({
-    sub: OWNER,
-    iss: "https://auth.splitch.test",
-    aud: AUDIENCE,
-    iat: nowSeconds(),
-    exp: nowSeconds() + 3600,
-    scopes: [`app:${appId}:${role}`],
-  });
-}
-
-async function request(
-  method: string,
-  path: string,
-  jwt: string,
-  body?: Record<string, unknown>,
-): Promise<Response> {
-  return h.app.request(path, {
-    method,
-    headers: {
-      authorization: `Bearer ${jwt}`,
-      ...(body ? { "content-type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-}
-
-async function createDefaultApp(key: string) {
-  const res = await request("POST", `/orgs/${ORG.orgId}/apps`, await orgToken(), {
-    organizationId: ORG.orgId,
-    name: `Credential Revoke ${key}`,
-    key,
-  });
-  expect(res.status).toBe(200);
-  return (await res.json()) as {
-    app: { id: string };
-    environments: Array<{ id: string; key: string }>;
-    clientKeys: Array<{ keyId: string; environmentId: string; keyMaterial: string }>;
-  };
-}
-
-async function createApiKey(appId: string, environmentId: string) {
-  const res = await request(
-    "POST",
-    `/apps/${appId}/envs/${environmentId}/api-keys`,
-    await appToken(appId, "admin"),
-    { scopes: ["data-plane:evaluate"] },
-  );
-  expect(res.status).toBe(200);
-  const body = (await res.json()) as { credential: { keyId: string }; value: string };
-  return { keyId: body.credential.keyId, cacheKey: apiKeyCacheKey(await sha256Hex(body.value)) };
-}
-
-async function clientCacheKey(keyMaterial: string): Promise<string> {
-  return clientKeyCacheKey(await sha256Hex(keyMaterial));
-}
-
-async function readCache(kv: KVNamespace, key: string) {
-  const raw = await kv.get(key, "text");
-  if (!raw) return null;
-  return cacheEnvelope.parse(JSON.parse(raw));
-}
-
-async function bodyOf(res: Response): Promise<ErrorResponse> {
-  return (await res.json()) as ErrorResponse;
-}
-
-function faultingPutKv(base: KVNamespace): KVNamespace {
-  return new Proxy(base, {
-    get(target, prop, receiver) {
-      if (prop === "put") {
-        return async () => {
-          throw new Error("KV unavailable");
-        };
-      }
-      const value = Reflect.get(target, prop, receiver);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-}
+beforeEach(setup);
+afterEach(teardown);
 
 describe("control-plane parent delete credential revocation", () => {
   it("writes revoked KV tombstones before deleting Environment credentials", async () => {

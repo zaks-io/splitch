@@ -61,7 +61,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
         updates,
       );
       if (!updated) return credentialNotFound(requestId);
-      await writeClientKeyCache(deps, updated, false, ctx.organizationId);
+      await writeClientKeyCache(deps, updated, false, ctx.organizationId, true);
       return Response.json(clientKeyResponse(updated));
     },
 

@@ -77,6 +77,10 @@ export function makeCredentialRepo(db: Db) {
       return rows[0] ?? null;
     },
 
+    removeApiKey(scope: EnvScope, keyId: string) {
+      return apiKeysTable.remove(scope, eq(apiKeys.keyId, keyId));
+    },
+
     listClientKeys(scope: EnvScope) {
       return clientKeysTable.findMany(scope);
     },
@@ -132,6 +136,10 @@ export function makeCredentialRepo(db: Db) {
     ) {
       const rows = await clientKeysTable.update(scope, values, eq(clientKeys.keyId, keyId));
       return rows[0] ?? null;
+    },
+
+    removeClientKey(scope: EnvScope, keyId: string) {
+      return clientKeysTable.remove(scope, eq(clientKeys.keyId, keyId));
     },
   };
 }

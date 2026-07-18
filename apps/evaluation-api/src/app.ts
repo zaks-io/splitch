@@ -28,6 +28,16 @@ export interface AppDeps extends EvaluatePathDeps {
 
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
+  app.use("*", async (context, next) => {
+    if (context.req.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: evaluationCorsHeaders() });
+    }
+    await next();
+    for (const [name, value] of evaluationCorsHeaders()) {
+      context.res.headers.set(name, value);
+    }
+    return context.res;
+  });
   const registrar = createRegistrar({
     authResolvers: {
       "control-plane-token": deps.authResolver,
@@ -50,4 +60,14 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, evaluationRoute("sdk_verify"), makeVerifyHandler(deps));
   registrar.mount(app, evaluationRoute("flags_test_eval"), makeTestEvaluationHandler(deps));
   return app;
+}
+
+function evaluationCorsHeaders(): Headers {
+  return new Headers({
+    "access-control-allow-origin": "*",
+    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-allow-headers":
+      "authorization, content-type, idempotency-key, x-splitch-sdk-runtime",
+    "access-control-expose-headers": "x-request-id, x-run-id",
+  });
 }

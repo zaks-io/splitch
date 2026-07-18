@@ -18,9 +18,19 @@ export function makeCachedEvaluationTelemetryHandler(deps: {
     const scope = credentialScope(principal);
     if (!scope.ok) return renderError(scope.error, { requestId });
     const body = telemetryBody(input);
+    const idempotencyKey = request.headers.get("idempotency-key");
+    if (idempotencyKey === null || body.idempotencyKey !== idempotencyKey) {
+      return renderError(
+        errorResponse(
+          "VALIDATION_ERROR",
+          "Idempotency-Key header must match the cached Evaluation telemetry body",
+        ),
+        { requestId },
+      );
+    }
     const write = await writeEvaluationUsage(
       false,
-      body.idempotencyKey,
+      idempotencyKey,
       scope.value,
       { flagKey: body.flagKey, sdkRuntime: sdkRuntime(request) },
       deps,

@@ -128,7 +128,9 @@ async function deleteEnvironmentAfterAuth(
   if (blocker) return blocker;
 
   await deleteEnvironmentCredentials(deps, appId, environmentId);
-  await deps.repo.identity.deleteEnvironment(scope, environmentId);
+  if ((await deps.repo.identity.deleteEnvironment(scope, environmentId)) !== 1) {
+    throw new Error("environment delete did not reach D1");
+  }
   return Response.json({ deleted: true });
 }
 

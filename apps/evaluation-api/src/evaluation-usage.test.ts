@@ -137,6 +137,23 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
     ]);
     expect(JSON.stringify(evaluationUsageSink.writes)).not.toContain("targetingKey");
   });
+
+  it("rejects cache telemetry when the body identity differs from Idempotency-Key", async () => {
+    const { app, evaluationUsageSink } = await makeSdkRouteHarness();
+    const res = await app.request("/api/sdk/evaluation-telemetry", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${CLIENT_KEY}`,
+        "content-type": "application/json",
+        "idempotency-key": "cache-hit-header",
+      },
+      body: JSON.stringify({ flagKey: "checkout-banner", idempotencyKey: "cache-hit-body" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as ErrorResponse).code).toBe("VALIDATION_ERROR");
+    expect(evaluationUsageSink.writes).toEqual([]);
+  });
 });
 
 class FailingEvaluationUsageSink extends RecordingEvaluationUsageSink {
