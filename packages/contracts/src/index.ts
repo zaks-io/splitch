@@ -46,8 +46,13 @@ export {
   authorizesLiveUpdateConnection,
   LiveUpdateConnectionContextSchema,
   parseLiveUpdateConnectionContext,
+  ServerAuthenticatedLiveUpdateContextSchema,
 } from "./live-update-connection";
-export type { LiveUpdateConnectionContext } from "./live-update-connection";
+export type {
+  LiveUpdateAuthorizationContext,
+  LiveUpdateConnectionContext,
+  ServerAuthenticatedLiveUpdateContext,
+} from "./live-update-connection";
 export {
   createHealthResponse,
   HealthResponseSchema,

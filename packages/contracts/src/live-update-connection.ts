@@ -36,6 +36,27 @@ export const LiveUpdateConnectionContextSchema = z
   .strict();
 export type LiveUpdateConnectionContext = z.infer<typeof LiveUpdateConnectionContextSchema>;
 
+/**
+ * Immutable authorization facts supplied only by the Control Plane after its
+ * bearer-auth boundary has accepted the WebSocket handshake.
+ */
+export const ServerAuthenticatedLiveUpdateContextSchema = z
+  .object({
+    version: z.literal(1),
+    authentication: z.literal("control-plane"),
+    principalId: z.string().min(1),
+    appId: z.string().min(1),
+    environmentId: z.string().min(1),
+  })
+  .strict();
+export type ServerAuthenticatedLiveUpdateContext = z.infer<
+  typeof ServerAuthenticatedLiveUpdateContextSchema
+>;
+
+export type LiveUpdateAuthorizationContext =
+  | LiveUpdateConnectionContext
+  | ServerAuthenticatedLiveUpdateContext;
+
 const LiveUpdateSessionSchema = z
   .object({
     userId: z.string().min(1),
@@ -47,9 +68,13 @@ const LiveUpdateSessionSchema = z
   })
   .strict();
 
-export function parseLiveUpdateConnectionContext(raw: unknown): LiveUpdateConnectionContext | null {
-  const result = LiveUpdateConnectionContextSchema.safeParse(raw);
-  return result.success ? result.data : null;
+export function parseLiveUpdateConnectionContext(
+  raw: unknown,
+): LiveUpdateAuthorizationContext | null {
+  const panelSession = LiveUpdateConnectionContextSchema.safeParse(raw);
+  if (panelSession.success) return panelSession.data;
+  const serverAuthenticated = ServerAuthenticatedLiveUpdateContextSchema.safeParse(raw);
+  return serverAuthenticated.success ? serverAuthenticated.data : null;
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { ErrorResponse } from "@splitch/contracts";
+import type { ErrorResponse, ServerAuthenticatedLiveUpdateContext } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
 import {
   emptyError,
@@ -72,7 +72,9 @@ async function handleLiveUpdate(c: Context, deps: LiveUpdateDeps): Promise<Respo
       );
     }
 
-    return deps.configStore.liveUpdatesFor(appId, environmentId).connect(request);
+    return deps.configStore
+      .liveUpdatesFor(appId, environmentId)
+      .connect(serverAuthenticatedLiveUpdateRequest(auth.principal, appId, environmentId));
   } catch {
     return renderError(emptyError("INTERNAL_SERVER_ERROR", "unhandled runtime fault"), {
       requestId,
@@ -142,4 +144,24 @@ function pathParam(c: Context, key: string): string {
     throw new Error(`control-plane-api: live update route missing path param "${key}"`);
   }
   return value;
+}
+
+function serverAuthenticatedLiveUpdateRequest(
+  principal: Principal,
+  appId: string,
+  environmentId: string,
+): Request {
+  const context: ServerAuthenticatedLiveUpdateContext = {
+    version: 1,
+    authentication: "control-plane",
+    principalId: principal.id,
+    appId,
+    environmentId,
+  };
+  return new Request("https://live-update.internal/connect", {
+    headers: {
+      upgrade: "websocket",
+      "x-splitch-live-update-context": JSON.stringify(context),
+    },
+  });
 }

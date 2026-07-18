@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import {
   authorizesLiveUpdateConnection,
   type DeltaNudge,
+  type LiveUpdateAuthorizationContext,
   type LiveUpdateConnectionContext,
   parseLiveUpdateConnectionContext,
 } from "@splitch/contracts";
@@ -150,7 +151,8 @@ export class ConfigStoreDurableObject
     }
   }
 
-  private async isAuthorized(context: LiveUpdateConnectionContext): Promise<boolean> {
+  private async isAuthorized(context: LiveUpdateAuthorizationContext): Promise<boolean> {
+    if (!isPanelSessionContext(context)) return true;
     try {
       const rawSession = await this.env.SESSION_STORE.get(
         `${PANEL_SESSION_KEY_PREFIX}${context.sessionTokenHash}`,
@@ -165,7 +167,7 @@ export class ConfigStoreDurableObject
   private async rescheduleExpiryAlarm(): Promise<void> {
     const expiries = this.ctx
       .getWebSockets()
-      .map((socket) => parseLiveUpdateConnectionContext(socket.deserializeAttachment())?.expiresAt)
+      .map((socket) => parsePanelSessionContext(socket.deserializeAttachment())?.expiresAt)
       .filter((expiresAt): expiresAt is number => expiresAt !== undefined);
     const nextExpiry = Math.min(...expiries);
     if (Number.isFinite(nextExpiry)) {
@@ -188,4 +190,15 @@ function parseConnectionContextHeader(value: string | null): unknown {
   } catch {
     return null;
   }
+}
+
+function parsePanelSessionContext(raw: unknown): LiveUpdateConnectionContext | null {
+  const context = parseLiveUpdateConnectionContext(raw);
+  return isPanelSessionContext(context) ? context : null;
+}
+
+function isPanelSessionContext(
+  context: LiveUpdateAuthorizationContext | null,
+): context is LiveUpdateConnectionContext {
+  return context !== null && "sessionTokenHash" in context;
 }

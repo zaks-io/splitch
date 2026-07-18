@@ -62,10 +62,7 @@ export class LiveUpdateConnection {
       if (socket !== this.socket || this.stopped) return;
       this.attempts = 0;
       this.startSessionRevalidation(socket);
-      this.options.onStaleDataChange?.(false);
-      void this.options.queryClient.invalidateQueries({
-        queryKey: queryKeys.app.root(this.options.scope.appId, this.options.scope.environmentId),
-      });
+      void this.recoverAfterConnect(socket);
     };
     socket.onmessage = (event) => {
       if (socket !== this.socket || this.stopped) return;
@@ -99,6 +96,15 @@ export class LiveUpdateConnection {
         socket.close();
       }
     }, sessionRevalidationIntervalMs);
+  }
+
+  private async recoverAfterConnect(socket: LiveUpdateSocket): Promise<void> {
+    const recovered = await invalidateWithRetry(
+      this.options.queryClient,
+      queryKeys.app.root(this.options.scope.appId, this.options.scope.environmentId),
+    );
+    if (socket !== this.socket || this.stopped) return;
+    this.options.onStaleDataChange?.(!recovered);
   }
 
   private stopSessionRevalidation(): void {
@@ -158,17 +164,27 @@ async function invalidateNudgeWithRetry(
     onStaleData: () => onStaleData?.(),
   });
 
-  for (let attempt = 0; attempt < reconnectDelaysMs.length; attempt += 1) {
+  await invalidateWithRetry(queryClient, prefix, reportFailure);
+}
+
+/** Initial refetch plus three retries after 2s, 4s, and 8s. */
+async function invalidateWithRetry(
+  queryClient: QueryClient,
+  queryKey: ReturnType<(typeof nudgeInvalidationPrefix)[InvalidatableNudgeEntity]>,
+  onRetry?: (failure: { attempt: number; nextRetryMs: number }) => void,
+): Promise<boolean> {
+  for (let retry = 0; retry <= reconnectDelaysMs.length; retry += 1) {
     try {
-      await queryClient.invalidateQueries({ queryKey: prefix }, { throwOnError: true });
-      return;
+      await queryClient.invalidateQueries({ queryKey }, { throwOnError: true });
+      return true;
     } catch {
-      const nextRetryMs = reconnectDelaysMs[attempt];
-      reportFailure({ attempt: attempt + 1, nextRetryMs });
-      if (attempt === reconnectDelaysMs.length - 1) return;
-      await wait(jitteredReconnectDelay(attempt));
+      if (retry === reconnectDelaysMs.length) return false;
+      const nextRetryMs = reconnectDelaysMs[retry] ?? 8_000;
+      onRetry?.({ attempt: retry + 1, nextRetryMs });
+      await wait(jitteredReconnectDelay(retry));
     }
   }
+  return false;
 }
 
 type InvalidatableNudgeEntity = Extract<DeltaNudge["entity"], keyof typeof nudgeInvalidationPrefix>;

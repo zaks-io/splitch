@@ -85,10 +85,11 @@ describe("live updates", () => {
     );
   });
 
-  it("surfaces staleness after reconnect failures and clears it when the server returns", () => {
+  it("keeps stale data visible until a reconnect refetch succeeds", async () => {
     vi.useFakeTimers();
     const sockets: FakeSocket[] = [];
     const stale = vi.fn();
+    const queryClient = queryClientStub();
     const connection = new LiveUpdateConnection({
       createSocket: () => {
         const socket = fakeSocket();
@@ -96,7 +97,7 @@ describe("live updates", () => {
         return socket;
       },
       onStaleDataChange: stale,
-      queryClient: queryClientStub().client,
+      queryClient: queryClient.client,
       random: () => 0.5,
       scope,
       url: "ws://panel.test/acme/app/dev/live",
@@ -104,6 +105,7 @@ describe("live updates", () => {
 
     connection.start();
     socketAt(sockets, 0).onopen?.({} as Event);
+    await vi.advanceTimersByTimeAsync(0);
     socketAt(sockets, 0).onclose?.({} as CloseEvent);
     vi.advanceTimersByTime(2_000);
     socketAt(sockets, 1).onclose?.({} as CloseEvent);
@@ -112,7 +114,14 @@ describe("live updates", () => {
 
     expect(stale).toHaveBeenCalledWith(true);
     vi.advanceTimersByTime(8_000);
+    const recovery = deferred<void>();
+    queryClient.invalidateQueries.mockImplementationOnce(() => recovery.promise);
     socketAt(sockets, 3).onopen?.({} as Event);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(stale).toHaveBeenLastCalledWith(true);
+    recovery.resolve();
+    await vi.advanceTimersByTimeAsync(0);
     expect(stale).toHaveBeenLastCalledWith(false);
   });
 
@@ -140,7 +149,7 @@ describe("live updates", () => {
     expect(socketAt(sockets, 0).sendSpy).toHaveBeenCalledOnce();
   });
 
-  it("retries failed nudge refetches after 2s, then 4s before the terminal 8s failure", async () => {
+  it("retries failed nudge refetches after 2s, 4s, and 8s before giving up", async () => {
     vi.useFakeTimers();
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     const attempts: number[] = [];
@@ -155,9 +164,10 @@ describe("live updates", () => {
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(2_000);
     await vi.advanceTimersByTimeAsync(4_000);
+    await vi.advanceTimersByTimeAsync(8_000);
     await pending;
 
-    expect(attempts.map((at) => at - startedAt)).toEqual([0, 2_000, 6_000]);
+    expect(attempts.map((at) => at - startedAt)).toEqual([0, 2_000, 6_000, 14_000]);
   });
 });
 
@@ -194,4 +204,14 @@ function queryClientStub(cachedValue?: unknown) {
     invalidateQueries: vi.fn(() => Promise.resolve()),
   };
   return { ...client, client: client as unknown as QueryClient };
+}
+
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {
+    throw new Error("deferred promise was not initialized");
+  };
+  const promise = new Promise<T>((resolved) => {
+    resolve = resolved;
+  });
+  return { promise, resolve };
 }

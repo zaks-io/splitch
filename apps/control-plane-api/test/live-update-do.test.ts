@@ -113,6 +113,31 @@ describe("live-update Durable Object", () => {
     expect(await response.json()).toMatchObject({ code: "FORBIDDEN" });
     expect(response.webSocket).toBeNull();
   });
+
+  it("forwards a server-authenticated context after bearer scope validation", async () => {
+    const app = createApp({
+      authResolver: makeControlPlaneAuthResolver({
+        verifier: makeJwksVerifier({
+          fetchJwks: async () => signer.jwks,
+          controlPlaneAudience: AUDIENCE,
+        }),
+        sessions: makeSessionStore(env.SESSION_STORE),
+        now: () => NOW_MS,
+      }),
+      rateLimiter: () => ({ limited: false }),
+      repo: createRepository(env.DB),
+      configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
+    });
+    const jwt = await token([appAdminScope(ids.appId)]);
+
+    const response = await app.request(`/apps/${ids.appId}/envs/${ids.environmentId}/live`, {
+      headers: { authorization: `Bearer ${jwt}`, upgrade: "websocket" },
+    });
+
+    expect(response.status).toBe(101);
+    response.webSocket?.accept();
+    response.webSocket?.close(1000, "test done");
+  });
 });
 
 async function seededLiveUpdateContext() {

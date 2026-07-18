@@ -106,8 +106,8 @@ A failed nudge-triggered refetch is **non-fatal**:
 
 - The failed refetch never unmounts existing data
 - The UI degrades to stale + dismissable toast ("couldn't refresh, retrying")
-- Retry policy: exponential backoff, 3 attempts, delays 2 s / 4 s / 8 s with ±20% jitter
-- After 3 failures: stop retrying for that nudge; wait for the next nudge or manual refresh
+- Retry policy: the initial refetch plus three retry attempts after 2 s / 4 s / 8 s with ±20% jitter
+- After the third retry fails: stop retrying for that nudge; wait for the next nudge or manual refresh
 - Sentry: low-severity breadcrumb, not an error event
 
 Socket disconnection triggers the reconnect path (full invalidate-and-refetch), not the nudge retry
