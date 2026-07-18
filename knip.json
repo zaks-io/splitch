@@ -8,7 +8,10 @@
   "ignore": [".agents/**"],
   "workspaces": {
     ".": {
-      "entry": ["scripts/sdk-release/check-published-version.mjs"]
+      "entry": [
+        "scripts/check-cli-mcp-parity.ts",
+        "scripts/sdk-release/check-published-version.mjs"
+      ]
     },
     "apps/control-panel": {
       "vite": false,
