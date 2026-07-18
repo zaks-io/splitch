@@ -209,6 +209,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           headers: {
             authorization: `Bearer ${config.credential}`,
             "content-type": "application/json",
+            "idempotency-key": event.idempotencyKey,
             "x-splitch-sdk-runtime": "javascript",
           },
           body: JSON.stringify(event),

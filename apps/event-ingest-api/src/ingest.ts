@@ -1,4 +1,5 @@
 import { emptyError, renderError, serviceUnavailable } from "./errors";
+import { evaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import { loadRunScope } from "./kv-config";
 import { readJsonObject, stringField } from "./payload";
 import {
@@ -86,7 +87,11 @@ export async function handleEvaluationIngest(request: Request, env: Env): Promis
   const payload = await readJsonObject(request);
   if (!payload.ok) return renderError(payload.error);
 
-  const event = await evaluationUsageEvent(payload.value, scope.value);
+  const event = await evaluationUsageEvent(
+    payload.value,
+    scope.value,
+    evaluationUsageReplayWindow(env.EVALUATION_USAGE_REPLAY_WINDOW),
+  );
   if (!event.ok) return renderError(event.error);
 
   const delivery = tinybirdDelivery(env, "raw_evaluations");

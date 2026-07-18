@@ -1,12 +1,11 @@
 import { type ErrorResponse, type ExposureEvent, ExposureEventSchema } from "@splitch/contracts";
 import { serviceUnavailable } from "./errors";
+import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
 import { stringField, stringValue } from "./payload";
 import type { CredentialScope, Env, Outcome, Payload, RunScope, TinybirdDelivery } from "./types";
 
 const rawEventsDatasource = "raw_events";
 const rawEvaluationsDatasource = "raw_evaluations";
-const EVALUATION_IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1000;
-
 export interface EvaluationUsageEvent {
   readonly eventId: string;
   readonly organizationId: string;
@@ -99,21 +98,33 @@ export function toTinybirdRow(event: ExposureEvent, payload: Payload): Record<st
 export async function evaluationUsageEvent(
   payload: Payload,
   scope: CredentialScope & { organizationId: string },
+  replayWindow: EvaluationUsageReplayWindow | undefined,
 ): Promise<Outcome<EvaluationUsageEvent>> {
   const dimensions = usageDimensions(payload);
   if (!dimensions.ok) return dimensions;
   const evaluation = evaluationUsageValues(payload);
   if (!evaluation.ok) return evaluation;
 
+  if (replayWindow === undefined) {
+    return {
+      ok: false,
+      error: serviceUnavailable("Evaluation usage replay window is unavailable"),
+    };
+  }
   const serverReceivedAt = new Date(Date.now()).toISOString();
+  let eventId: string;
+  try {
+    eventId = await evaluationUsageDedupKey(scope, dimensions.value.idempotencyKey, replayWindow);
+  } catch {
+    return {
+      ok: false,
+      error: serviceUnavailable("Evaluation usage replay window is unavailable"),
+    };
+  }
   return {
     ok: true,
     value: {
-      eventId: await evaluationUsageDedupKey(
-        scope,
-        dimensions.value.idempotencyKey,
-        serverReceivedAt,
-      ),
+      eventId,
       organizationId: scope.organizationId,
       appId: scope.appId,
       environmentId: scope.environmentId,
@@ -193,23 +204,19 @@ export function toEvaluationUsageTinybirdRow(event: EvaluationUsageEvent): Recor
 }
 
 /**
- * Caller idempotency is valid only for one UTC 24-hour window and never reaches
- * analytics raw. The authenticated credential scope prevents a shared caller
- * key from suppressing another Organization, App, or Environment.
+ * Caller idempotency is valid for a bounded replay window from its first
+ * receipt, never a UTC-day bucket. The authenticated credential scope prevents
+ * a shared caller key from suppressing another Organization, App, or Environment.
  */
 async function evaluationUsageDedupKey(
   scope: CredentialScope & { organizationId: string },
   idempotencyKey: string,
-  serverReceivedAt: string,
+  replayWindow: EvaluationUsageReplayWindow,
 ): Promise<string> {
-  const windowStart = Math.floor(
-    new Date(serverReceivedAt).getTime() / EVALUATION_IDEMPOTENCY_WINDOW_MS,
+  const identity = await sha256Hex(
+    [scope.organizationId, scope.appId, scope.environmentId, idempotencyKey].join("\u001f"),
   );
-  return `sha256:${await sha256Hex(
-    [scope.organizationId, scope.appId, scope.environmentId, windowStart, idempotencyKey].join(
-      "\u001f",
-    ),
-  )}`;
+  return replayWindow.claim(identity);
 }
 
 export function tinybirdDelivery(

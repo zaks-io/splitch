@@ -1,4 +1,8 @@
 import type { ErrorResponse } from "@splitch/contracts";
+import type {
+  EvaluationUsageReplayWindow,
+  EvaluationUsageReplayWindowNamespace,
+} from "./evaluation-usage-replay-window";
 
 export type Env = {
   CONFIG_STORE?: KVNamespace;
@@ -8,6 +12,9 @@ export type Env = {
   TINYBIRD_API_URL?: string;
   TINYBIRD_INGEST_TOKEN?: string;
   TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN?: string;
+  EVALUATION_USAGE_REPLAY_WINDOW?:
+    | EvaluationUsageReplayWindow
+    | EvaluationUsageReplayWindowNamespace;
   SENTRY_DSN?: string;
 };
 

@@ -92,8 +92,9 @@ describe("Evaluation usage ingest", () => {
   });
 
   it("deduplicates retries without storing the caller's raw Evaluation id", async () => {
-    const first = await postEvaluation();
-    const second = await postEvaluation();
+    const env = makeEnv();
+    const first = await postEvaluationAt(fixedNow, {}, undefined, env);
+    const second = await postEvaluationAt(fixedNow, {}, undefined, env);
 
     expect(expectRow(first.rows).dedup_key).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(expectRow(second.rows).dedup_key).toBe(expectRow(first.rows).dedup_key);
@@ -116,10 +117,19 @@ describe("Evaluation usage ingest", () => {
   });
 
   it("expires an Evaluation idempotency key after its 24-hour replay window", async () => {
-    const first = await postEvaluation();
-    const second = await postEvaluationAt("2026-07-02T12:34:56.789Z");
+    const env = makeEnv();
+    const first = await postEvaluationAt(fixedNow, {}, undefined, env);
+    const second = await postEvaluationAt("2026-07-02T12:34:56.789Z", {}, undefined, env);
 
     expect(expectRow(second.rows).dedup_key).not.toBe(expectRow(first.rows).dedup_key);
+  });
+
+  it("keeps a retry across midnight inside the first receipt's 24-hour replay window", async () => {
+    const env = makeEnv();
+    const first = await postEvaluationAt("2026-07-01T23:59:59.999Z", {}, undefined, env);
+    const retry = await postEvaluationAt("2026-07-02T00:00:00.001Z", {}, undefined, env);
+
+    expect(expectRow(retry.rows).dedup_key).toBe(expectRow(first.rows).dedup_key);
   });
 });
 

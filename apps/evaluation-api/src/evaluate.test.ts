@@ -26,6 +26,7 @@ describe("POST /api/sdk/evaluate", () => {
     const body = (await res.json()) as Record<string, unknown>;
 
     expect(res.status).toBe(200);
+    expect(res.headers.get("x-run-id")).toBe("run-42");
     expect(body).toEqual({ variant: true });
     expect(Object.keys(body)).toEqual(["variant"]);
     expect(JSON.stringify(body)).not.toContain("reason");
@@ -181,6 +182,64 @@ describe("POST /api/sdk/evaluate", () => {
     expect(assignmentStore.putCalls).toEqual([]);
   });
 });
+
+describe("Evaluation Worker to SDK metadata", () => {
+  it("gives the SDK run metadata so a repeat becomes cached telemetry", async () => {
+    const { app, evaluationUsageSink } = await makeSdkRouteHarness({
+      liveRun: true,
+      runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
+    });
+    const { createSplitchClient } = await loadSdkClient();
+    const telemetryRequests: Promise<Response>[] = [];
+    const client = createSplitchClient({
+      clientKey: CLIENT_KEY,
+      endpoint: "https://evaluation.test",
+      fetch: ((input: URL | RequestInfo, init?: RequestInit) => {
+        const response = Promise.resolve(app.request(String(input), init));
+        if (new URL(String(input)).pathname === "/api/sdk/evaluation-telemetry") {
+          telemetryRequests.push(response);
+        }
+        return response;
+      }) as typeof fetch,
+    });
+
+    await expect(
+      client.evaluateDetails("checkout-banner", {
+        targetingKey: "user-1",
+        idempotencyKey: "sdk-worker-cache-1",
+      }),
+    ).resolves.toMatchObject({ reason: "SPLIT" });
+    await expect(
+      client.evaluateDetails("checkout-banner", {
+        targetingKey: "user-1",
+        idempotencyKey: "sdk-worker-cache-1",
+      }),
+    ).resolves.toMatchObject({ reason: "CACHED" });
+    expect(telemetryRequests).toHaveLength(1);
+    await expect(telemetryRequests[0]).resolves.toMatchObject({ status: 200 });
+
+    expect(evaluationUsageSink.writes).toEqual([
+      expect.objectContaining({ evaluationCount: 1, isCached: false }),
+      expect.objectContaining({
+        idempotencyKey: "sdk-worker-cache-1",
+        evaluationCount: 0,
+        isCached: true,
+      }),
+    ]);
+  });
+});
+
+async function loadSdkClient(): Promise<{
+  createSplitchClient(options: { clientKey: string; endpoint: string; fetch: typeof fetch }): {
+    evaluateDetails(
+      flagKey: string,
+      context: { targetingKey: string; idempotencyKey: string },
+    ): Promise<{ reason: string }>;
+  };
+}> {
+  const path = new URL("../../../packages/sdk/src/client.ts", import.meta.url).href;
+  return import(/* @vite-ignore */ path);
+}
 
 describe("POST /api/sdk/evaluate: non-exposing outcomes", () => {
   it("returns a holdover Variant without firing another Exposure", async () => {

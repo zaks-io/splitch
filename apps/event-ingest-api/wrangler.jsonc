@@ -37,6 +37,20 @@
       "id": "00000000000000000000000000000000"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "EVALUATION_USAGE_REPLAY_WINDOW",
+        "class_name": "EvaluationUsageReplayWindowDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1_evaluation_usage_replay_window",
+      "new_sqlite_classes": ["EvaluationUsageReplayWindowDurableObject"]
+    }
+  ],
   "env": {
     "shared-preview": {
       "name": "splitch-event-ingest-api-shared-preview",
@@ -68,7 +82,21 @@
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
-      "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "70cc24e1592e4db4a5b37e8d0dd6d6af" }]
+      "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "70cc24e1592e4db4a5b37e8d0dd6d6af" }],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "EVALUATION_USAGE_REPLAY_WINDOW",
+            "class_name": "EvaluationUsageReplayWindowDurableObject"
+          }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1_evaluation_usage_replay_window",
+          "new_sqlite_classes": ["EvaluationUsageReplayWindowDurableObject"]
+        }
+      ]
     },
     "production": {
       "name": "splitch-event-ingest-api",
@@ -100,7 +128,21 @@
         "SPLITCH_PLATFORM_TARGET": "production",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
-      "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" }]
+      "kv_namespaces": [{ "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" }],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "EVALUATION_USAGE_REPLAY_WINDOW",
+            "class_name": "EvaluationUsageReplayWindowDurableObject"
+          }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1_evaluation_usage_replay_window",
+          "new_sqlite_classes": ["EvaluationUsageReplayWindowDurableObject"]
+        }
+      ]
     }
   }
 }

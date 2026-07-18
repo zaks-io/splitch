@@ -1,5 +1,9 @@
 import { CURRENT_KV_SCHEMA_VERSION, experimentConfigKey, runConfigKey } from "@splitch/contracts";
 import { vi } from "vitest";
+import {
+  EVALUATION_USAGE_REPLAY_WINDOW_MS,
+  type EvaluationUsageReplayWindow,
+} from "./evaluation-usage-replay-window";
 import worker from "./index";
 
 export const appId = "app_credential";
@@ -64,6 +68,7 @@ export async function postEvaluationAt(
     sdkRuntime: string;
   }> = {},
   scope = { appId, environmentId, organizationId },
+  env = makeEnv(),
 ) {
   vi.spyOn(Date, "now").mockReturnValue(new Date(now).getTime());
   const fetch = mockTinybirdFetch();
@@ -89,19 +94,20 @@ export async function postEvaluationAt(
         ...payload,
       }),
     }),
-    makeEnv(),
+    env,
     ctx,
   );
   return captureResponse(ctx, fetch, response);
 }
 
-export function makeEnv() {
+export function makeEnv(replayWindow: EvaluationUsageReplayWindow = new MemoryReplayWindow()) {
   return {
     CONFIG_STORE: seededConfigStore() as unknown as KVNamespace,
     SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
     TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN: "tb_raw_evaluations_ingest_secret",
+    EVALUATION_USAGE_REPLAY_WINDOW: replayWindow,
   };
 }
 
@@ -225,6 +231,26 @@ class MemoryKV {
 
   async get(key: string): Promise<string | null> {
     return this.values.get(key) ?? null;
+  }
+}
+
+class MemoryReplayWindow implements EvaluationUsageReplayWindow {
+  private readonly claims = new Map<string, { eventId: string; expiresAt: number }>();
+
+  async claim(identity: string): Promise<string> {
+    const now = Date.now();
+    const existing = this.claims.get(identity);
+    if (existing !== undefined && existing.expiresAt > now) return existing.eventId;
+
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`${identity}\u001f${now}`),
+    );
+    const eventId = `sha256:${[...new Uint8Array(digest)]
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")}`;
+    this.claims.set(identity, { eventId, expiresAt: now + EVALUATION_USAGE_REPLAY_WINDOW_MS });
+    return eventId;
   }
 }
 

@@ -156,6 +156,41 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
     expect(result.runId).toBe("run-42");
   });
 
+  it("sends cache telemetry with the same Idempotency-Key in its header and body", async () => {
+    const requests: { path: string; headers: Headers; body: unknown }[] = [];
+    const client = createSplitchClient({
+      clientKey: "ck_test",
+      fetch: ((url: URL | RequestInfo, init?: RequestInit) => {
+        const request = {
+          path: new URL(String(url)).pathname,
+          headers: new Headers(init?.headers),
+          body: JSON.parse(String(init?.body)),
+        };
+        requests.push(request);
+        return Promise.resolve(
+          request.path === "/api/sdk/evaluate"
+            ? new Response(JSON.stringify({ variant: "treatment" }), {
+                status: 200,
+                headers: { "x-run-id": "run-42" },
+              })
+            : new Response(JSON.stringify({ ok: true }), { status: 200 }),
+        );
+      }) as typeof fetch,
+    });
+
+    await client.evaluate("checkout", { targetingKey: "u1", idempotencyKey: "cache-hit-1" });
+    await client.evaluate("checkout", { targetingKey: "u1", idempotencyKey: "cache-hit-1" });
+    await Promise.resolve();
+
+    expect(requests).toHaveLength(2);
+    const telemetry = requests[1];
+    expect(telemetry).toMatchObject({
+      path: "/api/sdk/evaluation-telemetry",
+      body: { flagKey: "checkout", idempotencyKey: "cache-hit-1" },
+    });
+    expect(telemetry?.headers.get("idempotency-key")).toBe("cache-hit-1");
+  });
+
   it("non-2xx -> surfaces the status, no variant, no runId", async () => {
     const t = transport(stubFetch(new Response("", { status: 404 })));
     const result = await t.evaluate(REQ);

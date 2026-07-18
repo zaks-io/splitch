@@ -5,6 +5,7 @@ import {
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
 import { handleEvaluationIngest, handleIngest } from "./ingest";
+import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-replay-window";
 import type { Env } from "./types";
 
 const service = "splitch-event-ingest-api";
@@ -48,3 +49,5 @@ const handler = {
 } satisfies ExportedHandler<Env>;
 
 export default wrapWorkerHandler(handler, { surface: "event-ingest-api" });
+
+export { EvaluationUsageReplayWindowDurableObject };
