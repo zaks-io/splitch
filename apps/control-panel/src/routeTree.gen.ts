@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as KitchenSinkRouteImport } from './routes/kitchen-sink'
 import { Route as HealthRouteImport } from './routes/health'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as OrgSlugIndexRouteImport } from './routes/$orgSlug.index'
 import { Route as AuthLogoutRouteImport } from './routes/auth.logout'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
@@ -19,6 +20,8 @@ import { Route as OrgSlugClaimRouteImport } from './routes/$orgSlug.claim'
 import { Route as ClaimConsentAttemptIdRouteImport } from './routes/claim.consent.$attemptId'
 import { Route as OrgSlugAppSlugEnvRouteImport } from './routes/$orgSlug.$appSlug.$env'
 import { Route as OrgSlugAppSlugEnvSettingsRouteImport } from './routes/$orgSlug.$appSlug.$env.settings'
+import { Route as OrgSlugAppSlugEnvSegmentsRouteImport } from './routes/$orgSlug.$appSlug.$env.segments'
+import { Route as OrgSlugAppSlugEnvMetricsRouteImport } from './routes/$orgSlug.$appSlug.$env.metrics'
 import { Route as OrgSlugAppSlugEnvFlagsRouteImport } from './routes/$orgSlug.$appSlug.$env.flags'
 import { Route as OrgSlugAppSlugEnvExperimentsRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments'
 import { Route as OrgSlugAppSlugEnvFlagsFlagIdRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.$flagId'
@@ -36,6 +39,11 @@ const HealthRoute = HealthRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrgSlugIndexRoute = OrgSlugIndexRouteImport.update({
+  id: '/$orgSlug/',
+  path: '/$orgSlug/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthLogoutRoute = AuthLogoutRouteImport.update({
@@ -74,6 +82,18 @@ const OrgSlugAppSlugEnvSettingsRoute =
     path: '/settings',
     getParentRoute: () => OrgSlugAppSlugEnvRoute,
   } as any)
+const OrgSlugAppSlugEnvSegmentsRoute =
+  OrgSlugAppSlugEnvSegmentsRouteImport.update({
+    id: '/segments',
+    path: '/segments',
+    getParentRoute: () => OrgSlugAppSlugEnvRoute,
+  } as any)
+const OrgSlugAppSlugEnvMetricsRoute =
+  OrgSlugAppSlugEnvMetricsRouteImport.update({
+    id: '/metrics',
+    path: '/metrics',
+    getParentRoute: () => OrgSlugAppSlugEnvRoute,
+  } as any)
 const OrgSlugAppSlugEnvFlagsRoute = OrgSlugAppSlugEnvFlagsRouteImport.update({
   id: '/flags',
   path: '/flags',
@@ -100,10 +120,13 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
+  '/$orgSlug/': typeof OrgSlugIndexRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRouteWithChildren
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
   '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
+  '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
+  '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
   '/$orgSlug/$appSlug/$env/flags/$flagId': typeof OrgSlugAppSlugEnvFlagsFlagIdRoute
 }
@@ -115,10 +138,13 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
+  '/$orgSlug': typeof OrgSlugIndexRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRouteWithChildren
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
   '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
+  '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
+  '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
   '/$orgSlug/$appSlug/$env/flags/$flagId': typeof OrgSlugAppSlugEnvFlagsFlagIdRoute
 }
@@ -131,10 +157,13 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
+  '/$orgSlug/': typeof OrgSlugIndexRoute
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRouteWithChildren
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
   '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
+  '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
+  '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
   '/$orgSlug/$appSlug/$env/flags/$flagId': typeof OrgSlugAppSlugEnvFlagsFlagIdRoute
 }
@@ -148,10 +177,13 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
+    | '/$orgSlug/'
     | '/$orgSlug/$appSlug/$env'
     | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
+    | '/$orgSlug/$appSlug/$env/metrics'
+    | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
     | '/$orgSlug/$appSlug/$env/flags/$flagId'
   fileRoutesByTo: FileRoutesByTo
@@ -163,10 +195,13 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
+    | '/$orgSlug'
     | '/$orgSlug/$appSlug/$env'
     | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
+    | '/$orgSlug/$appSlug/$env/metrics'
+    | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
     | '/$orgSlug/$appSlug/$env/flags/$flagId'
   id:
@@ -178,10 +213,13 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/auth/login'
     | '/auth/logout'
+    | '/$orgSlug/'
     | '/$orgSlug/$appSlug/$env'
     | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
+    | '/$orgSlug/$appSlug/$env/metrics'
+    | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
     | '/$orgSlug/$appSlug/$env/flags/$flagId'
   fileRoutesById: FileRoutesById
@@ -194,6 +232,7 @@ export interface RootRouteChildren {
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthLogoutRoute: typeof AuthLogoutRoute
+  OrgSlugIndexRoute: typeof OrgSlugIndexRoute
   OrgSlugAppSlugEnvRoute: typeof OrgSlugAppSlugEnvRouteWithChildren
   ClaimConsentAttemptIdRoute: typeof ClaimConsentAttemptIdRoute
 }
@@ -219,6 +258,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$orgSlug/': {
+      id: '/$orgSlug/'
+      path: '/$orgSlug'
+      fullPath: '/$orgSlug/'
+      preLoaderRoute: typeof OrgSlugIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/logout': {
@@ -270,6 +316,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvSettingsRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvRoute
     }
+    '/$orgSlug/$appSlug/$env/segments': {
+      id: '/$orgSlug/$appSlug/$env/segments'
+      path: '/segments'
+      fullPath: '/$orgSlug/$appSlug/$env/segments'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvSegmentsRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
+    }
+    '/$orgSlug/$appSlug/$env/metrics': {
+      id: '/$orgSlug/$appSlug/$env/metrics'
+      path: '/metrics'
+      fullPath: '/$orgSlug/$appSlug/$env/metrics'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvMetricsRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
+    }
     '/$orgSlug/$appSlug/$env/flags': {
       id: '/$orgSlug/$appSlug/$env/flags'
       path: '/flags'
@@ -311,12 +371,16 @@ const OrgSlugAppSlugEnvFlagsRouteWithChildren =
 interface OrgSlugAppSlugEnvRouteChildren {
   OrgSlugAppSlugEnvExperimentsRoute: typeof OrgSlugAppSlugEnvExperimentsRoute
   OrgSlugAppSlugEnvFlagsRoute: typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
+  OrgSlugAppSlugEnvMetricsRoute: typeof OrgSlugAppSlugEnvMetricsRoute
+  OrgSlugAppSlugEnvSegmentsRoute: typeof OrgSlugAppSlugEnvSegmentsRoute
   OrgSlugAppSlugEnvSettingsRoute: typeof OrgSlugAppSlugEnvSettingsRoute
 }
 
 const OrgSlugAppSlugEnvRouteChildren: OrgSlugAppSlugEnvRouteChildren = {
   OrgSlugAppSlugEnvExperimentsRoute: OrgSlugAppSlugEnvExperimentsRoute,
   OrgSlugAppSlugEnvFlagsRoute: OrgSlugAppSlugEnvFlagsRouteWithChildren,
+  OrgSlugAppSlugEnvMetricsRoute: OrgSlugAppSlugEnvMetricsRoute,
+  OrgSlugAppSlugEnvSegmentsRoute: OrgSlugAppSlugEnvSegmentsRoute,
   OrgSlugAppSlugEnvSettingsRoute: OrgSlugAppSlugEnvSettingsRoute,
 }
 
@@ -331,6 +395,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthCallbackRoute: AuthCallbackRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthLogoutRoute: AuthLogoutRoute,
+  OrgSlugIndexRoute: OrgSlugIndexRoute,
   OrgSlugAppSlugEnvRoute: OrgSlugAppSlugEnvRouteWithChildren,
   ClaimConsentAttemptIdRoute: ClaimConsentAttemptIdRoute,
 }

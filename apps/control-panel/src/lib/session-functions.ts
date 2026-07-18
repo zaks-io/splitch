@@ -25,6 +25,24 @@ export type ScopedSessionResult =
   | { kind: "forbidden" }
   | { kind: "notFound" };
 
+export type OrgNavigationResult =
+  | {
+      kind: "ok";
+      organization: {
+        orgId: string;
+        orgSlug: string;
+        apps: Array<{
+          appId: string;
+          appSlug: string;
+          environments: Awaited<
+            ReturnType<ReturnType<typeof createEnvironmentResolver>["listEnvironments"]>
+          >;
+        }>;
+      };
+    }
+  | { kind: "unauthenticated" }
+  | { kind: "forbidden" };
+
 export const loadCurrentSession = createServerFn({ method: "GET" }).handler(
   async (): Promise<CurrentSessionResult> => {
     const bindings = controlPanelBindings(workerEnv);
@@ -42,6 +60,40 @@ export const loadCurrentSession = createServerFn({ method: "GET" }).handler(
     return { kind: "authenticated", session: publicSession(session) };
   },
 );
+
+export const loadOrgNavigation = createServerFn({ method: "GET" })
+  .validator((orgSlug: string) => orgSlug)
+  .handler(async ({ data: orgSlug }): Promise<OrgNavigationResult> => {
+    const bindings = controlPanelBindings(workerEnv);
+    const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
+    if (!loaded.ok) return { kind: "unauthenticated" };
+
+    const repo = createRepository(bindings.DB);
+    const session = await rehydrateLegacySession(
+      repo,
+      bindings.SESSION_STORE,
+      loaded.tokenHash,
+      loaded.session,
+    );
+    const organization = session.orgs.find((org) => org.orgSlug === orgSlug);
+    if (!organization) return { kind: "forbidden" };
+
+    const resolver = createEnvironmentResolver(repo);
+    return {
+      kind: "ok",
+      organization: {
+        orgId: organization.orgId,
+        orgSlug: organization.orgSlug,
+        apps: await Promise.all(
+          organization.apps.map(async (app) => ({
+            appId: app.appId,
+            appSlug: app.appSlug,
+            environments: await resolver.listEnvironments(app.appId),
+          })),
+        ),
+      },
+    };
+  });
 
 export const loadScopedSession = createServerFn({ method: "GET" })
   .validator((data: ScopeParams) => data)

@@ -36,6 +36,7 @@ export class LiveUpdateConnection {
 
   start(): void {
     this.stopped = false;
+    void this.refreshScope();
     this.connect();
   }
 
@@ -81,14 +82,18 @@ export class LiveUpdateConnection {
   }
 
   private async recoverAfterConnect(socket: LiveUpdateSocket): Promise<void> {
-    const recovered = await invalidateWithRetry(
+    const recovered = await this.refreshScope();
+    if (socket !== this.socket || this.stopped) return;
+    this.options.onStaleDataChange?.(!recovered);
+  }
+
+  private async refreshScope(): Promise<boolean> {
+    return invalidateWithRetry(
       this.options.queryClient,
       queryKeys.app.root(this.options.scope.appId, this.options.scope.environmentId),
       undefined,
       this.options.refetchRoute,
     );
-    if (socket !== this.socket || this.stopped) return;
-    this.options.onStaleDataChange?.(!recovered);
   }
 }
 

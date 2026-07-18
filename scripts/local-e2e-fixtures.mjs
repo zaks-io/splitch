@@ -20,7 +20,10 @@ export function localE2eSession(expiresAt = Math.floor(Date.now() / 1000) + 3_60
         orgRole: "owner",
         isProvisional: false,
         demoExpiresAt: null,
-        apps: [{ appId: "app_checkout_e2e", appSlug: "checkout-api", role: "owner" }],
+        apps: [
+          { appId: "app_checkout_e2e", appSlug: "checkout-api", role: "owner" },
+          { appId: "app_billing_e2e", appSlug: "billing-api", role: "admin" },
+        ],
       },
       {
         orgId: "org_orbit_e2e",
@@ -40,15 +43,19 @@ INSERT INTO organizations (id, name, plan, is_provisional, created_at, updated_a
   ('org_orbit_e2e', 'Orbit Tools', 'free', 0, '${createdAt}', '${createdAt}');
 INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, created_by) VALUES
   ('app_checkout_e2e', 'org_acme_e2e', 'Checkout API', 'checkout-api', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('app_billing_e2e', 'org_acme_e2e', 'Billing API', 'billing-api', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('app_agent_e2e', 'org_orbit_e2e', 'Agent Console', 'agent-console', '${createdAt}', '${createdAt}', 'user_local_e2e');
 INSERT INTO environments (id, app_id, key, name, created_at, updated_at, created_by) VALUES
   ('env_checkout_dev_e2e', 'app_checkout_e2e', 'dev', 'Development', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_checkout_prod_e2e', 'app_checkout_e2e', 'prod', 'Production', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_billing_prod_e2e', 'app_billing_e2e', 'prod', 'Production', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_agent_prod_e2e', 'app_agent_e2e', 'prod', 'Production', '${createdAt}', '${createdAt}', 'user_local_e2e');
 INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES
   ('org_acme_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('org_orbit_e2e', 'user_local_e2e', 'admin', '${createdAt}');
 INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES
   ('app_checkout_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
+  ('app_billing_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
   ('app_agent_e2e', 'user_local_e2e', 'admin', '${createdAt}');
 INSERT INTO flags (id, app_id, key, name, created_at, updated_at, created_by, updated_by) VALUES
   ('flag_checkout_e2e', 'app_checkout_e2e', 'new-checkout', 'New Checkout', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
