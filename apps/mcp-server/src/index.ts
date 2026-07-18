@@ -4,6 +4,8 @@ import {
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
 import { handleMcpServerRequest } from "./mcp-handler";
+import { McpSessionDurableObject } from "./mcp-session-do";
+import { durableMcpSessionStore, type McpSessionDurableObjectNamespace } from "./mcp-session-store";
 
 const service = "splitch-mcp-server";
 
@@ -14,6 +16,7 @@ type Env = {
   ANALYSIS_API_ORIGIN?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
+  MCP_SESSIONS: McpSessionDurableObjectNamespace;
 };
 
 const handler = {
@@ -36,13 +39,14 @@ const handler = {
       evaluationBaseUrl: env.EVALUATION_API_ORIGIN,
       analysisBaseUrl: env.ANALYSIS_API_ORIGIN,
       analysisFetch: serviceBindingFetch(env.ANALYSIS_API),
+      sessionStore: durableMcpSessionStore(env.MCP_SESSIONS),
     });
   },
 } satisfies ExportedHandler<Env>;
 
 export default wrapWorkerHandler(handler, { surface: "mcp-server" });
 
-export { handleMcpServerRequest };
+export { handleMcpServerRequest, McpSessionDurableObject };
 
 function serviceBindingFetch(service: Fetcher | undefined): typeof fetch | undefined {
   if (!service) {

@@ -1,11 +1,10 @@
-import { createMcpOperationAdapter } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import {
-  createHealthResponse,
   deriveMcpProtocolTools,
   getRoute,
   parsePlatformTarget,
   type RouteOwner,
 } from "@splitch/contracts";
+import { createMcpOperationAdapter } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import {
   JSON_RPC_INTERNAL_ERROR,
   JSON_RPC_METHOD_NOT_FOUND,
@@ -18,12 +17,12 @@ import {
 import { readJsonRpcRequest } from "./mcp-request";
 import {
   contextUseTool,
-  createMcpSessionStore,
+  type McpSessionStore,
   parseToolCall,
   resolveScope,
   setSessionContext,
-  type McpSessionStore,
 } from "./mcp-session-context";
+import { corsHeaders, jsonResponse, routeTransportRequest } from "./mcp-transport";
 
 const protocolVersion = "2025-06-18";
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
@@ -38,8 +37,6 @@ type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
 type OperationSdkResolver = () => OperationSdk;
 type OperationSdks = Record<McpRoutableOwner, OperationSdkResolver>;
 
-const sessions = createMcpSessionStore();
-
 export interface McpServerRequestOptions {
   readonly request: Request;
   readonly service: string;
@@ -53,18 +50,8 @@ export interface McpServerRequestOptions {
 }
 
 export async function handleMcpServerRequest(options: McpServerRequestOptions): Promise<Response> {
-  const url = new URL(options.request.url);
-  if (isHealthRequest(options.request, url)) {
-    return Response.json(
-      createHealthResponse(options.service, parsePlatformTarget(options.platformTarget)),
-    );
-  }
-  if (options.request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders() });
-  }
-  if (options.request.method !== "POST" || !isMcpPath(url)) {
-    return new Response("not found", { status: 404 });
-  }
+  const transportResponse = await routeTransportRequest(options);
+  if (transportResponse) return transportResponse;
 
   const request = await readJsonRpcRequest(options.request);
   if (!request.ok) {
@@ -75,7 +62,7 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
   }
 
   const sdks = createOperationSdks(options);
-  const sessionStore = options.sessionStore ?? sessions;
+  const sessionStore = options.sessionStore ?? unconfiguredSessionStore;
   const sessionId = options.request.headers.get("mcp-session-id");
   const response = await dispatch(
     request.value,
@@ -85,7 +72,7 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
     sessionStore,
   );
   const responseSessionId =
-    request.value.method === "initialize" ? sessionStore.create() : undefined;
+    request.value.method === "initialize" ? await sessionStore.create() : undefined;
   return jsonResponse(response, 200, responseSessionId);
 }
 
@@ -167,14 +154,6 @@ function apiBaseUrl(
   throw new Error(`mcp-server: ${envName} is required for ${platformTarget}`);
 }
 
-function isHealthRequest(request: Request, url: URL): boolean {
-  return request.method === "GET" && (url.pathname === "/" || url.pathname === "/health");
-}
-
-function isMcpPath(url: URL): boolean {
-  return url.pathname === "/" || url.pathname === "/mcp";
-}
-
 async function dispatch(
   request: JsonRpcRequest,
   sdks: OperationSdks,
@@ -217,7 +196,7 @@ async function callTool(
 
   try {
     const sdk = sdkForOwner(sdks, route.owner);
-    const input = resolveScope(route.path, call.arguments, sessionId, sessionStore);
+    const input = await resolveScope(route.path, call.arguments, sessionId, sessionStore);
     if (!input.ok) {
       return jsonRpcResult(id, toolResult({ message: input.message }, { isError: true }));
     }
@@ -233,13 +212,13 @@ async function callTool(
   }
 }
 
-function contextUse(
+async function contextUse(
   id: JsonRpcId,
   arguments_: unknown,
   sessionId: string | null,
   sessionStore: McpSessionStore,
-): JsonRpcResponse {
-  const result = setSessionContext(arguments_, sessionId, sessionStore);
+): Promise<JsonRpcResponse> {
+  const result = await setSessionContext(arguments_, sessionId, sessionStore);
   return jsonRpcResult(
     id,
     result.ok
@@ -271,18 +250,17 @@ function toolResult(value: unknown, options: { isError?: boolean } = {}): Record
   };
 }
 
-function jsonResponse(body: JsonRpcResponse, status = 200, sessionId?: string): Response {
-  const headers = corsHeaders();
-  if (sessionId) {
-    headers.set("mcp-session-id", sessionId);
-  }
-  return Response.json(body, { status, headers });
-}
-
-function corsHeaders(): Headers {
-  return new Headers({
-    "access-control-allow-headers": "authorization, content-type, mcp-session-id",
-    "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-origin": "*",
-  });
-}
+const unconfiguredSessionStore: McpSessionStore = {
+  async create() {
+    throw new Error("mcp-server: MCP session store is not configured");
+  },
+  async get() {
+    return undefined;
+  },
+  async set() {
+    throw new Error("mcp-server: MCP session store is not configured");
+  },
+  async end() {
+    throw new Error("mcp-server: MCP session store is not configured");
+  },
+};

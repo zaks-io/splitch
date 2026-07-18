@@ -4,9 +4,10 @@ export interface McpSessionContext {
 }
 
 export interface McpSessionStore {
-  create(): string;
-  get(id: string): McpSessionContext | undefined;
-  set(id: string, context: McpSessionContext): void;
+  create(): Promise<string>;
+  get(id: string): Promise<McpSessionContext | undefined>;
+  set(id: string, context: McpSessionContext): Promise<void>;
+  end(id: string): Promise<void>;
 }
 
 export const contextUseTool = {
@@ -23,30 +24,8 @@ export const contextUseTool = {
   },
 };
 
-export function createMcpSessionStore(): McpSessionStore {
-  const sessions = new Map<string, McpSessionContext | undefined>();
-  return {
-    create() {
-      const id = crypto.randomUUID();
-      sessions.set(id, undefined);
-      return id;
-    },
-    get(id) {
-      return sessions.get(id);
-    },
-    set(id, context) {
-      if (!sessions.has(id)) {
-        throw new Error(`mcp-server: unknown MCP session "${id}"`);
-      }
-      sessions.set(id, context);
-    },
-  };
-}
-
 function parseContext(value: unknown): McpSessionContext | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const { appId, environmentId } = value as { appId?: unknown; environmentId?: unknown };
   return typeof appId === "string" &&
     appId.length > 0 &&
@@ -56,11 +35,11 @@ function parseContext(value: unknown): McpSessionContext | null {
     : null;
 }
 
-export function setSessionContext(
+export async function setSessionContext(
   arguments_: unknown,
   sessionId: string | null,
   sessionStore: McpSessionStore,
-): { ok: true; value: McpSessionContext } | { ok: false; message: string } {
+): Promise<{ ok: true; value: McpSessionContext } | { ok: false; message: string }> {
   if (!sessionId) {
     return { ok: false, message: "MCP session is required before calling context_use." };
   }
@@ -69,21 +48,30 @@ export function setSessionContext(
     return { ok: false, message: "context_use requires non-empty appId and environmentId." };
   }
   try {
-    sessionStore.set(sessionId, context);
+    await sessionStore.set(sessionId, context);
     return { ok: true, value: context };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) };
   }
 }
 
-export function resolveScope(
+export async function resolveScope(
   path: string,
   arguments_: unknown,
   sessionId: string | null,
   sessionStore: McpSessionStore,
-): { ok: true; value: Record<string, unknown> } | { ok: false; message: string } {
+): Promise<{ ok: true; value: Record<string, unknown> } | { ok: false; message: string }> {
   const input = inputRecord(arguments_);
-  const context = sessionId ? sessionStore.get(sessionId) : undefined;
+  const session = await readSessionContext(sessionId, sessionStore);
+  if (!session.ok) return session;
+  return resolveRouteScope(path, input, session.value);
+}
+
+function resolveRouteScope(
+  path: string,
+  input: Record<string, unknown>,
+  context: McpSessionContext | undefined,
+): { ok: true; value: Record<string, unknown> } | { ok: false; message: string } {
   const app = resolveScopeAxis(
     input.appId,
     context?.appId,
@@ -92,24 +80,46 @@ export function resolveScope(
     "appId",
   );
   if (!app.ok) return app;
+
+  const environmentParameter = environmentScopeParameter(path);
   const environment = resolveScopeAxis(
-    input.environmentId,
+    environmentParameter ? input[environmentParameter] : undefined,
     context?.environmentId,
-    path.includes(":environmentId"),
+    environmentParameter !== undefined,
     "Environment",
-    "environmentId",
+    environmentParameter ?? "environmentId",
   );
   if (!environment.ok) return environment;
+
   return {
     ok: true,
     value: {
       ...input,
       ...(path.includes(":appId") && input.appId === undefined ? { appId: app.value } : {}),
-      ...(path.includes(":environmentId") && input.environmentId === undefined
-        ? { environmentId: environment.value }
+      ...(environmentParameter && input[environmentParameter] === undefined
+        ? { [environmentParameter]: environment.value }
         : {}),
     },
   };
+}
+
+async function readSessionContext(
+  sessionId: string | null,
+  sessionStore: McpSessionStore,
+): Promise<{ ok: true; value: McpSessionContext | undefined } | { ok: false; message: string }> {
+  try {
+    return { ok: true, value: sessionId ? await sessionStore.get(sessionId) : undefined };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function environmentScopeParameter(
+  path: string,
+): "environmentId" | "targetEnvironmentId" | undefined {
+  if (path.includes(":environmentId")) return "environmentId";
+  if (path.includes(":targetEnvironmentId")) return "targetEnvironmentId";
+  return undefined;
 }
 
 function resolveScopeAxis(
@@ -117,7 +127,7 @@ function resolveScopeAxis(
   session: string | undefined,
   required: boolean,
   name: "App" | "Environment",
-  parameter: "appId" | "environmentId",
+  parameter: string,
 ): { ok: true; value: string | undefined } | { ok: false; message: string } {
   const value = explicit ?? session;
   if (!required || (typeof value === "string" && value.length > 0)) {
@@ -136,9 +146,7 @@ function inputRecord(value: unknown): Record<string, unknown> {
 }
 
 export function parseToolCall(params: unknown): { name: string; arguments: unknown } | null {
-  if (!params || typeof params !== "object" || Array.isArray(params)) {
-    return null;
-  }
+  if (!params || typeof params !== "object" || Array.isArray(params)) return null;
   const call = params as { name?: unknown; arguments?: unknown };
   return typeof call.name === "string"
     ? { name: call.name, arguments: call.arguments ?? {} }

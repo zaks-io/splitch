@@ -170,11 +170,13 @@ describe("mcp server errors and config", () => {
     expect(body.result.structuredContent).toEqual(validationError);
   });
 
-  it("keeps wrangler config free of D1/KV/DO/Tinybird bindings", async () => {
+  it("keeps wrangler config limited to the MCP session Durable Object", async () => {
     const config = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
 
-    expect(config).not.toMatch(/d1_databases|kv_namespaces|durable_objects/i);
+    expect(config).not.toMatch(/d1_databases|kv_namespaces/i);
     expect(config).not.toMatch(/tinybird|analytics_engine_datasets/i);
+    expect(config.match(/"name": "MCP_SESSIONS"/g)).toHaveLength(3);
+    expect(config.match(/"class_name": "McpSessionDurableObject"/g)).toHaveLength(3);
   });
 });
 
