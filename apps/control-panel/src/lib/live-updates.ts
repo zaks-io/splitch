@@ -163,10 +163,10 @@ async function invalidateNudgeWithRetry(
       await queryClient.invalidateQueries({ queryKey: prefix }, { throwOnError: true });
       return;
     } catch {
-      const nextRetryMs = reconnectDelaysMs[attempt + 1];
+      const nextRetryMs = reconnectDelaysMs[attempt];
       reportFailure({ attempt: attempt + 1, nextRetryMs });
-      if (nextRetryMs === undefined) return;
-      await wait(jitteredReconnectDelay(attempt + 1));
+      if (attempt === reconnectDelaysMs.length - 1) return;
+      await wait(jitteredReconnectDelay(attempt));
     }
   }
 }

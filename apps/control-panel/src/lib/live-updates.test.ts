@@ -17,7 +17,10 @@ type FakeSocket = {
 const scope = { appId: "app_1", environmentId: "env_dev" };
 
 describe("live updates", () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
 
   it("invalidates only the nudged flag prefix", async () => {
     const queryClient = queryClientStub({ version: 2 });
@@ -135,6 +138,26 @@ describe("live updates", () => {
     connection.stop();
     vi.advanceTimersByTime(60_000);
     expect(socketAt(sockets, 0).sendSpy).toHaveBeenCalledOnce();
+  });
+
+  it("retries failed nudge refetches after 2s, then 4s before the terminal 8s failure", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const attempts: number[] = [];
+    const queryClient = queryClientStub();
+    const startedAt = Date.now();
+    queryClient.invalidateQueries.mockImplementation(() => {
+      attempts.push(Date.now());
+      return Promise.reject(new Error("read API unavailable"));
+    });
+
+    const pending = handleNudge(message("flag_1", 1).data, scope, queryClient.client);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(4_000);
+    await pending;
+
+    expect(attempts.map((at) => at - startedAt)).toEqual([0, 2_000, 6_000]);
   });
 });
 
