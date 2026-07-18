@@ -5,11 +5,9 @@ import { createNudgeRefetchFailureHandler } from "./panel-observability";
 import { type AppEnvironmentScope, nudgeInvalidationPrefix, queryKeys } from "./query-keys";
 
 const reconnectDelaysMs = [2_000, 4_000, 8_000] as const;
-const sessionRevalidationIntervalMs = 60_000;
 
 type LiveUpdateSocket = {
   close(): void;
-  send?(message: string): void;
   onclose: ((event: CloseEvent) => unknown) | null;
   onerror: ((event: Event) => unknown) | null;
   onmessage: ((event: MessageEvent) => void) | null;
@@ -22,6 +20,7 @@ export type LiveUpdateConnectionOptions = {
   readonly createSocket?: SocketFactory;
   readonly onStaleDataChange?: (isStale: boolean) => void;
   readonly random?: () => number;
+  readonly refetchRoute?: () => Promise<void>;
   readonly scope: AppEnvironmentScope;
   readonly url: string;
   readonly queryClient: QueryClient;
@@ -29,7 +28,6 @@ export type LiveUpdateConnectionOptions = {
 
 export class LiveUpdateConnection {
   private attempts = 0;
-  private revalidationTimer: Timer | undefined;
   private reconnectTimer: Timer | undefined;
   private socket: LiveUpdateSocket | undefined;
   private stopped = false;
@@ -45,7 +43,6 @@ export class LiveUpdateConnection {
     this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
-    this.stopSessionRevalidation();
     this.socket?.close();
     this.socket = undefined;
     this.options.queryClient.invalidateQueries({
@@ -61,7 +58,6 @@ export class LiveUpdateConnection {
     socket.onopen = () => {
       if (socket !== this.socket || this.stopped) return;
       this.attempts = 0;
-      this.startSessionRevalidation(socket);
       void this.recoverAfterConnect(socket);
     };
     socket.onmessage = (event) => {
@@ -73,7 +69,6 @@ export class LiveUpdateConnection {
     socket.onerror = () => socket.close();
     socket.onclose = () => {
       if (socket !== this.socket || this.stopped) return;
-      this.stopSessionRevalidation();
       this.scheduleReconnect();
     };
   }
@@ -85,31 +80,15 @@ export class LiveUpdateConnection {
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
   }
 
-  private startSessionRevalidation(socket: LiveUpdateSocket): void {
-    this.stopSessionRevalidation();
-    if (!socket.send) return;
-    this.revalidationTimer = setInterval(() => {
-      if (socket !== this.socket || this.stopped) return;
-      try {
-        socket.send?.("revalidate");
-      } catch {
-        socket.close();
-      }
-    }, sessionRevalidationIntervalMs);
-  }
-
   private async recoverAfterConnect(socket: LiveUpdateSocket): Promise<void> {
     const recovered = await invalidateWithRetry(
       this.options.queryClient,
       queryKeys.app.root(this.options.scope.appId, this.options.scope.environmentId),
+      undefined,
+      this.options.refetchRoute,
     );
     if (socket !== this.socket || this.stopped) return;
     this.options.onStaleDataChange?.(!recovered);
-  }
-
-  private stopSessionRevalidation(): void {
-    if (this.revalidationTimer) clearInterval(this.revalidationTimer);
-    this.revalidationTimer = undefined;
   }
 }
 
@@ -172,10 +151,12 @@ async function invalidateWithRetry(
   queryClient: QueryClient,
   queryKey: ReturnType<(typeof nudgeInvalidationPrefix)[InvalidatableNudgeEntity]>,
   onRetry?: (failure: { attempt: number; nextRetryMs: number }) => void,
+  refetchRoute?: () => Promise<void>,
 ): Promise<boolean> {
   for (let retry = 0; retry <= reconnectDelaysMs.length; retry += 1) {
     try {
-      await queryClient.invalidateQueries({ queryKey }, { throwOnError: true });
+      await queryClient.invalidateQueries({ queryKey, refetchType: "all" }, { throwOnError: true });
+      await refetchRoute?.();
       return true;
     } catch {
       if (retry === reconnectDelaysMs.length) return false;

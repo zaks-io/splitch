@@ -1,6 +1,9 @@
 import { env } from "cloudflare:workers";
+import { evictDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { createRepository } from "@splitch/db";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { authorizeLiveUpdateUpgrade } from "../../control-panel/src/lib/live-update-authorization.js";
+import { handleLiveUpdateUpgrade } from "../../control-panel/src/lib/live-update-upgrade.js";
 import { createApp } from "../src/app.js";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver.js";
 import { durableConfigStoreAccess, LIVE_UPDATE_CONTEXT_HEADER } from "../src/config-store-do.js";
@@ -72,8 +75,8 @@ describe("live-update Durable Object", () => {
     expect(response.webSocket).toBeNull();
   });
 
-  it("closes a revoked panel session with the authorization policy close code", async () => {
-    const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${ids.environmentId}`);
+  it("closes a silent revoked panel session after hibernation", async () => {
+    const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${ids.environmentId}:revoked`);
     const context = await seededLiveUpdateContext();
     const response = await stub.fetch("https://live.test/connect", {
       headers: { upgrade: "websocket", [LIVE_UPDATE_CONTEXT_HEADER]: JSON.stringify(context) },
@@ -83,8 +86,9 @@ describe("live-update Durable Object", () => {
     socket?.accept();
     const closed = waitForClose(socket as WebSocket);
 
+    await evictDurableObject(stub);
     await env.SESSION_STORE.delete(`session:${context.sessionTokenHash}`);
-    socket?.send("revalidate");
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
 
     await expect(closed).resolves.toMatchObject({ code: 1008 });
   });
@@ -138,7 +142,79 @@ describe("live-update Durable Object", () => {
     response.webSocket?.accept();
     response.webSocket?.close(1000, "test done");
   });
+
+  it.each([
+    { name: "invalid session", path: "/config-org/config-app/production/live", seed: false },
+    {
+      name: "revoked session",
+      path: "/config-org/config-app/production/live",
+      seed: true,
+      revoke: true,
+    },
+    {
+      name: "unauthorized App",
+      path: "/config-org/other-config-app/production/live",
+      seed: true,
+    },
+    {
+      name: "unauthorized Environment",
+      path: "/config-org/config-app/missing/live",
+      seed: true,
+    },
+  ])("rejects $name at the panel boundary without a DO connector", async ({
+    path,
+    seed,
+    revoke,
+  }) => {
+    const token = `spl_${crypto.randomUUID().replaceAll("-", "").repeat(2)}`;
+    const tokenHash = await hashToken(token);
+    if (seed) await seedPanelSession(tokenHash);
+    if (revoke) await env.SESSION_STORE.delete(`session:${tokenHash}`);
+    const connect = vi.fn(async () => new Response(null, { status: 101 }));
+
+    const request = new Request(`https://panel.test${path}`, {
+      headers: {
+        cookie: `__session=${token}`,
+        origin: "https://panel.test",
+        upgrade: "websocket",
+      },
+    });
+    const response = await handleLiveUpdateUpgrade(request, {
+      authorize: (upgradeRequest, params) =>
+        authorizeLiveUpdateUpgrade(upgradeRequest, env, params),
+      connect,
+    });
+
+    expect(response?.status).toBe(seed && !revoke ? 404 : 401);
+    expect(connect).not.toHaveBeenCalled();
+  });
 });
+
+async function seedPanelSession(sessionTokenHash: string): Promise<void> {
+  await env.SESSION_STORE.put(
+    `session:${sessionTokenHash}`,
+    JSON.stringify({
+      version: 2,
+      userId: USER_ID,
+      expiresAt: Math.floor(Date.now() / 1_000) + 3_600,
+      orgs: [
+        {
+          orgId: ids.orgId,
+          orgSlug: "config-org",
+          orgRole: "admin",
+          isProvisional: false,
+          demoExpiresAt: null,
+          apps: [{ appId: ids.appId, appSlug: "config-app", role: "admin" }],
+        },
+      ],
+    }),
+  );
+}
+
+async function hashToken(token: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 async function seededLiveUpdateContext() {
   const sessionTokenHash = "a".repeat(64);

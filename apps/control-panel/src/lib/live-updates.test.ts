@@ -6,8 +6,6 @@ import { queryKeys } from "./query-keys";
 type FakeSocket = {
   close: () => void;
   closeSpy: ReturnType<typeof vi.fn>;
-  send: (message: string) => void;
-  sendSpy: ReturnType<typeof vi.fn>;
   onclose: ((event: CloseEvent) => unknown) | null;
   onerror: ((event: Event) => unknown) | null;
   onmessage: ((event: MessageEvent) => void) | null;
@@ -36,7 +34,7 @@ describe("live updates", () => {
     );
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith(
-      { queryKey: queryKeys.flag.prefix(scope.appId, scope.environmentId) },
+      { queryKey: queryKeys.flag.prefix(scope.appId, scope.environmentId), refetchType: "all" },
       { throwOnError: true },
     );
   });
@@ -76,11 +74,11 @@ describe("live updates", () => {
       queryKey: queryKeys.app.root(scope.appId, scope.environmentId),
     });
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith(
-      { queryKey: queryKeys.flag.prefix("app_1", "env_prod") },
+      { queryKey: queryKeys.flag.prefix("app_1", "env_prod"), refetchType: "all" },
       { throwOnError: true },
     );
     expect(queryClient.invalidateQueries).not.toHaveBeenCalledWith(
-      { queryKey: queryKeys.flag.prefix("app_1", "env_dev") },
+      { queryKey: queryKeys.flag.prefix("app_1", "env_dev"), refetchType: "all" },
       { throwOnError: true },
     );
   });
@@ -90,6 +88,8 @@ describe("live updates", () => {
     const sockets: FakeSocket[] = [];
     const stale = vi.fn();
     const queryClient = queryClientStub();
+    let routeRefetch = () => Promise.resolve();
+    const refetchRoute = vi.fn(() => routeRefetch());
     const connection = new LiveUpdateConnection({
       createSocket: () => {
         const socket = fakeSocket();
@@ -99,6 +99,7 @@ describe("live updates", () => {
       onStaleDataChange: stale,
       queryClient: queryClient.client,
       random: () => 0.5,
+      refetchRoute,
       scope,
       url: "ws://panel.test/acme/app/dev/live",
     });
@@ -115,38 +116,15 @@ describe("live updates", () => {
     expect(stale).toHaveBeenCalledWith(true);
     vi.advanceTimersByTime(8_000);
     const recovery = deferred<void>();
-    queryClient.invalidateQueries.mockImplementationOnce(() => recovery.promise);
+    routeRefetch = () => recovery.promise;
     socketAt(sockets, 3).onopen?.({} as Event);
 
     await vi.advanceTimersByTimeAsync(0);
     expect(stale).toHaveBeenLastCalledWith(true);
+    expect(refetchRoute).toHaveBeenCalledTimes(2);
     recovery.resolve();
     await vi.advanceTimersByTimeAsync(0);
     expect(stale).toHaveBeenLastCalledWith(false);
-  });
-
-  it("revalidates the existing server-bound session without sending credentials or scope", () => {
-    vi.useFakeTimers();
-    const sockets: FakeSocket[] = [];
-    const connection = new LiveUpdateConnection({
-      createSocket: () => {
-        const socket = fakeSocket();
-        sockets.push(socket);
-        return socket;
-      },
-      queryClient: queryClientStub().client,
-      scope,
-      url: "ws://panel.test/acme/app/dev/live",
-    });
-
-    connection.start();
-    socketAt(sockets, 0).onopen?.({} as Event);
-    vi.advanceTimersByTime(60_000);
-
-    expect(socketAt(sockets, 0).sendSpy).toHaveBeenCalledWith("revalidate");
-    connection.stop();
-    vi.advanceTimersByTime(60_000);
-    expect(socketAt(sockets, 0).sendSpy).toHaveBeenCalledOnce();
   });
 
   it("retries failed nudge refetches after 2s, 4s, and 8s before giving up", async () => {
@@ -173,12 +151,9 @@ describe("live updates", () => {
 
 function fakeSocket(): FakeSocket {
   const closeSpy = vi.fn();
-  const sendSpy = vi.fn();
   return {
     close: closeSpy as () => void,
     closeSpy,
-    send: (message) => sendSpy(message),
-    sendSpy,
     onclose: null,
     onerror: null,
     onmessage: null,

@@ -16,6 +16,7 @@ export interface ConfigStoreDurableObjectNamespace {
 
 interface ConfigStoreDurableObjectStub extends ConfigStoreWriter {
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  setLiveUpdatesAvailable(available: boolean): Promise<void>;
 }
 
 interface ConfigStoreLiveUpdates {
@@ -99,6 +100,9 @@ export class ConfigStoreDurableObject
     if (!context || !(await this.isAuthorized(context))) {
       return new Response("live update authorization required", { status: 403 });
     }
+    if ((await this.ctx.storage.get<boolean>(LIVE_UPDATES_AVAILABLE_KEY)) === false) {
+      return new Response("live updates unavailable", { status: 503 });
+    }
 
     const pair = new WebSocketPair();
     const client = pair[0];
@@ -122,6 +126,14 @@ export class ConfigStoreDurableObject
   override async alarm(): Promise<void> {
     await Promise.all(this.ctx.getWebSockets().map((socket) => this.revalidate(socket)));
     await this.rescheduleExpiryAlarm();
+  }
+
+  async setLiveUpdatesAvailable(available: boolean): Promise<void> {
+    await this.ctx.storage.put(LIVE_UPDATES_AVAILABLE_KEY, available);
+    if (available) return;
+    for (const socket of this.ctx.getWebSockets()) {
+      socket.close(SERVICE_RESTART_CLOSE_CODE, "live update server unavailable");
+    }
   }
 
   private store(): ConfigStoreWriter {
@@ -171,7 +183,9 @@ export class ConfigStoreDurableObject
       .filter((expiresAt): expiresAt is number => expiresAt !== undefined);
     const nextExpiry = Math.min(...expiries);
     if (Number.isFinite(nextExpiry)) {
-      await this.ctx.storage.setAlarm(nextExpiry * 1_000);
+      await this.ctx.storage.setAlarm(
+        Math.min(nextExpiry * 1_000, Date.now() + SESSION_REVALIDATION_INTERVAL_MS),
+      );
     } else {
       await this.ctx.storage.deleteAlarm();
     }
@@ -182,6 +196,9 @@ export const LIVE_UPDATE_CONTEXT_HEADER = "x-splitch-live-update-context";
 const AUTHORIZATION_POLICY_CLOSE_CODE = 1008;
 
 const PANEL_SESSION_KEY_PREFIX = "session:";
+const SESSION_REVALIDATION_INTERVAL_MS = 60_000;
+const LIVE_UPDATES_AVAILABLE_KEY = "liveUpdatesAvailable";
+const SERVICE_RESTART_CLOSE_CODE = 1012;
 
 function parseConnectionContextHeader(value: string | null): unknown {
   if (!value) return null;

@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { Button } from "@splitch/ui/components/button";
 import { StaleDataToast } from "@splitch/ui/state/stale-data-toast";
 import { useEffect, useState } from "react";
+import { useRouter } from "@tanstack/react-router";
 import { LiveUpdateConnection, liveUpdateUrl } from "#lib/live-updates";
 import type { AppEnvironmentScope } from "#lib/query-keys";
 
@@ -11,6 +12,7 @@ type LiveUpdatesClientProps = {
 };
 
 export function LiveUpdatesClient({ queryClient, scope }: LiveUpdatesClientProps) {
+  const router = useRouter();
   const [isStale, setIsStale] = useState(false);
   const [isToastDismissed, setIsToastDismissed] = useState(false);
   const { appId, appSlug, env, environmentId, orgSlug } = scope;
@@ -19,6 +21,7 @@ export function LiveUpdatesClient({ queryClient, scope }: LiveUpdatesClientProps
     const liveScope = { appId, environmentId };
     const connection = new LiveUpdateConnection({
       queryClient,
+      refetchRoute: () => router.invalidate(),
       scope: liveScope,
       url: liveUpdateUrl({ appSlug, env, orgSlug }),
       onStaleDataChange: (stale) => {
@@ -28,7 +31,7 @@ export function LiveUpdatesClient({ queryClient, scope }: LiveUpdatesClientProps
     });
     connection.start();
     return () => connection.stop();
-  }, [appId, appSlug, env, environmentId, orgSlug, queryClient]);
+  }, [appId, appSlug, env, environmentId, orgSlug, queryClient, router]);
 
   return isStale && !isToastDismissed ? (
     <StaleDataToast

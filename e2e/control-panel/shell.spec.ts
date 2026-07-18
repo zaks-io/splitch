@@ -73,47 +73,12 @@ test.describe("Control Panel local full-stack harness", () => {
 
   test("surfaces stale data after server loss and clears it only after refetch recovery", async ({
     page,
-  }) => {
-    await page.addInitScript(() => {
-      class TestWebSocket {
-        static sockets: TestWebSocket[] = [];
-        onclose: ((event: CloseEvent) => unknown) | null = null;
-        onerror: ((event: Event) => unknown) | null = null;
-        onmessage: ((event: MessageEvent) => unknown) | null = null;
-        onopen: ((event: Event) => unknown) | null = null;
-
-        constructor(_url: string) {
-          TestWebSocket.sockets.push(this);
-        }
-
-        close() {
-          this.onclose?.(new CloseEvent("close"));
-        }
-
-        open() {
-          this.onopen?.(new Event("open"));
-        }
-
-        send() {}
-      }
-
-      const testWindow = window as typeof window & { __liveUpdateSockets: TestWebSocket[] };
-      testWindow.__liveUpdateSockets = TestWebSocket.sockets;
-      testWindow.WebSocket = TestWebSocket as unknown as typeof WebSocket;
-    });
+  }, testInfo) => {
     await page.goto("/acme-labs/checkout-api/dev");
-
-    await expect.poll(() => page.evaluate(() => window.__liveUpdateSockets.length)).toBe(1);
-    await page.evaluate(() => window.__liveUpdateSockets[0]?.open());
-    await page.evaluate(() => window.__liveUpdateSockets[0]?.close());
-    await expect.poll(() => page.evaluate(() => window.__liveUpdateSockets.length)).toBe(2);
-    await page.evaluate(() => window.__liveUpdateSockets[1]?.close());
-    await expect.poll(() => page.evaluate(() => window.__liveUpdateSockets.length)).toBe(3);
-    await page.evaluate(() => window.__liveUpdateSockets[2]?.close());
-
+    await expect(page.getByText("Data may be out of date")).toBeHidden();
+    await setLiveUpdateServer(testInfo, "down");
     await expect(page.getByText("Data may be out of date")).toBeVisible();
-    await expect.poll(() => page.evaluate(() => window.__liveUpdateSockets.length)).toBe(4);
-    await page.evaluate(() => window.__liveUpdateSockets[3]?.open());
+    await setLiveUpdateServer(testInfo, "up");
     await expect(page.getByText("Data may be out of date")).toBeHidden();
   });
 
@@ -124,3 +89,16 @@ test.describe("Control Panel local full-stack harness", () => {
     expect(response.ok()).toBe(true);
   });
 });
+
+async function setLiveUpdateServer(
+  testInfo: { project: { metadata: Record<string, unknown> } },
+  state: "up" | "down",
+): Promise<void> {
+  const runId = testInfo.project.metadata.localE2eRunId;
+  if (typeof runId !== "string") throw new Error("missing local E2E run ID");
+  const response = await fetch(
+    `http://127.0.0.1:18790/__test/live-updates/app_checkout_e2e/env_checkout_dev_e2e/${state}`,
+    { method: "POST", headers: { "x-splitch-local-e2e-run-id": runId } },
+  );
+  expect(response.ok).toBe(true);
+}
