@@ -24,8 +24,8 @@
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
-    "AUTH_API_ORIGIN": "http://127.0.0.1:8791",
-    "CONTROL_PLANE_API_ORIGIN": "http://127.0.0.1:8787",
+    "AUTH_API_ORIGIN": "http://localhost:8791",
+    "CONTROL_PLANE_API_ORIGIN": "http://localhost:8787",
     "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788"
   },
   "durable_objects": {

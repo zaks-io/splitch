@@ -64,7 +64,8 @@
     "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
   },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local"
+    "SPLITCH_PLATFORM_TARGET": "local",
+    "CONTROL_PLANE_ORIGIN": "http://localhost:8787"
   },
   "env": {
     "shared-preview": {

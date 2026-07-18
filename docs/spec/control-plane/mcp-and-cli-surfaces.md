@@ -165,8 +165,8 @@ session only.
 
 ```
 Agent connects to MCP server URL
-  → 401 + WWW-Authenticate: Bearer realm="splitch", resource_metadata="/.well-known/oauth-protected-resource{/mcp}"
-  → GET /.well-known/oauth-protected-resource{/mcp}   → { resource, authorization_servers }
+  → 401 + WWW-Authenticate: Bearer realm="splitch", resource_metadata="${mcpOrigin}/.well-known/oauth-protected-resource{/mcp}"
+  → GET ${mcpOrigin}/.well-known/oauth-protected-resource{/mcp}   → { resource, authorization_servers }
   → GET /.well-known/oauth-authorization-server  → { agent_auth: { identity_endpoint, claim_endpoint, ... } }
   → Agent picks an advertised door
   → POST /agent/identity → identity_assertion

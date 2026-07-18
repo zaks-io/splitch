@@ -20,7 +20,7 @@ import { corsHeaders, jsonResponse, routeTransportRequest } from "./mcp-transpor
 import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
 
 const protocolVersion = "2025-06-18";
-const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
+const defaultControlPlaneBaseUrl = "http://localhost:8787";
 const defaultEvaluationBaseUrl = "http://127.0.0.1:8788";
 const defaultAnalysisBaseUrl = "http://127.0.0.1:8790";
 const internalAnalysisBaseUrl = "https://analysis-api.internal";

@@ -4,7 +4,7 @@ import type { McpSessionStore } from "./mcp-session-context";
 import { McpSessionNotFoundError } from "./mcp-session-store";
 
 const protectedResourcePath = "/.well-known/oauth-protected-resource";
-const defaultAuthBaseUrl = "http://127.0.0.1:8791";
+const defaultAuthBaseUrl = "http://localhost:8791";
 
 export async function routeTransportRequest(options: {
   request: Request;
