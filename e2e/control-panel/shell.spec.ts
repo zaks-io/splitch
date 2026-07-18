@@ -36,4 +36,11 @@ test.describe("Control Panel local full-stack harness", () => {
     expect([302, 307]).toContain(response.status());
     expect(response.headers().location).toContain("/auth/login?returnTo=");
   });
+
+  test.afterAll(async ({ request }, workerInfo) => {
+    const runId = workerInfo.project.metadata.localE2eRunId;
+    expect(typeof runId).toBe("string");
+    const response = await request.get(`http://127.0.0.1:18799/health?run=${runId}`);
+    expect(response.ok()).toBe(true);
+  });
 });

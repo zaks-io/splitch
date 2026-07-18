@@ -62,7 +62,7 @@ const workers = [
 
 export async function waitForHealth(
   worker,
-  { timeoutMs = 60_000, fetchImpl = fetch, pollMs = 250 } = {},
+  { timeoutMs = 60_000, fetchImpl = fetch, pollMs = 250, runId } = {},
 ) {
   const deadline = Date.now() + timeoutMs;
   let lastFailure = "no response";
@@ -70,16 +70,22 @@ export async function waitForHealth(
     if (worker.process?.exitCode !== null) {
       throw new Error(`${worker.name} exited ${worker.process.exitCode} before becoming healthy`);
     }
-    try {
-      const response = await fetchImpl(`${worker.origin}/health`);
-      if (response.ok) return;
-      lastFailure = `HTTP ${response.status}`;
-    } catch (error) {
-      lastFailure = error instanceof Error ? error.message : String(error);
-    }
+    lastFailure = await probeHealth(worker, fetchImpl, runId);
+    if (!lastFailure) return;
     await new Promise((done) => setTimeout(done, pollMs));
   }
   throw new Error(`${worker.name} failed health check: ${lastFailure}`);
+}
+
+async function probeHealth(worker, fetchImpl, runId) {
+  try {
+    const response = await fetchImpl(`${worker.origin}/health`);
+    if (!response.ok) return `HTTP ${response.status}`;
+    const responseRunId = response.headers.get("x-splitch-local-e2e-run-id");
+    return !runId || responseRunId === runId ? "" : "health response belongs to another run";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
 }
 
 export function watchWorker(worker) {
@@ -106,10 +112,11 @@ export async function waitForFleetReady(running, healthOptions) {
   ]);
 }
 
-function createReadinessServer() {
+function createReadinessServer(runId) {
   let ready = false;
   const server = createServer((request, response) => {
-    if (request.url !== "/health") {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1:18799");
+    if (url.pathname !== "/health" || url.searchParams.get("run") !== runId) {
       response.writeHead(404).end("not found");
       return;
     }
@@ -187,17 +194,29 @@ function seedLocalResources() {
 }
 
 async function main() {
+  const runId = process.argv[2];
+  if (!runId) throw new Error("missing local E2E run ID");
   seedLocalResources();
   const running = workers.map((worker) => {
-    const child = spawn(worker.command, worker.args, {
+    const args =
+      worker.name === "control-plane-api"
+        ? [...worker.args, "--var", `SPLITCH_LOCAL_E2E_RUN_ID:${runId}`]
+        : worker.args;
+    const child = spawn(worker.command, args, {
       cwd: repoRoot,
-      env: { ...process.env, ...localBindings, ...worker.env, CI: "true" },
+      env: {
+        ...process.env,
+        ...localBindings,
+        ...worker.env,
+        CI: "true",
+        SPLITCH_LOCAL_E2E_RUN_ID: runId,
+      },
       stdio: "inherit",
     });
     const runningWorker = { ...worker, process: child };
     return { ...runningWorker, stopped: watchWorker(runningWorker) };
   });
-  const readiness = createReadinessServer();
+  const readiness = createReadinessServer(runId);
   await listen(readiness.server);
 
   const stop = () => {
@@ -207,7 +226,7 @@ async function main() {
   process.once("SIGTERM", stop);
 
   try {
-    await waitForFleetReady(running);
+    await waitForFleetReady(running, { runId });
     readiness.markReady();
     console.log(`local-e2e-fleet: healthy (${running.map((worker) => worker.name).join(", ")})`);
     await failOnWorkerStop(running);

@@ -33,6 +33,24 @@ test("local E2E fleet health checks reject an exited Worker immediately", async 
   );
 });
 
+test("local E2E fleet rejects a healthy response owned by another run", async () => {
+  await assert.rejects(
+    waitForHealth(
+      { name: "stale-worker", origin: "http://stale.test", process: { exitCode: null } },
+      {
+        runId: "current-run",
+        timeoutMs: 10,
+        pollMs: 1,
+        fetchImpl: async () =>
+          new Response("ready", {
+            headers: { "x-splitch-local-e2e-run-id": "stale-run" },
+          }),
+      },
+    ),
+    /stale-worker failed health check: health response belongs to another run/,
+  );
+});
+
 test("fleet readiness waits for every Worker, not only the panel", async () => {
   const running = [
     fakeWorker("control-panel", "http://panel.test"),

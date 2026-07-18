@@ -1,9 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { defineConfig } from "@playwright/test";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
+const runId = process.env.SPLITCH_LOCAL_E2E_RUN_ID ?? randomUUID();
+process.env.SPLITCH_LOCAL_E2E_RUN_ID = runId;
 
 export default defineConfig({
+  metadata: { localE2eRunId: runId },
   testDir: resolve(repoRoot, "e2e/control-panel"),
   timeout: 45_000,
   expect: { timeout: 10_000 },
@@ -18,9 +22,9 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "node scripts/local-e2e-fleet.mjs",
+    command: `node scripts/local-e2e-fleet.mjs ${runId}`,
     cwd: repoRoot,
-    url: "http://127.0.0.1:18799/health",
+    url: `http://127.0.0.1:18799/health?run=${runId}`,
     reuseExistingServer: false,
     timeout: 120_000,
   },
