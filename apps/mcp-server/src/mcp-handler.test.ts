@@ -57,12 +57,15 @@ describe("mcp server Streamable HTTP transport", () => {
     const body = (await response.json()) as JsonRpcSuccess<{ tools: unknown[] }>;
 
     expect(response.status).toBe(200);
-    expect(body.result.tools).toHaveLength(deriveMcpProtocolTools().length);
+    expect(body.result.tools).toHaveLength(deriveMcpProtocolTools().length + 1);
     expect(body.result.tools).toContainEqual(
       expect.objectContaining({
         name: "flags_list",
         inputSchema: expect.objectContaining({ type: "object" }),
       }),
+    );
+    expect(body.result.tools).toContainEqual(
+      expect.objectContaining({ name: "context_use", inputSchema: expect.any(Object) }),
     );
   });
 
@@ -207,17 +210,24 @@ async function mcp(
     controlPlaneBaseUrl?: string;
     evaluationBaseUrl?: string;
     analysisBaseUrl?: string;
+    sessionId?: string;
+    authorization?: string;
   } = {},
 ): Promise<Response> {
+  const { sessionId, authorization = token, ...origins } = baseUrls;
   return handleMcpServerRequest({
     request: new Request("https://mcp.test/mcp", {
       method: "POST",
-      headers: { authorization: token, "content-type": "application/json" },
+      headers: {
+        authorization,
+        "content-type": "application/json",
+        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+      },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     }),
     service,
     platformTarget: "local",
-    ...baseUrls,
+    ...origins,
   });
 }
 
@@ -244,20 +254,27 @@ async function handleControlPlaneRequest(
     body,
   });
 
+  const mockResponse = controlPlaneResponse(request);
+  writeJson(response, mockResponse.status, mockResponse.body);
+}
+
+function controlPlaneResponse(request: IncomingMessage): { status: number; body: unknown } {
   if (request.method === "GET" && request.url === "/apps/app_local/flags") {
-    writeJson(response, 200, upstreamFlagPage);
-    return;
+    return { status: 200, body: upstreamFlagPage };
   }
   if (request.method === "PATCH" && request.url === "/apps/app_local/flags/flag_checkout") {
-    writeJson(response, 200, updatedFlag);
-    return;
+    return { status: 200, body: updatedFlag };
   }
   if (request.method === "POST" && request.url === "/apps/app_local/flags") {
-    writeJson(response, 400, validationError);
-    return;
+    return { status: 400, body: validationError };
   }
-
-  writeJson(response, 404, { code: "FLAG_NOT_FOUND", message: "not found", details: {} });
+  if (
+    request.method === "GET" &&
+    /^\/apps\/[^/]+\/envs\/[^/]+\/experiments$/.test(request.url ?? "")
+  ) {
+    return { status: 200, body: { items: [] } };
+  }
+  return { status: 404, body: { code: "FLAG_NOT_FOUND", message: "not found", details: {} } };
 }
 
 async function readRequestBody(request: IncomingMessage): Promise<string> {

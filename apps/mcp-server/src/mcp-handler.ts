@@ -7,17 +7,23 @@ import {
   type RouteOwner,
 } from "@splitch/contracts";
 import {
-  isJsonRpcRequest,
   JSON_RPC_INTERNAL_ERROR,
-  JSON_RPC_INVALID_REQUEST,
   JSON_RPC_METHOD_NOT_FOUND,
-  JSON_RPC_PARSE_ERROR,
   type JsonRpcId,
   type JsonRpcRequest,
   type JsonRpcResponse,
   jsonRpcError,
   jsonRpcResult,
 } from "./json-rpc";
+import { readJsonRpcRequest } from "./mcp-request";
+import {
+  contextUseTool,
+  createMcpSessionStore,
+  parseToolCall,
+  resolveScope,
+  setSessionContext,
+  type McpSessionStore,
+} from "./mcp-session-context";
 
 const protocolVersion = "2025-06-18";
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
@@ -25,11 +31,14 @@ const defaultEvaluationBaseUrl = "http://127.0.0.1:8788";
 const defaultAnalysisBaseUrl = "http://127.0.0.1:8790";
 const internalAnalysisBaseUrl = "https://analysis-api.internal";
 const tools = deriveMcpProtocolTools();
-const toolNames = new Set(tools.map((tool) => tool.name));
+const protocolTools = [...tools, contextUseTool];
+const toolNames = new Set(protocolTools.map((tool) => tool.name));
 type McpRoutableOwner = "control-plane-api" | "evaluation-api" | "analysis-api";
 type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
 type OperationSdkResolver = () => OperationSdk;
 type OperationSdks = Record<McpRoutableOwner, OperationSdkResolver>;
+
+const sessions = createMcpSessionStore();
 
 export interface McpServerRequestOptions {
   readonly request: Request;
@@ -40,6 +49,7 @@ export interface McpServerRequestOptions {
   readonly analysisBaseUrl?: string;
   readonly controlPlaneFetch?: typeof fetch;
   readonly analysisFetch?: typeof fetch;
+  readonly sessionStore?: McpSessionStore;
 }
 
 export async function handleMcpServerRequest(options: McpServerRequestOptions): Promise<Response> {
@@ -65,12 +75,18 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
   }
 
   const sdks = createOperationSdks(options);
+  const sessionStore = options.sessionStore ?? sessions;
+  const sessionId = options.request.headers.get("mcp-session-id");
   const response = await dispatch(
     request.value,
     sdks,
     options.request.headers.get("authorization"),
+    sessionId,
+    sessionStore,
   );
-  return jsonResponse(response);
+  const responseSessionId =
+    request.value.method === "initialize" ? sessionStore.create() : undefined;
+  return jsonResponse(response, 200, responseSessionId);
 }
 
 function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
@@ -159,45 +175,22 @@ function isMcpPath(url: URL): boolean {
   return url.pathname === "/" || url.pathname === "/mcp";
 }
 
-async function readJsonRpcRequest(
-  request: Request,
-): Promise<
-  { ok: true; value: JsonRpcRequest } | { ok: false; status: number; response: JsonRpcResponse }
-> {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return {
-      ok: false,
-      status: 400,
-      response: jsonRpcError(null, JSON_RPC_PARSE_ERROR, "Parse error"),
-    };
-  }
-  if (!isJsonRpcRequest(body)) {
-    return {
-      ok: false,
-      status: 400,
-      response: jsonRpcError(null, JSON_RPC_INVALID_REQUEST, "Invalid Request"),
-    };
-  }
-  return { ok: true, value: body };
-}
-
 async function dispatch(
   request: JsonRpcRequest,
   sdks: OperationSdks,
   authorization: string | null,
+  sessionId: string | null,
+  sessionStore: McpSessionStore,
 ): Promise<JsonRpcResponse> {
   const id = request.id ?? null;
   if (request.method === "initialize") {
     return jsonRpcResult(id, initializeResult());
   }
   if (request.method === "tools/list") {
-    return jsonRpcResult(id, { tools });
+    return jsonRpcResult(id, { tools: protocolTools });
   }
   if (request.method === "tools/call") {
-    return callTool(id, request.params, sdks, authorization);
+    return callTool(id, request.params, sdks, authorization, sessionId, sessionStore);
   }
   return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
 }
@@ -207,10 +200,15 @@ async function callTool(
   params: unknown,
   sdks: OperationSdks,
   authorization: string | null,
+  sessionId: string | null,
+  sessionStore: McpSessionStore,
 ): Promise<JsonRpcResponse> {
   const call = parseToolCall(params);
   if (!call || !toolNames.has(call.name)) {
     return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
+  }
+  if (call.name === "context_use") {
+    return contextUse(id, call.arguments, sessionId, sessionStore);
   }
   const route = getRoute(call.name);
   if (!route) {
@@ -219,7 +217,11 @@ async function callTool(
 
   try {
     const sdk = sdkForOwner(sdks, route.owner);
-    const result = await sdk.callOperationById(call.name, call.arguments, { authorization });
+    const input = resolveScope(route.path, call.arguments, sessionId, sessionStore);
+    if (!input.ok) {
+      return jsonRpcResult(id, toolResult({ message: input.message }, { isError: true }));
+    }
+    const result = await sdk.callOperationById(call.name, input.value, { authorization });
     return jsonRpcResult(
       id,
       result.ok ? toolResult(result.data) : toolResult(result.error, { isError: true }),
@@ -231,21 +233,26 @@ async function callTool(
   }
 }
 
+function contextUse(
+  id: JsonRpcId,
+  arguments_: unknown,
+  sessionId: string | null,
+  sessionStore: McpSessionStore,
+): JsonRpcResponse {
+  const result = setSessionContext(arguments_, sessionId, sessionStore);
+  return jsonRpcResult(
+    id,
+    result.ok
+      ? toolResult(result.value)
+      : toolResult({ message: result.message }, { isError: true }),
+  );
+}
+
 function sdkForOwner(sdks: OperationSdks, owner: RouteOwner): OperationSdk {
   if (owner === "control-plane-api" || owner === "evaluation-api" || owner === "analysis-api") {
     return sdks[owner]();
   }
   throw new Error(`mcp-server: no API origin configured for route owner "${owner}"`);
-}
-
-function parseToolCall(params: unknown): { name: string; arguments: unknown } | null {
-  if (!params || typeof params !== "object" || Array.isArray(params)) {
-    return null;
-  }
-  const call = params as { name?: unknown; arguments?: unknown };
-  return typeof call.name === "string"
-    ? { name: call.name, arguments: call.arguments ?? {} }
-    : null;
 }
 
 function initializeResult(): Record<string, unknown> {
@@ -264,8 +271,12 @@ function toolResult(value: unknown, options: { isError?: boolean } = {}): Record
   };
 }
 
-function jsonResponse(body: JsonRpcResponse, status = 200): Response {
-  return Response.json(body, { status, headers: corsHeaders() });
+function jsonResponse(body: JsonRpcResponse, status = 200, sessionId?: string): Response {
+  const headers = corsHeaders();
+  if (sessionId) {
+    headers.set("mcp-session-id", sessionId);
+  }
+  return Response.json(body, { status, headers });
 }
 
 function corsHeaders(): Headers {
