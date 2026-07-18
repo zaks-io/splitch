@@ -76,6 +76,12 @@ Org membership controls who can manage the Organization itself (billing, SSO con
 | View Org settings   | yes   | yes   | yes    |
 | Manage trusted IdPs | yes   | no    | no     |
 
+Control Panel App creation stays server-side. The Panel validates its opaque session cookie, sends
+only the session's SHA-256 handle over the Control Plane service binding, and never exposes that
+handle to browser code. The Control Plane resolves the live session actor from shared session KV;
+the `apps_create` handler then applies the owner/admin matrix above from D1. Cached Panel roles do
+not authorize the mutation, and Worker refusals remain the typed response returned to the Panel.
+
 ## App Membership
 
 App membership controls who can read/write Flag, Experiment, and Run config for a specific App.
