@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { deltaNudgeEntities } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { nudgeInvalidationPrefix, queryKeys } from "./query-keys";
 
@@ -53,12 +54,18 @@ describe("Control Panel query keys", () => {
     ]);
   });
 
-  it.each([
-    ["experiment", queryKeys.experiment.prefix(scope.appId, scope.environmentId)],
+  const nudgeCases = [
     ["flag", queryKeys.flag.prefix(scope.appId, scope.environmentId)],
-    ["metric", queryKeys.metric.prefix(scope.appId, scope.environmentId)],
+    ["experiment", queryKeys.experiment.prefix(scope.appId, scope.environmentId)],
+    ["run", queryKeys.experiment.prefix(scope.appId, scope.environmentId)],
     ["segment", queryKeys.segment.prefix(scope.appId, scope.environmentId)],
-  ] as const)("maps %s nudges to the entity prefix", (entity, expected) => {
+  ] as const;
+
+  it("maps every canonical nudge entity", () => {
+    expect(nudgeCases.map(([entity]) => entity)).toEqual(deltaNudgeEntities);
+  });
+
+  it.each(nudgeCases)("maps %s nudges to the entity prefix", (entity, expected) => {
     expect(nudgeInvalidationPrefix[entity](scope.appId, scope.environmentId)).toEqual(expected);
   });
 

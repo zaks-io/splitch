@@ -8,6 +8,12 @@ export interface ControlPanelBindings {
   SENTRY_DSN?: string;
 }
 
+export interface ControlPanelLiveUpdateBindings extends ControlPanelBindings {
+  CONFIG_STORE_WRITER: {
+    getByName(name: string): { fetch(request: Request): Promise<Response> };
+  };
+}
+
 export function controlPanelBindings(raw: unknown): ControlPanelBindings {
   if (!isBindings(raw)) {
     throw new Error("control-panel Worker bindings are unavailable");
@@ -21,6 +27,26 @@ export function controlPanelBindings(raw: unknown): ControlPanelBindings {
     AUTH_API_ORIGIN: requiredString(raw.AUTH_API_ORIGIN, "AUTH_API_ORIGIN"),
     SPLITCH_PLATFORM_TARGET: optionalString(raw.SPLITCH_PLATFORM_TARGET),
     SENTRY_DSN: optionalString(raw.SENTRY_DSN),
+  };
+}
+
+export function controlPanelLiveUpdateBindings(raw: unknown): ControlPanelLiveUpdateBindings {
+  const bindings = controlPanelBindings(raw);
+  if (
+    typeof raw !== "object" ||
+    raw === null ||
+    !("CONFIG_STORE_WRITER" in raw) ||
+    typeof raw.CONFIG_STORE_WRITER !== "object" ||
+    raw.CONFIG_STORE_WRITER === null ||
+    !("getByName" in raw.CONFIG_STORE_WRITER) ||
+    typeof raw.CONFIG_STORE_WRITER.getByName !== "function"
+  ) {
+    throw new Error("control-panel live update Durable Object binding is unavailable");
+  }
+  return {
+    ...bindings,
+    CONFIG_STORE_WRITER:
+      raw.CONFIG_STORE_WRITER as ControlPanelLiveUpdateBindings["CONFIG_STORE_WRITER"],
   };
 }
 

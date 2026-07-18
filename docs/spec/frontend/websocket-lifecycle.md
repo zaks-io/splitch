@@ -63,6 +63,17 @@ This closes the sub-second gap between the loader-seeded first paint and the soc
 Any nudge missed in that window self-heals immediately on connect. There is no delta-replay log,
 no last-seen-version bookkeeping, no `getSince(v)` API.
 
+Reconnect recovery also revalidates the current route loader. The stale-data signal clears only after
+both the Query cache refetch and route revalidation succeed.
+
+## Session revocation
+
+The server owns session revalidation. A panel socket stores only immutable server-derived connection
+metadata in its hibernation attachment. The DO schedules an alarm at the earlier of session expiry or
+the next 60-second revalidation interval, reloads the session from KV, and closes an unauthorized socket
+with code `1008`. This alarm path must work after DO eviction with a silent client; browser messages are
+not an authorization dependency.
+
 ## (appId, environmentId) change: tear down and reconnect
 
 When the resolved `(appId, environmentId)` changes — an App switch or an Environment switch, e.g.
@@ -80,7 +91,7 @@ The DO broadcasts a small, schema-opaque signal. The panel consumes:
 ```
 NudgePayload {
   type:    string    // e.g. 'config.changed'
-  entity:  string    // 'experiment' | 'flag' | 'metric' | 'segment'
+  entity:  string    // 'experiment' | 'flag' | 'run' | 'segment'
   id:      string    // entity ID
   version: number    // monotone counter on the entity
 }
@@ -106,8 +117,8 @@ A failed nudge-triggered refetch is **non-fatal**:
 
 - The failed refetch never unmounts existing data
 - The UI degrades to stale + dismissable toast ("couldn't refresh, retrying")
-- Retry policy: exponential backoff, 3 attempts, delays 2 s / 4 s / 8 s with ±20% jitter
-- After 3 failures: stop retrying for that nudge; wait for the next nudge or manual refresh
+- Retry policy: the initial refetch plus three retry attempts after 2 s / 4 s / 8 s with ±20% jitter
+- After the third retry fails: stop retrying for that nudge; wait for the next nudge or manual refresh
 - Sentry: low-severity breadcrumb, not an error event
 
 Socket disconnection triggers the reconnect path (full invalidate-and-refetch), not the nudge retry

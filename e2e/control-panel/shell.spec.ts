@@ -37,6 +37,51 @@ test.describe("Control Panel local full-stack harness", () => {
     expect(response.headers().location).toContain("/auth/login?returnTo=");
   });
 
+  test("opens the same-origin, session-authorized live-update socket", async ({ page }) => {
+    await page.goto("/acme-labs/checkout-api/dev");
+
+    await expect(
+      page.evaluate(
+        () =>
+          new Promise<boolean>((resolve) => {
+            const socket = new WebSocket(`${location.origin}/acme-labs/checkout-api/dev/live`);
+            const timeout = window.setTimeout(() => {
+              socket.close();
+              resolve(false);
+            }, 5_000);
+            socket.addEventListener(
+              "open",
+              () => {
+                window.clearTimeout(timeout);
+                socket.close();
+                resolve(true);
+              },
+              { once: true },
+            );
+            socket.addEventListener(
+              "error",
+              () => {
+                window.clearTimeout(timeout);
+                resolve(false);
+              },
+              { once: true },
+            );
+          }),
+      ),
+    ).resolves.toBe(true);
+  });
+
+  test("surfaces stale data after server loss and clears it only after refetch recovery", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/acme-labs/checkout-api/dev");
+    await expect(page.getByText("Data may be out of date")).toBeHidden();
+    await setLiveUpdateServer(testInfo, "down");
+    await expect(page.getByText("Data may be out of date")).toBeVisible();
+    await setLiveUpdateServer(testInfo, "up");
+    await expect(page.getByText("Data may be out of date")).toBeHidden();
+  });
+
   test.afterAll(async ({ request }, workerInfo) => {
     const runId = workerInfo.project.metadata.localE2eRunId;
     expect(typeof runId).toBe("string");
@@ -44,3 +89,16 @@ test.describe("Control Panel local full-stack harness", () => {
     expect(response.ok()).toBe(true);
   });
 });
+
+async function setLiveUpdateServer(
+  testInfo: { project: { metadata: Record<string, unknown> } },
+  state: "up" | "down",
+): Promise<void> {
+  const runId = testInfo.project.metadata.localE2eRunId;
+  if (typeof runId !== "string") throw new Error("missing local E2E run ID");
+  const response = await fetch(
+    `http://127.0.0.1:18790/__test/live-updates/app_checkout_e2e/env_checkout_dev_e2e/${state}`,
+    { method: "POST", headers: { "x-splitch-local-e2e-run-id": runId } },
+  );
+  expect(response.ok).toBe(true);
+}
