@@ -1,14 +1,15 @@
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { parseConfigFileTextToJson } from "typescript";
 import { defineConfig } from "vite";
 
 const wranglerConfig = readWranglerConfig();
+const localE2eRunId = process.env.SPLITCH_LOCAL_E2E_RUN_ID;
 
 export default defineConfig(({ mode }) => ({
   server: {
@@ -21,7 +22,21 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     tailwindcss(),
-    cloudflare({ viteEnvironment: { name: "ssr" } }),
+    cloudflare({
+      config: localE2eRunId
+        ? (config) => ({
+            vars: {
+              ...config.vars,
+              SENTRY_DSN: "",
+              SPLITCH_LOCAL_E2E_RUN_ID: localE2eRunId,
+            },
+          })
+        : undefined,
+      persistState: process.env.SPLITCH_LOCAL_E2E_PERSIST_PATH
+        ? { path: process.env.SPLITCH_LOCAL_E2E_PERSIST_PATH }
+        : true,
+      viteEnvironment: { name: "ssr" },
+    }),
     tanstackStart(),
     react(),
   ],

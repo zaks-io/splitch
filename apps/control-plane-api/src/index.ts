@@ -27,9 +27,13 @@ const handler = {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/health" || url.pathname === "/") {
-      return Response.json(
+      const response = Response.json(
         createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
       );
+      if (env.SPLITCH_LOCAL_E2E_RUN_ID) {
+        response.headers.set("x-splitch-local-e2e-run-id", env.SPLITCH_LOCAL_E2E_RUN_ID);
+      }
+      return response;
     }
     if (url.pathname.startsWith("/internal/credential-cache-backfill")) {
       return handleCredentialCacheBackfillGate(request, env, url);
