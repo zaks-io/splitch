@@ -1,0 +1,108 @@
+name: reset-shared-preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-preview-deploy
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+  SPLITCH_PLATFORM_TARGET: shared-preview
+
+jobs:
+  reset:
+    name: Reset Shared Preview
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 30
+    environment: preview
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      TB_TOKEN: ${{ secrets.TB_TOKEN || secrets.TINYBIRD_DEPLOY_TOKEN }}
+      TB_HOST: ${{ vars.TB_HOST || 'https://api.us-west-2.aws.tinybird.co' }}
+      SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: main
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check reset credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TB_TOKEN TB_HOST SPLITCH_SMOKE_CLIENT_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is required for shared-preview reset"
+              exit 1
+            fi
+          done
+
+      - name: Install Tinybird CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://tinybird.co | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Reset preview-only state
+        id: reset
+        run: pnpm shared-preview:reset
+
+      - name: Verify clean shared preview
+        id: smoke
+        run: |
+          SPLITCH_SMOKE_COMMIT_SHA="$(git rev-parse HEAD)" pnpm shared-preview:smoke
+
+      - name: Clean up transient shared-preview smoke data
+        id: cleanup
+        if: always()
+        run: pnpm shared-preview:cleanup-smoke
+
+      - name: Upload Playwright smoke report
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: shared-preview-reset-playwright-report
+          path: |
+            playwright-report/shared-preview
+            test-results/shared-preview
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Shared preview reset"
+            echo
+            echo "- Trusted ref: \`$(git rev-parse HEAD)\`"
+            echo "- Reset outcome: \`${{ steps.reset.outcome }}\`"
+            echo "- Smoke outcome: \`${{ steps.smoke.outcome }}\`"
+            echo "- Cleanup outcome: \`${{ steps.cleanup.outcome }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
