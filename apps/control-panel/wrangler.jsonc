@@ -24,6 +24,13 @@
     "SPLITCH_PLATFORM_TARGET": "local",
     "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
   },
+  "services": [
+    {
+      "binding": "CONTROL_PLANE_API",
+      "service": "splitch-control-plane-api",
+      "entrypoint": "ControlPanelEntrypoint"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -73,6 +80,13 @@
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
       },
+      "services": [
+        {
+          "binding": "CONTROL_PLANE_API",
+          "service": "splitch-control-plane-api-shared-preview",
+          "entrypoint": "ControlPanelEntrypoint"
+        }
+      ],
       "d1_databases": [
         {
           "binding": "DB",
@@ -122,6 +136,13 @@
         "SPLITCH_PLATFORM_TARGET": "production",
         "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
       },
+      "services": [
+        {
+          "binding": "CONTROL_PLANE_API",
+          "service": "splitch-control-plane-api",
+          "entrypoint": "ControlPanelEntrypoint"
+        }
+      ],
       "d1_databases": [
         {
           "binding": "DB",

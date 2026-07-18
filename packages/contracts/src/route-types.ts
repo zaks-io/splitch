@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import type { CreateAppRequestSchema, CreateAppResponseSchema } from "./resource-envelopes-account";
 import {
   type CreateExperimentRequestSchema,
   ExperimentResponseSchema,
@@ -18,6 +19,7 @@ import type {
   ExperimentParams,
   FlagConfigResponseSchema,
   FlagParams,
+  OrgAppsParams,
   PatchFlagConfigRequestSchema,
 } from "./routes/route-shapes";
 
@@ -68,7 +70,12 @@ export type ExperimentsStartOutput = z.infer<typeof StartRunResponseSchema>;
 export type ExperimentsDeleteInput = z.infer<typeof ExperimentParams>;
 export type ExperimentsDeleteOutput = z.infer<typeof DeletedResponseSchema>;
 
+export type AppsCreateInput = z.infer<typeof OrgAppsParams> &
+  z.infer<typeof CreateAppRequestSchema>;
+export type AppsCreateOutput = z.infer<typeof CreateAppResponseSchema>;
+
 export type OperationId =
+  | "apps_create"
   | "flags_list"
   | "flags_create"
   | "flags_get"
@@ -83,50 +90,54 @@ export type OperationId =
 
 export type RouteFlatInput<Op extends OperationId> = Op extends "flags_list"
   ? FlagsListInput
-  : Op extends "flags_create"
-    ? FlagsCreateInput
-    : Op extends "flags_get"
-      ? FlagsGetInput
-      : Op extends "flags_update"
-        ? FlagsUpdateInput
-        : Op extends "flags_delete"
-          ? FlagsDeleteInput
-          : Op extends "experiments_list"
-            ? ExperimentsListInput
-            : Op extends "experiments_create"
-              ? ExperimentsCreateInput
-              : Op extends "experiments_get"
-                ? ExperimentsGetInput
-                : Op extends "experiments_update"
-                  ? ExperimentsUpdateInput
-                  : Op extends "experiments_start"
-                    ? ExperimentsStartInput
-                    : Op extends "experiments_delete"
-                      ? ExperimentsDeleteInput
-                      : never;
+  : Op extends "apps_create"
+    ? AppsCreateInput
+    : Op extends "flags_create"
+      ? FlagsCreateInput
+      : Op extends "flags_get"
+        ? FlagsGetInput
+        : Op extends "flags_update"
+          ? FlagsUpdateInput
+          : Op extends "flags_delete"
+            ? FlagsDeleteInput
+            : Op extends "experiments_list"
+              ? ExperimentsListInput
+              : Op extends "experiments_create"
+                ? ExperimentsCreateInput
+                : Op extends "experiments_get"
+                  ? ExperimentsGetInput
+                  : Op extends "experiments_update"
+                    ? ExperimentsUpdateInput
+                    : Op extends "experiments_start"
+                      ? ExperimentsStartInput
+                      : Op extends "experiments_delete"
+                        ? ExperimentsDeleteInput
+                        : never;
 
 export type RouteOutput<Op extends OperationId> = Op extends "flags_list"
   ? FlagsListOutput
-  : Op extends "flags_create"
-    ? FlagsCreateOutput
-    : Op extends "flags_get"
-      ? FlagsGetOutput
-      : Op extends "flags_update"
-        ? FlagsUpdateOutput
-        : Op extends "flags_delete"
-          ? FlagsDeleteOutput
-          : Op extends "experiments_list"
-            ? ExperimentsListOutput
-            : Op extends "experiments_create"
-              ? ExperimentsCreateOutput
-              : Op extends "experiments_get"
-                ? ExperimentsGetOutput
-                : Op extends "experiments_update"
-                  ? ExperimentsUpdateOutput
-                  : Op extends "experiments_start"
-                    ? ExperimentsStartOutput
-                    : Op extends "experiments_delete"
-                      ? ExperimentsDeleteOutput
-                      : never;
+  : Op extends "apps_create"
+    ? AppsCreateOutput
+    : Op extends "flags_create"
+      ? FlagsCreateOutput
+      : Op extends "flags_get"
+        ? FlagsGetOutput
+        : Op extends "flags_update"
+          ? FlagsUpdateOutput
+          : Op extends "flags_delete"
+            ? FlagsDeleteOutput
+            : Op extends "experiments_list"
+              ? ExperimentsListOutput
+              : Op extends "experiments_create"
+                ? ExperimentsCreateOutput
+                : Op extends "experiments_get"
+                  ? ExperimentsGetOutput
+                  : Op extends "experiments_update"
+                    ? ExperimentsUpdateOutput
+                    : Op extends "experiments_start"
+                      ? ExperimentsStartOutput
+                      : Op extends "experiments_delete"
+                        ? ExperimentsDeleteOutput
+                        : never;
 
 export type RouteInput<Op extends OperationId> = RouteFlatInput<Op>;

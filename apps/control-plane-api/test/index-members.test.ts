@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
-import worker from "../src/index.js";
+import worker, { ControlPanelEntrypoint } from "../src/index.js";
 import { memberProfileCacheKey } from "../src/member-profile-cache.js";
 
 const AUDIENCE = "https://cp.splitch.test";
@@ -69,6 +69,35 @@ describe("index.ts: member endpoints use the live session-cache profile resolver
   });
 });
 
+describe("index.ts: Control Panel binding boundary", () => {
+  it("rejects a valid panel session on the public Worker export", async () => {
+    const sessionHash = "a".repeat(64);
+    await storePanelSession(sessionHash);
+
+    const response = await callAppsCreate(worker.fetch, sessionHash, "public-replay");
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("redeems a valid panel session only through the named binding entrypoint", async () => {
+    const sessionHash = "b".repeat(64);
+    await storePanelSession(sessionHash);
+    const entrypoint = new ControlPanelEntrypoint(testCtx, testEnv);
+
+    const response = await callAppsCreate(
+      (request) => entrypoint.fetch(request),
+      sessionHash,
+      "binding-create",
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      app: { organizationId: ORG.orgId, key: "binding-create" },
+    });
+  });
+});
+
 async function token(sub: string, scopes: string[]): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   return signer.sign({
@@ -100,6 +129,41 @@ function call(method: string, path: string, jwt: string, body?: unknown): Promis
       testEnv,
       testCtx,
     ),
+  );
+}
+
+async function callAppsCreate(
+  fetcher: (
+    request: Request,
+    env: ControlPlaneApiEnv,
+    ctx: ExecutionContext,
+  ) => Response | Promise<Response>,
+  sessionHash: string,
+  key: string,
+): Promise<Response> {
+  return fetcher(
+    new Request(`${AUDIENCE}/orgs/${ORG.orgId}/apps`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-splitch-panel-session": sessionHash,
+      },
+      body: JSON.stringify({ organizationId: ORG.orgId, name: key, key }),
+    }),
+    testEnv,
+    testCtx,
+  );
+}
+
+async function storePanelSession(sessionHash: string): Promise<void> {
+  await env.SESSION_STORE.put(
+    `session:${sessionHash}`,
+    JSON.stringify({
+      version: 2,
+      userId: OWNER,
+      orgs: [],
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }),
   );
 }
 

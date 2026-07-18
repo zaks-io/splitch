@@ -1,5 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { ApiRouteContract } from "./openapi-route";
+import { accountRoutes } from "./routes/routes-account";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagRoutes } from "./routes/routes-flags";
 
@@ -41,6 +42,8 @@ const experimentsSdkRoutes = [
   experimentRoutes[5],
 ] as const;
 
+const appsSdkRoutes = [accountRoutes[9]] as const;
+
 const flagsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: flagsSdkRoutes[0].openapi, handler: emitOnlyHandler(flagsSdkRoutes[0]) },
   { route: flagsSdkRoutes[1].openapi, handler: emitOnlyHandler(flagsSdkRoutes[1]) },
@@ -60,14 +63,24 @@ const experimentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: experimentsSdkRoutes[5].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[5]) },
 ] as const);
 
+const appsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
+  { route: appsSdkRoutes[0].openapi, handler: emitOnlyHandler(appsSdkRoutes[0]) },
+] as const);
+
 /** `hc<FlagsControlPlaneClientApp>()` — flag route group client type. */
 export type FlagsControlPlaneClientApp = typeof flagsControlPlaneClientApp;
 
 /** `hc<ExperimentsControlPlaneClientApp>()` — experiment route group client type. */
 export type ExperimentsControlPlaneClientApp = typeof experimentsControlPlaneClientApp;
 
+/** `hc<AppsControlPlaneClientApp>()` — App route group client type. */
+export type AppsControlPlaneClientApp = typeof appsControlPlaneClientApp;
+
 /** Union of SDK emit-only apps; prefer domain-specific types for `hc`. */
-export type ControlPlaneClientApp = FlagsControlPlaneClientApp | ExperimentsControlPlaneClientApp;
+export type ControlPlaneClientApp =
+  | FlagsControlPlaneClientApp
+  | ExperimentsControlPlaneClientApp
+  | AppsControlPlaneClientApp;
 
 export function createFlagsControlPlaneClientApp(): FlagsControlPlaneClientApp {
   return flagsControlPlaneClientApp;
@@ -75,6 +88,10 @@ export function createFlagsControlPlaneClientApp(): FlagsControlPlaneClientApp {
 
 export function createExperimentsControlPlaneClientApp(): ExperimentsControlPlaneClientApp {
   return experimentsControlPlaneClientApp;
+}
+
+export function createAppsControlPlaneClientApp(): AppsControlPlaneClientApp {
+  return appsControlPlaneClientApp;
 }
 
 /** @deprecated Use {@link createFlagsControlPlaneClientApp} or {@link createExperimentsControlPlaneClientApp}. */

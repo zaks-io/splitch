@@ -7,6 +7,15 @@ import { createControlPlaneSdk } from "./index";
 async function typeChecks() {
   const sdk = createControlPlaneSdk({ baseUrl: "https://control-plane.test" });
 
+  await sdk.apps.create({
+    orgId: "org_local",
+    organizationId: "org_local",
+    name: "Checkout",
+    key: "checkout",
+  });
+  // @ts-expect-error apps_create requires the path orgId
+  await sdk.apps.create({ organizationId: "org_local", name: "Checkout", key: "checkout" });
+
   await sdk.flags.list({ appId: "app_local" });
   // @ts-expect-error flags_list requires appId
   await sdk.flags.list({});
