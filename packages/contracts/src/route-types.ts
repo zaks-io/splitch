@@ -1,5 +1,6 @@
 import { z } from "@hono/zod-openapi";
 import type {
+  AppAttentionRollupResponseSchema,
   CreateAppRequestSchema,
   CreateAppResponseSchema,
   CreateCredentialResponseSchema,
@@ -129,6 +130,9 @@ export type AppsUpdateOutput = z.infer<typeof AppSchema>;
 export type AppsDeleteInput = z.infer<typeof AppParams>;
 export type AppsDeleteOutput = z.infer<typeof DeletedResponseSchema>;
 
+export type AppAttentionRollupGetInput = z.infer<typeof AppParams>;
+export type AppAttentionRollupGetOutput = z.infer<typeof AppAttentionRollupResponseSchema>;
+
 export type EnvironmentsListInput = z.infer<typeof AppParams>;
 export type EnvironmentsListOutput = z.infer<typeof EnvironmentListResponseSchema>;
 export type EnvironmentsCreateInput = z.infer<typeof AppParams> &
@@ -177,6 +181,10 @@ export interface RouteTypeMap {
   apps_get: { input: AppsGetInput; output: AppsGetOutput };
   apps_update: { input: AppsUpdateInput; output: AppsUpdateOutput };
   apps_delete: { input: AppsDeleteInput; output: AppsDeleteOutput };
+  app_attention_rollup_get: {
+    input: AppAttentionRollupGetInput;
+    output: AppAttentionRollupGetOutput;
+  };
 
   environments_list: { input: EnvironmentsListInput; output: EnvironmentsListOutput };
   environments_create: { input: EnvironmentsCreateInput; output: EnvironmentsCreateOutput };

@@ -133,6 +133,46 @@ describe("control plane sdk Apps client", () => {
       error: experimentRunning,
     });
   });
+
+  it("returns the typed per-Environment App attention rollup", async () => {
+    let capturedUrl = "";
+    const sdk = createControlPlaneSdk({
+      baseUrl: "https://control-plane.test",
+      fetch: async (input) => {
+        capturedUrl = input instanceof Request ? input.url : String(input);
+        return Response.json({
+          appId: "app_local",
+          items: [
+            {
+              environmentId: "env_prod",
+              state: "attention",
+              srm: true,
+              guardrail: false,
+            },
+          ],
+        });
+      },
+    });
+
+    const result = await sdk.apps.getAttentionRollup({ appId: "app_local" });
+
+    expect(capturedUrl).toBe("https://control-plane.test/apps/app_local/attention-rollup");
+    expect(result).toEqual({
+      ok: true,
+      status: 200,
+      data: {
+        appId: "app_local",
+        items: [
+          {
+            environmentId: "env_prod",
+            state: "attention",
+            srm: true,
+            guardrail: false,
+          },
+        ],
+      },
+    });
+  });
 });
 
 function appsSdk(response: () => Response) {

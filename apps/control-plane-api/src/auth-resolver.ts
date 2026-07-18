@@ -252,7 +252,8 @@ async function resolvePanelResourcePrincipal(
   panelAccess?: PanelSessionAccess,
 ) {
   if (!panelAccess) return null;
-  const access = await panelAccess.authorizeApp(actorId, operation.appId, operation.environmentId);
+  const environmentId = "environmentId" in operation ? operation.environmentId : undefined;
+  const access = await panelAccess.authorizeApp(actorId, operation.appId, environmentId);
   if (!access) {
     return {
       ok: false as const,

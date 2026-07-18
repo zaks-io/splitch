@@ -53,13 +53,14 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 
 ### Apps
 
-| Tool          | Method | Path                |
-| ------------- | ------ | ------------------- |
-| `apps_list`   | GET    | `/orgs/:orgId/apps` |
-| `apps_create` | POST   | `/orgs/:orgId/apps` |
-| `apps_get`    | GET    | `/apps/:appId`      |
-| `apps_update` | PATCH  | `/apps/:appId`      |
-| `apps_delete` | DELETE | `/apps/:appId`      |
+| Tool                       | Method | Path                            |
+| -------------------------- | ------ | ------------------------------- |
+| `apps_list`                | GET    | `/orgs/:orgId/apps`             |
+| `apps_create`              | POST   | `/orgs/:orgId/apps`             |
+| `apps_get`                 | GET    | `/apps/:appId`                  |
+| `app_attention_rollup_get` | GET    | `/apps/:appId/attention-rollup` |
+| `apps_update`              | PATCH  | `/apps/:appId`                  |
+| `apps_delete`              | DELETE | `/apps/:appId`                  |
 
 ### Environments
 

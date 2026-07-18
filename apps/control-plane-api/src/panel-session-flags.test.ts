@@ -1,6 +1,7 @@
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
   issueControlPanelDelegation,
+  parseControlPanelOperation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { describe, expect, it, vi } from "vitest";
 import { makeControlPlaneAuthResolver, PANEL_SESSION_HEADER } from "./auth-resolver";
@@ -50,6 +51,24 @@ describe("Control Panel Flags principal", () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
     expect(authorizeApp).toHaveBeenCalledWith("user_1", "app_1", "env_1");
+  });
+
+  it("binds an attention-rollup read to live App access without an Environment claim", async () => {
+    const authorizeApp = vi.fn<PanelSessionAccess["authorizeApp"]>(async () => ({
+      appId: "app_1",
+      appRole: "member",
+      orgId: "org_1",
+      orgRole: "member",
+    }));
+    const resolver = makeResolver({ authorizeApp });
+
+    const result = await resolver(await panelRequest("GET", "/apps/app_1/attention-rollup"));
+
+    expect(result).toMatchObject({
+      ok: true,
+      principal: { id: "user_1", orgId: "org_1", appId: "app_1" },
+    });
+    expect(authorizeApp).toHaveBeenCalledWith("user_1", "app_1", undefined);
   });
 
   it("does not redeem a panel delegation outside the named entrypoint mode", async () => {
@@ -118,27 +137,15 @@ async function panelRequest(method: string, path: string): Promise<Request> {
     method,
     headers: { "x-splitch-panel-environment": "env_1" },
   });
-  const operation =
-    path === "/apps/app_1/flags"
-      ? {
-          id: method === "GET" ? "flags_list" : "flags_create",
-          appId: "app_1",
-          environmentId: "env_1",
-        }
-      : { id: "flag_config_get", appId: "app_1", environmentId: "env_1", flagId: "flag_1" };
+  const operation = parseControlPanelOperation(method, path, "env_1");
+  if (!operation) throw new Error(`expected a Control Panel operation for ${method} ${path}`);
   request.headers.set(
     CONTROL_PANEL_DELEGATION_HEADER,
-    await issueControlPanelDelegation(
-      request,
-      operation as Parameters<typeof issueControlPanelDelegation>[1],
-      "user_1",
-      DELEGATION_SECRET,
-      {
-        nowSeconds: NOW,
-        sessionExpiresAt: NOW + 30,
-        nonce: `nonce_${method.toLowerCase()}_1234567890`,
-      },
-    ),
+    await issueControlPanelDelegation(request, operation, "user_1", DELEGATION_SECRET, {
+      nowSeconds: NOW,
+      sessionExpiresAt: NOW + 30,
+      nonce: `nonce_${method.toLowerCase()}_1234567890`,
+    }),
   );
   return request;
 }

@@ -2,6 +2,7 @@ import { errorCodes, type ErrorCode } from "./errors";
 import type { ApiRouteContract } from "./openapi-route";
 import { accountRoutes } from "./routes/routes-account";
 import { analysisRoutes } from "./routes/routes-analysis";
+import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { dataPlaneRoutes } from "./routes/routes-data-plane";
 import { experimentRoutes } from "./routes/routes-experiments";
@@ -67,6 +68,7 @@ export function assertRegistry<const T extends readonly ApiRouteContract[]>(rout
 
 export const routeRegistry = assertRegistry([
   ...accountRoutes,
+  ...attentionRoutes,
   ...flagRoutes,
   ...experimentRoutes,
   ...credentialRoutes,

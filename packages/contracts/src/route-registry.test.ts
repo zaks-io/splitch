@@ -30,6 +30,7 @@ const CANONICAL_OPERATION_IDS = [
   "apps_list",
   "apps_create",
   "apps_get",
+  "app_attention_rollup_get",
   "apps_update",
   "apps_delete",
   // Environments

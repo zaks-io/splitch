@@ -141,6 +141,10 @@ describe("Control Panel operation allowlist", () => {
     expect(parseControlPanelOperation("POST", "/control-panel/experiments/detail")).toEqual({
       id: "experiments_detail",
     });
+    expect(parseControlPanelOperation("GET", "/apps/app_1/attention-rollup")).toEqual({
+      id: "app_attention_rollup_get",
+      appId: "app_1",
+    });
     expect(parseControlPanelOperation("GET", "/apps/app_1/flags", "env_1")).toEqual({
       id: "flags_list",
       appId: "app_1",

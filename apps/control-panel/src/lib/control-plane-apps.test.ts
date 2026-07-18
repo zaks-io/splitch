@@ -59,6 +59,54 @@ describe("Control Panel Apps transport", () => {
     expect(JSON.stringify(result)).not.toContain(TOKEN_HASH);
   });
 
+  it("reads attention through an App-scoped binding delegation without bearer material", async () => {
+    let capturedRequest: Request | undefined;
+    const apps = createControlPanelAppsClient(
+      {
+        fetch: async (request: Request) => {
+          capturedRequest = request;
+          return Response.json({
+            appId: "app_checkout",
+            items: [
+              {
+                environmentId: "env_prod",
+                state: "attention",
+                srm: true,
+                guardrail: false,
+              },
+            ],
+          });
+        },
+      } as unknown as Fetcher,
+      ACTOR,
+      DELEGATION_SECRET,
+      {
+        nowSeconds: () => 1_800_000_000,
+        nonce: () => "nonce_attention_123456",
+      },
+    );
+
+    const result = await apps.getAttentionRollup({ appId: "app_checkout" });
+    const request = capturedRequest;
+
+    expect(request?.headers.get("authorization")).toBeNull();
+    expect(request?.headers.get("cookie")).toBeNull();
+    const operation = { id: "app_attention_rollup_get", appId: "app_checkout" } as const;
+    await expect(
+      verifyControlPanelDelegation(
+        request?.headers.get(CONTROL_PANEL_DELEGATION_HEADER) ?? null,
+        request?.clone() as Request,
+        operation,
+        DELEGATION_SECRET,
+        1_800_000_000,
+      ),
+    ).resolves.toMatchObject({ operation, actorId: ACTOR.actorId });
+    expect(result).toMatchObject({
+      ok: true,
+      data: { appId: "app_checkout", items: [{ environmentId: "env_prod", srm: true }] },
+    });
+  });
+
   it("preserves typed Worker refusals for the server function caller", async () => {
     const apps = createControlPanelAppsClient(
       {

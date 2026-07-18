@@ -9,6 +9,11 @@ import {
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
+import {
+  type AnalysisResultsReader,
+  makeAttentionRollupHandler,
+  unavailableAnalysisResults,
+} from "./attention-rollup";
 import type { ConfigStoreAccess } from "./config-store-do";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
@@ -50,6 +55,7 @@ export interface AppDeps {
   defaultHeaders?: Record<string, string>;
   observability?: RegistrarDeps["observability"];
   logger?: Pick<Console, "warn">;
+  analysisResults?: AnalysisResultsReader;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -114,6 +120,7 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("apps_list"), appEnvironmentHandlers.listApps);
   registrar.mount(app, controlPlaneRoute("apps_create"), appEnvironmentHandlers.createApp);
   registrar.mount(app, controlPlaneRoute("apps_get"), appEnvironmentHandlers.getApp);
+  mountAttentionRollupRoute(app, registrar, deps);
   registrar.mount(app, controlPlaneRoute("apps_update"), appEnvironmentHandlers.updateApp);
   registrar.mount(app, controlPlaneRoute("apps_delete"), appEnvironmentHandlers.deleteApp);
   registrar.mount(
@@ -193,6 +200,17 @@ export function createApp(deps: AppDeps): Hono {
   mountUnavailableControlPlaneRoutes(app, registrar, deps.repo);
 
   return app;
+}
+
+function mountAttentionRollupRoute(app: Hono, registrar: Registrar, deps: AppDeps): void {
+  registrar.mount(
+    app,
+    controlPlaneRoute("app_attention_rollup_get"),
+    makeAttentionRollupHandler({
+      repo: deps.repo,
+      analysisResults: deps.analysisResults ?? unavailableAnalysisResults,
+    }),
+  );
 }
 
 function mountUnavailableControlPlaneRoutes(

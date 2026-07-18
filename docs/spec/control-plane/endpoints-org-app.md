@@ -92,6 +92,21 @@ Client Key the same way.
 Returns: `{ app_id, org_id, name, slug, created_at, updated_at }`
 Auth: App member.
 
+### `GET /apps/{app_id}/attention-rollup`
+
+Returns the minimal Environment-explicit SRM and Guardrail attention contract for the App:
+`{ appId, items: [{ environmentId, state: "no_data" | "clear" | "attention", srm, guardrail }] }`.
+Only current running Experiments contribute. `no_data` is distinct from a measured `clear` result;
+neither state may carry an SRM or Guardrail failure flag. An Environment with any firing SRM or
+breached Guardrail is `attention`, with the exact reason boolean set. Analysis read failures return
+`SERVICE_UNAVAILABLE` rather than silently clearing attention.
+
+Auth: live Organization and App member. The Worker rejects a token bound to another App or stale
+membership before any analysis read. Control Panel callers use the configured signed binding-only
+`SignedControlPanelEntrypoint`; the browser/session bearer never crosses the binding. The
+Control Plane Worker calls Analysis through its binding-only entrypoint with an exact
+actor/App/Environment/Experiment/Run service identity.
+
 ### `PATCH /apps/{app_id}`
 
 Body: `{ name?: string, slug?: string }`
