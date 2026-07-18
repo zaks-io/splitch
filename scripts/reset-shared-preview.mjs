@@ -97,7 +97,6 @@ export function runReset(
     "run",
     COPY_PIPE,
     "--wait",
-    "--yes",
     "--param",
     `copy_watermark_ts=${now()}`,
   ]);
@@ -122,6 +121,7 @@ function listResettableD1Tables(plan, command) {
       TARGET,
       "--config",
       plan.dbConfigPath,
+      "--json",
       "--command",
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
     ],
@@ -178,6 +178,7 @@ function assertEmptyD1Tables(plan, tables, command) {
         TARGET,
         "--config",
         plan.dbConfigPath,
+        "--json",
         "--command",
         `SELECT COUNT(*) AS count FROM "${table}"`,
       ],

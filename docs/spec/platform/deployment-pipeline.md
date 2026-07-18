@@ -1,8 +1,8 @@
 # Deployment pipeline: PR CI, shared preview, production release, rollback
 
-Status: CI, local gates, shared-preview deploy and smoke, production deploy wiring, Worker secret
-sync, and Cloudflare D1/KV resource provisioning are in place. Shared-preview reset, production
-smoke, and rollback are still designed, not wired.
+Status: CI, local gates, shared-preview deploy, reset, and smoke, production deploy wiring, Worker
+secret sync, and Cloudflare D1/KV resource provisioning are in place. Production smoke and rollback
+are still designed, not wired.
 Vocabulary follows [CONTEXT.md](../../../CONTEXT.md). This document uses **platform target** for
 CI/deployment targets such as local, PR CI, shared preview, and production. A platform target is not a
 splitch product **Environment** under an App.
@@ -163,7 +163,9 @@ Shared preview is provisioned once and updated on demand:
 4. Deploy Workers through Turborepo package deploy tasks that call
    `wrangler deploy --env shared-preview --secrets-file <temp-file>` when the Worker declares required
    secrets.
-5. Run smoke checks against the shared-preview URL.
+5. Run smoke checks against the shared-preview URL. Deploy smoke verifies the revision being deployed;
+   reset smoke first resolves the currently deployed revision from hosted health, then verifies that
+   exact revision across the Worker fleet after state reset.
 6. Post the shared-preview URL, deployed ref, Tinybird branch name, migration list, and smoke results to
    the PR or workflow summary.
 

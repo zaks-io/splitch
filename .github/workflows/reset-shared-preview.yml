@@ -53,6 +53,15 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve currently deployed preview revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow_ref="$(git rev-parse HEAD)"
+          echo "SPLITCH_WORKFLOW_REF=$workflow_ref" >> "$GITHUB_ENV"
+          deployed_sha="$(node scripts/resolve-shared-preview-deployed-sha.mjs)"
+          echo "SPLITCH_DEPLOYED_COMMIT_SHA=$deployed_sha" >> "$GITHUB_ENV"
+
       - name: Check reset credentials
         shell: bash
         run: |
@@ -77,7 +86,7 @@ jobs:
 
       - name: Verify clean shared preview
         id: smoke
-        run: pnpm shared-preview:smoke
+        run: SPLITCH_SMOKE_COMMIT_SHA="$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke
 
       - name: Clean up transient shared-preview smoke data
         id: cleanup
@@ -96,33 +105,8 @@ jobs:
 
       - name: Summary
         if: always()
-        run: |
-          {
-            echo "## Shared preview reset"
-            echo
-            echo "- Trusted ref: \`$(git rev-parse HEAD)\`"
-            echo "- Reset outcome: \`${{ steps.reset.outcome }}\`"
-            echo "- Smoke outcome: \`${{ steps.smoke.outcome }}\`"
-            echo "- Cleanup outcome: \`${{ steps.cleanup.outcome }}\`"
-            if [ "${{ steps.smoke.outcome }}" = "success" ]; then
-              echo
-              echo "### Verified smoke evidence"
-              echo
-              echo "- platformTarget: \`shared-preview\`"
-              echo "- Deployed SHA: unavailable/unverified; reset does not deploy Workers and hosted health does not expose deployment metadata"
-              echo "- Tinybird Branch: \`shared_preview\`"
-              echo "- Preview URLs and exercised health routes:"
-              echo "  - Marketing: https://preview.splitch.dev/health"
-              echo "  - Control Panel: https://app.preview.splitch.dev/health"
-              echo "  - Control Plane API: https://api.preview.splitch.dev/health"
-              echo "  - Auth API: https://auth.preview.splitch.dev/health"
-              echo "  - Evaluation API: https://edge.preview.splitch.dev/health"
-              echo "  - Event Ingest API: https://ingest.preview.splitch.dev/health"
-              echo "  - MCP: https://mcp.preview.splitch.dev/health"
-              echo "- Exercised functional routes: Auth discovery, device authorization, JWKS, client credentials, Control Plane reads, MCP tools/list, and MCP tools/call"
-              echo "- Applied D1 migrations:"
-              while IFS= read -r migration; do
-                echo "  - \`$(basename "$migration")\`"
-              done < <(find packages/db/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          SPLITCH_RESET_OUTCOME: ${{ steps.reset.outcome }}
+          SPLITCH_SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+          SPLITCH_CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
+        run: node scripts/render-shared-preview-summary.mjs reset >> "$GITHUB_STEP_SUMMARY"

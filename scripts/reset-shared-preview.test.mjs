@@ -15,23 +15,19 @@ const LOCAL_KV = "fixture-local-kv";
 const LOCAL_D1 = "fixture-local-d1";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("cleanup cannot bypass reset validation and smoke emits the required evidence", () => {
+test("cleanup cannot bypass reset validation and smoke emits generated deployment evidence", () => {
   const workflow = readFileSync(
     join(repoRoot, ".github/workflows/reset-shared-preview.yml"),
     "utf8",
   );
 
   assert.match(workflow, /if: \$\{\{ always\(\) && steps\.reset\.outcome == 'success' \}\}/);
-  for (const evidence of [
-    "platformTarget",
-    "Deployed SHA: unavailable/unverified",
-    "Tinybird Branch",
-    "Preview URLs and exercised health routes",
-    "Exercised functional routes",
-    "Applied D1 migrations",
-  ]) {
-    assert.match(workflow, new RegExp(evidence));
-  }
+  assert.match(workflow, /node scripts\/resolve-shared-preview-deployed-sha\.mjs/);
+  assert.match(
+    workflow,
+    /SPLITCH_SMOKE_COMMIT_SHA="\$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke/,
+  );
+  assert.match(workflow, /node scripts\/render-shared-preview-summary\.mjs reset/);
 });
 
 test("builds a mutation plan from positively identified shared-preview resources only", () => {
@@ -121,7 +117,8 @@ test("runs only preview-scoped reset commands and Copy Pipe on demand", () => {
 
   const rendered = calls.flatMap(({ command, args }) => [command, ...args]).join(" ");
   assert.match(rendered, /--env shared-preview/);
-  assert.match(rendered, /--branch=shared_preview copy run cp_deduped_exposures --wait --yes/);
+  assert.match(rendered, /--branch=shared_preview copy run cp_deduped_exposures --wait --param/);
+  assert.doesNotMatch(rendered, /copy run cp_deduped_exposures .*--yes/);
   assert.doesNotMatch(rendered, /cron|schedule/i);
   assert.doesNotMatch(rendered, /sqlite_sequence/);
   assert.doesNotMatch(rendered, new RegExp(PRODUCTION_KV));
@@ -134,6 +131,15 @@ test("runs only preview-scoped reset commands and Copy Pipe on demand", () => {
     assert.ok(call.args.includes("--remote"));
   }
   assert.match(rendered, /SELECT COUNT\(\*\) AS count FROM "apps"/);
+  for (const call of calls.filter(
+    (call) =>
+      call.args.includes("d1") &&
+      call.args.includes("execute") &&
+      (call.args.some((arg) => arg.includes("sqlite_master")) ||
+        call.args.some((arg) => arg.includes("COUNT(*)"))),
+  )) {
+    assert.ok(call.args.includes("--json"));
+  }
 });
 
 function createFixture({ previewKv = PREVIEW_KV, previewD1 = PREVIEW_D1 } = {}) {

@@ -39,8 +39,8 @@ in this config; refresh them from Linear during each workflow run.
   `Pull Requests`.
 - Critical unknowns: friction-intake fields remain unverified. Branch protection
   is absent on `main`. The GitHub `production` environment currently has no
-  required-reviewer rule. Shared-preview reset, production smoke, and rollback
-  scripts remain unwired. See `Unknowns`.
+  required-reviewer rule. Production smoke and rollback scripts remain unwired.
+  See `Unknowns`.
 
 ## Repo
 
@@ -405,11 +405,11 @@ real package API boundary.
       `0.1.0-bootstrap.0`, configure the trusted publisher for `sdk-publish.yml`, remove temporary
       bootstrap publishing access, and verify the provider before the provenance-bearing `0.1.0`
       release. Do not add a long-lived npm token to close this gap.
-- [x] Shared-preview and production deploy workflows are wired, Cloudflare
+- [x] Shared-preview deploy/reset and production deploy workflows are wired, Cloudflare
       D1/KV resource IDs are provisioned and committed, Worker secret sync is wired, hosted
-      shared-preview smoke is wired, and the `shared_preview` Tinybird Branch exists. Rollback remains
-      designed but not wired. Verifier: implement the remaining
-      `docs/spec/platform/deployment-pipeline.md` reset/rollback
+      shared-preview smoke verifies deployed revision evidence, and the `shared_preview` Tinybird
+      Branch exists. Rollback remains designed but not wired. Verifier: implement the remaining
+      `docs/spec/platform/deployment-pipeline.md` rollback
       work, run workflow syntax checks, and confirm required GitHub environment
       secrets/vars.
 - [ ] Production approval enforcement is not currently backed by GitHub
