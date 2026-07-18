@@ -1,9 +1,4 @@
-import {
-  deriveMcpProtocolTools,
-  getRoute,
-  parsePlatformTarget,
-  type RouteOwner,
-} from "@splitch/contracts";
+import { getRoute, parsePlatformTarget, type RouteOwner } from "@splitch/contracts";
 import { createMcpOperationAdapter } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import {
   JSON_RPC_INTERNAL_ERROR,
@@ -16,22 +11,20 @@ import {
 } from "./json-rpc";
 import { readJsonRpcRequest } from "./mcp-request";
 import {
-  contextUseTool,
   type McpSessionStore,
   parseToolCall,
   resolveScope,
   setSessionContext,
 } from "./mcp-session-context";
 import { corsHeaders, jsonResponse, routeTransportRequest } from "./mcp-transport";
+import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
 
 const protocolVersion = "2025-06-18";
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
 const defaultEvaluationBaseUrl = "http://127.0.0.1:8788";
 const defaultAnalysisBaseUrl = "http://127.0.0.1:8790";
 const internalAnalysisBaseUrl = "https://analysis-api.internal";
-const tools = deriveMcpProtocolTools();
-const protocolTools = [...tools, contextUseTool];
-const toolNames = new Set(protocolTools.map((tool) => tool.name));
+const toolNames = new Set(MCP_TOOL_DEFINITIONS.map((tool) => tool.name));
 type McpRoutableOwner = "control-plane-api" | "evaluation-api" | "analysis-api";
 type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
 type OperationSdkResolver = () => OperationSdk;
@@ -166,7 +159,7 @@ async function dispatch(
     return jsonRpcResult(id, initializeResult());
   }
   if (request.method === "tools/list") {
-    return jsonRpcResult(id, { tools: protocolTools });
+    return jsonRpcResult(id, { tools: MCP_TOOL_DEFINITIONS });
   }
   if (request.method === "tools/call") {
     return callTool(id, request.params, sdks, authorization, sessionId, sessionStore);
