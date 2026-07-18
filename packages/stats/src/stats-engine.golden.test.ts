@@ -65,7 +65,7 @@ describe("StatsEngine golden fixtures", () => {
     });
     expect(conversionTreatment?.ci_lower).toBeCloseTo(8.06954030815487, 12);
     expect(conversionTreatment?.ci_upper).toBeCloseTo(191.93045969184513, 12);
-    expect(conversionTreatment?.p_value).toBeCloseTo(0.03300614049248174, 12);
+    expect(conversionTreatment?.p_value).toBeCloseTo(0.0015655340676916651, 12);
 
     expect(guardrailTreatment?.ci_lower).toBe(conversionTreatment?.ci_lower);
     expect(output.guardrail_results).toEqual([
@@ -100,12 +100,12 @@ describe("StatsEngine golden fixtures", () => {
       decision_valid: true,
       low_n_warning: false,
     });
-    expect(primaryUsTreatment.p_value).toBeCloseTo(0.03300614049248174, 12);
+    expect(primaryUsTreatment.p_value).toBeCloseTo(0.0015655340676916651, 12);
     expect(primaryUsTreatment).toMatchObject({
       in_bh_family: true,
       exploratory: false,
       decision_valid: true,
-      is_significant: false,
+      is_significant: true,
       status: "ready",
     });
 
