@@ -7,6 +7,9 @@
   },
   "ignore": [".agents/**"],
   "workspaces": {
+    ".": {
+      "entry": ["scripts/sdk-release/check-published-version.mjs"]
+    },
     "apps/control-panel": {
       "vite": false,
       "ignore": ["vite.config.ts"],
