@@ -5,6 +5,7 @@ import type { McpSessionDurableObjectNamespace } from "../src/mcp-session-store"
 
 const namespace = (env as unknown as { MCP_SESSIONS: McpSessionDurableObjectNamespace })
   .MCP_SESSIONS;
+const authorization = "Bearer worker-boundary-test-token";
 
 describe("MCP session Worker transport", () => {
   it("preserves session context after the Durable Object isolate is evicted", async () => {
@@ -27,7 +28,7 @@ describe("MCP session Worker transport", () => {
 
     const ended = await SELF.fetch("https://mcp.test/mcp", {
       method: "DELETE",
-      headers: { "mcp-session-id": sessionId },
+      headers: { authorization, "mcp-session-id": sessionId },
     });
 
     expect(ended.status).toBe(204);
@@ -81,7 +82,7 @@ async function useContext(sessionId: string): Promise<void> {
 async function expectDeadSession(sessionId: string): Promise<void> {
   const response = await SELF.fetch("https://mcp.test/mcp", {
     method: "POST",
-    headers: { "content-type": "application/json", "mcp-session-id": sessionId },
+    headers: { authorization, "content-type": "application/json", "mcp-session-id": sessionId },
     body: "{malformed-dispatch-sentinel",
   });
 
@@ -94,6 +95,7 @@ function rpc(method: string, params?: unknown, sessionId?: string): Promise<Resp
   return SELF.fetch("https://mcp.test/mcp", {
     method: "POST",
     headers: {
+      authorization,
       "content-type": "application/json",
       ...(sessionId ? { "mcp-session-id": sessionId } : {}),
     },

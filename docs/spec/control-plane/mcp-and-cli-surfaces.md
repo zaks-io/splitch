@@ -168,11 +168,15 @@ Agent connects to MCP server URL
   → 401 + WWW-Authenticate: Bearer realm="splitch" resource_metadata_url="/.well-known/oauth-protected-resource"
   → GET /.well-known/oauth-protected-resource   → { authorization_servers: [...] }
   → GET /.well-known/oauth-authorization-server  → { agent_auth: { identity_endpoint, claim_endpoint, ... } }
-  → Agent picks door (ID-JAG preferred, device flow fallback)
+  → Agent picks an advertised door
   → POST /agent/identity → identity_assertion
   → POST /oauth2/token   → access_token
   → Subsequent tool calls: Authorization: Bearer <access_token>
 ```
+
+Door A (ID-JAG) is paused. While paused, authorization-server metadata and `auth.md` advertise only
+Door B (anonymous) and Door C (device flow). A paused door is absent from discovery rather than a
+broken endpoint an agent can select.
 
 ### MCP tool schema derivation
 

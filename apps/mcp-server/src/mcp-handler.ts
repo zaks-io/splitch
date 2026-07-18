@@ -34,6 +34,7 @@ export interface McpServerRequestOptions {
   readonly request: Request;
   readonly service: string;
   readonly platformTarget?: string;
+  readonly authBaseUrl?: string;
   readonly controlPlaneBaseUrl?: string;
   readonly evaluationBaseUrl?: string;
   readonly analysisBaseUrl?: string;

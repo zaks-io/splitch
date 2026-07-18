@@ -24,6 +24,7 @@
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
+    "AUTH_API_ORIGIN": "http://127.0.0.1:8791",
     "CONTROL_PLANE_API_ORIGIN": "http://127.0.0.1:8787",
     "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788"
   },
@@ -55,6 +56,7 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
         "CONTROL_PLANE_API_ORIGIN": "https://api.preview.splitch.dev",
         "EVALUATION_API_ORIGIN": "https://edge.preview.splitch.dev"
       },
@@ -87,6 +89,7 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
+        "AUTH_API_ORIGIN": "https://auth.splitch.dev",
         "CONTROL_PLANE_API_ORIGIN": "https://api.splitch.dev",
         "EVALUATION_API_ORIGIN": "https://edge.splitch.dev"
       },

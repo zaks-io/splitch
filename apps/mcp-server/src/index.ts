@@ -11,6 +11,7 @@ const service = "splitch-mcp-server";
 
 type Env = {
   ANALYSIS_API?: Fetcher;
+  AUTH_API_ORIGIN?: string;
   CONTROL_PLANE_API_ORIGIN?: string;
   EVALUATION_API_ORIGIN?: string;
   ANALYSIS_API_ORIGIN?: string;
@@ -35,6 +36,7 @@ const handler = {
       request,
       service,
       platformTarget: env.SPLITCH_PLATFORM_TARGET,
+      authBaseUrl: env.AUTH_API_ORIGIN,
       controlPlaneBaseUrl: env.CONTROL_PLANE_API_ORIGIN,
       evaluationBaseUrl: env.EVALUATION_API_ORIGIN,
       analysisBaseUrl: env.ANALYSIS_API_ORIGIN,

@@ -74,12 +74,12 @@ async function callTool(
   name: string,
   controlPlaneFetch: typeof fetch,
   arguments_: Record<string, unknown> = {},
-  authorization?: string,
+  authorization = "Bearer invalid-control-plane-token",
 ): Promise<ToolCallResult> {
   const response = await handleMcpServerRequest({
     request: new Request("https://mcp.test/mcp", {
       method: "POST",
-      headers: { "content-type": "application/json", ...(authorization ? { authorization } : {}) },
+      headers: { authorization, "content-type": "application/json" },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,

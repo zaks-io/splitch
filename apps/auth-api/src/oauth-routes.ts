@@ -70,7 +70,7 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
         skill: `${issuer}/auth.md`,
         identity_endpoint: `${issuer}/agent/identity`,
         claim_endpoint: `${issuer}/agent/identity/claim`,
-        identity_types_supported: ["id_jag", "anonymous", "device_flow"],
+        identity_types_supported: ["anonymous", "device_flow"],
       },
     });
   });

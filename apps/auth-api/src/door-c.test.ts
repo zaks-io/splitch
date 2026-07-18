@@ -148,7 +148,7 @@ describe("Door C discovery and device flow", () => {
     );
     expect(authorizationServer.status).toBe(200);
     const serverMetadata = (await authorizationServer.json()) as {
-      agent_auth: { skill: string };
+      agent_auth: { skill: string; identity_types_supported: string[] };
     };
     expect(serverMetadata).toMatchObject({
       issuer: ORIGIN,
@@ -158,12 +158,15 @@ describe("Door C discovery and device flow", () => {
       agent_auth: {
         identity_endpoint: `${ORIGIN}/agent/identity`,
         claim_endpoint: `${ORIGIN}/agent/identity/claim`,
+        identity_types_supported: ["anonymous", "device_flow"],
       },
     });
+    expect(JSON.stringify(serverMetadata)).not.toContain("id_jag");
 
     const skill = await app.request(serverMetadata.agent_auth.skill);
     expect(skill.status).toBe(200);
     expect(skill.headers.get("content-type")).toContain("text/markdown");
+    expect(await skill.text()).not.toContain("ID-JAG");
   });
 
   it("issues a control-plane token for a fixture device grant", async () => {
