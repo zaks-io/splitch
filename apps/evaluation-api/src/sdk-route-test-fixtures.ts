@@ -25,6 +25,7 @@ import {
   targetingRule,
 } from "./evaluate/evaluate-path-test-fixtures";
 import type { AssembledExposure } from "./evaluate/exposure-assembly";
+import type { EvaluationCommitEvent, EvaluationCommitSink } from "./evaluation-commit-sink";
 import type { EvaluationUsageEvent, EvaluationUsageSink } from "./evaluation-usage-sink";
 import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV, runConfigKV } from "./provider/fixtures";
@@ -45,7 +46,7 @@ const ORGANIZATION_ID = "org_verify";
 interface SdkRouteHarnessOptions {
   readonly liveRun?: boolean;
   readonly experimentOverrides?: Partial<ExperimentConfigKV>;
-  readonly exposureSink?: RecordingExposureSink;
+  readonly evaluationCommitSink?: EvaluationCommitSink;
   readonly evaluationUsageSink?: RecordingEvaluationUsageSink;
   readonly flagOverrides?: Partial<FlagConfigKV>;
   readonly holdovers?: Map<string, { runId: string; variant: string }>;
@@ -175,8 +176,11 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
   const configKv = seededConfigKv(options);
   const credentialKv = await seededCredentialKv(options);
   const assignmentStore = new RecordingAssignmentStore({ holdovers: options.holdovers });
-  const exposureSink = options.exposureSink ?? new RecordingExposureSink();
+  const exposureSink = new RecordingExposureSink();
   const evaluationUsageSink = options.evaluationUsageSink ?? new RecordingEvaluationUsageSink();
+  const evaluationCommitSink =
+    options.evaluationCommitSink ??
+    new RecordingEvaluationCommitSink(exposureSink, evaluationUsageSink);
   const app = createApp({
     authResolver: controlPlaneAuthResolver,
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(credentialKv),
@@ -189,7 +193,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
       newEventId: () => "evt-route-1",
       now: () => new Date("2026-07-03T00:00:00.000Z"),
     },
-    exposureSink,
+    evaluationCommitSink,
     evaluationUsageSink,
   });
   return { app, assignmentStore, configKv, credentialKv, exposureSink, evaluationUsageSink };
@@ -231,5 +235,20 @@ export class RecordingEvaluationUsageSink implements EvaluationUsageSink {
 
   async write(event: EvaluationUsageEvent): Promise<void> {
     this.writes.push(event);
+  }
+}
+
+export class RecordingEvaluationCommitSink implements EvaluationCommitSink {
+  readonly writes: EvaluationCommitEvent[] = [];
+
+  constructor(
+    private readonly exposureSink: RecordingExposureSink,
+    private readonly evaluationUsageSink: RecordingEvaluationUsageSink,
+  ) {}
+
+  async write(event: EvaluationCommitEvent): Promise<void> {
+    this.writes.push(event);
+    for (const exposure of event.exposures) await this.exposureSink.write(exposure);
+    await this.evaluationUsageSink.write(event.usage);
   }
 }

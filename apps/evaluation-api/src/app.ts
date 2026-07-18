@@ -6,8 +6,8 @@ import { makeApiKeyOnlyAuthResolver, makeClientKeyOnlyAuthResolver } from "./dat
 import { makeEvaluateHandler } from "./evaluate";
 import type { EvaluatePathDeps } from "./evaluate/evaluate-path";
 import type { ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
+import type { EvaluationCommitSink } from "./evaluation-commit-sink";
 import type { EvaluationUsageSink } from "./evaluation-usage-sink";
-import type { ExposureSink } from "./exposure-sink";
 import { makePeekHandler } from "./peek";
 import { evaluationRoute } from "./routes";
 import { makeTestEvaluationHandler } from "./test-evaluation";
@@ -17,7 +17,7 @@ export interface AppDeps extends EvaluatePathDeps {
   authResolver: AuthResolver;
   dataPlaneAuthResolver: AuthResolver;
   exposureAssembly: ExposureAssemblyDeps;
-  exposureSink: ExposureSink;
+  evaluationCommitSink: EvaluationCommitSink;
   evaluationUsageSink: EvaluationUsageSink;
   rateLimiter: RateLimiter;
   defaultHeaders?: Record<string, string>;

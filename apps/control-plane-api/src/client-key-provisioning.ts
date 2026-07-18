@@ -22,7 +22,7 @@ export async function provisionClientKey(
   ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
 ): Promise<ClientKeyRow> {
   const key = await ensureActiveClientKey(deps, ctx);
-  await writeClientKeyCache(deps, key, false, ctx.organizationId);
+  await writeClientKeyCache(deps, key, false, ctx.organizationId, true);
   return key;
 }
 

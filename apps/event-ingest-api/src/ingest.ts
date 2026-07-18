@@ -13,7 +13,7 @@ import {
 import type { CredentialScope, Env, EvaluationUsageScope, Outcome } from "./types";
 
 /** The three body fields that identify the fire-time Run scope. */
-function requiredIdentity(
+export function requiredIdentity(
   payload: Record<string, unknown>,
 ): Outcome<{ experimentId: string; idType: string; runId: string }> {
   const experimentId = stringField(payload, "experimentId");
@@ -134,7 +134,7 @@ function credentialScope(request: Request, env: Env): Outcome<CredentialScope> {
   return { ok: true, value: { appId, environmentId } };
 }
 
-function evaluationUsageScope(request: Request, env: Env): Outcome<EvaluationUsageScope> {
+export function evaluationUsageScope(request: Request, env: Env): Outcome<EvaluationUsageScope> {
   const credential = credentialScope(request, env);
   if (!credential.ok) return credential;
 

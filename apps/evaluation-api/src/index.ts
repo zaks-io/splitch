@@ -16,7 +16,7 @@ import {
 } from "./control-plane-auth";
 import { makeDataPlaneAuthResolver } from "./data-plane-auth";
 import type { EvaluationApiEnv } from "./env";
-import { makeHttpExposureSink } from "./exposure-sink";
+import { makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
 import { makeHttpEvaluationUsageSink } from "./evaluation-usage-sink";
 import { makeEnvSaltStore } from "./local-salt-store";
 import { KvProvider } from "./provider/kv-provider";
@@ -57,7 +57,7 @@ const handler = {
         saltStore,
         sourceId: env.SPLITCH_SOURCE_ID ?? "local",
       },
-      exposureSink: makeHttpExposureSink({
+      evaluationCommitSink: makeHttpEvaluationCommitSink({
         endpoint: env.EVENT_INGEST_URL,
         fetcher: env.EVENT_INGEST,
         token: env.SPLITCH_EVENT_INGEST_TOKEN,

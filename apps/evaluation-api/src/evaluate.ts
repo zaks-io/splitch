@@ -2,7 +2,6 @@ import {
   type DataPlaneEvaluateRequest,
   DataPlaneEvaluateResponseSchema,
   type ErrorResponse,
-  type Variant,
 } from "@splitch/contracts";
 import { type HandlerArgs, type Principal, renderError } from "@splitch/worker-runtime";
 import { evaluate } from "./evaluate/accessor-paths";
@@ -10,10 +9,10 @@ import type { EvaluateResult } from "./evaluate/evaluate-path";
 import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-path-types";
 import type { AssembledExposure, ExposureAssemblyDeps } from "./evaluate/exposure-assembly";
 import { errorResponse } from "./evaluation-error-response";
-import { type EvaluationUsageScope, writeEvaluationUsage } from "./evaluation-usage";
-import type { EvaluationUsageSink } from "./evaluation-usage-sink";
-import type { ExposureSink } from "./exposure-sink";
-import { ExposureSinkError } from "./exposure-sink";
+import type { EvaluationCommitSink } from "./evaluation-commit-sink";
+import { EvaluationCommitSinkError } from "./evaluation-commit-sink";
+import type { EvaluationUsageScope } from "./evaluation-usage";
+import { responseBody, sdkRuntime } from "./evaluate-response";
 import type { FlagConfig, Provider } from "./provider/provider";
 
 type EvaluateInput = {
@@ -22,8 +21,7 @@ type EvaluateInput = {
 
 interface EvaluateRouteDeps extends EvaluatePathDeps {
   readonly exposureAssembly: ExposureAssemblyDeps;
-  readonly exposureSink: ExposureSink;
-  readonly evaluationUsageSink: EvaluationUsageSink;
+  readonly evaluationCommitSink: EvaluationCommitSink;
   /**
    * `ctx.waitUntil` seam for the fire-and-forget Assignment Store write
    * (holdover-write-contract.md). When absent (unit harnesses), the write still
@@ -127,18 +125,14 @@ async function evaluateResponse(
     );
   }
 
-  const write = await writeExposures(output.exposures, deps);
-  if (!write.ok) return renderError(write.error, { requestId });
-
-  const usageWrite = await writeEvaluationUsage(
-    output.exposures.length > 0,
+  const commit = await writeEvaluationCommit(
+    output.exposures,
     logicalEvaluationId,
     evaluated.scope,
     { flagKey: provider.flag.flagKey, sdkRuntime: sdkRuntime(request) },
     deps,
-    () => errorResponse("SERVICE_UNAVAILABLE", "Evaluation usage ingest is unavailable"),
   );
-  if (!usageWrite.ok) return renderError(usageWrite.error, { requestId });
+  if (!commit.ok) return renderError(commit.error, { requestId });
 
   // Only record the holdover AFTER the Exposure is accepted by ingest. Writing it
   // first and then returning 503 would make the SDK retry hit holdover replay
@@ -151,27 +145,6 @@ async function evaluateResponse(
     response.headers.set("x-run-id", output.result.liveRunId);
   }
   return response;
-}
-
-function sdkRuntime(request: Request): string {
-  const value = request.headers.get("x-splitch-sdk-runtime");
-  return value && value.length <= 64 ? value : "unknown";
-}
-
-function responseBody(
-  flag: FlagConfig,
-  result: Exclude<EvaluateResult, { kind: "error" }>,
-): { ok: true; value: { variant: Variant["value"] | null } } | { ok: false; error: ErrorResponse } {
-  const value = valueForVariant(flag.variants, result);
-  return value.ok
-    ? { ok: true, value: { variant: value.value } }
-    : {
-        ok: false,
-        error: errorResponse(
-          "INTERNAL_SERVER_ERROR",
-          `Variant "${value.variantName}" has no value`,
-        ),
-      };
 }
 
 /**
@@ -207,23 +180,38 @@ function scheduleHoldoverWrite(result: EvaluateResult, deps: EvaluateRouteDeps):
   deps.waitUntil?.(write);
 }
 
-async function writeExposures(
+async function writeEvaluationCommit(
   exposures: readonly AssembledExposure[],
+  idempotencyKey: string,
+  scope: EvaluationUsageScope,
+  dimensions: { readonly flagKey: string; readonly sdkRuntime: string },
   deps: EvaluateRouteDeps,
 ): Promise<{ ok: true } | { ok: false; error: ErrorResponse }> {
   try {
-    for (const exposure of exposures) {
-      await deps.exposureSink.write(exposure);
-    }
+    await deps.evaluationCommitSink.write({
+      usage: {
+        idempotencyKey,
+        organizationId: scope.organizationId,
+        appId: scope.appId,
+        environmentId: scope.environmentId,
+        flagKey: dimensions.flagKey,
+        sdkRuntime: dimensions.sdkRuntime,
+        evaluationCount: 1,
+        isBatch: false,
+        isCached: false,
+        hasExposure: exposures.length > 0,
+      },
+      exposures,
+    });
     return { ok: true };
   } catch (cause) {
-    if (!(cause instanceof ExposureSinkError)) {
+    if (!(cause instanceof EvaluationCommitSinkError)) {
       throw cause;
     }
-    deps.logger?.error("exposure_sink_failed", { cause });
+    deps.logger?.error("evaluation_commit_sink_failed", { cause });
     return {
       ok: false,
-      error: errorResponse("SERVICE_UNAVAILABLE", "Exposure ingest is unavailable"),
+      error: errorResponse("SERVICE_UNAVAILABLE", "Evaluation commit ingest is unavailable"),
     };
   }
 }
@@ -283,17 +271,4 @@ class CapturingProvider implements Provider {
   getFlags(...args: Parameters<Provider["getFlags"]>) {
     return this.inner.getFlags(...args);
   }
-}
-
-function valueForVariant(
-  variants: readonly Variant[],
-  result: Exclude<EvaluateResult, { kind: "error" }>,
-): { ok: true; value: Variant["value"] | null } | { ok: false; variantName: string | null } {
-  if (result.variant === null) {
-    return { ok: true, value: null };
-  }
-  const variant = variants.find((item) => item.name === result.variant);
-  return variant === undefined
-    ? { ok: false, variantName: result.variant }
-    : { ok: true, value: variant.value };
 }

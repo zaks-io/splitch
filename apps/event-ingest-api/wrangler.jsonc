@@ -42,6 +42,10 @@
       {
         "name": "EVALUATION_USAGE_REPLAY_WINDOW",
         "class_name": "EvaluationUsageReplayWindowDurableObject"
+      },
+      {
+        "name": "EVALUATION_COMMIT_OUTBOX",
+        "class_name": "EvaluationCommitOutboxDurableObject"
       }
     ]
   },
@@ -49,6 +53,10 @@
     {
       "tag": "v1_evaluation_usage_replay_window",
       "new_sqlite_classes": ["EvaluationUsageReplayWindowDurableObject"]
+    },
+    {
+      "tag": "v2_evaluation_commit_outbox",
+      "new_sqlite_classes": ["EvaluationCommitOutboxDurableObject"]
     }
   ],
   "env": {
@@ -88,6 +96,10 @@
           {
             "name": "EVALUATION_USAGE_REPLAY_WINDOW",
             "class_name": "EvaluationUsageReplayWindowDurableObject"
+          },
+          {
+            "name": "EVALUATION_COMMIT_OUTBOX",
+            "class_name": "EvaluationCommitOutboxDurableObject"
           }
         ]
       },
@@ -95,6 +107,10 @@
         {
           "tag": "v1_evaluation_usage_replay_window",
           "new_sqlite_classes": ["EvaluationUsageReplayWindowDurableObject"]
+        },
+        {
+          "tag": "v2_evaluation_commit_outbox",
+          "new_sqlite_classes": ["EvaluationCommitOutboxDurableObject"]
         }
       ]
     },
@@ -134,6 +150,10 @@
           {
             "name": "EVALUATION_USAGE_REPLAY_WINDOW",
             "class_name": "EvaluationUsageReplayWindowDurableObject"
+          },
+          {
+            "name": "EVALUATION_COMMIT_OUTBOX",
+            "class_name": "EvaluationCommitOutboxDurableObject"
           }
         ]
       },
@@ -141,6 +161,10 @@
         {
           "tag": "v1_evaluation_usage_replay_window",
           "new_sqlite_classes": ["EvaluationUsageReplayWindowDurableObject"]
+        },
+        {
+          "tag": "v2_evaluation_commit_outbox",
+          "new_sqlite_classes": ["EvaluationCommitOutboxDurableObject"]
         }
       ]
     }

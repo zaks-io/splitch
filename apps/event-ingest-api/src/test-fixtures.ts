@@ -1,9 +1,12 @@
 import { CURRENT_KV_SCHEMA_VERSION, experimentConfigKey, runConfigKey } from "@splitch/contracts";
 import { vi } from "vitest";
+import type { EvaluationCommitOutbox } from "./evaluation-commit-outbox";
+import type { EvaluationUsageReplayWindow } from "./evaluation-usage-replay-window";
+import type { ExposurePayload } from "./event-ingest-test-types";
 import {
-  EVALUATION_USAGE_REPLAY_WINDOW_MS,
-  type EvaluationUsageReplayWindow,
-} from "./evaluation-usage-replay-window";
+  MemoryEvaluationCommitOutbox,
+  MemoryReplayWindow,
+} from "./memory-replay-windows.test-fixture";
 import worker from "./index";
 
 export const appId = "app_credential";
@@ -14,7 +17,6 @@ export const liveRunId = "run_live";
 export const priorRunId = "run_prior";
 export const fixedNow = "2026-07-01T12:34:56.789Z";
 export const organizationId = "org_credential";
-
 export async function postExposure(
   options: {
     payload?: Partial<ExposurePayload>;
@@ -100,7 +102,47 @@ export async function postEvaluationAt(
   return captureResponse(ctx, fetch, response);
 }
 
-export function makeEnv(replayWindow: EvaluationUsageReplayWindow = new MemoryReplayWindow()) {
+export async function postEvaluationCommit(
+  options: {
+    payload?: Partial<ExposurePayload>;
+    statuses?: readonly number[];
+    env?: ReturnType<typeof makeEnv>;
+  } = {},
+) {
+  vi.spyOn(Date, "now").mockReturnValue(new Date(fixedNow).getTime());
+  const fetch = mockTinybirdFetch(options.statuses);
+  const ctx = new TestExecutionContext();
+  const response = await worker.fetch(
+    workerRequest("https://event-ingest.test/api/internal/evaluation-commits", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer internal_ingest_secret",
+        "content-type": "application/json",
+        "x-splitch-app-id": appId,
+        "x-splitch-environment-id": environmentId,
+        "x-splitch-organization-id": organizationId,
+      },
+      body: JSON.stringify({
+        evaluationCount: 1,
+        isBatch: false,
+        isCached: false,
+        hasExposure: true,
+        flagKey: "checkout",
+        sdkRuntime: "javascript",
+        idempotencyKey: "eval-request-1",
+        exposures: [{ ...baseExposure(), ...options.payload }],
+      }),
+    }),
+    options.env ?? makeEnv(),
+    ctx,
+  );
+  return captureResponse(ctx, fetch, response);
+}
+
+export function makeEnv(
+  replayWindow: EvaluationUsageReplayWindow = new MemoryReplayWindow(),
+  evaluationCommitOutbox: EvaluationCommitOutbox = new MemoryEvaluationCommitOutbox(),
+) {
   return {
     CONFIG_STORE: seededConfigStore() as unknown as KVNamespace,
     SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
@@ -108,11 +150,16 @@ export function makeEnv(replayWindow: EvaluationUsageReplayWindow = new MemoryRe
     TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
     TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN: "tb_raw_evaluations_ingest_secret",
     EVALUATION_USAGE_REPLAY_WINDOW: replayWindow,
+    EVALUATION_COMMIT_OUTBOX: evaluationCommitOutbox,
   };
 }
 
-export function mockTinybirdFetch(status = 202) {
-  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status }));
+export function mockTinybirdFetch(statuses: number | readonly number[] = 202) {
+  const remaining = typeof statuses === "number" ? [statuses] : [...statuses];
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => {
+    const status = remaining.shift() ?? 202;
+    return new Response(null, { status });
+  });
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
@@ -232,43 +279,4 @@ class MemoryKV {
   async get(key: string): Promise<string | null> {
     return this.values.get(key) ?? null;
   }
-}
-
-class MemoryReplayWindow implements EvaluationUsageReplayWindow {
-  private readonly claims = new Map<string, { eventId: string; expiresAt: number }>();
-
-  async claim(identity: string): Promise<string> {
-    const now = Date.now();
-    const existing = this.claims.get(identity);
-    if (existing !== undefined && existing.expiresAt > now) return existing.eventId;
-
-    const digest = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(`${identity}\u001f${now}`),
-    );
-    const eventId = `sha256:${[...new Uint8Array(digest)]
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("")}`;
-    this.claims.set(identity, { eventId, expiresAt: now + EVALUATION_USAGE_REPLAY_WINDOW_MS });
-    return eventId;
-  }
-}
-
-interface ExposurePayload {
-  dedupKey: string;
-  eventId: string;
-  appId: string;
-  environmentId: string;
-  experimentId: string;
-  runId: string;
-  idType: string;
-  targetingKeyHash: string;
-  variantName: string;
-  type: "exposure";
-  sourceId: string;
-  counterfactual: boolean;
-  clientTimestamp: string;
-  serverReceivedAt: string;
-  ingestTs: string;
-  sdkVersion: string;
 }

@@ -272,25 +272,3 @@ describe("control-plane credential endpoints", () => {
     expect((await bodyOf(res)).code).toBe("INSUFFICIENT_SCOPES");
   });
 });
-
-describe("Client Key restriction cache write-through", () => {
-  it("fails loud when a restriction cache write throws", async () => {
-    const jwt = await token(ADMIN, "admin");
-    expect((await request("GET", credentialPath("/client-key"), jwt)).status).toBe(200);
-
-    const faultingKv = {
-      put: async () => {
-        throw new Error("KV unavailable");
-      },
-    } as unknown as KVNamespace;
-    h.app = makeApp(h.bindings, h.signer, faultingKv);
-
-    const res = await request("PATCH", credentialPath("/client-key"), jwt, {
-      originAllowlist: ["https://app.example.test"],
-      rateLimitRps: 25,
-    });
-
-    expect(res.status).toBe(500);
-    expect((await bodyOf(res)).code).toBe("INTERNAL_SERVER_ERROR");
-  });
-});

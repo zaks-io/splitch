@@ -12,7 +12,11 @@ import {
 import { FakeKv } from "./provider/fake-kv";
 import { experimentConfigKV, flagConfigKV } from "./provider/fixtures";
 import { KvProvider } from "./provider/kv-provider";
-import { RecordingEvaluationUsageSink, RecordingExposureSink } from "./sdk-route-test-fixtures";
+import {
+  RecordingEvaluationCommitSink,
+  RecordingEvaluationUsageSink,
+  RecordingExposureSink,
+} from "./sdk-route-test-fixtures";
 
 const APP_ID = "app-A";
 const ENVIRONMENT_ID = "env-1";
@@ -73,7 +77,10 @@ function makeHarness() {
       saltStore: new StaticSaltStore(),
       sourceId: "pop-test",
     },
-    exposureSink: new RecordingExposureSink(),
+    evaluationCommitSink: new RecordingEvaluationCommitSink(
+      new RecordingExposureSink(),
+      new RecordingEvaluationUsageSink(),
+    ),
     evaluationUsageSink: new RecordingEvaluationUsageSink(),
   });
   return { app, assignmentStore, configKv };

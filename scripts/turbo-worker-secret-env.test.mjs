@@ -1,20 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
+import { hostedWorkerSecretUnion } from "./lib/hosted-worker-secrets.mjs";
 
 const turboJson = new URL("../turbo.json", import.meta.url);
-const workerSecretEnv = [
-  "EVALUATION_PRIVACY_SALT",
-  "SPLITCH_DEPLOY_GATE_TOKEN",
-  "SPLITCH_EVENT_INGEST_TOKEN",
-  "TINYBIRD_COPY_TOKEN",
-  "TINYBIRD_INGEST_TOKEN",
-  "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN",
-  "TINYBIRD_READ_TOKEN",
-  "WORKOS_API_KEY",
-  "WORKOS_CLIENT_ID",
-  "SPLITCH_REQUIRE_WORKER_SECRET_ENV",
-];
+const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const workerSecretEnv = hostedWorkerSecretUnion(repoRoot);
 
 for (const task of [
   "deploy",
@@ -27,5 +20,9 @@ for (const task of [
     for (const name of workerSecretEnv) {
       assert.ok(tasks[task].passThroughEnv.includes(name), `${task} must pass ${name}`);
     }
+    assert.ok(
+      tasks[task].passThroughEnv.includes("SPLITCH_REQUIRE_WORKER_SECRET_ENV"),
+      `${task} must pass SPLITCH_REQUIRE_WORKER_SECRET_ENV`,
+    );
   });
 }

@@ -4,13 +4,36 @@ import {
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
-import { handleEvaluationIngest, handleIngest } from "./ingest";
+import { handleEvaluationCommit } from "./evaluation-commit";
+import { EvaluationCommitOutboxDurableObject } from "./evaluation-commit-outbox";
 import { EvaluationUsageReplayWindowDurableObject } from "./evaluation-usage-replay-window";
+import { handleEvaluationIngest, handleIngest } from "./ingest";
 import type { Env } from "./types";
 
 const service = "splitch-event-ingest-api";
 const ingestPath = "/api/internal/exposures";
 const evaluationIngestPath = "/api/internal/evaluations";
+const evaluationCommitPath = "/api/internal/evaluation-commits";
+
+const internalRoutes: Readonly<
+  Record<
+    string,
+    {
+      requestId: string;
+      handle(request: Request, env: Env): Promise<Response>;
+    }
+  >
+> = {
+  [ingestPath]: { requestId: "ingest-request", handle: handleIngest },
+  [evaluationIngestPath]: {
+    requestId: "evaluation-ingest-request",
+    handle: handleEvaluationIngest,
+  },
+  [evaluationCommitPath]: {
+    requestId: "evaluation-commit-request",
+    handle: handleEvaluationCommit,
+  },
+};
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -26,28 +49,19 @@ const handler = {
       );
     }
 
-    if (request.method === "POST" && url.pathname === ingestPath) {
-      observability.onRequest?.({
-        requestId: request.headers.get("x-request-id") ?? "ingest-request",
-        method: request.method,
-        path: url.pathname,
-      });
-      return handleIngest(request, env);
-    }
+    const route = request.method === "POST" ? internalRoutes[url.pathname] : undefined;
+    if (route === undefined) return new Response("not found", { status: 404 });
 
-    if (request.method === "POST" && url.pathname === evaluationIngestPath) {
-      observability.onRequest?.({
-        requestId: request.headers.get("x-request-id") ?? "evaluation-ingest-request",
-        method: request.method,
-        path: url.pathname,
-      });
-      return handleEvaluationIngest(request, env);
-    }
-
-    return new Response("not found", { status: 404 });
+    observability.onRequest?.({
+      requestId: request.headers.get("x-request-id") ?? route.requestId,
+      method: request.method,
+      path: url.pathname,
+    });
+    return route.handle(request, env);
   },
 } satisfies ExportedHandler<Env>;
 
 export default wrapWorkerHandler(handler, { surface: "event-ingest-api" });
 
 export { EvaluationUsageReplayWindowDurableObject };
+export { EvaluationCommitOutboxDurableObject };

@@ -86,7 +86,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       await writeClientKeyCache(deps, revoked, true, ctx.organizationId, true);
 
       const next = await createClientKey(deps, ctx);
-      await writeClientKeyCache(deps, next, false, ctx.organizationId);
+      await writeClientKeyCache(deps, next, false, ctx.organizationId, true);
       return Response.json({
         newKey: { keyId: next.keyId, keyMaterial: next.keyMaterial },
         revokedKeyId: revoked.keyId,

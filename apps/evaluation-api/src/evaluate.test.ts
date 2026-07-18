@@ -1,6 +1,6 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { ExposureSinkError } from "./exposure-sink";
+import { type EvaluationCommitEvent, EvaluationCommitSinkError } from "./evaluation-commit-sink";
 import {
   API_KEY,
   APP_ID,
@@ -9,7 +9,6 @@ import {
   LOCKED_CLIENT_KEY,
   makeSdkRouteHarness,
   REVOKED_CLIENT_KEY,
-  RecordingExposureSink,
   sdkRouteInit,
 } from "./sdk-route-test-fixtures";
 
@@ -165,7 +164,7 @@ describe("POST /api/sdk/evaluate", () => {
 
   it("returns SERVICE_UNAVAILABLE and writes NO holdover when Exposure ingest fails", async () => {
     const { app, assignmentStore } = await makeSdkRouteHarness({
-      exposureSink: new FailingExposureSink(),
+      evaluationCommitSink: new FailingEvaluationCommitSink(),
       liveRun: true,
       runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
     });
@@ -277,8 +276,8 @@ function liveRunHarness() {
   return makeSdkRouteHarness({ liveRun: true });
 }
 
-class FailingExposureSink extends RecordingExposureSink {
-  override async write(): Promise<void> {
-    throw new ExposureSinkError("forced failure");
+class FailingEvaluationCommitSink {
+  async write(_event: EvaluationCommitEvent): Promise<void> {
+    throw new EvaluationCommitSinkError("forced failure");
   }
 }

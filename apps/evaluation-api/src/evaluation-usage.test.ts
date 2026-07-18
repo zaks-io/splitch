@@ -1,14 +1,7 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
-import { EvaluationUsageSinkError } from "./evaluation-usage-sink";
-import { makeHttpEvaluationUsageSink } from "./evaluation-usage-sink";
-import {
-  APP_ID,
-  CLIENT_KEY,
-  makeSdkRouteHarness,
-  RecordingEvaluationUsageSink,
-  sdkRouteInit,
-} from "./sdk-route-test-fixtures";
+import { EvaluationCommitSinkError, makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
+import { APP_ID, CLIENT_KEY, makeSdkRouteHarness, sdkRouteInit } from "./sdk-route-test-fixtures";
 
 const PATH = "/api/sdk/evaluate";
 
@@ -31,7 +24,7 @@ describe("POST /api/sdk/evaluate: logical Evaluation identity", () => {
 describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
   it("maps a rejected usage service binding fetch to a retryable failure", async () => {
     const { app } = await makeSdkRouteHarness({
-      evaluationUsageSink: new RejectingFetcherEvaluationUsageSink(),
+      evaluationCommitSink: new RejectingFetcherEvaluationCommitSink(),
     });
 
     const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
@@ -87,7 +80,7 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
 
   it("maps Evaluation usage ingest failure before acknowledging a successful Evaluation", async () => {
     const { app } = await makeSdkRouteHarness({
-      evaluationUsageSink: new FailingEvaluationUsageSink(),
+      evaluationCommitSink: new FailingEvaluationCommitSink(),
     });
 
     const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
@@ -156,19 +149,19 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
   });
 });
 
-class FailingEvaluationUsageSink extends RecordingEvaluationUsageSink {
-  override async write(): Promise<void> {
-    throw new EvaluationUsageSinkError("forced failure");
+class FailingEvaluationCommitSink {
+  async write(): Promise<void> {
+    throw new EvaluationCommitSinkError("forced failure");
   }
 }
 
-class RejectingFetcherEvaluationUsageSink extends RecordingEvaluationUsageSink {
-  private readonly sink = makeHttpEvaluationUsageSink({
+class RejectingFetcherEvaluationCommitSink {
+  private readonly sink = makeHttpEvaluationCommitSink({
     token: "test-token",
     fetcher: { fetch: async () => Promise.reject(new Error("binding unavailable")) },
   });
 
-  override async write(event: Parameters<RecordingEvaluationUsageSink["write"]>[0]): Promise<void> {
+  async write(event: Parameters<typeof this.sink.write>[0]): Promise<void> {
     await this.sink.write(event);
   }
 }

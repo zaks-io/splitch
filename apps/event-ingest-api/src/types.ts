@@ -3,6 +3,10 @@ import type {
   EvaluationUsageReplayWindow,
   EvaluationUsageReplayWindowNamespace,
 } from "./evaluation-usage-replay-window";
+import type {
+  EvaluationCommitOutbox,
+  EvaluationCommitOutboxNamespace,
+} from "./evaluation-commit-outbox";
 
 export type Env = {
   CONFIG_STORE?: KVNamespace;
@@ -15,6 +19,7 @@ export type Env = {
   EVALUATION_USAGE_REPLAY_WINDOW?:
     | EvaluationUsageReplayWindow
     | EvaluationUsageReplayWindowNamespace;
+  EVALUATION_COMMIT_OUTBOX?: EvaluationCommitOutbox | EvaluationCommitOutboxNamespace;
   SENTRY_DSN?: string;
 };
 

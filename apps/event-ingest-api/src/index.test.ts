@@ -12,6 +12,7 @@ import {
   mockTinybirdFetch,
   organizationId,
   postEvaluation,
+  postEvaluationCommit,
   postEvaluationAt,
   postExposure,
   priorRunId,
@@ -116,6 +117,20 @@ describe("Evaluation usage ingest", () => {
     expect(expectRow(other.rows).dedup_key).not.toBe(expectRow(first.rows).dedup_key);
   });
 
+  it("keeps cached telemetry from preclaiming the replay identity of a remote Evaluation", async () => {
+    const env = makeEnv();
+    const cached = await postEvaluationAt(
+      fixedNow,
+      { evaluationCount: 0, isCached: true },
+      undefined,
+      env,
+    );
+    const remote = await postEvaluationAt(fixedNow, {}, undefined, env);
+
+    expect(expectRow(cached.rows).dedup_key).not.toBe(expectRow(remote.rows).dedup_key);
+    expect(expectRow(remote.rows)).toMatchObject({ evaluation_count: 1, is_cached: 0 });
+  });
+
   it("expires an Evaluation idempotency key after its 24-hour replay window", async () => {
     const env = makeEnv();
     const first = await postEvaluationAt(fixedNow, {}, undefined, env);
@@ -130,6 +145,33 @@ describe("Evaluation usage ingest", () => {
     const retry = await postEvaluationAt("2026-07-02T00:00:00.001Z", {}, undefined, env);
 
     expect(expectRow(retry.rows).dedup_key).toBe(expectRow(first.rows).dedup_key);
+  });
+});
+
+describe("Evaluation commit ingest", () => {
+  it("replays one durable usage and Exposure commit after the Exposure append fails", async () => {
+    const env = makeEnv();
+    const first = await postEvaluationCommit({ statuses: [202, 500], env });
+    const retry = await postEvaluationCommit({ env });
+
+    expect(first.response.status).toBe(503);
+    expect(first.rows).toHaveLength(2);
+    expect(first.rows[0]).toMatchObject({ evaluation_count: 1, has_exposure: 1 });
+    expect(retry.response.status).toBe(202);
+    expect(retry.rows).toHaveLength(2);
+    expect(retry.rows[0]?.dedup_key).toBe(first.rows[0]?.dedup_key);
+    expect(retry.rows[1]?.dedup_key).toBe(first.rows[1]?.dedup_key);
+  });
+
+  it("acks a delivered commit without appending a second usage or Exposure row", async () => {
+    const env = makeEnv();
+    const first = await postEvaluationCommit({ env });
+    const retry = await postEvaluationCommit({ env });
+
+    expect(first.response.status).toBe(202);
+    expect(first.rows).toHaveLength(2);
+    expect(retry.response.status).toBe(202);
+    expect(retry.rows).toHaveLength(0);
   });
 });
 
