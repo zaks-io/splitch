@@ -21,7 +21,12 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     tailwindcss(),
-    cloudflare({ viteEnvironment: { name: "ssr" } }),
+    cloudflare({
+      persistState: process.env.SPLITCH_LOCAL_E2E_PERSIST_PATH
+        ? { path: process.env.SPLITCH_LOCAL_E2E_PERSIST_PATH }
+        : true,
+      viteEnvironment: { name: "ssr" },
+    }),
     tanstackStart(),
     react(),
   ],
