@@ -13,6 +13,14 @@ function entityPrefix(appId: string, environmentId: string, entity: string): Que
   return [...root(appId, environmentId), entity];
 }
 
+function variantPrefix(appId: string, environmentId: string) {
+  return [...entityPrefix(appId, environmentId, "variant")] as const;
+}
+
+function variantList(appId: string, environmentId: string, flagId: string) {
+  return [...variantPrefix(appId, environmentId), flagId, "list"] as const;
+}
+
 export const queryKeys = {
   app: {
     root,
@@ -22,6 +30,8 @@ export const queryKeys = {
       [...entityPrefix(appId, environmentId, "experiment")] as const,
     list: (appId: string, environmentId: string) =>
       [...entityPrefix(appId, environmentId, "experiment"), "list"] as const,
+    detailPrefix: (appId: string, environmentId: string, experimentId: string) =>
+      [...entityPrefix(appId, environmentId, "experiment"), experimentId] as const,
     detail: (appId: string, environmentId: string, experimentId: string) =>
       [...entityPrefix(appId, environmentId, "experiment"), experimentId, "detail"] as const,
     runs: (appId: string, environmentId: string, experimentId: string) =>
@@ -34,10 +44,15 @@ export const queryKeys = {
       [...entityPrefix(appId, environmentId, "flag")] as const,
     list: (appId: string, environmentId: string) =>
       [...entityPrefix(appId, environmentId, "flag"), "list"] as const,
+    detailPrefix: (appId: string, environmentId: string, flagId: string) =>
+      [...entityPrefix(appId, environmentId, "flag"), flagId] as const,
     detail: (appId: string, environmentId: string, flagId: string) =>
       [...entityPrefix(appId, environmentId, "flag"), flagId, "detail"] as const,
-    variants: (appId: string, environmentId: string, flagId: string) =>
-      [...root(appId, environmentId), "variant", flagId, "list"] as const,
+    variants: variantList,
+  },
+  variant: {
+    prefix: variantPrefix,
+    list: variantList,
   },
   metric: {
     prefix: (appId: string, environmentId: string) =>

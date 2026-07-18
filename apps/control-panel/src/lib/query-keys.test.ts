@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -12,12 +12,16 @@ describe("Control Panel query keys", () => {
       queryKeys.app.root(scope.appId, scope.environmentId),
       queryKeys.experiment.prefix(scope.appId, scope.environmentId),
       queryKeys.experiment.list(scope.appId, scope.environmentId),
+      queryKeys.experiment.detailPrefix(scope.appId, scope.environmentId, "exp_1"),
       queryKeys.experiment.detail(scope.appId, scope.environmentId, "exp_1"),
       queryKeys.experiment.runs(scope.appId, scope.environmentId, "exp_1"),
       queryKeys.experiment.run(scope.appId, scope.environmentId, "exp_1", "run_1"),
       queryKeys.flag.prefix(scope.appId, scope.environmentId),
       queryKeys.flag.list(scope.appId, scope.environmentId),
+      queryKeys.flag.detailPrefix(scope.appId, scope.environmentId, "flag_1"),
       queryKeys.flag.detail(scope.appId, scope.environmentId, "flag_1"),
+      queryKeys.variant.prefix(scope.appId, scope.environmentId),
+      queryKeys.variant.list(scope.appId, scope.environmentId, "flag_1"),
       queryKeys.flag.variants(scope.appId, scope.environmentId, "flag_1"),
       queryKeys.metric.prefix(scope.appId, scope.environmentId),
       queryKeys.metric.list(scope.appId, scope.environmentId),
@@ -29,12 +33,16 @@ describe("Control Panel query keys", () => {
       ["app", "app_1", "env", "env_prod"],
       ["app", "app_1", "env", "env_prod", "experiment"],
       ["app", "app_1", "env", "env_prod", "experiment", "list"],
+      ["app", "app_1", "env", "env_prod", "experiment", "exp_1"],
       ["app", "app_1", "env", "env_prod", "experiment", "exp_1", "detail"],
       ["app", "app_1", "env", "env_prod", "experiment", "exp_1", "run"],
       ["app", "app_1", "env", "env_prod", "experiment", "exp_1", "run", "run_1"],
       ["app", "app_1", "env", "env_prod", "flag"],
       ["app", "app_1", "env", "env_prod", "flag", "list"],
+      ["app", "app_1", "env", "env_prod", "flag", "flag_1"],
       ["app", "app_1", "env", "env_prod", "flag", "flag_1", "detail"],
+      ["app", "app_1", "env", "env_prod", "variant"],
+      ["app", "app_1", "env", "env_prod", "variant", "flag_1", "list"],
       ["app", "app_1", "env", "env_prod", "variant", "flag_1", "list"],
       ["app", "app_1", "env", "env_prod", "metric"],
       ["app", "app_1", "env", "env_prod", "metric", "list"],

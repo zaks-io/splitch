@@ -1,81 +1,92 @@
+import { createControlPlaneSdk, type FlagConfigGetOutput } from "@splitch/control-plane-sdk";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import type { ApiResult } from "./api";
-import {
-  loadReferenceFlagConfig,
-  referenceFlagConfigQuery,
-  updateReferenceFlagConfig,
-  type ReferenceFlagConfigApi,
-} from "./reference-query";
-
-type Config = { readonly version: number; readonly enabled: boolean };
-type Patch = { readonly enabled: boolean };
+import { createFlagConfigApi } from "./flag-config-api";
+import { loadFlagConfigRoute, updateFlagConfigRoute } from "./flag-config-route";
+import { referenceFlagConfigQuery } from "./reference-query";
 
 const scope = { appId: "app_1", environmentId: "env_1" };
+const initialConfig = config({ version: 1, enabled: false });
 
-describe("reference flag configuration query flow", () => {
-  it("seeds a loader read into the QueryClient", async () => {
-    const api = apiFor({ ok: true, status: 200, data: { version: 1, enabled: false } });
+describe("reference Flag Configuration route query flow", () => {
+  it("seeds a real typed SDK loader read into the QueryClient", async () => {
+    let reads = 0;
+    const api = sdkApi(async (request) => {
+      reads += 1;
+      expect(request.url).toBe(
+        "https://control-plane.test/apps/app_1/envs/env_1/flags/flag_1/config",
+      );
+      return Response.json(initialConfig);
+    });
     const queryClient = queryClientForTest();
 
-    await expect(loadReferenceFlagConfig(queryClient, api, scope, "flag_1")).resolves.toEqual({
-      version: 1,
-      enabled: false,
-    });
-    expect(api.reads).toBe(1);
+    await expect(
+      loadFlagConfigRoute({ queryClient, api, scope, flagId: "flag_1" }),
+    ).resolves.toEqual(initialConfig);
+    expect(reads).toBe(1);
+    expect(
+      queryClient.getQueryData(referenceFlagConfigQuery(api, scope, "flag_1").queryKey),
+    ).toEqual(initialConfig);
   });
 
   it("does not write optimistically and refetches only after a confirmed 200", async () => {
-    let resolveUpdate: ((result: ApiResult<Config>) => void) | undefined;
-    const api = apiFor({ ok: true, status: 200, data: { version: 1, enabled: false } });
-    api.update = () =>
-      new Promise<ApiResult<Config>>((resolve) => {
-        resolveUpdate = resolve;
-      });
+    let readConfig = initialConfig;
+    let resolveUpdate: ((response: Response) => void) | undefined;
+    const api = sdkApi((request) => {
+      if (request.method === "PATCH") {
+        return new Promise<Response>((resolve) => {
+          resolveUpdate = resolve;
+        });
+      }
+      return Promise.resolve(Response.json(readConfig));
+    });
     const queryClient = queryClientForTest();
-    await loadReferenceFlagConfig(queryClient, api, scope, "flag_1");
-    const observer = new QueryObserver(queryClient, referenceFlagConfigQuery(api, scope, "flag_1"));
+    await loadFlagConfigRoute({ queryClient, api, scope, flagId: "flag_1" });
+    const query = referenceFlagConfigQuery(api, scope, "flag_1");
+    const observer = new QueryObserver(queryClient, query);
     const unsubscribe = observer.subscribe(() => undefined);
 
-    const mutation = updateReferenceFlagConfig(queryClient, api, scope, "flag_1", {
-      enabled: true,
+    const mutation = updateFlagConfigRoute({
+      queryClient,
+      api,
+      scope,
+      flagId: "flag_1",
+      patch: { enabled: true },
     });
-    expect(
-      queryClient.getQueryData(referenceFlagConfigQuery(api, scope, "flag_1").queryKey),
-    ).toEqual({
-      version: 1,
-      enabled: false,
-    });
+    expect(queryClient.getQueryData(query.queryKey)).toEqual(initialConfig);
 
-    api.readResult = { ok: true, status: 200, data: { version: 2, enabled: true } };
-    resolveUpdate?.({ ok: true, status: 200, data: { version: 2, enabled: true } });
+    readConfig = config({ version: 2, enabled: true });
+    resolveUpdate?.(Response.json(readConfig));
 
-    await expect(mutation).resolves.toEqual({ ok: true, data: { version: 2, enabled: true } });
-    expect(
-      queryClient.getQueryData(referenceFlagConfigQuery(api, scope, "flag_1").queryKey),
-    ).toEqual({
-      version: 2,
-      enabled: true,
-    });
+    await expect(mutation).resolves.toEqual({ ok: true, data: readConfig });
+    expect(queryClient.getQueryData(query.queryKey)).toEqual(readConfig);
     unsubscribe();
   });
 
-  it("retains cached state and surfaces a 400 field error", async () => {
-    const api = apiFor({ ok: true, status: 200, data: { version: 1, enabled: false } });
-    api.update = async () => ({
-      ok: false,
-      status: 400,
-      error: {
-        code: "VALIDATION_ERROR",
-        message: "Invalid Flag Configuration",
-        details: { issues: [{ path: ["enabled"], message: "Cannot disable this Flag" }] },
-      },
-    });
+  it("retains cached state and surfaces a typed SDK 400 field error", async () => {
+    const api = sdkApi(async (request) =>
+      request.method === "PATCH"
+        ? Response.json(
+            {
+              code: "VALIDATION_ERROR",
+              message: "Invalid Flag Configuration",
+              details: { issues: [{ path: ["enabled"], message: "Cannot disable this Flag" }] },
+            },
+            { status: 400 },
+          )
+        : Response.json(initialConfig),
+    );
     const queryClient = queryClientForTest();
-    await loadReferenceFlagConfig(queryClient, api, scope, "flag_1");
+    await loadFlagConfigRoute({ queryClient, api, scope, flagId: "flag_1" });
 
     await expect(
-      updateReferenceFlagConfig(queryClient, api, scope, "flag_1", { enabled: true }),
+      updateFlagConfigRoute({
+        queryClient,
+        api,
+        scope,
+        flagId: "flag_1",
+        patch: { enabled: true },
+      }),
     ).resolves.toEqual({
       ok: false,
       error: {
@@ -86,57 +97,62 @@ describe("reference flag configuration query flow", () => {
         ],
       },
     });
-    expect(
-      queryClient.getQueryData(referenceFlagConfigQuery(api, scope, "flag_1").queryKey),
-    ).toEqual({
-      version: 1,
-      enabled: false,
-    });
+    expect(cachedConfig(queryClient, api)).toEqual(initialConfig);
   });
 
-  it("surfaces a 403 as a tier error without changing the cache", async () => {
-    const api = apiFor({ ok: true, status: 200, data: { version: 1, enabled: false } });
-    api.update = async () => ({
-      ok: false,
-      status: 403,
-      error: { code: "FORBIDDEN", message: "Admin role required", details: {} },
-    });
+  it("surfaces a typed SDK 403 as a tier error without changing the cache", async () => {
+    const api = sdkApi(async (request) =>
+      request.method === "PATCH"
+        ? Response.json(
+            { code: "FORBIDDEN", message: "Admin role required", details: {} },
+            { status: 403 },
+          )
+        : Response.json(initialConfig),
+    );
     const queryClient = queryClientForTest();
-    await loadReferenceFlagConfig(queryClient, api, scope, "flag_1");
+    await loadFlagConfigRoute({ queryClient, api, scope, flagId: "flag_1" });
 
     await expect(
-      updateReferenceFlagConfig(queryClient, api, scope, "flag_1", { enabled: true }),
+      updateFlagConfigRoute({
+        queryClient,
+        api,
+        scope,
+        flagId: "flag_1",
+        patch: { enabled: true },
+      }),
     ).resolves.toMatchObject({
       ok: false,
       error: { kind: "tier", message: "Admin role required" },
     });
-    expect(
-      queryClient.getQueryData(referenceFlagConfigQuery(api, scope, "flag_1").queryKey),
-    ).toEqual({
-      version: 1,
-      enabled: false,
-    });
+    expect(cachedConfig(queryClient, api)).toEqual(initialConfig);
   });
 });
+
+function sdkApi(handler: (request: Request) => Promise<Response>) {
+  return createFlagConfigApi(
+    createControlPlaneSdk({
+      baseUrl: "https://control-plane.test",
+      fetch: async (input, init) =>
+        handler(input instanceof Request ? input : new Request(input, init)),
+    }).flags,
+    { authorization: "Bearer test-control-plane-token" },
+  );
+}
+
+function config(input: { version: number; enabled: boolean }): FlagConfigGetOutput {
+  return {
+    flagId: "flag_1",
+    environmentId: "env_1",
+    availableVariantNames: ["control", "treatment"],
+    targetingRules: [],
+    ...input,
+  };
+}
 
 function queryClientForTest() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-function apiFor(readResult: ApiResult<Config>) {
-  const api: ReferenceFlagConfigApi<Config, Patch> & {
-    reads: number;
-    readResult: ApiResult<Config>;
-  } = {
-    reads: 0,
-    readResult,
-    async read() {
-      this.reads += 1;
-      return this.readResult;
-    },
-    async update() {
-      return { ok: true, status: 200, data: { version: 1, enabled: false } };
-    },
-  };
-  return api;
+function cachedConfig(queryClient: QueryClient, api: ReturnType<typeof sdkApi>) {
+  return queryClient.getQueryData(referenceFlagConfigQuery(api, scope, "flag_1").queryKey);
 }

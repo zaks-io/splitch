@@ -2,14 +2,14 @@ import { Toaster } from "@splitch/ui/components/sonner";
 import { TooltipProvider } from "@splitch/ui/components/tooltip";
 import { AppErrorPage } from "@splitch/ui/state/app-error-page";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
-import type { QueryClient } from "@tanstack/react-query";
-import { HeadContent, Link, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
-import { initControlPanelClientSentry } from "#lib/panel-sentry-client";
+import { createRootRouteWithContext, HeadContent, Link, Scripts } from "@tanstack/react-router";
+import { type ReactNode, useEffect } from "react";
 import { reportRouteError } from "#lib/panel-observability";
+import { initControlPanelClientSentry } from "#lib/panel-sentry-client";
+import type { ControlPanelRouterContext } from "#lib/router-context";
 import appCss from "../styles/app.css?url";
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+export const Route = createRootRouteWithContext<ControlPanelRouterContext>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },

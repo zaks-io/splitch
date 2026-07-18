@@ -23,6 +23,7 @@
     "@sentry/cloudflare": "^10.63.0",
     "@sentry/react": "^10.63.0",
     "@splitch/contracts": "workspace:*",
+    "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/db": "workspace:*",
     "@splitch/observability": "workspace:*",
     "@splitch/ui": "workspace:*",

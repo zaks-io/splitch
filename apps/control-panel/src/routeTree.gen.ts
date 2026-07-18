@@ -21,6 +21,7 @@ import { Route as OrgSlugAppSlugEnvRouteImport } from './routes/$orgSlug.$appSlu
 import { Route as OrgSlugAppSlugEnvSettingsRouteImport } from './routes/$orgSlug.$appSlug.$env.settings'
 import { Route as OrgSlugAppSlugEnvFlagsRouteImport } from './routes/$orgSlug.$appSlug.$env.flags'
 import { Route as OrgSlugAppSlugEnvExperimentsRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments'
+import { Route as OrgSlugAppSlugEnvFlagsFlagIdRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.$flagId'
 
 const KitchenSinkRoute = KitchenSinkRouteImport.update({
   id: '/kitchen-sink',
@@ -84,6 +85,12 @@ const OrgSlugAppSlugEnvExperimentsRoute =
     path: '/experiments',
     getParentRoute: () => OrgSlugAppSlugEnvRoute,
   } as any)
+const OrgSlugAppSlugEnvFlagsFlagIdRoute =
+  OrgSlugAppSlugEnvFlagsFlagIdRouteImport.update({
+    id: '/$flagId',
+    path: '/$flagId',
+    getParentRoute: () => OrgSlugAppSlugEnvFlagsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -96,8 +103,9 @@ export interface FileRoutesByFullPath {
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRouteWithChildren
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
-  '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRoute
+  '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
+  '/$orgSlug/$appSlug/$env/flags/$flagId': typeof OrgSlugAppSlugEnvFlagsFlagIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -110,8 +118,9 @@ export interface FileRoutesByTo {
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRouteWithChildren
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
-  '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRoute
+  '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
+  '/$orgSlug/$appSlug/$env/flags/$flagId': typeof OrgSlugAppSlugEnvFlagsFlagIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -125,8 +134,9 @@ export interface FileRoutesById {
   '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRouteWithChildren
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsRoute
-  '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRoute
+  '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
+  '/$orgSlug/$appSlug/$env/flags/$flagId': typeof OrgSlugAppSlugEnvFlagsFlagIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -143,6 +153,7 @@ export interface FileRouteTypes {
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
     | '/$orgSlug/$appSlug/$env/settings'
+    | '/$orgSlug/$appSlug/$env/flags/$flagId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -157,6 +168,7 @@ export interface FileRouteTypes {
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
     | '/$orgSlug/$appSlug/$env/settings'
+    | '/$orgSlug/$appSlug/$env/flags/$flagId'
   id:
     | '__root__'
     | '/'
@@ -171,6 +183,7 @@ export interface FileRouteTypes {
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
     | '/$orgSlug/$appSlug/$env/settings'
+    | '/$orgSlug/$appSlug/$env/flags/$flagId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -271,18 +284,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvRoute
     }
+    '/$orgSlug/$appSlug/$env/flags/$flagId': {
+      id: '/$orgSlug/$appSlug/$env/flags/$flagId'
+      path: '/$flagId'
+      fullPath: '/$orgSlug/$appSlug/$env/flags/$flagId'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvFlagsFlagIdRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvFlagsRoute
+    }
   }
 }
 
+interface OrgSlugAppSlugEnvFlagsRouteChildren {
+  OrgSlugAppSlugEnvFlagsFlagIdRoute: typeof OrgSlugAppSlugEnvFlagsFlagIdRoute
+}
+
+const OrgSlugAppSlugEnvFlagsRouteChildren: OrgSlugAppSlugEnvFlagsRouteChildren =
+  {
+    OrgSlugAppSlugEnvFlagsFlagIdRoute: OrgSlugAppSlugEnvFlagsFlagIdRoute,
+  }
+
+const OrgSlugAppSlugEnvFlagsRouteWithChildren =
+  OrgSlugAppSlugEnvFlagsRoute._addFileChildren(
+    OrgSlugAppSlugEnvFlagsRouteChildren,
+  )
+
 interface OrgSlugAppSlugEnvRouteChildren {
   OrgSlugAppSlugEnvExperimentsRoute: typeof OrgSlugAppSlugEnvExperimentsRoute
-  OrgSlugAppSlugEnvFlagsRoute: typeof OrgSlugAppSlugEnvFlagsRoute
+  OrgSlugAppSlugEnvFlagsRoute: typeof OrgSlugAppSlugEnvFlagsRouteWithChildren
   OrgSlugAppSlugEnvSettingsRoute: typeof OrgSlugAppSlugEnvSettingsRoute
 }
 
 const OrgSlugAppSlugEnvRouteChildren: OrgSlugAppSlugEnvRouteChildren = {
   OrgSlugAppSlugEnvExperimentsRoute: OrgSlugAppSlugEnvExperimentsRoute,
-  OrgSlugAppSlugEnvFlagsRoute: OrgSlugAppSlugEnvFlagsRoute,
+  OrgSlugAppSlugEnvFlagsRoute: OrgSlugAppSlugEnvFlagsRouteWithChildren,
   OrgSlugAppSlugEnvSettingsRoute: OrgSlugAppSlugEnvSettingsRoute,
 }
 

@@ -11,6 +11,14 @@ async function typeChecks() {
   // @ts-expect-error flags_list requires appId
   await sdk.flags.list({});
 
+  await sdk.flags.getConfig({
+    appId: "app_local",
+    environmentId: "env_local",
+    flagId: "flag_local",
+  });
+  // @ts-expect-error flag_config_get requires environmentId
+  await sdk.flags.getConfig({ appId: "app_local", flagId: "flag_local" });
+
   await sdk.experiments.list({ appId: "app_local", environmentId: "env_local" });
   // @ts-expect-error experiments_list requires environmentId
   await sdk.experiments.list({ appId: "app_local" });

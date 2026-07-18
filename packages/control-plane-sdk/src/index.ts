@@ -51,7 +51,15 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
   };
 }
 
-export type { RouteFlatInput, RouteInput, RouteOutput } from "@splitch/contracts/route-types";
+export type {
+  FlagConfigGetInput,
+  FlagConfigGetOutput,
+  FlagConfigUpdateInput,
+  FlagConfigUpdateOutput,
+  RouteFlatInput,
+  RouteInput,
+  RouteOutput,
+} from "@splitch/contracts/route-types";
 export type { ExperimentsClient } from "./experiments-client";
 export type { FlagsClient } from "./flags-client";
 export type {
