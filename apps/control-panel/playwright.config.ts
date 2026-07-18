@@ -1,5 +1,5 @@
-import { defineConfig } from "@playwright/test";
 import { resolve } from "node:path";
+import { defineConfig } from "@playwright/test";
 
 const repoRoot = resolve(import.meta.dirname, "../..");
 
@@ -20,7 +20,7 @@ export default defineConfig({
   webServer: {
     command: "node scripts/local-e2e-fleet.mjs",
     cwd: repoRoot,
-    url: "http://127.0.0.1:18793/health",
+    url: "http://127.0.0.1:18799/health",
     reuseExistingServer: false,
     timeout: 120_000,
   },

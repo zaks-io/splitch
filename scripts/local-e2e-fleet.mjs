@@ -2,6 +2,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { resolve } from "node:path";
 import {
   LOCAL_E2E_D1_SEED,
@@ -81,6 +82,55 @@ export async function waitForHealth(
   throw new Error(`${worker.name} failed health check: ${lastFailure}`);
 }
 
+export function watchWorker(worker) {
+  return new Promise((resolveStop) => {
+    worker.process.once("error", (error) => {
+      resolveStop({ name: worker.name, error });
+    });
+    worker.process.once("exit", (code, signal) => {
+      resolveStop({ name: worker.name, code, signal });
+    });
+  });
+}
+
+export async function failOnWorkerStop(running) {
+  const stopped = await Promise.race(running.map((worker) => worker.stopped));
+  const detail = stopped.error?.message ?? stopped.signal ?? `exit ${stopped.code ?? "unknown"}`;
+  throw new Error(`${stopped.name} stopped unexpectedly (${detail})`);
+}
+
+export async function waitForFleetReady(running, healthOptions) {
+  await Promise.race([
+    Promise.all(running.map((worker) => waitForHealth(worker, healthOptions))),
+    failOnWorkerStop(running),
+  ]);
+}
+
+function createReadinessServer() {
+  let ready = false;
+  const server = createServer((request, response) => {
+    if (request.url !== "/health") {
+      response.writeHead(404).end("not found");
+      return;
+    }
+    response.writeHead(ready ? 200 : 503, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ok: ready, service: "local-e2e-fleet" }));
+  });
+  return {
+    server,
+    markReady() {
+      ready = true;
+    },
+  };
+}
+
+function listen(server) {
+  return new Promise((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(18799, "127.0.0.1", resolveListen);
+  });
+}
+
 function runWrangler(args) {
   const result = spawnSync("pnpm", ["exec", "wrangler", ...args], {
     cwd: repoRoot,
@@ -144,8 +194,11 @@ async function main() {
       env: { ...process.env, ...localBindings, ...worker.env, CI: "true" },
       stdio: "inherit",
     });
-    return { ...worker, process: child };
+    const runningWorker = { ...worker, process: child };
+    return { ...runningWorker, stopped: watchWorker(runningWorker) };
   });
+  const readiness = createReadinessServer();
+  await listen(readiness.server);
 
   const stop = () => {
     for (const worker of running) worker.process.kill("SIGTERM");
@@ -154,22 +207,12 @@ async function main() {
   process.once("SIGTERM", stop);
 
   try {
-    await Promise.all(running.map((worker) => waitForHealth(worker)));
+    await waitForFleetReady(running);
+    readiness.markReady();
     console.log(`local-e2e-fleet: healthy (${running.map((worker) => worker.name).join(", ")})`);
-    const ended = await Promise.race(
-      running.map(
-        (worker) =>
-          new Promise((resolveExit) =>
-            worker.process.once("exit", (code, signal) =>
-              resolveExit({ name: worker.name, code, signal }),
-            ),
-          ),
-      ),
-    );
-    throw new Error(
-      `${ended.name} stopped unexpectedly (${ended.signal ?? `exit ${ended.code ?? "unknown"}`})`,
-    );
+    await failOnWorkerStop(running);
   } finally {
+    readiness.server.close();
     stop();
   }
 }
