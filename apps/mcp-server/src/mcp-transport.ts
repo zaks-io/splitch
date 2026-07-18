@@ -1,6 +1,7 @@
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import type { JsonRpcResponse } from "./json-rpc";
 import type { McpSessionStore } from "./mcp-session-context";
+import { McpSessionNotFoundError } from "./mcp-session-store";
 
 export async function routeTransportRequest(options: {
   request: Request;
@@ -23,7 +24,7 @@ export async function routeTransportRequest(options: {
   if (options.request.method !== "POST" || !isMcpPath(url)) {
     return new Response("not found", { status: 404 });
   }
-  return undefined;
+  return validateSession(options.request, options.sessionStore);
 }
 
 export function jsonResponse(body: JsonRpcResponse, status = 200, sessionId?: string): Response {
@@ -38,9 +39,31 @@ async function endSession(
 ): Promise<Response> {
   const sessionId = request.headers.get("mcp-session-id");
   if (!sessionId) return new Response("MCP session ID is required", { status: 400 });
+  const invalidSession = await validateSession(request, sessionStore);
+  if (invalidSession) return invalidSession;
   if (!sessionStore) throw new Error("mcp-server: MCP session store is not configured");
   await sessionStore.end(sessionId);
   return new Response(null, { status: 204, headers: corsHeaders() });
+}
+
+async function validateSession(
+  request: Request,
+  sessionStore: McpSessionStore | undefined,
+): Promise<Response | undefined> {
+  const sessionId = request.headers.get("mcp-session-id");
+  if (!sessionId) return undefined;
+  if (!sessionStore) throw new Error("mcp-server: MCP session store is not configured");
+  try {
+    await sessionStore.get(sessionId);
+    return undefined;
+  } catch (error) {
+    if (error instanceof McpSessionNotFoundError) return deadSessionResponse();
+    throw error;
+  }
+}
+
+function deadSessionResponse(): Response {
+  return new Response("MCP session not found", { status: 404, headers: corsHeaders() });
 }
 
 function isHealthRequest(request: Request, url: URL): boolean {

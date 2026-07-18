@@ -9,6 +9,12 @@ interface McpSessionDurableObjectStub {
   end(): Promise<void>;
 }
 
+export class McpSessionNotFoundError extends Error {
+  constructor() {
+    super("mcp-server: MCP session is unknown or expired");
+  }
+}
+
 export type McpSessionResult<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly message: string };
@@ -30,7 +36,9 @@ export function durableMcpSessionStore(
       return id;
     },
     async get(id) {
-      return unwrap(await namespace.getByName(id).getContext(now()));
+      const result = await namespace.getByName(id).getContext(now());
+      if (!result.ok) throw new McpSessionNotFoundError();
+      return result.value;
     },
     async set(id, context) {
       unwrap(await namespace.getByName(id).setContext(context, now()));

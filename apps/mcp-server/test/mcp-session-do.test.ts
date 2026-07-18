@@ -39,9 +39,7 @@ describe("MCP session Durable Object transport", () => {
       sessionStore: store,
     });
     expect(ended.status).toBe(204);
-    expect(await toolError(await call("tools/call", promotion(), store, sessionId))).toContain(
-      "unknown or expired",
-    );
+    expect((await call("tools/call", promotion(), store, sessionId)).status).toBe(404);
   });
 
   it("deletes expired session context when its alarm fires", async () => {
@@ -52,24 +50,28 @@ describe("MCP session Durable Object transport", () => {
 
     await evictDurableObject(stub as DurableObjectStub);
     expect(await runDurableObjectAlarm(stub as DurableObjectStub)).toBe(true);
-    expect(await toolError(await call("tools/call", promotion(), store, sessionId))).toContain(
-      "unknown or expired",
-    );
+    expect((await call("tools/call", promotion(), store, sessionId)).status).toBe(404);
   });
 
   it("rejects and cleans up a session when the request observes expiry", async () => {
-    let now = 100;
-    const store = durableMcpSessionStore(namespace, { now: () => now, ttlMs: 10 });
+    let now = Date.now();
+    const store = durableMcpSessionStore(namespace, { now: () => now, ttlMs: 60_000 });
     const sessionId = await initialize(store);
     await useContext(store, sessionId);
 
-    now = 111;
-    expect(await toolError(await call("tools/call", promotion(), store, sessionId))).toContain(
-      "unknown or expired",
-    );
+    now += 60_001;
+    expect((await call("tools/call", promotion(), store, sessionId)).status).toBe(404);
     expect(await runDurableObjectAlarm(namespace.getByName(sessionId) as DurableObjectStub)).toBe(
       false,
     );
+  });
+
+  it("rejects an unknown session before JSON-RPC dispatch", async () => {
+    const store = durableMcpSessionStore(namespace);
+    const response = await call("tools/call", promotion(), store, crypto.randomUUID());
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("MCP session not found");
   });
 });
 
