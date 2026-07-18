@@ -3,7 +3,7 @@ import { createRepository } from "@splitch/db";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver.js";
-import { durableConfigStoreAccess } from "../src/config-store-do.js";
+import { durableConfigStoreAccess, LIVE_UPDATE_CONTEXT_HEADER } from "../src/config-store-do.js";
 import { ids, NOW_MS, seedConfigGraph } from "../src/config-store-fixture-data.js";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
 import { makeJwksVerifier } from "../src/jwks-verify.js";
@@ -23,8 +23,9 @@ beforeAll(async () => {
 describe("live-update Durable Object", () => {
   it("broadcasts exactly one durable config nudge after a committed write", async () => {
     const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${ids.environmentId}`);
+    const context = await seededLiveUpdateContext();
     const socketResponse = await stub.fetch("https://live.test/connect", {
-      headers: { upgrade: "websocket" },
+      headers: { upgrade: "websocket", [LIVE_UPDATE_CONTEXT_HEADER]: JSON.stringify(context) },
     });
     expect(socketResponse.status).toBe(101);
 
@@ -60,6 +61,34 @@ describe("live-update Durable Object", () => {
     socket?.close(1000, "test done");
   });
 
+  it("rejects a socket without immutable server-authenticated connection metadata", async () => {
+    const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${ids.environmentId}`);
+
+    const response = await stub.fetch("https://live.test/connect", {
+      headers: { upgrade: "websocket" },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.webSocket).toBeNull();
+  });
+
+  it("closes a revoked panel session with the authorization policy close code", async () => {
+    const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${ids.environmentId}`);
+    const context = await seededLiveUpdateContext();
+    const response = await stub.fetch("https://live.test/connect", {
+      headers: { upgrade: "websocket", [LIVE_UPDATE_CONTEXT_HEADER]: JSON.stringify(context) },
+    });
+    const socket = response.webSocket;
+    expect(socket).not.toBeNull();
+    socket?.accept();
+    const closed = waitForClose(socket as WebSocket);
+
+    await env.SESSION_STORE.delete(`session:${context.sessionTokenHash}`);
+    socket?.send("revalidate");
+
+    await expect(closed).resolves.toMatchObject({ code: 1008 });
+  });
+
   it("rejects a WebSocket scoped to App A before it can attach to DO(B)", async () => {
     const app = createApp({
       authResolver: makeControlPlaneAuthResolver({
@@ -86,6 +115,38 @@ describe("live-update Durable Object", () => {
   });
 });
 
+async function seededLiveUpdateContext() {
+  const sessionTokenHash = "a".repeat(64);
+  const expiresAt = Math.floor(Date.now() / 1_000) + 3_600;
+  await env.SESSION_STORE.put(
+    `session:${sessionTokenHash}`,
+    JSON.stringify({
+      userId: USER_ID,
+      expiresAt,
+      version: 2,
+      orgs: [
+        {
+          orgId: ids.orgId,
+          orgSlug: "config-org",
+          orgRole: "admin",
+          isProvisional: false,
+          demoExpiresAt: null,
+          apps: [{ appId: ids.appId, appSlug: "config-app", role: "admin" }],
+        },
+      ],
+    }),
+  );
+  return {
+    version: 1 as const,
+    sessionTokenHash,
+    userId: USER_ID,
+    orgId: ids.orgId,
+    appId: ids.appId,
+    environmentId: ids.environmentId,
+    expiresAt,
+  };
+}
+
 async function token(scopes: string[]): Promise<string> {
   return signer.sign({
     sub: USER_ID,
@@ -106,4 +167,8 @@ async function waitForMessages(messages: unknown[], count: number): Promise<void
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function waitForClose(socket: WebSocket): Promise<CloseEvent> {
+  return new Promise((resolve) => socket.addEventListener("close", resolve, { once: true }));
 }

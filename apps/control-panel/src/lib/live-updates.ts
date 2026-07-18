@@ -1,13 +1,15 @@
-import type { QueryClient } from "@tanstack/react-query";
 import type { DeltaNudge } from "@splitch/contracts";
 import { DeltaNudgeSchema } from "@splitch/contracts";
+import type { QueryClient } from "@tanstack/react-query";
 import { createNudgeRefetchFailureHandler } from "./panel-observability";
 import { type AppEnvironmentScope, nudgeInvalidationPrefix, queryKeys } from "./query-keys";
 
 const reconnectDelaysMs = [2_000, 4_000, 8_000] as const;
+const sessionRevalidationIntervalMs = 60_000;
 
 type LiveUpdateSocket = {
   close(): void;
+  send?(message: string): void;
   onclose: ((event: CloseEvent) => unknown) | null;
   onerror: ((event: Event) => unknown) | null;
   onmessage: ((event: MessageEvent) => void) | null;
@@ -27,6 +29,7 @@ export type LiveUpdateConnectionOptions = {
 
 export class LiveUpdateConnection {
   private attempts = 0;
+  private revalidationTimer: Timer | undefined;
   private reconnectTimer: Timer | undefined;
   private socket: LiveUpdateSocket | undefined;
   private stopped = false;
@@ -42,6 +45,7 @@ export class LiveUpdateConnection {
     this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
+    this.stopSessionRevalidation();
     this.socket?.close();
     this.socket = undefined;
     this.options.queryClient.invalidateQueries({
@@ -57,6 +61,7 @@ export class LiveUpdateConnection {
     socket.onopen = () => {
       if (socket !== this.socket || this.stopped) return;
       this.attempts = 0;
+      this.startSessionRevalidation(socket);
       this.options.onStaleDataChange?.(false);
       void this.options.queryClient.invalidateQueries({
         queryKey: queryKeys.app.root(this.options.scope.appId, this.options.scope.environmentId),
@@ -71,6 +76,7 @@ export class LiveUpdateConnection {
     socket.onerror = () => socket.close();
     socket.onclose = () => {
       if (socket !== this.socket || this.stopped) return;
+      this.stopSessionRevalidation();
       this.scheduleReconnect();
     };
   }
@@ -80,6 +86,24 @@ export class LiveUpdateConnection {
     this.attempts += 1;
     if (this.attempts >= reconnectDelaysMs.length) this.options.onStaleDataChange?.(true);
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
+  }
+
+  private startSessionRevalidation(socket: LiveUpdateSocket): void {
+    this.stopSessionRevalidation();
+    if (!socket.send) return;
+    this.revalidationTimer = setInterval(() => {
+      if (socket !== this.socket || this.stopped) return;
+      try {
+        socket.send?.("revalidate");
+      } catch {
+        socket.close();
+      }
+    }, sessionRevalidationIntervalMs);
+  }
+
+  private stopSessionRevalidation(): void {
+    if (this.revalidationTimer) clearInterval(this.revalidationTimer);
+    this.revalidationTimer = undefined;
   }
 }
 

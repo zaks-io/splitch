@@ -37,6 +37,40 @@ test.describe("Control Panel local full-stack harness", () => {
     expect(response.headers().location).toContain("/auth/login?returnTo=");
   });
 
+  test("opens the same-origin, session-authorized live-update socket", async ({ page }) => {
+    await page.goto("/acme-labs/checkout-api/dev");
+
+    await expect(
+      page.evaluate(
+        () =>
+          new Promise<boolean>((resolve) => {
+            const socket = new WebSocket(`${location.origin}/acme-labs/checkout-api/dev/live`);
+            const timeout = window.setTimeout(() => {
+              socket.close();
+              resolve(false);
+            }, 5_000);
+            socket.addEventListener(
+              "open",
+              () => {
+                window.clearTimeout(timeout);
+                socket.close();
+                resolve(true);
+              },
+              { once: true },
+            );
+            socket.addEventListener(
+              "error",
+              () => {
+                window.clearTimeout(timeout);
+                resolve(false);
+              },
+              { once: true },
+            );
+          }),
+      ),
+    ).resolves.toBe(true);
+  });
+
   test.afterAll(async ({ request }, workerInfo) => {
     const runId = workerInfo.project.metadata.localE2eRunId;
     expect(typeof runId).toBe("string");

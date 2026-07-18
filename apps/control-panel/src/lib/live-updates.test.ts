@@ -1,11 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LiveUpdateConnection, handleNudge } from "./live-updates";
+import { handleNudge, LiveUpdateConnection } from "./live-updates";
 import { queryKeys } from "./query-keys";
 
 type FakeSocket = {
   close: () => void;
   closeSpy: ReturnType<typeof vi.fn>;
+  send: (message: string) => void;
+  sendSpy: ReturnType<typeof vi.fn>;
   onclose: ((event: CloseEvent) => unknown) | null;
   onerror: ((event: Event) => unknown) | null;
   onmessage: ((event: MessageEvent) => void) | null;
@@ -110,13 +112,40 @@ describe("live updates", () => {
     socketAt(sockets, 3).onopen?.({} as Event);
     expect(stale).toHaveBeenLastCalledWith(false);
   });
+
+  it("revalidates the existing server-bound session without sending credentials or scope", () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    const connection = new LiveUpdateConnection({
+      createSocket: () => {
+        const socket = fakeSocket();
+        sockets.push(socket);
+        return socket;
+      },
+      queryClient: queryClientStub().client,
+      scope,
+      url: "ws://panel.test/acme/app/dev/live",
+    });
+
+    connection.start();
+    socketAt(sockets, 0).onopen?.({} as Event);
+    vi.advanceTimersByTime(60_000);
+
+    expect(socketAt(sockets, 0).sendSpy).toHaveBeenCalledWith("revalidate");
+    connection.stop();
+    vi.advanceTimersByTime(60_000);
+    expect(socketAt(sockets, 0).sendSpy).toHaveBeenCalledOnce();
+  });
 });
 
 function fakeSocket(): FakeSocket {
   const closeSpy = vi.fn();
+  const sendSpy = vi.fn();
   return {
     close: closeSpy as () => void,
     closeSpy,
+    send: (message) => sendSpy(message),
+    sendSpy,
     onclose: null,
     onerror: null,
     onmessage: null,
