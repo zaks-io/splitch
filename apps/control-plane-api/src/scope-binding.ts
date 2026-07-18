@@ -50,10 +50,15 @@ function soleId(ids: Set<string>): string | null {
 
 export function deriveBinding(scopes: readonly string[]): ScopeBinding {
   return {
-    orgId: soleId(idsInScopes(scopes, ORG_SCOPE)),
+    orgId: soleId(organizationIdsInScopes(scopes)),
     appId: soleId(idsInScopes(scopes, APP_SCOPE)),
     environmentId: null,
   };
+}
+
+/** Return every Organization identifier named by a control-plane token. */
+export function organizationIdsInScopes(scopes: readonly string[]): Set<string> {
+  return idsInScopes(scopes, ORG_SCOPE);
 }
 
 /** Build the exact App admin scope string used by admin-only route gates. */

@@ -1,4 +1,6 @@
 import { z } from "@hono/zod-openapi";
+import { AppSchema, EnvironmentSchema, UserSchema } from "../leaf-schemas-runtime";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   CreateAppRequestSchema,
   CreateAppResponseSchema,
@@ -6,8 +8,6 @@ import {
   PatchAppRequestSchema,
   PatchOrganizationRequestSchema,
 } from "../resource-envelopes-account";
-import { AppSchema, EnvironmentSchema, UserSchema } from "../leaf-schemas-runtime";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   AddMemberRequestSchema,
   AppParams,
@@ -87,7 +87,12 @@ export const accountRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "PRIVACY_CONFIRMATION_REQUIRED"],
+    errors: [
+      "ORGANIZATION_NOT_FOUND",
+      "FORBIDDEN",
+      "PRIVACY_CONFIRMATION_REQUIRED",
+      "SERVICE_UNAVAILABLE",
+    ],
   }),
   defineApiRoute({
     operationId: "organization_members_list",

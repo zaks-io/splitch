@@ -1,9 +1,10 @@
-import { UserRoleSchema, type User, type UserRole } from "@splitch/contracts";
+import { type User, type UserRole, UserRoleSchema } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { objectBody, pathParam } from "./handler-input";
 import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, ORG_OWNER_ROLES, requireOrgRole } from "./org-authz";
+import { makeListOrganizationsHandler } from "./org-list-handler";
 
 export interface MemberProfile {
   email: string;
@@ -27,6 +28,8 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
   const now = () => deps.nowIso?.() ?? new Date().toISOString();
 
   return {
+    listOrganizations: makeListOrganizationsHandler(deps.repo),
+
     async getOrg({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const orgId = pathParam(input, "orgId");
       const forbidden = await requireOrgRole(

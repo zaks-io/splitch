@@ -63,7 +63,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["UNAUTHORIZED"],
+    errors: ["UNAUTHORIZED", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
     operationId: "current_user_delete",
@@ -75,7 +75,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["UNAUTHORIZED", "LAST_OWNER_REQUIRED"],
+    errors: ["UNAUTHORIZED", "LAST_OWNER_REQUIRED", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
     operationId: "organization_privacy_export",
@@ -88,7 +88,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN"],
+    errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
     operationId: "app_privacy_export",
@@ -101,7 +101,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN"],
+    errors: ["APP_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
     operationId: "entity_privacy_export",
@@ -114,7 +114,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
+    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
     operationId: "entity_privacy_delete",
@@ -127,7 +127,7 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
+    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR", "SERVICE_UNAVAILABLE"],
   }),
   defineApiRoute({
     operationId: "privacy_requests_get",
@@ -140,6 +140,6 @@ export const privacyRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["PRIVACY_JOB_NOT_FOUND", "FORBIDDEN"],
+    errors: ["PRIVACY_JOB_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
   }),
 ] as const satisfies readonly ApiRouteContract[];
