@@ -116,8 +116,9 @@ function treatmentArmResult(
   comparison: MetricComparisonEstimate,
   adapters: ArmResultAdapters,
 ): ArmResult {
-  const ci = ciForComparison(input, comparison, adapters);
-  const status = treatmentStatusForOutput(comparison, ci);
+  const decisionCi = decisionCiForComparison(input, comparison, adapters);
+  const relativeCi = relativeCiForComparison(input, comparison, adapters);
+  const status = treatmentStatusForOutput(comparison, decisionCi);
 
   return {
     variant: comparison.treatment.variant,
@@ -125,9 +126,9 @@ function treatmentArmResult(
     sample_size_n: comparison.treatment.sample_size_n,
     point_estimate: pointEstimateForOutput(comparison.treatment),
     relative_lift_pct: relativeLiftForOutput(comparison),
-    ci_lower: ciLowerForOutput(comparison, ci),
-    ci_upper: ciUpperForOutput(comparison, ci),
-    p_value: ci?.p_value ?? 1,
+    ci_lower: relativeCiBoundForOutput(comparison, relativeCi, "lower"),
+    ci_upper: relativeCiBoundForOutput(comparison, relativeCi, "upper"),
+    p_value: decisionCi?.p_value ?? 1,
     is_significant: false,
     in_bh_family: false,
     exploratory: true,
@@ -137,7 +138,33 @@ function treatmentArmResult(
   };
 }
 
-function ciForComparison(
+function decisionCiForComparison(
+  input: StatsInput,
+  comparison: MetricComparisonEstimate,
+  adapters: ArmResultAdapters,
+): CIResult | null {
+  if (
+    comparison.control.status !== "ready" ||
+    comparison.treatment.status !== "ready" ||
+    comparison.absolute_lift === null ||
+    comparison.absolute_lift_sampling_var === null
+  ) {
+    return null;
+  }
+
+  const adapter = input.horizon === "fixed" ? adapters.fixedHorizonCI : adapters.sequentialCI;
+  return adapter.compute({
+    estimate: comparison.absolute_lift,
+    sampling_var: comparison.absolute_lift_sampling_var,
+    n_t: comparison.treatment.sample_size_n,
+    n_c: comparison.control.sample_size_n,
+    alpha: 1 - input.confidence_level,
+    target_n: input.target_n,
+    sample_size_locked: input.sample_size_locked,
+  });
+}
+
+function relativeCiForComparison(
   input: StatsInput,
   comparison: MetricComparisonEstimate,
   adapters: ArmResultAdapters,
@@ -169,10 +196,10 @@ function treatmentStatusForOutput(
   if (comparison.control.sample_size_n === 0 || comparison.treatment.sample_size_n === 0) {
     return "running";
   }
-  if (comparison.status === "insufficient_denominator") {
-    return "insufficient_denominator";
-  }
-  if (comparison.status !== "ready" || ci === null) {
+  if (ci === null) {
+    if (comparison.status === "insufficient_denominator") {
+      return "insufficient_denominator";
+    }
     return "running";
   }
   if (ci.status === "error") {
@@ -180,6 +207,11 @@ function treatmentStatusForOutput(
   }
   if (ci.warnings?.some((warning) => warning.code === "FIXED_HORIZON_NOT_AT_LOCKED_SAMPLE")) {
     return "running";
+  }
+  if (ci.warnings?.some((warning) => warning.code === "ZERO_SAMPLING_VARIANCE")) {
+    return comparison.status === "insufficient_denominator"
+      ? "insufficient_denominator"
+      : "running";
   }
   return "ready";
 }
@@ -194,30 +226,18 @@ function armStatusForOutput(arm: MetricArmEstimate): StatsResultStatus {
   return "ready";
 }
 
-function ciLowerForOutput(
+function relativeCiBoundForOutput(
   comparison: MetricComparisonEstimate,
-  ci: CIResult | null,
+  decisionCi: CIResult | null,
+  bound: "lower" | "upper",
 ): number | null {
-  if (ci !== null) {
-    return ci.ci_lower;
-  }
   if (comparison.control.sample_size_n === 0 || comparison.treatment.sample_size_n === 0) {
-    return Number.NEGATIVE_INFINITY;
+    return bound === "lower" ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
   }
-  return null;
-}
-
-function ciUpperForOutput(
-  comparison: MetricComparisonEstimate,
-  ci: CIResult | null,
-): number | null {
-  if (ci !== null) {
-    return ci.ci_upper;
+  if (comparison.relative_lift_pct === null || decisionCi === null) {
+    return null;
   }
-  if (comparison.control.sample_size_n === 0 || comparison.treatment.sample_size_n === 0) {
-    return Number.POSITIVE_INFINITY;
-  }
-  return null;
+  return bound === "lower" ? decisionCi.ci_lower : decisionCi.ci_upper;
 }
 
 function pointEstimateForOutput(arm: MetricArmEstimate): number {

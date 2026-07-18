@@ -1,4 +1,4 @@
-import { inverseNormalCdf, normalCdf } from "./normal-distribution";
+import { inverseNormalCdf, normalCdf, normalSurvival } from "./normal-distribution";
 import type { CIAdapter, CIError, CIParams, CIResult, CISource, CIWarning } from "./sequential-ci";
 
 export const FIXED_HORIZON_CI_SOURCE: CISource = {
@@ -90,7 +90,11 @@ export function fixedHorizonPValue(estimate: number, standardError: number): num
   }
 
   const z = Math.abs(estimate / standardError);
-  return Math.max(0, Math.min(1, 2 * (1 - normalCdf(z))));
+  const directUpperTail = 1 - normalCdf(z);
+  if (directUpperTail > 0) {
+    return Math.min(1, 2 * directUpperTail);
+  }
+  return Math.max(Number.MIN_VALUE, Math.min(1, 2 * normalSurvival(z)));
 }
 
 function validateParams(params: CIParams): CIError | undefined {

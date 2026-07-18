@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StatsInput } from "@splitch/contracts";
 import { analyzeStats } from "./stats-engine";
-import { ENGINE_RUN_ID, exposure } from "./stats-engine-test-helpers";
+import { ENGINE_RUN_ID, binomialStatsInput, exposure } from "./stats-engine-test-helpers";
 
 describe("StatsEngine.analyze zero-event Metrics", () => {
   it("emits ArmResults for a locked decision-family Metric before any Metric rows arrive", async () => {
@@ -30,6 +30,89 @@ describe("StatsEngine.analyze zero-event Metrics", () => {
       exploratory: false,
       status: "insufficient_denominator",
     });
+  });
+
+  it("keeps a total-loss Treatment decision-valid and breaches its locked relative guardrail", async () => {
+    const output = await analyzeStats(
+      binomialStatsInput({
+        controlN: 100,
+        treatmentN: 100,
+        controlConversions: 40,
+        treatmentConversions: 0,
+        horizon: "fixed",
+        sampleSizeLocked: 100,
+        includeGuardrail: true,
+      }),
+    );
+    const treatment = armResult(output, "conversion", "treatment");
+
+    expect(treatment).toMatchObject({
+      relative_lift_pct: -100,
+      status: "ready",
+      decision_valid: true,
+      in_bh_family: true,
+    });
+    expect(treatment.ci_lower).toBeLessThan(-100);
+    expect(treatment.ci_upper).toBeLessThan(0);
+    expect(treatment.p_value).toBeLessThan(0.000001);
+    expect(output.guardrail_results).toContainEqual(
+      expect.objectContaining({
+        metric_id: "guardrail_conversion",
+        variant: "treatment",
+        is_breached: true,
+      }),
+    );
+  });
+
+  it("uses a finite boundary-safe decision path for opposing all-event arms", async () => {
+    const output = await analyzeStats(
+      binomialStatsInput({
+        controlN: 100,
+        treatmentN: 100,
+        controlConversions: 100,
+        treatmentConversions: 0,
+        horizon: "fixed",
+        sampleSizeLocked: 100,
+        includeGuardrail: true,
+      }),
+    );
+    const treatment = armResult(output, "conversion", "treatment");
+
+    expect(treatment).toMatchObject({
+      relative_lift_pct: -100,
+      status: "ready",
+      decision_valid: true,
+    });
+    expect(treatment.ci_lower).toBeLessThan(-100);
+    expect(treatment.p_value).toBeGreaterThan(0);
+    expect(treatment.p_value).toBeLessThan(0.000001);
+    expect(output.guardrail_results[0]).toMatchObject({ is_breached: true });
+  });
+
+  it("keeps absolute decision evidence when the Control makes no events", async () => {
+    const output = await analyzeStats(
+      binomialStatsInput({
+        controlN: 100,
+        treatmentN: 100,
+        controlConversions: 0,
+        treatmentConversions: 100,
+        horizon: "fixed",
+        sampleSizeLocked: 100,
+      }),
+    );
+    const treatment = armResult(output, "conversion", "treatment");
+
+    expect(treatment).toMatchObject({
+      relative_lift_pct: null,
+      ci_lower: null,
+      ci_upper: null,
+      status: "ready",
+      decision_valid: true,
+      in_bh_family: true,
+      is_significant: true,
+    });
+    expect(treatment.p_value).toBeGreaterThan(0);
+    expect(treatment.p_value).toBeLessThan(0.000001);
   });
 });
 

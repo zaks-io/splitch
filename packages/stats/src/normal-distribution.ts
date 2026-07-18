@@ -11,6 +11,24 @@ export function normalCdf(value: number): number {
   return 0.5 * (1 + erf);
 }
 
+export function normalSurvival(value: number): number {
+  if (value < 0) {
+    return normalCdf(-value);
+  }
+
+  const x = value / Math.SQRT2;
+  const t = 1 / (1 + 0.5 * x);
+  let polynomial = 0.17087277;
+  for (const coefficient of [
+    -0.82215223, 1.48851587, -1.13520398, 0.27886807, -0.18628806, 0.09678418, 0.37409196,
+    1.00002368,
+  ]) {
+    polynomial = coefficient + t * polynomial;
+  }
+  const erfc = t * Math.exp(-x * x - 1.26551223 + t * polynomial);
+  return Math.max(0, Math.min(0.5, erfc / 2));
+}
+
 export function inverseNormalCdf(probability: number): number {
   if (!Number.isFinite(probability) || probability <= 0 || probability >= 1) {
     throw new Error("probability must be finite and in (0, 1).");
