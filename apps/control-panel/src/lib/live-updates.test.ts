@@ -140,7 +140,7 @@ describe("live updates", () => {
 
     await vi.advanceTimersByTimeAsync(0);
     expect(stale).toHaveBeenLastCalledWith(true);
-    expect(refetchRoute).toHaveBeenCalledTimes(2);
+    expect(refetchRoute).toHaveBeenCalledTimes(3);
     recovery.resolve();
     await vi.advanceTimersByTimeAsync(0);
     expect(stale).toHaveBeenLastCalledWith(false);
@@ -165,6 +165,29 @@ describe("live updates", () => {
     await pending;
 
     expect(attempts.map((at) => at - startedAt)).toEqual([0, 2_000, 6_000, 14_000]);
+  });
+});
+
+describe("scope startup", () => {
+  it("refreshes a replacement Environment before its socket opens", async () => {
+    const queryClient = queryClientStub();
+    const refetchRoute = vi.fn(() => Promise.resolve());
+    const connection = new LiveUpdateConnection({
+      createSocket: () => fakeSocket(),
+      queryClient: queryClient.client,
+      refetchRoute,
+      scope: { appId: "app_1", environmentId: "env_prod" },
+      url: "ws://panel.test/acme/app/prod/live",
+    });
+
+    connection.start();
+    await Promise.resolve();
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith(
+      { queryKey: queryKeys.app.root("app_1", "env_prod"), refetchType: "all" },
+      { throwOnError: true },
+    );
+    expect(refetchRoute).toHaveBeenCalledOnce();
   });
 });
 

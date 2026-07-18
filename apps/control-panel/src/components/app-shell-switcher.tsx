@@ -16,26 +16,15 @@ export function AppShellSwitchers({ context }: SwitcherProps) {
 
   return (
     <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
-      <Switcher label="Organization" value={context.scope.orgSlug}>
-        {context.navigation.orgs.map((org) => (
-          <MenuGroup key={org.orgId} label={org.orgSlug}>
-            {org.apps.flatMap((app) =>
-              app.environments.map((environment) => (
-                <SwitcherLink
-                  href={scopedHref({
-                    appSlug: app.appSlug,
-                    env: environment.env,
-                    orgSlug: org.orgSlug,
-                  })}
-                  key={`${app.appId}:${environment.environmentId}`}
-                >
-                  {app.appSlug} · {environment.env}
-                </SwitcherLink>
-              )),
-            )}
-          </MenuGroup>
-        ))}
-      </Switcher>
+      {context.navigation.orgs.length > 1 ? (
+        <Switcher label="Organization" value={context.scope.orgSlug}>
+          {context.navigation.orgs.map((org) => (
+            <SwitcherLink href={`/${encodeURIComponent(org.orgSlug)}`} key={org.orgId}>
+              {org.orgSlug}
+            </SwitcherLink>
+          ))}
+        </Switcher>
+      ) : null}
 
       <Switcher label="App" value={context.scope.appSlug}>
         {currentOrg?.apps.map((app) => (

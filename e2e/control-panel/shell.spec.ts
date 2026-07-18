@@ -105,8 +105,13 @@ test.describe("Control Panel local full-stack harness", () => {
       "app_billing_e2e",
     );
 
-    await chooseScope(page, "Organization", "/orbit-tools/agent-console/prod");
-    await expect(page).toHaveURL("/orbit-tools/agent-console/prod");
+    await chooseScope(page, "Organization", "/orbit-tools");
+    await expect(page).toHaveURL("/orbit-tools");
+    await expect(page.getByRole("heading", { name: "orbit-tools" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Production" })).toHaveAttribute(
+      "href",
+      "/orbit-tools/agent-console/prod",
+    );
   });
 
   test("cold deep links match client-side navigation for the same shell URL", async ({ page }) => {
