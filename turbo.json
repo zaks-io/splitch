@@ -110,6 +110,8 @@
         "TURNSTILE_SECRET",
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
+        "WORKOS_ISSUER",
+        "WORKOS_JWKS_URI",
         "SPLITCH_SMOKE_CLIENT_SECRET"
       ]
     },
@@ -141,6 +143,8 @@
         "TURNSTILE_SECRET",
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
+        "WORKOS_ISSUER",
+        "WORKOS_JWKS_URI",
         "SPLITCH_SMOKE_CLIENT_SECRET"
       ]
     },
@@ -172,6 +176,8 @@
         "TURNSTILE_SECRET",
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
+        "WORKOS_ISSUER",
+        "WORKOS_JWKS_URI",
         "SPLITCH_SMOKE_CLIENT_SECRET"
       ]
     },
@@ -203,6 +209,8 @@
         "TURNSTILE_SECRET",
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
+        "WORKOS_ISSUER",
+        "WORKOS_JWKS_URI",
         "SPLITCH_SMOKE_CLIENT_SECRET"
       ]
     },
