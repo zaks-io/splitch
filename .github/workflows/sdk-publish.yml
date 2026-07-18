@@ -1,0 +1,133 @@
+name: sdk-publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: sdk-publish-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+
+jobs:
+  publish:
+    name: Publish @splitch/sdk
+    if: startsWith(github.event.release.tag_name, 'sdk-v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout release tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node for npm trusted publishing
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: 24.17.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Resolve SDK release target
+        id: target
+        run: |
+          set -euo pipefail
+          target="$(node scripts/sdk-release/resolve-version.mjs "$GITHUB_WORKSPACE")"
+          {
+            echo "sdk_version=$(printf '%s' "$target" | jq -r '.version')"
+            echo "sdk_tag=$(printf '%s' "$target" | jq -r '.tag')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate release source and commit
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TARGET_COMMITISH: ${{ github.event.release.target_commitish }}
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: node scripts/sdk-release/validate-publish-context.mjs "$GITHUB_WORKSPACE"
+
+      - name: Refresh live release state before npm version check
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/sdk-release/validate-live-publish-state.mjs "$GITHUB_WORKSPACE"
+
+      - name: Check whether SDK version is already published
+        id: npm-version
+        env:
+          SDK_VERSION: ${{ steps.target.outputs.sdk_version }}
+        working-directory: packages/sdk
+        run: |
+          set -euo pipefail
+          already_published="$(node "$GITHUB_WORKSPACE/scripts/sdk-release/check-published-version.mjs" "$SDK_VERSION")"
+          echo "already_published=$already_published" >> "$GITHUB_OUTPUT"
+          if [ "$already_published" = "true" ]; then
+            echo "Skipping immutable npm version @splitch/sdk@$SDK_VERSION: it already exists"
+          else
+            echo "@splitch/sdk@$SDK_VERSION is not published; publish may proceed"
+          fi
+
+      - name: Install release dependencies
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build @splitch/sdk
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: pnpm --filter @splitch/sdk build
+
+      - name: Check release package contents
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: |
+          pnpm --filter @splitch/sdk pack --dry-run
+          pnpm --filter @splitch/sdk pack:check
+
+      - name: Publish @splitch/sdk with provenance
+        if: steps.npm-version.outputs.already_published != 'true'
+        working-directory: packages/sdk
+        run: npm publish --provenance --access public --tag latest
+
+      - name: Publish summary
+        if: always()
+        env:
+          ALREADY_PUBLISHED: ${{ steps.npm-version.outputs.already_published }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TARGET_COMMITISH: ${{ github.event.release.target_commitish }}
+          SDK_VERSION: ${{ steps.target.outputs.sdk_version }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$ALREADY_PUBLISHED" in
+            true) decision="skip-already-published" ;;
+            false) decision="publish" ;;
+            *) decision="not-evaluated" ;;
+          esac
+          {
+            echo '## SDK publish'
+            echo
+            echo '- Package: @splitch/sdk'
+            echo "- Version: $SDK_VERSION"
+            echo "- Release tag: $RELEASE_TAG"
+            echo "- Release target commit: $RELEASE_TARGET_COMMITISH"
+            echo "- Commit: $GITHUB_SHA"
+            echo '- Runner: ubuntu-24.04 (GitHub-hosted)'
+            echo '- Provenance: npm trusted publishing/OIDC with npm publish --provenance'
+            echo '- npm dist-tag: latest'
+            echo "- Decision: $decision"
+          } >> "$GITHUB_STEP_SUMMARY"
