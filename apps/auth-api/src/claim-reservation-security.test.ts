@@ -4,7 +4,8 @@ import { EMAIL, setupClaimHarness } from "./claim-harness";
 import { FIXTURE_OTP } from "./otp";
 import { makeRateLimiter } from "./rate-limit";
 
-const { deps, register, fullClaim, isProvisional, count } = setupClaimHarness();
+const { deps, register, fullClaim, isProvisional, count, expireIncompleteReservations } =
+  setupClaimHarness();
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: the reservation race cases share one fixture lifecycle.
 describe("claim reservation security", () => {
@@ -137,6 +138,37 @@ describe("claim reservation security", () => {
     };
 
     await expect(verifyClaim(d.claim, input)).rejects.toThrow("worker interrupted");
+    await expect(verifyClaim(d.claim, input)).resolves.toMatchObject({ org_id: orgId });
+    expect(await isProvisional(orgId)).toBe(false);
+  });
+
+  it("reclaims an expired incomplete reservation without waiting for retention cleanup", async () => {
+    const d = deps();
+    const { assertion, orgId } = await register(d);
+    await initiateClaim(d.claim, {
+      identityAssertion: assertion,
+      email: EMAIL,
+      remoteIp: "1.2.3.4",
+    });
+    const markVerified = d.repo.claim.markVerified.bind(d.repo.claim);
+    let interrupted = true;
+    d.repo.claim.markVerified = async (input) => {
+      if (interrupted) {
+        interrupted = false;
+        throw new Error("worker interrupted after WorkOS confirmation");
+      }
+      return markVerified(input);
+    };
+    const input = {
+      identityAssertion: assertion,
+      otp: FIXTURE_OTP,
+      email: EMAIL,
+      idempotencyKey: "expired-incomplete",
+      remoteIp: "1.2.3.4",
+    };
+
+    await expect(verifyClaim(d.claim, input)).rejects.toThrow("worker interrupted");
+    await expireIncompleteReservations();
     await expect(verifyClaim(d.claim, input)).resolves.toMatchObject({ org_id: orgId });
     expect(await isProvisional(orgId)).toBe(false);
   });

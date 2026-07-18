@@ -43,6 +43,7 @@ export interface ClaimHarness {
   setProvisional(orgId: string, provisional: boolean): Promise<void>;
   removeMemberships(orgId: string, appId: string, userId: string): Promise<void>;
   isConsumed(table: "claim_verifications" | "claim_consent_attempts", id: string): Promise<boolean>;
+  expireIncompleteReservations(): Promise<void>;
 }
 
 export function setupClaimHarness(): ClaimHarness {
@@ -152,6 +153,13 @@ export function setupClaimHarness(): ClaimHarness {
     return row?.consumed_at !== null && row?.consumed_at !== undefined;
   }
 
+  async function expireIncompleteReservations() {
+    await local.d1
+      .prepare("UPDATE claim_idempotency SET expires_at = ? WHERE completed_at IS NULL")
+      .bind(new Date(NOW_MS - 1).toISOString())
+      .run();
+  }
+
   return {
     deps,
     register,
@@ -161,5 +169,6 @@ export function setupClaimHarness(): ClaimHarness {
     setProvisional,
     removeMemberships,
     isConsumed,
+    expireIncompleteReservations,
   };
 }

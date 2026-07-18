@@ -24,7 +24,6 @@ let signer: FixtureSigner;
 let testEnv: ControlPlaneApiEnv;
 
 beforeAll(async () => {
-  await ensureIdentitySchema(env.DB);
   await seedOrgApp(env.DB, ORG);
   await seedOrgMember(env.DB, { orgId: ORG.orgId, userId: OWNER, role: "owner" });
   await cacheMemberProfile(OWNER, "owner@index.test");
@@ -106,16 +105,6 @@ function call(method: string, path: string, jwt: string, body?: unknown): Promis
 
 async function cacheMemberProfile(userId: string, email: string): Promise<void> {
   await env.SESSION_STORE.put(memberProfileCacheKey(userId), JSON.stringify({ email }));
-}
-
-async function ensureIdentitySchema(d1: D1Database): Promise<void> {
-  const schema = [
-    `CREATE TABLE IF NOT EXISTS organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
-    `CREATE TABLE IF NOT EXISTS org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
-    `CREATE TABLE IF NOT EXISTS apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS apps_org_key_unique ON apps (organization_id, key)`,
-  ];
-  for (const statement of schema) await d1.exec(statement);
 }
 
 async function seedOrgApp(d1: D1Database, row: typeof ORG): Promise<void> {

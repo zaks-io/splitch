@@ -43,7 +43,7 @@ function bearerToken(value: string | null) {
 
 async function consentDecision(request: Request): Promise<"approve" | "deny"> {
   const text = await request.text();
-  if (!text.trim()) return "approve";
+  if (!text.trim()) throw new OAuthError("invalid_request", "missing consent decision");
   let body: unknown;
   try {
     body = JSON.parse(text) as unknown;

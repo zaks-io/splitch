@@ -35,7 +35,7 @@ describe("Auth Worker Wrangler runtime config", () => {
     ["production", config.env?.production],
   ])("fails closed on missing WorkOS JWT verification configuration for %s", (_target, target) => {
     expect(target?.secrets?.required).toEqual(
-      expect.arrayContaining(["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_AUTH_AUDIENCE"]),
+      expect.arrayContaining(["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_CLIENT_ID"]),
     );
   });
 

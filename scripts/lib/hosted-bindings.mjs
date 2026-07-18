@@ -64,7 +64,7 @@ export function assertHostedAuthVerifierBindings(config, source) {
     return;
   }
   const required = config?.secrets?.required;
-  const missing = ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_AUTH_AUDIENCE"].filter(
+  const missing = ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_CLIENT_ID"].filter(
     (name) => !Array.isArray(required) || !required.includes(name),
   );
   if (missing.length > 0) {

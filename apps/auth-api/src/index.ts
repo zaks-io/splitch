@@ -147,7 +147,10 @@ function isHostedTarget(target: string | undefined): boolean {
 function hostedWorkOsConfigured(env: AuthApiEnv): boolean {
   return (
     !isHostedTarget(env.SPLITCH_PLATFORM_TARGET) ||
-    (Boolean(env.WORKOS_API_KEY) && Boolean(env.WORKOS_CLIENT_ID))
+    (Boolean(env.WORKOS_API_KEY) &&
+      Boolean(env.WORKOS_CLIENT_ID) &&
+      Boolean(env.WORKOS_JWKS_URI) &&
+      Boolean(env.WORKOS_ISSUER))
   );
 }
 
@@ -173,11 +176,11 @@ function workosAccessTokenVerifier(env: AuthApiEnv) {
     env.SPLITCH_PLATFORM_TARGET !== "production"
   )
     return undefined;
-  if (!env.WORKOS_JWKS_URI || !env.WORKOS_ISSUER || !env.WORKOS_AUTH_AUDIENCE) return undefined;
+  if (!env.WORKOS_JWKS_URI || !env.WORKOS_ISSUER || !env.WORKOS_CLIENT_ID) return undefined;
   return makeWorkOsAccessTokenVerifier({
     jwksUri: env.WORKOS_JWKS_URI,
     issuer: env.WORKOS_ISSUER,
-    audience: env.WORKOS_AUTH_AUDIENCE,
+    clientId: env.WORKOS_CLIENT_ID,
   });
 }
 

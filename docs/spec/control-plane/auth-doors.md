@@ -77,13 +77,34 @@ RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md
 
 **Endpoint:** `POST /agent/identity/claim` on the auth-api Worker (also `POST /claim` for human UI)
 
-**Request body:**
+**Initiation request:**
 
 ```
 {
   identity_assertion: string,   // the provisional assertion
+  email: string                 // address to verify or link
+}
+```
+
+**OTP verification request:**
+
+```
+{
+  identity_assertion: string,
+  email: string,
   otp: string,                  // one-time password delivered to the user's email
   idempotency_key: string       // caller-supplied; prevents double-claim on retry
+}
+```
+
+**Consent verification request:**
+
+```
+{
+  identity_assertion: string,
+  email: string,
+  verification_id: string,      // returned with interaction_required
+  idempotency_key: string
 }
 ```
 
@@ -93,7 +114,7 @@ RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md
 2. D1 stores only SHA-256 identifier digests plus bounded TTL, attempt, one-use, consent, and idempotency state. It never stores an OTP or a hosted fixture code.
 3. For a free address, WorkOS confirms the OTP. Its result is the email-ownership authority.
 4. For an existing verified address, the existing AuthKit principal authenticates at the consent URL. The browser can approve or refuse with POST; no provisional WorkOS user email is changed in this branch.
-5. The consent page is a dedicated Control Panel route. Its URL is built from the explicit `CONTROL_PANEL_ORIGIN`, never the Control Plane API origin. Its opaque browser session maps to a server-side WorkOS access JWT; the panel forwards that JWT only server-to-server. Auth API verifies its RS256 signature, configured issuer, audience, expiry, and `sub` against WorkOS JWKS. Existing splitch membership is not an authorization input for this route.
+5. The consent page is a dedicated Control Panel route. Its URL is built from the explicit `CONTROL_PANEL_ORIGIN`, never the Control Plane API origin. Its opaque browser session maps to a server-side WorkOS access JWT; the panel forwards that JWT only server-to-server. Auth API verifies its RS256 signature, configured issuer, `client_id`, expiry, and `sub` against WorkOS JWKS. The panel session is bounded by the JWT expiry. Existing splitch membership is not an authorization input for this route.
 6. After WorkOS verification or authenticated consent, one guarded D1 batch first acquires the still-provisional Organization only while the signed provisional User still has the matching Org and App memberships. Every membership mutation, state consumption, and idempotency insert is conditional on that acquisition. Retries after a pre-batch failure are safe.
 7. Return: `{ access_token, user_id, org_id, app_id }`.
 

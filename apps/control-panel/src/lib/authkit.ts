@@ -77,15 +77,19 @@ export async function completeAuthKitCallback(input: CompleteAuthKitCallbackInpu
     userAgent: input.request.headers.get("user-agent") ?? undefined,
   });
 
-  const workosSessionId = decodeWorkOsSessionId(authentication.accessToken);
+  const accessClaims = decodeWorkOsAccessTokenClaims(authentication.accessToken);
   const sessionPrincipal = await buildSessionPrincipal(input.repo, {
     userId: authentication.user.id,
-    workosSessionId,
+    workosSessionId: accessClaims.sessionId,
   });
 
   const session = await createSession(
     input.kv,
-    { ...sessionPrincipal, workosAccessToken: authentication.accessToken },
+    {
+      ...sessionPrincipal,
+      expiresAt: accessClaims.expiresAt,
+      workosAccessToken: authentication.accessToken,
+    },
     input.now,
   );
   return { cookie: session.cookie };
@@ -95,13 +99,17 @@ export function callbackRedirectUri(request: Request): string {
   return new URL("/auth/callback", request.url).toString();
 }
 
-function decodeWorkOsSessionId(accessToken: string): string {
+function decodeWorkOsAccessTokenClaims(accessToken: string): {
+  sessionId: string;
+  expiresAt: number;
+} {
   const payload = decodeJwtPayload(accessToken);
   const sid = payload.sid;
-  if (typeof sid !== "string" || sid.length === 0) {
-    throw new Error("WorkOS AuthKit callback did not include a session id");
+  const exp = payload.exp;
+  if (typeof sid !== "string" || sid.length === 0 || !Number.isInteger(exp)) {
+    throw new Error("WorkOS AuthKit callback returned incomplete access token claims");
   }
-  return sid;
+  return { sessionId: sid, expiresAt: exp as number };
 }
 
 function decodeJwtPayload(jwt: string): Record<string, unknown> {

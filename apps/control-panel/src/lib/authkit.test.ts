@@ -8,7 +8,8 @@ const NOW = Date.UTC(2026, 6, 5, 12, 0, 0);
 describe("WorkOS AuthKit callback materialization", () => {
   it("stores the WorkOS JWT only in the KV-backed server session, never in the cookie", async () => {
     const kv = new MemoryKv();
-    const accessToken = jwt({ sid: "workos_session_1" });
+    const expiresAt = Math.floor(NOW / 1000) + 300;
+    const accessToken = jwt({ sid: "workos_session_1", exp: expiresAt });
     let authRequest: Parameters<AuthKitClient["authenticateWithCode"]>[0] | undefined;
     const authKit: AuthKitClient = {
       authenticateWithCode: async (request) => {
@@ -52,6 +53,31 @@ describe("WorkOS AuthKit callback materialization", () => {
     expect(stored).toContain("user_1");
     expect(stored).toContain("checkout-api");
     expect(stored).toContain(accessToken);
+    expect(stored).toContain(`"expiresAt":${expiresAt}`);
+    expect(callback.cookie).toContain("Max-Age=300");
+  });
+
+  it("rejects a WorkOS access token without a bounded JWT expiry", async () => {
+    const authKit: AuthKitClient = {
+      authenticateWithCode: async () => ({
+        accessToken: jwt({ sid: "workos_session_1" }),
+        user: { id: "user_1" },
+      }),
+      getAuthorizationUrl: () => "https://workos.example/authorize",
+      getLogoutUrl: () => "https://workos.example/logout",
+    };
+
+    await expect(
+      completeAuthKitCallback({
+        authKit,
+        clientId: "client_123",
+        code: "workos_code",
+        kv: new MemoryKv().namespace(),
+        now: NOW,
+        repo: repository(),
+        request: new Request("https://app.splitch.dev/auth/callback"),
+      }),
+    ).rejects.toThrow("incomplete access token claims");
   });
 });
 

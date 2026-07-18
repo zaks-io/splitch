@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { approveClaimConsent, initiateClaim, refuseClaimConsent, verifyClaim } from "./claim";
+import { handleConsent } from "./claim-consent-route";
 import { EMAIL, setupClaimHarness } from "./claim-harness";
 import { FIXTURE_OTP } from "./otp";
+import { makeRateLimiter } from "./rate-limit";
 
 /**
  * Door B claim — SECURITY-FINDING regressions (BugBot on the SPL-24 fix).
@@ -98,6 +100,62 @@ describe("FINDING 2: WorkOS index + collision check share ONE canonicalization",
 });
 
 describe("SPL-137 transfer guards and consent one-use semantics", () => {
+  it("requires an explicit consent decision before approving a transfer", async () => {
+    const d = deps();
+    const owner = await d.workos.resolveOrCreateUser("owner@example.com");
+    const { assertion } = await register(d);
+    let error: ClaimConsentError | undefined;
+    try {
+      await initiateClaim(d.claim, {
+        identityAssertion: assertion,
+        email: "owner@example.com",
+        remoteIp: "1.2.3.4",
+      });
+    } catch (cause) {
+      error = cause as ClaimConsentError;
+    }
+    const attemptId = new URL(error?.extra.consent_url as string).pathname
+      .split("/")
+      .at(-1) as string;
+    const response = await handleConsent(
+      { claim: d.claim, workosAccessTokens: { verify: async () => ({ userId: owner }) } },
+      new Request(`https://auth.splitch.test/claim/consent/${attemptId}`, {
+        method: "POST",
+        headers: { authorization: "Bearer workos-token" },
+      }),
+      attemptId,
+      () => Math.floor(d.claim.now() / 1000),
+    );
+
+    expect(response.status).toBe(400);
+    await approveClaimConsent(d.claim, attemptId, owner);
+  });
+
+  it("rate-limits collision retries before creating durable consent attempts", async () => {
+    const d = deps();
+    const { assertion } = await register(d);
+    await initiateClaim(d.claim, {
+      identityAssertion: assertion,
+      email: EMAIL,
+      remoteIp: "1.2.3.4",
+    });
+    await d.workos.resolveOrCreateUser(EMAIL);
+    d.claim.rateLimiter = makeRateLimiter({ perIpPerHour: 1, globalPerHour: 1 });
+    const verify = () =>
+      verifyClaim(d.claim, {
+        identityAssertion: assertion,
+        email: EMAIL,
+        idempotencyKey: "collision-retry",
+        remoteIp: "1.2.3.4",
+      });
+
+    await expect(verify()).rejects.toMatchObject({ code: "interaction_required" });
+    await expect(verify()).rejects.toMatchObject({ code: "too_many_requests" });
+    expect(await count("claim_consent_attempts")).toBe(1);
+  });
+});
+
+describe("SPL-137 guarded transfer and consent one-use semantics", () => {
   it("does not consume state or mint idempotency when the Organization acquisition guard fails", async () => {
     const d = deps();
     const { assertion, orgId } = await register(d);

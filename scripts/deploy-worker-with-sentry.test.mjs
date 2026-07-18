@@ -138,9 +138,9 @@ test("fails before auth Worker deploy when hosted Control Panel origin is missin
   assert.equal(existsSync(fixture.callsPath), false);
 });
 
-for (const missingVerifierBinding of ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_AUTH_AUDIENCE"]) {
+for (const missingVerifierBinding of ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_CLIENT_ID"]) {
   test(`fails before auth Worker deploy when ${missingVerifierBinding} is not required`, () => {
-    const requiredSecrets = ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_AUTH_AUDIENCE"].filter(
+    const requiredSecrets = ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_CLIENT_ID"].filter(
       (name) => name !== missingVerifierBinding,
     );
     const fixture = createFixture({

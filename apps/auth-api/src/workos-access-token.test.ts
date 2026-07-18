@@ -7,7 +7,7 @@ const NOW = 1_780_000_000;
 describe("WorkOS consent access-token verification", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("requires a valid RS256 signature and the configured issuer, audience, subject, and expiry", async () => {
+  it("requires a valid RS256 signature and the configured issuer, client, subject, and expiry", async () => {
     const keypair = await makeFixtureKeypair();
     vi.stubGlobal(
       "fetch",
@@ -16,12 +16,12 @@ describe("WorkOS consent access-token verification", () => {
     const verifier = makeWorkOsAccessTokenVerifier({
       jwksUri: "https://workos.test/jwks",
       issuer: "https://workos.test",
-      audience: "client_123",
+      clientId: "client_123",
     });
     const token = await signIdJag(keypair.privateKey, {
       sub: "user_existing",
       iss: "https://workos.test",
-      aud: "client_123",
+      client_id: "client_123",
       exp: NOW + 60,
     });
 
@@ -30,7 +30,7 @@ describe("WorkOS consent access-token verification", () => {
 
   it.each([
     { iss: "https://other.test" },
-    { aud: "other-client" },
+    { client_id: "other-client" },
     { sub: "" },
     { exp: NOW },
   ])("rejects a token with an invalid claim", async (override: Record<string, unknown>) => {
@@ -42,12 +42,12 @@ describe("WorkOS consent access-token verification", () => {
     const verifier = makeWorkOsAccessTokenVerifier({
       jwksUri: "https://workos.test/jwks",
       issuer: "https://workos.test",
-      audience: "client_123",
+      clientId: "client_123",
     });
     const token = await signIdJag(keypair.privateKey, {
       sub: "user_existing",
       iss: "https://workos.test",
-      aud: "client_123",
+      client_id: "client_123",
       exp: NOW + 60,
       ...override,
     });
@@ -65,12 +65,12 @@ describe("WorkOS consent access-token verification", () => {
     const verifier = makeWorkOsAccessTokenVerifier({
       jwksUri: "https://workos.test/jwks",
       issuer: "https://workos.test",
-      audience: "client_123",
+      clientId: "client_123",
     });
     const token = await signIdJag(other.privateKey, {
       sub: "user_existing",
       iss: "https://workos.test",
-      aud: "client_123",
+      client_id: "client_123",
       exp: NOW + 60,
     });
 

@@ -33,7 +33,6 @@ export interface AuthApiEnv {
   /** Hosted WorkOS access-token verification contract. */
   WORKOS_JWKS_URI?: string;
   WORKOS_ISSUER?: string;
-  WORKOS_AUTH_AUDIENCE?: string;
   /** Shared-preview smoke OAuth client id for non-interactive auth proof. */
   SPLITCH_SMOKE_CLIENT_ID?: string;
   /** Shared-preview smoke OAuth client secret. Never configure for production. */

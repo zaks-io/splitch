@@ -87,7 +87,6 @@
           "WORKOS_API_KEY",
           "WORKOS_JWKS_URI",
           "WORKOS_ISSUER",
-          "WORKOS_AUTH_AUDIENCE",
           "SPLITCH_SMOKE_CLIENT_SECRET"
         ]
       },
@@ -137,8 +136,7 @@
           "WORKOS_CLIENT_ID",
           "WORKOS_API_KEY",
           "WORKOS_JWKS_URI",
-          "WORKOS_ISSUER",
-          "WORKOS_AUTH_AUDIENCE"
+          "WORKOS_ISSUER"
         ]
       },
       "d1_databases": [

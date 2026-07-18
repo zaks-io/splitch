@@ -35,7 +35,13 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
   if (existingReservation?.completedAt && existingReservation.expiresAt > nowIso) {
     return tokenize(deps, claimant, verifiedUserId, now);
   }
-  if (existingReservation && !existingReservation.completedAt) {
+  if (
+    existingReservation &&
+    !existingReservation.completedAt &&
+    existingReservation.expiresAt <= nowIso
+  ) {
+    await deps.repo.claim.releaseClaimReservation({ ...identityHashes, keyHash });
+  } else if (existingReservation && !existingReservation.completedAt) {
     const reconciled = await reconcileProviderConfirmation(
       deps,
       claimant,
@@ -75,6 +81,7 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
         })
       : null;
   if (collision && !approvedConsent) {
+    deps.rateLimiter.assertUnderCeiling(input.remoteIp ?? "unknown", now);
     const consentId = await createConsent(
       deps,
       verification.id,
