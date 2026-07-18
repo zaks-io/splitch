@@ -48,7 +48,11 @@ const handler = {
     });
     if (url.pathname === "/health" || url.pathname === "/") {
       return Response.json(
-        createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
+        createHealthResponse(
+          service,
+          parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
+          env.SPLITCH_DEPLOYED_COMMIT_SHA,
+        ),
       );
     }
 

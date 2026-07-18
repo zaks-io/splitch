@@ -55,6 +55,7 @@ export type {
 } from "./live-update-connection";
 export {
   createHealthResponse,
+  FullCommitShaSchema,
   HealthResponseSchema,
   parsePlatformTarget,
   PlatformTargetSchema,

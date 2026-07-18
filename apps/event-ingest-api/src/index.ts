@@ -45,7 +45,11 @@ const handler = {
 
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
       return Response.json(
-        createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
+        createHealthResponse(
+          service,
+          parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
+          env.SPLITCH_DEPLOYED_COMMIT_SHA,
+        ),
       );
     }
 

@@ -16,6 +16,7 @@ const service = "splitch-analysis-api";
 export interface AnalysisAppDeps extends ResultsDeps, UsageDeps {
   authResolver: AuthResolver;
   rateLimiter: RateLimiter;
+  deployedCommitSha?: string;
   platformTarget?: string;
   defaultHeaders?: Record<string, string>;
   observability?: RegistrarDeps["observability"];
@@ -24,7 +25,13 @@ export interface AnalysisAppDeps extends ResultsDeps, UsageDeps {
 export function createApp(deps: AnalysisAppDeps): Hono {
   const app = new Hono();
   const health = () =>
-    Response.json(createHealthResponse(service, parsePlatformTarget(deps.platformTarget)));
+    Response.json(
+      createHealthResponse(
+        service,
+        parsePlatformTarget(deps.platformTarget),
+        deps.deployedCommitSha,
+      ),
+    );
   const registrar = analysisRegistrar(deps);
   const resultsHandler = makeResultsHandler(deps);
   const usageHandler = makeUsageHandler(deps);

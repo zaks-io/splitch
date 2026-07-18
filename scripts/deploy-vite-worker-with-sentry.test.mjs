@@ -15,6 +15,7 @@ import { PLACEHOLDER_KV_ID } from "./lib/hosted-bindings.mjs";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 const scriptPath = join(repoRoot, "scripts/deploy-vite-worker-with-sentry.mjs");
+const deployedCommitSha = "a".repeat(40);
 
 test("control-panel deploy scripts use the Vite-aware deploy wrapper", () => {
   const packageJson = JSON.parse(
@@ -44,10 +45,12 @@ test("passes CLOUDFLARE_ENV to Vite build and deploys the generated hosted confi
   assert.equal(calls[0].command, "build");
   assert.equal(calls[0].cloudflareEnv, "production");
   assert.equal(calls[0].generatedWranglerEnv, "production");
+  assert.equal(calls[0].deployedCommitSha, deployedCommitSha);
   assert.deepEqual(calls[1].args.slice(0, 3), ["exec", "wrangler", "deploy"]);
   assert.equal(calls[1].args.includes("--env"), false);
   assert.equal(calls[1].cloudflareEnv, "production");
   assert.equal(calls[1].generatedWranglerEnv, "production");
+  assert.equal(calls[1].args.includes(`SPLITCH_DEPLOYED_COMMIT_SHA:${deployedCommitSha}`), true);
 });
 
 test("fails before deploy when the generated hosted config keeps placeholder bindings", () => {
@@ -124,7 +127,8 @@ appendFileSync(process.env.SPLITCH_FAKE_CALLS, JSON.stringify({
   command: args[0],
   args,
   cloudflareEnv: process.env.CLOUDFLARE_ENV,
-  generatedWranglerEnv: process.env.SPLITCH_GENERATED_WRANGLER_ENV
+  generatedWranglerEnv: process.env.SPLITCH_GENERATED_WRANGLER_ENV,
+  deployedCommitSha: process.env.SPLITCH_DEPLOYED_COMMIT_SHA
 }) + "\\n");
 if (args[0] === "build") {
   const configPath = join(process.cwd(), "dist/server/wrangler.json");
@@ -168,12 +172,14 @@ function runDeploy(fixture, args, extraEnv = {}) {
     "CLOUDFLARE_ENV",
     "SPLITCH_GENERATED_WRANGLER_ENV",
     "SPLITCH_PLATFORM_TARGET",
+    "SPLITCH_DEPLOYED_COMMIT_SHA",
   ]) {
     delete env[name];
   }
   Object.assign(env, {
     PATH: `${fixture.binDir}:${process.env.PATH}`,
     SENTRY_RELEASE: "test-release",
+    SPLITCH_DEPLOYED_COMMIT_SHA: deployedCommitSha,
     SPLITCH_FAKE_CALLS: fixture.callsPath,
     SPLITCH_GENERATED_WRANGLER_CONFIG: JSON.stringify(fixture.generatedConfig),
     WORKOS_CLIENT_ID: "fake-workos-client-id",

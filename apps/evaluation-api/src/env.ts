@@ -16,6 +16,7 @@ export interface EvaluationApiEnv {
   CONTROL_PLANE_ORIGIN?: string;
   EVALUATION_PRIVACY_SALT?: string;
   SPLITCH_EVENT_INGEST_TOKEN?: string;
+  SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SPLITCH_SOURCE_ID?: string;
   SENTRY_DSN?: string;
