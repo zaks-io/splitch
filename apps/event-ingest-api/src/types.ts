@@ -10,6 +10,7 @@ import type {
 
 export type Env = {
   CONFIG_STORE?: KVNamespace;
+  SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_EVENT_INGEST_TOKEN?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SPLITCH_SOURCE_ID?: string;

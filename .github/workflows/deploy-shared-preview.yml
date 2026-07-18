@@ -64,6 +64,17 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
 
+      - name: Resolve immutable deploy revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployed_sha="$(git rev-parse HEAD)"
+          if [[ ! "$deployed_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::checked-out deploy revision is not a full commit SHA"
+            exit 1
+          fi
+          echo "SPLITCH_DEPLOYED_COMMIT_SHA=$deployed_sha" >> "$GITHUB_ENV"
+
       - name: Setup pnpm
         run: |
           corepack enable
@@ -107,18 +118,21 @@ jobs:
           fi
 
       - name: Deploy shared preview
+        id: deploy
         run: pnpm deploy:shared-preview
 
       - name: Seed shared preview smoke data
+        id: seed
         run: pnpm shared-preview:seed-smoke
 
       - name: Smoke shared preview
+        id: smoke
         env:
           SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
-        run: |
-          SPLITCH_SMOKE_COMMIT_SHA="$(git rev-parse HEAD)" pnpm shared-preview:smoke
+        run: SPLITCH_SMOKE_COMMIT_SHA="$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke
 
       - name: Clean up shared preview smoke data
+        id: cleanup
         if: always()
         run: pnpm shared-preview:cleanup-smoke
 
@@ -134,18 +148,8 @@ jobs:
 
       - name: Summary
         if: always()
-        run: |
-          {
-            echo "## Shared preview deploy"
-            echo
-            echo "- Ref: \`$(git rev-parse HEAD)\`"
-            echo "- Tinybird Branch: \`shared_preview\`"
-            echo "- Marketing: https://preview.splitch.dev/"
-            echo "- Control Panel: https://app.preview.splitch.dev/"
-            echo "- Control Plane API: https://api.preview.splitch.dev/"
-            echo "- Auth API: https://auth.preview.splitch.dev/"
-            echo "- Evaluation API: https://edge.preview.splitch.dev/"
-            echo "- Event Ingest API: https://ingest.preview.splitch.dev/"
-            echo "- MCP: https://mcp.preview.splitch.dev/"
-            echo "- Smoke: Playwright API tests (\`pnpm shared-preview:smoke\`)"
-          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          SPLITCH_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          SPLITCH_SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+          SPLITCH_CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
+        run: node scripts/render-shared-preview-summary.mjs deploy >> "$GITHUB_STEP_SUMMARY"

@@ -28,7 +28,11 @@ const handler = {
     const url = new URL(request.url);
     if (url.pathname === "/health" || url.pathname === "/") {
       const response = Response.json(
-        createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
+        createHealthResponse(
+          service,
+          parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
+          env.SPLITCH_DEPLOYED_COMMIT_SHA,
+        ),
       );
       if (env.SPLITCH_LOCAL_E2E_RUN_ID) {
         response.headers.set("x-splitch-local-e2e-run-id", env.SPLITCH_LOCAL_E2E_RUN_ID);

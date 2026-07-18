@@ -15,6 +15,7 @@ import { PLACEHOLDER_KV_ID } from "./lib/hosted-bindings.mjs";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 const scriptPath = join(repoRoot, "scripts/deploy-worker-with-sentry.mjs");
+const deployedCommitSha = "a".repeat(40);
 
 test("passes required Worker secrets to wrangler deploy as a temporary secrets file", () => {
   const fixture = createFixture({
@@ -38,6 +39,7 @@ test("passes required Worker secrets to wrangler deploy as a temporary secrets f
   const secretsFileIndex = call.args.indexOf("--secrets-file");
   assert.notEqual(secretsFileIndex, -1);
   assert.deepEqual(call.args.slice(0, 3), ["exec", "wrangler", "deploy"]);
+  assert.equal(call.args.includes(`SPLITCH_DEPLOYED_COMMIT_SHA:${deployedCommitSha}`), true);
   assert.deepEqual(call.args.slice(secretsFileIndex + 2), []);
   assert.deepEqual(Object.keys(call.secrets).sort(), [
     "SENTRY_DSN",
@@ -134,6 +136,18 @@ test("fails before wrangler deploy when hosted target is implied without a resol
   assert.equal(existsSync(fixture.callsPath), false);
 });
 
+test("fails before hosted deploy when the revision is only a workflow ref", () => {
+  const fixture = createFixture();
+
+  const result = runDeploy(fixture, ["--env", "production"], {
+    SPLITCH_DEPLOYED_COMMIT_SHA: "main",
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /requires a full SPLITCH_DEPLOYED_COMMIT_SHA/);
+  assert.equal(existsSync(fixture.callsPath), false);
+});
+
 test("fails before auth Worker deploy when hosted Control Panel origin is missing", () => {
   const fixture = createFixture({
     workerName: "splitch-auth-api",
@@ -225,6 +239,7 @@ function runDeploy(fixture, args, extraEnv = {}, fakeWranglerExit = "0") {
     "SENTRY_ORG",
     "SENTRY_PROJECT",
     "SPLITCH_EVENT_INGEST_TOKEN",
+    "SPLITCH_DEPLOYED_COMMIT_SHA",
     "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN",
     "SPLITCH_GENERATED_WRANGLER_ENV",
     "SPLITCH_PLATFORM_TARGET",
@@ -237,6 +252,7 @@ function runDeploy(fixture, args, extraEnv = {}, fakeWranglerExit = "0") {
   Object.assign(env, {
     PATH: `${fixture.binDir}:${process.env.PATH}`,
     SENTRY_RELEASE: "test-release",
+    SPLITCH_DEPLOYED_COMMIT_SHA: deployedCommitSha,
     SPLITCH_FAKE_WRANGLER_CALLS: fixture.callsPath,
     SPLITCH_FAKE_WRANGLER_EXIT: fakeWranglerExit,
   });

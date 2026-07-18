@@ -6,13 +6,18 @@ import { McpSessionNotFoundError } from "./mcp-session-store";
 export async function routeTransportRequest(options: {
   request: Request;
   service: string;
+  deployedCommitSha?: string;
   platformTarget?: string;
   sessionStore?: McpSessionStore;
 }): Promise<Response | undefined> {
   const url = new URL(options.request.url);
   if (isHealthRequest(options.request, url)) {
     return Response.json(
-      createHealthResponse(options.service, parsePlatformTarget(options.platformTarget)),
+      createHealthResponse(
+        options.service,
+        parsePlatformTarget(options.platformTarget),
+        options.deployedCommitSha,
+      ),
     );
   }
   if (options.request.method === "OPTIONS") {
