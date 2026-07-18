@@ -75,7 +75,7 @@ export function AppShell({ context, queryClient }: AppShellProps) {
               >
                 <span>{section.label}</span>
                 {"scope" in section ? (
-                  <Badge className="hidden text-[10px] xl:inline-flex" variant="outline">
+                  <Badge className="shrink-0 px-1.5 text-[9px] sm:text-[10px]" variant="outline">
                     {section.scope}
                   </Badge>
                 ) : null}

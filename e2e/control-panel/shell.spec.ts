@@ -74,6 +74,7 @@ test.describe("Control Panel local full-stack harness", () => {
   test("renders the URL-derived App shell and preserves the section across Environment switches", async ({
     page,
   }, testInfo) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto("/acme-labs/checkout-api/dev/flags");
 
     const shell = page.locator("[data-app-shell='ready']");
@@ -83,6 +84,12 @@ test.describe("Control Panel local full-stack harness", () => {
     await expect(page.getByRole("navigation", { name: "App sections" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Segments App-level" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Metrics App-level" })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Segments App-level" }).getByText("App-level"),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Metrics App-level" }).getByText("App-level"),
+    ).toBeVisible();
 
     await chooseScope(page, "Environment", "/acme-labs/checkout-api/prod/flags");
     await expect(page).toHaveURL("/acme-labs/checkout-api/prod/flags");
