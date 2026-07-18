@@ -141,13 +141,13 @@ Per-Worker configs must declare only the bindings owned by that Worker:
 
 | Worker                   | Binding rule                                                                                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update Durable Object binding                                                   |
+| Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update and D1-backed Durable Object bindings                                    |
 | MCP Worker               | No D1, KV, Tinybird, or Durable Object data bindings; calls public APIs by origin and Analysis by service binding through `@splitch/control-plane-sdk` |
 | Evaluation Worker        | Provider/config KV, Assignment Store KV/DO, Event Ingest service binding                                                                               |
 | Event Ingest Worker      | Queue, sharded ingest/dedup Durable Objects, Tinybird write secret                                                                                     |
 | Analysis Worker          | Tinybird read secret; no SDK evaluate or ingest bindings                                                                                               |
-| Auth API Worker          | Auth/session/token bindings only; no post-create App management bindings                                                                               |
-| Control Panel Worker     | UI/session/client bindings only; no direct D1/KV/Tinybird access                                                                                       |
+| Auth API Worker          | D1 identity/session binding plus auth/session/token bindings; no post-create App management bindings                                                   |
+| Control Panel Worker     | D1 binding for server-side auth, session, and claim flows plus UI/session/client bindings; no direct KV/Tinybird access                                |
 | Marketing Worker         | Static/public bindings only; no authenticated App data                                                                                                 |
 | Scheduled jobs           | Cron triggers stay on owning Workers: Control Plane API demo cleanup and Analysis snapshot refresh                                                     |
 
@@ -213,8 +213,9 @@ or any Durable Object migration.
 - Shared preview applies migrations remotely to the shared-preview D1 database before Worker deployment.
 - Production applies migrations remotely as part of `deploy-production`, after approval and before code
   that requires the new schema is serving traffic.
-- Production D1 migration recovery policy is tracked separately in SPL-82. Do not add backup,
-  export, restore, or time-travel automation until the security and retention boundaries are decided.
+- Production D1 recovery follows the [recovery policy and runbook](#production-d1-recovery-policy-and-runbook).
+  Its private R2 export provisioning is a separate, approval-gated slice; normal deploy workflows do
+  not create recovery resources or initiate backup, export, restore, or Time Travel actions.
 - Failed migrations roll back the failed migration and leave prior successful migrations applied.
 - Schema changes follow expand/contract. Additive migrations and backward-compatible reads ship first;
   destructive cleanup ships in a later release with an explicit runbook.
@@ -365,6 +366,139 @@ deployment. For any Durable Object migration, use `wrangler deploy`.
 - Destructive data changes, secret rotations, and binding deletions require an explicit runbook and are
   separate from normal feature deploys.
 
+## Production D1 recovery policy and runbook
+
+Production D1 recovery has two deliberately separate windows. **D1 Time Travel** is the short-window
+point-in-time recovery mechanism. It is always on for D1 databases on the supported storage subsystem;
+the production plan must provide its 30-day window, and the provisioner must fail the recovery setup if
+the database is not eligible. **Private R2 exports** are the longer-retention recovery mechanism.
+They are recovery material, not build output, release artifacts, or a substitute for reversible
+migrations.
+
+### Recovery policy
+
+- Roll forward is the default for a failed migration. A restore is an incident operation only when a
+  compatible forward migration cannot safely correct the data or schema.
+- Time Travel is the first recovery option while the required point is still within the provider's
+  available window. The operator records the proposed timestamp or bookmark in the restricted
+  incident record before acting. A Time Travel restore is destructive even though Cloudflare returns a
+  previous bookmark that can be used to undo it.
+- Longer-lived recovery points are full D1 SQL exports written only to a dedicated, private R2 bucket.
+  A Cloudflare Workflow runs once every 24 hours, initiates and continuously polls the D1 export API,
+  then writes the returned export directly to R2. This sets the R2 recovery-point objective at 24
+  hours; the signed export URL is transient transport material and is never persisted, displayed, or
+  forwarded outside that Workflow.
+- D1 export can make the database unavailable to other requests. The daily export therefore runs in a
+  declared production maintenance window with a ten-minute planned-unavailability budget. Before the
+  export starts, the Workflow enables one shared D1 maintenance gate that is independent of D1. Every
+  Worker entrypoint capable of D1 access in the Auth API Worker, Control Panel Worker, and Control Plane
+  API Worker must consult that gate before constructing a repository or otherwise touching D1. This
+  includes HTTP routes and scheduled handlers, specifically the Control Plane API scheduled demo-reaper.
+  Every Durable Object entrypoint capable of D1 access, including the Control Plane API credential-cache
+  writer, credential-cache backfill, and config-store Durable Objects, must use the same guard before
+  touching D1. A fenced gate, an unreadable gate, or a timed-out gate fails closed: HTTP entrypoints
+  return the standard `503` `SERVICE_UNAVAILABLE` response with `Retry-After`, while scheduled entrypoints
+  stop before D1 and record an explicit maintenance-skipped operational outcome rather than success. No
+  entrypoint may fall through to D1 or make maintenance look like successful product behavior. Static
+  or public paths proven not to touch D1 may remain available.
+- The Workflow may initiate the export only after the shared gate reports fenced and maintenance probes
+  for all three D1-bound Workers, their D1-using scheduled handlers, and the D1-using Durable Object
+  entrypoints confirm the guarded path.
+  The fence remains set until the export has stopped and a direct D1 readiness check proves requests are
+  served again; only then may the Workflow clear it. An export still running at ten minutes breaches the
+  budget: stop polling so the provider cancels the unpolled export, keep the fence until readiness
+  returns, alert the incident owner, and disable later scheduled exports until the cause is resolved.
+  Provisioning must prove the budget with production-size synthetic data before enabling the schedule.
+  Any non-blocking replacement requires verified provider support and a policy update.
+- The recovery bucket has no public `r2.dev` access, public custom domain, or public-read policy. No
+  recovery object, signed URL, token, SQL content, or restore command enters GitHub, the repository,
+  CI logs, deployment summaries, test artifacts, chat, or normal application logs.
+- R2's provider encryption at rest and TLS in transit are the minimum transport and storage controls.
+  The export path must not create a plaintext local staging file. Any future customer-managed-key or
+  cross-account copy requirement needs its own security decision.
+- The recovery bucket lifecycle retains each completed export for 90 days. A 90-day bucket-lock rule
+  covers the recovery-object prefix, so lifecycle expiry cannot shorten the promised retention. Failed,
+  partial, or unverified exports are not recovery points: they use a separate private failure prefix
+  and expire after seven days. Changing the export cadence, retention, or lock rules is a production
+  security change, not routine workflow maintenance.
+
+### Access and evidence
+
+Use separate least-privilege identities, but do not claim controls the provider does not offer.
+Cloudflare's public D1 token model exposes account-level D1 permissions rather than an export-only,
+single-database permission, and an R2 Worker binding grants a Worker bucket capability rather than
+prefix-scoped write-only IAM. The scheduled Workflow is therefore the mandatory mediator:
+
+- It has no public route or caller-controlled entrypoint. Only its configured schedule can start an
+  export, and code plus configuration allowlist the exact production account ID, database UUID,
+  dedicated recovery bucket binding, and completed/failure object-key prefixes.
+- Its API token uses the least account-level D1 permission the export endpoint accepts. Provisioning
+  must verify the permission against the export endpoint; if Cloudflare requires `D1 Edit`, record that
+  broader provider grant as accepted residual risk. The mediator implements only initiate/poll export
+  calls and contains no general query, import, delete, or Time Travel restore client path.
+- Its R2 access is a Worker binding to the dedicated recovery bucket, not an account-wide R2 token. The
+  binding technically exposes bucket reads, writes, lists, and deletes; the mediator exposes only
+  writes to its two allowlisted prefixes and the exact-object read needed for recoverability evidence.
+  Bucket isolation, no public route, reviewed allowlists, and bucket lock compensate for the missing
+  write-only and prefix-level provider grants.
+- It receives no bucket-policy or public-access administration authority. Provisioning and lifecycle or
+  lock administration use a separate production-approved identity that is absent from the runtime.
+
+A restore operator receives time-bounded, incident-only authority for the named database and recovery
+object; it is not the scheduled export identity. Long-lived account-wide tokens, shared credentials,
+and Global API keys are prohibited.
+
+An export succeeds only after the Workflow records restricted, non-content evidence: database identity,
+source bookmark, export run time, object key, size, checksum or ETag when available, retention/lock
+configuration version, and a successful object-readability or import-readiness check. Evidence lives in
+the access-controlled recovery/incident system, not in GitHub or application telemetry. The scheduled
+workflow must alert on a missed, failed, or unverified recovery point; it must not silently continue.
+
+### Restore authority and drills
+
+Only a human incident owner may request a production restore, and a separate human with production
+approval authority must approve it before the restore operation begins. Normal deploy workflows,
+scheduled exports, and agents cannot restore production. The incident record must identify the target
+time or recovery object, affected database, approvers, rollback/undo point, and the expected privacy
+and service impact before the destructive action.
+
+Every restore follows this runbook boundary:
+
+1. Stop or fence the affected write path, capture restricted incident evidence, and evaluate a
+   forward migration first.
+2. Verify the selected Time Travel point or R2 object against its restricted evidence. Do not treat
+   the existence of an export alone as recoverability proof.
+3. Obtain the separate production approval, perform the restore with the incident-only identity, and
+   retain the provider's undo point in the restricted incident record.
+4. Before traffic or analytics resume, replay privacy deletion tombstones and validate migration state,
+   tenant isolation, and the affected Worker smoke paths. This extends the privacy restore contract in
+   [privacy-data-lifecycle.md](./privacy-data-lifecycle.md).
+5. Record the outcome and any data-loss window in the restricted incident record, then roll forward to
+   the compatible desired schema and application version.
+
+Run restore drills at least quarterly using synthetic or non-production data. A drill must exercise
+object selection, integrity/readiness verification, tombstone replay, and post-restore validation. A
+drill that restores production is itself a destructive production operation and needs the same separate
+human approval and incident record as a real restore. A successful export without this recoverability
+evidence is not a successful recovery program.
+
+### Follow-up implementation boundary
+
+A separate, approval-gated provisioning slice must create the dedicated private R2 bucket, recovery
+prefix, lifecycle and bucket-lock rules, scoped identities, and Cloudflare Workflow/API integration. It
+must add the schedule-only mediator, shared fail-closed maintenance gate, guarded D1 access and
+readiness behavior, production-size synthetic duration test, restricted evidence storage, alerting,
+permission verification, allowlist tests, and automated non-production drill coverage. Route-level
+tests must prove that D1-dependent Auth API, Control Panel, and Control Plane API routes each return the
+standard maintenance contract while fenced and resume only after direct D1 readiness succeeds and the
+gate is cleared. Tests for every D1-using Durable Object entrypoint must prove the same fail-closed and
+resume ordering. A scheduled-handler test must prove that the Control Plane API demo-reaper exits before
+constructing a repository or querying or mutating D1 while fenced, records the maintenance-skipped
+outcome, and resumes only after direct D1 readiness succeeds and the gate is cleared. It must not add R2
+creation, exports, restores, recovery credentials, or a restore action to normal production deploy
+workflows. The implementation must keep all production data and recovery material out of Git, GitHub,
+logs, and build artifacts.
+
 ## Rollback
 
 Worker code-only rollback:
@@ -427,6 +561,19 @@ is compatible with current data.
   <https://developers.cloudflare.com/d1/wrangler-commands/>,
   <https://developers.cloudflare.com/d1/reference/migrations/>,
   <https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/>
+- Cloudflare D1 Time Travel, export, and Workflows guidance:
+  <https://developers.cloudflare.com/d1/reference/time-travel/>,
+  <https://developers.cloudflare.com/d1/best-practices/import-export-data/>,
+  <https://developers.cloudflare.com/workflows/examples/backup-d1/>,
+  <https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/export/>
+- Cloudflare R2 recovery-object controls:
+  <https://developers.cloudflare.com/r2/reference/data-security/>,
+  <https://developers.cloudflare.com/r2/api/tokens/>,
+  <https://developers.cloudflare.com/r2/api/workers/workers-api-reference/>,
+  <https://developers.cloudflare.com/r2/buckets/bucket-locks/>,
+  <https://developers.cloudflare.com/r2/buckets/public-buckets/>
+- Cloudflare account API token permissions:
+  <https://developers.cloudflare.com/fundamentals/api/reference/permissions/>
 - Tinybird branches, CI/CD, deployment, and limits docs:
   <https://www.tinybird.co/docs/forward/core-concepts/branches>,
   <https://www.tinybird.co/docs/forward/development-workflow/cicd>,
