@@ -13,6 +13,7 @@ export interface CompleteClaimInput {
   appId: string;
   acquisitionToken: string;
   acquisitionKeyHash: string;
+  replayExpiresAt: string;
   now: string;
 }
 
@@ -132,13 +133,14 @@ export async function completeClaim(d1: D1Database, input: CompleteClaimInput): 
       : []),
     d1
       .prepare(
-        `UPDATE claim_idempotency SET completed_at = ?
+        `UPDATE claim_idempotency SET completed_at = ?, expires_at = ?
          WHERE key_hash = ? AND provisional_user_hash = ? AND email_hash = ?
            AND organization_hash = ? AND app_hash = ? AND verified_user_hash = ?
            AND verification_id = ? AND completed_at IS NULL AND ${acquiredGuard}`,
       )
       .bind(
         input.now,
+        input.replayExpiresAt,
         input.keyHash,
         input.provisionalUserHash,
         input.emailHash,

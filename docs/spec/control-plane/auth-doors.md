@@ -122,8 +122,9 @@ RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md
 
 The daily Control Plane scheduled reaper purges expired claim artifacts in bounded batches of 100
 verifications. Consent attempts are deleted before their verification rows, and completed or abandoned
-idempotency reservations are retained for their full 24-hour replay window before those verification
-rows become eligible. This preserves one-use and replay behavior while keeping Door B state bounded.
+idempotency reservations use a five-minute in-flight lease that is extended to the full 24-hour replay
+window only after completion. This lets a valid ceremony recover an abandoned reservation while keeping
+completed retries stable before those verification rows become eligible for deletion.
 
 ### `interaction_required` error response
 

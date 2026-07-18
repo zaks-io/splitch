@@ -10,7 +10,8 @@ import {
 import { OAuthError } from "./oauth-errors";
 import type { ClaimDeps, ClaimResult, VerifyInput } from "./claim";
 
-const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+const IN_FLIGHT_LEASE_MS = 5 * 60 * 1000;
+const COMPLETED_REPLAY_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_OTP_ATTEMPTS = 5;
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity lint/complexity/noExcessiveLinesPerFunction: the ordered security gates are deliberately kept in one auditable ceremony.
@@ -95,7 +96,7 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
     ...identityHashes,
     keyHash,
     verificationId: verification.id,
-    expiresAt: iso(now + IDEMPOTENCY_TTL_MS),
+    expiresAt: iso(now + IN_FLIGHT_LEASE_MS),
   };
   // Reserve before WorkOS consumes the one-use OTP. A same-key loser therefore
   // observes the durable reservation, never a provider-specific OTP failure.
@@ -116,6 +117,7 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
     appId: claimant.appId,
     acquisitionToken: crypto.randomUUID(),
     acquisitionKeyHash: keyHash,
+    replayExpiresAt: iso(now + COMPLETED_REPLAY_TTL_MS),
     now: nowIso,
   };
   let providerConfirmationStarted = false;
@@ -233,6 +235,7 @@ async function reconcileProviderConfirmation(
     appId: claimant.appId,
     acquisitionToken: crypto.randomUUID(),
     acquisitionKeyHash: keyHash,
+    replayExpiresAt: iso(Date.parse(nowIso) + COMPLETED_REPLAY_TTL_MS),
     now: nowIso,
   };
   if (await deps.repo.claim.completeClaim(transfer)) return true;

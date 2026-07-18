@@ -4,8 +4,7 @@ import { EMAIL, setupClaimHarness } from "./claim-harness";
 import { FIXTURE_OTP } from "./otp";
 import { makeRateLimiter } from "./rate-limit";
 
-const { deps, register, fullClaim, isProvisional, count, expireIncompleteReservations } =
-  setupClaimHarness();
+const { deps, register, fullClaim, isProvisional, count } = setupClaimHarness();
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: the reservation race cases share one fixture lifecycle.
 describe("claim reservation security", () => {
@@ -168,8 +167,8 @@ describe("claim reservation security", () => {
     };
 
     await expect(verifyClaim(d.claim, input)).rejects.toThrow("worker interrupted");
-    await expireIncompleteReservations();
-    await expect(verifyClaim(d.claim, input)).resolves.toMatchObject({ org_id: orgId });
+    const afterLease = { ...d.claim, now: () => d.claim.now() + 6 * 60 * 1000 };
+    await expect(verifyClaim(afterLease, input)).resolves.toMatchObject({ org_id: orgId });
     expect(await isProvisional(orgId)).toBe(false);
   });
 
