@@ -25,7 +25,11 @@ export default defineConfig(({ mode }) => ({
     cloudflare({
       config: localE2eRunId
         ? (config) => ({
-            vars: { ...config.vars, SPLITCH_LOCAL_E2E_RUN_ID: localE2eRunId },
+            vars: {
+              ...config.vars,
+              SENTRY_DSN: "",
+              SPLITCH_LOCAL_E2E_RUN_ID: localE2eRunId,
+            },
           })
         : undefined,
       persistState: process.env.SPLITCH_LOCAL_E2E_PERSIST_PATH
