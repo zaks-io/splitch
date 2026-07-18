@@ -1,139 +1,102 @@
-import { evictDurableObject, runDurableObjectAlarm } from "cloudflare:test";
+import { evictDurableObject, runDurableObjectAlarm, SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { handleMcpServerRequest } from "../src/mcp-handler";
-import {
-  durableMcpSessionStore,
-  type McpSessionDurableObjectNamespace,
-} from "../src/mcp-session-store";
+import type { McpSessionDurableObjectNamespace } from "../src/mcp-session-store";
 
 const namespace = (env as unknown as { MCP_SESSIONS: McpSessionDurableObjectNamespace })
   .MCP_SESSIONS;
 
-describe("MCP session Durable Object transport", () => {
-  it("preserves inherited route scope after the session isolate is evicted", async () => {
-    const store = durableMcpSessionStore(namespace);
-    const sessionId = await initialize(store);
-    await useContext(store, sessionId);
+describe("MCP session Worker transport", () => {
+  it("preserves session context after the Durable Object isolate is evicted", async () => {
+    const sessionId = await initialize();
+    await useContext(sessionId);
+    const stub = namespace.getByName(sessionId);
 
-    await evictDurableObject(namespace.getByName(sessionId) as DurableObjectStub);
-    const seen: Request[] = [];
-    await call("tools/call", promotion(), store, sessionId, seen);
+    await evictDurableObject(stub as DurableObjectStub);
 
-    expect(new URL(seen[0]?.url ?? "https://invalid").pathname).toBe(
-      "/apps/app_session/envs/env_session/flags/flag_checkout/promote",
-    );
-  });
-
-  it("rejects reuse after explicit session termination", async () => {
-    const store = durableMcpSessionStore(namespace);
-    const sessionId = await initialize(store);
-    await useContext(store, sessionId);
-
-    const ended = await handleMcpServerRequest({
-      request: new Request("https://mcp.test/mcp", {
-        method: "DELETE",
-        headers: { "mcp-session-id": sessionId },
-      }),
-      service: "splitch-mcp-server",
-      sessionStore: store,
+    expect(await stub.getContext(Date.now())).toEqual({
+      ok: true,
+      value: { appId: "app_session", environmentId: "env_session" },
     });
-    expect(ended.status).toBe(204);
-    expect((await call("tools/call", promotion(), store, sessionId)).status).toBe(404);
+    expect((await rpc("tools/list", undefined, sessionId)).status).toBe(200);
   });
 
-  it("deletes expired session context when its alarm fires", async () => {
-    const store = durableMcpSessionStore(namespace);
-    const sessionId = await initialize(store);
-    await useContext(store, sessionId);
+  it("returns 404 before dispatch after explicit session termination", async () => {
+    const sessionId = await initialize();
+    await useContext(sessionId);
+
+    const ended = await SELF.fetch("https://mcp.test/mcp", {
+      method: "DELETE",
+      headers: { "mcp-session-id": sessionId },
+    });
+
+    expect(ended.status).toBe(204);
+    await expectDeadSession(sessionId);
+  });
+
+  it("returns 404 before dispatch after the expiry alarm deletes context", async () => {
+    const sessionId = await initialize();
+    await useContext(sessionId);
     const stub = namespace.getByName(sessionId);
 
     await evictDurableObject(stub as DurableObjectStub);
     expect(await runDurableObjectAlarm(stub as DurableObjectStub)).toBe(true);
-    expect((await call("tools/call", promotion(), store, sessionId)).status).toBe(404);
+    await expectDeadSession(sessionId);
   });
 
-  it("rejects and cleans up a session when the request observes expiry", async () => {
-    let now = Date.now();
-    const store = durableMcpSessionStore(namespace, { now: () => now, ttlMs: 60_000 });
-    const sessionId = await initialize(store);
-    await useContext(store, sessionId);
+  it("returns 404 and cleans up when transport validation observes expiry", async () => {
+    const sessionId = crypto.randomUUID();
+    const stub = namespace.getByName(sessionId);
+    expect(await stub.initialize(Date.now() - 1)).toEqual({ ok: true, value: undefined });
 
-    now += 60_001;
-    expect((await call("tools/call", promotion(), store, sessionId)).status).toBe(404);
-    expect(await runDurableObjectAlarm(namespace.getByName(sessionId) as DurableObjectStub)).toBe(
-      false,
-    );
+    await expectDeadSession(sessionId);
+    expect(await runDurableObjectAlarm(stub as DurableObjectStub)).toBe(false);
   });
 
-  it("rejects an unknown session before JSON-RPC dispatch", async () => {
-    const store = durableMcpSessionStore(namespace);
-    const response = await call("tools/call", promotion(), store, crypto.randomUUID());
-
-    expect(response.status).toBe(404);
-    expect(await response.text()).toBe("MCP session not found");
+  it("returns 404 before dispatch for an unknown session", async () => {
+    await expectDeadSession(crypto.randomUUID());
   });
 });
 
-async function initialize(store: ReturnType<typeof durableMcpSessionStore>): Promise<string> {
-  const response = await call("initialize", undefined, store);
+async function initialize(): Promise<string> {
+  const response = await rpc("initialize");
   const sessionId = response.headers.get("mcp-session-id");
+  expect(response.status).toBe(200);
   expect(sessionId).toBeTruthy();
   return sessionId as string;
 }
 
-async function useContext(
-  store: ReturnType<typeof durableMcpSessionStore>,
-  sessionId: string,
-): Promise<void> {
-  const response = await call(
+async function useContext(sessionId: string): Promise<void> {
+  const response = await rpc(
     "tools/call",
     { name: "context_use", arguments: { appId: "app_session", environmentId: "env_session" } },
-    store,
     sessionId,
   );
-  expect(await toolError(response)).toBeNull();
-}
-
-function promotion(): unknown {
-  return {
-    name: "flags_promote",
-    arguments: { flagId: "flag_checkout", fromEnvironmentId: "source", select: { enabled: true } },
-  };
-}
-
-async function call(
-  method: string,
-  params: unknown,
-  sessionStore: ReturnType<typeof durableMcpSessionStore>,
-  sessionId?: string,
-  seen: Request[] = [],
-): Promise<Response> {
-  return handleMcpServerRequest({
-    request: new Request("https://mcp.test/mcp", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
-      },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    }),
-    service: "splitch-mcp-server",
-    platformTarget: "local",
-    sessionStore,
-    controlPlaneFetch: async (request) => {
-      seen.push(request instanceof Request ? request : new Request(request));
-      return Response.json(
-        { code: "FLAG_NOT_FOUND", message: "not found", details: {} },
-        { status: 404 },
-      );
-    },
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    result: { structuredContent: { appId: "app_session", environmentId: "env_session" } },
   });
 }
 
-async function toolError(response: Response): Promise<string | null> {
-  const body = (await response.clone().json()) as {
-    result?: { isError?: boolean; structuredContent?: { message?: string } };
-  };
-  return body.result?.isError ? (body.result.structuredContent?.message ?? "tool error") : null;
+async function expectDeadSession(sessionId: string): Promise<void> {
+  const response = await SELF.fetch("https://mcp.test/mcp", {
+    method: "POST",
+    headers: { "content-type": "application/json", "mcp-session-id": sessionId },
+    body: "{malformed-dispatch-sentinel",
+  });
+
+  expect(response.status).toBe(404);
+  expect(response.headers.get("content-type")).toBe("text/plain;charset=UTF-8");
+  expect(await response.text()).toBe("MCP session not found");
+}
+
+function rpc(method: string, params?: unknown, sessionId?: string): Promise<Response> {
+  return SELF.fetch("https://mcp.test/mcp", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
 }
