@@ -17,7 +17,9 @@ export function runReset(
   { command = runCommand, now = () => new Date().toISOString() } = {},
 ) {
   requireEnvironment(["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "TB_TOKEN", "TB_HOST"]);
-  command("tb", ["--no-version-warning", "branch", "rm", TINYBIRD_BRANCH, "--yes"]);
+  if (tinybirdBranchExists(command)) {
+    command("tb", ["--no-version-warning", "branch", "rm", TINYBIRD_BRANCH, "--yes"]);
+  }
   command("tb", [
     "--no-version-warning",
     "branch",
@@ -99,6 +101,11 @@ export function runReset(
     "--param",
     `copy_watermark_ts=${now()}`,
   ]);
+}
+
+function tinybirdBranchExists(command) {
+  const result = command("tb", ["--no-version-warning", "branch", "ls"], { capture: true });
+  return new RegExp(`(^|\\s)${TINYBIRD_BRANCH}(\\s|$)`, "m").test(result.stdout);
 }
 
 function listResettableD1Tables(plan, command) {

@@ -89,7 +89,7 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 | ----------------------- | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks                                                |
 | `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                    |
-| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | not wired: restore shared preview to the default branch or clear preview data                                                                                                |
+| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: rebuild the Tinybird Branch, migrate and clear preview-only D1/KV state, reseed fixtures, run Copy Pipe on demand, and verify hosted smoke                            |
 | `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, Turborepo Worker deploy tasks, and Linear release sync                  |
 | `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                                                 |
 | `sdk-release`           | manual dispatch                                     | `sdk-release`, queued            | wired: validate `@splitch/sdk`, prepare release artifacts, create or update draft GitHub Release for `sdk-v<version>`; does not publish to npm                               |
@@ -526,11 +526,13 @@ is compatible with current data.
       `verify:commit`, `verify:push`, Knip, and Gitleaks.
 - [x] Add `deploy:shared-preview` and `deploy:production` scripts through Turborepo package tasks.
 - [x] Add script for `shared-preview:smoke`.
-- [ ] Add scripts for `shared-preview:reset` and `rollback:production`.
+- [x] Add script for `shared-preview:reset`.
+- [ ] Add script for `rollback:production`.
 - [x] Add `deploy:production` and hook Tinybird deployment into it.
 - [x] Add Tinybird project files and `tinybird.config.json` with local-mode development.
 - [x] Add Blacksmith-backed GitHub workflows for CI and Gitleaks.
-- [ ] Add Blacksmith-backed GitHub workflows for shared preview reset and rollback.
+- [x] Add a Blacksmith-backed GitHub workflow for shared preview reset.
+- [ ] Add a Blacksmith-backed GitHub workflow for production rollback.
 - [x] Add a Blacksmith-backed `sdk-release` workflow for manual SDK draft release prep.
 - [x] Add a GitHub-hosted `sdk-publish` workflow for release-published npm trusted publishing with provenance.
 - [x] Add a Blacksmith-backed `deploy-shared-preview` workflow.

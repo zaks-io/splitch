@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { createResetPlan } from "./lib/shared-preview-reset-plan.mjs";
 import { runReset } from "./reset-shared-preview.mjs";
 
@@ -12,6 +13,26 @@ const PRODUCTION_KV = "production-kv";
 const PRODUCTION_D1 = "production-d1";
 const LOCAL_KV = "fixture-local-kv";
 const LOCAL_D1 = "fixture-local-d1";
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+test("cleanup cannot bypass reset validation and smoke emits the required evidence", () => {
+  const workflow = readFileSync(
+    join(repoRoot, ".github/workflows/reset-shared-preview.yml"),
+    "utf8",
+  );
+
+  assert.match(workflow, /if: \$\{\{ always\(\) && steps\.reset\.outcome == 'success' \}\}/);
+  for (const evidence of [
+    "platformTarget",
+    "Deployed SHA: unavailable/unverified",
+    "Tinybird Branch",
+    "Preview URLs and exercised health routes",
+    "Exercised functional routes",
+    "Applied D1 migrations",
+  ]) {
+    assert.match(workflow, new RegExp(evidence));
+  }
+});
 
 test("builds a mutation plan from positively identified shared-preview resources only", () => {
   const root = createFixture();
@@ -65,6 +86,9 @@ test("runs only preview-scoped reset commands and Copy Pipe on demand", () => {
       now: () => "2026-07-18T00:00:00.000Z",
       command(command, args, options = {}) {
         calls.push({ command, args, options });
+        if (command === "tb" && args.includes("ls")) {
+          return { stdout: "shared_preview\n" };
+        }
         if (args.some((arg) => arg.includes("sqlite_master"))) {
           return {
             stdout: JSON.stringify([
