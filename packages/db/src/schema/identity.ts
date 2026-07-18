@@ -34,6 +34,11 @@ export const organizations = sqliteTable("organizations", {
   // is_provisional = 1 implies demo_expires_at IS NOT NULL (enforced in the seam).
   isProvisional: integer("is_provisional", { mode: "boolean" }).notNull().default(false),
   demoExpiresAt: text("demo_expires_at"),
+  // Set only by the atomic Door B transfer acquisition batch.
+  claimAcquiredAt: text("claim_acquired_at"),
+  claimAcquisitionToken: text("claim_acquisition_token"),
+  // Cleared on completion; identifies same-key losers while the batch is in flight.
+  claimAcquisitionKeyHash: text("claim_acquisition_key_hash"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -103,6 +108,66 @@ export const deviceRefreshSessions = sqliteTable("device_refresh_sessions", {
   providerSessionId: text("provider_session_id").notNull(),
   createdAt: createdAt(),
 });
+
+/**
+ * Bounded Door B workflow state. Identifiers are SHA-256 digests, never raw
+ * email addresses, WorkOS user ids, OTPs, or session tokens.
+ */
+export const claimVerifications = sqliteTable("claim_verifications", {
+  id: text("id").primaryKey(),
+  provisionalUserHash: text("provisional_user_hash").notNull(),
+  emailHash: text("email_hash").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  verifiedAt: text("verified_at"),
+  consumedAt: text("consumed_at"),
+  createdAt: createdAt(),
+});
+
+export const claimConsentAttempts = sqliteTable("claim_consent_attempts", {
+  id: text("id").primaryKey(),
+  verificationId: text("verification_id")
+    .notNull()
+    .references(() => claimVerifications.id),
+  existingUserHash: text("existing_user_hash").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  approvedAt: text("approved_at"),
+  consumedAt: text("consumed_at"),
+  createdAt: createdAt(),
+});
+
+export const claimIdempotency = sqliteTable(
+  "claim_idempotency",
+  {
+    keyHash: text("key_hash").notNull(),
+    verificationId: text("verification_id")
+      .notNull()
+      .references(() => claimVerifications.id),
+    provisionalUserHash: text("provisional_user_hash").notNull(),
+    emailHash: text("email_hash").notNull(),
+    organizationHash: text("organization_hash").notNull(),
+    appHash: text("app_hash").notNull(),
+    verifiedUserHash: text("verified_user_hash").notNull(),
+    // NULL owns an in-flight ceremony; a timestamp makes its retry replayable.
+    completedAt: text("completed_at"),
+    // Set before the one-use provider confirmation so a retry can reconcile an
+    // interrupted response from WorkOS without guessing that the OTP failed.
+    providerConfirmationStartedAt: text("provider_confirmation_started_at"),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [
+        t.keyHash,
+        t.provisionalUserHash,
+        t.emailHash,
+        t.organizationHash,
+        t.appHash,
+        t.verifiedUserHash,
+      ],
+    }),
+  ],
+);
 
 /**
  * Trusted IdP allow-list for ID-JAG validation (access-control-matrix.md). Org

@@ -36,12 +36,13 @@ export interface OAuthErrorBody {
   error: OAuthErrorCode;
   error_description: string;
   /**
-   * `interaction_required` carries the consent link the human must visit
-   * (auth-doors.md). Other codes leave these absent. Kept on the one body shape
+   * `interaction_required` carries the consent link and opaque verification id
+   * the human must visit (auth-doors.md). Other codes leave these absent. Kept on the one body shape
    * (not a forked type) so the whole door speaks one error wire contract.
    */
   consent_url?: string;
   consent_expires_at?: string;
+  verification_id?: string;
 }
 
 /** HTTP status for each OAuth error code (OAuth 2.0 / auth.md mapping). */
@@ -64,7 +65,10 @@ const statusByCode: Record<OAuthErrorCode, number> = {
 };
 
 /** Optional extra body fields some codes carry (e.g. the consent link). */
-type OAuthErrorExtra = Pick<OAuthErrorBody, "consent_url" | "consent_expires_at">;
+type OAuthErrorExtra = Pick<
+  OAuthErrorBody,
+  "consent_url" | "consent_expires_at" | "verification_id"
+>;
 
 /** A typed door failure carrying its OAuth code + human description. */
 export class OAuthError extends Error {

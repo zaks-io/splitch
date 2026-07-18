@@ -31,6 +31,49 @@ export function assertNoPlaceholderHostedBindings(config, source) {
   }
 }
 
+export function assertHostedAuthOrigins(config, source) {
+  if (config?.name !== "splitch-auth-api") {
+    return;
+  }
+
+  const origin = config?.vars?.CONTROL_PANEL_ORIGIN;
+  if (typeof origin !== "string" || origin.length === 0) {
+    throw new Error(`${source} must declare vars.CONTROL_PANEL_ORIGIN for hosted claims`);
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    throw new Error(`${source}.vars.CONTROL_PANEL_ORIGIN must be an absolute URL`);
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.pathname !== "/" ||
+    parsed.search !== "" ||
+    parsed.hash !== ""
+  ) {
+    throw new Error(
+      `${source}.vars.CONTROL_PANEL_ORIGIN must be an https origin without a path for hosted claims`,
+    );
+  }
+}
+
+export function assertHostedAuthVerifierBindings(config, source) {
+  if (config?.name !== "splitch-auth-api") {
+    return;
+  }
+  const required = config?.secrets?.required;
+  const missing = ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_CLIENT_ID"].filter(
+    (name) => !Array.isArray(required) || !required.includes(name),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `${source} must require hosted WorkOS verifier bindings: ${missing.join(", ")}`,
+    );
+  }
+}
+
 function invalidKvBindings(namespaces) {
   if (!Array.isArray(namespaces)) {
     return [];

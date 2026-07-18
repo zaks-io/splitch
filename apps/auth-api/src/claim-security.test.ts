@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { approveClaimConsent, initiateClaim, refuseClaimConsent, verifyClaim } from "./claim";
+import { handleConsent } from "./claim-consent-route";
 import { EMAIL, setupClaimHarness } from "./claim-harness";
-import { initiateClaim, verifyClaim } from "./claim";
 import { FIXTURE_OTP } from "./otp";
+import { makeRateLimiter } from "./rate-limit";
 
 /**
  * Door B claim — SECURITY-FINDING regressions (BugBot on the SPL-24 fix).
@@ -16,7 +18,12 @@ import { FIXTURE_OTP } from "./otp";
  *     reservation, so a legitimate retry re-runs instead of seeing "in progress".
  */
 
-const { deps, register, fullClaim, isProvisional } = setupClaimHarness();
+const { deps, register, fullClaim, isProvisional, count, setProvisional } = setupClaimHarness();
+
+type ClaimConsentError = {
+  code: string;
+  extra: { consent_url?: string; verification_id?: string };
+};
 
 describe("FINDING 1: idempotency replay is RE-AUTHENTICATED (no key-only token mint)", () => {
   it("a replay with a DIFFERENT user's valid assertion is rejected (no token minted)", async () => {
@@ -92,41 +99,64 @@ describe("FINDING 2: WorkOS index + collision check share ONE canonicalization",
   });
 });
 
-describe("FINDING 3: a winner that FAILS releases the key (retry is not locked out)", () => {
-  it("wrong OTP releases the reservation; a correct retry with the same key succeeds", async () => {
+describe("SPL-137 transfer guards and consent one-use semantics", () => {
+  it("requires an explicit consent decision before approving a transfer", async () => {
     const d = deps();
-    const { assertion, orgId } = await register(d);
-    await initiateClaim(d.claim, {
-      identityAssertion: assertion,
-      email: EMAIL,
-      remoteIp: "1.2.3.4",
-    });
-
-    // First attempt WINS the reservation but supplies the wrong OTP → ceremony throws.
-    await expect(
-      verifyClaim(d.claim, {
+    const owner = await d.workos.resolveOrCreateUser("owner@example.com");
+    const { assertion } = await register(d);
+    let error: ClaimConsentError | undefined;
+    try {
+      await initiateClaim(d.claim, {
         identityAssertion: assertion,
-        otp: "999999",
-        email: EMAIL,
-        idempotencyKey: "retry-key",
+        email: "owner@example.com",
         remoteIp: "1.2.3.4",
+      });
+    } catch (cause) {
+      error = cause as ClaimConsentError;
+    }
+    const attemptId = new URL(error?.extra.consent_url as string).pathname
+      .split("/")
+      .at(-1) as string;
+    const response = await handleConsent(
+      { claim: d.claim, workosAccessTokens: { verify: async () => ({ userId: owner }) } },
+      new Request(`https://auth.splitch.test/claim/consent/${attemptId}`, {
+        method: "POST",
+        headers: { authorization: "Bearer workos-token" },
       }),
-    ).rejects.toMatchObject({ code: "invalid_grant" });
+      attemptId,
+      () => Math.floor(d.claim.now() / 1000),
+    );
 
-    // The retry with the SAME key RE-RUNS the ceremony (not "in progress") and,
-    // with the right code, succeeds. (Before the fix the key stayed locked forever.)
-    const ok = await verifyClaim(d.claim, {
-      identityAssertion: assertion,
-      otp: FIXTURE_OTP,
-      email: EMAIL,
-      idempotencyKey: "retry-key",
-      remoteIp: "1.2.3.4",
-    });
-    expect(ok.org_id).toBe(orgId);
-    expect(await isProvisional(orgId)).toBe(false);
+    expect(response.status).toBe(400);
+    await approveClaimConsent(d.claim, attemptId, owner);
   });
 
-  it("a concurrent in-flight loser still fails loud while the winner is mid-ceremony", async () => {
+  it("rate-limits collision retries before creating durable consent attempts", async () => {
+    const d = deps();
+    const { assertion } = await register(d);
+    await initiateClaim(d.claim, {
+      identityAssertion: assertion,
+      email: EMAIL,
+      remoteIp: "1.2.3.4",
+    });
+    await d.workos.resolveOrCreateUser(EMAIL);
+    d.claim.rateLimiter = makeRateLimiter({ perIpPerHour: 1, globalPerHour: 1 });
+    const verify = () =>
+      verifyClaim(d.claim, {
+        identityAssertion: assertion,
+        email: EMAIL,
+        idempotencyKey: "collision-retry",
+        remoteIp: "1.2.3.4",
+      });
+
+    await expect(verify()).rejects.toMatchObject({ code: "interaction_required" });
+    await expect(verify()).rejects.toMatchObject({ code: "too_many_requests" });
+    expect(await count("claim_consent_attempts")).toBe(1);
+  });
+});
+
+describe("SPL-137 guarded transfer and consent one-use semantics", () => {
+  it("does not consume state or mint idempotency when the Organization acquisition guard fails", async () => {
     const d = deps();
     const { assertion, orgId } = await register(d);
     await initiateClaim(d.claim, {
@@ -134,24 +164,124 @@ describe("FINDING 3: a winner that FAILS releases the key (retry is not locked o
       email: EMAIL,
       remoteIp: "1.2.3.4",
     });
-    const one = () =>
+    await setProvisional(orgId, false);
+
+    await expect(
       verifyClaim(d.claim, {
         identityAssertion: assertion,
         otp: FIXTURE_OTP,
         email: EMAIL,
-        idempotencyKey: "race-2",
+        idempotencyKey: "guard-failure",
+        remoteIp: "1.2.3.4",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+    expect(await count("claim_idempotency")).toBe(0);
+    expect(await count("claim_consent_attempts")).toBe(0);
+  });
+
+  it("rejects a competing idempotency key after the one-use transfer completed", async () => {
+    const d = deps();
+    const { assertion, orgId } = await register(d);
+    await fullClaim(d, assertion, EMAIL, "winner");
+
+    await expect(
+      verifyClaim(d.claim, {
+        identityAssertion: assertion,
+        otp: FIXTURE_OTP,
+        email: EMAIL,
+        idempotencyKey: "competitor",
+        remoteIp: "1.2.3.4",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+    expect(await count("claim_idempotency")).toBe(1);
+    expect(await isProvisional(orgId)).toBe(false);
+  });
+
+  it("requires the existing AuthKit principal, refuses a second principal, and consumes consent once", async () => {
+    const d = deps();
+    const owner = await d.workos.resolveOrCreateUser("owner@example.com");
+    const { assertion, orgId } = await register(d);
+    let error: ClaimConsentError | undefined;
+    try {
+      await initiateClaim(d.claim, {
+        identityAssertion: assertion,
+        email: "owner@example.com",
         remoteIp: "1.2.3.4",
       });
-    const settled = await Promise.allSettled([one(), one()]);
-    const fulfilled = settled.filter((s) => s.status === "fulfilled");
-    const rejections = settled
-      .filter((s): s is PromiseRejectedResult => s.status === "rejected")
-      .map((s) => s.reason);
-    expect(fulfilled.length).toBeGreaterThanOrEqual(1);
-    // An in-flight loser fails loud as invalid_request, never a double-mutated 500.
-    for (const reason of rejections) {
-      expect(reason.code).toBe("invalid_request");
+    } catch (cause) {
+      error = cause as ClaimConsentError;
     }
+    const consentError = error as ClaimConsentError;
+    const attemptId = new URL(consentError.extra.consent_url as string).pathname
+      .split("/")
+      .at(-1) as string;
+    const verificationId = consentError.extra.verification_id as string;
+
+    await expect(approveClaimConsent(d.claim, attemptId, "user_wrong")).rejects.toMatchObject({
+      code: "invalid_grant",
+    });
+    await approveClaimConsent(d.claim, attemptId, owner);
+    await expect(approveClaimConsent(d.claim, attemptId, owner)).rejects.toMatchObject({
+      code: "invalid_grant",
+    });
+
+    const result = await verifyClaim(d.claim, {
+      identityAssertion: assertion,
+      verificationId,
+      email: "owner@example.com",
+      idempotencyKey: "consent-once",
+      remoteIp: "1.2.3.4",
+    });
+    expect(result.user_id).toBe(owner);
     expect(await isProvisional(orgId)).toBe(false);
+  });
+
+  it("refusal and expiry cannot be reused", async () => {
+    const d = deps();
+    const owner = await d.workos.resolveOrCreateUser("owner@example.com");
+    const { assertion } = await register(d);
+    let error: ClaimConsentError | undefined;
+    try {
+      await initiateClaim(d.claim, {
+        identityAssertion: assertion,
+        email: "owner@example.com",
+        remoteIp: "1.2.3.4",
+      });
+    } catch (cause) {
+      error = cause as ClaimConsentError;
+    }
+    const consentError = error as ClaimConsentError;
+    const attemptId = new URL(consentError.extra.consent_url as string).pathname
+      .split("/")
+      .at(-1) as string;
+    await refuseClaimConsent(d.claim, attemptId, owner);
+    await expect(approveClaimConsent(d.claim, attemptId, owner)).rejects.toMatchObject({
+      code: "invalid_grant",
+    });
+
+    const expired = deps();
+    const expiredOwner = await expired.workos.resolveOrCreateUser("expired@example.com");
+    const { assertion: expiredAssertion } = await register(expired);
+    let expiredError: ClaimConsentError | undefined;
+    try {
+      await initiateClaim(expired.claim, {
+        identityAssertion: expiredAssertion,
+        email: "expired@example.com",
+        remoteIp: "1.2.3.4",
+      });
+    } catch (cause) {
+      expiredError = cause as ClaimConsentError;
+    }
+    const expiredConsentError = expiredError as ClaimConsentError;
+    const expiredAttempt = new URL(expiredConsentError.extra.consent_url as string).pathname
+      .split("/")
+      .at(-1) as string;
+    await expect(
+      approveClaimConsent(
+        { ...expired.claim, now: () => 1_780_000_000_000 + 16 * 60 * 1000 },
+        expiredAttempt,
+        expiredOwner,
+      ),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
   });
 });

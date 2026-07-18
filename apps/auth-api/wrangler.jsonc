@@ -45,7 +45,8 @@
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "AUTH_API_ORIGIN": "http://localhost:8791",
-    "CONTROL_PLANE_ORIGIN": "http://localhost:8787"
+    "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
+    "CONTROL_PANEL_ORIGIN": "http://localhost:8787"
   },
   "env": {
     "shared-preview": {
@@ -70,6 +71,7 @@
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
         "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
+        "CONTROL_PANEL_ORIGIN": "https://app.preview.splitch.dev",
         "TURNSTILE_SITE_KEY": "0x4AAAAAADsCXVP9TRrC6c6N",
         "SPLITCH_SMOKE_CLIENT_ID": "splitch-shared-preview-smoke",
         "SPLITCH_SMOKE_USER_ID": "user_shared_preview_smoke",
@@ -83,6 +85,8 @@
           "TURNSTILE_SECRET",
           "WORKOS_CLIENT_ID",
           "WORKOS_API_KEY",
+          "WORKOS_JWKS_URI",
+          "WORKOS_ISSUER",
           "SPLITCH_SMOKE_CLIENT_SECRET"
         ]
       },
@@ -120,6 +124,7 @@
         "SPLITCH_PLATFORM_TARGET": "production",
         "AUTH_API_ORIGIN": "https://auth.splitch.dev",
         "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
+        "CONTROL_PANEL_ORIGIN": "https://app.splitch.dev",
         "TURNSTILE_SITE_KEY": "0x4AAAAAADsCY8JNBv2vrTFC"
       },
       "secrets": {
@@ -129,7 +134,9 @@
           "ASSERTION_SIGNING_SECRET",
           "TURNSTILE_SECRET",
           "WORKOS_CLIENT_ID",
-          "WORKOS_API_KEY"
+          "WORKOS_API_KEY",
+          "WORKOS_JWKS_URI",
+          "WORKOS_ISSUER"
         ]
       },
       "d1_databases": [

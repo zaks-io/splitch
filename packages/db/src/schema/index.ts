@@ -9,6 +9,9 @@
 export {
   apps,
   appMemberships,
+  claimConsentAttempts,
+  claimIdempotency,
+  claimVerifications,
   deviceRefreshSessions,
   environments,
   organizations,

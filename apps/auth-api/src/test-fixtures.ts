@@ -92,7 +92,7 @@ export async function signIdJag(
 const SCHEMA = [
   `CREATE TABLE trusted_idps (idp_id TEXT PRIMARY KEY NOT NULL, org_id TEXT, issuer TEXT NOT NULL, jwks_uri TEXT NOT NULL, client_ids TEXT NOT NULL, enabled INTEGER DEFAULT 1 NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE UNIQUE INDEX trusted_idps_org_issuer_unique ON trusted_idps (org_id, issuer)`,
-  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, claim_acquired_at TEXT, claim_acquisition_token TEXT, claim_acquisition_key_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
   `CREATE TABLE org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
   `CREATE TABLE apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX apps_org_key_unique ON apps (organization_id, key)`,
@@ -100,6 +100,9 @@ const SCHEMA = [
   `CREATE TABLE environments (id TEXT PRIMARY KEY NOT NULL, app_id TEXT NOT NULL, key TEXT NOT NULL, name TEXT NOT NULL, policy TEXT DEFAULT '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}' NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX environments_app_key_unique ON environments (app_id, key)`,
   `CREATE TABLE device_refresh_sessions (refresh_token_hash TEXT PRIMARY KEY NOT NULL, provider_session_id TEXT NOT NULL, created_at TEXT NOT NULL)`,
+  `CREATE TABLE claim_verifications (id TEXT PRIMARY KEY NOT NULL, provisional_user_hash TEXT NOT NULL, email_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER DEFAULT 0 NOT NULL, verified_at TEXT, consumed_at TEXT, created_at TEXT NOT NULL)`,
+  `CREATE TABLE claim_consent_attempts (id TEXT PRIMARY KEY NOT NULL, verification_id TEXT NOT NULL, existing_user_hash TEXT NOT NULL, expires_at TEXT NOT NULL, approved_at TEXT, consumed_at TEXT, created_at TEXT NOT NULL)`,
+  `CREATE TABLE claim_idempotency (key_hash TEXT NOT NULL, verification_id TEXT NOT NULL, provisional_user_hash TEXT NOT NULL, email_hash TEXT NOT NULL, organization_hash TEXT NOT NULL, app_hash TEXT NOT NULL, verified_user_hash TEXT NOT NULL, completed_at TEXT, provider_confirmation_started_at TEXT, expires_at TEXT NOT NULL, PRIMARY KEY (key_hash, provisional_user_hash, email_hash, organization_hash, app_hash, verified_user_hash))`,
 ];
 
 export interface LocalBindings {
@@ -135,6 +138,7 @@ export async function makeLocalBindings(): Promise<LocalBindings> {
  * the Door B test reaches into the returned fixtures (workos, otp, idempotency).
  */
 export interface DoorBFixtures {
+  repo: Repository;
   register: RegisterDeps;
   claim: ClaimDeps;
   workos: WorkOsPort;
@@ -156,6 +160,7 @@ export function makeDoorBDeps(
   const rateLimiter = makeRateLimiter(opts.rateLimits);
   const idempotency = makeIdempotencyStore();
   return {
+    repo,
     workos,
     otp,
     idempotency,

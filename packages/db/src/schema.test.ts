@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { createLocalD1 } from "./repo/test-d1";
 
 /**
  * Asserts the GENERATED migration SQL — the exact DDL `wrangler d1 migrations
@@ -126,9 +127,41 @@ describe("credential invariants", () => {
 });
 
 describe("full table corpus", () => {
-  it("emits all 19 D1 tables", () => {
-    const createCount = (migrationSql.match(/CREATE TABLE /g) ?? []).length;
-    expect(createCount).toBe(19);
+  it("applies the 22 named live D1 tables", async () => {
+    const local = await createLocalD1();
+    try {
+      const tables = await local.d1
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != '_cf_METADATA'",
+        )
+        .all<{ name: string }>();
+      expect(tables.results.map((table) => table.name).sort()).toEqual([
+        "api_keys",
+        "app_memberships",
+        "apps",
+        "claim_consent_attempts",
+        "claim_idempotency",
+        "claim_verifications",
+        "client_keys",
+        "device_refresh_sessions",
+        "entity_deletions",
+        "environments",
+        "experiments",
+        "flag_configs",
+        "flags",
+        "metrics",
+        "org_memberships",
+        "organizations",
+        "privacy_requests",
+        "runs",
+        "segments",
+        "targeting_rules",
+        "trusted_idps",
+        "variants",
+      ]);
+    } finally {
+      await local.dispose();
+    }
   });
 });
 
@@ -142,5 +175,14 @@ describe("device refresh session storage", () => {
 
   it("does not add a raw refresh_token column", () => {
     expect(block).not.toContain("`refresh_token`");
+  });
+});
+
+describe("Door B transfer acquisition storage", () => {
+  it("stores a nullable one-batch acquisition marker on Organizations", () => {
+    expect(migrationSql).toContain("ALTER TABLE `organizations` ADD `claim_acquired_at` text");
+    expect(migrationSql).toContain(
+      "ALTER TABLE `organizations` ADD `claim_acquisition_token` text",
+    );
   });
 });

@@ -3,6 +3,7 @@ export interface ControlPanelBindings {
   SESSION_STORE: KVNamespace;
   WORKOS_API_KEY: string;
   WORKOS_CLIENT_ID: string;
+  AUTH_API_ORIGIN: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
 }
@@ -17,6 +18,7 @@ export function controlPanelBindings(raw: unknown): ControlPanelBindings {
     SESSION_STORE: raw.SESSION_STORE,
     WORKOS_API_KEY: requiredString(raw.WORKOS_API_KEY, "WORKOS_API_KEY"),
     WORKOS_CLIENT_ID: requiredString(raw.WORKOS_CLIENT_ID, "WORKOS_CLIENT_ID"),
+    AUTH_API_ORIGIN: requiredString(raw.AUTH_API_ORIGIN, "AUTH_API_ORIGIN"),
     SPLITCH_PLATFORM_TARGET: optionalString(raw.SPLITCH_PLATFORM_TARGET),
     SENTRY_DSN: optionalString(raw.SENTRY_DSN),
   };
@@ -27,6 +29,7 @@ function isBindings(value: unknown): value is {
   SESSION_STORE: KVNamespace;
   WORKOS_API_KEY?: unknown;
   WORKOS_CLIENT_ID?: unknown;
+  AUTH_API_ORIGIN?: unknown;
   SPLITCH_PLATFORM_TARGET?: unknown;
   SENTRY_DSN?: unknown;
 } {

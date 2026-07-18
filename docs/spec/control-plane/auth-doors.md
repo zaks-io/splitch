@@ -77,24 +77,54 @@ RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md
 
 **Endpoint:** `POST /agent/identity/claim` on the auth-api Worker (also `POST /claim` for human UI)
 
-**Request body:**
+**Initiation request:**
 
 ```
 {
   identity_assertion: string,   // the provisional assertion
+  email: string                 // address to verify or link
+}
+```
+
+**OTP verification request:**
+
+```
+{
+  identity_assertion: string,
+  email: string,
   otp: string,                  // one-time password delivered to the user's email
   idempotency_key: string       // caller-supplied; prevents double-claim on retry
 }
 ```
 
+**Consent verification request:**
+
+```
+{
+  identity_assertion: string,
+  email: string,
+  verification_id: string,      // returned with interaction_required
+  idempotency_key: string
+}
+```
+
 **Claim steps:**
 
-1. Validate `identity_assertion`; assert provisional
-2. Verify `otp` against D1 OTP record (TTL 10 min); check `idempotency_key` to skip if already processed
-3. If `email` maps to an existing real user → return `interaction_required` (see below)
-4. If no collision: update WorkOS user email to verified; clear `is_provisional`; clear `demo_expires_at`
-5. Upgrade scopes to full `app:{app_id}:{role}` in issued token
-6. Return: `{ access_token, user_id, org_id, app_id }`
+1. Validate `identity_assertion`; assert provisional. Initiation first asks WorkOS whether the normalized email already belongs to a verified user. A free address is then assigned to the provisional WorkOS user and the email-verification code is sent; a collision creates only durable verification and consent state and returns `interaction_required` without mutating the provisional user.
+2. D1 stores only SHA-256 identifier digests plus bounded TTL, attempt, one-use, consent, and idempotency state. It never stores an OTP or a hosted fixture code.
+3. For a free address, WorkOS confirms the OTP. Its result is the email-ownership authority.
+4. For an existing verified address, the existing AuthKit principal authenticates at the consent URL. The browser can approve or refuse with POST; no provisional WorkOS user email is changed in this branch.
+5. The consent page is a dedicated Control Panel route. Its URL is built from the explicit `CONTROL_PANEL_ORIGIN`, never the Control Plane API origin. Its opaque browser session maps to a server-side WorkOS access JWT; the panel forwards that JWT only server-to-server. Auth API verifies its RS256 signature, configured issuer, `client_id`, expiry, and `sub` against WorkOS JWKS. The panel session is bounded by the JWT expiry. Existing splitch membership is not an authorization input for this route.
+6. After WorkOS verification or authenticated consent, one guarded D1 batch first acquires the still-provisional Organization only while the signed provisional User still has the matching Org and App memberships. Every membership mutation, state consumption, and idempotency insert is conditional on that acquisition. Retries after a pre-batch failure are safe.
+7. Return: `{ access_token, user_id, org_id, app_id }`.
+
+### Claim-state retention
+
+The daily Control Plane scheduled reaper purges expired claim artifacts in bounded batches of 100
+verifications. Consent attempts are deleted before their verification rows, and completed or abandoned
+idempotency reservations use a five-minute in-flight lease that is extended to the full 24-hour replay
+window only after completion. This lets a valid ceremony recover an abandoned reservation while keeping
+completed retries stable before those verification rows become eligible for deletion.
 
 ### `interaction_required` error response
 
@@ -106,11 +136,14 @@ Returned when the claiming email maps to an existing verified user (account-take
   error_description: string,
   consent_url: string,     // URL the real user must visit to approve linking
   consent_expires_at: string  // ISO 8601; consent link valid for 15 min
+  verification_id: string     // opaque durable verification state to retry after approval
 }
 ```
 
-The agent must surface `consent_url` to the human. The human authenticates at that URL, approves the
-link, and splitch merges the identities. The agent then retries the claim.
+The agent must surface `consent_url` to the human. The human authenticates at that URL, approves or
+refuses the link, and splitch transfers the provisional memberships only after approval. Approval and
+refusal are one-use; an expired or consumed attempt fails closed. After approval, the agent retries the
+claim with the returned `verification_id` and idempotency key; no fixture OTP is accepted for this branch.
 
 ### Provisional demo reaping
 

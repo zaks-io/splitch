@@ -18,7 +18,7 @@ import { accessTokenPrivateJwkFromSecret } from "./access-token-key";
  * origin — defense in depth (access-control-matrix.md).
  */
 
-const ASSERTION_TTL_SECONDS = 300; // assertion is exchanged immediately
+const ASSERTION_TTL_SECONDS = 15 * 60; // aligns with the Door B claim ceremony
 const ACCESS_TOKEN_TTL_SECONDS = 3600; // control-plane token default 1h
 
 interface AssertionClaims {

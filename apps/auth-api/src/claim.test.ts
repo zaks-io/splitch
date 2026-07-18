@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EMAIL, setupClaimHarness } from "./claim-harness";
 import { initiateClaim, verifyClaim } from "./claim";
 import { FIXTURE_OTP } from "./otp";
@@ -14,7 +14,12 @@ import { FIXTURE_OTP } from "./otp";
  * race can be expressed with Promise.all on one shared fixture set.
  */
 
-const { deps, register, fullClaim, isProvisional } = setupClaimHarness();
+const { deps, register, fullClaim, isProvisional, count } = setupClaimHarness();
+
+type ClaimConsentError = {
+  code: string;
+  extra: { consent_url?: string; verification_id?: string };
+};
 
 describe("Door B claim: happy path", () => {
   it("initiate→verify with the delivered OTP upgrades scopes and clears provisional", async () => {
@@ -62,6 +67,31 @@ describe("BLOCKING #1: OTP is bound to the claimed email (no pre-emptive takeove
       code: "interaction_required",
     });
     expect(await isProvisional(orgId)).toBe(true);
+  });
+
+  it("detects a collision before the provisional WorkOS user is mutated", async () => {
+    const d = deps();
+    await d.workos.resolveOrCreateUser("owner@example.com");
+    const send = vi.spyOn(d.workos, "sendEmailVerification");
+    const { assertion, orgId } = await register(d);
+
+    let error: ClaimConsentError | undefined;
+    try {
+      await initiateClaim(d.claim, {
+        identityAssertion: assertion,
+        email: "owner@example.com",
+        remoteIp: "1.2.3.4",
+      });
+    } catch (cause) {
+      error = cause as ClaimConsentError;
+    }
+
+    expect(error).toMatchObject({ code: "interaction_required" });
+    expect(send).not.toHaveBeenCalled();
+    expect(await d.workos.findVerifiedUserByEmail("owner@example.com")).toMatch(/^user_fixture_/);
+    expect(await isProvisional(orgId)).toBe(true);
+    expect(await count("claim_verifications")).toBe(1);
+    expect(await count("claim_consent_attempts")).toBe(1);
   });
 
   it("interaction_required does NOT reflect the email into consent_url (enumeration-safe)", async () => {

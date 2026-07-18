@@ -134,7 +134,45 @@ test("fails before wrangler deploy when hosted target is implied without a resol
   assert.equal(existsSync(fixture.callsPath), false);
 });
 
-function createFixture({ requiredSecrets = [], bindings = {} } = {}) {
+test("fails before auth Worker deploy when hosted Control Panel origin is missing", () => {
+  const fixture = createFixture({
+    workerName: "splitch-auth-api",
+    vars: { AUTH_API_ORIGIN: "https://auth.example.test" },
+  });
+
+  const result = runDeploy(fixture, ["--env", "production"]);
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /CONTROL_PANEL_ORIGIN/);
+  assert.equal(existsSync(fixture.callsPath), false);
+});
+
+for (const missingVerifierBinding of ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_CLIENT_ID"]) {
+  test(`fails before auth Worker deploy when ${missingVerifierBinding} is not required`, () => {
+    const requiredSecrets = ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKOS_CLIENT_ID"].filter(
+      (name) => name !== missingVerifierBinding,
+    );
+    const fixture = createFixture({
+      workerName: "splitch-auth-api",
+      targetVars: { CONTROL_PANEL_ORIGIN: "https://app.example.test" },
+      requiredSecrets,
+    });
+
+    const result = runDeploy(fixture, ["--env", "production"]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, new RegExp(missingVerifierBinding));
+    assert.equal(existsSync(fixture.callsPath), false);
+  });
+}
+
+function createFixture({
+  requiredSecrets = [],
+  bindings = {},
+  workerName = "splitch-evaluation-api",
+  vars = {},
+  targetVars = {},
+} = {}) {
   const root = mkdtempSync(join(tmpdir(), "splitch-worker-deploy-test-"));
   const binDir = join(root, "bin");
   const callsPath = join(root, "wrangler-deploy-calls.jsonl");
@@ -143,10 +181,12 @@ function createFixture({ requiredSecrets = [], bindings = {} } = {}) {
   writeFileSync(
     join(root, "wrangler.jsonc"),
     JSON.stringify({
-      name: "splitch-evaluation-api",
+      name: workerName,
+      vars,
       env: {
         production: {
           ...bindings,
+          vars: targetVars,
           secrets: {
             required: requiredSecrets,
           },

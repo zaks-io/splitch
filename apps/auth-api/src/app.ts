@@ -2,6 +2,7 @@ import type { Repository } from "@splitch/db";
 import { Hono } from "hono";
 import { verifyAccessToken } from "./access-token";
 import { type ClaimDeps, initiateClaim, verifyClaim } from "./claim";
+import { handleConsent } from "./claim-consent-route";
 import type { DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import { type IdJagDeps, verifyIdJag } from "./idjag-verify";
@@ -17,6 +18,7 @@ import {
 } from "./schemas";
 import type { TokenSigner } from "./token-exchange";
 import { makeTrustedIdpCrud } from "./trusted-idp-crud";
+import type { WorkOsAccessTokenVerifier } from "./workos-access-token";
 
 /**
  * Auth API Worker HTTP surface.
@@ -38,6 +40,7 @@ export interface AppDeps {
   register: RegisterDeps;
   /** Door B claim ceremony (OTP, idempotency dedup, interaction_required). */
   claim: ClaimDeps;
+  workosAccessTokens?: WorkOsAccessTokenVerifier;
   /** Secret the control-plane access token is signed with (distinct from the assertion secret). */
   accessSecret: string;
   /** Audience the access token must bind to (control-plane protected-resource origin). */
@@ -95,6 +98,9 @@ export function createApp(deps: AppDeps): Hono {
   const claimHandler = (c: { req: { raw: Request } }) => handleClaim(deps, c.req.raw);
   app.post("/agent/identity/claim", claimHandler);
   app.post("/claim", claimHandler);
+  app.post("/claim/consent/:attemptId", (c) =>
+    handleConsent(deps, c.req.raw, c.req.param("attemptId"), nowSeconds),
+  );
 
   // GET /claim is the human-UI entry: it does not mutate, it points the browser at
   // the claim flow. Kept minimal here (the full UI is the frontend's job).
@@ -180,8 +186,8 @@ async function handleAnonymousRegister(
 }
 
 /**
- * Door B claim. The presence of `otp` selects the step: no otp → INITIATE (send a
- * code to the claimed email); otp → VERIFY (idempotency_key is then required).
+ * Door B claim. An INITIATE has neither `otp` nor `verification_id`; a VERIFY has
+ * one of them and always requires `idempotency_key`.
  */
 async function handleClaim(deps: AppDeps, request: Request): Promise<Response> {
   const parsed = ClaimRequestSchema.safeParse(await readJson(request));
@@ -190,7 +196,7 @@ async function handleClaim(deps: AppDeps, request: Request): Promise<Response> {
   }
   const remoteIp = clientIp(request);
   try {
-    if (parsed.data.otp === undefined) {
+    if (parsed.data.otp === undefined && parsed.data.verification_id === undefined) {
       const result = await initiateClaim(deps.claim, {
         identityAssertion: parsed.data.identity_assertion,
         email: parsed.data.email,
@@ -206,6 +212,7 @@ async function handleClaim(deps: AppDeps, request: Request): Promise<Response> {
     const result = await verifyClaim(deps.claim, {
       identityAssertion: parsed.data.identity_assertion,
       otp: parsed.data.otp,
+      verificationId: parsed.data.verification_id,
       email: parsed.data.email,
       idempotencyKey: parsed.data.idempotency_key,
       remoteIp,

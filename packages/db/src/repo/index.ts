@@ -1,4 +1,5 @@
 import { createDb } from "./client";
+import { makeClaimStateRepo } from "./claim-state";
 import { makeCredentialRepo } from "./credentials";
 import { makeExperimentRepo } from "./experiments";
 import { makeFlagRepo } from "./flags";
@@ -25,6 +26,7 @@ export function createRepository(d1: D1Database) {
     flags: makeFlagRepo(db),
     experiments: makeExperimentRepo(db, d1),
     credentials: makeCredentialRepo(db),
+    claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
     privacy: makePrivacyRepo(db),
   };
