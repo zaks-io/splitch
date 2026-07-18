@@ -43,6 +43,17 @@ export type { McpProtocolToolDefinition, McpToolDefinition } from "./mcp-tools";
 export { DeltaNudgeEntitySchema, deltaNudgeEntities, DeltaNudgeSchema } from "./delta-nudge";
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export {
+  authorizesLiveUpdateConnection,
+  LiveUpdateConnectionContextSchema,
+  parseLiveUpdateConnectionContext,
+  ServerAuthenticatedLiveUpdateContextSchema,
+} from "./live-update-connection";
+export type {
+  LiveUpdateAuthorizationContext,
+  LiveUpdateConnectionContext,
+  ServerAuthenticatedLiveUpdateContext,
+} from "./live-update-connection";
+export {
   createHealthResponse,
   HealthResponseSchema,
   parsePlatformTarget,

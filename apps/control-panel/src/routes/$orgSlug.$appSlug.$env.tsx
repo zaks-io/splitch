@@ -5,6 +5,7 @@ import { NotFoundPage } from "@splitch/ui/state/not-found-page";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { WidgetErrorBoundary } from "#components/widget-error-boundary";
+import { LiveUpdatesClient } from "#components/live-updates-client";
 import {
   AccessDeniedError,
   isAccessDeniedError,
@@ -59,9 +60,11 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
 
 function ScopePlaceholderRoute() {
   const context = Route.useLoaderData();
+  const { queryClient } = Route.useRouteContext();
 
   return (
     <main className="grid gap-6">
+      <LiveUpdatesClient queryClient={queryClient} scope={context.scope} />
       <section className="grid gap-2">
         <p className="font-mono text-muted-foreground text-xs uppercase tracking-wide">Scope</p>
         <h1 className="font-semibold text-3xl text-foreground">App scope preview</h1>

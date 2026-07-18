@@ -1,3 +1,5 @@
+import type { DeltaNudgeEntity } from "@splitch/contracts";
+
 export type AppEnvironmentScope = {
   readonly appId: string;
   readonly environmentId: string;
@@ -72,14 +74,12 @@ export const queryKeys = {
   },
 } as const;
 
-export type NudgeEntity = "experiment" | "flag" | "metric" | "segment";
-
 export const nudgeInvalidationPrefix: Record<
-  NudgeEntity,
+  DeltaNudgeEntity,
   (appId: string, environmentId: string) => QueryKey
 > = {
   experiment: queryKeys.experiment.prefix,
   flag: queryKeys.flag.prefix,
-  metric: queryKeys.metric.prefix,
+  run: queryKeys.experiment.prefix,
   segment: queryKeys.segment.prefix,
 };

@@ -83,11 +83,11 @@ keys = {
 
 When the WebSocket delivers `NudgePayload { type, entity, id, version }`, the handler:
 
-1. Checks version gate: if `queryClient.getQueryData(keys[entity].detail(appId, environmentId, id))?.version >= nudge.version`, skip (no-op for the editor who just wrote).
+1. Checks the version gate when the entity has a directly addressable detail key. A `run` nudge skips this optimization because the canonical payload does not carry its parent Experiment ID.
 2. Calls `queryClient.invalidateQueries({ queryKey: keys[entity].prefix(appId, environmentId) })`.
 
-This single prefix call invalidates the list, detail, runs, and all sub-resources for the entity in
-one operation — no enumeration of individual keys.
+This single prefix call invalidates the mapped list, detail, and sub-resources in one operation. No
+individual keys are enumerated.
 
 Mapping table (nudge entity → invalidated prefix):
 
@@ -95,15 +95,21 @@ Mapping table (nudge entity → invalidated prefix):
 | -------------- | ---------------------------------------------- |
 | `experiment`   | `keys.experiment.prefix(appId, environmentId)` |
 | `flag`         | `keys.flag.prefix(appId, environmentId)`       |
-| `metric`       | `keys.metric.prefix(appId, environmentId)`     |
+| `run`          | `keys.experiment.prefix(appId, environmentId)` |
 | `segment`      | `keys.segment.prefix(appId, environmentId)`    |
+
+`run` invalidates the Environment's Experiment prefix because the canonical nudge carries a Run ID,
+not its parent Experiment ID. The subsequent read remains the source of truth; the client does not
+maintain a Run-to-Experiment index.
 
 ## Version gating (no double-refetch for the editor)
 
 The mutation 200 response carries `{ version: number }`. The editor stores this in the Query cache
 as part of the refetch it triggers after 200 (see [mutation-data-flow.md](./mutation-data-flow.md)).
-When the echoed nudge arrives, the cached version is already equal to the nudge's version, so the
-version-gate skips the redundant refetch. Other editors have older cached versions, so they refetch.
+When an echoed Flag, Experiment, or Segment nudge arrives, a cached version equal to the nudge's
+version skips the redundant refetch. Other editors have older cached versions, so they refetch. Run
+nudges always refetch the Experiment prefix because the payload cannot address a Run detail key by
+itself.
 
 ## Failure contract
 
@@ -112,10 +118,8 @@ fail at runtime. There is no success-vs-error superposition because there is no 
 builder returns a key array unconditionally. Malformed usage is caught at compile time:
 
 - A missing or wrong-typed argument (e.g. omitting `appId` or `environmentId`) is a TypeScript error, not a runtime one.
-- A nudge whose `entity` is not a known key in `keys` is rejected at the handler boundary: the
-  nudge handler **must** narrow `nudge.entity` against the known entity union before calling
-  `keys[entity].prefix(appId, environmentId)`. An unrecognized entity is logged and dropped (fail-loud, no silent
-  no-op and no invalidation of an unintended prefix), never passed to the factory.
+- A nudge whose `entity` is outside the canonical contract union is rejected by the strict payload
+  schema before it reaches the mapping. The mapping is compile-time total over that union.
 - Invalidation itself (`queryClient.invalidateQueries`) is owned by TanStack Query, not this module;
   its failure handling lives in [websocket-lifecycle.md](./websocket-lifecycle.md) (stale data is
   kept, a dismissable toast shown, bounded retry).
