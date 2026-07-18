@@ -391,15 +391,19 @@ migrations.
 - D1 export can make the database unavailable to other requests. The daily export therefore runs in a
   declared production maintenance window with a ten-minute planned-unavailability budget. Before the
   export starts, the Workflow enables one shared D1 maintenance gate that is independent of D1. Every
-  route capable of D1 access in the Auth API Worker, Control Panel Worker, and Control Plane API Worker
-  must consult that gate before constructing a repository or otherwise touching D1. Every Durable
-  Object entrypoint capable of D1 access, including the Control Plane API credential-cache writer,
-  credential-cache backfill, and config-store Durable Objects, must use the same guard before touching
-  D1. A fenced gate, an unreadable gate, or a timed-out gate fails closed with the standard `503`
-  `SERVICE_UNAVAILABLE` response and `Retry-After`; it cannot fall through to D1 or look like successful
-  product behavior. Static or public paths proven not to touch D1 may remain available.
+  Worker entrypoint capable of D1 access in the Auth API Worker, Control Panel Worker, and Control Plane
+  API Worker must consult that gate before constructing a repository or otherwise touching D1. This
+  includes HTTP routes and scheduled handlers, specifically the Control Plane API scheduled demo-reaper.
+  Every Durable Object entrypoint capable of D1 access, including the Control Plane API credential-cache
+  writer, credential-cache backfill, and config-store Durable Objects, must use the same guard before
+  touching D1. A fenced gate, an unreadable gate, or a timed-out gate fails closed: HTTP entrypoints
+  return the standard `503` `SERVICE_UNAVAILABLE` response with `Retry-After`, while scheduled entrypoints
+  stop before D1 and record an explicit maintenance-skipped operational outcome rather than success. No
+  entrypoint may fall through to D1 or make maintenance look like successful product behavior. Static
+  or public paths proven not to touch D1 may remain available.
 - The Workflow may initiate the export only after the shared gate reports fenced and maintenance probes
-  for all three D1-bound Workers and the D1-using Durable Object entrypoints confirm the guarded path.
+  for all three D1-bound Workers, their D1-using scheduled handlers, and the D1-using Durable Object
+  entrypoints confirm the guarded path.
   The fence remains set until the export has stopped and a direct D1 readiness check proves requests are
   served again; only then may the Workflow clear it. An export still running at ten minutes breaches the
   budget: stop polling so the provider cancels the unpolled export, keep the fence until readiness
@@ -488,9 +492,12 @@ permission verification, allowlist tests, and automated non-production drill cov
 tests must prove that D1-dependent Auth API, Control Panel, and Control Plane API routes each return the
 standard maintenance contract while fenced and resume only after direct D1 readiness succeeds and the
 gate is cleared. Tests for every D1-using Durable Object entrypoint must prove the same fail-closed and
-resume ordering. It must not add R2 creation, exports, restores, recovery credentials, or a restore
-action to normal production deploy workflows. The implementation must keep all production data and
-recovery material out of Git, GitHub, logs, and build artifacts.
+resume ordering. A scheduled-handler test must prove that the Control Plane API demo-reaper exits before
+constructing a repository or querying or mutating D1 while fenced, records the maintenance-skipped
+outcome, and resumes only after direct D1 readiness succeeds and the gate is cleared. It must not add R2
+creation, exports, restores, recovery credentials, or a restore action to normal production deploy
+workflows. The implementation must keep all production data and recovery material out of Git, GitHub,
+logs, and build artifacts.
 
 ## Rollback
 
