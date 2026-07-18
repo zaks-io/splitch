@@ -19,7 +19,7 @@ export async function routeTransportRequest(options: {
       createHealthResponse(options.service, parsePlatformTarget(options.platformTarget)),
     );
   }
-  if (options.request.method === "GET" && url.pathname === protectedResourcePath) {
+  if (options.request.method === "GET" && isProtectedResourcePath(url.pathname)) {
     return protectedResourceResponse(url, options.platformTarget, options.authBaseUrl);
   }
   if (options.request.method === "OPTIONS") {
@@ -41,15 +41,23 @@ function requiresBearer(request: Request, url: URL): boolean {
   return isMcpPath(url) && (request.method === "POST" || request.method === "DELETE");
 }
 
+function isProtectedResourcePath(pathname: string): boolean {
+  const resourcePath = pathname.slice(protectedResourcePath.length);
+  return (
+    pathname.startsWith(protectedResourcePath) && (resourcePath === "" || resourcePath === "/mcp")
+  );
+}
+
 function protectedResourceResponse(
   resourceUrl: URL,
   platformTarget: string | undefined,
   configuredAuthBaseUrl: string | undefined,
 ): Response {
   const authorizationServer = authBaseUrl(configuredAuthBaseUrl, platformTarget);
+  const resourcePath = resourceUrl.pathname.slice(protectedResourcePath.length);
   return Response.json(
     {
-      resource: resourceUrl.origin,
+      resource: `${resourceUrl.origin}${resourcePath}`,
       authorization_servers: [authorizationServer],
     },
     { headers: corsHeaders() },
@@ -71,9 +79,10 @@ function hasBearerToken(request: Request): boolean {
 
 function unauthorizedResponse(url: URL): Response {
   const headers = corsHeaders();
+  const resourcePath = url.pathname === "/" ? "" : url.pathname;
   headers.set(
     "www-authenticate",
-    `Bearer realm="splitch" resource_metadata_url="${url.origin}${protectedResourcePath}"`,
+    `Bearer realm="splitch", resource_metadata="${url.origin}${protectedResourcePath}${resourcePath}"`,
   );
   return new Response("Unauthorized", { status: 401, headers });
 }

@@ -39,12 +39,19 @@ afterEach(async () => {
 
 describe("MCP OAuth protected-resource boundary", () => {
   it("challenges an unauthenticated connect with discoverable protected-resource metadata", async () => {
-    const response = await request(new Request("https://mcp.splitch.test/mcp", { method: "POST" }));
+    for (const [path, metadataPath] of [
+      ["/", "/.well-known/oauth-protected-resource"],
+      ["/mcp", "/.well-known/oauth-protected-resource/mcp"],
+    ]) {
+      const response = await request(
+        new Request(`https://mcp.splitch.test${path}`, { method: "POST" }),
+      );
 
-    expect(response.status).toBe(401);
-    expect(response.headers.get("www-authenticate")).toBe(
-      'Bearer realm="splitch" resource_metadata_url="https://mcp.splitch.test/.well-known/oauth-protected-resource"',
-    );
+      expect(response.status).toBe(401);
+      expect(response.headers.get("www-authenticate")).toBe(
+        `Bearer realm="splitch", resource_metadata="https://mcp.splitch.test${metadataPath}"`,
+      );
+    }
   });
 
   it("rejects malformed bearer credentials at the transport boundary", async () => {
@@ -75,6 +82,22 @@ describe("MCP OAuth protected-resource boundary", () => {
         authorization_servers: [target[1]],
       });
     }
+  });
+
+  it("identifies each challenged MCP endpoint as the protected resource", async () => {
+    const rootMetadata = await request(
+      new Request("https://mcp.splitch.test/.well-known/oauth-protected-resource"),
+    );
+    const mcpMetadata = await request(
+      new Request("https://mcp.splitch.test/.well-known/oauth-protected-resource/mcp"),
+    );
+
+    await expect(rootMetadata.json()).resolves.toMatchObject({
+      resource: "https://mcp.splitch.test",
+    });
+    await expect(mcpMetadata.json()).resolves.toMatchObject({
+      resource: "https://mcp.splitch.test/mcp",
+    });
   });
 
   it("forwards the current bearer on every call and never widens session authority", async () => {
