@@ -63,8 +63,9 @@ p_value  = inf alpha in (0, 1] such that 0 is outside CI_alpha
 If `0` is inside the 95% CI, the p-value is not set to `0.95`; it is computed by boundary
 inversion. This matters because BH FDR ranks all p-values, including non-significant ones.
 
-The base CI is for **absolute lift** `(treatment - control)`. Relative-lift CI is then computed
-via delta method (see [inference-engine.md](inference-engine.md) §Relative-lift CI).
+The base CI and p-value are for **absolute lift** `(treatment - control)`. Relative-lift output
+uses its own delta-method reporting interval (see [inference-engine.md](inference-engine.md)
+§Relative-lift CI); it never supplies the decision statistic, stopping input, or BH rank.
 
 ## Stopping rules
 

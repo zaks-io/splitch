@@ -13,9 +13,9 @@ per-Entity Metric values (one row per Entity, aggregated upstream — ADR-0015)
   ▼ 2. Type-appropriate variance estimator                         → variance_i
   ▼ 3. Delta-method term (Ratio Metrics and relative-lift; always) → delta_adjusted_variance_i
   ▼ 4. CUPED adjustment (gated; when applied, replaces variance_i) → cuped_adjusted_variance_i
-  ▼ 5. Asymptotic confidence sequence (aCS) — variance → time-uniform CI:
-       [ci_lower_N, ci_upper_N] (valid at any N, safe to peek continuously)
-  ▼ 6. Relative-lift CI (delta-method ratio of CI objects):
+  ▼ 5. Absolute-lift inference (aCS or fixed-horizon) → decision p-value / stop input:
+       [absolute_ci_lower_N, absolute_ci_upper_N] (valid at any N for aCS)
+  ▼ 6. Relative-lift reporting interval (delta-method variance):
        [relative_lift_ci_lower, relative_lift_ci_upper]
   ▼ 7. Guardrail bound check (CI lower-bound vs. downside threshold) → guardrail_status
   ▼ 8. Benjamini-Hochberg FDR (across goal-metric × Variant family)  → is_significant (post-FDR)
@@ -126,14 +126,22 @@ fails only if the arm-level denominator mean `B = 0`.
 
 ### Relative-lift CI
 
-Relative lift `R_t / R_c - 1` is itself a ratio; its variance is delta-method. If the
-Control estimate is zero, relative lift is not defined.
+Relative lift `R_t / R_c - 1` is reported separately from the decision statistic. The base
+interval and p-value are always computed on absolute lift `R_t - R_c`. Relative-lift reporting and
+relative Guardrail bounds retain their delta-method interval. If the Control estimate is zero,
+relative lift and its interval are undefined, while the absolute-lift decision remains available.
 
 ```
 relative_lift = R_t / R_c - 1
 sampling_var_relative =
   (1 / R_c^2) * sampling_var_t + (R_t^2 / R_c^4) * sampling_var_c
 ```
+
+For a Binomial comparison with a non-zero effect but a zero plug-in variance at a boundary, the
+decision or relative-reporting standard error uses the documented Agresti-Caffo plus-two variance
+adjustment. The reported point estimate and Experiment estimand remain unadjusted. This avoids
+manufacturing certainty from a zero Wald standard error while retaining finite boundary-safe
+decision and Guardrail paths.
 
 ## Guardrail Metric behavior
 
@@ -151,14 +159,14 @@ rules (Guardrails, Secondary Metrics/Dimensions) live in
 
 ## Failure contracts
 
-| Failure                                  | Behavior                                                                                                             |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| N = 0 in an arm                          | Return CI = `[-∞, +∞]`, p_value = 1.0, status = `running`                                                            |
-| N < 100                                  | Report result with `health.low_n_warning = true`; do not suppress                                                    |
-| CUPED pre-period missing                 | Fall back per [variance-reduction.md](variance-reduction.md); log method in `variance_techniques`                    |
-| Ratio arm-level denominator mean `B = 0` | Return CI = `[-∞, +∞]`, p_value = 1.0, status = `insufficient_denominator`; log zero-denominator Entity count        |
-| Relative lift Control estimate `R_c = 0` | Return relative lift and CI as `null`, p_value = 1.0, status = `insufficient_denominator`; keep absolute-lift result |
-| aCS divergence (NaN/inf)                 | Return error status; do not return a corrupt CI                                                                      |
+| Failure                                  | Behavior                                                                                                                           |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| N = 0 in an arm                          | Return CI = `[-∞, +∞]`, p_value = 1.0, status = `running`                                                                          |
+| N < 100                                  | Report result with `health.low_n_warning = true`; do not suppress                                                                  |
+| CUPED pre-period missing                 | Fall back per [variance-reduction.md](variance-reduction.md); log method in `variance_techniques`                                  |
+| Ratio arm-level denominator mean `B = 0` | Return CI = `[-∞, +∞]`, p_value = 1.0, status = `insufficient_denominator`; log zero-denominator Entity count                      |
+| Relative lift Control estimate `R_c = 0` | Return relative lift and CI as `null`; retain the absolute-lift decision p-value and ready status when absolute inference is valid |
+| aCS divergence (NaN/inf)                 | Return error status; do not return a corrupt CI                                                                                    |
 
 ## Sources
 

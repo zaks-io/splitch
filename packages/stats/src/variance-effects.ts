@@ -27,16 +27,55 @@ function absoluteLiftEffect(
   control: MetricArmEstimate,
   treatment: MetricArmEstimate,
 ): Pick<MetricComparisonEstimate, "absolute_lift" | "absolute_lift_sampling_var"> {
+  const absoluteLift =
+    treatment.point_estimate === null || control.point_estimate === null
+      ? null
+      : treatment.point_estimate - control.point_estimate;
+  const samplingVar =
+    treatment.sampling_var === null || control.sampling_var === null
+      ? null
+      : treatment.sampling_var + control.sampling_var;
+
   return {
-    absolute_lift:
-      treatment.point_estimate === null || control.point_estimate === null
-        ? null
-        : treatment.point_estimate - control.point_estimate,
-    absolute_lift_sampling_var:
-      treatment.sampling_var === null || control.sampling_var === null
-        ? null
-        : treatment.sampling_var + control.sampling_var,
+    absolute_lift: absoluteLift,
+    absolute_lift_sampling_var: boundarySafeAbsoluteLiftSamplingVar(
+      control,
+      treatment,
+      absoluteLift,
+      samplingVar,
+    ),
   };
+}
+
+function boundarySafeAbsoluteLiftSamplingVar(
+  control: MetricArmEstimate,
+  treatment: MetricArmEstimate,
+  absoluteLift: number | null,
+  samplingVar: number | null,
+): number | null {
+  if (
+    samplingVar === null ||
+    samplingVar !== 0 ||
+    absoluteLift === null ||
+    absoluteLift === 0 ||
+    control.metric_type !== "binomial" ||
+    treatment.metric_type !== "binomial"
+  ) {
+    return samplingVar;
+  }
+
+  return agrestiCaffoSamplingVar(control) + agrestiCaffoSamplingVar(treatment);
+}
+
+function agrestiCaffoSamplingVar(arm: MetricArmEstimate): number {
+  const pointEstimate = arm.point_estimate;
+  if (pointEstimate === null || arm.sample_size_n === 0) {
+    throw new Error("Agresti-Caffo boundary variance requires a non-empty Binomial arm.");
+  }
+
+  const adjustedN = arm.sample_size_n + 2;
+  const adjustedRate = (pointEstimate * arm.sample_size_n + 1) / adjustedN;
+  return (adjustedRate * (1 - adjustedRate)) / adjustedN;
 }
 
 function relativeLiftEffect(
@@ -68,9 +107,45 @@ function relativeLiftEffect(
 
   return {
     relative_lift_pct: relativeLift * 100,
-    sampling_var: clampSamplingVariance(samplingVar),
+    sampling_var: boundarySafeRelativeLiftSamplingVar(
+      control,
+      treatment,
+      relativeLift,
+      clampSamplingVariance(samplingVar),
+    ),
     status: "ready",
   };
+}
+
+function boundarySafeRelativeLiftSamplingVar(
+  control: MetricArmEstimate,
+  treatment: MetricArmEstimate,
+  relativeLift: number,
+  samplingVar: number,
+): number {
+  if (
+    samplingVar !== 0 ||
+    relativeLift === 0 ||
+    control.metric_type !== "binomial" ||
+    treatment.metric_type !== "binomial" ||
+    control.point_estimate === null ||
+    treatment.point_estimate === null ||
+    control.sampling_var === null ||
+    treatment.sampling_var === null
+  ) {
+    return samplingVar;
+  }
+
+  const controlSamplingVar =
+    control.sampling_var === 0 ? agrestiCaffoSamplingVar(control) : control.sampling_var;
+  const treatmentSamplingVar =
+    treatment.sampling_var === 0 ? agrestiCaffoSamplingVar(treatment) : treatment.sampling_var;
+
+  return clampSamplingVariance(
+    (treatmentSamplingVar / control.point_estimate ** 2 +
+      (treatment.point_estimate ** 2 * controlSamplingVar) / control.point_estimate ** 4) *
+      10_000,
+  );
 }
 
 function readyRelativeValues(control: MetricArmEstimate, treatment: MetricArmEstimate) {
