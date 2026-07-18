@@ -31,6 +31,7 @@ export interface ControlPlaneApiEnv {
   CONTROL_PLANE_ORIGIN?: string;
   /** Auth-api JWKS endpoint the control-plane token signature is verified against. */
   AUTH_JWKS_URI?: string;
+  SPLITCH_LOCAL_E2E_RUN_ID?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
 }

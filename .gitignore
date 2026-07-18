@@ -11,6 +11,7 @@ dist/
 reports/mutation/
 .stryker-tmp/
 playwright-report/
+test-results/
 .sdk-release-artifacts/
 .claude/
 .codex/
