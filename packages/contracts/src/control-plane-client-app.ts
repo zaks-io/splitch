@@ -28,6 +28,8 @@ const flagsSdkRoutes = [
   flagRoutes[2],
   flagRoutes[3],
   flagRoutes[4],
+  flagRoutes[8],
+  flagRoutes[9],
 ] as const;
 
 const experimentsSdkRoutes = [
@@ -45,6 +47,8 @@ const flagsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: flagsSdkRoutes[2].openapi, handler: emitOnlyHandler(flagsSdkRoutes[2]) },
   { route: flagsSdkRoutes[3].openapi, handler: emitOnlyHandler(flagsSdkRoutes[3]) },
   { route: flagsSdkRoutes[4].openapi, handler: emitOnlyHandler(flagsSdkRoutes[4]) },
+  { route: flagsSdkRoutes[5].openapi, handler: emitOnlyHandler(flagsSdkRoutes[5]) },
+  { route: flagsSdkRoutes[6].openapi, handler: emitOnlyHandler(flagsSdkRoutes[6]) },
 ] as const);
 
 const experimentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([

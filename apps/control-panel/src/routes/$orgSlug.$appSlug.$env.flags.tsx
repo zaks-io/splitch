@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@splitch/ui/components/card";
-import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { createFileRoute } from "@tanstack/react-router";
+import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { reportRouteError } from "#lib/panel-observability";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags")({
@@ -22,6 +22,7 @@ function FlagsSectionRoute() {
       <CardContent>
         <p className="text-muted-foreground text-sm">Flag Configuration list surface.</p>
       </CardContent>
+      <Outlet />
     </Card>
   );
 }

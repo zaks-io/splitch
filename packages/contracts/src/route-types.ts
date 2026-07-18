@@ -11,7 +11,15 @@ import {
   FlagResponseSchema,
   type PatchFlagRequestSchema,
 } from "./resource-envelopes-flag";
-import type { AppParams, EnvParams, ExperimentParams, FlagParams } from "./routes/route-shapes";
+import type {
+  AppParams,
+  EnvFlagParams,
+  EnvParams,
+  ExperimentParams,
+  FlagConfigResponseSchema,
+  FlagParams,
+  PatchFlagConfigRequestSchema,
+} from "./routes/route-shapes";
 
 /**
  * Typed flat inputs/outputs for representative Control Plane operations.
@@ -38,6 +46,11 @@ export type FlagsUpdateInput = z.infer<typeof FlagParams> & z.infer<typeof Patch
 export type FlagsUpdateOutput = z.infer<typeof FlagResponseSchema>;
 export type FlagsDeleteInput = z.infer<typeof FlagParams>;
 export type FlagsDeleteOutput = z.infer<typeof DeletedResponseSchema>;
+export type FlagConfigGetInput = z.infer<typeof EnvFlagParams>;
+export type FlagConfigGetOutput = z.infer<typeof FlagConfigResponseSchema>;
+export type FlagConfigUpdateInput = z.infer<typeof EnvFlagParams> &
+  z.infer<typeof PatchFlagConfigRequestSchema>;
+export type FlagConfigUpdateOutput = z.infer<typeof FlagConfigResponseSchema>;
 
 export type ExperimentsListInput = z.infer<typeof EnvParams>;
 export type ExperimentsListOutput = z.infer<typeof ExperimentListResponseSchema>;

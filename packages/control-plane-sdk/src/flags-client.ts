@@ -1,4 +1,8 @@
 import type {
+  FlagConfigGetInput,
+  FlagConfigGetOutput,
+  FlagConfigUpdateInput,
+  FlagConfigUpdateOutput,
   FlagsCreateInput,
   FlagsCreateOutput,
   FlagsDeleteInput,
@@ -11,10 +15,10 @@ import type {
   FlagsUpdateOutput,
 } from "@splitch/contracts/route-types";
 import {
-  createFlagsHcClient,
-  hcRequestOptions,
-  type FlagsHcClient,
   type ControlPlaneHcOptions,
+  createFlagsHcClient,
+  type FlagsHcClient,
+  hcRequestOptions,
   withAuthorization,
 } from "./hc-client";
 import { invokeFlagsHcRoute } from "./hc-invoke";
@@ -41,6 +45,14 @@ export interface FlagsClient {
     input: FlagsDeleteInput,
     options?: ControlPlaneOperationOptions,
   ): Promise<ControlPlaneOperationResult<FlagsDeleteOutput>>;
+  getConfig(
+    input: FlagConfigGetInput,
+    options?: ControlPlaneOperationOptions,
+  ): Promise<ControlPlaneOperationResult<FlagConfigGetOutput>>;
+  updateConfig(
+    input: FlagConfigUpdateInput,
+    options?: ControlPlaneOperationOptions,
+  ): Promise<ControlPlaneOperationResult<FlagConfigUpdateOutput>>;
 }
 
 export function createFlagsClient(
@@ -107,5 +119,35 @@ export function createFlagsClient(
             { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
           ),
       ),
+    getConfig: (input, callOptions) =>
+      invokeFlagsHcRoute<FlagConfigGetOutput>(
+        hcClient,
+        withAuthorization(hcOptions, callOptions),
+        "flag_config_get",
+        (client, requestOptions) =>
+          client.apps[":appId"].envs[":environmentId"].flags[":flagId"].config.$get(
+            {
+              param: {
+                appId: input.appId,
+                environmentId: input.environmentId,
+                flagId: input.flagId,
+              },
+            },
+            { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
+          ),
+      ),
+    updateConfig: (input, callOptions) => {
+      const { appId, environmentId, flagId, ...body } = input;
+      return invokeFlagsHcRoute<FlagConfigUpdateOutput>(
+        hcClient,
+        withAuthorization(hcOptions, callOptions),
+        "flag_config_update",
+        (client, requestOptions) =>
+          client.apps[":appId"].envs[":environmentId"].flags[":flagId"].config.$patch(
+            { param: { appId, environmentId, flagId }, json: body } as never,
+            { ...requestOptions, ...hcRequestOptions(withAuthorization(hcOptions, callOptions)) },
+          ),
+      );
+    },
   };
 }
