@@ -33,39 +33,39 @@ describe("MCP contract errors", () => {
     });
   });
 
-  it("keeps member and unrelated-principal authorization errors typed", async () => {
-    const controlPlaneFetch: typeof fetch = async () =>
-      Response.json(
-        {
-          code: "FORBIDDEN",
-          message: "credential is not allowed for this operation",
-          details: {},
-        },
-        { status: 403 },
-      );
-    const inputs = [
-      ["organizations_delete", { orgId: "org_forbidden" }],
-      ["organization_privacy_export", { orgId: "org_forbidden" }],
-      ["app_privacy_export", { appId: "app_forbidden" }],
-      [
-        "entity_privacy_export",
-        { appId: "app_forbidden", idType: "user", targetingKey: "subject_forbidden" },
-      ],
-      [
-        "entity_privacy_delete",
-        { appId: "app_forbidden", idType: "user", targetingKey: "subject_forbidden" },
-      ],
-      ["privacy_requests_get", { requestId: "privacy_request_forbidden" }],
-    ] as const;
+  it("returns the real Control Plane authorization result for privacy request status", async () => {
+    const controlPlaneFetch = await realControlPlaneFetch();
+    const arguments_ = { requestId: "privacy_request_mcp_contract" };
 
-    for (const _principal of ["member", "unrelated"]) {
-      for (const [name, arguments_] of inputs) {
-        const result = await callTool(name, controlPlaneFetch, arguments_);
-        expect(result.result).toMatchObject({
-          isError: true,
-          structuredContent: { code: "FORBIDDEN" satisfies ErrorResponse["code"] },
-        });
-      }
+    for (const authorization of [
+      "Bearer member",
+      "Bearer unrelated",
+      "Bearer wrong-org-scope",
+      "Bearer wrong-app-scope",
+    ]) {
+      const result = await callTool(
+        "privacy_requests_get",
+        controlPlaneFetch,
+        arguments_,
+        authorization,
+      );
+      expect(result.result).toMatchObject({
+        isError: true,
+        structuredContent: { code: "FORBIDDEN" satisfies ErrorResponse["code"] },
+      });
+    }
+
+    for (const authorization of ["Bearer requester", "Bearer org-owner", "Bearer app-admin"]) {
+      const result = await callTool(
+        "privacy_requests_get",
+        controlPlaneFetch,
+        arguments_,
+        authorization,
+      );
+      expect(result.result).toMatchObject({
+        isError: true,
+        structuredContent: { code: "SERVICE_UNAVAILABLE" satisfies ErrorResponse["code"] },
+      });
     }
   });
 });
@@ -74,11 +74,12 @@ async function callTool(
   name: string,
   controlPlaneFetch: typeof fetch,
   arguments_: Record<string, unknown> = {},
+  authorization?: string,
 ): Promise<ToolCallResult> {
   const response = await handleMcpServerRequest({
     request: new Request("https://mcp.test/mcp", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...(authorization ? { authorization } : {}) },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
@@ -91,6 +92,95 @@ async function callTool(
     controlPlaneFetch,
   });
   return (await response.json()) as ToolCallResult;
+}
+
+async function realControlPlaneFetch(): Promise<typeof fetch> {
+  const module = (await import(
+    new URL("../../control-plane-api/src/app.ts", import.meta.url).href
+  )) as {
+    createApp(deps: unknown): { fetch(request: Request): Promise<Response> };
+  };
+  const app = module.createApp({
+    authResolver: async (request: Request) => principalFor(request.headers.get("authorization")),
+    rateLimiter: () => ({ limited: false }),
+    repo: {
+      identity: {
+        getOrgMembership: async (orgId: string, userId: string) =>
+          orgId === "org_mcp_contract" && userId === "org-owner" ? { role: "owner" } : null,
+        getAppMembership: async (scope: { appId: string }, userId: string) =>
+          scope.appId === "app_mcp_contract" && userId === "app-admin" ? { role: "admin" } : null,
+      },
+      privacy: {
+        getPrivacyRequestById: async (requestId: string) =>
+          requestId === "privacy_request_mcp_contract"
+            ? {
+                orgId: "org_mcp_contract",
+                appId: "app_mcp_contract",
+                requestedBy: "requester",
+              }
+            : null,
+      },
+    },
+  });
+  return async (input, init) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    return app.fetch(request);
+  };
+}
+
+function principalFor(authorization: string | null) {
+  const principals = {
+    "Bearer requester": { id: "requester", scopes: [], orgId: null, appId: null },
+    "Bearer member": {
+      id: "member",
+      scopes: ["org:org_mcp_contract:member"],
+      orgId: "org_mcp_contract",
+      appId: null,
+    },
+    "Bearer unrelated": {
+      id: "unrelated",
+      scopes: ["org:org_mcp_contract:owner"],
+      orgId: "org_mcp_contract",
+      appId: null,
+    },
+    "Bearer wrong-org-scope": {
+      id: "org-owner",
+      scopes: ["org:org_other:owner"],
+      orgId: "org_other",
+      appId: null,
+    },
+    "Bearer org-owner": {
+      id: "org-owner",
+      scopes: ["org:org_mcp_contract:owner"],
+      orgId: "org_mcp_contract",
+      appId: null,
+    },
+    "Bearer wrong-app-scope": {
+      id: "app-admin",
+      scopes: ["app:app_other:admin"],
+      orgId: null,
+      appId: "app_other",
+    },
+    "Bearer app-admin": {
+      id: "app-admin",
+      scopes: ["app:app_mcp_contract:admin"],
+      orgId: null,
+      appId: "app_mcp_contract",
+    },
+  } as const;
+  const principal = authorization
+    ? principals[authorization as keyof typeof principals]
+    : undefined;
+  return principal
+    ? {
+        ok: true as const,
+        principal: {
+          ...principal,
+          kind: "control-plane-token" as const,
+          environmentId: null,
+        },
+      }
+    : { ok: false as const, reason: "UNAUTHORIZED" as const };
 }
 
 interface ToolCallResult {

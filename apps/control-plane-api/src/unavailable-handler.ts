@@ -19,6 +19,10 @@ interface UnavailableHandlerDeps {
   repo: Repository;
 }
 
+type PrivacyRequest = NonNullable<
+  Awaited<ReturnType<Repository["privacy"]["getPrivacyRequestById"]>>
+>;
+
 /**
  * Preserve the shared HTTP/MCP error contract for routes whose backing workflow
  * is intentionally not available in this slice.
@@ -81,26 +85,51 @@ async function authorizePrivacyRequestStatus(
   }
   if (privacyRequest.requestedBy === args.principal.id) return null;
 
-  const orgAuthorization = await requireOrgRole(
+  const orgAuthorization = await requireScopedOrgOwner(deps, args, privacyRequest);
+  if (orgAuthorization === null) return null;
+
+  if (!privacyRequest.appId) {
+    return orgAuthorization ?? resourceScopeForbidden("organization", args.requestId);
+  }
+
+  const appAuthorization = await requireScopedAppAdmin(deps, args, privacyRequest.appId);
+  if (appAuthorization === null) return null;
+  return (
+    orgAuthorization ??
+    appAuthorization ??
+    resourceScopeForbidden("organization or app", args.requestId)
+  );
+}
+
+async function requireScopedOrgOwner(
+  deps: UnavailableHandlerDeps,
+  args: HandlerArgs<unknown>,
+  privacyRequest: PrivacyRequest,
+): Promise<Response | null | undefined> {
+  if (args.principal.orgId !== privacyRequest.orgId) return undefined;
+  return requireOrgRole(
     deps,
     privacyRequest.orgId,
     args.principal.id,
     ORG_OWNER_ROLES,
     args.requestId,
   );
-  if (!orgAuthorization) return null;
+}
 
-  if (privacyRequest.appId) {
-    const appAuthorization = await requireAppWrite(
-      deps,
-      privacyRequest.appId,
-      args.principal.id,
-      args.requestId,
-    );
-    if (!appAuthorization) return null;
-  }
+async function requireScopedAppAdmin(
+  deps: UnavailableHandlerDeps,
+  args: HandlerArgs<unknown>,
+  appId: string,
+): Promise<Response | null | undefined> {
+  if (args.principal.appId !== appId) return undefined;
+  return requireAppWrite(deps, appId, args.principal.id, args.requestId);
+}
 
-  return orgAuthorization;
+function resourceScopeForbidden(resource: string, requestId: string): Response {
+  return renderError(
+    { code: "FORBIDDEN", message: `credential is not scoped to this ${resource}`, details: {} },
+    { requestId },
+  );
 }
 
 function unavailableResponse(requestId: string): Response {

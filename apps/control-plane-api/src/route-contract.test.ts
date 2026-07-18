@@ -196,6 +196,17 @@ describe("control-plane route contract", () => {
       expect(response.status).toBe(403);
       expect(((await response.json()) as ErrorResponse).code).toBe("FORBIDDEN");
     }
+
+    for (const jwt of [
+      await token([], ORG_OWNER),
+      await token([`org:${SECONDARY.orgId}:owner`], ORG_OWNER),
+      await token([], APP_ADMIN),
+      await token([appAdminScope(SECONDARY.appId)], APP_ADMIN),
+    ]) {
+      const response = await request("GET", `/privacy/requests/${PRIVACY_REQUEST_ID}`, jwt);
+      expect(response.status).toBe(403);
+      expect(((await response.json()) as ErrorResponse).code).toBe("FORBIDDEN");
+    }
   });
 });
 
