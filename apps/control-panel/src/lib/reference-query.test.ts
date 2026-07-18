@@ -22,7 +22,7 @@ describe("reference Flag Configuration route query flow", () => {
 
     await expect(
       loadFlagConfigRoute({ queryClient, api, scope, flagId: "flag_1" }),
-    ).resolves.toEqual(initialConfig);
+    ).resolves.toBeUndefined();
     expect(reads).toBe(1);
     expect(
       queryClient.getQueryData(referenceFlagConfigQuery(api, scope, "flag_1").queryKey),

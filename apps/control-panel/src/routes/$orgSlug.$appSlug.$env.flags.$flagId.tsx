@@ -16,7 +16,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagId")({
     if (scoped.kind === "forbidden") throw new AccessDeniedError();
     if (scoped.kind === "notFound") throw notFound();
 
-    return loadFlagConfigRoute({
+    await loadFlagConfigRoute({
       queryClient: context.queryClient,
       api: context.flagConfigApi,
       scope: scoped.context.scope,

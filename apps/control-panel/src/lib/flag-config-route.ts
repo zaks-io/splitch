@@ -8,8 +8,10 @@ export function loadFlagConfigRoute(input: {
   api: FlagConfigApi;
   scope: AppEnvironmentScope;
   flagId: string;
-}) {
-  return loadReferenceFlagConfig(input.queryClient, input.api, input.scope, input.flagId);
+}): Promise<void> {
+  return loadReferenceFlagConfig(input.queryClient, input.api, input.scope, input.flagId).then(
+    () => undefined,
+  );
 }
 
 export function updateFlagConfigRoute(input: {
