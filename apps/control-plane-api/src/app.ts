@@ -1,3 +1,4 @@
+import { buildOpenApiDocument } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import {
   type AuthResolver,
@@ -7,9 +8,9 @@ import {
   type RegistrarDeps,
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
+import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
 import type { ConfigStoreAccess } from "./config-store-do";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
-import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
@@ -18,6 +19,7 @@ import { mountLiveUpdateRoute } from "./live-updates";
 import { makeMetricSegmentHandlers } from "./metric-segment-handlers";
 import type { MemberProfileResolver } from "./org-handlers";
 import { controlPlaneRoute } from "./routes";
+import { unavailableControlPlaneOperation } from "./unavailable-handler";
 
 /**
  * Control Plane API Worker HTTP surface.
@@ -98,6 +100,8 @@ export function createApp(deps: AppDeps): Hono {
   });
   const registrar = controlPlaneRegistrar(deps);
 
+  app.get("/.well-known/openapi.json", (c) => c.json(buildOpenApiDocument()));
+
   mountLiveUpdateRoute(app, {
     authResolver: deps.authResolver,
     rateLimiter: deps.rateLimiter,
@@ -137,6 +141,7 @@ export function createApp(deps: AppDeps): Hono {
     appEnvironmentHandlers.deleteEnvironment,
   );
   registrar.mount(app, controlPlaneRoute("organizations_get"), handlers.getOrg);
+  registrar.mount(app, controlPlaneRoute("organizations_list"), handlers.listOrganizations);
   registrar.mount(app, controlPlaneRoute("organizations_update"), handlers.updateOrg);
   registrar.mount(app, controlPlaneRoute("organization_members_list"), handlers.listMembers);
   registrar.mount(app, controlPlaneRoute("organization_members_add"), handlers.addMember);
@@ -183,8 +188,24 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("api_keys_list"), credentialHandlers.listApiKeys);
   registrar.mount(app, controlPlaneRoute("api_keys_create"), credentialHandlers.createApiKey);
   registrar.mount(app, controlPlaneRoute("api_keys_revoke"), credentialHandlers.revokeApiKey);
+  mountUnavailableControlPlaneRoutes(app, registrar);
 
   return app;
+}
+
+function mountUnavailableControlPlaneRoutes(app: Hono, registrar: Registrar): void {
+  for (const operationId of [
+    "organizations_delete",
+    "current_user_privacy_export",
+    "current_user_delete",
+    "organization_privacy_export",
+    "app_privacy_export",
+    "entity_privacy_export",
+    "entity_privacy_delete",
+    "privacy_requests_get",
+  ]) {
+    registrar.mount(app, controlPlaneRoute(operationId), unavailableControlPlaneOperation);
+  }
 }
 
 function mountExperimentRoutes(

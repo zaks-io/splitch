@@ -4,11 +4,11 @@ import type { RateLimiter } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { controlPlaneRegistrar, createApp } from "./app";
-import { appAdminScope } from "./scope-binding";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
-import { withRequiredScopes, controlPlaneRoute } from "./routes";
+import { controlPlaneRoute, withRequiredScopes } from "./routes";
+import { appAdminScope } from "./scope-binding";
 import { makeSessionStore, revocationKey } from "./session-store";
 import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
 
