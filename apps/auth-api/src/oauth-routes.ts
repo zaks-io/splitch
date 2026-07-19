@@ -1,9 +1,11 @@
 import type { Hono } from "hono";
+import { verifyAccessToken } from "./access-token";
+import { accessTokenJwks } from "./access-token-key";
+import { authMarkdown } from "./auth-markdown";
 import { DEVICE_CODE_GRANT, type DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
 import type { RevocationStore } from "./revocation";
-import { authMarkdown } from "./auth-markdown";
 import {
   ClientCredentialsRequestSchema,
   DeviceAuthorizationRequestSchema,
@@ -13,8 +15,6 @@ import {
 } from "./schemas";
 import { timingSafeEqualString } from "./secret-compare";
 import type { TokenSigner } from "./token-exchange";
-import { verifyAccessToken } from "./access-token";
-import { accessTokenJwks } from "./access-token-key";
 
 const ACCESS_TOKEN_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
 const CLIENT_CREDENTIALS_GRANT = "client_credentials";
@@ -33,6 +33,7 @@ export interface OAuthRouteDeps {
   revocations: RevocationStore;
   accessSecret: string;
   controlPlaneAudience: string;
+  mcpAudience?: string;
   smokeClientCredentials?: SmokeClientCredentials;
   now: () => number;
 }
@@ -131,11 +132,7 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
     }
 
     try {
-      const actor = await verifyAccessToken(
-        `Bearer ${parsed.data.token}`,
-        { accessSecret: deps.accessSecret, controlPlaneAudience: deps.controlPlaneAudience },
-        nowSeconds(),
-      );
+      const actor = await verifyRevocableAccessToken(deps, parsed.data.token, nowSeconds());
       if (actor) {
         await deps.revocations.revoke(actor.userId, actor.expiresAt - nowSeconds());
       } else {
@@ -190,6 +187,7 @@ async function exchangeClientCredentials(
       scopes,
       "client_credentials",
       nowSeconds,
+      audienceForResource(deps, parsed.data.resource),
     );
     return tokenResponse(accessToken);
   } catch (cause) {
@@ -210,6 +208,7 @@ async function exchangeIdentityAssertion(
     const accessToken = await deps.tokenSigner.exchangeForAccessToken(
       parsed.data.identity_assertion,
       nowSeconds,
+      audienceForResource(deps, parsed.data.resource),
     );
     return tokenResponse(accessToken);
   } catch (cause) {
@@ -227,6 +226,7 @@ async function exchangeDeviceCode(
     return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/token body"));
   }
   try {
+    const audience = audienceForResource(deps, parsed.data.resource);
     const deviceToken = await deps.deviceFlow.exchangeDeviceCode({
       clientId: parsed.data.client_id,
       deviceCode: parsed.data.device_code,
@@ -246,11 +246,36 @@ async function exchangeDeviceCode(
       deviceToken.scopes,
       "device_flow",
       nowSeconds,
+      audience,
     );
     return tokenResponse(accessToken, deviceToken.refreshToken);
   } catch (cause) {
     return renderDoorFault(cause);
   }
+}
+
+function audienceForResource(deps: OAuthRouteDeps, resource: string | undefined): string {
+  if (!resource) return deps.controlPlaneAudience;
+  if (allowedAccessTokenAudiences(deps).includes(resource)) return resource;
+  throw new OAuthError("invalid_request", "requested resource is not supported");
+}
+
+function allowedAccessTokenAudiences(deps: OAuthRouteDeps): string[] {
+  if (!deps.mcpAudience) return [deps.controlPlaneAudience];
+  const mcpRoot = deps.mcpAudience.replace(/\/+$/, "");
+  return [deps.controlPlaneAudience, mcpRoot, `${mcpRoot}/mcp`];
+}
+
+async function verifyRevocableAccessToken(deps: OAuthRouteDeps, token: string, nowSeconds: number) {
+  for (const audience of allowedAccessTokenAudiences(deps)) {
+    const actor = await verifyAccessToken(
+      `Bearer ${token}`,
+      { accessSecret: deps.accessSecret, controlPlaneAudience: audience },
+      nowSeconds,
+    );
+    if (actor) return actor;
+  }
+  return null;
 }
 
 function tokenResponse(accessToken: string, refreshToken?: string): Response {

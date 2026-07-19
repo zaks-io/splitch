@@ -1,6 +1,7 @@
-import type { ErrorResponse } from "@splitch/contracts";
+import { type ErrorResponse, parseMcpDelegation } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
+import { memoryMcpDelegationReplayGuard, TEST_MCP_DELEGATION_SECRET } from "./mcp-test-verifier";
 
 const service = "splitch-mcp-server";
 
@@ -90,18 +91,47 @@ async function callTool(
     service,
     controlPlaneBaseUrl: "https://control-plane.test",
     controlPlaneFetch,
+    controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    tokenVerifier: {
+      async verify() {
+        const principal = principalFor(authorization);
+        return principal.ok
+          ? { subject: principal.principal.id, scopes: [...principal.principal.scopes] }
+          : { subject: "invalid-test-actor", scopes: [] };
+      },
+    },
   });
   return (await response.json()) as ToolCallResult;
 }
 
 async function realControlPlaneFetch(): Promise<typeof fetch> {
+  const replayGuard = memoryMcpDelegationReplayGuard();
   const module = (await import(
     new URL("../../control-plane-api/src/app.ts", import.meta.url).href
   )) as {
     createApp(deps: unknown): { fetch(request: Request): Promise<Response> };
   };
   const app = module.createApp({
-    authResolver: async (request: Request) => principalFor(request.headers.get("authorization")),
+    authResolver: async (request: Request) => {
+      const actor = await parseMcpDelegation({
+        request,
+        owner: "control-plane-api",
+        secret: TEST_MCP_DELEGATION_SECRET,
+        replayGuard,
+      });
+      if (!actor) return { ok: false as const, reason: "UNAUTHORIZED" as const };
+      return {
+        ok: true as const,
+        principal: {
+          kind: "control-plane-token" as const,
+          id: actor.subject,
+          scopes: actor.scopes,
+          orgId: soleScopedId(actor.scopes, "org"),
+          appId: soleScopedId(actor.scopes, "app"),
+          environmentId: null,
+        },
+      };
+    },
     rateLimiter: () => ({ limited: false }),
     repo: {
       identity: {
@@ -126,6 +156,16 @@ async function realControlPlaneFetch(): Promise<typeof fetch> {
     const request = input instanceof Request ? input : new Request(input, init);
     return app.fetch(request);
   };
+}
+
+function soleScopedId(scopes: readonly string[], kind: "org" | "app"): string | null {
+  const ids = new Set(
+    scopes.flatMap((scope) => {
+      const match = scope.match(new RegExp(`^${kind}:([^:]+):(owner|admin|member)$`));
+      return match?.[1] ? [match[1]] : [];
+    }),
+  );
+  return ids.size === 1 ? ([...ids][0] as string) : null;
 }
 
 function principalFor(authorization: string | null) {

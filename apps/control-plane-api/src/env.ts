@@ -1,6 +1,7 @@
 import type { ConfigStoreDurableObjectNamespace } from "./config-store-do";
 import type { CredentialCacheBackfillDurableObjectNamespace } from "./credential-cache-backfill-do";
 import type { CredentialCacheWriterDurableObjectNamespace } from "./credential-cache-writer-do";
+import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
 
 /**
  * Control Plane API Worker bindings.
@@ -25,12 +26,16 @@ export interface ControlPlaneApiEnv {
   CONFIG_STORE_WRITER: ConfigStoreDurableObjectNamespace;
   CREDENTIAL_CACHE_WRITER: CredentialCacheWriterDurableObjectNamespace;
   CREDENTIAL_CACHE_BACKFILL: CredentialCacheBackfillDurableObjectNamespace;
+  /** Strongly consistent one-use claims for binding-only MCP delegations. */
+  MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
   /** CI-only bearer token for the hosted credential-cache rollout gate. */
   SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */
   CONTROL_PLANE_ORIGIN?: string;
   /** Auth-api JWKS endpoint the control-plane token signature is verified against. */
   AUTH_JWKS_URI?: string;
+  /** Verifies signed one-call credentials accepted only by McpEntrypoint. */
+  MCP_CONTROL_PLANE_DELEGATION_SECRET?: string;
   SPLITCH_LOCAL_E2E_RUN_ID?: string;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;

@@ -20,7 +20,12 @@
     }
   },
   "secrets": {
-    "required": ["SENTRY_DSN"]
+    "required": [
+      "SENTRY_DSN",
+      "MCP_CONTROL_PLANE_DELEGATION_SECRET",
+      "MCP_EVALUATION_DELEGATION_SECRET",
+      "MCP_ANALYSIS_DELEGATION_SECRET"
+    ]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
@@ -52,7 +57,12 @@
       },
       "routes": [{ "pattern": "mcp.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN"]
+        "required": [
+          "SENTRY_DSN",
+          "MCP_CONTROL_PLANE_DELEGATION_SECRET",
+          "MCP_EVALUATION_DELEGATION_SECRET",
+          "MCP_ANALYSIS_DELEGATION_SECRET"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
@@ -64,7 +74,23 @@
         "bindings": [{ "name": "MCP_SESSIONS", "class_name": "McpSessionDurableObject" }]
       },
       "migrations": [{ "tag": "v1", "new_classes": ["McpSessionDurableObject"] }],
-      "services": [{ "binding": "ANALYSIS_API", "service": "splitch-analysis-api-shared-preview" }]
+      "services": [
+        {
+          "binding": "CONTROL_PLANE_API",
+          "service": "splitch-control-plane-api-shared-preview",
+          "entrypoint": "McpEntrypoint"
+        },
+        {
+          "binding": "EVALUATION_API",
+          "service": "splitch-evaluation-api-shared-preview",
+          "entrypoint": "McpEntrypoint"
+        },
+        {
+          "binding": "ANALYSIS_API",
+          "service": "splitch-analysis-api-shared-preview",
+          "entrypoint": "McpEntrypoint"
+        }
+      ]
     },
     "production": {
       "name": "splitch-mcp-server",
@@ -85,7 +111,12 @@
       },
       "routes": [{ "pattern": "mcp.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN"]
+        "required": [
+          "SENTRY_DSN",
+          "MCP_CONTROL_PLANE_DELEGATION_SECRET",
+          "MCP_EVALUATION_DELEGATION_SECRET",
+          "MCP_ANALYSIS_DELEGATION_SECRET"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
@@ -97,7 +128,23 @@
         "bindings": [{ "name": "MCP_SESSIONS", "class_name": "McpSessionDurableObject" }]
       },
       "migrations": [{ "tag": "v1", "new_classes": ["McpSessionDurableObject"] }],
-      "services": [{ "binding": "ANALYSIS_API", "service": "splitch-analysis-api" }]
+      "services": [
+        {
+          "binding": "CONTROL_PLANE_API",
+          "service": "splitch-control-plane-api",
+          "entrypoint": "McpEntrypoint"
+        },
+        {
+          "binding": "EVALUATION_API",
+          "service": "splitch-evaluation-api",
+          "entrypoint": "McpEntrypoint"
+        },
+        {
+          "binding": "ANALYSIS_API",
+          "service": "splitch-analysis-api",
+          "entrypoint": "McpEntrypoint"
+        }
+      ]
     }
   }
 }

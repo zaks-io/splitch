@@ -67,6 +67,7 @@ function routeApp(params: {
     revocations,
     accessSecret: params.accessSecret ?? "test-access-secret",
     controlPlaneAudience: "https://cp.splitch.test",
+    mcpAudience: "https://mcp.splitch.test",
     smokeClientCredentials: params.smokeClientCredentials,
     now: () => 1_780_000_000_000,
   });
@@ -109,6 +110,59 @@ describe("OAuth access-token JWKS", () => {
 });
 
 describe("OAuth smoke client_credentials route", () => {
+  it("mints only the exact configured MCP protected resource", async () => {
+    const audiences: Array<string | undefined> = [];
+    const signer = {
+      ...tokenSigner,
+      mintAccessToken: async (
+        _userId: string,
+        _scopes: string[],
+        _door: "client_credentials",
+        _now: number,
+        audience?: string,
+      ) => {
+        audiences.push(audience);
+        return "mcp-access-token";
+      },
+    } satisfies TokenSigner;
+    const app = routeApp({
+      tokenSigner: signer,
+      smokeClientCredentials: {
+        clientId: "smoke",
+        clientSecret: "secret",
+        userId: "user_smoke",
+        scopes: ["app:app_smoke:admin"],
+      },
+    });
+
+    const accepted = await app.request("/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form({
+        grant_type: "client_credentials",
+        client_id: "smoke",
+        client_secret: "secret",
+        resource: "https://mcp.splitch.test/mcp",
+      }),
+    });
+    expect(accepted.status).toBe(200);
+    expect(audiences).toEqual(["https://mcp.splitch.test/mcp"]);
+
+    const rejected = await app.request("/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form({
+        grant_type: "client_credentials",
+        client_id: "smoke",
+        client_secret: "secret",
+        resource: "https://attacker.test",
+      }),
+    });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toMatchObject({ error: "invalid_request" });
+    expect(audiences).toHaveLength(1);
+  });
+
   it("does not advertise client_credentials without the shared-preview smoke client", async () => {
     const app = routeApp({});
 

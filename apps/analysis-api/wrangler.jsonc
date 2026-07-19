@@ -23,7 +23,12 @@
     "crons": ["0 * * * *"]
   },
   "secrets": {
-    "required": ["SENTRY_DSN", "TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
+    "required": [
+      "SENTRY_DSN",
+      "TINYBIRD_READ_TOKEN",
+      "TINYBIRD_COPY_TOKEN",
+      "MCP_ANALYSIS_DELEGATION_SECRET"
+    ]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
@@ -36,6 +41,17 @@
     {
       "binding": "SESSION_STORE",
       "id": "00000000000000000000000000000000"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1_mcp_delegation_replay",
+      "new_sqlite_classes": ["McpDelegationReplayDurableObject"]
     }
   ],
   "env": {
@@ -60,7 +76,7 @@
         "crons": []
       },
       "secrets": {
-        "required": ["SENTRY_DSN", "TINYBIRD_READ_TOKEN"]
+        "required": ["SENTRY_DSN", "TINYBIRD_READ_TOKEN", "MCP_ANALYSIS_DELEGATION_SECRET"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
@@ -73,6 +89,17 @@
         {
           "binding": "SESSION_STORE",
           "id": "673d17e768eb45f5bfc5275fbd0e9320"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1_mcp_delegation_replay",
+          "new_sqlite_classes": ["McpDelegationReplayDurableObject"]
         }
       ]
     },
@@ -97,7 +124,12 @@
         "crons": ["0 * * * *"]
       },
       "secrets": {
-        "required": ["SENTRY_DSN", "TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
+        "required": [
+          "SENTRY_DSN",
+          "TINYBIRD_READ_TOKEN",
+          "TINYBIRD_COPY_TOKEN",
+          "MCP_ANALYSIS_DELEGATION_SECRET"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
@@ -110,6 +142,17 @@
         {
           "binding": "SESSION_STORE",
           "id": "bdfa1197123d4eef945c5a703d63a572"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1_mcp_delegation_replay",
+          "new_sqlite_classes": ["McpDelegationReplayDurableObject"]
         }
       ]
     }

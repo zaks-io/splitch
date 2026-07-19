@@ -1,13 +1,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { ErrorResponse } from "@splitch/contracts";
+import { parseMcpDelegation } from "@splitch/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
 import type { McpSessionContext, McpSessionStore } from "./mcp-session-context";
 import { McpSessionNotFoundError } from "./mcp-session-store";
+import { memoryMcpDelegationReplayGuard, TEST_MCP_DELEGATION_SECRET } from "./mcp-test-verifier";
 
 const service = "splitch-mcp-server";
-const issuedToken = "fake-issued-control-plane-token";
+const NOW_SECONDS = 1_800_000_000;
 
 const flagPage = {
   items: [
@@ -24,11 +25,7 @@ const flagPage = {
   ],
 };
 
-const unauthorized: ErrorResponse = {
-  code: "UNAUTHORIZED",
-  message: "invalid or expired control-plane token",
-  details: {},
-};
+const actor = { subject: "user_mcp", scopes: ["app:app_local:admin"] };
 
 let cleanupServers: Array<() => Promise<void>> = [];
 
@@ -100,12 +97,12 @@ describe("MCP OAuth protected-resource boundary", () => {
     });
   });
 
-  it("forwards the current bearer on every call and never widens session authority", async () => {
+  it("accepts an MCP-audience token and dispatches with a separate one-call delegation", async () => {
     const authRequests: SeenRequest[] = [];
-    const authBaseUrl = await bootAuthApi(authRequests);
-    const seenAuthorization: Array<string | null> = [];
-    const controlPlaneBaseUrl = await bootControlPlaneApi(seenAuthorization);
-    const tokenResponse = await fetch(`${authBaseUrl}/oauth2/token`, { method: "POST" });
+    const auth = await bootAuthApi(authRequests);
+    const seenDownstream: SeenDownstream[] = [];
+    const controlPlaneBaseUrl = await bootControlPlaneApi(seenDownstream);
+    const tokenResponse = await fetch(`${auth.baseUrl}/oauth2/token`, { method: "POST" });
     const token = ((await tokenResponse.json()) as { access_token: string }).access_token;
     expect(authRequests).toEqual([{ method: "POST", path: "/oauth2/token" }]);
     const sessionStore = memorySessionStore();
@@ -113,6 +110,8 @@ describe("MCP OAuth protected-resource boundary", () => {
     const initialize = await mcp("initialize", undefined, `Bearer ${token}`, {
       controlPlaneBaseUrl,
       sessionStore,
+      authBaseUrl: auth.baseUrl,
+      now: () => NOW_SECONDS * 1000,
     });
     const sessionId = initialize.headers.get("mcp-session-id");
     expect(sessionId).toBeTruthy();
@@ -121,28 +120,41 @@ describe("MCP OAuth protected-resource boundary", () => {
       "tools/call",
       { name: "flags_list", arguments: { appId: "app_local" } },
       `Bearer ${token}`,
-      { controlPlaneBaseUrl, sessionStore, sessionId: sessionId ?? undefined },
+      {
+        controlPlaneBaseUrl,
+        sessionStore,
+        sessionId: sessionId ?? undefined,
+        authBaseUrl: auth.baseUrl,
+        now: () => NOW_SECONDS * 1000,
+      },
     );
     const acceptedBody = (await accepted.json()) as JsonRpcSuccess<ToolResult<typeof flagPage>>;
     expect(acceptedBody.result.structuredContent).toEqual(flagPage);
 
-    for (const rejectedToken of ["expired-control-plane-token", "garbage-token"]) {
+    expect(seenDownstream).toEqual([
+      {
+        authorization: null,
+        delegation: actor,
+        method: "GET",
+        path: "/apps/app_local/flags",
+      },
+    ]);
+
+    for (const rejectedToken of [auth.controlPlaneToken, auth.expiredMcpToken, "garbage-token"]) {
       const rejected = await mcp(
         "tools/call",
         { name: "flags_list", arguments: { appId: "app_local" } },
         `Bearer ${rejectedToken}`,
-        { controlPlaneBaseUrl, sessionStore, sessionId: sessionId ?? undefined },
+        {
+          controlPlaneBaseUrl,
+          sessionStore,
+          authBaseUrl: auth.baseUrl,
+          now: () => NOW_SECONDS * 1000,
+        },
       );
-      const rejectedBody = (await rejected.json()) as JsonRpcSuccess<ToolResult<ErrorResponse>>;
-      expect(rejectedBody.result.isError).toBe(true);
-      expect(rejectedBody.result.structuredContent).toEqual(unauthorized);
+      expect(rejected.status).toBe(401);
     }
-
-    expect(seenAuthorization).toEqual([
-      `Bearer ${issuedToken}`,
-      "Bearer expired-control-plane-token",
-      "Bearer garbage-token",
-    ]);
+    expect(seenDownstream).toHaveLength(1);
   });
 });
 
@@ -160,6 +172,11 @@ interface SeenRequest {
   path: string;
 }
 
+interface SeenDownstream extends SeenRequest {
+  authorization: string | null;
+  delegation: { subject: string; scopes: readonly string[] } | null;
+}
+
 async function request(
   raw: Request,
   options: {
@@ -167,9 +184,17 @@ async function request(
     authBaseUrl?: string;
     controlPlaneBaseUrl?: string;
     sessionStore?: McpSessionStore;
+    now?: () => number;
   } = {},
 ): Promise<Response> {
-  return handleMcpServerRequest({ request: raw, service, ...options });
+  return handleMcpServerRequest({
+    request: raw,
+    service,
+    controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    evaluationDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    analysisDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    ...options,
+  });
 }
 
 async function mcp(
@@ -180,6 +205,8 @@ async function mcp(
     controlPlaneBaseUrl: string;
     sessionStore: McpSessionStore;
     sessionId?: string;
+    authBaseUrl?: string;
+    now?: () => number;
   },
 ): Promise<Response> {
   return request(
@@ -196,27 +223,112 @@ async function mcp(
   );
 }
 
-async function bootAuthApi(seen: SeenRequest[]): Promise<string> {
-  return bootServer((request, response) => {
+async function bootAuthApi(seen: SeenRequest[]): Promise<{
+  baseUrl: string;
+  controlPlaneToken: string;
+  expiredMcpToken: string;
+}> {
+  const pair = (await crypto.subtle.generateKey(
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    true,
+    ["sign", "verify"],
+  )) as CryptoKeyPair;
+  const publicJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  let issuer = "";
+  const baseUrl = await bootServer(async (request, response) => {
     seen.push({ method: request.method ?? "", path: request.url ?? "" });
+    if (request.method === "GET" && request.url === "/.well-known/jwks.json") {
+      writeJson(response, 200, { keys: [{ ...publicJwk, kid: "fake-auth" }] });
+      return;
+    }
     if (request.method !== "POST" || request.url !== "/oauth2/token") {
       writeJson(response, 404, { error: "not_found" });
       return;
     }
-    writeJson(response, 200, { access_token: issuedToken, token_type: "Bearer" });
+    writeJson(response, 200, {
+      access_token: await signAccessToken(pair.privateKey, {
+        ...actorClaims(issuer),
+        aud: "https://mcp.splitch.test/mcp",
+        exp: NOW_SECONDS + 60,
+      }),
+      token_type: "Bearer",
+    });
   });
+  issuer = baseUrl;
+  return {
+    baseUrl,
+    controlPlaneToken: await signAccessToken(pair.privateKey, {
+      ...actorClaims(issuer),
+      aud: "https://api.splitch.test",
+      exp: NOW_SECONDS + 60,
+    }),
+    expiredMcpToken: await signAccessToken(pair.privateKey, {
+      ...actorClaims(issuer),
+      aud: "https://mcp.splitch.test/mcp",
+      exp: NOW_SECONDS - 1,
+    }),
+  };
 }
 
-async function bootControlPlaneApi(seenAuthorization: Array<string | null>): Promise<string> {
-  return bootServer((request, response) => {
+function actorClaims(issuer: string) {
+  return { typ: "access_token", sub: actor.subject, scopes: actor.scopes, iss: issuer };
+}
+
+async function signAccessToken(key: CryptoKey, claims: unknown): Promise<string> {
+  const header = encodeJwtSegment({ alg: "RS256", typ: "JWT", kid: "fake-auth" });
+  const payload = encodeJwtSegment(claims);
+  const input = `${header}.${payload}`;
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(input),
+  );
+  return `${input}.${base64Url(new Uint8Array(signature))}`;
+}
+
+function encodeJwtSegment(value: unknown): string {
+  return base64Url(new TextEncoder().encode(JSON.stringify(value)));
+}
+
+function base64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function bootControlPlaneApi(seen: SeenDownstream[]): Promise<string> {
+  const replayGuard = memoryMcpDelegationReplayGuard();
+  return bootServer(async (request, response) => {
     const authorization = request.headers.authorization ?? null;
-    seenAuthorization.push(authorization);
+    const delegatedRequest = new Request(`https://control-plane.internal${request.url}`, {
+      method: request.method,
+      headers: request.headers as HeadersInit,
+    });
+    const delegation = await parseMcpDelegation({
+      request: delegatedRequest,
+      owner: "control-plane-api",
+      secret: TEST_MCP_DELEGATION_SECRET,
+      replayGuard,
+    });
+    seen.push({
+      authorization,
+      delegation,
+      method: request.method ?? "",
+      path: request.url ?? "",
+    });
     if (
       request.method !== "GET" ||
       request.url !== "/apps/app_local/flags" ||
-      authorization !== `Bearer ${issuedToken}`
+      authorization !== null ||
+      delegation?.subject !== actor.subject ||
+      delegation.scopes.join(" ") !== actor.scopes.join(" ")
     ) {
-      writeJson(response, 401, unauthorized);
+      writeJson(response, 401, { code: "UNAUTHORIZED", message: "UNAUTHORIZED", details: {} });
       return;
     }
     writeJson(response, 200, { ...flagPage, cursor: null, limit: 50, total: null });
@@ -224,9 +336,11 @@ async function bootControlPlaneApi(seenAuthorization: Array<string | null>): Pro
 }
 
 async function bootServer(
-  handler: (request: IncomingMessage, response: ServerResponse) => void,
+  handler: (request: IncomingMessage, response: ServerResponse) => void | Promise<void>,
 ): Promise<string> {
-  const server = createServer(handler);
+  const server = createServer((request, response) => {
+    void handler(request, response);
+  });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   cleanupServers.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
   const address = server.address() as AddressInfo;

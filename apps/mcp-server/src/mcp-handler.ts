@@ -9,6 +9,11 @@ import {
   jsonRpcError,
   jsonRpcResult,
 } from "./json-rpc";
+import {
+  type McpAccessTokenActor,
+  type McpAccessTokenVerifier,
+  makeHttpMcpAccessTokenVerifier,
+} from "./mcp-access-token";
 import { readJsonRpcRequest } from "./mcp-request";
 import {
   type McpSessionStore,
@@ -40,13 +45,36 @@ export interface McpServerRequestOptions {
   readonly evaluationBaseUrl?: string;
   readonly analysisBaseUrl?: string;
   readonly controlPlaneFetch?: typeof fetch;
+  readonly evaluationFetch?: typeof fetch;
   readonly analysisFetch?: typeof fetch;
+  readonly controlPlaneDelegationSecret?: string;
+  readonly evaluationDelegationSecret?: string;
+  readonly analysisDelegationSecret?: string;
   readonly sessionStore?: McpSessionStore;
+  readonly tokenVerifier?: McpAccessTokenVerifier;
+  readonly now?: () => number;
 }
 
 export async function handleMcpServerRequest(options: McpServerRequestOptions): Promise<Response> {
-  const transportResponse = await routeTransportRequest(options);
+  let actor: McpAccessTokenActor | null = null;
+  const verifier =
+    options.tokenVerifier ??
+    makeHttpMcpAccessTokenVerifier({
+      issuer: authIssuer(options.authBaseUrl, options.platformTarget),
+    });
+  const transportResponse = await routeTransportRequest({
+    ...options,
+    authenticateBearer: async (authorization, audience) => {
+      actor = await verifier.verify(
+        authorization,
+        audience,
+        Math.floor((options.now?.() ?? Date.now()) / 1000),
+      );
+      return actor !== null;
+    },
+  });
   if (transportResponse) return transportResponse;
+  if (!actor) throw new Error("mcp-server: authenticated request has no verified actor");
 
   const request = await readJsonRpcRequest(options.request);
   if (!request.ok) {
@@ -59,13 +87,7 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
   const sdks = createOperationSdks(options);
   const sessionStore = options.sessionStore ?? unconfiguredSessionStore;
   const sessionId = options.request.headers.get("mcp-session-id");
-  const response = await dispatch(
-    request.value,
-    sdks,
-    options.request.headers.get("authorization"),
-    sessionId,
-    sessionStore,
-  );
+  const response = await dispatch(request.value, sdks, actor, sessionId, sessionStore);
   const responseSessionId =
     request.value.method === "initialize" ? await sessionStore.create() : undefined;
   return jsonResponse(response, 200, responseSessionId);
@@ -82,7 +104,11 @@ function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
           defaultControlPlaneBaseUrl,
           platformTarget,
         ),
-        fetch: options.controlPlaneFetch,
+        fetch: downstreamFetch("CONTROL_PLANE_API", options.controlPlaneFetch, platformTarget),
+        delegationSecret: requiredDelegationSecret(
+          "CONTROL_PLANE_API",
+          options.controlPlaneDelegationSecret,
+        ),
       }),
     ),
     "evaluation-api": createLazyOperationSdk(() =>
@@ -93,7 +119,11 @@ function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
           defaultEvaluationBaseUrl,
           platformTarget,
         ),
-        fetch: options.controlPlaneFetch,
+        fetch: downstreamFetch("EVALUATION_API", options.evaluationFetch, platformTarget),
+        delegationSecret: requiredDelegationSecret(
+          "EVALUATION_API",
+          options.evaluationDelegationSecret,
+        ),
       }),
     ),
     "analysis-api": createLazyOperationSdk(() =>
@@ -104,9 +134,18 @@ function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
           options.analysisFetch !== undefined,
         ),
         fetch: options.analysisFetch ?? options.controlPlaneFetch,
+        delegationSecret: requiredDelegationSecret(
+          "ANALYSIS_API",
+          options.analysisDelegationSecret,
+        ),
       }),
     ),
   };
+}
+
+function requiredDelegationSecret(bindingName: string, secret: string | undefined): string {
+  if (!secret) throw new Error(`mcp-server: ${bindingName} delegation secret is required`);
+  return secret;
 }
 
 function createLazyOperationSdk(createSdk: () => OperationSdk): OperationSdkResolver {
@@ -149,10 +188,21 @@ function apiBaseUrl(
   throw new Error(`mcp-server: ${envName} is required for ${platformTarget}`);
 }
 
+function downstreamFetch(
+  bindingName: string,
+  requestFetch: typeof fetch | undefined,
+  platformTarget: string,
+): typeof fetch | undefined {
+  if (requestFetch || platformTarget === "local" || platformTarget === "pr-ci") {
+    return requestFetch;
+  }
+  throw new Error(`mcp-server: ${bindingName} service binding is required for hosted targets`);
+}
+
 async function dispatch(
   request: JsonRpcRequest,
   sdks: OperationSdks,
-  authorization: string | null,
+  actor: McpAccessTokenActor,
   sessionId: string | null,
   sessionStore: McpSessionStore,
 ): Promise<JsonRpcResponse> {
@@ -164,7 +214,7 @@ async function dispatch(
     return jsonRpcResult(id, { tools: MCP_TOOL_DEFINITIONS });
   }
   if (request.method === "tools/call") {
-    return callTool(id, request.params, sdks, authorization, sessionId, sessionStore);
+    return callTool(id, request.params, sdks, actor, sessionId, sessionStore);
   }
   return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
 }
@@ -173,7 +223,7 @@ async function callTool(
   id: JsonRpcId,
   params: unknown,
   sdks: OperationSdks,
-  authorization: string | null,
+  actor: McpAccessTokenActor,
   sessionId: string | null,
   sessionStore: McpSessionStore,
 ): Promise<JsonRpcResponse> {
@@ -195,7 +245,9 @@ async function callTool(
     if (!input.ok) {
       return jsonRpcResult(id, toolResult({ message: input.message }, { isError: true }));
     }
-    const result = await sdk.callOperationById(call.name, input.value, { authorization });
+    const result = await sdk.callOperationById(call.name, input.value, {
+      delegation: { subject: actor.subject, scopes: actor.scopes },
+    });
     return jsonRpcResult(
       id,
       result.ok ? toolResult(result.data) : toolResult(result.error, { isError: true }),
@@ -205,6 +257,13 @@ async function callTool(
       message: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function authIssuer(configured: string | undefined, platformTarget: string | undefined): string {
+  if (configured) return new URL(configured).origin;
+  const target = parsePlatformTarget(platformTarget);
+  if (target === "local" || target === "pr-ci") return "http://localhost:8791";
+  throw new Error(`mcp-server: AUTH_API_ORIGIN is required for ${target}`);
 }
 
 async function contextUse(

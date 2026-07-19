@@ -48,6 +48,7 @@ export const ClaimConsentRequestSchema = z.object({
 export const TokenExchangeRequestSchema = z.object({
   grant_type: z.string(),
   identity_assertion: z.string().min(1),
+  resource: z.url().optional(),
 });
 
 /** POST /oauth2/device_authorization: starts Door C's device-code flow. */
@@ -62,6 +63,7 @@ export const DeviceTokenRequestSchema = z.object({
   device_code: z.string().min(1),
   client_id: z.string().min(1).optional(),
   scope: z.string().min(1).optional(),
+  resource: z.url().optional(),
 });
 
 /** POST /oauth2/token: shared-preview smoke client_credentials grant. */
@@ -70,6 +72,7 @@ export const ClientCredentialsRequestSchema = z.object({
   client_id: z.string().min(1),
   client_secret: z.string().min(1),
   scope: z.string().min(1).optional(),
+  resource: z.url().optional(),
 });
 
 /** POST /oauth2/revoke: RFC 7009 token revocation. */

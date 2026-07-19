@@ -45,6 +45,8 @@ export interface AppDeps {
   accessSecret: string;
   /** Audience the access token must bind to (control-plane protected-resource origin). */
   controlPlaneAudience: string;
+  /** MCP protected-resource origin allowed by RFC 8707 resource selection. */
+  mcpAudience?: string;
   /** Door C device-flow adapter (real WorkOS in deployed envs, fixture in tests/local). */
   deviceFlow: DeviceFlowPort;
   /** Resolves provider refresh tokens to provider session ids for fail-loud revoke. */

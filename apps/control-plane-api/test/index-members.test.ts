@@ -1,13 +1,15 @@
 import { env } from "cloudflare:workers";
+import { createMcpDelegationHeader, MCP_DELEGATION_HEADER } from "@splitch/contracts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
-import worker, { ControlPanelEntrypoint } from "../src/index.js";
+import worker, { ControlPanelEntrypoint, McpEntrypoint } from "../src/index.js";
 import { memberProfileCacheKey } from "../src/member-profile-cache.js";
 
 const AUDIENCE = "https://cp.splitch.test";
 const JWKS_URI = "https://auth.splitch.test/.well-known/jwks.json";
 const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);
+const MCP_DELEGATION_SECRET = "d".repeat(32);
 
 const ORG = {
   orgId: "org_index_members_241b",
@@ -40,6 +42,7 @@ beforeAll(async () => {
     ...env,
     CONTROL_PLANE_ORIGIN: AUDIENCE,
     AUTH_JWKS_URI: JWKS_URI,
+    MCP_CONTROL_PLANE_DELEGATION_SECRET: MCP_DELEGATION_SECRET,
   } as ControlPlaneApiEnv;
 });
 
@@ -95,6 +98,49 @@ describe("index.ts: Control Panel binding boundary", () => {
     expect(await response.json()).toMatchObject({
       app: { organizationId: ORG.orgId, key: "binding-create" },
     });
+  });
+});
+
+describe("index.ts: MCP service-binding boundary", () => {
+  it("rejects delegation publicly, accepts it once on the named entrypoint, then rejects replay", async () => {
+    const request = new Request(`${AUDIENCE}/apps/${ORG.appId}/flags`);
+    request.headers.set(
+      MCP_DELEGATION_HEADER,
+      await createMcpDelegationHeader({
+        operationId: "flags_list",
+        actor: { subject: OWNER, scopes: [`app:${ORG.appId}:admin`] },
+        request,
+        secret: MCP_DELEGATION_SECRET,
+        jti: "index-members-delegation",
+      }),
+    );
+
+    const publicResponse = await worker.fetch(request.clone(), testEnv, testCtx);
+    expect(publicResponse.status).toBe(401);
+
+    const entrypoint = new McpEntrypoint(testCtx, testEnv);
+    const accepted = await entrypoint.fetch(request.clone());
+    expect(accepted.status).toBe(200);
+
+    const replayed = await entrypoint.fetch(request.clone());
+    expect(replayed.status).toBe(401);
+  });
+
+  it("fails closed when the delegation secret or replay binding is missing", async () => {
+    const request = new Request(`${AUDIENCE}/apps/${ORG.appId}/flags`);
+    const missingSecret = new McpEntrypoint(testCtx, {
+      ...testEnv,
+      MCP_CONTROL_PLANE_DELEGATION_SECRET: undefined,
+    });
+    await expect(missingSecret.fetch(request.clone())).rejects.toThrow(
+      "MCP_CONTROL_PLANE_DELEGATION_SECRET is required",
+    );
+
+    const missingReplay = new McpEntrypoint(testCtx, {
+      ...testEnv,
+      MCP_DELEGATION_REPLAY: undefined,
+    });
+    await expect(missingReplay.fetch(request)).rejects.toThrow("MCP_DELEGATION_REPLAY is required");
   });
 });
 

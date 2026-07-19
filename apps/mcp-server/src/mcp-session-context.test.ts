@@ -1,13 +1,19 @@
+import { parseMcpDelegation } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
 import type { McpSessionContext, McpSessionStore } from "./mcp-session-context";
+import {
+  memoryMcpDelegationReplayGuard,
+  staticMcpTokenVerifier,
+  TEST_MCP_DELEGATION_SECRET,
+} from "./mcp-test-verifier";
 
 const service = "splitch-mcp-server";
 const defaultAuthorization = "Bearer local-test-token";
 const sessionStore = memorySessionStore();
 
 describe("MCP session context", () => {
-  it("inherits session scope, lets explicit scope override it, and preserves the bearer token", async () => {
+  it("inherits session scope, lets explicit scope override it, and delegates without the bearer", async () => {
     const seen: Request[] = [];
     const authorization = "Bearer header.payload.signature-with-scopes-unchanged";
     const sessionId = await initializeSession();
@@ -35,12 +41,23 @@ describe("MCP session context", () => {
       { sessionId, authorization, seen },
     );
 
-    expect(
-      seen.map((request) => [new URL(request.url).pathname, request.headers.get("authorization")]),
-    ).toEqual([
-      ["/apps/app_session/envs/env_session/experiments", authorization],
-      ["/apps/app_explicit/envs/env_explicit/experiments", authorization],
+    expect(seen.map((request) => new URL(request.url).pathname)).toEqual([
+      "/apps/app_session/envs/env_session/experiments",
+      "/apps/app_explicit/envs/env_explicit/experiments",
     ]);
+    for (const request of seen) {
+      expect(request.headers.get("authorization")).toBeNull();
+      expect(
+        await parseMcpDelegation({
+          request,
+          owner: "control-plane-api",
+          secret: TEST_MCP_DELEGATION_SECRET,
+          replayGuard: memoryMcpDelegationReplayGuard(),
+        }),
+      ).toMatchObject({
+        subject: "user_local_test",
+      });
+    }
   });
 
   it("fails loud with each missing scope axis instead of calling an arbitrary App", async () => {
@@ -116,6 +133,8 @@ async function mcp(
     }),
     service,
     platformTarget: "local",
+    tokenVerifier: staticMcpTokenVerifier(),
+    controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     controlPlaneFetch: async (request) => {
       options.seen?.push(request instanceof Request ? request : new Request(request));
       return Response.json({ items: [] });

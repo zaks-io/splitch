@@ -11,10 +11,15 @@ const service = "splitch-mcp-server";
 
 type Env = {
   ANALYSIS_API?: Fetcher;
+  CONTROL_PLANE_API?: Fetcher;
+  EVALUATION_API?: Fetcher;
   AUTH_API_ORIGIN?: string;
   CONTROL_PLANE_API_ORIGIN?: string;
   EVALUATION_API_ORIGIN?: string;
   ANALYSIS_API_ORIGIN?: string;
+  MCP_CONTROL_PLANE_DELEGATION_SECRET?: string;
+  MCP_EVALUATION_DELEGATION_SECRET?: string;
+  MCP_ANALYSIS_DELEGATION_SECRET?: string;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
@@ -42,7 +47,12 @@ const handler = {
       controlPlaneBaseUrl: env.CONTROL_PLANE_API_ORIGIN,
       evaluationBaseUrl: env.EVALUATION_API_ORIGIN,
       analysisBaseUrl: env.ANALYSIS_API_ORIGIN,
+      controlPlaneFetch: serviceBindingFetch(env.CONTROL_PLANE_API),
+      evaluationFetch: serviceBindingFetch(env.EVALUATION_API),
       analysisFetch: serviceBindingFetch(env.ANALYSIS_API),
+      controlPlaneDelegationSecret: env.MCP_CONTROL_PLANE_DELEGATION_SECRET,
+      evaluationDelegationSecret: env.MCP_EVALUATION_DELEGATION_SECRET,
+      analysisDelegationSecret: env.MCP_ANALYSIS_DELEGATION_SECRET,
       sessionStore: durableMcpSessionStore(env.MCP_SESSIONS),
     });
   },

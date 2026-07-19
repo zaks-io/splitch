@@ -1,4 +1,5 @@
 import type { AssignmentWriterNamespace } from "./assignment/kv-assignment-store";
+import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
 
 interface ExposureIngestFetcher {
   fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
@@ -14,6 +15,8 @@ export interface EvaluationApiEnv {
   SESSION_STORE: KVNamespace;
   AUTH_JWKS_URI?: string;
   CONTROL_PLANE_ORIGIN?: string;
+  MCP_EVALUATION_DELEGATION_SECRET?: string;
+  MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
   EVALUATION_PRIVACY_SALT?: string;
   SPLITCH_EVENT_INGEST_TOKEN?: string;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;

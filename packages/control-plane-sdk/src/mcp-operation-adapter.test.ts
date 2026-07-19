@@ -1,3 +1,4 @@
+import { MCP_DELEGATION_HEADER } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { createMcpOperationAdapter } from "./mcp-operation-adapter";
 
@@ -44,5 +45,30 @@ describe("mcp operation adapter", () => {
     await expect(adapter.callOperationById("missing_tool", {})).rejects.toThrow(
       'control-plane-sdk: unknown operation "missing_tool"',
     );
+  });
+
+  it("uses delegation without forwarding an available bearer credential", async () => {
+    let forwardedRequest: Request | undefined;
+    const adapter = createMcpOperationAdapter({
+      baseUrl: "https://control-plane.test",
+      authorization: "Bearer must-not-forward",
+      delegationSecret: "d".repeat(32),
+      fetch: async (request) => {
+        forwardedRequest = request instanceof Request ? request : new Request(request);
+        return Response.json(flagPage);
+      },
+    });
+
+    await adapter.callOperationById(
+      "flags_list",
+      { appId: "app_local" },
+      {
+        authorization: "Bearer also-must-not-forward",
+        delegation: { subject: "user_mcp", scopes: ["app:app_local:admin"] },
+      },
+    );
+
+    expect(forwardedRequest?.headers.get("authorization")).toBeNull();
+    expect(forwardedRequest?.headers.get(MCP_DELEGATION_HEADER)).not.toBeNull();
   });
 });

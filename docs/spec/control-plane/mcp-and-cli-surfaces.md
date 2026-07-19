@@ -156,9 +156,10 @@ default.
 **Who:** AI agents (Claude, Cursor, OpenAI Agents SDK).
 **Auth:** In-band via MCP OAuth Protected Resource Metadata (PRM), with `auth.md` as the
 human/agent-readable companion. Connecting triggers the handshake (401 + WWW-Authenticate
-→ agent follows PRM + authorization-server metadata → control-plane token → subsequent tool
-calls carry token in Authorization header). No on-disk credential; token lives in the transport
-session only.
+→ agent follows PRM + authorization-server metadata → exact MCP-resource token → subsequent tool
+calls carry that token in the Authorization header). The MCP Worker validates issuer, expiry,
+exact audience, and scope shape before JSON-RPC dispatch. No on-disk credential; the client token
+lives only in the transport session and is never forwarded downstream.
 **Deployment:** Remote Worker URL (not stdio/subprocess). Zero install for agents.
 
 ### OAuth PRM + auth.md discovery chain
@@ -170,9 +171,19 @@ Agent connects to MCP server URL
   → GET /.well-known/oauth-authorization-server  → { agent_auth: { identity_endpoint, claim_endpoint, ... } }
   → Agent picks an advertised door
   → POST /agent/identity → identity_assertion
-  → POST /oauth2/token   → access_token
+  → POST /oauth2/token with resource=<exact MCP resource> → access_token
   → Subsequent tool calls: Authorization: Bearer <access_token>
 ```
+
+For each tool call, MCP creates a separate short-lived delegated credential bound to the derived
+operation, owning Worker, verified actor and scopes, method, exact downstream path/query, and body
+digest. The credential is signed with the owning service's delegation key, expires after 30 seconds,
+and carries a one-use identifier consumed by the Worker's replay guard. Only named Worker
+service-binding entrypoints accept it. Public Worker entrypoints do not, and downstream requests
+never contain the client bearer. The signed delegated principal carries only the already-verified
+actor and scopes, so it cannot be forged or widen the caller's authority. Replay identifiers are
+claimed atomically through a Durable Object; missing secrets or replay bindings and storage errors
+fail closed before downstream route dispatch.
 
 Door A (ID-JAG) is paused. While paused, authorization-server metadata and `auth.md` advertise only
 Door B (anonymous) and Door C (device flow). A paused door is absent from discovery rather than a

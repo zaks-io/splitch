@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { deriveMcpProtocolTools, type ErrorResponse } from "@splitch/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
+import { staticMcpTokenVerifier, TEST_MCP_DELEGATION_SECRET } from "./mcp-test-verifier";
 
 const service = "splitch-mcp-server";
 const token = "Bearer local-test-token";
@@ -83,7 +84,7 @@ describe("mcp server Streamable HTTP transport", () => {
       {
         method: "GET",
         path: "/apps/app_local/flags",
-        authorization: token,
+        authorization: null,
         body: "",
       },
     ]);
@@ -128,7 +129,7 @@ describe("mcp server Streamable HTTP transport", () => {
     expect(seen[0]).toMatchObject({
       method: "PATCH",
       path: "/apps/app_local/flags/flag_checkout",
-      authorization: token,
+      authorization: null,
     });
     expect(JSON.parse(seen[0]?.body ?? "{}")).toEqual({
       name: "Checkout v2",
@@ -229,6 +230,10 @@ async function mcp(
     }),
     service,
     platformTarget: "local",
+    tokenVerifier: staticMcpTokenVerifier(),
+    controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    evaluationDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    analysisDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     ...origins,
   });
 }

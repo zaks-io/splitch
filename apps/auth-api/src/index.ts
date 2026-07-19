@@ -9,8 +9,9 @@ import { createApp } from "./app";
 import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import type { AuthApiEnv } from "./env";
-import { fetchJwks } from "./jwks";
 import { makeJtiCache } from "./jti-cache";
+import { fetchJwks } from "./jwks";
+import type { SmokeClientCredentials } from "./oauth-routes";
 import { makeFixtureOtp, makeIdempotencyStore } from "./otp";
 import { makeRateLimiter } from "./rate-limit";
 import { makeKvRevocationStore } from "./revocation";
@@ -18,7 +19,6 @@ import { makeTokenSigner } from "./token-exchange";
 import { makeFixtureTurnstile, makeRuntimeTurnstile } from "./turnstile";
 import { makeFixtureWorkOs, makeHostedWorkOs } from "./workos";
 import { makeWorkOsAccessTokenVerifier } from "./workos-access-token";
-import type { SmokeClientCredentials } from "./oauth-routes";
 
 const service = "splitch-auth-api";
 
@@ -59,6 +59,7 @@ const handler = {
     const repo = createRepository(env.DB);
     const origin = env.AUTH_API_ORIGIN ?? url.origin;
     const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
+    const mcpAudience = env.MCP_ORIGIN;
     const assertionSecret = env.ASSERTION_SIGNING_SECRET ?? "local-dev-assertion-secret";
     const accessSecret = env.ACCESS_TOKEN_SECRET ?? "local-dev-access-secret";
     const consentBaseUrl = env.CONTROL_PANEL_ORIGIN ?? "http://localhost:8787";
@@ -77,6 +78,7 @@ const handler = {
       repo,
       accessSecret,
       controlPlaneAudience,
+      mcpAudience,
       now,
       tokenSigner,
       idJag: {

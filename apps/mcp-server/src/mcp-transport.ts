@@ -13,6 +13,7 @@ export async function routeTransportRequest(options: {
   platformTarget?: string;
   authBaseUrl?: string;
   sessionStore?: McpSessionStore;
+  authenticateBearer?: (authorization: string, audience: string) => Promise<boolean>;
 }): Promise<Response | undefined> {
   const url = new URL(options.request.url);
   if (isHealthRequest(options.request, url)) {
@@ -30,9 +31,8 @@ export async function routeTransportRequest(options: {
   if (options.request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
-  if (requiresBearer(options.request, url) && !hasBearerToken(options.request)) {
-    return unauthorizedResponse(url);
-  }
+  const authenticationFailure = await authenticateRequest(options, url);
+  if (authenticationFailure) return authenticationFailure;
   if (options.request.method === "DELETE" && isMcpPath(url)) {
     return endSession(options.request, options.sessionStore);
   }
@@ -40,6 +40,22 @@ export async function routeTransportRequest(options: {
     return new Response("not found", { status: 404 });
   }
   return validateSession(options.request, options.sessionStore);
+}
+
+async function authenticateRequest(
+  options: {
+    request: Request;
+    authenticateBearer?: (authorization: string, audience: string) => Promise<boolean>;
+  },
+  url: URL,
+): Promise<Response | null> {
+  if (!requiresBearer(options.request, url)) return null;
+  const authorization = bearerAuthorization(options.request);
+  if (!authorization) return unauthorizedResponse(url);
+  if (!options.authenticateBearer) return null;
+  return (await options.authenticateBearer(authorization, protectedResource(url)))
+    ? null
+    : unauthorizedResponse(url);
 }
 
 function requiresBearer(request: Request, url: URL): boolean {
@@ -76,10 +92,10 @@ function authBaseUrl(configured: string | undefined, platformTarget: string | un
   throw new Error(`mcp-server: AUTH_API_ORIGIN is required for ${target}`);
 }
 
-function hasBearerToken(request: Request): boolean {
+function bearerAuthorization(request: Request): string | null {
   const header = request.headers.get("authorization");
-  if (!header?.startsWith("Bearer ")) return false;
-  return header.slice("Bearer ".length).trim().length > 0;
+  if (!header?.startsWith("Bearer ")) return null;
+  return header.slice("Bearer ".length).trim().length > 0 ? header : null;
 }
 
 function unauthorizedResponse(url: URL): Response {
@@ -90,6 +106,10 @@ function unauthorizedResponse(url: URL): Response {
     `Bearer realm="splitch", resource_metadata="${url.origin}${protectedResourcePath}${resourcePath}"`,
   );
   return new Response("Unauthorized", { status: 401, headers });
+}
+
+function protectedResource(url: URL): string {
+  return url.pathname === "/" ? url.origin : `${url.origin}${url.pathname}`;
 }
 
 export function jsonResponse(body: JsonRpcResponse, status = 200, sessionId?: string): Response {
