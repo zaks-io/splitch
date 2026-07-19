@@ -42,6 +42,16 @@ export const LOCAL_E2E_ANALYSIS_RESULTS = Object.freeze([
 ]);
 
 const createdAt = "2026-07-18T00:00:00.000Z";
+const checkoutVariants = [
+  { id: "variant_checkout_control_e2e", name: "control", value: false },
+  { id: "variant_checkout_treatment_e2e", name: "treatment", value: true },
+];
+const checkoutAllocation = { control: 50, treatment: 50 };
+const checkoutTargetingRules = [];
+const devRunSalt = "local-e2e-dev";
+const prodRunSalt = "local-e2e-prod";
+const devRunHash = runConfigHash(devRunSalt);
+const prodRunHash = runConfigHash(prodRunSalt);
 
 export function localE2eSession(expiresAt = Math.floor(Date.now() / 1000) + 3_600) {
   return {
@@ -114,16 +124,22 @@ INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES
   ('app_billing_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
   ('app_agent_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
   ('app_checkout_e2e', 'user_local_member_e2e', 'member', '${createdAt}');
-INSERT INTO flags (id, app_id, key, name, created_at, updated_at, created_by, updated_by) VALUES
-  ('flag_checkout_e2e', 'app_checkout_e2e', 'new-checkout', 'New Checkout', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
-  ('flag_agent_e2e', 'app_agent_e2e', 'agent-routing', 'Agent Routing', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e');
-INSERT INTO experiments (id, app_id, environment_id, key, flag_id, name, status, targeting_key_field, targeting_key_type, metrics, guardrail_metrics, dimensions, live_run_id, created_at, updated_at, created_by, updated_by) VALUES
-  ('experiment_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'checkout-copy-dev', 'flag_checkout_e2e', 'Checkout Copy Dev', 'running', 'targetingKey', 'string', '[]', '[]', '[]', 'run_checkout_dev_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
-  ('experiment_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'checkout-copy-prod', 'flag_checkout_e2e', 'Checkout Copy Prod', 'running', 'targetingKey', 'string', '[]', '[]', '[]', 'run_checkout_prod_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
-  ('experiment_agent_e2e', 'app_agent_e2e', 'env_agent_prod_e2e', 'routing-model', 'flag_agent_e2e', 'Routing Model', 'draft', 'targetingKey', 'string', '[]', '[]', '[]', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e');
+INSERT INTO flags (id, app_id, key, name, schema, default_variant_id, created_at, updated_at, created_by, updated_by) VALUES
+  ('flag_checkout_e2e', 'app_checkout_e2e', 'new-checkout', 'New Checkout', '{"type":"boolean"}', 'variant_checkout_control_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('flag_agent_e2e', 'app_agent_e2e', 'agent-routing', 'Agent Routing', NULL, NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e');
+INSERT INTO variants (id, flag_id, name, value, created_at) VALUES
+  ('variant_checkout_control_e2e', 'flag_checkout_e2e', 'control', 'false', '${createdAt}'),
+  ('variant_checkout_treatment_e2e', 'flag_checkout_e2e', 'treatment', 'true', '${createdAt}');
+INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, available_variant_names, default_variant_id, created_at, updated_at) VALUES
+  ('config_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_e2e', 1, '["control","treatment"]', 'variant_checkout_control_e2e', '${createdAt}', '${createdAt}'),
+  ('config_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'flag_checkout_e2e', 1, '["control","treatment"]', 'variant_checkout_control_e2e', '${createdAt}', '${createdAt}');
+INSERT INTO experiments (id, app_id, environment_id, key, flag_id, name, status, targeting_key_field, targeting_key_type, default_variant_id, metrics, guardrail_metrics, dimensions, live_run_id, created_at, updated_at, created_by, updated_by) VALUES
+  ('experiment_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'checkout-copy-dev', 'flag_checkout_e2e', 'Checkout Copy Dev', 'running', 'targetingKey', 'user', 'variant_checkout_control_e2e', '[]', '[]', '[]', 'run_checkout_dev_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('experiment_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'checkout-copy-prod', 'flag_checkout_e2e', 'Checkout Copy Prod', 'running', 'targetingKey', 'user', 'variant_checkout_control_e2e', '[]', '[]', '[]', 'run_checkout_prod_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
+  ('experiment_agent_e2e', 'app_agent_e2e', 'env_agent_prod_e2e', 'routing-model', 'flag_agent_e2e', 'Routing Model', 'draft', 'targetingKey', 'user', NULL, '[]', '[]', '[]', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e');
 INSERT INTO runs (id, app_id, environment_id, experiment_id, run_number, status, targeting_key_field, targeting_key_type, salt, allocation, variant_set, targeting_rules, confidence_level, decision_family, guardrail_decisions, config_hash, started_at, created_at, created_by) VALUES
-  ('run_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_dev_e2e', 1, 'running', 'targetingKey', 'string', 'local-e2e-dev', '{"control":50,"treatment":50}', '[]', '[]', 0.95, '[]', '[]', 'local-e2e-dev-config', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('run_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'experiment_checkout_prod_e2e', 1, 'running', 'targetingKey', 'string', 'local-e2e-prod', '{"control":50,"treatment":50}', '[]', '[]', 0.95, '[]', '[]', 'local-e2e-prod-config', '${createdAt}', '${createdAt}', 'user_local_e2e');
+  ('run_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_dev_e2e', 1, 'running', 'targetingKey', 'user', '${devRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[]', '[]', '${devRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('run_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'experiment_checkout_prod_e2e', 1, 'running', 'targetingKey', 'user', '${prodRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[]', '[]', '${prodRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e');
 `;
 
 function analysisResult(environmentId, experimentId, mismatch) {
@@ -152,8 +168,29 @@ function analysisResult(environmentId, experimentId, mismatch) {
         activation_balance_mismatch: null,
         exposure_counts: counts,
         deduped_counts: counts,
-        low_n_warning: false,
+        low_n_warning: true,
       },
     },
   };
+}
+
+function runConfigHash(salt) {
+  const config = {
+    salt,
+    allocation: checkoutAllocation,
+    variantSet: checkoutVariants,
+    targetingRules: checkoutTargetingRules,
+  };
+  return `sha256:${createHash("sha256").update(stableStringify(config)).digest("hex")}`;
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value).sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }

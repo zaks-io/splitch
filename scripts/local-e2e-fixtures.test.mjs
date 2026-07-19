@@ -64,6 +64,12 @@ test("fixture App has explicit dev and prod Environments with one SRM attention 
   assert.equal(resultByEnvironment.size, 2);
   assert.equal(resultByEnvironment.get("env_checkout_dev_e2e")?.result.srm.srm_is_mismatch, false);
   assert.equal(resultByEnvironment.get("env_checkout_prod_e2e")?.result.srm.srm_is_mismatch, true);
+  assert.equal(resultByEnvironment.get("env_checkout_dev_e2e")?.result.health.low_n_warning, true);
+  assert.equal(resultByEnvironment.get("env_checkout_prod_e2e")?.result.health.low_n_warning, true);
+  assert.match(LOCAL_E2E_D1_SEED, /variant_checkout_control_e2e/);
+  assert.match(LOCAL_E2E_D1_SEED, /config_checkout_dev_e2e/);
+  assert.match(LOCAL_E2E_D1_SEED, /config_checkout_prod_e2e/);
+  assert.match(LOCAL_E2E_D1_SEED, /sha256:[0-9a-f]{64}/);
   assert.match(LOCAL_E2E_D1_SEED, /experiment_checkout_dev_e2e[\s\S]*'running'/);
   assert.match(LOCAL_E2E_D1_SEED, /experiment_checkout_prod_e2e[\s\S]*'running'/);
 });

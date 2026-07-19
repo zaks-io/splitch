@@ -5,7 +5,6 @@ import { mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import {
-  LOCAL_E2E_ANALYSIS_RESULTS,
   LOCAL_E2E_D1_SEED,
   LOCAL_E2E_MEMBER_SESSION_KEY,
   LOCAL_E2E_SESSION_KEY,
@@ -22,6 +21,12 @@ const localBindings = {
   WORKOS_CLIENT_ID: "local-e2e-workos-client-id",
 };
 const workers = [
+  {
+    name: "analysis-api-fixture",
+    origin: "http://127.0.0.1:8790",
+    command: "node",
+    args: ["scripts/local-e2e-analysis-fixture.mjs"],
+  },
   {
     name: "control-plane-api",
     origin: "http://127.0.0.1:18790",
@@ -208,22 +213,6 @@ function seedLocalResources() {
     "--persist-to",
     persistPath,
   ]);
-  for (const fixture of LOCAL_E2E_ANALYSIS_RESULTS) {
-    runWrangler([
-      "kv",
-      "key",
-      "put",
-      fixture.storageKey,
-      JSON.stringify(fixture.result),
-      "--binding",
-      "SESSION_STORE",
-      "--local",
-      "--config",
-      "apps/control-panel/wrangler.jsonc",
-      "--persist-to",
-      persistPath,
-    ]);
-  }
 }
 
 function launchWorkers(runId) {
