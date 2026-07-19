@@ -25,6 +25,8 @@ export interface ControlPlaneApiEnv {
   CONFIG_STORE_WRITER: ConfigStoreDurableObjectNamespace;
   CREDENTIAL_CACHE_WRITER: CredentialCacheWriterDurableObjectNamespace;
   CREDENTIAL_CACHE_BACKFILL: CredentialCacheBackfillDurableObjectNamespace;
+  /** Binding-only Run-results reader on the Analysis Worker. */
+  ANALYSIS_API: Fetcher;
   /** CI-only bearer token for the hosted credential-cache rollout gate. */
   SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */

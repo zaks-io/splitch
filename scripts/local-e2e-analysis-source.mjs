@@ -13,31 +13,38 @@ const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 20
 const publicJwk = { ...publicKey.export({ format: "jwk" }), alg: "RS256", kid: keyId, use: "sig" };
 
 export function createAnalysisSourceServer(runId = "local-e2e") {
-  return createServer((request, response) => {
-    const url = new URL(request.url ?? "/", origin);
-    if (url.pathname === "/health") {
-      json(response, 200, { ok: true, service: "local-e2e-analysis-source" }, runId);
-      return;
-    }
-    if (url.pathname === "/.well-known/jwks.json") {
-      json(response, 200, { keys: [publicJwk] }, runId);
-      return;
-    }
-    if (url.pathname === "/token") {
-      json(response, 200, { accessToken: analysisAccessToken() }, runId);
-      return;
-    }
-    if (request.headers.authorization !== `Bearer ${readToken}`) {
-      json(response, 401, { error: "unauthorized" }, runId);
-      return;
-    }
-    const pipeName = url.pathname.match(/^\/v0\/pipes\/([^/]+)\.json$/)?.[1];
-    if (!pipeName) {
-      response.writeHead(404).end("not found");
-      return;
-    }
-    json(response, 200, { data: pipeRows(pipeName, url.searchParams) }, runId);
-  });
+  return createServer((request, response) => handleRequest(request, response, runId));
+}
+
+function handleRequest(request, response, runId) {
+  const url = new URL(request.url ?? "/", origin);
+  if (servePublicRoute(url.pathname, response, runId)) return;
+  if (request.headers.authorization !== `Bearer ${readToken}`) {
+    json(response, 401, { error: "unauthorized" }, runId);
+    return;
+  }
+  const pipeName = url.pathname.match(/^\/v0\/pipes\/([^/]+)\.json$/)?.[1];
+  if (!pipeName) {
+    response.writeHead(404).end("not found");
+    return;
+  }
+  json(response, 200, { data: pipeRows(pipeName, url.searchParams) }, runId);
+}
+
+function servePublicRoute(pathname, response, runId) {
+  if (pathname === "/health") {
+    json(response, 200, { ok: true, service: "local-e2e-analysis-source" }, runId);
+    return true;
+  }
+  if (pathname === "/.well-known/jwks.json") {
+    json(response, 200, { keys: [publicJwk] }, runId);
+    return true;
+  }
+  if (pathname === "/token") {
+    json(response, 200, { accessToken: analysisAccessToken() }, runId);
+    return true;
+  }
+  return false;
 }
 
 function pipeRows(pipeName, params) {
@@ -56,14 +63,17 @@ function pipeRows(pipeName, params) {
         horizon: "sequential",
         allocation: JSON.stringify({ control: 50, treatment: 50 }),
         control_variant: "control",
-        decision_family: "[]",
-        guardrail_decisions: "[]",
+        decision_family: JSON.stringify(fixture.decisionFamily),
+        guardrail_decisions: JSON.stringify(fixture.guardrailDecisions),
         dimensions: "[]",
       },
     ];
   }
   if (pipeName === "analysis_deduped_exposures" && params.get("run_id") === fixture.runId) {
     return fixture.exposures;
+  }
+  if (pipeName === "analysis_metric_values" && params.get("run_id") === fixture.runId) {
+    return fixture.metricValues;
   }
   return [];
 }

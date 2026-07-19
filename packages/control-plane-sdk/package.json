@@ -12,6 +12,10 @@
     "./mcp-operation-adapter": {
       "types": "./src/mcp-operation-adapter.ts",
       "default": "./src/mcp-operation-adapter.ts"
+    },
+    "./panel-experiments": {
+      "types": "./src/panel-experiments.ts",
+      "default": "./src/panel-experiments.ts"
     }
   },
   "files": [

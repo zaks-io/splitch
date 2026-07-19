@@ -31,18 +31,38 @@ describe("Control Plane API Wrangler runtime config", () => {
   ])("declares the Auth API JWKS trust root for %s", (_target, target, jwksUri) => {
     expect(target?.vars?.AUTH_JWKS_URI).toBe(jwksUri);
   });
+
+  it.each([
+    ["local", config, "splitch-analysis-api"],
+    ["shared-preview", config.env?.["shared-preview"], "splitch-analysis-api-shared-preview"],
+    ["production", config.env?.production, "splitch-analysis-api"],
+  ])("binds %s to the Analysis Worker's named entrypoint", (_target, target, service) => {
+    expect(target?.services).toContainEqual({
+      binding: "ANALYSIS_API",
+      service,
+      entrypoint: "ControlPlaneEntrypoint",
+    });
+  });
 });
 
 interface WranglerConfig {
   d1_databases?: unknown[];
   env?: Record<string, WranglerTarget | undefined>;
+  services?: ServiceBinding[];
   triggers?: { crons?: string[] };
 }
 
 interface WranglerTarget {
   d1_databases?: unknown[];
+  services?: ServiceBinding[];
   triggers?: { crons?: string[] };
   vars?: Record<string, unknown>;
+}
+
+interface ServiceBinding {
+  binding: string;
+  service: string;
+  entrypoint: string;
 }
 
 function effectiveCrons(target: WranglerTarget | undefined): string[] | undefined {
