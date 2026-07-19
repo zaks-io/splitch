@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { LOCAL_E2E_SESSION_TOKEN } from "../../scripts/local-e2e-fixtures.mjs";
+import {
+  LOCAL_E2E_FIXTURE_CONTRACT,
+  LOCAL_E2E_MEMBER_SESSION_TOKEN,
+  LOCAL_E2E_SESSION_TOKEN,
+} from "../../scripts/local-e2e-fixtures.mjs";
 import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
@@ -35,6 +39,88 @@ test.describe("Control Panel local full-stack harness", () => {
 
     expect([302, 307]).toContain(response.status());
     expect(response.headers().location).toContain("/auth/login?returnTo=");
+  });
+
+  test("proves member identity, explicit Environments, and attention placement before UI work", async ({
+    context,
+    page,
+  }) => {
+    const environments = LOCAL_E2E_FIXTURE_CONTRACT.app.environments;
+    expect(environments).toHaveLength(2);
+    expect(environments.map((environment) => environment.key)).toEqual(["dev", "prod"]);
+    expect(
+      environments.filter((environment) => environment.attention.state === "attention"),
+    ).toEqual([
+      expect.objectContaining({
+        id: "env_checkout_prod_e2e",
+        attention: { state: "attention", srm: true, guardrail: false },
+      }),
+    ]);
+    const accessToken = await page.request
+      .get("http://127.0.0.1:18788/token")
+      .then(async (response) => (await response.json()).accessToken);
+    expect(typeof accessToken).toBe("string");
+    const unauthorized = await page.request.get(
+      "http://127.0.0.1:8790/apps/app_checkout_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
+    );
+    expect(unauthorized.status()).toBe(401);
+    const wrongApp = await page.request.get(
+      "http://127.0.0.1:8790/apps/app_billing_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
+      { headers: { authorization: `Bearer ${accessToken}` } },
+    );
+    expect(wrongApp.status()).toBe(403);
+
+    const analysisResults = await Promise.all(
+      environments.map(async (environment) => {
+        const experimentId = `experiment_checkout_${environment.key}_e2e`;
+        const response = await page.request.get(
+          `http://127.0.0.1:8790/apps/app_checkout_e2e/envs/${environment.id}/experiments/${experimentId}/results`,
+          { headers: { authorization: `Bearer ${accessToken}` } },
+        );
+        expect(response.status()).toBe(200);
+        return { environmentId: environment.id, result: await response.json() };
+      }),
+    );
+    expect(
+      analysisResults
+        .filter(({ result }) => result.srm.srm_is_mismatch)
+        .map(({ environmentId }) => environmentId),
+    ).toEqual(["env_checkout_prod_e2e"]);
+    expect(
+      analysisResults.find(({ environmentId }) => environmentId.endsWith("dev_e2e"))?.result.srm
+        .srm_p_value,
+    ).toBe(1);
+    expect(
+      analysisResults.find(({ environmentId }) => environmentId.endsWith("prod_e2e"))?.result.srm
+        .srm_p_value,
+    ).toBeCloseTo(0.00005699411623331831, 15);
+
+    await context.clearCookies();
+    await context.addCookies([
+      { name: "__session", value: LOCAL_E2E_MEMBER_SESSION_TOKEN, url: origin },
+    ]);
+    await page.goto("/");
+    await expect(page.getByText("user_local_member_e2e")).toBeVisible();
+    await expect(
+      page.locator("[data-org-slug='acme-labs']").getByText("member").first(),
+    ).toBeVisible();
+    await expect(page.getByText("checkout-api")).toBeVisible();
+    await expect(page.locator("[data-org-slug='orbit-tools']")).toHaveCount(0);
+
+    await page.goto("/acme-labs");
+    await expect(page.getByRole("link", { name: "Development" })).toHaveAttribute(
+      "href",
+      "/acme-labs/checkout-api/dev",
+    );
+    await expect(page.getByRole("link", { name: "Production" })).toHaveAttribute(
+      "href",
+      "/acme-labs/checkout-api/prod",
+    );
+
+    await page.goto("/orbit-tools");
+    const denial = page.getByRole("alert");
+    await expect(denial).toContainText("Access denied");
+    await expect(denial).toContainText("You are not a member of this Organization.");
   });
 
   test("opens the same-origin, session-authorized live-update socket", async ({ page }) => {
