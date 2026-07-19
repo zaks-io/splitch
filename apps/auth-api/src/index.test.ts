@@ -33,7 +33,6 @@ beforeAll(async () => {
     CONTROL_PLANE_ORIGIN: "https://cp.splitch.test",
     CONTROL_PANEL_ORIGIN: "https://app.splitch.test",
     ASSERTION_SIGNING_SECRET: "test-assertion-secret",
-    ACCESS_TOKEN_SECRET: "test-access-secret",
   };
 });
 

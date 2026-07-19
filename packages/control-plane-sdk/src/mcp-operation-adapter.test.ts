@@ -1,4 +1,8 @@
-import { MCP_DELEGATION_HEADER } from "@splitch/contracts";
+import {
+  MCP_DELEGATION_HEADER,
+  type McpDelegationReplayGuard,
+  parseMcpDelegation,
+} from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { createMcpOperationAdapter } from "./mcp-operation-adapter";
 
@@ -64,11 +68,60 @@ describe("mcp operation adapter", () => {
       { appId: "app_local" },
       {
         authorization: "Bearer also-must-not-forward",
-        delegation: { subject: "user_mcp", scopes: ["app:app_local:admin"] },
+        delegation: {
+          subject: "user_mcp",
+          scopes: ["app:app_local:admin", "app:app_unrelated:owner", "org:org_unrelated:owner"],
+        },
       },
     );
 
     expect(forwardedRequest?.headers.get("authorization")).toBeNull();
     expect(forwardedRequest?.headers.get(MCP_DELEGATION_HEADER)).not.toBeNull();
+    await expect(delegatedActor(forwardedRequest, "control-plane-api")).resolves.toEqual({
+      subject: "user_mcp",
+      scopes: ["app:app_local:admin"],
+    });
+  });
+
+  it("delegates only the selected Organization authority for Org operations", async () => {
+    let forwardedRequest: Request | undefined;
+    const adapter = createMcpOperationAdapter({
+      baseUrl: "https://control-plane.test",
+      delegationSecret: "d".repeat(32),
+      fetch: async (request) => {
+        forwardedRequest = request instanceof Request ? request : new Request(request);
+        return Response.json({ items: [] });
+      },
+    });
+
+    await adapter.callOperationById(
+      "apps_list",
+      { orgId: "org_selected" },
+      {
+        delegation: {
+          subject: "user_mcp",
+          scopes: ["org:org_selected:owner", "org:org_unrelated:admin", "app:app_unrelated:owner"],
+        },
+      },
+    );
+
+    await expect(delegatedActor(forwardedRequest, "control-plane-api")).resolves.toEqual({
+      subject: "user_mcp",
+      scopes: ["org:org_selected:owner"],
+    });
   });
 });
+
+async function delegatedActor(request: Request | undefined, owner: "control-plane-api") {
+  expect(request).toBeDefined();
+  return parseMcpDelegation({
+    request: request as Request,
+    owner,
+    secret: "d".repeat(32),
+    replayGuard: memoryReplayGuard(),
+  });
+}
+
+function memoryReplayGuard(): McpDelegationReplayGuard {
+  return { claim: async () => true };
+}

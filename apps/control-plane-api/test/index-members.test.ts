@@ -102,6 +102,44 @@ describe("index.ts: Control Panel binding boundary", () => {
 });
 
 describe("index.ts: MCP service-binding boundary", () => {
+  it("dispatches the local MCP fleet through the real named entrypoint", async () => {
+    const mcpModule = (await import(
+      new URL("../../mcp-server/src/mcp-handler.ts", import.meta.url).href
+    )) as {
+      handleMcpServerRequest(options: Record<string, unknown>): Promise<Response>;
+    };
+    const entrypoint = new McpEntrypoint(testCtx, testEnv);
+    const response = await mcpModule.handleMcpServerRequest({
+      request: new Request("https://mcp.local/mcp", {
+        method: "POST",
+        headers: { authorization: "Bearer local-mcp-token", "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "flags_list", arguments: { appId: ORG.appId } },
+        }),
+      }),
+      service: "splitch-mcp-server",
+      platformTarget: "local",
+      tokenVerifier: {
+        verify: async () => ({
+          subject: OWNER,
+          scopes: [`app:${ORG.appId}:admin`, "app:app_unrelated:owner", "org:org_unrelated:owner"],
+        }),
+      },
+      revocations: { isRevoked: async () => false },
+      controlPlaneFetch: (request: RequestInfo | URL, init?: RequestInit) =>
+        entrypoint.fetch(request instanceof Request ? request : new Request(request, init)),
+      controlPlaneDelegationSecret: MCP_DELEGATION_SECRET,
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      result: { structuredContent: { items: [] } },
+    });
+  });
+
   it("rejects delegation publicly, accepts it once on the named entrypoint, then rejects replay", async () => {
     const request = new Request(`${AUDIENCE}/apps/${ORG.appId}/flags`);
     request.headers.set(

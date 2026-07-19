@@ -1,7 +1,11 @@
 import { type ErrorResponse, parseMcpDelegation } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
-import { memoryMcpDelegationReplayGuard, TEST_MCP_DELEGATION_SECRET } from "./mcp-test-verifier";
+import {
+  allowMcpRevocations,
+  memoryMcpDelegationReplayGuard,
+  TEST_MCP_DELEGATION_SECRET,
+} from "./mcp-test-verifier";
 
 const service = "splitch-mcp-server";
 
@@ -100,6 +104,7 @@ async function callTool(
           : { subject: "invalid-test-actor", scopes: [] };
       },
     },
+    revocations: allowMcpRevocations(),
   });
   return (await response.json()) as ToolCallResult;
 }

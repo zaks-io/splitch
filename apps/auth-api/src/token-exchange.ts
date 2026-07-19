@@ -7,8 +7,9 @@ import { OAuthError } from "./oauth-errors";
  * Door A returns an `identity_assertion` (the durable client-side artifact,
  * ADR-0022), which the agent presents at `/oauth2/token` for a short-lived
  * resource-bound access token. No refresh token on the ID-JAG path. Both are
- * HMAC-SHA256-signed JWTs for local fixtures. Hosted access tokens are RS256
- * JWTs backed by the Auth API JWKS route so downstream Workers can verify them.
+ * HMAC-SHA256 signs identity assertions and isolated unit-test access tokens.
+ * The real Auth Worker issues RS256 access tokens on every target, backed by
+ * the Auth API JWKS route so downstream Workers share one verification contract.
  *
  * The two token classes are signed with SEPARATE secrets (`assertionSecret` vs
  * `accessSecret`) so an identity_assertion can NEVER verify as a control-plane

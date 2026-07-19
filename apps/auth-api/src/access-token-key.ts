@@ -78,3 +78,23 @@ export function accessTokenJwks(accessSecret: string): AccessTokenJwks | null {
   const key = accessTokenPublicJwkFromSecret(accessSecret);
   return key ? { keys: [key] } : null;
 }
+
+export async function makeEphemeralAccessTokenPrivateJwk(): Promise<string> {
+  const pair = await crypto.subtle.generateKey(
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    true,
+    ["sign", "verify"],
+  );
+  const privateJwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+  return JSON.stringify({
+    ...privateJwk,
+    kid: "splitch-local-access-token",
+    alg: "RS256",
+    use: "sig",
+  });
+}

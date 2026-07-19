@@ -20,19 +20,40 @@
     }
   },
   "secrets": {
-    "required": [
-      "SENTRY_DSN",
-      "MCP_CONTROL_PLANE_DELEGATION_SECRET",
-      "MCP_EVALUATION_DELEGATION_SECRET",
-      "MCP_ANALYSIS_DELEGATION_SECRET"
-    ]
+    "required": ["SENTRY_DSN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "AUTH_API_ORIGIN": "http://localhost:8791",
     "CONTROL_PLANE_API_ORIGIN": "http://localhost:8787",
-    "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788"
+    "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788",
+    "MCP_CONTROL_PLANE_DELEGATION_SECRET": "local-mcp-control-plane-delegation-secret",
+    "MCP_EVALUATION_DELEGATION_SECRET": "local-mcp-evaluation-delegation-secret",
+    "MCP_ANALYSIS_DELEGATION_SECRET": "local-mcp-analysis-delegation-secret"
   },
+  "services": [
+    {
+      "binding": "CONTROL_PLANE_API",
+      "service": "splitch-control-plane-api",
+      "entrypoint": "McpEntrypoint"
+    },
+    {
+      "binding": "EVALUATION_API",
+      "service": "splitch-evaluation-api",
+      "entrypoint": "McpEntrypoint"
+    },
+    {
+      "binding": "ANALYSIS_API",
+      "service": "splitch-analysis-api",
+      "entrypoint": "McpEntrypoint"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "SESSION_STORE",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
   "durable_objects": {
     "bindings": [{ "name": "MCP_SESSIONS", "class_name": "McpSessionDurableObject" }]
   },
@@ -73,6 +94,7 @@
       "durable_objects": {
         "bindings": [{ "name": "MCP_SESSIONS", "class_name": "McpSessionDurableObject" }]
       },
+      "kv_namespaces": [{ "binding": "SESSION_STORE", "id": "673d17e768eb45f5bfc5275fbd0e9320" }],
       "migrations": [{ "tag": "v1", "new_classes": ["McpSessionDurableObject"] }],
       "services": [
         {
@@ -127,6 +149,7 @@
       "durable_objects": {
         "bindings": [{ "name": "MCP_SESSIONS", "class_name": "McpSessionDurableObject" }]
       },
+      "kv_namespaces": [{ "binding": "SESSION_STORE", "id": "bdfa1197123d4eef945c5a703d63a572" }],
       "migrations": [{ "tag": "v1", "new_classes": ["McpSessionDurableObject"] }],
       "services": [
         {

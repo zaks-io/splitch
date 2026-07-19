@@ -20,10 +20,11 @@
     }
   },
   "secrets": {
-    "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "MCP_EVALUATION_DELEGATION_SECRET"]
+    "required": ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN"]
   },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local"
+    "SPLITCH_PLATFORM_TARGET": "local",
+    "MCP_EVALUATION_DELEGATION_SECRET": "local-mcp-evaluation-delegation-secret"
   },
   "services": [
     {

@@ -35,6 +35,10 @@ type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
 type OperationSdkResolver = () => OperationSdk;
 type OperationSdks = Record<McpRoutableOwner, OperationSdkResolver>;
 
+export interface McpRevocationReader {
+  isRevoked(subject: string): Promise<boolean>;
+}
+
 export interface McpServerRequestOptions {
   readonly request: Request;
   readonly service: string;
@@ -52,6 +56,7 @@ export interface McpServerRequestOptions {
   readonly analysisDelegationSecret?: string;
   readonly sessionStore?: McpSessionStore;
   readonly tokenVerifier?: McpAccessTokenVerifier;
+  readonly revocations?: McpRevocationReader;
   readonly now?: () => number;
 }
 
@@ -70,6 +75,9 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
         audience,
         Math.floor((options.now?.() ?? Date.now()) / 1000),
       );
+      if (actor && (await requiredRevocations(options.revocations).isRevoked(actor.subject))) {
+        actor = null;
+      }
       return actor !== null;
     },
   });
@@ -104,7 +112,7 @@ function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
           defaultControlPlaneBaseUrl,
           platformTarget,
         ),
-        fetch: downstreamFetch("CONTROL_PLANE_API", options.controlPlaneFetch, platformTarget),
+        fetch: downstreamFetch("CONTROL_PLANE_API", options.controlPlaneFetch),
         delegationSecret: requiredDelegationSecret(
           "CONTROL_PLANE_API",
           options.controlPlaneDelegationSecret,
@@ -119,7 +127,7 @@ function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
           defaultEvaluationBaseUrl,
           platformTarget,
         ),
-        fetch: downstreamFetch("EVALUATION_API", options.evaluationFetch, platformTarget),
+        fetch: downstreamFetch("EVALUATION_API", options.evaluationFetch),
         delegationSecret: requiredDelegationSecret(
           "EVALUATION_API",
           options.evaluationDelegationSecret,
@@ -128,12 +136,8 @@ function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
     ),
     "analysis-api": createLazyOperationSdk(() =>
       createMcpOperationAdapter({
-        baseUrl: analysisApiBaseUrl(
-          options.analysisBaseUrl,
-          platformTarget,
-          options.analysisFetch !== undefined,
-        ),
-        fetch: options.analysisFetch ?? options.controlPlaneFetch,
+        baseUrl: analysisApiBaseUrl(options.analysisBaseUrl, platformTarget),
+        fetch: downstreamFetch("ANALYSIS_API", options.analysisFetch),
         delegationSecret: requiredDelegationSecret(
           "ANALYSIS_API",
           options.analysisDelegationSecret,
@@ -148,6 +152,11 @@ function requiredDelegationSecret(bindingName: string, secret: string | undefine
   return secret;
 }
 
+function requiredRevocations(revocations: McpRevocationReader | undefined): McpRevocationReader {
+  if (!revocations) throw new Error("mcp-server: SESSION_STORE revocation binding is required");
+  return revocations;
+}
+
 function createLazyOperationSdk(createSdk: () => OperationSdk): OperationSdkResolver {
   let sdk: OperationSdk | undefined;
   return () => {
@@ -156,21 +165,14 @@ function createLazyOperationSdk(createSdk: () => OperationSdk): OperationSdkReso
   };
 }
 
-function analysisApiBaseUrl(
-  configured: string | undefined,
-  platformTarget: string,
-  hasServiceBinding: boolean,
-): string {
+function analysisApiBaseUrl(configured: string | undefined, platformTarget: string): string {
   if (configured) {
     return configured;
   }
   if (platformTarget === "local" || platformTarget === "pr-ci") {
     return defaultAnalysisBaseUrl;
   }
-  if (hasServiceBinding) {
-    return internalAnalysisBaseUrl;
-  }
-  throw new Error("mcp-server: ANALYSIS_API service binding is required for hosted targets");
+  return internalAnalysisBaseUrl;
 }
 
 function apiBaseUrl(
@@ -191,12 +193,9 @@ function apiBaseUrl(
 function downstreamFetch(
   bindingName: string,
   requestFetch: typeof fetch | undefined,
-  platformTarget: string,
-): typeof fetch | undefined {
-  if (requestFetch || platformTarget === "local" || platformTarget === "pr-ci") {
-    return requestFetch;
-  }
-  throw new Error(`mcp-server: ${bindingName} service binding is required for hosted targets`);
+): typeof fetch {
+  if (!requestFetch) throw new Error(`mcp-server: ${bindingName} service binding is required`);
+  return requestFetch;
 }
 
 async function dispatch(

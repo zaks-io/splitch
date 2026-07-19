@@ -5,7 +5,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
 import type { McpSessionContext, McpSessionStore } from "./mcp-session-context";
 import { McpSessionNotFoundError } from "./mcp-session-store";
-import { memoryMcpDelegationReplayGuard, TEST_MCP_DELEGATION_SECRET } from "./mcp-test-verifier";
+import {
+  allowMcpRevocations,
+  memoryMcpDelegationReplayGuard,
+  TEST_MCP_DELEGATION_SECRET,
+} from "./mcp-test-verifier";
 
 const service = "splitch-mcp-server";
 const NOW_SECONDS = 1_800_000_000;
@@ -140,7 +144,21 @@ describe("MCP OAuth protected-resource boundary", () => {
       },
     ]);
 
-    for (const rejectedToken of [auth.controlPlaneToken, auth.expiredMcpToken, "garbage-token"]) {
+    const jwtShapedMalformedToken = `${encodeJwtSegment({
+      alg: "RS256",
+      typ: "JWT",
+      kid: "fake-auth",
+    })}.${encodeJwtSegment({
+      ...actorClaims(auth.baseUrl),
+      aud: "https://mcp.splitch.test/mcp",
+      exp: NOW_SECONDS + 60,
+    })}.%%%`;
+    for (const rejectedToken of [
+      auth.controlPlaneToken,
+      auth.expiredMcpToken,
+      jwtShapedMalformedToken,
+      "garbage-token",
+    ]) {
       const rejected = await mcp(
         "tools/call",
         { name: "flags_list", arguments: { appId: "app_local" } },
@@ -193,6 +211,8 @@ async function request(
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     evaluationDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     analysisDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    revocations: allowMcpRevocations(),
+    controlPlaneFetch: options.controlPlaneBaseUrl ? fetch : undefined,
     ...options,
   });
 }

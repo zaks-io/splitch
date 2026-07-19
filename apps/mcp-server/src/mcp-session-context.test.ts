@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
 import type { McpSessionContext, McpSessionStore } from "./mcp-session-context";
 import {
+  allowMcpRevocations,
   memoryMcpDelegationReplayGuard,
   staticMcpTokenVerifier,
   TEST_MCP_DELEGATION_SECRET,
@@ -134,6 +135,7 @@ async function mcp(
     service,
     platformTarget: "local",
     tokenVerifier: staticMcpTokenVerifier(),
+    revocations: allowMcpRevocations(),
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     controlPlaneFetch: async (request) => {
       options.seen?.push(request instanceof Request ? request : new Request(request));

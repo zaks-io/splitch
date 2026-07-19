@@ -1,5 +1,6 @@
 import type { McpDelegationReplayGuard } from "@splitch/contracts";
 import type { McpAccessTokenActor, McpAccessTokenVerifier } from "./mcp-access-token";
+import type { McpRevocationReader } from "./mcp-handler";
 
 export const TEST_MCP_DELEGATION_SECRET = "d".repeat(32);
 
@@ -25,4 +26,8 @@ export function staticMcpTokenVerifier(
       return authorization?.startsWith("Bearer ") ? actor : null;
     },
   };
+}
+
+export function allowMcpRevocations(): McpRevocationReader {
+  return { isRevoked: async () => false };
 }

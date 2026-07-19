@@ -37,7 +37,7 @@ export function makeHttpMcpAccessTokenVerifier(options: {
       const parsed = parseJwt(token);
       if (parsed?.header.alg !== "RS256") return null;
       const key = selectKey(await fetchJwks(), parsed.header.kid);
-      if (!key || !(await signatureValid(parsed, key))) return null;
+      if (!key || !(await safeSignatureValid(parsed, key))) return null;
       return actorFromClaims(parsed.payload, { issuer, expectedAudience, nowSeconds });
     },
   };
@@ -118,6 +118,17 @@ async function signatureValid(
     base64UrlToBytes(parsed.signature) as unknown as BufferSource,
     new TextEncoder().encode(parsed.signingInput) as unknown as BufferSource,
   );
+}
+
+async function safeSignatureValid(
+  parsed: ParsedJwt,
+  key: { kty: string; kid?: string; n?: string; e?: string },
+): Promise<boolean> {
+  try {
+    return await signatureValid(parsed, key);
+  } catch {
+    return false;
+  }
 }
 
 function decodeSegment(segment: string): Record<string, unknown> {

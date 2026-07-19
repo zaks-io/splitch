@@ -9,7 +9,7 @@ export interface AuthApiEnv {
   DB: D1Database;
   /** KV namespace backing the jti replay cache (`jti:{jti}` keys). */
   JTI_CACHE: KVNamespace;
-  /** KV namespace shared with control-plane session validation (`revoked:{sub}`). */
+  /** KV namespace shared with control-plane and MCP token revocation (`revoked:{sub}`). */
   SESSION_STORE: KVNamespace;
   /** This auth-api origin; every accepted ID-JAG `aud` must point here. */
   AUTH_API_ORIGIN?: string;
@@ -24,7 +24,7 @@ export interface AuthApiEnv {
    * distinct from ACCESS_TOKEN_SECRET so an assertion can never verify as a Bearer.
    */
   ASSERTION_SIGNING_SECRET?: string;
-  /** RSA private JWK for hosted access tokens; local fixtures may use an HMAC secret. */
+  /** RSA private JWK for hosted access tokens; local/pr-ci generate an isolate-local fixture key. */
   ACCESS_TOKEN_SECRET?: string;
   /** WorkOS client id used by the device-flow proxy. */
   WORKOS_CLIENT_ID?: string;

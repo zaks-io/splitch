@@ -23,18 +23,14 @@
     "crons": ["0 * * * *"]
   },
   "secrets": {
-    "required": [
-      "SENTRY_DSN",
-      "TINYBIRD_READ_TOKEN",
-      "TINYBIRD_COPY_TOKEN",
-      "MCP_ANALYSIS_DELEGATION_SECRET"
-    ]
+    "required": ["SENTRY_DSN", "TINYBIRD_READ_TOKEN", "TINYBIRD_COPY_TOKEN"]
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "AUTH_API_ORIGIN": "http://localhost:8791",
     "AUTH_JWKS_URI": "http://localhost:8791/.well-known/jwks.json",
     "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
+    "MCP_ANALYSIS_DELEGATION_SECRET": "local-mcp-analysis-delegation-secret",
     "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
   },
   "kv_namespaces": [

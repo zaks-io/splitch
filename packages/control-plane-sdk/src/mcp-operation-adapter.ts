@@ -54,7 +54,7 @@ export function createMcpOperationAdapter(
           MCP_DELEGATION_HEADER,
           await createMcpDelegationHeader({
             operationId,
-            actor: callOptions.delegation,
+            actor: scopedDelegationActor(route, input, callOptions.delegation),
             request,
             secret: requiredDelegationSecret(options.delegationSecret),
           }),
@@ -65,6 +65,36 @@ export function createMcpOperationAdapter(
       return parseControlPlaneResponse(response, operationId, route.output);
     },
   };
+}
+
+function scopedDelegationActor(
+  route: ApiRouteContract,
+  input: unknown,
+  actor: NonNullable<McpOperationCallOptions["delegation"]>,
+) {
+  const record = inputRecord(input);
+  const targets = [
+    route.path.includes(":orgId") ? scopeTarget("org", record.orgId) : null,
+    route.path.includes(":appId") ? scopeTarget("app", record.appId) : null,
+  ].filter((target): target is string => target !== null);
+  return {
+    subject: actor.subject,
+    scopes:
+      targets.length === 0
+        ? actor.scopes
+        : actor.scopes.filter((scope) =>
+            targets.some((target) => scopeMatchesTarget(scope, target)),
+          ),
+  };
+}
+
+function scopeTarget(kind: "org" | "app", id: unknown): string | null {
+  return typeof id === "string" ? `${kind}:${id}:` : null;
+}
+
+function scopeMatchesTarget(scope: string, target: string): boolean {
+  const role = scope.slice(target.length);
+  return scope.startsWith(target) && (role === "owner" || role === "admin" || role === "member");
 }
 
 function requiredDelegationSecret(secret: string | undefined): string {

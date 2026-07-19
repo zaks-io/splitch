@@ -27,7 +27,19 @@ describe("MCP OAuth origin configuration", () => {
     expect(authConfig).toContain('"CONTROL_PLANE_ORIGIN": "http://localhost:8787"');
     expect(authConfig).toContain('"MCP_ORIGIN": "http://localhost:8792"');
     expect(controlPlaneConfig).toContain('"CONTROL_PLANE_ORIGIN": "http://localhost:8787"');
-    expect(mcpConfig.match(/"entrypoint": "McpEntrypoint"/g)).toHaveLength(6);
+    expect(mcpConfig.match(/"entrypoint": "McpEntrypoint"/g)).toHaveLength(9);
+    for (const binding of ["CONTROL_PLANE_API", "EVALUATION_API", "ANALYSIS_API"]) {
+      expect(mcpConfig.match(new RegExp(`"binding": "${binding}"`, "g"))).toHaveLength(3);
+    }
+    expect(mcpConfig.match(/"binding": "SESSION_STORE"/g)).toHaveLength(3);
+    for (const id of [
+      "00000000000000000000000000000000",
+      "673d17e768eb45f5bfc5275fbd0e9320",
+      "bdfa1197123d4eef945c5a703d63a572",
+    ]) {
+      expect(authConfig).toContain(`"id": "${id}"`);
+      expect(mcpConfig).toContain(`"id": "${id}"`);
+    }
     for (const config of [controlPlaneConfig, evaluationConfig, analysisConfig]) {
       expect(config.match(/"name": "MCP_DELEGATION_REPLAY"/g)).toHaveLength(3);
       expect(config.match(/"tag": "v\d+_mcp_delegation_replay"/g)).toHaveLength(3);

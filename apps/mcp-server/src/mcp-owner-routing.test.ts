@@ -2,7 +2,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
-import { staticMcpTokenVerifier, TEST_MCP_DELEGATION_SECRET } from "./mcp-test-verifier";
+import {
+  allowMcpRevocations,
+  staticMcpTokenVerifier,
+  TEST_MCP_DELEGATION_SECRET,
+} from "./mcp-test-verifier";
 
 const service = "splitch-mcp-server";
 const token = "Bearer local-test-token";
@@ -190,9 +194,13 @@ async function mcp(
     service,
     platformTarget: options.platformTarget ?? "local",
     tokenVerifier: staticMcpTokenVerifier(),
+    revocations: allowMcpRevocations(),
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     evaluationDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     analysisDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    controlPlaneFetch: options.controlPlaneBaseUrl ? fetch : undefined,
+    evaluationFetch: options.evaluationBaseUrl ? fetch : undefined,
+    analysisFetch: options.analysisBaseUrl ? fetch : undefined,
     ...options,
   });
 }

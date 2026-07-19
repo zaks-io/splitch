@@ -73,6 +73,38 @@ describe("MCP access-token verifier", () => {
       scopes: [],
     });
     await expect(verifier.verify(`Bearer ${token}broken`, AUDIENCE, NOW)).resolves.toBeNull();
+
+    const [header, payload] = token.split(".") as [string, string];
+    await expect(
+      verifier.verify(`Bearer ${header}.${payload}.%%%`, AUDIENCE, NOW),
+    ).resolves.toBeNull();
+  });
+
+  it("contains key-import failures but leaves JWKS availability fail-loud", async () => {
+    const malformedKey = makeHttpMcpAccessTokenVerifier({
+      issuer: ISSUER,
+      fetchJwks: async () => ({ keys: [{ kty: "RSA", kid: "test", n: "%%%", e: "AQAB" }] }),
+    });
+    const token = await sign({
+      typ: "access_token",
+      sub: "user_mcp",
+      iss: ISSUER,
+      aud: AUDIENCE,
+      exp: NOW + 60,
+      scopes: [],
+    });
+
+    await expect(malformedKey.verify(`Bearer ${token}`, AUDIENCE, NOW)).resolves.toBeNull();
+
+    const unavailable = makeHttpMcpAccessTokenVerifier({
+      issuer: ISSUER,
+      fetchJwks: async () => {
+        throw new Error("JWKS unavailable");
+      },
+    });
+    await expect(unavailable.verify(`Bearer ${token}`, AUDIENCE, NOW)).rejects.toThrow(
+      "JWKS unavailable",
+    );
   });
 });
 
