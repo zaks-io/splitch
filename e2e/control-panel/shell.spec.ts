@@ -64,6 +64,11 @@ test.describe("Control Panel local full-stack harness", () => {
       "http://127.0.0.1:8790/apps/app_checkout_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
     );
     expect(unauthorized.status()).toBe(401);
+    const wrongApp = await page.request.get(
+      "http://127.0.0.1:8790/apps/app_billing_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
+      { headers: { authorization: `Bearer ${accessToken}` } },
+    );
+    expect(wrongApp.status()).toBe(403);
 
     const analysisResults = await Promise.all(
       environments.map(async (environment) => {
