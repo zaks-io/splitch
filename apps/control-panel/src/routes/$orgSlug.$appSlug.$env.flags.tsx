@@ -1,10 +1,25 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@splitch/ui/components/card";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { createFileRoute, notFound, Outlet, redirect } from "@tanstack/react-router";
+import { FlagsPage } from "#components/flags-page";
+import { loadControlPanelFlags } from "#lib/control-plane-flag-functions";
+import { AccessDeniedError } from "#lib/loader-context";
 import { reportRouteError } from "#lib/panel-observability";
+import { loadScopedSession } from "#lib/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags")({
+  loader: async ({ location, params }) => {
+    const scoped = await loadScopedSession({ data: params });
+    if (scoped.kind === "unauthenticated") {
+      throw redirect({ href: `/auth/login?returnTo=${encodeURIComponent(location.href)}` });
+    }
+    if (scoped.kind === "forbidden") throw new AccessDeniedError();
+    if (scoped.kind === "notFound") throw notFound();
+
+    const result = await loadControlPanelFlags({ data: scoped.context.scope });
+    if (!result.ok) throw new Error(result.error.message);
+    return { items: result.data.items, scope: scoped.context.scope };
+  },
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/flags");
   },
@@ -14,15 +29,18 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags")({
 });
 
 function FlagsSectionRoute() {
+  const { items, scope } = Route.useLoaderData();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Flags</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-muted-foreground text-sm">Flag Configuration list surface.</p>
-      </CardContent>
+    <>
+      <FlagsPage
+        appId={scope.appId}
+        appSlug={scope.appSlug}
+        env={scope.env}
+        environmentId={scope.environmentId}
+        items={items}
+        orgSlug={scope.orgSlug}
+      />
       <Outlet />
-    </Card>
+    </>
   );
 }

@@ -1,5 +1,7 @@
 import type { AuthResolver } from "@splitch/worker-runtime";
+import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import type { JwksVerifier } from "./jwks-verify";
+import type { PanelSessionAccess } from "./panel-session-access";
 import { deriveBinding } from "./scope-binding";
 import type { SessionStore } from "./session-store";
 
@@ -8,9 +10,9 @@ import type { SessionStore } from "./session-store";
  *
  * Normal callers use bearer JWTs. The Control Panel may instead present the
  * SHA-256 handle of its already-validated server session, but only for the
- * `apps_create` route over the Worker service binding. The Control Plane
- * resolves that handle from shared session KV and still performs live D1 role
- * authorization in the route handler.
+ * operations allowlisted by the binding-only `ControlPanelEntrypoint`. The
+ * Control Plane resolves that handle from shared session KV and derives its
+ * App-scoped principal from live D1 membership and resource checks.
  *
  * Order (access-control-matrix.md "Token validation"):
  *   1. Extract `Authorization: Bearer <jwt>`; absent/malformed → UNAUTHORIZED.
@@ -31,7 +33,6 @@ import type { SessionStore } from "./session-store";
 
 const BEARER_PREFIX = "Bearer ";
 export const PANEL_SESSION_HEADER = "x-splitch-panel-session";
-const APPS_CREATE_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
 
 export interface ControlPlaneAuthDeps {
   verifier: JwksVerifier;
@@ -43,6 +44,7 @@ export interface ControlPlaneAuthDeps {
 export interface ControlPlaneAuthOptions {
   /** Only the named Control Panel Worker entrypoint may redeem panel sessions. */
   allowPanelSession?: boolean;
+  panelAccess?: PanelSessionAccess;
 }
 
 function extractBearer(header: string | null): string | null {
@@ -61,14 +63,13 @@ export function makeControlPlaneAuthResolver(
 
   return async (request) => {
     if (options.allowPanelSession && request.headers.get("authorization") === null) {
-      const panelPrincipal = await resolvePanelAppsCreatePrincipal(
+      const panelPrincipal = await resolvePanelPrincipal(
         request,
         deps.sessions,
         nowSeconds(),
+        options.panelAccess,
       );
-      if (panelPrincipal) {
-        return { ok: true, principal: panelPrincipal };
-      }
+      if (panelPrincipal) return panelPrincipal;
     }
     return resolveBearerPrincipal(request, deps, nowSeconds());
   };
@@ -109,44 +110,68 @@ async function resolveBearerPrincipal(
   };
 }
 
-async function resolvePanelAppsCreatePrincipal(
+async function resolvePanelPrincipal(
   request: Request,
   sessions: SessionStore,
   nowSeconds: number,
+  panelAccess?: PanelSessionAccess,
 ) {
-  if (request.method !== "POST") {
-    return null;
-  }
-  const match = new URL(request.url).pathname.match(APPS_CREATE_PATH);
-  const encodedOrgId = match?.[1];
   const tokenHash = request.headers.get(PANEL_SESSION_HEADER);
-  if (!encodedOrgId || !tokenHash) {
-    return null;
-  }
+  if (!tokenHash) return null;
   const actor = await sessions.loadPanelSessionActor(tokenHash, nowSeconds);
-  if (!actor) {
-    return null;
+  if (!actor) return null;
+
+  const operation = parseControlPanelBindingOperation(request);
+  if (!operation) return null;
+  if (operation.id === "apps_create") {
+    return {
+      ok: true as const,
+      principal: {
+        kind: "control-plane-token" as const,
+        id: actor.userId,
+        // The apps_create handler rechecks the live owner/admin role in D1.
+        scopes: [`org:${operation.orgId}:member`],
+        orgId: operation.orgId,
+        appId: null,
+        environmentId: null,
+      },
+    };
   }
-  const orgId = decodePathSegment(encodedOrgId);
-  if (!orgId) {
-    return null;
-  }
-  return {
-    kind: "control-plane-token" as const,
-    id: actor.userId,
-    // Cached panel roles never authorize the mutation. This minimal member scope
-    // binds the path; the apps_create handler performs the live D1 owner/admin gate.
-    scopes: [`org:${orgId}:member`],
-    orgId,
-    appId: null,
-    environmentId: null,
-  };
+
+  return resolvePanelFlagsPrincipal(operation, actor.userId, panelAccess);
 }
 
-function decodePathSegment(value: string): string | null {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return null;
+async function resolvePanelFlagsPrincipal(
+  operation: Exclude<
+    ReturnType<typeof parseControlPanelBindingOperation>,
+    { id: "apps_create" } | null
+  >,
+  actorId: string,
+  panelAccess?: PanelSessionAccess,
+) {
+  if (!panelAccess) return null;
+  const access = await panelAccess.authorizeApp(actorId, operation.appId, operation.environmentId);
+  if (!access) {
+    return {
+      ok: false as const,
+      reason: "UNAUTHORIZED" as const,
+      error: {
+        code: "FORBIDDEN" as const,
+        message: "live App membership and resource access are required",
+        details: {},
+      },
+    };
   }
+
+  return {
+    ok: true as const,
+    principal: {
+      kind: "control-plane-token" as const,
+      id: actorId,
+      scopes: [`org:${access.orgId}:${access.orgRole}`, `app:${access.appId}:${access.appRole}`],
+      orgId: access.orgId,
+      appId: access.appId,
+      environmentId: null,
+    },
+  };
 }

@@ -11,6 +11,7 @@ import { createApp } from "./app";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
+import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
 import {
   CredentialCacheWriterDurableObject,
@@ -19,12 +20,11 @@ import {
 import type { ControlPlaneApiEnv } from "./env";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
+import { makePanelSessionAccess } from "./panel-session-access";
 import { rateLimiterForTarget } from "./rate-limit";
 import { makeSessionStore } from "./session-store";
 
 const service = "splitch-control-plane-api";
-const CONTROL_PANEL_APPS_CREATE_PATH = /^\/orgs\/[^/]+\/apps\/?$/;
-
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
     return handleRequest(request, env, ctx);
@@ -38,11 +38,10 @@ const handler = {
 
 export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
 
-/** Binding-only entrypoint used by the Control Panel for authenticated mutations. */
+/** Binding-only entrypoint used by the Control Panel for allowlisted reads and mutations. */
 export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    if (request.method !== "POST" || !CONTROL_PANEL_APPS_CREATE_PATH.test(url.pathname)) {
+    if (!parseControlPanelBindingOperation(request)) {
       return new Response("not found", { status: 404 });
     }
     return handleRequest(request, this.env, this.ctx, true);
@@ -82,16 +81,20 @@ async function handleRequest(
     controlPlaneAudience,
   });
 
+  const repo = createRepository(env.DB);
   const app = createApp({
     authResolver: makeControlPlaneAuthResolver(
       {
         verifier,
         sessions: makeSessionStore(env.SESSION_STORE),
       },
-      { allowPanelSession },
+      {
+        allowPanelSession,
+        ...(allowPanelSession ? { panelAccess: makePanelSessionAccess(repo) } : {}),
+      },
     ),
     rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET),
-    repo: createRepository(env.DB),
+    repo,
     credentialStore: env.CREDENTIAL_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
     configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
