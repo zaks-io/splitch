@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  LOCAL_E2E_ANALYSIS_RESULTS,
+  LOCAL_E2E_ANALYSIS_INPUTS,
   LOCAL_E2E_D1_SEED,
   LOCAL_E2E_FIXTURE_CONTRACT,
   LOCAL_E2E_MEMBER_SESSION_KEY,
@@ -58,14 +58,20 @@ test("fixture App has explicit dev and prod Environments with one SRM attention 
     },
   ]);
 
-  const resultByEnvironment = new Map(
-    LOCAL_E2E_ANALYSIS_RESULTS.map((fixture) => [fixture.environmentId, fixture]),
+  const inputByEnvironment = new Map(
+    LOCAL_E2E_ANALYSIS_INPUTS.map((fixture) => [fixture.environmentId, fixture]),
   );
-  assert.equal(resultByEnvironment.size, 2);
-  assert.equal(resultByEnvironment.get("env_checkout_dev_e2e")?.result.srm.srm_is_mismatch, false);
-  assert.equal(resultByEnvironment.get("env_checkout_prod_e2e")?.result.srm.srm_is_mismatch, true);
-  assert.equal(resultByEnvironment.get("env_checkout_dev_e2e")?.result.health.low_n_warning, true);
-  assert.equal(resultByEnvironment.get("env_checkout_prod_e2e")?.result.health.low_n_warning, true);
+  assert.equal(inputByEnvironment.size, 2);
+  assert.deepEqual(inputByEnvironment.get("env_checkout_dev_e2e")?.counts, {
+    control: 10,
+    treatment: 10,
+  });
+  assert.deepEqual(inputByEnvironment.get("env_checkout_prod_e2e")?.counts, {
+    control: 19,
+    treatment: 1,
+  });
+  assert.equal(inputByEnvironment.get("env_checkout_dev_e2e")?.exposures.length, 20);
+  assert.equal(inputByEnvironment.get("env_checkout_prod_e2e")?.exposures.length, 20);
   assert.match(LOCAL_E2E_D1_SEED, /variant_checkout_control_e2e/);
   assert.match(LOCAL_E2E_D1_SEED, /config_checkout_dev_e2e/);
   assert.match(LOCAL_E2E_D1_SEED, /config_checkout_prod_e2e/);

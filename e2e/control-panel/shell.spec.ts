@@ -56,11 +56,21 @@ test.describe("Control Panel local full-stack harness", () => {
         attention: { state: "attention", srm: true, guardrail: false },
       }),
     ]);
+    const accessToken = await page.request
+      .get("http://127.0.0.1:18788/token")
+      .then(async (response) => (await response.json()).accessToken);
+    expect(typeof accessToken).toBe("string");
+    const unauthorized = await page.request.get(
+      "http://127.0.0.1:8790/apps/app_checkout_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
+    );
+    expect(unauthorized.status()).toBe(401);
+
     const analysisResults = await Promise.all(
       environments.map(async (environment) => {
         const experimentId = `experiment_checkout_${environment.key}_e2e`;
         const response = await page.request.get(
           `http://127.0.0.1:8790/apps/app_checkout_e2e/envs/${environment.id}/experiments/${experimentId}/results`,
+          { headers: { authorization: `Bearer ${accessToken}` } },
         );
         expect(response.status()).toBe(200);
         return { environmentId: environment.id, result: await response.json() };
@@ -71,6 +81,14 @@ test.describe("Control Panel local full-stack harness", () => {
         .filter(({ result }) => result.srm.srm_is_mismatch)
         .map(({ environmentId }) => environmentId),
     ).toEqual(["env_checkout_prod_e2e"]);
+    expect(
+      analysisResults.find(({ environmentId }) => environmentId.endsWith("dev_e2e"))?.result.srm
+        .srm_p_value,
+    ).toBe(1);
+    expect(
+      analysisResults.find(({ environmentId }) => environmentId.endsWith("prod_e2e"))?.result.srm
+        .srm_p_value,
+    ).toBeCloseTo(0.00005699411623331831, 15);
 
     await context.clearCookies();
     await context.addCookies([

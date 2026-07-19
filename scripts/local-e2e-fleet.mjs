@@ -11,62 +11,11 @@ import {
   localE2eMemberSession,
   localE2eSession,
 } from "./local-e2e-fixtures.mjs";
+import { localBindings, localE2eWorkers } from "./local-e2e-fleet-config.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const persistPath = resolve(repoRoot, "test-results/control-panel-e2e-state");
-const localBindings = {
-  SENTRY_DSN: "",
-  SPLITCH_DEPLOY_GATE_TOKEN: "local-e2e-deploy-gate",
-  WORKOS_API_KEY: "local-e2e-workos-api-key",
-  WORKOS_CLIENT_ID: "local-e2e-workos-client-id",
-};
-const workers = [
-  {
-    name: "analysis-api-fixture",
-    origin: "http://127.0.0.1:8790",
-    command: "node",
-    args: ["scripts/local-e2e-analysis-fixture.mjs"],
-  },
-  {
-    name: "control-plane-api",
-    origin: "http://127.0.0.1:18790",
-    command: "pnpm",
-    args: [
-      "exec",
-      "wrangler",
-      "dev",
-      "--config",
-      "apps/control-plane-api/wrangler.jsonc",
-      "--local",
-      "--ip",
-      "127.0.0.1",
-      "--port",
-      "18790",
-      "--persist-to",
-      persistPath,
-    ],
-  },
-  {
-    name: "control-panel",
-    origin: "http://127.0.0.1:18793",
-    command: "pnpm",
-    args: [
-      "--filter",
-      "@splitch/control-panel",
-      "exec",
-      "vite",
-      "dev",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      "18793",
-    ],
-    env: {
-      ...localBindings,
-      SPLITCH_LOCAL_E2E_PERSIST_PATH: persistPath,
-    },
-  },
-];
+const workers = localE2eWorkers(persistPath);
 
 export async function waitForHealth(
   worker,
@@ -90,7 +39,9 @@ async function probeHealth(worker, fetchImpl, runId) {
     const response = await fetchImpl(`${worker.origin}/health`);
     if (!response.ok) return `HTTP ${response.status}`;
     const responseRunId = response.headers.get("x-splitch-local-e2e-run-id");
-    return !runId || responseRunId === runId ? "" : "health response belongs to another run";
+    return !runId || worker.checkRunId === false || responseRunId === runId
+      ? ""
+      : "health response belongs to another run";
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }

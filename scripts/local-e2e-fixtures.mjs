@@ -36,9 +36,15 @@ export const LOCAL_E2E_FIXTURE_CONTRACT = Object.freeze({
   },
 });
 
-export const LOCAL_E2E_ANALYSIS_RESULTS = Object.freeze([
-  analysisResult("env_checkout_dev_e2e", "experiment_checkout_dev_e2e", false),
-  analysisResult("env_checkout_prod_e2e", "experiment_checkout_prod_e2e", true),
+export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
+  analysisInput("env_checkout_dev_e2e", "experiment_checkout_dev_e2e", "run_checkout_dev_e2e", {
+    control: 10,
+    treatment: 10,
+  }),
+  analysisInput("env_checkout_prod_e2e", "experiment_checkout_prod_e2e", "run_checkout_prod_e2e", {
+    control: 19,
+    treatment: 1,
+  }),
 ]);
 
 const createdAt = "2026-07-18T00:00:00.000Z";
@@ -142,35 +148,26 @@ INSERT INTO runs (id, app_id, environment_id, experiment_id, run_number, status,
   ('run_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'experiment_checkout_prod_e2e', 1, 'running', 'targetingKey', 'user', '${prodRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[]', '[]', '${prodRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e');
 `;
 
-function analysisResult(environmentId, experimentId, mismatch) {
-  const counts = mismatch ? { control: 19, treatment: 1 } : { control: 10, treatment: 10 };
+function analysisInput(environmentId, experimentId, runId, counts) {
   return {
-    storageKey: `local-e2e:analysis-result:app_checkout_e2e:${environmentId}:${experimentId}`,
     appId: "app_checkout_e2e",
     environmentId,
     experimentId,
-    result: {
-      arm_results: [],
-      srm: {
-        srm_p_value: mismatch ? 0.0001 : 0.5,
-        srm_is_mismatch: mismatch,
-        observed_counts: counts,
-        expected_counts: { control: 10, treatment: 10 },
-        activated_srm_p_value: null,
-        activated_srm_mismatch: null,
-      },
-      guardrail_results: [],
-      health: {
-        multiple_rate: 0,
-        multiple_count: 0,
-        activation_rates: null,
-        activation_balance_p_value: null,
-        activation_balance_mismatch: null,
-        exposure_counts: counts,
-        deduped_counts: counts,
-        low_n_warning: true,
-      },
-    },
+    runId,
+    counts,
+    exposures: Object.entries(counts).flatMap(([variant, count]) =>
+      Array.from({ length: count }, (_, index) => ({
+        app_id: "app_checkout_e2e",
+        targeting_key_hash: `${environmentId}-${variant}-${index}`,
+        environment_id: environmentId,
+        id_type: "user",
+        run_id: runId,
+        variant,
+        first_exposure_ts: "2026-07-18T00:00:00.000Z",
+        window_anchor: "2026-07-18T00:00:00.000Z",
+        dimension_values: "{}",
+      })),
+    ),
   };
 }
 
