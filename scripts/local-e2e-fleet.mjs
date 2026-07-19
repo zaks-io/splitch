@@ -5,8 +5,11 @@ import { mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import {
+  LOCAL_E2E_ANALYSIS_RESULTS,
   LOCAL_E2E_D1_SEED,
+  LOCAL_E2E_MEMBER_SESSION_KEY,
   LOCAL_E2E_SESSION_KEY,
+  localE2eMemberSession,
   localE2eSession,
 } from "./local-e2e-fixtures.mjs";
 
@@ -191,6 +194,36 @@ function seedLocalResources() {
     "--persist-to",
     persistPath,
   ]);
+  runWrangler([
+    "kv",
+    "key",
+    "put",
+    LOCAL_E2E_MEMBER_SESSION_KEY,
+    JSON.stringify(localE2eMemberSession()),
+    "--binding",
+    "SESSION_STORE",
+    "--local",
+    "--config",
+    "apps/control-panel/wrangler.jsonc",
+    "--persist-to",
+    persistPath,
+  ]);
+  for (const fixture of LOCAL_E2E_ANALYSIS_RESULTS) {
+    runWrangler([
+      "kv",
+      "key",
+      "put",
+      fixture.storageKey,
+      JSON.stringify(fixture.result),
+      "--binding",
+      "SESSION_STORE",
+      "--local",
+      "--config",
+      "apps/control-panel/wrangler.jsonc",
+      "--persist-to",
+      persistPath,
+    ]);
+  }
 }
 
 function launchWorkers(runId) {
