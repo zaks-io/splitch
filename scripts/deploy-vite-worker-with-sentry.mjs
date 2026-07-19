@@ -17,6 +17,10 @@ if (cloudflareEnv) {
   commandEnv.SPLITCH_GENERATED_WRANGLER_ENV = cloudflareEnv;
 }
 
+if (isHostedWranglerEnv(cloudflareEnv) && !commandEnv.SPLITCH_DEPLOYED_COMMIT_SHA) {
+  commandEnv.SPLITCH_DEPLOYED_COMMIT_SHA = commitSha();
+}
+
 run("pnpm", ["build"], { env: commandEnv });
 validateGeneratedHostedConfig(cloudflareEnv);
 run("node", [deployScript, ...deployArgs], { env: commandEnv });
@@ -76,6 +80,18 @@ function run(command, args, options = {}) {
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
+}
+
+function commitSha() {
+  const result = spawnSync("git", ["rev-parse", "HEAD"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  const sha = result.status === 0 ? result.stdout.trim() : "";
+  if (!/^[0-9a-f]{40}$/.test(sha)) {
+    fail("hosted Vite Worker deploy requires an exact checked-out commit SHA");
+  }
+  return sha;
 }
 
 function validateGeneratedHostedConfig(cloudflareEnv) {

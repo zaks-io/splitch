@@ -8,7 +8,7 @@ import type { SessionPrincipal } from "./session";
 
 describe("scoped loader context", () => {
   it("resolves URL org, app, and environment through membership and D1 seams", async () => {
-    const resolver = resolverFor({ environmentId: "env_1", env: "dev" });
+    const resolver = resolverFor([{ environmentId: "env_1", env: "dev", name: "Development" }]);
 
     const context = await resolveScopedLoaderContext(
       sessionPrincipal(),
@@ -23,6 +23,9 @@ describe("scoped loader context", () => {
       environmentId: "env_1",
       env: "dev",
     });
+    expect(context.navigation.orgs[0]?.apps[0]?.environments).toEqual([
+      { environmentId: "env_1", env: "dev", name: "Development" },
+    ]);
   });
 
   it("returns 403 before environment lookup when org membership does not match", async () => {
@@ -91,13 +94,13 @@ describe("scoped loader context", () => {
 });
 
 function resolverFor(
-  result: Awaited<ReturnType<EnvironmentResolver["findEnvironmentByKey"]>>,
+  result: Awaited<ReturnType<EnvironmentResolver["listEnvironments"]>> | null,
   onCall?: () => void,
 ): EnvironmentResolver {
   return {
-    async findEnvironmentByKey() {
+    async listEnvironments() {
       onCall?.();
-      return result;
+      return result ?? [];
     },
   };
 }

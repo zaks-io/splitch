@@ -1,4 +1,8 @@
 import { expect, test as base, type APIRequestContext } from "@playwright/test";
+import {
+  requireFullCommitSha,
+  verifyHealthObservation,
+} from "../../scripts/lib/shared-preview-deployment-evidence.mjs";
 
 export { expect };
 
@@ -24,6 +28,7 @@ export interface SmokeConfig {
   readonly authBaseUrl: string;
   readonly controlPlaneBaseUrl: string;
   readonly expectedPlatformTarget: string;
+  readonly expectedCommitSha: string;
   readonly healthRoutes: readonly HealthRoute[];
   readonly mcpBaseUrl: string;
   readonly runId: string;
@@ -60,16 +65,17 @@ class SmokeClient {
     readonly config: SmokeConfig,
   ) {}
 
-  async assertHealth(route: HealthRoute): Promise<unknown> {
+  async assertHealth(route: HealthRoute): Promise<{ body: unknown; route: HealthRoute }> {
     const response = await this.request.get(route.url);
     await expect(response, `${route.surface} health`).toBeOK();
     const body = await response.json();
-    expect(body).toMatchObject({
-      ok: true,
-      service: route.service,
-      platformTarget: this.config.expectedPlatformTarget,
+    verifyHealthObservation({
+      body,
+      expectedCommitSha: this.config.expectedCommitSha,
+      expectedPlatformTarget: this.config.expectedPlatformTarget,
+      route,
     });
-    return body;
+    return { body, route };
   }
 
   async authDiscovery(): Promise<Record<string, unknown>> {
@@ -220,6 +226,10 @@ function readSmokeConfig(): SmokeConfig {
       "https://api.preview.splitch.dev",
     ),
     expectedPlatformTarget: "shared-preview",
+    expectedCommitSha: requireFullCommitSha(
+      process.env.SPLITCH_SMOKE_COMMIT_SHA ?? process.env.SPLITCH_DEPLOYED_COMMIT_SHA,
+      "SPLITCH_SMOKE_COMMIT_SHA",
+    ),
     healthRoutes: healthRoutes(),
     mcpBaseUrl,
     runId: runId(),

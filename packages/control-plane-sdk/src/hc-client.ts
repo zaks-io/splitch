@@ -1,4 +1,5 @@
 import type {
+  AppsControlPlaneClientApp,
   ExperimentsControlPlaneClientApp,
   FlagsControlPlaneClientApp,
 } from "@splitch/contracts/client-app";
@@ -16,6 +17,18 @@ export type FlagsHcClient = ReturnType<typeof createFlagsHcClient>;
 
 /** Hono `hc` client over the experiments emit-only app type. */
 export type ExperimentsHcClient = ReturnType<typeof createExperimentsHcClient>;
+
+/** Hono `hc` client over the App emit-only app type. */
+export type AppsHcClient = ReturnType<typeof createAppsHcClient>;
+
+export function createAppsHcClient(options: ControlPlaneHcOptions) {
+  const headers = options.authorization ? { authorization: options.authorization } : undefined;
+
+  return hc<AppsControlPlaneClientApp>(options.baseUrl, {
+    fetch: options.fetch,
+    ...(headers ? { headers } : {}),
+  });
+}
 
 export function createFlagsHcClient(options: ControlPlaneHcOptions) {
   const headers = options.authorization ? { authorization: options.authorization } : undefined;

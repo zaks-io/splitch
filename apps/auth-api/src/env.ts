@@ -43,6 +43,7 @@ export interface AuthApiEnv {
   SPLITCH_SMOKE_SCOPES?: string;
   /** Cloudflare Turnstile server-side validation secret. */
   TURNSTILE_SECRET?: string;
+  SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
 }

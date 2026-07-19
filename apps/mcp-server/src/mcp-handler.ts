@@ -33,6 +33,7 @@ type OperationSdks = Record<McpRoutableOwner, OperationSdkResolver>;
 export interface McpServerRequestOptions {
   readonly request: Request;
   readonly service: string;
+  readonly deployedCommitSha?: string;
   readonly platformTarget?: string;
   readonly authBaseUrl?: string;
   readonly controlPlaneBaseUrl?: string;

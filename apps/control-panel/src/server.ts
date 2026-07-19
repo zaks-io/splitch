@@ -2,9 +2,13 @@ import { addBreadcrumb, captureException, setTag, setUser } from "@sentry/cloudf
 import { wrapWorkerHandler } from "@splitch/observability/worker";
 import handler from "@tanstack/react-start/server-entry";
 import { controlPanelLiveUpdateBindings } from "#lib/bindings";
+import { createControlPanelApp } from "#lib/control-plane-app-functions";
 import { authorizeLiveUpdateUpgrade } from "#lib/live-update-authorization";
 import { handleLiveUpdateUpgrade } from "#lib/live-update-upgrade";
 import { setControlPanelSentryClient } from "#lib/panel-observability";
+
+// Keep the mutation server function in the Worker graph before its SPL-103 UI caller lands.
+void createControlPanelApp;
 
 type ControlPanelWorkerEnv = {
   DB: D1Database;
@@ -15,6 +19,7 @@ type ControlPanelWorkerEnv = {
   WORKOS_API_KEY: string;
   WORKOS_CLIENT_ID: string;
   AUTH_API_ORIGIN: string;
+  CONTROL_PLANE_API: Fetcher;
   SENTRY_DSN?: string;
   SENTRY_RELEASE?: string;
   SPLITCH_PLATFORM_TARGET?: string;

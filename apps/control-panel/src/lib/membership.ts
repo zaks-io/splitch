@@ -93,16 +93,13 @@ export async function rehydrateLegacySession(
 
 export function createEnvironmentResolver(repo: Repository): EnvironmentResolver {
   return {
-    async findEnvironmentByKey(appId, env) {
+    async listEnvironments(appId) {
       const environments = await repo.identity.listEnvironments(appScope(appId));
-      const environment = environments.find((candidate) => candidate.key === env);
-      if (!environment) {
-        return null;
-      }
-      return {
+      return environments.map((environment) => ({
         environmentId: environment.id,
         env: environment.key,
-      };
+        name: environment.name,
+      }));
     },
   };
 }

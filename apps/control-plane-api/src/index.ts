@@ -1,3 +1,4 @@
+import { WorkerEntrypoint } from "cloudflare:workers";
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import {
@@ -22,51 +23,11 @@ import { rateLimiterForTarget } from "./rate-limit";
 import { makeSessionStore } from "./session-store";
 
 const service = "splitch-control-plane-api";
+const CONTROL_PANEL_APPS_CREATE_PATH = /^\/orgs\/[^/]+\/apps\/?$/;
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
-    const url = new URL(request.url);
-    if (url.pathname === "/health" || url.pathname === "/") {
-      const response = Response.json(
-        createHealthResponse(service, parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET)),
-      );
-      if (env.SPLITCH_LOCAL_E2E_RUN_ID) {
-        response.headers.set("x-splitch-local-e2e-run-id", env.SPLITCH_LOCAL_E2E_RUN_ID);
-      }
-      return response;
-    }
-    if (url.pathname.startsWith("/internal/credential-cache-backfill")) {
-      return handleCredentialCacheBackfillGate(request, env, url);
-    }
-    const liveUpdateTestControl = await handleLiveUpdateTestControl(request, env, url);
-    if (liveUpdateTestControl) return liveUpdateTestControl;
-
-    const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
-    const jwksUri = authJwksUri(env);
-    const verifier = makeJwksVerifier({
-      fetchJwks: makeHttpJwksFetcher(jwksUri),
-      controlPlaneAudience,
-    });
-
-    const app = createApp({
-      authResolver: makeControlPlaneAuthResolver({
-        verifier,
-        sessions: makeSessionStore(env.SESSION_STORE),
-      }),
-      rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET),
-      repo: createRepository(env.DB),
-      credentialStore: env.CREDENTIAL_STORE,
-      credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
-      configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
-      logger: console,
-      memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
-      observability: createWorkerObservability(
-        env,
-        workerObservabilityWithWaitUntil("control-plane-api", ctx),
-      ),
-    });
-
-    return app.fetch(request, env);
+    return handleRequest(request, env, ctx);
   },
 
   scheduled(event, env, ctx): void {
@@ -76,6 +37,74 @@ const handler = {
 } satisfies ExportedHandler<ControlPlaneApiEnv>;
 
 export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
+
+/** Binding-only entrypoint used by the Control Panel for authenticated mutations. */
+export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
+  override async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.method !== "POST" || !CONTROL_PANEL_APPS_CREATE_PATH.test(url.pathname)) {
+      return new Response("not found", { status: 404 });
+    }
+    return handleRequest(request, this.env, this.ctx, true);
+  }
+}
+
+async function handleRequest(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  ctx: ExecutionContext,
+  allowPanelSession = false,
+): Promise<Response> {
+  const url = new URL(request.url);
+  if (url.pathname === "/health" || url.pathname === "/") {
+    const response = Response.json(
+      createHealthResponse(
+        service,
+        parsePlatformTarget(env.SPLITCH_PLATFORM_TARGET),
+        env.SPLITCH_DEPLOYED_COMMIT_SHA,
+      ),
+    );
+    if (env.SPLITCH_LOCAL_E2E_RUN_ID) {
+      response.headers.set("x-splitch-local-e2e-run-id", env.SPLITCH_LOCAL_E2E_RUN_ID);
+    }
+    return response;
+  }
+  if (url.pathname.startsWith("/internal/credential-cache-backfill")) {
+    return handleCredentialCacheBackfillGate(request, env, url);
+  }
+  const liveUpdateTestControl = await handleLiveUpdateTestControl(request, env, url);
+  if (liveUpdateTestControl) return liveUpdateTestControl;
+
+  const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? url.origin;
+  const jwksUri = authJwksUri(env);
+  const verifier = makeJwksVerifier({
+    fetchJwks: makeHttpJwksFetcher(jwksUri),
+    controlPlaneAudience,
+  });
+
+  const app = createApp({
+    authResolver: makeControlPlaneAuthResolver(
+      {
+        verifier,
+        sessions: makeSessionStore(env.SESSION_STORE),
+      },
+      { allowPanelSession },
+    ),
+    rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET),
+    repo: createRepository(env.DB),
+    credentialStore: env.CREDENTIAL_STORE,
+    credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
+    configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
+    logger: console,
+    memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
+    observability: createWorkerObservability(
+      env,
+      workerObservabilityWithWaitUntil("control-plane-api", ctx),
+    ),
+  });
+
+  return app.fetch(request, env);
+}
 
 async function runDemoReaper(
   env: ControlPlaneApiEnv,

@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 const service = "splitch-control-panel";
 const workerEnv = env as {
+  SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_LOCAL_E2E_RUN_ID?: string;
   SPLITCH_PLATFORM_TARGET?: string;
 };
@@ -13,7 +14,11 @@ export const Route = createFileRoute("/health")({
     handlers: {
       GET: async () => {
         const response = Response.json(
-          createHealthResponse(service, parsePlatformTarget(workerEnv.SPLITCH_PLATFORM_TARGET)),
+          createHealthResponse(
+            service,
+            parsePlatformTarget(workerEnv.SPLITCH_PLATFORM_TARGET),
+            workerEnv.SPLITCH_DEPLOYED_COMMIT_SHA,
+          ),
         );
         if (workerEnv.SPLITCH_LOCAL_E2E_RUN_ID) {
           response.headers.set("x-splitch-local-e2e-run-id", workerEnv.SPLITCH_LOCAL_E2E_RUN_ID);

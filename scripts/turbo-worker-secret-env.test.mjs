@@ -24,5 +24,9 @@ for (const task of [
       tasks[task].passThroughEnv.includes("SPLITCH_REQUIRE_WORKER_SECRET_ENV"),
       `${task} must pass SPLITCH_REQUIRE_WORKER_SECRET_ENV`,
     );
+    assert.ok(
+      tasks[task].passThroughEnv.includes("SPLITCH_DEPLOYED_COMMIT_SHA"),
+      `${task} must pass SPLITCH_DEPLOYED_COMMIT_SHA`,
+    );
   });
 }

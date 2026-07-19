@@ -15,6 +15,7 @@ type Env = {
   CONTROL_PLANE_API_ORIGIN?: string;
   EVALUATION_API_ORIGIN?: string;
   ANALYSIS_API_ORIGIN?: string;
+  SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
   MCP_SESSIONS: McpSessionDurableObjectNamespace;
@@ -35,6 +36,7 @@ const handler = {
     return handleMcpServerRequest({
       request,
       service,
+      deployedCommitSha: env.SPLITCH_DEPLOYED_COMMIT_SHA,
       platformTarget: env.SPLITCH_PLATFORM_TARGET,
       authBaseUrl: env.AUTH_API_ORIGIN,
       controlPlaneBaseUrl: env.CONTROL_PLANE_API_ORIGIN,

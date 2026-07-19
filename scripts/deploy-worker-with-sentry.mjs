@@ -20,6 +20,7 @@ const cloudflareEnv = resolvedCloudflareEnv(args, process.env);
 const wranglerConfig = readWranglerConfig();
 validateHostedEnvBindings(wranglerConfig, cloudflareEnv);
 const release = resolveRelease();
+const deployedCommitSha = resolveDeployedCommitSha(cloudflareEnv);
 const missingSentryEnv = missingSentryUploadEnv();
 const wranglerArgs = [
   "exec",
@@ -30,6 +31,7 @@ const wranglerArgs = [
   "--upload-source-maps",
   "--var",
   `SENTRY_RELEASE:${release}`,
+  ...(deployedCommitSha ? ["--var", `SPLITCH_DEPLOYED_COMMIT_SHA:${deployedCommitSha}`] : []),
   ...args,
 ];
 
@@ -125,6 +127,20 @@ function resolveRelease() {
   }
 
   return `${readWorkerName()}@${baseRelease}`;
+}
+
+function resolveDeployedCommitSha(envName) {
+  if (!isHostedWranglerEnv(envName)) return undefined;
+  const checkedOutSha = commandOutput("git", ["rev-parse", "HEAD"]);
+  const commitSha =
+    process.env.SPLITCH_DEPLOYED_COMMIT_SHA || process.env.SENTRY_RELEASE || checkedOutSha;
+  if (!commitSha || !/^[0-9a-f]{40}$/.test(commitSha)) {
+    fail(`hosted deploy requires a full SPLITCH_DEPLOYED_COMMIT_SHA; found ${commitSha ?? "none"}`);
+  }
+  if (checkedOutSha && checkedOutSha !== commitSha) {
+    fail(`deployed commit SHA ${commitSha} differs from checked out commit ${checkedOutSha}`);
+  }
+  return commitSha;
 }
 
 function readWorkerName() {
