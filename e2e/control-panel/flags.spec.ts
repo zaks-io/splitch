@@ -27,15 +27,18 @@ test.describe("per-Environment Flags", () => {
     await captureThemeScreenshots(page, testInfo, "flags-list-prod");
   });
 
-  test("teaches the empty state and creates the boolean Flag through the Worker", async ({
-    page,
-  }, testInfo) => {
+  test("teaches the empty state", async ({ page }, testInfo) => {
     await page.goto("/acme-labs/billing-api/prod/flags");
 
     await expect(page.getByRole("heading", { name: "Flags" })).toBeVisible();
     await expect(page.getByText("Create your first Flag")).toBeVisible();
     await expect(page.getByText("A Flag is a named toggle with Variants.")).toBeVisible();
     await captureThemeScreenshots(page, testInfo, "flags-empty");
+  });
+
+  test("creates the boolean Flag through the Worker", async ({ page }, testInfo) => {
+    const flagKey = `billing-refresh-${testInfo.retry}`;
+    await page.goto("/acme-labs/billing-api/prod/flags");
 
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
@@ -43,18 +46,21 @@ test.describe("per-Environment Flags", () => {
     await expect(dialog.getByText("enabled")).toBeVisible();
     await expect(dialog.getByText("Default")).toBeVisible();
 
-    await dialog.getByLabel("Flag key").fill("billing-refresh");
+    await dialog.getByLabel("Flag key").fill(flagKey);
     await dialog.getByRole("button", { name: "Create Flag" }).click();
     await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();
-    await expect(dialog.getByText("billing-refresh")).toBeVisible();
+    await expect(dialog.getByText(flagKey)).toBeVisible();
     await captureThemeScreenshots(page, testInfo, "flags-create-success");
 
-    await dialog.getByRole("button", { name: "Close" }).click();
-    await expect(page.locator("[data-flag-key='billing-refresh']")).toContainText("Not configured");
+    await dialog
+      .locator("[data-slot='dialog-footer']")
+      .getByRole("button", { name: "Close" })
+      .click();
+    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("Not configured");
     await captureThemeScreenshots(page, testInfo, "flags-list");
 
     await page.getByRole("button", { name: "Create Flag" }).click();
-    await page.getByRole("dialog").getByLabel("Flag key").fill("billing-refresh");
+    await page.getByRole("dialog").getByLabel("Flag key").fill(flagKey);
     await page.getByRole("dialog").getByRole("button", { name: "Create Flag" }).click();
     await expect(page.getByText("flag key already exists in this App")).toBeVisible();
     await expect(page.getByLabel("Flag key")).toHaveAttribute("aria-invalid", "true");

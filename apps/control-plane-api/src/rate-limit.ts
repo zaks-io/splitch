@@ -14,7 +14,11 @@ const failClosedRateLimiter: RateLimiter = () => {
 
 const allowRuntimeRateLimiter: RateLimiter = () => ({ limited: false });
 
-export function rateLimiterForTarget(target: string | undefined): RateLimiter {
+export function rateLimiterForTarget(
+  target: string | undefined,
+  bindingOnlyPanelOperation = false,
+): RateLimiter {
+  if (bindingOnlyPanelOperation) return allowRuntimeRateLimiter;
   return target === "local" || target === "shared-preview"
     ? allowRuntimeRateLimiter
     : failClosedRateLimiter;

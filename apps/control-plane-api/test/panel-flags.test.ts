@@ -1,4 +1,11 @@
 import { env } from "cloudflare:workers";
+import {
+  CONTROL_PANEL_IDENTITY_HEADER,
+  issueControlPanelIdentity,
+  parseControlPanelOperation,
+  serializeControlPanelIdentity,
+  type ControlPanelOperation,
+} from "@splitch/control-plane-sdk/control-panel-identity";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import worker, { ControlPanelEntrypoint } from "../src/index.js";
@@ -11,7 +18,6 @@ const ENV_ID = "env_panel_flags_e2e";
 const OTHER_ENV_ID = "env_panel_flags_other_e2e";
 const FLAG_ID = "flag_panel_flags_e2e";
 const USER_ID = "user_panel_flags_e2e";
-const SESSION_HASH = "f".repeat(64);
 const NOW = "2026-07-19T00:00:00.000Z";
 
 let testEnv: ControlPlaneApiEnv;
@@ -19,16 +25,11 @@ let entrypoint: ControlPanelEntrypoint;
 
 beforeAll(async () => {
   await seed();
-  await env.SESSION_STORE.put(
-    `session:${SESSION_HASH}`,
-    JSON.stringify({
-      version: 2,
-      userId: USER_ID,
-      orgs: [],
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-    }),
-  );
-  testEnv = { ...env, CONTROL_PLANE_ORIGIN: ORIGIN } as ControlPlaneApiEnv;
+  testEnv = {
+    ...env,
+    CONTROL_PLANE_ORIGIN: ORIGIN,
+    SPLITCH_PLATFORM_TARGET: "production",
+  } as ControlPlaneApiEnv;
   entrypoint = new ControlPanelEntrypoint(testCtx, testEnv);
 });
 
@@ -38,9 +39,15 @@ describe("ControlPanelEntrypoint Flags operations", () => {
   it("lists definitions and this Environment's Configuration", async () => {
     const list = await panelRequest("GET", `/apps/${APP_ID}/flags`);
     expect(list.status).toBe(200);
-    expect(await list.json()).toMatchObject({
-      items: [{ id: FLAG_ID, key: "checkout-refresh", variants: [{ name: "disabled" }] }],
-    });
+    const listed = (await list.json()) as {
+      items: Array<{ id: string; key: string; variants: Array<{ name: string }> }>;
+    };
+    expect(listed.items).toHaveLength(1);
+    expect(listed.items[0]).toMatchObject({ id: FLAG_ID, key: "checkout-refresh" });
+    expect(listed.items[0]?.variants.map((variant) => variant.name)).toEqual([
+      "disabled",
+      "enabled",
+    ]);
 
     const config = await panelRequest(
       "GET",
@@ -102,6 +109,39 @@ describe("ControlPanelEntrypoint Flags operations", () => {
     });
     expect(unsupported.status).toBe(404);
   });
+
+  it("binds operation, App, Environment, actor, expiry, and replay", async () => {
+    const replayedRequest = request("GET", `/apps/${APP_ID}/flags`);
+    expect((await entrypoint.fetch(replayedRequest.clone())).status).toBe(200);
+    expect((await entrypoint.fetch(replayedRequest.clone())).status).toBe(401);
+
+    const wrongOperation = request("GET", `/apps/${APP_ID}/flags`, undefined, {
+      id: "flags_create",
+      appId: APP_ID,
+      environmentId: ENV_ID,
+    });
+    expect((await entrypoint.fetch(wrongOperation)).status).toBe(401);
+
+    const wrongApp = request("GET", `/apps/${APP_ID}/flags`, undefined, {
+      id: "flags_list",
+      appId: OTHER_APP_ID,
+      environmentId: ENV_ID,
+    });
+    expect((await entrypoint.fetch(wrongApp)).status).toBe(401);
+
+    const wrongEnvironment = request("GET", `/apps/${APP_ID}/flags`, undefined, {
+      id: "flags_list",
+      appId: APP_ID,
+      environmentId: OTHER_ENV_ID,
+    });
+    expect((await entrypoint.fetch(wrongEnvironment)).status).toBe(401);
+
+    const wrongActor = request("GET", `/apps/${APP_ID}/flags`, undefined, undefined, "user_other");
+    expect((await entrypoint.fetch(wrongActor)).status).toBe(403);
+
+    const expired = request("GET", `/apps/${APP_ID}/flags`, undefined, undefined, USER_ID, -1);
+    expect((await entrypoint.fetch(expired)).status).toBe(401);
+  });
 });
 
 async function panelRequest(method: string, path: string, body?: unknown): Promise<Response> {
@@ -112,14 +152,33 @@ async function publicRequest(method: string, path: string): Promise<Response> {
   return Promise.resolve(worker.fetch(request(method, path), testEnv, testCtx));
 }
 
-function request(method: string, path: string, body?: unknown): Request {
+function request(
+  method: string,
+  path: string,
+  body?: unknown,
+  identityOperation?: ControlPanelOperation,
+  actorId = USER_ID,
+  expiresInSeconds = 30,
+): Request {
+  const headers = new Headers({
+    "x-splitch-panel-environment": ENV_ID,
+    ...(body ? { "content-type": "application/json" } : {}),
+  });
+  const expectedOperation = parseControlPanelOperation(method, path, ENV_ID);
+  if (expectedOperation) {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const identity = {
+      ...issueControlPanelIdentity(identityOperation ?? expectedOperation, actorId, {
+        nowSeconds: expiresInSeconds < 0 ? nowSeconds - 30 : nowSeconds,
+        sessionExpiresAt: nowSeconds + expiresInSeconds,
+      }),
+      expiresAt: nowSeconds + expiresInSeconds,
+    };
+    headers.set(CONTROL_PANEL_IDENTITY_HEADER, serializeControlPanelIdentity(identity));
+  }
   return new Request(`${ORIGIN}${path}`, {
     method,
-    headers: {
-      "x-splitch-panel-session": SESSION_HASH,
-      "x-splitch-panel-environment": ENV_ID,
-      ...(body ? { "content-type": "application/json" } : {}),
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
 }

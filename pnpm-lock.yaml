@@ -200,6 +200,9 @@ importers:
       '@splitch/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@splitch/control-plane-sdk':
+        specifier: workspace:*
+        version: link:../../packages/control-plane-sdk
       '@splitch/db':
         specifier: workspace:*
         version: link:../../packages/db

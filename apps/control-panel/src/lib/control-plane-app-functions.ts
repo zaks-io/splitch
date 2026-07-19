@@ -25,5 +25,8 @@ export const createControlPanelApp = createServerFn({ method: "POST" })
       };
     }
 
-    return createControlPanelAppsClient(bindings.CONTROL_PLANE_API, loaded.tokenHash).create(data);
+    return createControlPanelAppsClient(bindings.CONTROL_PLANE_API, {
+      actorId: loaded.session.userId,
+      sessionExpiresAt: loaded.session.expiresAt,
+    }).create(data);
   });

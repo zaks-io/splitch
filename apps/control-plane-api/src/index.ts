@@ -21,6 +21,7 @@ import type { ControlPlaneApiEnv } from "./env";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { makePanelSessionAccess } from "./panel-session-access";
+import { makePanelIdentityReplayStore } from "./panel-identity-replay";
 import { rateLimiterForTarget } from "./rate-limit";
 import { makeSessionStore } from "./session-store";
 
@@ -52,7 +53,7 @@ async function handleRequest(
   request: Request,
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
-  allowPanelSession = false,
+  allowPanelIdentity = false,
 ): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/health" || url.pathname === "/") {
@@ -89,11 +90,16 @@ async function handleRequest(
         sessions: makeSessionStore(env.SESSION_STORE),
       },
       {
-        allowPanelSession,
-        ...(allowPanelSession ? { panelAccess: makePanelSessionAccess(repo) } : {}),
+        allowPanelIdentity,
+        ...(allowPanelIdentity
+          ? {
+              panelAccess: makePanelSessionAccess(repo),
+              panelIdentityReplay: makePanelIdentityReplayStore(env.SESSION_STORE),
+            }
+          : {}),
       },
     ),
-    rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET),
+    rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET, allowPanelIdentity),
     repo,
     credentialStore: env.CREDENTIAL_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),

@@ -1,4 +1,9 @@
 import { env } from "cloudflare:workers";
+import {
+  CONTROL_PANEL_IDENTITY_HEADER,
+  issueControlPanelIdentity,
+  serializeControlPanelIdentity,
+} from "@splitch/control-plane-sdk/control-panel-identity";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
@@ -70,24 +75,19 @@ describe("index.ts: member endpoints use the live session-cache profile resolver
 });
 
 describe("index.ts: Control Panel binding boundary", () => {
-  it("rejects a valid panel session on the public Worker export", async () => {
-    const sessionHash = "a".repeat(64);
-    await storePanelSession(sessionHash);
-
-    const response = await callAppsCreate(worker.fetch, sessionHash, "public-replay");
+  it("rejects a valid panel identity on the public Worker export", async () => {
+    const response = await callAppsCreate(worker.fetch, OWNER, "public-replay");
 
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({ code: "UNAUTHORIZED" });
   });
 
-  it("redeems a valid panel session only through the named binding entrypoint", async () => {
-    const sessionHash = "b".repeat(64);
-    await storePanelSession(sessionHash);
+  it("redeems a scoped panel identity only through the named binding entrypoint", async () => {
     const entrypoint = new ControlPanelEntrypoint(testCtx, testEnv);
 
     const response = await callAppsCreate(
       (request) => entrypoint.fetch(request),
-      sessionHash,
+      OWNER,
       "binding-create",
     );
 
@@ -138,7 +138,7 @@ async function callAppsCreate(
     env: ControlPlaneApiEnv,
     ctx: ExecutionContext,
   ) => Response | Promise<Response>,
-  sessionHash: string,
+  actorId: string,
   key: string,
 ): Promise<Response> {
   return fetcher(
@@ -146,24 +146,16 @@ async function callAppsCreate(
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-splitch-panel-session": sessionHash,
+        [CONTROL_PANEL_IDENTITY_HEADER]: serializeControlPanelIdentity(
+          issueControlPanelIdentity({ id: "apps_create", orgId: ORG.orgId }, actorId, {
+            sessionExpiresAt: Math.floor(Date.now() / 1000) + 3600,
+          }),
+        ),
       },
       body: JSON.stringify({ organizationId: ORG.orgId, name: key, key }),
     }),
     testEnv,
     testCtx,
-  );
-}
-
-async function storePanelSession(sessionHash: string): Promise<void> {
-  await env.SESSION_STORE.put(
-    `session:${sessionHash}`,
-    JSON.stringify({
-      version: 2,
-      userId: OWNER,
-      orgs: [],
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-    }),
   );
 }
 

@@ -1,6 +1,12 @@
 import type { AuthResolver } from "@splitch/worker-runtime";
+import {
+  CONTROL_PANEL_IDENTITY_HEADER,
+  parseControlPanelIdentity,
+  verifyControlPanelIdentity,
+} from "@splitch/control-plane-sdk/control-panel-identity";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import type { JwksVerifier } from "./jwks-verify";
+import type { PanelIdentityReplayStore } from "./panel-identity-replay";
 import type { PanelSessionAccess } from "./panel-session-access";
 import { deriveBinding } from "./scope-binding";
 import type { SessionStore } from "./session-store";
@@ -8,11 +14,11 @@ import type { SessionStore } from "./session-store";
 /**
  * Control-plane auth resolver (the `control-plane-token` AuthKind).
  *
- * Normal callers use bearer JWTs. The Control Panel may instead present the
- * SHA-256 handle of its already-validated server session, but only for the
- * operations allowlisted by the binding-only `ControlPanelEntrypoint`. The
- * Control Plane resolves that handle from shared session KV and derives its
- * App-scoped principal from live D1 membership and resource checks.
+ * Normal callers use bearer JWTs. The binding-only Control Panel entrypoint may
+ * instead redeem a short-lived, single-use downstream identity. The reusable
+ * panel session remains inside the Control Panel Worker.
+ * Binding calls verify the allowlisted operation and resource claims, expiry,
+ * and single-use nonce before deriving authority from live D1 access.
  *
  * Order (access-control-matrix.md "Token validation"):
  *   1. Extract `Authorization: Bearer <jwt>`; absent/malformed → UNAUTHORIZED.
@@ -32,7 +38,6 @@ import type { SessionStore } from "./session-store";
  */
 
 const BEARER_PREFIX = "Bearer ";
-export const PANEL_SESSION_HEADER = "x-splitch-panel-session";
 
 export interface ControlPlaneAuthDeps {
   verifier: JwksVerifier;
@@ -42,9 +47,10 @@ export interface ControlPlaneAuthDeps {
 }
 
 export interface ControlPlaneAuthOptions {
-  /** Only the named Control Panel Worker entrypoint may redeem panel sessions. */
-  allowPanelSession?: boolean;
+  /** Only the named Control Panel Worker entrypoint may redeem panel identities. */
+  allowPanelIdentity?: boolean;
   panelAccess?: PanelSessionAccess;
+  panelIdentityReplay?: PanelIdentityReplayStore;
 }
 
 function extractBearer(header: string | null): string | null {
@@ -62,12 +68,12 @@ export function makeControlPlaneAuthResolver(
   const nowSeconds = () => Math.floor((deps.now?.() ?? Date.now()) / 1000);
 
   return async (request) => {
-    if (options.allowPanelSession && request.headers.get("authorization") === null) {
+    if (options.allowPanelIdentity && request.headers.get("authorization") === null) {
       const panelPrincipal = await resolvePanelPrincipal(
         request,
-        deps.sessions,
         nowSeconds(),
         options.panelAccess,
+        options.panelIdentityReplay,
       );
       if (panelPrincipal) return panelPrincipal;
     }
@@ -112,23 +118,27 @@ async function resolveBearerPrincipal(
 
 async function resolvePanelPrincipal(
   request: Request,
-  sessions: SessionStore,
   nowSeconds: number,
   panelAccess?: PanelSessionAccess,
+  replay?: PanelIdentityReplayStore,
 ) {
-  const tokenHash = request.headers.get(PANEL_SESSION_HEADER);
-  if (!tokenHash) return null;
-  const actor = await sessions.loadPanelSessionActor(tokenHash, nowSeconds);
-  if (!actor) return null;
-
   const operation = parseControlPanelBindingOperation(request);
-  if (!operation) return null;
+  const identity = parseControlPanelIdentity(request.headers.get(CONTROL_PANEL_IDENTITY_HEADER));
+  if (
+    !operation ||
+    !identity ||
+    !replay ||
+    !verifyControlPanelIdentity(identity, operation, nowSeconds) ||
+    !(await replay.consume(identity.nonce, identity.expiresAt, nowSeconds))
+  ) {
+    return null;
+  }
   if (operation.id === "apps_create") {
     return {
       ok: true as const,
       principal: {
         kind: "control-plane-token" as const,
-        id: actor.userId,
+        id: identity.actorId,
         // The apps_create handler rechecks the live owner/admin role in D1.
         scopes: [`org:${operation.orgId}:member`],
         orgId: operation.orgId,
@@ -138,7 +148,7 @@ async function resolvePanelPrincipal(
     };
   }
 
-  return resolvePanelFlagsPrincipal(operation, actor.userId, panelAccess);
+  return resolvePanelFlagsPrincipal(operation, identity.actorId, panelAccess);
 }
 
 async function resolvePanelFlagsPrincipal(

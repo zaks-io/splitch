@@ -46,7 +46,7 @@ async function authorizedFlagsClient(environmentId: string) {
     ok: true as const,
     flags: createControlPanelFlagsClient(
       bindings.CONTROL_PLANE_API,
-      loaded.tokenHash,
+      { actorId: loaded.session.userId, sessionExpiresAt: loaded.session.expiresAt },
       environmentId,
     ),
   };

@@ -1,16 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+  CONTROL_PANEL_IDENTITY_HEADER,
+  parseControlPanelIdentity,
+} from "@splitch/control-plane-sdk/control-panel-identity";
 import { createControlPanelAppsClient } from "./control-plane-apps";
 
+const ACTOR = { actorId: "user_acme", sessionExpiresAt: 1_800_003_600 };
 const TOKEN_HASH = "a".repeat(64);
 
 describe("Control Panel Apps transport", () => {
-  it("carries only the server-side session handle over the Worker binding", async () => {
+  it("carries only an operation-scoped single-use identity over the Worker binding", async () => {
     let capturedRequest: Request | undefined;
     const fetcher = vi.fn(async (request: Request) => {
       capturedRequest = request;
       return Response.json(createdApp());
     });
-    const apps = createControlPanelAppsClient({ fetch: fetcher } as unknown as Fetcher, TOKEN_HASH);
+    const apps = createControlPanelAppsClient({ fetch: fetcher } as unknown as Fetcher, ACTOR, {
+      nowSeconds: () => 1_800_000_000,
+      nonce: () => "nonce_1234567890abcdef",
+    });
 
     const result = await apps.create({
       orgId: "org_acme",
@@ -21,10 +29,19 @@ describe("Control Panel Apps transport", () => {
 
     const request = capturedRequest;
     expect(request).toBeInstanceOf(Request);
-    expect(request?.headers.get("x-splitch-panel-session")).toBe(TOKEN_HASH);
+    expect(request?.headers.get("x-splitch-panel-session")).toBeNull();
     expect(request?.headers.get("authorization")).toBeNull();
     expect(request?.headers.get("cookie")).toBeNull();
     expect(await request?.clone().text()).not.toContain(TOKEN_HASH);
+    expect(
+      parseControlPanelIdentity(request?.headers.get(CONTROL_PANEL_IDENTITY_HEADER) ?? null),
+    ).toEqual({
+      version: 1,
+      operation: { id: "apps_create", orgId: "org_acme" },
+      actorId: ACTOR.actorId,
+      expiresAt: 1_800_000_030,
+      nonce: "nonce_1234567890abcdef",
+    });
     expect(result).toMatchObject({ ok: true, status: 200 });
     expect(JSON.stringify(result)).not.toContain(TOKEN_HASH);
   });
@@ -42,7 +59,7 @@ describe("Control Panel Apps transport", () => {
             { status: 403 },
           ),
       } as unknown as Fetcher,
-      TOKEN_HASH,
+      ACTOR,
     );
 
     await expect(
@@ -63,10 +80,20 @@ describe("Control Panel Apps transport", () => {
     });
   });
 
-  it("rejects malformed session handles before dispatch", () => {
-    expect(() =>
-      createControlPanelAppsClient({ fetch: vi.fn() } as unknown as Fetcher, "browser-value"),
-    ).toThrow("control-panel session handle is invalid");
+  it("rejects an expired panel session before dispatch", async () => {
+    const apps = createControlPanelAppsClient(
+      { fetch: vi.fn() } as unknown as Fetcher,
+      { actorId: "user_acme", sessionExpiresAt: 99 },
+      { nowSeconds: () => 100 },
+    );
+    await expect(
+      apps.create({
+        orgId: "org_acme",
+        organizationId: "org_acme",
+        name: "Checkout",
+        key: "checkout",
+      }),
+    ).rejects.toThrow("control-panel downstream identity is invalid");
   });
 });
 

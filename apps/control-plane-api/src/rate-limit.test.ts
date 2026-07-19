@@ -11,6 +11,13 @@ describe("rateLimiterForTarget", () => {
       "control-plane-api: rate-limit binding is not configured yet",
     );
   });
+
+  it("allows only the binding-only panel path in production", () => {
+    expect(rateLimiterForTarget("production", true)(input())).toEqual({ limited: false });
+    expect(() => rateLimiterForTarget("production")(input())).toThrow(
+      "control-plane-api: rate-limit binding is not configured yet",
+    );
+  });
 });
 
 function input() {
