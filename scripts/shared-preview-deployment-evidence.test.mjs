@@ -6,6 +6,7 @@ import test from "node:test";
 import { spawnSync } from "node:child_process";
 import {
   createFleetEvidence,
+  resolveDeployedCommitSha,
   verifyHealthObservation,
 } from "./lib/shared-preview-deployment-evidence.mjs";
 
@@ -51,6 +52,26 @@ test("a checked-out workflow ref cannot substitute for deployed revision evidenc
   );
 });
 
+test("resolves the current deployed SHA only from valid shared-preview health metadata", () => {
+  assert.equal(
+    resolveDeployedCommitSha({
+      body: health(routes[0].service, sha),
+      expectedPlatformTarget: "shared-preview",
+      route: routes[0],
+    }),
+    sha,
+  );
+  assert.throws(
+    () =>
+      resolveDeployedCommitSha({
+        body: health(routes[0].service, "not-a-sha"),
+        expectedPlatformTarget: "shared-preview",
+        route: routes[0],
+      }),
+    /deployed commit SHA must be a full lowercase commit SHA/,
+  );
+});
+
 test("deploy and reset summaries retain the independently verified deployed SHA", () => {
   const fixture = mkdtempSync(join(tmpdir(), "splitch-shared-preview-evidence-"));
   const evidencePath = join(fixture, "evidence.json");
@@ -84,6 +105,18 @@ test("shared-preview workflow resolves one immutable SHA before deploy and verif
     /SPLITCH_SMOKE_COMMIT_SHA="\$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke/,
   );
   assert.doesNotMatch(workflow, /SPLITCH_SMOKE_COMMIT_SHA="\$\(git rev-parse HEAD\)"/);
+});
+
+test("shared-preview reset resolves the hosted revision and verifies the whole fleet", () => {
+  const workflow = readFileSync(".github/workflows/reset-shared-preview.yml", "utf8");
+  assert.match(workflow, /node scripts\/resolve-shared-preview-deployed-sha\.mjs/);
+  assert.match(workflow, /SPLITCH_DEPLOYED_COMMIT_SHA=\$deployed_sha/);
+  assert.match(
+    workflow,
+    /SPLITCH_SMOKE_COMMIT_SHA="\$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke/,
+  );
+  assert.match(workflow, /node scripts\/render-shared-preview-summary\.mjs reset/);
+  assert.doesNotMatch(workflow, /Deployed SHA: unavailable\/unverified/);
 });
 
 function summary(mode, evidencePath, workflowRef) {

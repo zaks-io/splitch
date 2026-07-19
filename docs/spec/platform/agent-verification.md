@@ -66,8 +66,10 @@ Selectors:
 - `pnpm smoke:local -- @splitch/control-plane-api` smokes one Worker.
 
 The smoke requires `platformTarget = "local"`. `pnpm shared-preview:smoke` asserts
-`platformTarget = "shared-preview"` against the hosted preview URLs after the deploy workflow
-updates that target.
+`platformTarget = "shared-preview"` and one exact deployed commit SHA across the hosted preview
+fleet. The deploy workflow verifies the revision it deploys; the reset workflow resolves the
+currently deployed revision from hosted health before resetting state and verifies the same revision
+afterward.
 
 ## Remote Cursor requirements
 
@@ -112,8 +114,8 @@ and the `splitch` repo-route label from [../../agents/workflow/config.md](../../
 
 - `pnpm d1:migrate:local` and `pnpm tinybird:local` intentionally skip until migrations and Tinybird
   files exist. The slice that adds those files must convert the skip to a failing validator.
-- Shared-preview deploy and smoke are wired. Shared-preview reset, production smoke, and rollback
-  scripts are still not wired.
+- Shared-preview deploy, reset, and smoke are wired with deployed-revision evidence. Production smoke
+  and rollback scripts are still not wired.
 - Real provider credentials, real Cloudflare bindings, Tinybird Cloud, code host remote, and repo-route
   tracker wiring are not provisioned.
 

@@ -27,6 +27,7 @@
     "security": "pnpm sast && pnpm pins:check && pnpm audit",
     "security:full": "pnpm sast && pnpm pins:check && pnpm audit && pnpm secrets:git",
     "shared-preview:cleanup-smoke": "node scripts/seed-shared-preview-smoke.mjs --cleanup-transient",
+    "shared-preview:reset": "node scripts/reset-shared-preview.mjs",
     "shared-preview:seed-smoke": "node scripts/seed-shared-preview-smoke.mjs",
     "sdk:release:check-prepare": "node scripts/sdk-release/check-prepare-clean-checkout.mjs",
     "sdk:release:prepare": "node scripts/sdk-release/prepare-artifacts.mjs",

@@ -7,6 +7,20 @@ export function requireFullCommitSha(value, label = "commit SHA") {
   return value;
 }
 
+export function resolveDeployedCommitSha({ body, expectedPlatformTarget, route }) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error(`${route.surface} health returned a non-object response`);
+  }
+  if (body.ok !== true) throw new Error(`${route.surface} health ok was not true`);
+  if (body.service !== route.service) {
+    throw new Error(`${route.surface} reported service ${String(body.service)}`);
+  }
+  if (body.platformTarget !== expectedPlatformTarget) {
+    throw new Error(`${route.surface} reported platformTarget ${String(body.platformTarget)}`);
+  }
+  return requireFullCommitSha(body.deployedCommitSha, `${route.surface} deployed commit SHA`);
+}
+
 export function verifyHealthObservation({
   body,
   expectedCommitSha,
