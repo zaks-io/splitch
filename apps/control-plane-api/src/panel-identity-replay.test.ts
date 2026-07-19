@@ -1,28 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { makePanelIdentityReplayStore } from "./panel-identity-replay";
+import { makePanelDelegationReplayStore } from "./panel-identity-replay";
 
-describe("Control Panel identity replay store", () => {
-  it("accepts a nonce once and rejects sequential replay", async () => {
-    const values = new Map<string, string>();
-    const kv = {
-      get: vi.fn(async (key: string) => values.get(key) ?? null),
-      put: vi.fn(async (key: string, value: string) => {
-        values.set(key, value);
-      }),
-    } as unknown as KVNamespace;
-    const replay = makePanelIdentityReplayStore(kv);
+describe("Control Panel delegation replay store", () => {
+  it("routes every redemption for one nonce to the same Durable Object", async () => {
+    const consume = vi.fn(async () => true);
+    const getByName = vi.fn(() => ({ consume }));
+    const replay = makePanelDelegationReplayStore({ getByName });
 
     await expect(replay.consume("nonce_1234567890abcdef", 130, 100)).resolves.toBe(true);
-    await expect(replay.consume("nonce_1234567890abcdef", 130, 100)).resolves.toBe(false);
-    expect(kv.put).toHaveBeenCalledWith("control-panel-identity:nonce_1234567890abcdef", "used", {
-      expirationTtl: 60,
-    });
-  });
-
-  it("rejects an already expired identity without writing it", async () => {
-    const kv = { get: vi.fn(), put: vi.fn() } as unknown as KVNamespace;
-    await expect(makePanelIdentityReplayStore(kv).consume("nonce", 100, 100)).resolves.toBe(false);
-    expect(kv.get).not.toHaveBeenCalled();
-    expect(kv.put).not.toHaveBeenCalled();
+    expect(getByName).toHaveBeenCalledWith("nonce_1234567890abcdef");
+    expect(consume).toHaveBeenCalledWith(130, 100);
   });
 });

@@ -1,8 +1,7 @@
 import { env } from "cloudflare:workers";
 import {
-  CONTROL_PANEL_IDENTITY_HEADER,
-  issueControlPanelIdentity,
-  serializeControlPanelIdentity,
+  CONTROL_PANEL_DELEGATION_HEADER,
+  issueControlPanelDelegation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
@@ -13,6 +12,7 @@ import { memberProfileCacheKey } from "../src/member-profile-cache.js";
 const AUDIENCE = "https://cp.splitch.test";
 const JWKS_URI = "https://auth.splitch.test/.well-known/jwks.json";
 const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);
+const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
 
 const ORG = {
   orgId: "org_index_members_241b",
@@ -45,6 +45,7 @@ beforeAll(async () => {
     ...env,
     CONTROL_PLANE_ORIGIN: AUDIENCE,
     AUTH_JWKS_URI: JWKS_URI,
+    CONTROL_PANEL_DELEGATION_SECRET: DELEGATION_SECRET,
   } as ControlPlaneApiEnv;
 });
 
@@ -75,14 +76,14 @@ describe("index.ts: member endpoints use the live session-cache profile resolver
 });
 
 describe("index.ts: Control Panel binding boundary", () => {
-  it("rejects a valid panel identity on the public Worker export", async () => {
+  it("rejects a valid panel delegation on the public Worker export", async () => {
     const response = await callAppsCreate(worker.fetch, OWNER, "public-replay");
 
     expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({ code: "UNAUTHORIZED" });
   });
 
-  it("redeems a scoped panel identity only through the named binding entrypoint", async () => {
+  it("redeems a scoped panel delegation only through the named binding entrypoint", async () => {
     const entrypoint = new ControlPanelEntrypoint(testCtx, testEnv);
 
     const response = await callAppsCreate(
@@ -141,22 +142,22 @@ async function callAppsCreate(
   actorId: string,
   key: string,
 ): Promise<Response> {
-  return fetcher(
-    new Request(`${AUDIENCE}/orgs/${ORG.orgId}/apps`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        [CONTROL_PANEL_IDENTITY_HEADER]: serializeControlPanelIdentity(
-          issueControlPanelIdentity({ id: "apps_create", orgId: ORG.orgId }, actorId, {
-            sessionExpiresAt: Math.floor(Date.now() / 1000) + 3600,
-          }),
-        ),
-      },
-      body: JSON.stringify({ organizationId: ORG.orgId, name: key, key }),
-    }),
-    testEnv,
-    testCtx,
+  const request = new Request(`${AUDIENCE}/orgs/${ORG.orgId}/apps`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ organizationId: ORG.orgId, name: key, key }),
+  });
+  request.headers.set(
+    CONTROL_PANEL_DELEGATION_HEADER,
+    await issueControlPanelDelegation(
+      request,
+      { id: "apps_create", orgId: ORG.orgId },
+      actorId,
+      DELEGATION_SECRET,
+      { sessionExpiresAt: Math.floor(Date.now() / 1000) + 3600 },
+    ),
   );
+  return fetcher(request, testEnv, testCtx);
 }
 
 async function cacheMemberProfile(userId: string, email: string): Promise<void> {

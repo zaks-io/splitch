@@ -20,8 +20,9 @@ import {
 import type { ControlPlaneApiEnv } from "./env";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
+import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
+import { makePanelDelegationReplayStore } from "./panel-identity-replay";
 import { makePanelSessionAccess } from "./panel-session-access";
-import { makePanelIdentityReplayStore } from "./panel-identity-replay";
 import { rateLimiterForTarget } from "./rate-limit";
 import { makeSessionStore } from "./session-store";
 
@@ -53,7 +54,7 @@ async function handleRequest(
   request: Request,
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
-  allowPanelIdentity = false,
+  allowPanelDelegation = false,
 ): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/health" || url.pathname === "/") {
@@ -90,16 +91,17 @@ async function handleRequest(
         sessions: makeSessionStore(env.SESSION_STORE),
       },
       {
-        allowPanelIdentity,
-        ...(allowPanelIdentity
+        allowPanelDelegation,
+        ...(allowPanelDelegation
           ? {
+              panelDelegationSecret: requiredPanelDelegationSecret(env),
               panelAccess: makePanelSessionAccess(repo),
-              panelIdentityReplay: makePanelIdentityReplayStore(env.SESSION_STORE),
+              panelDelegationReplay: makePanelDelegationReplayStore(env.PANEL_DELEGATION_REPLAY),
             }
           : {}),
       },
     ),
-    rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET, allowPanelIdentity),
+    rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET, allowPanelDelegation),
     repo,
     credentialStore: env.CREDENTIAL_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
@@ -195,4 +197,10 @@ export {
   ConfigStoreDurableObject,
   CredentialCacheBackfillDurableObject,
   CredentialCacheWriterDurableObject,
+  PanelDelegationReplayDurableObject,
 };
+
+function requiredPanelDelegationSecret(env: ControlPlaneApiEnv): string {
+  if (env.CONTROL_PANEL_DELEGATION_SECRET) return env.CONTROL_PANEL_DELEGATION_SECRET;
+  throw new Error("control-plane-api: CONTROL_PANEL_DELEGATION_SECRET is required");
+}

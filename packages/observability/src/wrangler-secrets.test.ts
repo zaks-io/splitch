@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = join(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 
-const WORKER_WRANGLER_PATHS: Record<string, string> = {
+const WORKER_WRANGLER_PATHS = {
   "control-plane-api": "apps/control-plane-api/wrangler.jsonc",
   "evaluation-api": "apps/evaluation-api/wrangler.jsonc",
   "event-ingest-api": "apps/event-ingest-api/wrangler.jsonc",
@@ -15,7 +15,7 @@ const WORKER_WRANGLER_PATHS: Record<string, string> = {
   "mcp-server": "apps/mcp-server/wrangler.jsonc",
   "control-panel": "apps/control-panel/wrangler.jsonc",
   marketing: "apps/marketing/wrangler.jsonc",
-};
+} as const satisfies Record<string, string>;
 
 const OBSERVABILITY_TARGETS = ["local", "shared-preview", "production"] as const;
 const AXIOM_TRACE_DESTINATION = "axiom-traces";
@@ -33,6 +33,7 @@ const GITHUB_ACTIONS_LINK_REFERENCE =
 const WORKER_SECRET_SYNC_NAMES = [
   "ACCESS_TOKEN_SECRET",
   "ASSERTION_SIGNING_SECRET",
+  "CONTROL_PANEL_DELEGATION_SECRET",
   "SENTRY_DSN",
   "EVALUATION_PRIVACY_SALT",
 ] as const;
@@ -79,6 +80,19 @@ describe("Worker Wrangler observability secrets", () => {
       expect(target?.vars?.SENTRY_RELEASE).toBeUndefined();
       expect(target?.vars?.AXIOM_TOKEN).toBeUndefined();
       expect(target?.vars?.AXIOM_DATASET).toBeUndefined();
+    });
+  }
+});
+
+describe("Control Panel delegation secret", () => {
+  for (const surfaceId of ["control-plane-api", "control-panel"] as const) {
+    const config = readWranglerConfig(join(repoRoot, WORKER_WRANGLER_PATHS[surfaceId]));
+
+    it.each([
+      "shared-preview",
+      "production",
+    ])(`${surfaceId} requires the shared delegation secret for %s`, (target) => {
+      expect(config.env?.[target]?.secrets?.required).toContain("CONTROL_PANEL_DELEGATION_SECRET");
     });
   }
 });

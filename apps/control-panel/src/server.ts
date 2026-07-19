@@ -22,6 +22,7 @@ type ControlPanelWorkerEnv = {
   WORKOS_API_KEY: string;
   WORKOS_CLIENT_ID: string;
   AUTH_API_ORIGIN: string;
+  CONTROL_PANEL_DELEGATION_SECRET: string;
   CONTROL_PLANE_API: Fetcher;
   SENTRY_DSN?: string;
   SENTRY_RELEASE?: string;

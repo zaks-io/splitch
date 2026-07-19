@@ -47,7 +47,8 @@
     "bindings": [
       { "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" },
       { "name": "CREDENTIAL_CACHE_WRITER", "class_name": "CredentialCacheWriterDurableObject" },
-      { "name": "CREDENTIAL_CACHE_BACKFILL", "class_name": "CredentialCacheBackfillDurableObject" }
+      { "name": "CREDENTIAL_CACHE_BACKFILL", "class_name": "CredentialCacheBackfillDurableObject" },
+      { "name": "PANEL_DELEGATION_REPLAY", "class_name": "PanelDelegationReplayDurableObject" }
     ]
   },
   "migrations": [
@@ -58,13 +59,18 @@
         "CredentialCacheWriterDurableObject",
         "CredentialCacheBackfillDurableObject"
       ]
+    },
+    {
+      "tag": "v3_panel_delegation_replay",
+      "new_sqlite_classes": ["PanelDelegationReplayDurableObject"]
     }
   ],
   "secrets": {
     "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
   },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local"
+    "SPLITCH_PLATFORM_TARGET": "local",
+    "CONTROL_PANEL_DELEGATION_SECRET": "local-control-panel-delegation-secret"
   },
   "env": {
     "shared-preview": {
@@ -86,7 +92,7 @@
       },
       "routes": [{ "pattern": "api.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
+        "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN", "CONTROL_PANEL_DELEGATION_SECRET"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
@@ -112,6 +118,10 @@
           {
             "name": "CREDENTIAL_CACHE_BACKFILL",
             "class_name": "CredentialCacheBackfillDurableObject"
+          },
+          {
+            "name": "PANEL_DELEGATION_REPLAY",
+            "class_name": "PanelDelegationReplayDurableObject"
           }
         ]
       },
@@ -123,6 +133,10 @@
             "CredentialCacheWriterDurableObject",
             "CredentialCacheBackfillDurableObject"
           ]
+        },
+        {
+          "tag": "v3_panel_delegation_replay",
+          "new_sqlite_classes": ["PanelDelegationReplayDurableObject"]
         }
       ]
     },
@@ -145,7 +159,7 @@
       },
       "routes": [{ "pattern": "api.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
+        "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN", "CONTROL_PANEL_DELEGATION_SECRET"]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
@@ -171,6 +185,10 @@
           {
             "name": "CREDENTIAL_CACHE_BACKFILL",
             "class_name": "CredentialCacheBackfillDurableObject"
+          },
+          {
+            "name": "PANEL_DELEGATION_REPLAY",
+            "class_name": "PanelDelegationReplayDurableObject"
           }
         ]
       },
@@ -182,6 +200,10 @@
             "CredentialCacheWriterDurableObject",
             "CredentialCacheBackfillDurableObject"
           ]
+        },
+        {
+          "tag": "v3_panel_delegation_replay",
+          "new_sqlite_classes": ["PanelDelegationReplayDurableObject"]
         }
       ]
     }

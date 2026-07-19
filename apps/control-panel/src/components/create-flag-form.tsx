@@ -11,7 +11,7 @@ import { Input } from "@splitch/ui/components/input";
 import { type FormEvent, useState } from "react";
 import { type MutationErrorSurface, mutationErrorSurface } from "#lib/api";
 import { createControlPanelFlag } from "#lib/control-plane-flag-functions";
-import { booleanFlagInput, flagFieldError } from "#lib/create-flag-model";
+import { BOOLEAN_FLAG_VARIANTS, booleanFlagInput, flagFieldError } from "#lib/create-flag-model";
 
 export function CreateFlagForm({
   appId,
@@ -96,17 +96,20 @@ export function CreateFlagForm({
           <h3 className="font-medium text-sm" id="variant-catalog-title">
             Variant catalog
           </h3>
-          <p className="text-muted-foreground text-xs">Boolean values are ready with no JSON.</p>
+          <p className="text-muted-foreground text-xs">
+            Prefilled: disabled is the Default Variant; enabled is true.
+          </p>
         </div>
         <div className="divide-y rounded-lg border border-border" data-testid="boolean-catalog">
-          {[
-            { name: "disabled", value: "false", isDefault: true },
-            { name: "enabled", value: "true", isDefault: false },
-          ].map((variant) => (
-            <div className="flex items-center justify-between gap-3 px-3 py-2.5" key={variant.name}>
+          {BOOLEAN_FLAG_VARIANTS.map((variant) => (
+            <div
+              className="flex items-center justify-between gap-3 px-3 py-2.5"
+              data-variant-name={variant.name}
+              key={variant.name}
+            >
               <div className="grid gap-0.5">
                 <span className="font-medium text-sm">{variant.name}</span>
-                <code className="text-muted-foreground text-xs">{variant.value}</code>
+                <code className="text-muted-foreground text-xs">{String(variant.value)}</code>
               </div>
               {variant.isDefault ? <Badge variant="secondary">Default</Badge> : null}
             </div>

@@ -1,16 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
 import {
-  CONTROL_PANEL_IDENTITY_HEADER,
-  issueControlPanelIdentity,
-  serializeControlPanelIdentity,
+  CONTROL_PANEL_DELEGATION_HEADER,
+  issueControlPanelDelegation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
+import { describe, expect, it, vi } from "vitest";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import type { JwksVerifier } from "./jwks-verify";
-import type { PanelIdentityReplayStore } from "./panel-identity-replay";
+import type { PanelDelegationReplayStore } from "./panel-identity-replay";
 import type { PanelSessionAccess } from "./panel-session-access";
 import type { SessionStore } from "./session-store";
 
 const NOW = 1_800_000_000;
+const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
 
 describe("Control Panel Flags principal", () => {
   it("derives least-privilege scopes from live App access", async () => {
@@ -22,7 +22,7 @@ describe("Control Panel Flags principal", () => {
     }));
     const resolver = makeResolver({ authorizeApp });
 
-    const result = await resolver(panelRequest("GET", "/apps/app_1/flags"));
+    const result = await resolver(await panelRequest("GET", "/apps/app_1/flags"));
 
     expect(result).toEqual({
       ok: true,
@@ -43,27 +43,27 @@ describe("Control Panel Flags principal", () => {
     const resolver = makeResolver({ authorizeApp });
 
     const result = await resolver(
-      panelRequest("GET", "/apps/app_1/envs/env_1/flags/flag_1/config"),
+      await panelRequest("GET", "/apps/app_1/envs/env_1/flags/flag_1/config"),
     );
 
     expect(result).toMatchObject({ ok: false, error: { code: "FORBIDDEN" } });
     expect(authorizeApp).toHaveBeenCalledWith("user_1", "app_1", "env_1");
   });
 
-  it("does not redeem a panel identity outside the named entrypoint mode", async () => {
+  it("does not redeem a panel delegation outside the named entrypoint mode", async () => {
     const verify = vi.fn(async () => null);
     const resolver = makeControlPlaneAuthResolver(deps(verify));
 
-    const result = await resolver(panelRequest("GET", "/apps/app_1/flags"));
+    const result = await resolver(await panelRequest("GET", "/apps/app_1/flags"));
 
     expect(result).toEqual({ ok: false, reason: "UNAUTHORIZED" });
     expect(verify).not.toHaveBeenCalled();
   });
 
-  it("never falls back to the panel identity when Authorization is present", async () => {
+  it("never falls back to the panel delegation when Authorization is present", async () => {
     const authorizeApp = vi.fn<PanelSessionAccess["authorizeApp"]>(async () => null);
     const resolver = makeResolver({ authorizeApp });
-    const request = panelRequest("GET", "/apps/app_1/flags");
+    const request = await panelRequest("GET", "/apps/app_1/flags");
     request.headers.set("authorization", "Bearer invalid");
 
     const result = await resolver(request);
@@ -75,9 +75,10 @@ describe("Control Panel Flags principal", () => {
 
 function makeResolver(panelAccess: PanelSessionAccess) {
   return makeControlPlaneAuthResolver(deps(), {
-    allowPanelIdentity: true,
+    allowPanelDelegation: true,
+    panelDelegationSecret: DELEGATION_SECRET,
     panelAccess,
-    panelIdentityReplay: { consume: async () => true } as PanelIdentityReplayStore,
+    panelDelegationReplay: { consume: async () => true } as PanelDelegationReplayStore,
   });
 }
 
@@ -89,7 +90,7 @@ function deps(verify = async () => null) {
   };
 }
 
-function panelRequest(method: string, path: string): Request {
+async function panelRequest(method: string, path: string): Promise<Request> {
   const request = new Request(`https://control-plane.internal${path}`, {
     method,
     headers: { "x-splitch-panel-environment": "env_1" },
@@ -103,17 +104,17 @@ function panelRequest(method: string, path: string): Request {
         }
       : { id: "flag_config_get", appId: "app_1", environmentId: "env_1" };
   request.headers.set(
-    CONTROL_PANEL_IDENTITY_HEADER,
-    serializeControlPanelIdentity(
-      issueControlPanelIdentity(
-        operation as Parameters<typeof issueControlPanelIdentity>[0],
-        "user_1",
-        {
-          nowSeconds: NOW,
-          sessionExpiresAt: NOW + 30,
-          nonce: `nonce_${method.toLowerCase()}_1234567890`,
-        },
-      ),
+    CONTROL_PANEL_DELEGATION_HEADER,
+    await issueControlPanelDelegation(
+      request,
+      operation as Parameters<typeof issueControlPanelDelegation>[1],
+      "user_1",
+      DELEGATION_SECRET,
+      {
+        nowSeconds: NOW,
+        sessionExpiresAt: NOW + 30,
+        nonce: `nonce_${method.toLowerCase()}_1234567890`,
+      },
     ),
   );
   return request;

@@ -48,6 +48,7 @@ async function authorizedFlagsClient(environmentId: string) {
       bindings.CONTROL_PLANE_API,
       { actorId: loaded.session.userId, sessionExpiresAt: loaded.session.expiresAt },
       environmentId,
+      bindings.CONTROL_PANEL_DELEGATION_SECRET,
     ),
   };
 }

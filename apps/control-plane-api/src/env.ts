@@ -1,6 +1,7 @@
 import type { ConfigStoreDurableObjectNamespace } from "./config-store-do";
 import type { CredentialCacheBackfillDurableObjectNamespace } from "./credential-cache-backfill-do";
 import type { CredentialCacheWriterDurableObjectNamespace } from "./credential-cache-writer-do";
+import type { PanelDelegationReplayDurableObjectNamespace } from "./panel-identity-replay";
 
 /**
  * Control Plane API Worker bindings.
@@ -25,12 +26,14 @@ export interface ControlPlaneApiEnv {
   CONFIG_STORE_WRITER: ConfigStoreDurableObjectNamespace;
   CREDENTIAL_CACHE_WRITER: CredentialCacheWriterDurableObjectNamespace;
   CREDENTIAL_CACHE_BACKFILL: CredentialCacheBackfillDurableObjectNamespace;
+  PANEL_DELEGATION_REPLAY: PanelDelegationReplayDurableObjectNamespace;
   /** CI-only bearer token for the hosted credential-cache rollout gate. */
   SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */
   CONTROL_PLANE_ORIGIN?: string;
   /** Auth-api JWKS endpoint the control-plane token signature is verified against. */
   AUTH_JWKS_URI?: string;
+  CONTROL_PANEL_DELEGATION_SECRET?: string;
   SPLITCH_LOCAL_E2E_RUN_ID?: string;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;

@@ -4,11 +4,10 @@ import {
   type FlagsClient,
 } from "@splitch/control-plane-sdk";
 import {
+  CONTROL_PANEL_DELEGATION_HEADER,
   CONTROL_PANEL_ENVIRONMENT_HEADER,
-  CONTROL_PANEL_IDENTITY_HEADER,
-  issueControlPanelIdentity,
+  issueControlPanelDelegation,
   parseControlPanelOperation,
-  serializeControlPanelIdentity,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 
 const CONTROL_PLANE_INTERNAL_ORIGIN = "https://control-plane.internal";
@@ -18,7 +17,7 @@ interface ControlPanelActor {
   sessionExpiresAt: number;
 }
 
-interface IdentityOptions {
+interface DelegationOptions {
   nowSeconds?: () => number;
   nonce?: () => string;
 }
@@ -27,11 +26,18 @@ interface IdentityOptions {
 export function createControlPanelAppsClient(
   controlPlane: Fetcher,
   actor: ControlPanelActor,
-  identityOptions?: IdentityOptions,
+  delegationSecret: string,
+  delegationOptions?: DelegationOptions,
 ): AppsClient {
   return createControlPlaneSdk({
     baseUrl: CONTROL_PLANE_INTERNAL_ORIGIN,
-    fetch: panelIdentityFetch(controlPlane, actor, undefined, identityOptions),
+    fetch: panelDelegationFetch(
+      controlPlane,
+      actor,
+      delegationSecret,
+      undefined,
+      delegationOptions,
+    ),
   }).apps;
 }
 
@@ -40,19 +46,27 @@ export function createControlPanelFlagsClient(
   controlPlane: Fetcher,
   actor: ControlPanelActor,
   environmentId: string,
-  identityOptions?: IdentityOptions,
+  delegationSecret: string,
+  delegationOptions?: DelegationOptions,
 ): FlagsClient {
   return createControlPlaneSdk({
     baseUrl: CONTROL_PLANE_INTERNAL_ORIGIN,
-    fetch: panelIdentityFetch(controlPlane, actor, environmentId, identityOptions),
+    fetch: panelDelegationFetch(
+      controlPlane,
+      actor,
+      delegationSecret,
+      environmentId,
+      delegationOptions,
+    ),
   }).flags;
 }
 
-function panelIdentityFetch(
+function panelDelegationFetch(
   controlPlane: Fetcher,
   actor: ControlPanelActor,
+  delegationSecret: string,
   environmentId?: string,
-  options: IdentityOptions = {},
+  options: DelegationOptions = {},
 ): typeof fetch {
   return async (input, init) => {
     const request = input instanceof Request ? new Request(input, init) : new Request(input, init);
@@ -65,12 +79,14 @@ function panelIdentityFetch(
     );
     if (!operation) throw new Error("control-panel attempted an unsupported binding operation");
     const nowSeconds = options.nowSeconds?.() ?? Math.floor(Date.now() / 1000);
-    const identity = issueControlPanelIdentity(operation, actor.actorId, {
-      nowSeconds,
-      sessionExpiresAt: actor.sessionExpiresAt,
-      ...(options.nonce ? { nonce: options.nonce() } : {}),
-    });
-    headers.set(CONTROL_PANEL_IDENTITY_HEADER, serializeControlPanelIdentity(identity));
+    headers.set(
+      CONTROL_PANEL_DELEGATION_HEADER,
+      await issueControlPanelDelegation(request, operation, actor.actorId, delegationSecret, {
+        nowSeconds,
+        sessionExpiresAt: actor.sessionExpiresAt,
+        ...(options.nonce ? { nonce: options.nonce() } : {}),
+      }),
+    );
     return controlPlane.fetch(new Request(request, { headers }));
   };
 }

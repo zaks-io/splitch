@@ -1,6 +1,11 @@
 import type { FlagsCreateInput } from "@splitch/contracts/route-types";
 import type { MutationErrorSurface } from "./api";
 
+export const BOOLEAN_FLAG_VARIANTS = [
+  { name: "disabled", value: false, isDefault: true },
+  { name: "enabled", value: true, isDefault: false },
+] as const;
+
 export function booleanFlagInput(appId: string, rawKey: string): FlagsCreateInput {
   const key = rawKey.trim();
   return {
@@ -8,10 +13,7 @@ export function booleanFlagInput(appId: string, rawKey: string): FlagsCreateInpu
     key,
     name: flagName(key),
     schema: { type: "boolean" },
-    variants: [
-      { name: "disabled", value: false, isDefault: true },
-      { name: "enabled", value: true, isDefault: false },
-    ],
+    variants: BOOLEAN_FLAG_VARIANTS.map((variant) => ({ ...variant })),
   };
 }
 

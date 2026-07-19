@@ -1,10 +1,9 @@
 import { env } from "cloudflare:workers";
 import {
-  CONTROL_PANEL_IDENTITY_HEADER,
-  issueControlPanelIdentity,
-  parseControlPanelOperation,
-  serializeControlPanelIdentity,
+  CONTROL_PANEL_DELEGATION_HEADER,
   type ControlPanelOperation,
+  issueControlPanelDelegation,
+  parseControlPanelOperation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
@@ -19,6 +18,7 @@ const OTHER_ENV_ID = "env_panel_flags_other_e2e";
 const FLAG_ID = "flag_panel_flags_e2e";
 const USER_ID = "user_panel_flags_e2e";
 const NOW = "2026-07-19T00:00:00.000Z";
+const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
 
 let testEnv: ControlPlaneApiEnv;
 let entrypoint: ControlPanelEntrypoint;
@@ -29,6 +29,8 @@ beforeAll(async () => {
     ...env,
     CONTROL_PLANE_ORIGIN: ORIGIN,
     SPLITCH_PLATFORM_TARGET: "production",
+    AUTH_JWKS_URI: "https://auth.splitch.test/.well-known/jwks.json",
+    CONTROL_PANEL_DELEGATION_SECRET: DELEGATION_SECRET,
   } as ControlPlaneApiEnv;
   entrypoint = new ControlPanelEntrypoint(testCtx, testEnv);
 });
@@ -111,55 +113,96 @@ describe("ControlPanelEntrypoint Flags operations", () => {
   });
 
   it("binds operation, App, Environment, actor, expiry, and replay", async () => {
-    const replayedRequest = request("GET", `/apps/${APP_ID}/flags`);
-    expect((await entrypoint.fetch(replayedRequest.clone())).status).toBe(200);
-    expect((await entrypoint.fetch(replayedRequest.clone())).status).toBe(401);
+    const replayedRequest = await request("GET", `/apps/${APP_ID}/flags`);
+    const replayResponses = await Promise.all([
+      entrypoint.fetch(replayedRequest.clone()),
+      entrypoint.fetch(replayedRequest.clone()),
+    ]);
+    expect(replayResponses.map((response) => response.status).sort()).toEqual([200, 401]);
 
-    const wrongOperation = request("GET", `/apps/${APP_ID}/flags`, undefined, {
+    const wrongOperation = await request("GET", `/apps/${APP_ID}/flags`, undefined, {
       id: "flags_create",
       appId: APP_ID,
       environmentId: ENV_ID,
     });
     expect((await entrypoint.fetch(wrongOperation)).status).toBe(401);
 
-    const wrongApp = request("GET", `/apps/${APP_ID}/flags`, undefined, {
+    const wrongApp = await request("GET", `/apps/${APP_ID}/flags`, undefined, {
       id: "flags_list",
       appId: OTHER_APP_ID,
       environmentId: ENV_ID,
     });
     expect((await entrypoint.fetch(wrongApp)).status).toBe(401);
 
-    const wrongEnvironment = request("GET", `/apps/${APP_ID}/flags`, undefined, {
+    const wrongEnvironment = await request("GET", `/apps/${APP_ID}/flags`, undefined, {
       id: "flags_list",
       appId: APP_ID,
       environmentId: OTHER_ENV_ID,
     });
     expect((await entrypoint.fetch(wrongEnvironment)).status).toBe(401);
 
-    const wrongActor = request("GET", `/apps/${APP_ID}/flags`, undefined, undefined, "user_other");
+    const wrongActor = await request(
+      "GET",
+      `/apps/${APP_ID}/flags`,
+      undefined,
+      undefined,
+      "user_other",
+    );
     expect((await entrypoint.fetch(wrongActor)).status).toBe(403);
 
-    const expired = request("GET", `/apps/${APP_ID}/flags`, undefined, undefined, USER_ID, -1);
+    const expired = await request(
+      "GET",
+      `/apps/${APP_ID}/flags`,
+      undefined,
+      undefined,
+      USER_ID,
+      -1,
+    );
     expect((await entrypoint.fetch(expired)).status).toBe(401);
+  });
+
+  it("does not redeem one delegation for a different request body", async () => {
+    const originalBody = {
+      appId: APP_ID,
+      key: "body-bound-original",
+      name: "Body Bound Original",
+      schema: { type: "boolean" },
+      variants: [
+        { name: "disabled", value: false, isDefault: true },
+        { name: "enabled", value: true, isDefault: false },
+      ],
+    };
+    const changed = await request(
+      "POST",
+      `/apps/${APP_ID}/flags`,
+      { ...originalBody, key: "body-bound-changed" },
+      undefined,
+      USER_ID,
+      30,
+      originalBody,
+    );
+
+    expect((await entrypoint.fetch(changed)).status).toBe(401);
   });
 });
 
 async function panelRequest(method: string, path: string, body?: unknown): Promise<Response> {
-  return entrypoint.fetch(request(method, path, body));
+  return entrypoint.fetch(await request(method, path, body));
 }
 
 async function publicRequest(method: string, path: string): Promise<Response> {
-  return Promise.resolve(worker.fetch(request(method, path), testEnv, testCtx));
+  return Promise.resolve(worker.fetch(await request(method, path), testEnv, testCtx));
 }
 
-function request(
+async function request(
   method: string,
   path: string,
   body?: unknown,
-  identityOperation?: ControlPanelOperation,
+  delegatedOperation?: ControlPanelOperation,
   actorId = USER_ID,
   expiresInSeconds = 30,
-): Request {
+  delegatedBody = body,
+): Promise<Request> {
   const headers = new Headers({
     "x-splitch-panel-environment": ENV_ID,
     ...(body ? { "content-type": "application/json" } : {}),
@@ -167,14 +210,24 @@ function request(
   const expectedOperation = parseControlPanelOperation(method, path, ENV_ID);
   if (expectedOperation) {
     const nowSeconds = Math.floor(Date.now() / 1000);
-    const identity = {
-      ...issueControlPanelIdentity(identityOperation ?? expectedOperation, actorId, {
-        nowSeconds: expiresInSeconds < 0 ? nowSeconds - 30 : nowSeconds,
-        sessionExpiresAt: nowSeconds + expiresInSeconds,
-      }),
-      expiresAt: nowSeconds + expiresInSeconds,
-    };
-    headers.set(CONTROL_PANEL_IDENTITY_HEADER, serializeControlPanelIdentity(identity));
+    const signedRequest = new Request(`${ORIGIN}${path}`, {
+      method,
+      headers,
+      body: delegatedBody ? JSON.stringify(delegatedBody) : undefined,
+    });
+    headers.set(
+      CONTROL_PANEL_DELEGATION_HEADER,
+      await issueControlPanelDelegation(
+        signedRequest,
+        delegatedOperation ?? expectedOperation,
+        actorId,
+        DELEGATION_SECRET,
+        {
+          nowSeconds: expiresInSeconds < 0 ? nowSeconds - 30 : nowSeconds,
+          sessionExpiresAt: nowSeconds + expiresInSeconds,
+        },
+      ),
+    );
   }
   return new Request(`${ORIGIN}${path}`, {
     method,

@@ -1,8 +1,7 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import {
-  CONTROL_PANEL_IDENTITY_HEADER,
-  issueControlPanelIdentity,
-  serializeControlPanelIdentity,
+  CONTROL_PANEL_DELEGATION_HEADER,
+  issueControlPanelDelegation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
@@ -12,13 +11,14 @@ import { createApp } from "./app";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
+import type { PanelDelegationReplayStore } from "./panel-identity-replay";
 import { makeSessionStore } from "./session-store";
-import type { PanelIdentityReplayStore } from "./panel-identity-replay";
 import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 18, 22, 0, 0);
 const NOW_SECONDS = Math.floor(NOW_MS / 1000);
+const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
 const PRIMARY = {
   orgId: "org_panel_primary",
   orgName: "Panel Primary",
@@ -69,8 +69,9 @@ beforeEach(async () => {
   app = createApp({
     ...appDeps,
     authResolver: makeControlPlaneAuthResolver(authDeps, {
-      allowPanelIdentity: true,
-      panelIdentityReplay: { consume: async () => true } as PanelIdentityReplayStore,
+      allowPanelDelegation: true,
+      panelDelegationSecret: DELEGATION_SECRET,
+      panelDelegationReplay: { consume: async () => true } as PanelDelegationReplayStore,
     }),
   });
   publicApp = createApp({
@@ -81,8 +82,8 @@ beforeEach(async () => {
 
 afterEach(async () => bindings.dispose());
 
-describe("Control Panel downstream identity for apps_create", () => {
-  it("rejects panel identities at the public Control Plane boundary", async () => {
+describe("Control Panel delegation for apps_create", () => {
+  it("rejects panel delegations at the public Control Plane boundary", async () => {
     const response = await createAppRequest(PRIMARY.orgId, OWNER, "public-replay", {}, publicApp);
 
     expect(response.status).toBe(401);
@@ -125,7 +126,10 @@ describe("Control Panel downstream identity for apps_create", () => {
 
     const malformed = await app.request(`/orgs/${PRIMARY.orgId}/apps`, {
       method: "POST",
-      headers: { [CONTROL_PANEL_IDENTITY_HEADER]: "not-json", "content-type": "application/json" },
+      headers: {
+        [CONTROL_PANEL_DELEGATION_HEADER]: "not-a-delegation",
+        "content-type": "application/json",
+      },
       body: JSON.stringify({ organizationId: PRIMARY.orgId, name: "bad", key: "bad" }),
     });
     expect(malformed.status).toBe(401);
@@ -149,18 +153,30 @@ async function createAppRequest(
   targetApp = app,
   expiresAt = NOW_SECONDS + 30,
 ): Promise<Response> {
-  const identity = issueControlPanelIdentity({ id: "apps_create", orgId }, actorId, {
-    nowSeconds: NOW_SECONDS - (expiresAt === NOW_SECONDS ? 30 : 0),
-    sessionExpiresAt: expiresAt,
-    nonce: `nonce_${key.padEnd(16, "0")}`,
+  const body = JSON.stringify({ organizationId: orgId, name: key, key });
+  const request = new Request(`${AUDIENCE}/orgs/${orgId}/apps`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
   });
+  const delegation = await issueControlPanelDelegation(
+    request,
+    { id: "apps_create", orgId },
+    actorId,
+    DELEGATION_SECRET,
+    {
+      nowSeconds: NOW_SECONDS - (expiresAt === NOW_SECONDS ? 30 : 0),
+      sessionExpiresAt: expiresAt,
+      nonce: `nonce_${key.padEnd(16, "0")}`,
+    },
+  );
   return targetApp.request(`/orgs/${orgId}/apps`, {
     method: "POST",
     headers: {
-      [CONTROL_PANEL_IDENTITY_HEADER]: serializeControlPanelIdentity(identity),
+      [CONTROL_PANEL_DELEGATION_HEADER]: delegation,
       "content-type": "application/json",
       ...headers,
     },
-    body: JSON.stringify({ organizationId: orgId, name: key, key }),
+    body,
   });
 }
