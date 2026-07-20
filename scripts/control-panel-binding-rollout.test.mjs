@@ -1,0 +1,178 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+
+const repoRoot = new URL("..", import.meta.url).pathname;
+const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+const panelConfig = JSON.parse(
+  readFileSync(join(repoRoot, "apps/control-panel/wrangler.jsonc"), "utf8"),
+);
+const planeConfig = JSON.parse(
+  readFileSync(join(repoRoot, "apps/control-plane-api/wrangler.jsonc"), "utf8"),
+);
+const rollbackScript = join(repoRoot, "scripts/rollback-control-panel-binding.mjs");
+const compatDeployScript = join(repoRoot, "scripts/deploy-control-plane-compat.mjs");
+
+for (const environment of ["production", "shared-preview"]) {
+  test(`${environment} deploy keeps every protocol transition functional`, () => {
+    const rollout = packageJson.scripts[`deploy:cloudflare:${environment}`];
+    const stages = [
+      `control-plane-compat:${environment}`,
+      `control-panel:${environment}`,
+      `control-plane:${environment}`,
+      `credential-cache:backfill:${environment}`,
+      `remaining:${environment}`,
+    ];
+
+    const positions = stages.map((stage) => rollout.indexOf(stage));
+    assert.equal(
+      positions.every((position) => position >= 0),
+      true,
+    );
+    assert.equal(
+      positions.every((position, index) => index === 0 || positions[index - 1] < position),
+      true,
+    );
+    assert.match(
+      packageJson.scripts[`deploy:cloudflare:control-plane-compat:${environment}`],
+      new RegExp(`deploy-control-plane-compat\\.mjs ${environment}$`, "u"),
+    );
+    assert.doesNotMatch(
+      packageJson.scripts[`deploy:cloudflare:control-plane:${environment}`],
+      /bounded-rollout/u,
+    );
+    assert.match(
+      packageJson.scripts[`deploy:cloudflare:remaining:${environment}`],
+      /!@splitch\/control-panel/u,
+    );
+  });
+
+  test(`${environment} final config binds only signed V2 and disables V1`, () => {
+    const panelTarget =
+      environment === "production" ? panelConfig.env.production : panelConfig.env[environment];
+    const planeTarget =
+      environment === "production" ? planeConfig.env.production : planeConfig.env[environment];
+
+    assert.deepEqual(
+      panelTarget.services.find((service) => service.binding === "CONTROL_PLANE_API"),
+      {
+        binding: "CONTROL_PLANE_API",
+        service:
+          environment === "production"
+            ? "splitch-control-plane-api"
+            : "splitch-control-plane-api-shared-preview",
+        entrypoint: "SignedControlPanelEntrypoint",
+      },
+    );
+    assert.equal(planeTarget.vars.CONTROL_PANEL_LEGACY_IDENTITY_MODE, "disabled");
+    assert.equal(planeTarget.vars.CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT, "0");
+  });
+}
+
+test("compatibility deploy enables V1 with a self-expiring transition deadline", () => {
+  const fixture = makeFakePnpm();
+  const before = Math.floor(Date.now() / 1000);
+  const result = spawnSync(process.execPath, [compatDeployScript, "production"], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${fixture.binDir}:${process.env.PATH}`,
+      SPLITCH_FAKE_PNPM_CALLS: fixture.callsPath,
+      SPLITCH_FAKE_PNPM_FAIL_CALL: "0",
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+  const [call] = readCalls(fixture.callsPath);
+  assert.equal(call.includes("CONTROL_PANEL_LEGACY_IDENTITY_MODE:bounded-rollout"), true);
+  const expiry = call.find((arg) => arg.startsWith("CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT:"));
+  const expiresAt = Number(expiry?.split(":", 2)[1]);
+  assert.ok(expiresAt >= before + 30 * 60);
+  assert.ok(expiresAt <= Math.floor(Date.now() / 1000) + 30 * 60);
+});
+
+test("rollback enables V1, rolls the panel back first, then rolls the Control Plane back", () => {
+  const fixture = makeFakePnpm();
+  const result = runRollback(fixture);
+
+  assert.equal(result.status, 0, result.stderr);
+  const calls = readCalls(fixture.callsPath);
+  assert.deepEqual(calls[0], ["deploy:cloudflare:control-plane-compat:production"]);
+  assert.deepEqual(calls[1].slice(0, 7), [
+    "--dir",
+    "apps/control-panel",
+    "exec",
+    "wrangler",
+    "versions",
+    "deploy",
+    "11111111-1111-1111-1111-111111111111@100%",
+  ]);
+  assert.deepEqual(calls[2].slice(0, 7), [
+    "--dir",
+    "apps/control-plane-api",
+    "exec",
+    "wrangler",
+    "versions",
+    "deploy",
+    "22222222-2222-2222-2222-222222222222@100%",
+  ]);
+});
+
+test("rollback stops before the Control Plane if the panel version cannot be activated", () => {
+  const fixture = makeFakePnpm("2");
+  const result = runRollback(fixture);
+
+  assert.equal(result.status, 19);
+  assert.equal(readCalls(fixture.callsPath).length, 2);
+});
+
+test("rollback leaves the compatibility Control Plane active if its final version fails", () => {
+  const fixture = makeFakePnpm("3");
+  const result = runRollback(fixture);
+
+  assert.equal(result.status, 19);
+  assert.equal(readCalls(fixture.callsPath).length, 3);
+});
+
+function runRollback(fixture) {
+  return spawnSync(process.execPath, [rollbackScript, "production"], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${fixture.binDir}:${process.env.PATH}`,
+      SPLITCH_FAKE_PNPM_CALLS: fixture.callsPath,
+      SPLITCH_FAKE_PNPM_FAIL_CALL: fixture.failCall,
+      SPLITCH_ROLLBACK_CONTROL_PANEL_VERSION_ID: "11111111-1111-1111-1111-111111111111",
+      SPLITCH_ROLLBACK_CONTROL_PLANE_VERSION_ID: "22222222-2222-2222-2222-222222222222",
+    },
+  });
+}
+
+function makeFakePnpm(failCall = "0") {
+  const root = mkdtempSync(join(tmpdir(), "splitch-panel-rollout-test-"));
+  const binDir = join(root, "bin");
+  const callsPath = join(root, "calls.jsonl");
+  mkdirSync(binDir);
+  writeFileSync(
+    join(binDir, "pnpm"),
+    `#!/usr/bin/env node
+const { appendFileSync, existsSync, readFileSync } = require("node:fs");
+const callsPath = process.env.SPLITCH_FAKE_PNPM_CALLS;
+const count = existsSync(callsPath) ? readFileSync(callsPath, "utf8").trim().split("\\n").length : 0;
+appendFileSync(callsPath, JSON.stringify(process.argv.slice(2)) + "\\n");
+process.exit(String(count + 1) === process.env.SPLITCH_FAKE_PNPM_FAIL_CALL ? 19 : 0);
+`,
+  );
+  chmodSync(join(binDir, "pnpm"), 0o755);
+  return { binDir, callsPath, failCall };
+}
+
+function readCalls(path) {
+  return readFileSync(path, "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+}

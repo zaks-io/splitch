@@ -46,6 +46,15 @@ describe("Control Plane API Wrangler runtime config", () => {
       new_sqlite_classes: ["PanelDelegationReplayDurableObject"],
     });
   });
+
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("keeps the legacy panel identity entrypoint disabled for %s", (_target, target) => {
+    expect(target?.vars?.CONTROL_PANEL_LEGACY_IDENTITY_MODE).toBe("disabled");
+    expect(target?.vars?.CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT).toBe("0");
+  });
 });
 
 interface WranglerConfig {
@@ -54,6 +63,7 @@ interface WranglerConfig {
   env?: Record<string, WranglerTarget | undefined>;
   migrations?: DurableObjectMigration[];
   triggers?: { crons?: string[] };
+  vars?: Record<string, unknown>;
 }
 
 interface WranglerTarget {

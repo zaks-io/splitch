@@ -20,7 +20,7 @@ describe("Control Panel Control Plane service binding", () => {
     expect(services).toContainEqual({
       binding: "CONTROL_PLANE_API",
       service,
-      entrypoint: "ControlPanelEntrypoint",
+      entrypoint: "SignedControlPanelEntrypoint",
     });
   });
 });

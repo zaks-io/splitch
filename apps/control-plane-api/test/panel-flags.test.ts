@@ -7,7 +7,7 @@ import {
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
-import worker, { ControlPanelEntrypoint } from "../src/index.js";
+import worker, { SignedControlPanelEntrypoint } from "../src/index.js";
 
 const ORIGIN = "https://cp.splitch.test";
 const ORG_ID = "org_panel_flags_e2e";
@@ -21,7 +21,7 @@ const NOW = "2026-07-19T00:00:00.000Z";
 const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
 
 let testEnv: ControlPlaneApiEnv;
-let entrypoint: ControlPanelEntrypoint;
+let entrypoint: SignedControlPanelEntrypoint;
 
 beforeAll(async () => {
   await seed();
@@ -32,12 +32,12 @@ beforeAll(async () => {
     AUTH_JWKS_URI: "https://auth.splitch.test/.well-known/jwks.json",
     CONTROL_PANEL_DELEGATION_SECRET: DELEGATION_SECRET,
   } as ControlPlaneApiEnv;
-  entrypoint = new ControlPanelEntrypoint(testCtx, testEnv);
+  entrypoint = new SignedControlPanelEntrypoint(testCtx, testEnv);
 });
 
 afterAll(() => vi.unstubAllGlobals());
 
-describe("ControlPanelEntrypoint Flags operations", () => {
+describe("SignedControlPanelEntrypoint Flags operations", () => {
   it("lists definitions and this Environment's Configuration", async () => {
     const list = await panelRequest("GET", `/apps/${APP_ID}/flags`);
     expect(list.status).toBe(200);

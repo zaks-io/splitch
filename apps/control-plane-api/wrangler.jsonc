@@ -70,7 +70,9 @@
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
-    "CONTROL_PANEL_DELEGATION_SECRET": "local-control-panel-delegation-secret"
+    "CONTROL_PANEL_DELEGATION_SECRET": "local-control-panel-delegation-secret",
+    "CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT": "0",
+    "CONTROL_PANEL_LEGACY_IDENTITY_MODE": "disabled"
   },
   "env": {
     "shared-preview": {
@@ -97,7 +99,9 @@
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev"
+        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
+        "CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT": "0",
+        "CONTROL_PANEL_LEGACY_IDENTITY_MODE": "disabled"
       },
       "d1_databases": [
         {
@@ -164,7 +168,9 @@
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev"
+        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
+        "CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT": "0",
+        "CONTROL_PANEL_LEGACY_IDENTITY_MODE": "disabled"
       },
       "d1_databases": [
         {

@@ -6,7 +6,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
-import worker, { ControlPanelEntrypoint } from "../src/index.js";
+import worker, { ControlPanelEntrypoint, SignedControlPanelEntrypoint } from "../src/index.js";
 import { memberProfileCacheKey } from "../src/member-profile-cache.js";
 
 const AUDIENCE = "https://cp.splitch.test";
@@ -84,7 +84,7 @@ describe("index.ts: Control Panel binding boundary", () => {
   });
 
   it("redeems a scoped panel delegation only through the named binding entrypoint", async () => {
-    const entrypoint = new ControlPanelEntrypoint(testCtx, testEnv);
+    const entrypoint = new SignedControlPanelEntrypoint(testCtx, testEnv);
 
     const response = await callAppsCreate(
       (request) => entrypoint.fetch(request),
@@ -96,6 +96,41 @@ describe("index.ts: Control Panel binding boundary", () => {
     expect(await response.json()).toMatchObject({
       app: { organizationId: ORG.orgId, key: "binding-create" },
     });
+  });
+
+  it("keeps the retired V1 entrypoint closed in the final configuration", async () => {
+    const entrypoint = new ControlPanelEntrypoint(testCtx, testEnv);
+
+    const response = await callLegacyAppsCreate(entrypoint, "legacy-disabled");
+
+    expect(response.status).toBe(404);
+  });
+
+  it("keeps an old panel functional only during the bounded compatibility stage", async () => {
+    const entrypoint = new ControlPanelEntrypoint(testCtx, {
+      ...testEnv,
+      CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT: String(Math.floor(Date.now() / 1000) + 300),
+      CONTROL_PANEL_LEGACY_IDENTITY_MODE: "bounded-rollout",
+    });
+
+    const response = await callLegacyAppsCreate(entrypoint, "legacy-bounded");
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      app: { organizationId: ORG.orgId, key: "legacy-bounded" },
+    });
+  });
+
+  it("closes the V1 entrypoint when the compatibility deadline expires", async () => {
+    const entrypoint = new ControlPanelEntrypoint(testCtx, {
+      ...testEnv,
+      CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT: String(Math.floor(Date.now() / 1000) - 1),
+      CONTROL_PANEL_LEGACY_IDENTITY_MODE: "bounded-rollout",
+    });
+
+    const response = await callLegacyAppsCreate(entrypoint, "legacy-expired");
+
+    expect(response.status).toBe(404);
   });
 });
 
@@ -158,6 +193,31 @@ async function callAppsCreate(
     ),
   );
   return fetcher(request, testEnv, testCtx);
+}
+
+async function callLegacyAppsCreate(
+  entrypoint: ControlPanelEntrypoint,
+  key: string,
+): Promise<Response> {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return entrypoint.fetch(
+    new Request(`${AUDIENCE}/orgs/${ORG.orgId}/apps`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-splitch-panel-identity": encodeURIComponent(
+          JSON.stringify({
+            version: 1,
+            operation: { id: "apps_create", orgId: ORG.orgId },
+            actorId: OWNER,
+            expiresAt: nowSeconds + 30,
+            nonce: `nonce_${key.padEnd(16, "0")}`,
+          }),
+        ),
+      },
+      body: JSON.stringify({ organizationId: ORG.orgId, name: key, key }),
+    }),
+  );
 }
 
 async function cacheMemberProfile(userId: string, email: string): Promise<void> {

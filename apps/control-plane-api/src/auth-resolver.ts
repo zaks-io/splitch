@@ -5,6 +5,10 @@ import {
 import type { AuthResolver } from "@splitch/worker-runtime";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import type { JwksVerifier } from "./jwks-verify";
+import {
+  LEGACY_CONTROL_PANEL_IDENTITY_HEADER,
+  parseBoundedLegacyPanelIdentity,
+} from "./legacy-panel-identity";
 import type { PanelDelegationReplayStore } from "./panel-identity-replay";
 import type { PanelSessionAccess } from "./panel-session-access";
 import { deriveBinding } from "./scope-binding";
@@ -52,6 +56,8 @@ export interface ControlPlaneAuthOptions {
   panelDelegationSecret?: string;
   panelAccess?: PanelSessionAccess;
   panelDelegationReplay?: PanelDelegationReplayStore;
+  /** Temporary V1 bridge. The deployment workflow disables it after the V2 panel is live. */
+  allowBoundedLegacyPanelIdentity?: boolean;
 }
 
 function extractBearer(header: string | null): string | null {
@@ -69,13 +75,17 @@ export function makeControlPlaneAuthResolver(
   const nowSeconds = () => Math.floor((deps.now?.() ?? Date.now()) / 1000);
 
   return async (request) => {
-    if (options.allowPanelDelegation && request.headers.get("authorization") === null) {
+    if (
+      (options.allowPanelDelegation || options.allowBoundedLegacyPanelIdentity) &&
+      request.headers.get("authorization") === null
+    ) {
       const panelPrincipal = await resolvePanelPrincipal(
         request,
         nowSeconds(),
         options.panelDelegationSecret,
         options.panelAccess,
         options.panelDelegationReplay,
+        options.allowBoundedLegacyPanelIdentity ?? false,
       );
       if (panelPrincipal) return panelPrincipal;
     }
@@ -124,18 +134,18 @@ async function resolvePanelPrincipal(
   delegationSecret?: string,
   panelAccess?: PanelSessionAccess,
   replay?: PanelDelegationReplayStore,
+  allowBoundedLegacyIdentity = false,
 ) {
   const operation = parseControlPanelBindingOperation(request);
-  const delegation =
-    operation && delegationSecret
-      ? await verifyControlPanelDelegation(
-          request.headers.get(CONTROL_PANEL_DELEGATION_HEADER),
-          request,
-          operation,
-          delegationSecret,
-          nowSeconds,
-        )
-      : null;
+  const delegation = operation
+    ? await resolvePanelDelegation(
+        request,
+        operation,
+        nowSeconds,
+        delegationSecret,
+        allowBoundedLegacyIdentity,
+      )
+    : null;
   if (
     !operation ||
     !delegation ||
@@ -160,6 +170,30 @@ async function resolvePanelPrincipal(
   }
 
   return resolvePanelFlagsPrincipal(operation, delegation.actorId, panelAccess);
+}
+
+async function resolvePanelDelegation(
+  request: Request,
+  operation: NonNullable<ReturnType<typeof parseControlPanelBindingOperation>>,
+  nowSeconds: number,
+  delegationSecret: string | undefined,
+  allowBoundedLegacyIdentity: boolean,
+) {
+  if (allowBoundedLegacyIdentity) {
+    return parseBoundedLegacyPanelIdentity(
+      request.headers.get(LEGACY_CONTROL_PANEL_IDENTITY_HEADER),
+      operation,
+      nowSeconds,
+    );
+  }
+  if (!delegationSecret) return null;
+  return verifyControlPanelDelegation(
+    request.headers.get(CONTROL_PANEL_DELEGATION_HEADER),
+    request,
+    operation,
+    delegationSecret,
+    nowSeconds,
+  );
 }
 
 async function resolvePanelFlagsPrincipal(

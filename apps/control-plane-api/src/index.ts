@@ -40,21 +40,36 @@ const handler = {
 
 export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
 
-/** Binding-only entrypoint used by the Control Panel for allowlisted reads and mutations. */
+/** Bounded V1 bridge used only while an old Control Panel remains live during deploy or rollback. */
 export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
+  override async fetch(request: Request): Promise<Response> {
+    if (!boundedLegacyIdentityEnabled(this.env)) {
+      return new Response("not found", { status: 404 });
+    }
+    if (!parseControlPanelBindingOperation(request)) {
+      return new Response("not found", { status: 404 });
+    }
+    return handleRequest(request, this.env, this.ctx, "bounded-legacy");
+  }
+}
+
+/** Binding-only V2 entrypoint used by the Control Panel for signed least-privilege delegation. */
+export class SignedControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
     if (!parseControlPanelBindingOperation(request)) {
       return new Response("not found", { status: 404 });
     }
-    return handleRequest(request, this.env, this.ctx, true);
+    return handleRequest(request, this.env, this.ctx, "signed");
   }
 }
+
+type PanelProtocol = "none" | "signed" | "bounded-legacy";
 
 async function handleRequest(
   request: Request,
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
-  allowPanelDelegation = false,
+  panelProtocol: PanelProtocol = "none",
 ): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/health" || url.pathname === "/") {
@@ -91,17 +106,20 @@ async function handleRequest(
         sessions: makeSessionStore(env.SESSION_STORE),
       },
       {
-        allowPanelDelegation,
-        ...(allowPanelDelegation
+        allowPanelDelegation: panelProtocol === "signed",
+        allowBoundedLegacyPanelIdentity: panelProtocol === "bounded-legacy",
+        ...(panelProtocol !== "none"
           ? {
-              panelDelegationSecret: requiredPanelDelegationSecret(env),
+              ...(panelProtocol === "signed"
+                ? { panelDelegationSecret: requiredPanelDelegationSecret(env) }
+                : {}),
               panelAccess: makePanelSessionAccess(repo),
               panelDelegationReplay: makePanelDelegationReplayStore(env.PANEL_DELEGATION_REPLAY),
             }
           : {}),
       },
     ),
-    rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET, allowPanelDelegation),
+    rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET, panelProtocol !== "none"),
     repo,
     credentialStore: env.CREDENTIAL_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
@@ -203,4 +221,14 @@ export {
 function requiredPanelDelegationSecret(env: ControlPlaneApiEnv): string {
   if (env.CONTROL_PANEL_DELEGATION_SECRET) return env.CONTROL_PANEL_DELEGATION_SECRET;
   throw new Error("control-plane-api: CONTROL_PANEL_DELEGATION_SECRET is required");
+}
+
+function boundedLegacyIdentityEnabled(env: ControlPlaneApiEnv): boolean {
+  const expiresAt = env.CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT;
+  return (
+    env.CONTROL_PANEL_LEGACY_IDENTITY_MODE === "bounded-rollout" &&
+    typeof expiresAt === "string" &&
+    /^\d{10}$/u.test(expiresAt) &&
+    Number(expiresAt) > Math.floor(Date.now() / 1000)
+  );
 }

@@ -34,6 +34,8 @@ export interface ControlPlaneApiEnv {
   /** Auth-api JWKS endpoint the control-plane token signature is verified against. */
   AUTH_JWKS_URI?: string;
   CONTROL_PANEL_DELEGATION_SECRET?: string;
+  CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT?: string;
+  CONTROL_PANEL_LEGACY_IDENTITY_MODE?: string;
   SPLITCH_LOCAL_E2E_RUN_ID?: string;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;

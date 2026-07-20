@@ -71,6 +71,27 @@ describe("Control Panel Flags principal", () => {
     expect(result).toEqual({ ok: false, reason: "UNAUTHORIZED" });
     expect(authorizeApp).not.toHaveBeenCalled();
   });
+
+  it("supports the old panel only when the bounded compatibility mode is explicit", async () => {
+    const authorizeApp = vi.fn<PanelSessionAccess["authorizeApp"]>(async () => ({
+      appId: "app_1",
+      appRole: "admin",
+      orgId: "org_1",
+      orgRole: "member",
+    }));
+    const replay = vi.fn(async () => true);
+    const resolver = makeControlPlaneAuthResolver(deps(), {
+      allowBoundedLegacyPanelIdentity: true,
+      panelAccess: { authorizeApp },
+      panelDelegationReplay: { consume: replay },
+    });
+
+    const result = await resolver(legacyPanelRequest());
+
+    expect(result).toMatchObject({ ok: true, principal: { id: "user_1", appId: "app_1" } });
+    expect(authorizeApp).toHaveBeenCalledWith("user_1", "app_1", "env_1");
+    expect(replay).toHaveBeenCalledWith("nonce_legacy_1234567890", NOW + 30, NOW);
+  });
 });
 
 function makeResolver(panelAccess: PanelSessionAccess) {
@@ -118,4 +139,21 @@ async function panelRequest(method: string, path: string): Promise<Request> {
     ),
   );
   return request;
+}
+
+function legacyPanelRequest(): Request {
+  return new Request("https://control-plane.internal/apps/app_1/flags", {
+    headers: {
+      "x-splitch-panel-environment": "env_1",
+      "x-splitch-panel-identity": encodeURIComponent(
+        JSON.stringify({
+          version: 1,
+          operation: { id: "flags_list", appId: "app_1", environmentId: "env_1" },
+          actorId: "user_1",
+          expiresAt: NOW + 30,
+          nonce: "nonce_legacy_1234567890",
+        }),
+      ),
+    },
+  });
 }

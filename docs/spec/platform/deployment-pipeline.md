@@ -345,6 +345,10 @@ drift from the release path.
 5. Apply D1 migrations to production.
 6. Sync Worker secrets, then deploy Workers through Turborepo package deploy tasks. The Turbo graph
    enforces service-binding order where it matters: Evaluation deploy waits for Event Ingest deploy.
+   The Control Panel delegation protocol uses a bounded cutover: deploy the Control Plane with its
+   retired V1 binding entrypoint enabled with a 30-minute expiry, deploy the V2 panel bound to the
+   signed entrypoint, then immediately redeploy the Control Plane from its checked-in config with V1
+   disabled. Credential backfill and remaining Workers run only after that final state is active.
 7. Verify cron trigger registration on Control Plane API and Analysis Workers.
 8. Run route and binding smoke checks before marking the GitHub deployment complete.
 9. Record Worker version IDs, D1 migration names, Tinybird deployment URL, commit SHA, and smoke results
@@ -507,6 +511,12 @@ Worker code-only rollback:
 
 - Use `wrangler rollback <version_id>` or deploy a previous version to 100 percent traffic.
 - Cloudflare only supports rollback to recent versions, and rollback immediately changes active traffic.
+- A Control Panel protocol rollback must run
+  `rollback:cloudflare:panel-binding:<platform-target>` with the prior panel and Control Plane Worker
+  version IDs. It first enables the bounded V1 entrypoint on the current Control Plane, activates the
+  prior panel version, and only then activates the prior Control Plane version. Failure at either
+  version activation leaves a compatible Control Plane active for the currently active panel; the
+  compatibility entrypoint closes automatically at its transition deadline if recovery stalls.
 
 Rollback limits:
 

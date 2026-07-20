@@ -29,7 +29,7 @@
     {
       "binding": "CONTROL_PLANE_API",
       "service": "splitch-control-plane-api",
-      "entrypoint": "ControlPanelEntrypoint"
+      "entrypoint": "SignedControlPanelEntrypoint"
     }
   ],
   "d1_databases": [
@@ -85,7 +85,7 @@
         {
           "binding": "CONTROL_PLANE_API",
           "service": "splitch-control-plane-api-shared-preview",
-          "entrypoint": "ControlPanelEntrypoint"
+          "entrypoint": "SignedControlPanelEntrypoint"
         }
       ],
       "d1_databases": [
@@ -141,7 +141,7 @@
         {
           "binding": "CONTROL_PLANE_API",
           "service": "splitch-control-plane-api",
-          "entrypoint": "ControlPanelEntrypoint"
+          "entrypoint": "SignedControlPanelEntrypoint"
         }
       ],
       "d1_databases": [
