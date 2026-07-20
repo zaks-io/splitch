@@ -2,7 +2,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseWranglerConfigFile } from "./wrangler-config.mjs";
 
-export const HOSTED_ENVS = ["shared-preview", "production"];
+const HOSTED_ENVS = ["shared-preview", "production"];
 
 export const MCP_DELEGATION_PAIRS = [
   {
