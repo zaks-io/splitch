@@ -1,4 +1,5 @@
 import { CheckIcon } from "lucide-react";
+import { SectionEyebrow } from "./section-eyebrow";
 
 const contracts = [
   "Sequential, always-valid inference by default",
@@ -15,11 +16,9 @@ export function RigorSection() {
     >
       <div className="mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-2 lg:items-center">
         <div className="grid gap-5">
-          <p className="font-mono text-muted-foreground text-xs uppercase tracking-wide">
-            Statistical rigor
-          </p>
+          <SectionEyebrow>Statistical rigor</SectionEyebrow>
           <h2 className="font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
-            Results have to trace back to facts.
+            Results have to trace back to facts<span className="text-arm-control">.</span>
           </h2>
           <p className="max-w-xl text-muted-foreground leading-relaxed">
             splitch treats analysis as an enforced product contract. A result should be auditable

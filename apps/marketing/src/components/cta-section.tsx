@@ -16,7 +16,8 @@ export function CtaSection() {
       <div className="mx-auto grid w-full max-w-6xl gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
         <div className="grid gap-4">
           <h2 className="max-w-3xl font-bold font-display text-3xl tracking-tight sm:text-4xl">
-            Give agents the same flag and experiment surface humans get.
+            Give agents the same flag and experiment surface humans get
+            <span className="text-arm-treatment">.</span>
           </h2>
           <p className="max-w-2xl text-neutral-400 leading-relaxed">
             Start in the panel, then let agents operate through MCP with typed tools and the same

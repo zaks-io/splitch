@@ -1,4 +1,5 @@
 import { Button } from "@splitch/ui/components/button";
+import { SectionEyebrow } from "./section-eyebrow";
 
 const steps = [
   [
@@ -21,11 +22,9 @@ export function QuickstartSection() {
     >
       <div className="mx-auto grid w-full max-w-6xl gap-10">
         <div className="grid max-w-3xl gap-4">
-          <p className="font-mono text-muted-foreground text-xs uppercase tracking-wide">
-            Quickstart
-          </p>
+          <SectionEyebrow>Quickstart</SectionEyebrow>
           <h2 className="font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
-            The first run ends on verify, not hope.
+            The first run ends on verify, not hope<span className="text-arm-control">.</span>
           </h2>
           <p className="text-muted-foreground leading-relaxed">
             Four steps from zero to a measured result. The same quickstart is exposed to agents

@@ -14,7 +14,6 @@ const links = [
   ["/#product", "Product"],
   ["/#rigor", "Rigor"],
   ["/quickstart", "Quickstart"],
-  ["https://mcp.splitch.dev", "MCP"],
 ] as const;
 
 export function SiteHeader() {

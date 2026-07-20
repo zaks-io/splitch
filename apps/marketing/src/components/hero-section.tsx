@@ -1,4 +1,5 @@
 import { Button } from "@splitch/ui/components/button";
+import { SectionEyebrow } from "./section-eyebrow";
 import { SplitVisual } from "./split-visual";
 
 export function HeroSection() {
@@ -6,14 +7,11 @@ export function HeroSection() {
     <section className="px-4 py-16 sm:px-6 sm:py-20 lg:py-24">
       <div className="mx-auto grid w-full max-w-6xl items-center gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
         <div className="grid gap-7">
-          <p className="flex items-center gap-2 font-mono text-muted-foreground text-xs uppercase tracking-wide">
-            <span aria-hidden="true" className="size-2 rounded-sm bg-arm-control" />
-            <span aria-hidden="true" className="-ml-1 size-2 rounded-sm bg-arm-treatment" />
-            Feature flags and A/B experimentation, agents first
-          </p>
+          <SectionEyebrow>Feature flags and A/B experimentation, agents first</SectionEyebrow>
 
           <h1 className="max-w-xl font-bold font-display text-4xl text-foreground tracking-tight sm:text-5xl lg:text-6xl">
-            Ship the split. Measure the truth.
+            Ship the split<span className="text-arm-control">.</span> Measure the truth
+            <span className="text-arm-treatment">.</span>
           </h1>
 
           <p className="max-w-xl text-lg text-muted-foreground leading-relaxed">

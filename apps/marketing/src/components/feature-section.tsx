@@ -1,3 +1,5 @@
+import { SectionEyebrow } from "./section-eyebrow";
+
 const features = [
   {
     title: "Flags and Experiments together",
@@ -18,11 +20,10 @@ export function FeatureSection() {
     <section className="border-border border-t bg-muted px-4 py-16 sm:px-6 sm:py-20" id="product">
       <div className="mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <div className="grid content-start gap-4">
-          <p className="font-mono text-muted-foreground text-xs uppercase tracking-wide">
-            Flags + Experiments
-          </p>
+          <SectionEyebrow>Flags + Experiments</SectionEyebrow>
           <h2 className="max-w-xl font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
-            One product surface for what ships and what proves it.
+            One product surface for what ships and what proves it
+            <span className="text-arm-control">.</span>
           </h2>
         </div>
 

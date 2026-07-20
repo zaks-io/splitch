@@ -49,10 +49,14 @@ app stylesheet. Both apps already do this; do not fork it.
    Control-vs-Treatment meaning exists. Success is its own green, never
    chartreuse.
 5. **Mono is a signal.** Flag keys, IDs, stats, CLI commands, code:
-   `font-mono`. Eyebrows: `font-mono text-xs uppercase tracking-wide
-text-muted-foreground`. Prose stays sans.
+   `font-mono`. Eyebrows: duotone dots + `font-mono text-xs uppercase
+tracking-wide text-arm-control` (see marketing `SectionEyebrow`). Prose stays
+   sans.
 6. **Display type.** Headings `2xl`+: `font-display font-bold tracking-tight`.
-   Hero scale: `text-4xl sm:text-5xl lg:text-6xl`.
+   Hero scale: `text-4xl sm:text-5xl lg:text-6xl`. Type accents come from
+   punctuation, not word coloring: a display headline ends on one arm-colored
+   period (`text-arm-control`, or `text-arm-treatment` when the sentence lands
+   on the treatment/agent side). Never set light-mode body text in chartreuse.
 
 ## Layout recipes
 

@@ -74,7 +74,7 @@ export function QuickstartSteps() {
           key={step.title}
         >
           <div className="grid content-start gap-2">
-            <p className="font-mono text-muted-foreground text-xs uppercase tracking-wide">
+            <p className="font-mono text-arm-control text-xs uppercase tracking-wide">
               Step {index + 1} / {steps.length}
             </p>
             <h2 className="font-display font-semibold text-2xl text-foreground tracking-tight">

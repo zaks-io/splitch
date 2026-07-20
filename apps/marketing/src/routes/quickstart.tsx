@@ -30,7 +30,7 @@ function QuickstartRoute() {
             </Badge>
           </p>
           <h1 className="font-bold font-display text-4xl text-foreground tracking-tight sm:text-5xl">
-            Zero to a resolving Flag.
+            Zero to a resolving Flag<span className="text-arm-control">.</span>
           </h1>
           <p className="max-w-2xl text-lg text-muted-foreground leading-relaxed">
             The same steps for a human at the CLI, an agent over MCP, and a developer in the panel.

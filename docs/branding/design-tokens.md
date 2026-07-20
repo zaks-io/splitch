@@ -298,7 +298,8 @@ the right leading automatically.
 **Rules of thumb**
 
 - Display headings (`2xl`+): `font-display font-bold tracking-tight`. Tight tracking is what makes the grotesk read as _designed_ rather than default.
-- Eyebrows / section overlines: `font-mono text-xs uppercase tracking-wide text-muted-foreground`. (See §5, signature.)
+- Eyebrows / section overlines: the duotone dots + `font-mono text-xs uppercase tracking-wide text-arm-control` (marketing: the `SectionEyebrow` component). Quiet contexts (footer columns, dense panel chrome) may stay `text-muted-foreground`.
+- **Punctuation carries the duotone.** A display headline ends on an arm-colored period: `text-arm-control` (cobalt) by default; `text-arm-treatment` (chartreuse) only where the sentence lands on the treatment/agent side (hero's second sentence, the closing CTA). At display sizes the period is a marker, so chartreuse is safe in both modes. One colored period per headline; body text stays ink.
 - Body never exceeds ~70ch measure.
 
 ---
@@ -317,11 +318,11 @@ Small radii. The product reads as precise instrumentation, not a consumer app.
 
 | token           | value    | use                                        |
 | --------------- | -------- | ------------------------------------------ |
-| `--radius-sm`   | `4px`    | inputs, badges, chips, table cells         |
-| `--radius-md`   | `6px`    | **default** — `--radius` resolves here     |
-| `--radius-lg`   | `10px`   | buttons (shadcn `rounded-lg`), menus       |
-| `--radius-xl`   | `14px`   | cards, modals, marketing panels            |
-| `--radius-2xl`  | `20px`   | large marketing surfaces                   |
+| `--radius-sm`   | `3px`    | inputs, badges, chips, table cells         |
+| `--radius-md`   | `4px`    | **default** — `--radius` resolves here     |
+| `--radius-lg`   | `6px`    | buttons (shadcn `rounded-lg`), menus       |
+| `--radius-xl`   | `8px`    | cards, modals, marketing panels            |
+| `--radius-2xl`  | `12px`   | large marketing surfaces                   |
 | `--radius-full` | `9999px` | pills, avatars, the split-allocation track |
 
 ### 4.3 Shadow — hairlines first, then soft elevation
