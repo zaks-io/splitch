@@ -31,22 +31,48 @@ describe("Control Plane API Wrangler runtime config", () => {
   ])("declares the Auth API JWKS trust root for %s", (_target, target, jwksUri) => {
     expect(target?.vars?.AUTH_JWKS_URI).toBe(jwksUri);
   });
+
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("declaratively provisions every Durable Object for %s", (_target, target) => {
+    expect(effectiveExports(target)).toEqual({
+      ConfigStoreDurableObject: { type: "durable-object", storage: "sqlite" },
+      CredentialCacheWriterDurableObject: { type: "durable-object", storage: "sqlite" },
+      CredentialCacheBackfillDurableObject: { type: "durable-object", storage: "sqlite" },
+    });
+    expect(target?.migrations).toBeUndefined();
+  });
 });
 
 interface WranglerConfig {
   d1_databases?: unknown[];
   env?: Record<string, WranglerTarget | undefined>;
+  exports?: DurableObjectExports;
+  migrations?: unknown[];
   triggers?: { crons?: string[] };
 }
 
 interface WranglerTarget {
   d1_databases?: unknown[];
+  exports?: DurableObjectExports;
+  migrations?: unknown[];
   triggers?: { crons?: string[] };
   vars?: Record<string, unknown>;
 }
 
+type DurableObjectExports = Record<
+  string,
+  { type: "durable-object"; storage: "sqlite" | "legacy-kv" }
+>;
+
 function effectiveCrons(target: WranglerTarget | undefined): string[] | undefined {
   return target?.triggers?.crons ?? config.triggers?.crons;
+}
+
+function effectiveExports(target: WranglerTarget | undefined): DurableObjectExports | undefined {
+  return target?.exports ?? config.exports;
 }
 
 function readWranglerConfig(): WranglerConfig {
