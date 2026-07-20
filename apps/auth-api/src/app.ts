@@ -5,7 +5,7 @@ import { type ClaimDeps, initiateClaim, verifyClaim } from "./claim";
 import { handleConsent } from "./claim-consent-route";
 import type { DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
-import type { IdJagDeps } from "./idjag-verify";
+import type { verifyIdJag } from "./idjag-verify";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
 import { mountOAuthRoutes, type SmokeClientCredentials } from "./oauth-routes";
 import { type RegisterDeps, registerAnonymous } from "./register";
@@ -32,7 +32,7 @@ import type { WorkOsAccessTokenVerifier } from "./workos-access-token";
  */
 
 export interface AppDeps {
-  idJag: IdJagDeps;
+  idJag: Parameters<typeof verifyIdJag>[0];
   tokenSigner: TokenSigner;
   repo: Repository;
   /** Door B anonymous register (Turnstile + rate ceiling + provisional create). */

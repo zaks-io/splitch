@@ -6,12 +6,6 @@ import { z } from "zod";
  * focused on flow, not parsing.
  */
 
-/** POST /agent/identity (ID-JAG door): a signed JWT + optional requested scopes. */
-export const AgentIdentityRequestSchema = z.object({
-  id_jag: z.string().min(1),
-  requested_scopes: z.array(z.string()).optional(),
-});
-
 /**
  * POST /agent/identity (Door B anonymous): NO `id_jag`; a Turnstile token gates
  * the write (ADR-0034). The presence/absence of `id_jag` is what routes the
