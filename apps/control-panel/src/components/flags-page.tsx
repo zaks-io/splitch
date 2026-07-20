@@ -1,3 +1,4 @@
+import type { UrlScope } from "#lib/app-shell-navigation";
 import type { FlagsPageItem } from "#lib/flags-page-data";
 import { CreateFlagDialog } from "./create-flag-dialog";
 import { FlagsEmptyState } from "./flags-empty-state";
@@ -8,6 +9,7 @@ type FlagsPageProps = {
   env: string;
   environmentId: string;
   items: FlagsPageItem[];
+  scope: UrlScope;
 };
 
 export function FlagsPage(props: FlagsPageProps) {
@@ -33,7 +35,7 @@ export function FlagsPage(props: FlagsPageProps) {
       {props.items.length === 0 ? (
         <FlagsEmptyState appId={props.appId} environmentId={props.environmentId} />
       ) : (
-        <FlagsTable env={props.env} items={props.items} />
+        <FlagsTable env={props.env} items={props.items} scope={props.scope} />
       )}
     </section>
   );
