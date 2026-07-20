@@ -176,8 +176,10 @@ export function expectRow(rows: Record<string, unknown>[]): Record<string, unkno
   return row;
 }
 
-export class TestExecutionContext {
+export class TestExecutionContext implements ExecutionContext {
+  readonly exports: Cloudflare.Exports = {};
   readonly props = {};
+  readonly tracing = {} as Tracing;
   waits: Promise<unknown>[] = [];
 
   waitUntil(promise: Promise<unknown>): void {
