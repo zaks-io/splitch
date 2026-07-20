@@ -148,7 +148,6 @@ export function makeEnv(
     SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
-    TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN: "tb_raw_evaluations_ingest_secret",
     EVALUATION_USAGE_REPLAY_WINDOW: replayWindow,
     EVALUATION_COMMIT_OUTBOX: evaluationCommitOutbox,
   };
