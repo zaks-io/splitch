@@ -68,7 +68,39 @@ function valid(overrides: Record<string, unknown> = {}): Record<string, unknown>
   };
 }
 
+function decodePayload(token: string): Record<string, unknown> {
+  const payload = token.split(".")[1];
+  if (!payload) throw new Error("missing JWT payload");
+  const padded = payload
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(payload.length / 4) * 4, "=");
+  return JSON.parse(atob(padded)) as Record<string, unknown>;
+}
+
 describe("verifyAccessToken guards", () => {
+  it("binds the anonymous Door B audit identity through assertion exchange", async () => {
+    const signer = makeTokenSigner({
+      assertionSecret: "test-assertion-secret",
+      accessSecret: ACCESS_SECRET,
+      issuer: "https://auth.splitch.test",
+      controlPlaneAudience: CP_AUDIENCE,
+    });
+    const assertion = await signer.mintIdentityAssertion(
+      "user_anonymous",
+      ["app:app_demo:member"],
+      "anonymous",
+      NOW,
+    );
+    const token = await signer.exchangeForAccessToken(assertion, NOW);
+
+    expect(decodePayload(token)).toMatchObject({
+      sub: "user_anonymous",
+      scopes: ["app:app_demo:member"],
+      auth_door: "anonymous",
+    });
+  });
+
   it("accepts a well-formed access token (control)", async () => {
     const token = await sign(valid(), ACCESS_SECRET);
     expect(await verifyAccessToken(`Bearer ${token}`, opts, NOW)).not.toBeNull();

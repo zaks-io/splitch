@@ -131,6 +131,7 @@ describe("Dormant ID-JAG verifier: happy path", () => {
     const identityAssertion = await signer.mintIdentityAssertion(
       verified.userId,
       [],
+      "id_jag",
       Math.floor(NOW_MS / 1000),
     );
     expect(identityAssertion.split(".")).toHaveLength(3);

@@ -29,8 +29,10 @@ interface AssertionClaims {
   iss: string;
   iat: number;
   exp: number;
+  auth_door: AssertionAuthDoor;
 }
 
+type AssertionAuthDoor = "id_jag" | "anonymous";
 type AccessTokenAuthDoor = "id_jag" | "anonymous" | "device_flow" | "client_credentials";
 
 export type AccessTokenTrustContract = "local-hs256" | "rs256-jwks";
@@ -132,6 +134,13 @@ function base64UrlToBytes(input: string): Uint8Array {
   return out;
 }
 
+function assertionAuthDoor(claims: Record<string, unknown>): AssertionAuthDoor {
+  if (claims.auth_door !== "anonymous" && claims.auth_door !== "id_jag") {
+    throw new OAuthError("invalid_grant", "identity_assertion auth door is invalid");
+  }
+  return claims.auth_door;
+}
+
 async function verifyAndDecode(token: string, secret: string): Promise<Record<string, unknown>> {
   const parts = token.split(".");
   if (parts.length !== 3) {
@@ -157,7 +166,12 @@ interface AssertionIdentity {
 }
 
 export interface TokenSigner {
-  mintIdentityAssertion(userId: string, scopes: string[], nowSeconds: number): Promise<string>;
+  mintIdentityAssertion(
+    userId: string,
+    scopes: string[],
+    authDoor: AssertionAuthDoor,
+    nowSeconds: number,
+  ): Promise<string>;
   exchangeForAccessToken(assertion: string, nowSeconds: number, audience?: string): Promise<string>;
   /**
    * Verify a provisional identity_assertion and return its claims (the claim
@@ -195,7 +209,7 @@ export function makeTokenSigner(opts: {
 }): TokenSigner {
   const accessTokenTrustContract = opts.accessTokenTrustContract ?? "local-hs256";
   return {
-    async mintIdentityAssertion(userId, scopes, nowSeconds) {
+    async mintIdentityAssertion(userId, scopes, authDoor, nowSeconds) {
       const claims: AssertionClaims = {
         typ: "identity_assertion",
         sub: userId,
@@ -203,6 +217,7 @@ export function makeTokenSigner(opts: {
         iss: opts.issuer,
         iat: nowSeconds,
         exp: nowSeconds + ASSERTION_TTL_SECONDS,
+        auth_door: authDoor,
       };
       return signHmacJwt(claims, opts.assertionSecret);
     },
@@ -212,6 +227,7 @@ export function makeTokenSigner(opts: {
       if (claims.typ !== "identity_assertion" || typeof claims.sub !== "string") {
         throw new OAuthError("invalid_grant", "not a valid identity_assertion");
       }
+      const authDoor = assertionAuthDoor(claims);
       // exp is REQUIRED: a missing exp must not mean never-expires (fail-loud).
       if (typeof claims.exp !== "number" || claims.exp < nowSeconds) {
         throw new OAuthError("invalid_grant", "identity_assertion is missing exp or has expired");
@@ -225,7 +241,7 @@ export function makeTokenSigner(opts: {
         iat: nowSeconds,
         exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
         scopes,
-        auth_door: "id_jag",
+        auth_door: authDoor,
       };
       return signAccessJwt(access, opts.accessSecret, accessTokenTrustContract);
     },

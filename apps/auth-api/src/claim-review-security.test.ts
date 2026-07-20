@@ -19,6 +19,7 @@ describe("SPL-137 security review regressions", () => {
     const assertion = await d.tokenSigner.mintIdentityAssertion(
       victim.userId,
       [`app:${other.appId}:member`],
+      "anonymous",
       NOW_SECONDS,
     );
 
@@ -90,6 +91,7 @@ describe("SPL-137 security review regressions", () => {
     const secondSession = await d.tokenSigner.mintIdentityAssertion(
       provisional.userId,
       [`app:${secondAppId}:member`],
+      "anonymous",
       NOW_SECONDS,
     );
 

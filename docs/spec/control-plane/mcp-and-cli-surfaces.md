@@ -170,8 +170,15 @@ Agent connects to MCP server URL
   → GET ${mcpOrigin}/.well-known/oauth-protected-resource{/mcp}   → { resource, authorization_servers }
   → GET /.well-known/oauth-authorization-server  → { agent_auth: { identity_endpoint, claim_endpoint, ... } }
   → Agent picks an advertised door
-  → POST /agent/identity → identity_assertion
-  → POST /oauth2/token with resource=<exact MCP resource> → access_token
+      Door B (anonymous / pre-claim):
+        → POST /agent/identity with Turnstile token → identity_assertion
+        → POST /oauth2/token with identity_assertion + resource=<exact MCP resource>
+        → Auth API issues the exact-resource access_token for the anonymous identity
+      Door C (device flow):
+        → POST /oauth2/device_authorization → device_code + human verification URL
+        → Human approves in WorkOS
+        → Poll POST /oauth2/token with the device-code grant + resource=<exact MCP resource>
+        → Auth API issues the exact-resource access_token for the authenticated WorkOS User
   → Subsequent tool calls: Authorization: Bearer <access_token>
 ```
 

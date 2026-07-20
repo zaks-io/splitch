@@ -4,6 +4,12 @@ import { accessTokenJwks } from "./access-token-key";
 import { authMarkdown } from "./auth-markdown";
 import { DEVICE_CODE_GRANT, type DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
+import {
+  type MembershipAuthorityRepo,
+  narrowMembershipAuthority,
+  parseRequestedScopes,
+  resolveMembershipAuthority,
+} from "./membership-authority";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
 import type { RevocationStore } from "./revocation";
 import {
@@ -36,6 +42,7 @@ export interface OAuthRouteDeps {
   mcpAudience?: string;
   smokeClientCredentials?: SmokeClientCredentials;
   now: () => number;
+  repo: MembershipAuthorityRepo;
 }
 
 export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
@@ -230,7 +237,6 @@ async function exchangeDeviceCode(
     const deviceToken = await deps.deviceFlow.exchangeDeviceCode({
       clientId: parsed.data.client_id,
       deviceCode: parsed.data.device_code,
-      scope: parsed.data.scope,
     });
     if (deviceToken.refreshToken) {
       if (!deviceToken.providerSessionId) {
@@ -241,9 +247,15 @@ async function exchangeDeviceCode(
         deviceToken.providerSessionId,
       );
     }
+    const authority = await resolveMembershipAuthority(deps.repo, deviceToken.userId);
+    const scopes = narrowMembershipAuthority(
+      authority,
+      deviceToken.scopes,
+      parseRequestedScopes(parsed.data.scope),
+    );
     const accessToken = await deps.tokenSigner.mintAccessToken(
       deviceToken.userId,
-      deviceToken.scopes,
+      scopes,
       "device_flow",
       nowSeconds,
       audience,

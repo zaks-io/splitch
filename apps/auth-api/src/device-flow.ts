@@ -19,14 +19,13 @@ interface DeviceAuthorizationResult {
 interface DeviceTokenParams {
   clientId?: string;
   deviceCode: string;
-  scope?: string;
 }
 
 interface DeviceTokenResult {
   userId: string;
   refreshToken?: string;
   providerSessionId?: string;
-  scopes: string[];
+  scopes?: string[];
 }
 
 interface RevokeProviderTokenParams {
@@ -68,14 +67,14 @@ function splitScopes(scope: string | undefined): string[] {
   return scope?.trim() ? scope.trim().split(/\s+/) : [];
 }
 
-function scopeList(body: WorkOsDeviceTokenBody, fallback: string | undefined): string[] {
+function scopeList(body: WorkOsDeviceTokenBody): string[] | undefined {
   if (typeof body.scope === "string") {
     return splitScopes(body.scope);
   }
   if (Array.isArray(body.scopes)) {
     return body.scopes.filter((scope): scope is string => typeof scope === "string");
   }
-  return splitScopes(fallback);
+  return undefined;
 }
 
 function base64UrlToBytes(input: string): Uint8Array {
@@ -140,10 +139,7 @@ function deviceAuthorizationResult(json: Record<string, unknown>): DeviceAuthori
   };
 }
 
-function deviceTokenResult(
-  json: WorkOsDeviceTokenBody,
-  scope: string | undefined,
-): DeviceTokenResult {
+function deviceTokenResult(json: WorkOsDeviceTokenBody): DeviceTokenResult {
   if (!json.user || typeof json.user.id !== "string") {
     throw new OAuthError("invalid_grant", "device token response missing user");
   }
@@ -156,7 +152,7 @@ function deviceTokenResult(
     userId: json.user.id,
     refreshToken,
     providerSessionId,
-    scopes: scopeList(json, scope),
+    scopes: scopeList(json),
   };
 }
 
@@ -240,7 +236,7 @@ export function makeWorkOsDeviceFlow(opts: WorkOsDeviceFlowOptions): DeviceFlowP
         }),
       )) as WorkOsDeviceTokenBody;
 
-      return deviceTokenResult(json, params.scope);
+      return deviceTokenResult(json);
     },
 
     async revokeProviderToken({ sessionId }) {
@@ -267,18 +263,14 @@ export function makeFixtureDeviceFlow(): DeviceFlowPort {
       };
     },
 
-    async exchangeDeviceCode(params) {
-      if (
-        params.deviceCode !== approvedDeviceCode ||
-        revokedProviderSessions.has(providerSessionId)
-      ) {
+    async exchangeDeviceCode({ deviceCode }) {
+      if (deviceCode !== approvedDeviceCode || revokedProviderSessions.has(providerSessionId)) {
         throw new OAuthError("authorization_pending", "device grant is not approved");
       }
       return {
         userId: "user_device_fixture",
         refreshToken,
         providerSessionId,
-        scopes: splitScopes(params.scope),
       };
     },
 

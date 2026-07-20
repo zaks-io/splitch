@@ -5,7 +5,6 @@ import { makeFixtureDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import { makeJtiCache } from "./jti-cache";
 import { makeKvRevocationStore } from "./revocation";
-import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import {
   type DoorBFixtures,
   type LocalBindings,
@@ -13,6 +12,7 @@ import {
   makeFixtureKeypair,
   makeLocalBindings,
 } from "./test-fixtures";
+import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import { FIXTURE_TURNSTILE_TOKEN } from "./turnstile";
 import { makeFixtureWorkOs } from "./workos";
 
@@ -108,6 +108,16 @@ interface RegisterBody {
   demo_expires_at: string;
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const payload = token.split(".")[1];
+  if (!payload) throw new Error("missing JWT payload");
+  const padded = payload
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(payload.length / 4) * 4, "=");
+  return JSON.parse(atob(padded)) as Record<string, unknown>;
+}
+
 async function registerOk(app: ReturnType<typeof createApp>): Promise<RegisterBody> {
   const res = await app.request("/agent/identity", {
     method: "POST",
@@ -146,6 +156,26 @@ describe("Door B register: Turnstile-before-write, provisional Org+App+Environme
     // The owner membership lands on both Org and App.
     expect(await rowCount("org_memberships")).toBe(1);
     expect(await rowCount("app_memberships")).toBe(1);
+  });
+
+  it("labels the pre-claim access token with the anonymous auth door", async () => {
+    const { app } = build();
+    const registration = await registerOk(app);
+    const exchange = await app.request("/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+        identity_assertion: registration.identity_assertion,
+      }).toString(),
+    });
+
+    expect(exchange.status).toBe(200);
+    const body = (await exchange.json()) as { access_token: string };
+    expect(decodeJwtPayload(body.access_token)).toMatchObject({
+      sub: registration.user_id,
+      auth_door: "anonymous",
+    });
   });
 
   it("a MISSING Turnstile token creates ZERO rows (invalid_request, fail-loud)", async () => {

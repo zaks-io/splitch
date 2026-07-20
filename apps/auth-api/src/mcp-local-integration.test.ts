@@ -1,3 +1,4 @@
+import { MCP_DELEGATION_HEADER } from "@splitch/contracts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthApiEnv } from "./env";
 import worker from "./index";
@@ -7,6 +8,12 @@ import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
 let local: LocalBindings;
 let env: AuthApiEnv;
 let disposeLocal: (() => void) | undefined;
+
+const DEVICE_USER = "user_device_fixture";
+const SELECTED_ORG = "org_selected";
+const SELECTED_APP = "app_selected";
+const VICTIM_APP = "app_victim";
+const NOW_ISO = "2026-07-20T00:00:00.000Z";
 
 beforeAll(async () => {
   local = await makeLocalBindings();
@@ -21,6 +28,7 @@ beforeAll(async () => {
     CONTROL_PANEL_ORIGIN: "https://app.splitch.test",
     ASSERTION_SIGNING_SECRET: "test-assertion-secret",
   };
+  await seedMemberships();
 });
 
 afterAll(() => disposeLocal?.());
@@ -31,7 +39,7 @@ const testCtx = {
 } as unknown as ExecutionContext;
 
 describe("local Auth-to-MCP integration", () => {
-  it("accepts a real local RS256 token until Auth revokes it", async () => {
+  it("derives device authority from live memberships and rejects a requested victim App scope", async () => {
     const accessTokenModule = (await import(
       new URL("../../mcp-server/src/mcp-access-token.ts", import.meta.url).href
     )) as McpAccessTokenModule;
@@ -45,11 +53,7 @@ describe("local Auth-to-MCP integration", () => {
         body: new URLSearchParams({
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
           device_code: "fixture-approved-device-code",
-          scope: [
-            "app:app_selected:admin",
-            "app:app_unrelated:owner",
-            "org:org_unrelated:owner",
-          ].join(" "),
+          scope: [`app:${SELECTED_APP}:admin`, `app:${VICTIM_APP}:admin`].join(" "),
           resource: "https://mcp.splitch.test/mcp",
         }),
       }),
@@ -71,6 +75,13 @@ describe("local Auth-to-MCP integration", () => {
       },
     });
     const revocations = makeKvRevocationStore(local.sessionKv);
+    await expect(
+      verifier.verify(
+        `Bearer ${accessToken}`,
+        "https://mcp.splitch.test/mcp",
+        Math.floor(Date.now() / 1000),
+      ),
+    ).resolves.toEqual({ subject: DEVICE_USER, scopes: [`app:${SELECTED_APP}:admin`] });
     const accepted = await mcpRequest(
       handlerModule.handleMcpServerRequest,
       accessToken,
@@ -79,6 +90,38 @@ describe("local Auth-to-MCP integration", () => {
       "tools/list",
     );
     expect(accepted.status).toBe(200);
+
+    const victimScope = `app:${VICTIM_APP}:admin`;
+    const victimDelegations: string[][] = [];
+    const victimDownstream = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const scopes = decodeDelegationScopes(request);
+      victimDelegations.push(scopes);
+      if (scopes.includes(victimScope)) {
+        return Response.json({ items: [], cursor: null, limit: 50, total: null });
+      }
+      return Response.json(
+        { code: "FORBIDDEN", message: "credential is not scoped to this app", details: {} },
+        { status: 403 },
+      );
+    });
+    const victimUse = await mcpRequest(
+      handlerModule.handleMcpServerRequest,
+      accessToken,
+      verifier,
+      revocations,
+      "tools/call",
+      { name: "flags_list", arguments: { appId: VICTIM_APP } },
+      victimDownstream,
+    );
+    const victimBody = (await victimUse.json()) as {
+      result: { isError?: boolean; structuredContent?: { code?: string } };
+    };
+    expect(victimBody.result).toMatchObject({
+      isError: true,
+      structuredContent: { code: "FORBIDDEN" },
+    });
+    expect(victimDelegations).toEqual([[]]);
 
     const revoked = await authFetch(
       new Request("https://auth.splitch.test/oauth2/revoke", {
@@ -108,6 +151,34 @@ function authFetch(request: Request): Promise<Response> {
   return Promise.resolve(
     worker.fetch(request as unknown as Parameters<typeof worker.fetch>[0], env, testCtx),
   );
+}
+
+async function seedMemberships(): Promise<void> {
+  await local.d1
+    .prepare(
+      "INSERT INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
+    )
+    .bind(SELECTED_ORG, "Selected Org", "free", NOW_ISO, NOW_ISO)
+    .run();
+  await local.d1
+    .prepare("INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES (?,?,?,?)")
+    .bind(SELECTED_ORG, DEVICE_USER, "owner", NOW_ISO)
+    .run();
+  for (const [appId, key] of [
+    [SELECTED_APP, "selected"],
+    [VICTIM_APP, "victim"],
+  ]) {
+    await local.d1
+      .prepare(
+        "INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, created_by) VALUES (?,?,?,?,?,?,?)",
+      )
+      .bind(appId, SELECTED_ORG, key, key, NOW_ISO, NOW_ISO, DEVICE_USER)
+      .run();
+  }
+  await local.d1
+    .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
+    .bind(SELECTED_APP, DEVICE_USER, "admin", NOW_ISO)
+    .run();
 }
 
 function mcpRequest(
@@ -175,4 +246,17 @@ function decodeJwtHeader(token: string): Record<string, unknown> {
     .replace(/_/g, "/")
     .padEnd(Math.ceil(header.length / 4) * 4, "=");
   return JSON.parse(atob(padded)) as Record<string, unknown>;
+}
+
+function decodeDelegationScopes(request: Request): string[] {
+  const delegation = request.headers.get(MCP_DELEGATION_HEADER);
+  const payload = delegation?.split(".")[0];
+  if (!payload) throw new Error("missing MCP delegation payload");
+  const padded = payload
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(payload.length / 4) * 4, "=");
+  const claims = JSON.parse(atob(padded)) as { scopes?: unknown };
+  if (!Array.isArray(claims.scopes)) throw new Error("missing MCP delegation scopes");
+  return claims.scopes as string[];
 }

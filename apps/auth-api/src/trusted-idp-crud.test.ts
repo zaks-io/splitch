@@ -5,13 +5,13 @@ import { makeFixtureDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import { makeJtiCache } from "./jti-cache";
 import { makeKvRevocationStore } from "./revocation";
-import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import {
   type LocalBindings,
   makeDoorBDeps,
   makeFixtureKeypair,
   makeLocalBindings,
 } from "./test-fixtures";
+import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import { makeFixtureWorkOs } from "./workos";
 
 /**
@@ -36,7 +36,12 @@ let local: LocalBindings;
 let signer: TokenSigner;
 
 async function accessTokenFor(userId: string): Promise<string> {
-  const assertion = await signer.mintIdentityAssertion(userId, [], Math.floor(NOW_MS / 1000));
+  const assertion = await signer.mintIdentityAssertion(
+    userId,
+    [],
+    "id_jag",
+    Math.floor(NOW_MS / 1000),
+  );
   return signer.exchangeForAccessToken(assertion, Math.floor(NOW_MS / 1000));
 }
 
@@ -244,6 +249,7 @@ describe("H1: an identity_assertion cannot be replayed as a control-plane Bearer
     const assertion = await signer.mintIdentityAssertion(
       OWNER,
       ["app:x:owner"],
+      "id_jag",
       Math.floor(NOW_MS / 1000),
     );
     const res = await app.request(`/orgs/${ORG_A}/trusted-idps`, {

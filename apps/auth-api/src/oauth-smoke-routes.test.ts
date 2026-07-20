@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { DeviceFlowPort } from "./device-flow";
+import type { MembershipAuthorityRepo } from "./membership-authority";
 import { mountOAuthRoutes } from "./oauth-routes";
 import type { TokenSigner } from "./token-exchange";
 
@@ -15,6 +16,13 @@ const revocations = {
   revoke: async () => {},
   isRevoked: async () => false,
 };
+const emptyMembershipRepo = {
+  identity: {
+    listOrgMembershipsForUser: async () => [],
+    listAppsForOrg: async () => [],
+    getAppMembership: async () => null,
+  },
+} satisfies MembershipAuthorityRepo;
 
 function form(body: Record<string, string>): string {
   return new URLSearchParams(body).toString();
@@ -70,6 +78,7 @@ function routeApp(params: {
     mcpAudience: "https://mcp.splitch.test",
     smokeClientCredentials: params.smokeClientCredentials,
     now: () => 1_780_000_000_000,
+    repo: emptyMembershipRepo,
   });
   return app;
 }

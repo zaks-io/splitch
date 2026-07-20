@@ -6,9 +6,10 @@ import {
   type DeviceRefreshSessionStore,
   makeD1DeviceRefreshSessionStore,
 } from "./device-session-store";
+import type { MembershipAuthorityRepo } from "./membership-authority";
 import { mountOAuthRoutes } from "./oauth-routes";
-import type { TokenSigner } from "./token-exchange";
 import { makeLocalBindings } from "./test-fixtures";
+import type { TokenSigner } from "./token-exchange";
 
 const tokenSigner = {
   mintIdentityAssertion: async () => "identity-assertion",
@@ -20,6 +21,13 @@ const revocations = {
   revoke: async () => {},
   isRevoked: async () => false,
 };
+const emptyMembershipRepo = {
+  identity: {
+    listOrgMembershipsForUser: async () => [],
+    listAppsForOrg: async () => [],
+    getAppMembership: async () => null,
+  },
+} satisfies MembershipAuthorityRepo;
 
 function form(body: Record<string, string>): string {
   return new URLSearchParams(body).toString();
@@ -39,19 +47,85 @@ function staleMissCache(keys: string[] = []): KVNamespace {
 function routeApp(params: {
   deviceFlow: DeviceFlowPort;
   deviceRefreshSessions: DeviceRefreshSessionStore;
+  repo?: MembershipAuthorityRepo;
+  tokenSigner?: TokenSigner;
 }): Hono {
   const app = new Hono();
   mountOAuthRoutes(app, {
-    tokenSigner,
+    tokenSigner: params.tokenSigner ?? tokenSigner,
     deviceFlow: params.deviceFlow,
     deviceRefreshSessions: params.deviceRefreshSessions,
     revocations,
     accessSecret: "test-access-secret",
     controlPlaneAudience: "https://cp.splitch.test",
     now: () => 1_780_000_000_000,
+    repo: params.repo ?? emptyMembershipRepo,
   });
   return app;
 }
+
+describe("OAuth device token authority", () => {
+  it("mints only requested scopes backed by the authenticated User's live memberships", async () => {
+    const minted: Array<{ userId: string; scopes: string[]; authDoor: string; audience?: string }> =
+      [];
+    const signer = {
+      ...tokenSigner,
+      mintAccessToken: async (userId, scopes, authDoor, _nowSeconds, audience) => {
+        minted.push({ userId, scopes, authDoor, audience });
+        return "membership-bound-token";
+      },
+    } satisfies TokenSigner;
+    const repo = {
+      identity: {
+        listOrgMembershipsForUser: async () => [{ orgId: "org_selected", role: "owner" }],
+        listAppsForOrg: async () => [{ id: "app_selected" }, { id: "app_victim" }],
+        getAppMembership: async (scope: { appId: string }) =>
+          scope.appId === "app_selected" ? { role: "admin" } : null,
+      },
+    } as unknown as MembershipAuthorityRepo;
+    const app = routeApp({
+      repo,
+      tokenSigner: signer,
+      deviceFlow: {
+        authorizeDevice: async () => {
+          throw new Error("not used");
+        },
+        exchangeDeviceCode: async (params) => {
+          expect(params).toEqual({ clientId: undefined, deviceCode: "approved" });
+          return {
+            userId: "user_device",
+            scopes: ["app:app_selected:admin", "app:app_victim:admin"],
+          };
+        },
+        revokeProviderToken: async () => {
+          throw new Error("not used");
+        },
+      },
+      deviceRefreshSessions: { remember: async () => {}, lookup: async () => null },
+    });
+
+    const res = await app.request("/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form({
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+        device_code: "approved",
+        scope: "app:app_selected:admin app:app_victim:admin",
+        resource: "https://cp.splitch.test",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(minted).toEqual([
+      {
+        userId: "user_device",
+        scopes: ["app:app_selected:admin"],
+        authDoor: "device_flow",
+        audience: "https://cp.splitch.test",
+      },
+    ]);
+  });
+});
 
 describe("OAuth revoke route", () => {
   it("fails before calling the provider when a refresh token cannot resolve a session", async () => {
@@ -143,6 +217,7 @@ describe("OAuth revoke route", () => {
           },
         } satisfies DeviceFlowPort,
         deviceRefreshSessions,
+        repo,
       });
 
       const tokenRes = await app.request("/oauth2/token", {
