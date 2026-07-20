@@ -148,27 +148,27 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
     expect(await rowCount("apps")).toBe(beforeApps);
   });
 
-  it.each([
-    "shared-preview",
-    "production",
-  ])("%s fails closed without WORKOS_API_KEY instead of using fixture WorkOS", async (target) => {
-    const beforeOrganizations = await rowCount("organizations");
-    const res = await call(
-      { turnstile_token: turnstileToken() },
-      `198.51.100.${target === "shared-preview" ? "90" : "91"}`,
-      "/agent/identity",
-      {
-        ...env,
-        SPLITCH_PLATFORM_TARGET: target,
-        WORKOS_CLIENT_ID: "workos-client",
-        TURNSTILE_SECRET: "test-turnstile-secret",
-      },
-    );
+  it.each(["shared-preview", "production"])(
+    "%s fails closed without WORKOS_API_KEY instead of using fixture WorkOS",
+    async (target) => {
+      const beforeOrganizations = await rowCount("organizations");
+      const res = await call(
+        { turnstile_token: turnstileToken() },
+        `198.51.100.${target === "shared-preview" ? "90" : "91"}`,
+        "/agent/identity",
+        {
+          ...env,
+          SPLITCH_PLATFORM_TARGET: target,
+          WORKOS_CLIENT_ID: "workos-client",
+          TURNSTILE_SECRET: "test-turnstile-secret",
+        },
+      );
 
-    expect(res.status).toBe(500);
-    expect(await res.json()).toMatchObject({ error: "server_error" });
-    expect(await rowCount("organizations")).toBe(beforeOrganizations);
-  });
+      expect(res.status).toBe(500);
+      expect(await res.json()).toMatchObject({ error: "server_error" });
+      expect(await rowCount("organizations")).toBe(beforeOrganizations);
+    },
+  );
 
   it("hosted claims fail closed when the Control Panel origin is missing", async () => {
     const beforeOrganizations = await rowCount("organizations");
@@ -192,30 +192,30 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
     expect(await rowCount("organizations")).toBe(beforeOrganizations);
   });
 
-  it.each([
-    "WORKOS_JWKS_URI",
-    "WORKOS_ISSUER",
-  ] as const)("hosted claims fail closed when %s is missing", async (missingBinding) => {
-    const beforeOrganizations = await rowCount("organizations");
-    const hostedEnv: AuthApiEnv = {
-      ...env,
-      SPLITCH_PLATFORM_TARGET: "production",
-      WORKOS_API_KEY: "test-workos-api-key",
-      WORKOS_CLIENT_ID: "test-workos-client-id",
-      WORKOS_JWKS_URI: "https://api.workos.test/jwks",
-      WORKOS_ISSUER: "https://api.workos.test",
-      TURNSTILE_SECRET: "test-turnstile-secret",
-    };
-    delete hostedEnv[missingBinding];
+  it.each(["WORKOS_JWKS_URI", "WORKOS_ISSUER"] as const)(
+    "hosted claims fail closed when %s is missing",
+    async (missingBinding) => {
+      const beforeOrganizations = await rowCount("organizations");
+      const hostedEnv: AuthApiEnv = {
+        ...env,
+        SPLITCH_PLATFORM_TARGET: "production",
+        WORKOS_API_KEY: "test-workos-api-key",
+        WORKOS_CLIENT_ID: "test-workos-client-id",
+        WORKOS_JWKS_URI: "https://api.workos.test/jwks",
+        WORKOS_ISSUER: "https://api.workos.test",
+        TURNSTILE_SECRET: "test-turnstile-secret",
+      };
+      delete hostedEnv[missingBinding];
 
-    const res = await call(
-      { turnstile_token: turnstileToken() },
-      missingBinding === "WORKOS_JWKS_URI" ? "198.51.100.93" : "198.51.100.94",
-      "/agent/identity",
-      hostedEnv,
-    );
+      const res = await call(
+        { turnstile_token: turnstileToken() },
+        missingBinding === "WORKOS_JWKS_URI" ? "198.51.100.93" : "198.51.100.94",
+        "/agent/identity",
+        hostedEnv,
+      );
 
-    expect(res.status).toBe(500);
-    expect(await rowCount("organizations")).toBe(beforeOrganizations);
-  });
+      expect(res.status).toBe(500);
+      expect(await rowCount("organizations")).toBe(beforeOrganizations);
+    },
+  );
 });

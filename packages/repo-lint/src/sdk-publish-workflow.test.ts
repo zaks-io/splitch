@@ -172,31 +172,34 @@ describe("SDK live publish-state validation", () => {
   it.each([
     ["prerelease", { prerelease: true, immutable: true }],
     ["mutable", { prerelease: false, immutable: false }],
-  ])("fails closed when the live release is %s even if npm already has the version", async (_label, releaseState) => {
-    expect(
-      checkPublishedVersion({
-        version: "0.1.0",
-        run: () => ({ status: 0, stdout: '"0.1.0"\n', stderr: "" }),
-      }),
-    ).toBe(true);
+  ])(
+    "fails closed when the live release is %s even if npm already has the version",
+    async (_label, releaseState) => {
+      expect(
+        checkPublishedVersion({
+          version: "0.1.0",
+          run: () => ({ status: 0, stdout: '"0.1.0"\n', stderr: "" }),
+        }),
+      ).toBe(true);
 
-    await expect(
-      validateLivePublishState(repoRoot, environment, {
-        fetcher: fetcher(
-          { private: false, visibility: "public" },
-          {
-            tag_name: "sdk-v0.1.0",
-            draft: false,
-            ...releaseState,
-            published_at: "2026-07-17T00:00:00Z",
-            target_commitish: commit,
-          },
-        ),
-        head: () => commit,
-        peeledTag: () => commit,
-      }),
-    ).rejects.toThrow("not a published immutable release");
-  });
+      await expect(
+        validateLivePublishState(repoRoot, environment, {
+          fetcher: fetcher(
+            { private: false, visibility: "public" },
+            {
+              tag_name: "sdk-v0.1.0",
+              draft: false,
+              ...releaseState,
+              published_at: "2026-07-17T00:00:00Z",
+              target_commitish: commit,
+            },
+          ),
+          head: () => commit,
+          peeledTag: () => commit,
+        }),
+      ).rejects.toThrow("not a published immutable release");
+    },
+  );
 });
 describe("SDK trusted-publish validation behavior", () => {
   const commit = "0123456789abcdef0123456789abcdef01234567";

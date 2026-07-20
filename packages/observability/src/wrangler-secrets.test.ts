@@ -68,18 +68,19 @@ describe("Worker Wrangler observability secrets", () => {
   for (const [surfaceId, wranglerPath] of Object.entries(WORKER_WRANGLER_PATHS)) {
     const config = readWranglerConfig(join(repoRoot, wranglerPath));
 
-    it.each(
-      wranglerTargets(config),
-    )(`${surfaceId} declares SENTRY_DSN and stays Axiom token-free for %s`, (_target, target) => {
-      const requiredSecrets = target?.secrets?.required ?? [];
-      const sentryVar = target?.vars?.SENTRY_DSN;
+    it.each(wranglerTargets(config))(
+      `${surfaceId} declares SENTRY_DSN and stays Axiom token-free for %s`,
+      (_target, target) => {
+        const requiredSecrets = target?.secrets?.required ?? [];
+        const sentryVar = target?.vars?.SENTRY_DSN;
 
-      expect(requiredSecrets.includes("SENTRY_DSN") || sentryVar === SENTRY_DSN).toBe(true);
-      expect(requiredSecrets).not.toContain("AXIOM_TOKEN");
-      expect(target?.vars?.SENTRY_RELEASE).toBeUndefined();
-      expect(target?.vars?.AXIOM_TOKEN).toBeUndefined();
-      expect(target?.vars?.AXIOM_DATASET).toBeUndefined();
-    });
+        expect(requiredSecrets.includes("SENTRY_DSN") || sentryVar === SENTRY_DSN).toBe(true);
+        expect(requiredSecrets).not.toContain("AXIOM_TOKEN");
+        expect(target?.vars?.SENTRY_RELEASE).toBeUndefined();
+        expect(target?.vars?.AXIOM_TOKEN).toBeUndefined();
+        expect(target?.vars?.AXIOM_DATASET).toBeUndefined();
+      },
+    );
   }
 });
 
@@ -135,11 +136,12 @@ describe("Worker Wrangler source maps", () => {
   for (const [surfaceId, wranglerPath] of Object.entries(WORKER_WRANGLER_PATHS)) {
     const config = readWranglerConfig(join(repoRoot, wranglerPath));
 
-    it.each(
-      wranglerTargets(config),
-    )(`${surfaceId} enables Cloudflare source map upload for %s`, (_target, target) => {
-      expect(target?.upload_source_maps ?? config.upload_source_maps).toBe(true);
-    });
+    it.each(wranglerTargets(config))(
+      `${surfaceId} enables Cloudflare source map upload for %s`,
+      (_target, target) => {
+        expect(target?.upload_source_maps ?? config.upload_source_maps).toBe(true);
+      },
+    );
   }
 });
 
@@ -147,19 +149,20 @@ describe("Worker Wrangler Cloudflare Observability destinations", () => {
   for (const [surfaceId, wranglerPath] of Object.entries(WORKER_WRANGLER_PATHS)) {
     const config = readWranglerConfig(join(repoRoot, wranglerPath));
 
-    it.each(
-      wranglerTargets(config),
-    )(`${surfaceId} exports %s telemetry to Axiom destinations`, (_target, target) => {
-      expect(target?.observability?.traces?.enabled).toBe(true);
-      expect(target?.observability?.traces?.destinations).toContain(AXIOM_TRACE_DESTINATION);
-      expect(target?.observability?.traces?.persist).toBe(false);
-      expect(target?.observability?.traces?.head_sampling_rate).toBe(1);
+    it.each(wranglerTargets(config))(
+      `${surfaceId} exports %s telemetry to Axiom destinations`,
+      (_target, target) => {
+        expect(target?.observability?.traces?.enabled).toBe(true);
+        expect(target?.observability?.traces?.destinations).toContain(AXIOM_TRACE_DESTINATION);
+        expect(target?.observability?.traces?.persist).toBe(false);
+        expect(target?.observability?.traces?.head_sampling_rate).toBe(1);
 
-      expect(target?.observability?.logs?.enabled).toBe(true);
-      expect(target?.observability?.logs?.destinations).toContain(AXIOM_LOG_DESTINATION);
-      expect(target?.observability?.logs?.persist).toBe(false);
-      expect(target?.observability?.logs?.head_sampling_rate).toBe(1);
-    });
+        expect(target?.observability?.logs?.enabled).toBe(true);
+        expect(target?.observability?.logs?.destinations).toContain(AXIOM_LOG_DESTINATION);
+        expect(target?.observability?.logs?.persist).toBe(false);
+        expect(target?.observability?.logs?.head_sampling_rate).toBe(1);
+      },
+    );
   }
 });
 

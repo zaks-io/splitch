@@ -180,33 +180,32 @@ describe("live-update Durable Object", () => {
       path: "/config-org/config-app/missing/live",
       seed: true,
     },
-  ])("rejects $name at the panel boundary without a DO connector", async ({
-    path,
-    seed,
-    revoke,
-  }) => {
-    const token = `spl_${crypto.randomUUID().replaceAll("-", "").repeat(2)}`;
-    const tokenHash = await hashToken(token);
-    if (seed) await seedPanelSession(tokenHash);
-    if (revoke) await env.SESSION_STORE.delete(`session:${tokenHash}`);
-    const connect = vi.fn(async () => new Response(null, { status: 101 }));
+  ])(
+    "rejects $name at the panel boundary without a DO connector",
+    async ({ path, seed, revoke }) => {
+      const token = `spl_${crypto.randomUUID().replaceAll("-", "").repeat(2)}`;
+      const tokenHash = await hashToken(token);
+      if (seed) await seedPanelSession(tokenHash);
+      if (revoke) await env.SESSION_STORE.delete(`session:${tokenHash}`);
+      const connect = vi.fn(async () => new Response(null, { status: 101 }));
 
-    const request = new Request(`https://panel.test${path}`, {
-      headers: {
-        cookie: `__session=${token}`,
-        origin: "https://panel.test",
-        upgrade: "websocket",
-      },
-    });
-    const response = await handleLiveUpdateUpgrade(request, {
-      authorize: (upgradeRequest, params) =>
-        authorizeLiveUpdateUpgrade(upgradeRequest, env, params),
-      connect,
-    });
+      const request = new Request(`https://panel.test${path}`, {
+        headers: {
+          cookie: `__session=${token}`,
+          origin: "https://panel.test",
+          upgrade: "websocket",
+        },
+      });
+      const response = await handleLiveUpdateUpgrade(request, {
+        authorize: (upgradeRequest, params) =>
+          authorizeLiveUpdateUpgrade(upgradeRequest, env, params),
+        connect,
+      });
 
-    expect(response?.status).toBe(seed && !revoke ? 404 : 401);
-    expect(connect).not.toHaveBeenCalled();
-  });
+      expect(response?.status).toBe(seed && !revoke ? 404 : 401);
+      expect(connect).not.toHaveBeenCalled();
+    },
+  );
 });
 
 async function seedPanelSession(sessionTokenHash: string): Promise<void> {

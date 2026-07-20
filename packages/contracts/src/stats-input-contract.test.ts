@@ -77,16 +77,12 @@ describe("PerEntityMetricRowSchema", () => {
     expect(PerEntityMetricRowSchema.parse(metricRow).value).toBe(1);
   });
 
-  it.each([
-    "targeting_key_hash",
-    "run_id",
-    "metric_id",
-    "metric_type",
-    "value",
-    "in_window",
-  ])("rejects a missing %s field", (field) => {
-    expect(PerEntityMetricRowSchema.safeParse(omitField(metricRow, field)).success).toBe(false);
-  });
+  it.each(["targeting_key_hash", "run_id", "metric_id", "metric_type", "value", "in_window"])(
+    "rejects a missing %s field",
+    (field) => {
+      expect(PerEntityMetricRowSchema.safeParse(omitField(metricRow, field)).success).toBe(false);
+    },
+  );
 
   it.each(["num_value", "denom_value"])("rejects a missing Ratio %s field", (field) => {
     expect(
@@ -154,14 +150,12 @@ describe("PrePeriodRowSchema", () => {
     covariate_source: "pre_period",
   };
 
-  it.each([
-    "targeting_key_hash",
-    "metric_id",
-    "pre_period_value",
-    "covariate_source",
-  ])("rejects a missing %s field", (field) => {
-    expect(PrePeriodRowSchema.safeParse(omitField(prePeriodRow, field)).success).toBe(false);
-  });
+  it.each(["targeting_key_hash", "metric_id", "pre_period_value", "covariate_source"])(
+    "rejects a missing %s field",
+    (field) => {
+      expect(PrePeriodRowSchema.safeParse(omitField(prePeriodRow, field)).success).toBe(false);
+    },
+  );
 
   it("parses the CUPED covariate source enum", () => {
     for (const covariate_source of ["pre_period", "declared_attribute", "historical_attribute"]) {
@@ -195,15 +189,12 @@ describe("ActivationRowSchema", () => {
     activated: true,
   };
 
-  it.each([
-    "targeting_key_hash",
-    "run_id",
-    "activation_ts",
-    "counterfactual",
-    "activated",
-  ])("rejects a missing %s field", (field) => {
-    expect(ActivationRowSchema.safeParse(omitField(activationRow, field)).success).toBe(false);
-  });
+  it.each(["targeting_key_hash", "run_id", "activation_ts", "counterfactual", "activated"])(
+    "rejects a missing %s field",
+    (field) => {
+      expect(ActivationRowSchema.safeParse(omitField(activationRow, field)).success).toBe(false);
+    },
+  );
 
   it("parses the Activation gate row fields", () => {
     const row = ActivationRowSchema.parse(activationRow);

@@ -90,16 +90,19 @@ describe("Control Panel server session transport for apps_create", () => {
   it.each([
     ["owner", OWNER, "a"],
     ["admin", ADMIN, "b"],
-  ])("allows an authenticated %s while the Worker performs the live role gate", async (_, userId, suffix) => {
-    const tokenHash = await storePanelSession(userId, suffix);
-    const response = await createAppRequest(PRIMARY.orgId, tokenHash, `checkout-${suffix}`);
+  ])(
+    "allows an authenticated %s while the Worker performs the live role gate",
+    async (_, userId, suffix) => {
+      const tokenHash = await storePanelSession(userId, suffix);
+      const response = await createAppRequest(PRIMARY.orgId, tokenHash, `checkout-${suffix}`);
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      app: { organizationId: PRIMARY.orgId, key: `checkout-${suffix}` },
-      environments: [{ key: "dev" }, { key: "prod" }],
-    });
-  });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        app: { organizationId: PRIMARY.orgId, key: `checkout-${suffix}` },
+        environments: [{ key: "dev" }, { key: "prod" }],
+      });
+    },
+  );
 
   it.each([
     ["member", MEMBER, "c"],

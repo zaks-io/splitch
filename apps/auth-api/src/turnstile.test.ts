@@ -7,32 +7,33 @@ import {
 } from "./turnstile";
 
 describe("runtime Turnstile verifier selection", () => {
-  it.each([
-    undefined,
-    "local",
-    "pr-ci",
-  ])("keeps the fixture verifier for %s", async (platformTarget) => {
-    const verifier = makeRuntimeTurnstile({
-      fixture: makeFixtureTurnstile(),
-      platformTarget,
-      secret: undefined,
-    });
-
-    await expect(verifier.assertValid(FIXTURE_TURNSTILE_TOKEN, undefined)).resolves.toBe(undefined);
-  });
-
-  it.each([
-    "shared-preview",
-    "production",
-  ])("requires TURNSTILE_SECRET for %s", (platformTarget) => {
-    expect(() =>
-      makeRuntimeTurnstile({
+  it.each([undefined, "local", "pr-ci"])(
+    "keeps the fixture verifier for %s",
+    async (platformTarget) => {
+      const verifier = makeRuntimeTurnstile({
         fixture: makeFixtureTurnstile(),
         platformTarget,
         secret: undefined,
-      }),
-    ).toThrow("auth-api: TURNSTILE_SECRET is required outside local/test targets");
-  });
+      });
+
+      await expect(verifier.assertValid(FIXTURE_TURNSTILE_TOKEN, undefined)).resolves.toBe(
+        undefined,
+      );
+    },
+  );
+
+  it.each(["shared-preview", "production"])(
+    "requires TURNSTILE_SECRET for %s",
+    (platformTarget) => {
+      expect(() =>
+        makeRuntimeTurnstile({
+          fixture: makeFixtureTurnstile(),
+          platformTarget,
+          secret: undefined,
+        }),
+      ).toThrow("auth-api: TURNSTILE_SECRET is required outside local/test targets");
+    },
+  );
 
   it("fails closed for unknown explicit targets", () => {
     expect(() =>

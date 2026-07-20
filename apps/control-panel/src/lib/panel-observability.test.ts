@@ -70,30 +70,27 @@ describe("control-panel observability tiers", () => {
       surface: createElement(WidgetErrorState),
       surfaceLabel: "Widget unavailable",
     },
-  ] as const)("accepts thrown $tier route-loader errors with the correct surface and reporting", ({
-    tier,
-    route,
-    level,
-    surface,
-    surfaceLabel,
-  }) => {
-    const captureException = vi.fn();
-    setControlPanelSentryClientForTests({ captureException });
+  ] as const)(
+    "accepts thrown $tier route-loader errors with the correct surface and reporting",
+    ({ tier, route, level, surface, surfaceLabel }) => {
+      const captureException = vi.fn();
+      setControlPanelSentryClientForTests({ captureException });
 
-    const loaderError = new Error(`${tier} route loader failed`);
-    reportRouteError(tier, loaderError, route);
-    const html = renderToStaticMarkup(surface);
+      const loaderError = new Error(`${tier} route loader failed`);
+      reportRouteError(tier, loaderError, route);
+      const html = renderToStaticMarkup(surface);
 
-    expect(html).toContain(surfaceLabel);
-    expect(captureException).toHaveBeenCalledWith(
-      loaderError,
-      expect.objectContaining({
-        extra: { route },
-        level,
-        tags: { boundary: tier, route },
-      }),
-    );
-  });
+      expect(html).toContain(surfaceLabel);
+      expect(captureException).toHaveBeenCalledWith(
+        loaderError,
+        expect.objectContaining({
+          extra: { route },
+          level,
+          tags: { boundary: tier, route },
+        }),
+      );
+    },
+  );
 
   it("records expected 403 route failures as info breadcrumbs only", () => {
     const addBreadcrumb = vi.fn();

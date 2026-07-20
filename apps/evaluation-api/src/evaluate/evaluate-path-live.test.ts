@@ -47,40 +47,43 @@ describe("evaluatePath condition validation", () => {
   it.each([
     ["missing", {}],
     ["null", { plan: null as never }],
-  ] as const)("%s Targeting Rule attribute fails loud with no Exposure decision", async (_caseName, attributes) => {
-    const rule = targetingRule({
-      id: "rule-null-attribute",
-      conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
-    });
-    const store = new RecordingAssignmentStore();
-    const provider = new RecordingProvider({
-      experiment: experimentConfig({ liveRun: runConfig({ targetingRules: [rule] }) }),
-    });
-    const logger = new RecordingLogger();
+  ] as const)(
+    "%s Targeting Rule attribute fails loud with no Exposure decision",
+    async (_caseName, attributes) => {
+      const rule = targetingRule({
+        id: "rule-null-attribute",
+        conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
+      });
+      const store = new RecordingAssignmentStore();
+      const provider = new RecordingProvider({
+        experiment: experimentConfig({ liveRun: runConfig({ targetingRules: [rule] }) }),
+      });
+      const logger = new RecordingLogger();
 
-    const result = await evaluatePath(
-      baseInput({
-        evaluationContext: { targetingKey: "user-1", idType: "user", attributes },
-      }),
-      { assignmentStore: store, provider, logger },
-    );
+      const result = await evaluatePath(
+        baseInput({
+          evaluationContext: { targetingKey: "user-1", idType: "user", attributes },
+        }),
+        { assignmentStore: store, provider, logger },
+      );
 
-    expect(result).toMatchObject({
-      kind: "error",
-      variant: "control",
-      reason: "ERROR",
-      errorCode: "VALIDATION_ERROR",
-      liveRunId: null,
-      exposure: null,
-    });
-    expect(logger.warnings).toHaveLength(1);
-    expect(logger.warnings[0]).toMatchObject([
-      "condition_attribute_null",
-      { attribute: "plan", operator: "eq", ruleId: "rule-null-attribute" },
-    ]);
-    expect(logger.errors).toHaveLength(1);
-    expect(store.putCalls).toEqual([]);
-  });
+      expect(result).toMatchObject({
+        kind: "error",
+        variant: "control",
+        reason: "ERROR",
+        errorCode: "VALIDATION_ERROR",
+        liveRunId: null,
+        exposure: null,
+      });
+      expect(logger.warnings).toHaveLength(1);
+      expect(logger.warnings[0]).toMatchObject([
+        "condition_attribute_null",
+        { attribute: "plan", operator: "eq", ruleId: "rule-null-attribute" },
+      ]);
+      expect(logger.errors).toHaveLength(1);
+      expect(store.putCalls).toEqual([]);
+    },
+  );
 });
 
 describe("evaluatePath live Run paths", () => {

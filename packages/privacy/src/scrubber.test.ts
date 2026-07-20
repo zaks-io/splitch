@@ -49,7 +49,7 @@ describe("scrubValue", () => {
 
     expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
     expect(descriptor?.enumerable).toBe(true);
-    expect((descriptor?.value as Record<string, unknown>).email).toBe(REDACTED);
+    expect((descriptor?.value as Record<string, unknown> | undefined)?.email).toBe(REDACTED);
     expect(JSON.stringify(out).includes("proto@example.com")).toBe(false);
   });
 
