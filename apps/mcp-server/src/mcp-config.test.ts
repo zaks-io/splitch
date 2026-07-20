@@ -42,6 +42,11 @@ describe("MCP OAuth origin configuration", () => {
     }
     for (const config of [controlPlaneConfig, evaluationConfig, analysisConfig]) {
       expect(config.match(/"name": "MCP_DELEGATION_REPLAY"/g)).toHaveLength(3);
+    }
+    expect(controlPlaneConfig).toContain(
+      '"McpDelegationReplayDurableObject": { "type": "durable-object", "storage": "sqlite" }',
+    );
+    for (const config of [evaluationConfig, analysisConfig]) {
       expect(config.match(/"tag": "v\d+_mcp_delegation_replay"/g)).toHaveLength(3);
     }
   });

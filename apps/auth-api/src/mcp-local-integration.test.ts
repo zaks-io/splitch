@@ -10,7 +10,7 @@ let env: AuthApiEnv;
 let disposeLocal: (() => void) | undefined;
 
 const DEVICE_USER = "user_device_fixture";
-const SELECTED_ORG = "org_selected";
+const SELECTED_ORG = "org_device";
 const SELECTED_APP = "app_selected";
 const VICTIM_APP = "app_victim";
 const NOW_ISO = "2026-07-20T00:00:00.000Z";

@@ -3,8 +3,6 @@ import { verifyHealthObservation } from "../../scripts/lib/shared-preview-deploy
 import { type HealthRoute, readSmokeConfig, type SmokeConfig } from "./smoke-config";
 
 export { expect };
-export type { SmokeConfig };
-
 interface JsonRpcEnvelope {
   readonly jsonrpc: "2.0";
   readonly id: string;
