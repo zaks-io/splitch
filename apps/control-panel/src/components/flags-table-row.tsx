@@ -1,14 +1,18 @@
 import { Badge } from "@splitch/ui/components/badge";
 import { TableCell, TableRow } from "@splitch/ui/components/table";
+import { type UrlScope, scopedHref } from "#lib/app-shell-navigation";
 import type { FlagsPageItem } from "#lib/flags-page-data";
 
-export function FlagsTableRow({ item }: { item: FlagsPageItem }) {
+export function FlagsTableRow({ item, scope }: { item: FlagsPageItem; scope: UrlScope }) {
   const config = item.configuration;
+  const detailHref = scopedHref(scope, `flags/${encodeURIComponent(item.definition.id)}`);
 
   return (
     <TableRow data-flag-key={item.definition.key}>
       <TableCell className="px-4 font-mono font-medium text-foreground">
-        {item.definition.key}
+        <a className="hover:underline" href={detailHref}>
+          {item.definition.key}
+        </a>
       </TableCell>
       <TableCell>
         {config ? (

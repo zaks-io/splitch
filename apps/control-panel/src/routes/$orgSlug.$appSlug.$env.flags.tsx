@@ -29,6 +29,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags")({
 });
 
 function FlagsSectionRoute() {
+  const params = Route.useParams();
   const { items, scope } = Route.useLoaderData();
   return (
     <>
@@ -37,6 +38,7 @@ function FlagsSectionRoute() {
         env={scope.env}
         environmentId={scope.environmentId}
         items={items}
+        scope={{ orgSlug: params.orgSlug, appSlug: params.appSlug, env: params.env }}
       />
       <Outlet />
     </>
