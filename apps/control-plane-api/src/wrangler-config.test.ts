@@ -47,6 +47,14 @@ describe("Control Plane API Wrangler runtime config", () => {
     });
   });
 
+  it("binds the actor-scoped limiter in production", () => {
+    expect(config.env?.production?.ratelimits).toContainEqual({
+      name: "CONTROL_PLANE_ACTOR_RATE_LIMITER",
+      namespace_id: expect.stringMatching(/^\d+$/u),
+      simple: { limit: 600, period: 60 },
+    });
+  });
+
   it.each([
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
@@ -62,6 +70,7 @@ interface WranglerConfig {
   durable_objects?: DurableObjectsConfig;
   env?: Record<string, WranglerTarget | undefined>;
   migrations?: DurableObjectMigration[];
+  ratelimits?: RateLimitConfig[];
   triggers?: { crons?: string[] };
   vars?: Record<string, unknown>;
 }
@@ -70,6 +79,7 @@ interface WranglerTarget {
   d1_databases?: unknown[];
   durable_objects?: DurableObjectsConfig;
   migrations?: DurableObjectMigration[];
+  ratelimits?: RateLimitConfig[];
   triggers?: { crons?: string[] };
   vars?: Record<string, unknown>;
 }
@@ -81,6 +91,12 @@ interface DurableObjectsConfig {
 interface DurableObjectMigration {
   tag: string;
   new_sqlite_classes?: string[];
+}
+
+interface RateLimitConfig {
+  name: string;
+  namespace_id: string;
+  simple: { limit: number; period: number };
 }
 
 function effectiveCrons(target: WranglerTarget | undefined): string[] | undefined {

@@ -2,13 +2,44 @@ import { createControlPlaneSdk, type FlagConfigGetOutput } from "@splitch/contro
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { createFlagConfigApi } from "./flag-config-api";
-import { loadFlagConfigRoute, updateFlagConfigRoute } from "./flag-config-route";
+import {
+  loadFlagConfigByKeyRoute,
+  loadFlagConfigRoute,
+  updateFlagConfigRoute,
+} from "./flag-config-route";
 import { referenceFlagConfigQuery } from "./reference-query";
 
 const scope = { appId: "app_1", environmentId: "env_1" };
 const initialConfig = config({ version: 1, enabled: false });
 
 describe("reference Flag Configuration route query flow", () => {
+  it("resolves the URL key before loading the canonical Flag ID", async () => {
+    const requests: string[] = [];
+    const api = sdkApi(async (request) => {
+      requests.push(request.url);
+      if (request.url.endsWith("/apps/app_1/flags")) {
+        return Response.json({ items: [flagDefinition()] });
+      }
+      expect(request.url).toBe(
+        "https://control-plane.test/apps/app_1/envs/env_1/flags/flag_1/config",
+      );
+      return Response.json(initialConfig);
+    });
+
+    await expect(
+      loadFlagConfigByKeyRoute({
+        queryClient: queryClientForTest(),
+        api,
+        scope,
+        flagKey: "new-checkout",
+      }),
+    ).resolves.toBe("flag_1");
+    expect(requests).toEqual([
+      "https://control-plane.test/apps/app_1/flags",
+      "https://control-plane.test/apps/app_1/envs/env_1/flags/flag_1/config",
+    ]);
+  });
+
   it("seeds a real typed SDK loader read into the QueryClient", async () => {
     let reads = 0;
     const api = sdkApi(async (request) => {
@@ -146,6 +177,23 @@ function config(input: { version: number; enabled: boolean }): FlagConfigGetOutp
     availableVariantNames: ["control", "treatment"],
     targetingRules: [],
     ...input,
+  };
+}
+
+function flagDefinition() {
+  return {
+    id: "flag_1",
+    appId: "app_1",
+    key: "new-checkout",
+    name: "New Checkout",
+    schema: { type: "boolean" },
+    variants: [
+      { id: "var_disabled", name: "disabled", value: false },
+      { id: "var_enabled", name: "enabled", value: true },
+    ],
+    defaultVariantId: "var_disabled",
+    createdAt: "2026-07-20T00:00:00.000Z",
+    updatedAt: "2026-07-20T00:00:00.000Z",
   };
 }
 

@@ -184,6 +184,13 @@
         { "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" },
         { "binding": "CREDENTIAL_STORE", "id": "2c0082cdd2f4426f8cfeb4d2bbd62277" }
       ],
+      "ratelimits": [
+        {
+          "name": "CONTROL_PLANE_ACTOR_RATE_LIMITER",
+          "namespace_id": "1102",
+          "simple": { "limit": 600, "period": 60 }
+        }
+      ],
       "durable_objects": {
         "bindings": [
           { "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" },

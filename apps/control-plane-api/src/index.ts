@@ -107,7 +107,10 @@ async function handleRequest(
       },
       controlPanelAuthOptions(env, repo, panelProtocol),
     ),
-    rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET, panelProtocol !== "none"),
+    rateLimiter: rateLimiterForTarget(
+      env.SPLITCH_PLATFORM_TARGET,
+      env.CONTROL_PLANE_ACTOR_RATE_LIMITER,
+    ),
     repo,
     credentialStore: env.CREDENTIAL_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),

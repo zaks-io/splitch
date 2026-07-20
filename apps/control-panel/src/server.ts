@@ -3,7 +3,13 @@ import { wrapWorkerHandler } from "@splitch/observability/worker";
 import handler from "@tanstack/react-start/server-entry";
 import { controlPanelLiveUpdateBindings } from "#lib/bindings";
 import { createControlPanelApp } from "#lib/control-plane-app-functions";
-import { createControlPanelFlag, loadControlPanelFlags } from "#lib/control-plane-flag-functions";
+import {
+  createControlPanelFlag,
+  loadControlPanelFlagConfig,
+  loadControlPanelFlags,
+  resolveControlPanelFlagId,
+  updateControlPanelFlagConfig,
+} from "#lib/control-plane-flag-functions";
 import { authorizeLiveUpdateUpgrade } from "#lib/live-update-authorization";
 import { handleLiveUpdateUpgrade } from "#lib/live-update-upgrade";
 import { setControlPanelSentryClient } from "#lib/panel-observability";
@@ -11,7 +17,10 @@ import { setControlPanelSentryClient } from "#lib/panel-observability";
 // Keep server functions in the Worker graph so their handlers are deployed with the app.
 void createControlPanelApp;
 void createControlPanelFlag;
+void loadControlPanelFlagConfig;
 void loadControlPanelFlags;
+void resolveControlPanelFlagId;
+void updateControlPanelFlagConfig;
 
 type ControlPanelWorkerEnv = {
   DB: D1Database;

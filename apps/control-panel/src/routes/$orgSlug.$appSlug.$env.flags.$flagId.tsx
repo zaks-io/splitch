@@ -1,5 +1,5 @@
 import { createFileRoute, notFound, redirect } from "@tanstack/react-router";
-import { loadFlagConfigRoute } from "#lib/flag-config-route";
+import { FlagConfigNotFoundError, loadFlagConfigByKeyRoute } from "#lib/flag-config-route";
 import { AccessDeniedError } from "#lib/loader-context";
 import { loadScopedSession } from "#lib/session-functions";
 
@@ -16,12 +16,17 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagId")({
     if (scoped.kind === "forbidden") throw new AccessDeniedError();
     if (scoped.kind === "notFound") throw notFound();
 
-    await loadFlagConfigRoute({
-      queryClient: context.queryClient,
-      api: context.flagConfigApi,
-      scope: scoped.context.scope,
-      flagId: params.flagId,
-    });
+    try {
+      await loadFlagConfigByKeyRoute({
+        queryClient: context.queryClient,
+        api: context.flagConfigApi,
+        scope: scoped.context.scope,
+        flagKey: params.flagId,
+      });
+    } catch (error) {
+      if (error instanceof FlagConfigNotFoundError) throw notFound();
+      throw error;
+    }
   },
   component: () => null,
 });

@@ -27,6 +27,8 @@ export interface ControlPlaneApiEnv {
   CREDENTIAL_CACHE_WRITER: CredentialCacheWriterDurableObjectNamespace;
   CREDENTIAL_CACHE_BACKFILL: CredentialCacheBackfillDurableObjectNamespace;
   PANEL_DELEGATION_REPLAY: PanelDelegationReplayDurableObjectNamespace;
+  /** Cloudflare-native counter keyed by the authenticated Control Plane actor. */
+  CONTROL_PLANE_ACTOR_RATE_LIMITER?: RateLimit;
   /** CI-only bearer token for the hosted credential-cache rollout gate. */
   SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */
