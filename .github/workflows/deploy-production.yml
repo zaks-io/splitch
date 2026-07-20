@@ -10,6 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -38,10 +39,6 @@ jobs:
           github.event.workflow_run.head_repository.full_name == github.repository
         )
       }}
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
-      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -98,26 +95,32 @@ jobs:
             exit 1
           fi
 
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.8.0 --activate
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.17.0
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Check Turbo remote cache inputs
-        run: node scripts/check-turbo-remote-cache-env.mjs
-
-      - name: Verify manual deploy
+      - name: Verify CI passed for manual deploy commit
         if: github.event_name == 'workflow_dispatch'
-        run: pnpm verify:ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ env.SENTRY_RELEASE }}
+        run: |
+          set -euo pipefail
+          runs="$(curl --fail --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --get \
+            --data-urlencode "head_sha=$RELEASE_SHA" \
+            --data-urlencode "branch=main" \
+            --data-urlencode "event=push" \
+            --data-urlencode "status=success" \
+            --data-urlencode "per_page=1" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs")"
+          run_url="$(jq -r --arg sha "$RELEASE_SHA" \
+            '.workflow_runs[] | select(.head_sha == $sha and .head_branch == "main" and .event == "push" and .conclusion == "success") | .html_url' \
+            <<< "$runs" | head -n 1)"
+          if [ -z "$run_url" ]; then
+            echo "::error::No successful ci push run found for production commit $RELEASE_SHA"
+            exit 1
+          fi
+          echo "Verified CI: $run_url"
 
   deploy:
     name: Deploy Production

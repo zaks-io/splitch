@@ -85,15 +85,15 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 
 ## Required GitHub workflows
 
-| Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                                                              |
-| ----------------------- | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks                                                |
-| `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                    |
-| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: rebuild the Tinybird Branch, migrate and clear preview-only D1/KV state, reseed fixtures, run Copy Pipe on demand, and verify hosted smoke                            |
-| `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, optional manual `verify:ci`, Tinybird production deploy, D1 migrations, Turborepo Worker deploy tasks, and Linear release sync                  |
-| `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                                                 |
-| `sdk-release`           | manual dispatch                                     | `sdk-release`, queued            | wired: validate `@splitch/sdk`, prepare release artifacts, create or update draft GitHub Release for `sdk-v<version>`; does not publish to npm                               |
-| `sdk-publish`           | published GitHub Release                            | `sdk-publish`, queued            | wired: validate fresh public repository/release/remote-tag SHA evidence immediately before GitHub-hosted npm trusted publishing with provenance, or skip an existing version |
+| Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                                                                  |
+| ----------------------- | --------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks                                                    |
+| `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                        |
+| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: rebuild the Tinybird Branch, migrate and clear preview-only D1/KV state, reseed fixtures, run Copy Pipe on demand, and verify hosted smoke                                |
+| `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, successful CI verification for manual dispatches, Tinybird production deploy, D1 migrations, Turborepo Worker deploy tasks, and Linear release sync |
+| `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                                                     |
+| `sdk-release`           | manual dispatch                                     | `sdk-release`, queued            | wired: validate `@splitch/sdk`, prepare release artifacts, create or update draft GitHub Release for `sdk-v<version>`; does not publish to npm                                   |
+| `sdk-publish`           | published GitHub Release                            | `sdk-publish`, queued            | wired: validate fresh public repository/release/remote-tag SHA evidence immediately before GitHub-hosted npm trusted publishing with provenance, or skip an existing version     |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
@@ -310,8 +310,8 @@ Tinybird flow:
 3. Production release starts automatically after the `ci` workflow succeeds for a same-repository
    push to `main`, or manually from `main`. Automatic runs use the CI `head_sha`; manual runs use the
    dispatch event's `github.sha`. Both paths check out and verify that immutable release SHA. Manual
-   runs execute `verify:ci` before the production gate. The deployment job then waits for the GitHub
-   `production` environment, runs
+   runs query GitHub Actions and require a successful `ci` push run on `main` for that exact SHA. The
+   deployment job then waits for the GitHub `production` environment, runs
    `tb deploy --check` and `tb deploy --wait` through environment-scoped `TB_TOKEN` and `TB_HOST`,
    applies D1 migrations, deploys the backward-compatible Control Plane Worker, then uses its
    CI-only backfill gate to run and verify every credential-cache v2 rewrite before deploying the
@@ -338,7 +338,8 @@ exact CI head SHA before the GitHub `production` environment gate, then uses the
 environment-scoped Cloudflare and Tinybird credentials. Tinybird deploys first so datafiles cannot
 drift from the release path.
 
-1. Install dependencies and run `verify:ci`.
+1. Verify successful `ci` evidence for the exact release SHA. Automatic runs use the successful
+   `workflow_run` payload; manual runs query the `ci` workflow's successful `main` push runs.
 2. Wait for GitHub `production` environment approval. Required reviewers and prevent-self-review should
    be enabled.
 3. Run Tinybird deployment check with the environment-scoped production Tinybird token.
