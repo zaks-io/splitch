@@ -74,6 +74,14 @@ them per screen.
 > the 500 is text-safe and is the product's electric signature. This is the one
 > place the brand is loud — keep everything around it quiet.
 
+> **No atmosphere. Ever.** Brand hues appear at **full saturation on bounded
+> shapes** (the split track, CTAs, badges, chips, focus rings, plot marks) —
+> never as low-alpha washes or gradients over large surfaces. Chartreuse at 18%
+> alpha over near-black is olive mud; cobalt at 24% is murk. Backgrounds stay on
+> the neutral ramp in both modes; the duotone is ink on shapes, not weather.
+> (Exception: the small `--accent` / `*-muted` fills the role layer defines for
+> compact elements like badges and hovers.)
+
 `--color-brand-*` (the generic brand aliases the spec names) resolve to the
 **control** ramp: `--color-brand-500: var(--color-brand-control-500)`. Cobalt is
 the primary brand color; chartreuse is its deliberate counterpart, not a
@@ -141,8 +149,16 @@ _role_ tokens flip.
 | `[data-theme="light"]` on `<html>`    | light, explicit user choice (**wins over OS**) |
 
 Absent `data-theme` ⇒ follow the OS. A user toggle sets/clears the attribute and
-persists the choice. `color-scheme` is set per mode so native form controls and
-scrollbars match.
+persists the choice (`ThemeToggle` in `@splitch/ui/components/theme-toggle`,
+plus its exported `themeInitScript` inlined in `<head>` to apply the stored
+choice before first paint). `color-scheme` is set per mode so native form
+controls and scrollbars match.
+
+**Implementation:** the role layer resolves via CSS `light-dark()` driven by
+`color-scheme` (`:root { color-scheme: light dark }`, forced by
+`[data-theme="light|dark"]`), so each role is declared once instead of per-mode
+blocks. Components that need a mode-conditional class use the `dark:` variant,
+which `@custom-variant dark` maps to the same explicit-or-OS logic.
 
 **Dark is designed, not inverted.** The care points that separate a real dark
 theme from a flipped one:
@@ -168,39 +184,39 @@ theme from a flipped one:
 ### 2.5 The semantic role layer — the only tokens components touch
 
 Components **never** reference raw palette tokens (`--color-neutral-900`,
-`--color-brand-control-500`). They reference **roles**, which are defined once per
-mode. This is what lets every component theme for free and guarantees neither app
-forks the palette.
+`--color-brand-control-500`). They reference **roles**, which resolve per mode.
+This is what lets every component theme for free and guarantees neither app
+forks the palette. Role names follow **shadcn's variable contract** (ADR-0020),
+so stock shadcn components drop in unmodified; splitch-only roles (arms, status,
+charts) extend the same layer.
 
-| role token                              | means                               | light → dark                           |
-| --------------------------------------- | ----------------------------------- | -------------------------------------- |
-| `--color-surface`                       | page background                     | `neutral-0` → `neutral-950`            |
-| `--color-surface-raised`                | card / panel                        | `neutral-0` → `dark-raised`            |
-| `--color-surface-sunken`                | inset, zebra, code well             | `neutral-50` → `#0D1015`               |
-| `--color-surface-hover`                 | row / ghost hover                   | `neutral-100` → `dark-hover`           |
-| `--color-text`                          | primary ink                         | `neutral-900` → `neutral-50`           |
-| `--color-text-secondary`                | body secondary                      | `neutral-600` → `#A7ADB8`              |
-| `--color-text-muted`                    | captions, meta                      | `neutral-500` → `#7C8492`              |
-| `--color-text-on-brand`                 | text on cobalt fill                 | `neutral-0` (both)                     |
-| `--color-border`                        | default hairline                    | `neutral-200` → `dark-border`          |
-| `--color-border-strong`                 | strong border                       | `neutral-300` → `dark-border-strong`   |
-| `--color-brand`                         | primary action fill (cobalt)        | `control-500` (both)                   |
-| `--color-brand-hover`                   | action hover                        | `control-600` → `control-400`          |
-| `--color-brand-text`                    | cobalt as text/link on surface      | `control-700` → `control-400`          |
-| `--color-brand-subtle`                  | cobalt wash                         | `control-50` → `rgb(cobalt / .16)`     |
-| `--color-arm-control`                   | **Control arm** (plots, allocation) | `control-500` → `control-400`          |
-| `--color-arm-treatment`                 | **Treatment arm**                   | `treatment-500` (both — glows on dark) |
-| `--color-arm-treatment-text`            | chartreuse as text                  | `treatment-700` → `treatment-400`      |
-| `--color-success` / `-text` / `-subtle` | passing / resolves                  | `500/700/50` → `400/400/.16-alpha`     |
-| `--color-warning` / `-text` / `-subtle` | SRM caution / guardrail near        | `500/700/50` → `400/400/.18-alpha`     |
-| `--color-danger` / `-text` / `-subtle`  | SRM firing / errors / removed       | `500/700/50` → `400/400/.18-alpha`     |
-| `--color-focus-ring`                    | keyboard focus                      | `control-500` → `control-400`          |
-| `--color-overlay`                       | modal scrim                         | `rgb(ink/.45)` → `rgb(0 0 0/.6)`       |
+| role token                                       | means                                | light → dark                           |
+| ------------------------------------------------ | ------------------------------------ | -------------------------------------- |
+| `--background` / `--foreground`                  | page surface / primary ink           | `neutral-0/900` → `neutral-950/50`     |
+| `--card` / `--card-foreground`                   | card, panel                          | `neutral-0` → `dark-raised`            |
+| `--popover` / `--popover-foreground`             | menus, popovers                      | `neutral-0` → `dark-raised-2`          |
+| `--primary` / `--primary-foreground`             | primary action fill (cobalt)         | `control-500` + white (both)           |
+| `--secondary` / `--secondary-foreground`         | quiet fill button, chips             | `neutral-50` → `dark-hover`            |
+| `--muted` / `--muted-foreground`                 | inset well / captions, meta          | `neutral-50/500` → `#0D1015`/`#7C8492` |
+| `--accent` / `--accent-foreground`               | compact brand wash (badges, hovers)  | `control-50/700` → `.16-alpha/400`     |
+| `--destructive`                                  | errors, kill switch, removed-in-diff | `500` → `400`                          |
+| `--border` / `--input`                           | hairline / control border            | `neutral-200` → `dark-border(-strong)` |
+| `--ring`                                         | keyboard focus                       | `control-500` → `control-400`          |
+| `--overlay`                                      | modal scrim                          | `rgb(ink/.45)` → `rgb(0 0 0/.6)`       |
+| `--arm-control` / `-contrast`                    | **Control arm** (plots, allocation)  | `control-500` → `control-400`          |
+| `--arm-treatment` / `-contrast`                  | **Treatment arm**                    | `treatment-500` (both — glows on dark) |
+| `--arm-treatment-foreground`                     | chartreuse as text                   | `treatment-700` → `treatment-400`      |
+| `--success` / `-foreground` / `-muted`           | passing / resolves                   | `500/700/50` → `400/400/.16-alpha`     |
+| `--warning` / `-foreground` / `-muted`           | SRM caution / guardrail near         | `500/700/50` → `400/400/.18-alpha`     |
+| `--chart-1..5`                                   | series colors (1=cobalt, 2=chartr.)  | `500s` → `400s`                        |
+| `--sidebar*` (8 tokens, shadcn sidebar contract) | panel navigation shell               | `neutral-50`-family → `#0D1015`-family |
 
-Authoritative values live in `packages/ui/src/theme.css` (the `:root` /
-`@media` / `[data-theme]` blocks below the `@theme` palette). **Rule: if a
-component hardcodes a `--color-neutral-*` or `--color-brand-control-*`, it is a
-bug — it will not theme.** New surfaces add a _role_, not a raw reference.
+Authoritative values live in `packages/ui/src/styles/semantic.css` (the
+`light-dark()` role layer); the raw palette is `packages/ui/src/styles/palette.css`.
+In classes these surface through Tailwind as `bg-background`, `text-foreground`,
+`border-border`, `bg-arm-treatment`, `text-success-foreground`, etc. **Rule: if
+a component hardcodes a `--color-neutral-*` or `--color-brand-control-*`, it is
+a bug — it will not theme.** New surfaces add a _role_, not a raw reference.
 
 ---
 
@@ -212,17 +228,22 @@ that this is a tool built by and for engineers.
 
 ### 3.1 Families
 
-| token                   | stack                                                       | role                                         |
-| ----------------------- | ----------------------------------------------------------- | -------------------------------------------- |
-| `--font-family-display` | `"Söhne", "Inter Display", "Inter", system-ui, sans-serif`  | headings, hero, large numerals               |
-| `--font-family-sans`    | `"Inter", system-ui, -apple-system, "Segoe UI", sans-serif` | body, UI labels, controls                    |
-| `--font-family-mono`    | `"IBM Plex Mono", "SFMono-Regular", "Menlo", monospace`     | **keys, code, IDs, metrics, CLI, plot axes** |
+| token            | stack                                                             | role                                         |
+| ---------------- | ----------------------------------------------------------------- | -------------------------------------------- |
+| `--font-display` | `"Söhne", "Inter Variable", "Inter", system-ui, sans-serif`       | headings, hero, large numerals               |
+| `--font-sans`    | `"Inter Variable", "Inter", system-ui, -apple-system, sans-serif` | body, UI labels, controls                    |
+| `--font-mono`    | `"IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace`      | **keys, code, IDs, metrics, CLI, plot axes** |
 
-**Licensing note.** Söhne is commercial (Klim). If unlicensed at build time, the
-display stack falls back to **Inter Display** tightened (see tracking below) —
-the token name stays `--font-family-display` so swapping the licensed face later
-is a one-line change, no component edits. IBM Plex Mono and Inter are OFL/SIL,
-free to ship.
+**The fonts actually ship.** `packages/ui/src/theme.css` imports self-hosted
+webfonts (`@fontsource-variable/inter` with the `opsz` axis, and
+`@fontsource/ibm-plex-mono` 400/500/600); Vite bundles the woff2 subsets. Inter
+Variable's optical-sizing axis (`font-optical-sizing: auto` on `body`) renders
+the display cut automatically at heading sizes — no separate Display file.
+
+**Licensing note.** Söhne is commercial (Klim). Until licensed, the display
+stack resolves to Inter Variable tightened (see tracking below) — the token name
+stays `--font-display` so swapping the licensed face later is a one-line change,
+no component edits. IBM Plex Mono and Inter are OFL/SIL, free to ship.
 
 ### 3.2 The mono is doing real work
 
@@ -242,18 +263,23 @@ it's mono.** Prose about those things stays sans.
 A modular scale (~1.20, major-ish) tuned for dense data screens at the small end
 and a confident marketing hero at the top.
 
-| token              | size               | line-height (`--line-height-*`) | typical use                                         |
-| ------------------ | ------------------ | ------------------------------- | --------------------------------------------------- |
-| `--font-size-2xs`  | `11px / 0.6875rem` | `1.4` (tight)                   | dense table meta, plot axis labels                  |
-| `--font-size-xs`   | `12px / 0.75rem`   | `1.5`                           | captions, badges, secondary meta                    |
-| `--font-size-sm`   | `13px / 0.8125rem` | `1.5`                           | table body, secondary UI text                       |
-| `--font-size-base` | `15px / 0.9375rem` | `1.6` (relaxed)                 | **body default** (15px, not 16 — dense-but-legible) |
-| `--font-size-lg`   | `18px / 1.125rem`  | `1.5`                           | lead paragraph, card titles                         |
-| `--font-size-xl`   | `22px / 1.375rem`  | `1.35`                          | section headings (H3)                               |
-| `--font-size-2xl`  | `28px / 1.75rem`   | `1.25`                          | screen titles (H2)                                  |
-| `--font-size-3xl`  | `36px / 2.25rem`   | `1.15`                          | page titles (H1)                                    |
-| `--font-size-4xl`  | `52px / 3.25rem`   | `1.05` (tight)                  | marketing sub-hero                                  |
-| `--font-size-5xl`  | `76px / 4.75rem`   | `1.0` (display)                 | marketing hero                                      |
+Sizes live in the Tailwind v4 `--text-*` namespace with a paired default
+line-height (`--text-<size>--line-height`), so `text-sm`, `text-4xl`, etc. carry
+the right leading automatically.
+
+| token         | size               | line-height | typical use                                         |
+| ------------- | ------------------ | ----------- | --------------------------------------------------- |
+| `--text-2xs`  | `11px / 0.6875rem` | `1.45`      | dense table meta, plot axis labels                  |
+| `--text-xs`   | `12px / 0.75rem`   | `1.45`      | captions, badges, secondary meta, eyebrows          |
+| `--text-sm`   | `13px / 0.8125rem` | `1.5`       | table body, secondary UI text                       |
+| `--text-base` | `15px / 0.9375rem` | `1.55`      | **body default** (15px, not 16 — dense-but-legible) |
+| `--text-lg`   | `18px / 1.125rem`  | `1.55`      | lead paragraph, card titles                         |
+| `--text-xl`   | `22px / 1.375rem`  | `1.35`      | section headings (H3)                               |
+| `--text-2xl`  | `28px / 1.75rem`   | `1.25`      | screen titles (H2)                                  |
+| `--text-3xl`  | `36px / 2.25rem`   | `1.15`      | page titles (H1), mobile hero                       |
+| `--text-4xl`  | `52px / 3.25rem`   | `1.05`      | marketing sub-hero, section headlines               |
+| `--text-5xl`  | `64px / 4rem`      | `1.02`      | marketing hero (tablet)                             |
+| `--text-6xl`  | `76px / 4.75rem`   | `1.0`       | marketing hero (desktop)                            |
 
 | token                    | value | use                                |
 | ------------------------ | ----- | ---------------------------------- |
@@ -262,17 +288,17 @@ and a confident marketing hero at the top.
 | `--font-weight-semibold` | `600` | card titles, H3/H2                 |
 | `--font-weight-bold`     | `700` | H1, hero, big numerals             |
 
-| token                     | value     | use                                                     |
-| ------------------------- | --------- | ------------------------------------------------------- |
-| `--letter-spacing-tight`  | `-0.02em` | **display headings ≥ `2xl`** (grotesk wants tightening) |
-| `--letter-spacing-snug`   | `-0.01em` | `lg`/`xl` headings                                      |
-| `--letter-spacing-normal` | `0`       | body                                                    |
-| `--letter-spacing-wide`   | `0.04em`  | **eyebrows / overline labels** (uppercase mono)         |
+| token               | value     | use                                                     |
+| ------------------- | --------- | ------------------------------------------------------- |
+| `--tracking-tight`  | `-0.02em` | **display headings ≥ `2xl`** (grotesk wants tightening) |
+| `--tracking-snug`   | `-0.01em` | `lg`/`xl` headings                                      |
+| `--tracking-normal` | `0`       | body                                                    |
+| `--tracking-wide`   | `0.04em`  | **eyebrows / overline labels** (uppercase mono)         |
 
 **Rules of thumb**
 
-- Display headings (`2xl`+): `--font-family-display`, weight `700`, `--letter-spacing-tight`. Tight tracking is what makes the grotesk read as _designed_ rather than default.
-- Eyebrows / section overlines: `--font-family-mono`, `--font-size-2xs`, uppercase, `--letter-spacing-wide`, `--color-neutral-500`. (See §5, signature.)
+- Display headings (`2xl`+): `font-display font-bold tracking-tight`. Tight tracking is what makes the grotesk read as _designed_ rather than default.
+- Eyebrows / section overlines: `font-mono text-xs uppercase tracking-wide text-muted-foreground`. (See §5, signature.)
 - Body never exceeds ~70ch measure.
 
 ---
@@ -281,18 +307,9 @@ and a confident marketing hero at the top.
 
 ### 4.1 Spacing — 4px grid
 
-All spacing is a multiple of 4 (`--spacing-1` = 4px). The panel is dense; lean on
-the small end (`2`–`4`) inside components, the large end (`8`–`24`) between
-sections.
-
-| token         | px  |     | token          | px  |
-| ------------- | --- | --- | -------------- | --- |
-| `--spacing-1` | 4   |     | `--spacing-8`  | 32  |
-| `--spacing-2` | 8   |     | `--spacing-10` | 40  |
-| `--spacing-3` | 12  |     | `--spacing-12` | 48  |
-| `--spacing-4` | 16  |     | `--spacing-16` | 64  |
-| `--spacing-5` | 20  |     | `--spacing-20` | 80  |
-| `--spacing-6` | 24  |     | `--spacing-24` | 96  |
+Tailwind v4's default spacing scale (`--spacing: 0.25rem`; `p-4` = 16px) — no
+custom overrides. The panel is dense; lean on the small end (`2`–`4`) inside
+components, the large end (`8`–`24`) between sections.
 
 ### 4.2 Radius — restrained, technical
 
@@ -301,8 +318,10 @@ Small radii. The product reads as precise instrumentation, not a consumer app.
 | token           | value    | use                                        |
 | --------------- | -------- | ------------------------------------------ |
 | `--radius-sm`   | `4px`    | inputs, badges, chips, table cells         |
-| `--radius-md`   | `6px`    | **default** — buttons, cards, menus        |
-| `--radius-lg`   | `10px`   | modals, large marketing cards              |
+| `--radius-md`   | `6px`    | **default** — `--radius` resolves here     |
+| `--radius-lg`   | `10px`   | buttons (shadcn `rounded-lg`), menus       |
+| `--radius-xl`   | `14px`   | cards, modals, marketing panels            |
+| `--radius-2xl`  | `20px`   | large marketing surfaces                   |
 | `--radius-full` | `9999px` | pills, avatars, the split-allocation track |
 
 ### 4.3 Shadow — hairlines first, then soft elevation
@@ -312,6 +331,7 @@ shadow, never pure black.
 
 | token            | value                                   | use                              |
 | ---------------- | --------------------------------------- | -------------------------------- |
+| `--shadow-xs`    | `0 1px 1px 0 rgb(16 19 25 / 0.04)`      | subtle card lift                 |
 | `--shadow-sm`    | `0 1px 2px 0 rgb(16 19 25 / 0.05)`      | cards, raised rows               |
 | `--shadow-md`    | `0 4px 12px -2px rgb(16 19 25 / 0.08)`  | dropdowns, popovers              |
 | `--shadow-lg`    | `0 12px 32px -4px rgb(16 19 25 / 0.12)` | modals, dialogs                  |
@@ -423,14 +443,16 @@ Non-negotiable, built in, not announced:
 ## 8. How tokens flow to code
 
 ```
-docs/branding/design-tokens.md   ← authoritative values (this file)
+docs/branding/design-tokens.md      ← authoritative values (this file)
         │  values copied into
         ▼
-packages/ui/src/theme.css        ← @theme palette (mode-agnostic) +
-        │                            :root / @media / [data-theme] role layer (light & dark)
+packages/ui/src/theme.css           ← entry: tailwind, fonts, @custom-variant dark, base layer
+  ├── src/styles/palette.css        ← @theme raw palette + type/radius/shadow/motion (mode-agnostic)
+  └── src/styles/semantic.css       ← role layer (shadcn names), light-dark(), [data-theme]
         │  consumed by — components reference ROLE tokens only
-        ├── apps/control-panel    ← composes role tokens; never forks the palette; themes for free
-        └── apps/marketing        ← split hero / large CTA are compositions from these tokens
+        ├── packages/ui/src/components  ← shadcn (base-nova on Base UI) component copies
+        ├── apps/control-panel      ← composes role tokens; never forks; /kitchen-sink gallery
+        └── apps/marketing          ← split hero / quickstart are compositions from these tokens
 ```
 
 **Two layers, one rule.** The `@theme` block is the raw palette and never changes

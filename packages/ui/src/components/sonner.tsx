@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import {
   CircleCheckIcon,
   InfoIcon,
@@ -6,6 +5,7 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react";
+import type { CSSProperties } from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
 const Toaster = ({ theme = "system", ...props }: ToasterProps) => {
