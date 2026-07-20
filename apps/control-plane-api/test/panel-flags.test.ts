@@ -31,6 +31,7 @@ beforeAll(async () => {
     SPLITCH_PLATFORM_TARGET: "production",
     AUTH_JWKS_URI: "https://auth.splitch.test/.well-known/jwks.json",
     CONTROL_PANEL_DELEGATION_SECRET: DELEGATION_SECRET,
+    CONTROL_PLANE_ACTOR_RATE_LIMITER: { limit: async () => ({ success: true }) },
   } as ControlPlaneApiEnv;
   entrypoint = new SignedControlPanelEntrypoint(testCtx, testEnv);
 });
