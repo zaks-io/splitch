@@ -43,6 +43,8 @@ import { EmptyState } from "@splitch/ui/state/empty-state";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { StaleDataToast } from "@splitch/ui/state/stale-data-toast";
 import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
+import { KitchenSinkForms } from "#components/kitchen-sink-forms";
+import { KitchenSinkOverlays } from "#components/kitchen-sink-overlays";
 import { loadCurrentSession } from "#lib/session-functions";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -267,6 +269,9 @@ function KitchenSinkRoute() {
           </CardContent>
         </Card>
       </Grid>
+
+      <KitchenSinkForms />
+      <KitchenSinkOverlays />
 
       <Grid columns="2" gap="6">
         <EmptyState

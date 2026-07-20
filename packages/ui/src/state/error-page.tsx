@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { AlertTriangleIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Button } from "#components/button";
 import { Card, CardContent } from "#components/card";

@@ -6,7 +6,6 @@ import { stringField, stringValue } from "./payload";
 import type { CredentialScope, Env, Outcome, Payload, RunScope, TinybirdDelivery } from "./types";
 
 const rawEventsDatasource = "raw_events";
-const rawEvaluationsDatasource = "raw_evaluations";
 export interface EvaluationUsageEvent {
   readonly eventId: string;
   readonly organizationId: string;
@@ -226,10 +225,7 @@ export function tinybirdDelivery(
   env: Env,
   datasource = rawEventsDatasource,
 ): Outcome<TinybirdDelivery> {
-  const token =
-    datasource === rawEvaluationsDatasource
-      ? env.TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN
-      : env.TINYBIRD_INGEST_TOKEN;
+  const token = env.TINYBIRD_INGEST_TOKEN;
   if (!token) {
     return { ok: false, error: serviceUnavailable("Tinybird ingest token is unavailable") };
   }
