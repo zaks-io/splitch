@@ -5,14 +5,10 @@ import {
 import type { AuthResolver } from "@splitch/worker-runtime";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import type { JwksVerifier } from "./jwks-verify";
-import {
-  LEGACY_CONTROL_PANEL_IDENTITY_HEADER,
-  parseBoundedLegacyPanelIdentity,
-} from "./legacy-panel-identity";
 import type { PanelDelegationReplayStore } from "./panel-identity-replay";
 import type { PanelSessionAccess } from "./panel-session-access";
 import { deriveBinding } from "./scope-binding";
-import type { SessionStore } from "./session-store";
+import type { PanelSessionStore, SessionStore } from "./session-store";
 
 /**
  * Control-plane auth resolver (the `control-plane-token` AuthKind).
@@ -23,6 +19,9 @@ import type { SessionStore } from "./session-store";
  * Binding calls verify the signature, allowlisted operation and resource claims,
  * canonical request-body digest, expiry, and single-use nonce before deriving
  * authority from live D1 access.
+ * During the self-expiring deploy bridge only, the predecessor entrypoint may
+ * redeem the old Panel's SHA-256 session handle for apps_create. That path
+ * resolves the live session from KV and still rechecks the Org role in D1.
  *
  * Order (access-control-matrix.md "Token validation"):
  *   1. Extract `Authorization: Bearer <jwt>`; absent/malformed → UNAUTHORIZED.
@@ -42,6 +41,7 @@ import type { SessionStore } from "./session-store";
  */
 
 const BEARER_PREFIX = "Bearer ";
+export const PANEL_SESSION_HEADER = "x-splitch-panel-session";
 
 export interface ControlPlaneAuthDeps {
   verifier: JwksVerifier;
@@ -56,8 +56,9 @@ export interface ControlPlaneAuthOptions {
   panelDelegationSecret?: string;
   panelAccess?: PanelSessionAccess;
   panelDelegationReplay?: PanelDelegationReplayStore;
-  /** Temporary V1 bridge. The deployment workflow disables it after the V2 panel is live. */
-  allowBoundedLegacyPanelIdentity?: boolean;
+  /** Temporary predecessor bridge. The deployment workflow disables it after V2 is live. */
+  allowBoundedPanelSession?: boolean;
+  boundedPanelSessions?: PanelSessionStore;
 }
 
 function extractBearer(header: string | null): string | null {
@@ -76,16 +77,17 @@ export function makeControlPlaneAuthResolver(
 
   return async (request) => {
     if (
-      (options.allowPanelDelegation || options.allowBoundedLegacyPanelIdentity) &&
+      (options.allowPanelDelegation || options.allowBoundedPanelSession) &&
       request.headers.get("authorization") === null
     ) {
       const panelPrincipal = await resolvePanelPrincipal(
         request,
         nowSeconds(),
+        options.boundedPanelSessions,
         options.panelDelegationSecret,
         options.panelAccess,
         options.panelDelegationReplay,
-        options.allowBoundedLegacyPanelIdentity ?? false,
+        options.allowBoundedPanelSession ?? false,
       );
       if (panelPrincipal) return panelPrincipal;
     }
@@ -131,23 +133,35 @@ async function resolveBearerPrincipal(
 async function resolvePanelPrincipal(
   request: Request,
   nowSeconds: number,
+  boundedPanelSessions?: PanelSessionStore,
   delegationSecret?: string,
   panelAccess?: PanelSessionAccess,
   replay?: PanelDelegationReplayStore,
-  allowBoundedLegacyIdentity = false,
+  allowBoundedPanelSession = false,
 ) {
   const operation = parseControlPanelBindingOperation(request);
-  const delegation = operation
-    ? await resolvePanelDelegation(
+  if (!operation) return null;
+
+  if (allowBoundedPanelSession) {
+    if (!boundedPanelSessions) return null;
+    return resolveBoundedPanelSessionPrincipal(
+      request,
+      operation,
+      boundedPanelSessions,
+      nowSeconds,
+    );
+  }
+
+  const delegation = delegationSecret
+    ? await verifyControlPanelDelegation(
+        request.headers.get(CONTROL_PANEL_DELEGATION_HEADER),
         request,
         operation,
-        nowSeconds,
         delegationSecret,
-        allowBoundedLegacyIdentity,
+        nowSeconds,
       )
     : null;
   if (
-    !operation ||
     !delegation ||
     !replay ||
     !(await replay.consume(delegation.nonce, delegation.expiresAt, nowSeconds))
@@ -172,28 +186,29 @@ async function resolvePanelPrincipal(
   return resolvePanelFlagsPrincipal(operation, delegation.actorId, panelAccess);
 }
 
-async function resolvePanelDelegation(
+async function resolveBoundedPanelSessionPrincipal(
   request: Request,
   operation: NonNullable<ReturnType<typeof parseControlPanelBindingOperation>>,
+  sessions: PanelSessionStore,
   nowSeconds: number,
-  delegationSecret: string | undefined,
-  allowBoundedLegacyIdentity: boolean,
 ) {
-  if (allowBoundedLegacyIdentity) {
-    return parseBoundedLegacyPanelIdentity(
-      request.headers.get(LEGACY_CONTROL_PANEL_IDENTITY_HEADER),
-      operation,
-      nowSeconds,
-    );
-  }
-  if (!delegationSecret) return null;
-  return verifyControlPanelDelegation(
-    request.headers.get(CONTROL_PANEL_DELEGATION_HEADER),
-    request,
-    operation,
-    delegationSecret,
-    nowSeconds,
-  );
+  if (operation.id !== "apps_create") return null;
+  const tokenHash = request.headers.get(PANEL_SESSION_HEADER);
+  if (!tokenHash) return null;
+  const actor = await sessions.loadPanelSessionActor(tokenHash, nowSeconds);
+  if (!actor) return null;
+  return {
+    ok: true as const,
+    principal: {
+      kind: "control-plane-token" as const,
+      id: actor.userId,
+      // The handler rechecks the live owner/admin role in D1.
+      scopes: [`org:${operation.orgId}:member`],
+      orgId: operation.orgId,
+      appId: null,
+      environmentId: null,
+    },
+  };
 }
 
 async function resolvePanelFlagsPrincipal(

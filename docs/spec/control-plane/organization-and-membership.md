@@ -76,11 +76,25 @@ Org membership controls who can manage the Organization itself (billing, SSO con
 | View Org settings   | yes   | yes   | yes    |
 | Manage trusted IdPs | yes   | no    | no     |
 
-Control Panel App creation stays server-side. The Panel validates its opaque session cookie, sends
-only the session's SHA-256 handle over the Control Plane service binding, and never exposes that
-handle to browser code. The Control Plane resolves the live session actor from shared session KV;
-the `apps_create` handler then applies the owner/admin matrix above from D1. Cached Panel roles do
-not authorize the mutation, and Worker refusals remain the typed response returned to the Panel.
+Control Panel operations stay server-side. After the signed-binding rollout, the Panel validates its
+opaque session cookie and issues a signed, short-lived delegation bound to one allowlisted operation,
+the App and Environment resources for that operation, and the canonical request body. The Control
+Plane accepts it only through the named binding entrypoint, atomically consumes its one-use nonce,
+and derives authority from live D1 state. App-scoped operations must verify current Org and App
+membership, that the App belongs to the Organization, and that the Environment belongs to that App.
+The `apps_create` handler applies the live owner/admin matrix above. Cached Panel roles never
+authorize a mutation, and Worker refusals remain the typed response returned to the Panel. The Panel
+cookie, bearer material, and reusable session hash stay inside the Panel Worker.
+
+The only exception is the binding-only deploy/rollback bridge for the predecessor Panel protocol.
+While both the explicit bounded mode and its future transition deadline are valid, the predecessor
+`ControlPanelEntrypoint` may redeem `x-splitch-panel-session`, a SHA-256 session handle, for
+`apps_create` only. It resolves the still-live actor from shared session KV and then applies the same
+live D1 owner/admin check. The bridge does not accept that handle for Flag or Environment operations,
+is unreachable through public HTTP, and fails closed for an absent, malformed, unknown, or expired
+handle, an unsupported operation, a disabled mode, or an elapsed deadline. The checked-in final
+configuration disables the bridge; the signed entrypoint never accepts reusable session-hash
+authority.
 
 ## App Membership
 

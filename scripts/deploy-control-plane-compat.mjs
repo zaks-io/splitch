@@ -20,9 +20,9 @@ const result = spawnSync(
     environment,
     "--strict",
     "--var",
-    "CONTROL_PANEL_LEGACY_IDENTITY_MODE:bounded-rollout",
+    "CONTROL_PANEL_LEGACY_SESSION_MODE:bounded-rollout",
     "--var",
-    `CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT:${expiresAt}`,
+    `CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT:${expiresAt}`,
   ],
   { stdio: "inherit" },
 );

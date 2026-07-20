@@ -15,6 +15,7 @@ const planeConfig = JSON.parse(
 );
 const rollbackScript = join(repoRoot, "scripts/rollback-control-panel-binding.mjs");
 const compatDeployScript = join(repoRoot, "scripts/deploy-control-plane-compat.mjs");
+const protocolPairs = new Set(["base:base", "base:compat", "signed:compat", "signed:final"]);
 
 for (const environment of ["production", "shared-preview"]) {
   test(`${environment} deploy keeps every protocol transition functional`, () => {
@@ -50,7 +51,7 @@ for (const environment of ["production", "shared-preview"]) {
     );
   });
 
-  test(`${environment} final config binds only signed V2 and disables V1`, () => {
+  test(`${environment} final config binds only signed V2 and disables predecessor sessions`, () => {
     const panelTarget =
       environment === "production" ? panelConfig.env.production : panelConfig.env[environment];
     const planeTarget =
@@ -67,12 +68,38 @@ for (const environment of ["production", "shared-preview"]) {
         entrypoint: "SignedControlPanelEntrypoint",
       },
     );
-    assert.equal(planeTarget.vars.CONTROL_PANEL_LEGACY_IDENTITY_MODE, "disabled");
-    assert.equal(planeTarget.vars.CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT, "0");
+    assert.equal(planeTarget.vars.CONTROL_PANEL_LEGACY_SESSION_MODE, "disabled");
+    assert.equal(planeTarget.vars.CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT, "0");
   });
 }
 
-test("compatibility deploy enables V1 with a self-expiring transition deadline", () => {
+test("every forward failure boundary leaves an interoperable active protocol pair", () => {
+  const activePairAfterFailure = [
+    ["base", "base"],
+    ["base", "compat"],
+    ["signed", "compat"],
+    ["signed", "final"],
+    ["signed", "final"],
+  ];
+
+  for (const [panel, plane] of activePairAfterFailure) {
+    assertProtocolAvailable(panel, plane);
+  }
+});
+
+test("every rollback failure boundary leaves an interoperable active protocol pair", () => {
+  const activePairAfterFailure = [
+    ["signed", "final"],
+    ["signed", "compat"],
+    ["base", "compat"],
+  ];
+
+  for (const [panel, plane] of activePairAfterFailure) {
+    assertProtocolAvailable(panel, plane);
+  }
+});
+
+test("compatibility deploy enables predecessor sessions with a self-expiring deadline", () => {
   const fixture = makeFakePnpm();
   const before = Math.floor(Date.now() / 1000);
   const result = spawnSync(process.execPath, [compatDeployScript, "production"], {
@@ -87,14 +114,14 @@ test("compatibility deploy enables V1 with a self-expiring transition deadline",
 
   assert.equal(result.status, 0, result.stderr);
   const [call] = readCalls(fixture.callsPath);
-  assert.equal(call.includes("CONTROL_PANEL_LEGACY_IDENTITY_MODE:bounded-rollout"), true);
-  const expiry = call.find((arg) => arg.startsWith("CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT:"));
+  assert.equal(call.includes("CONTROL_PANEL_LEGACY_SESSION_MODE:bounded-rollout"), true);
+  const expiry = call.find((arg) => arg.startsWith("CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT:"));
   const expiresAt = Number(expiry?.split(":", 2)[1]);
   assert.ok(expiresAt >= before + 30 * 60);
   assert.ok(expiresAt <= Math.floor(Date.now() / 1000) + 30 * 60);
 });
 
-test("rollback enables V1, rolls the panel back first, then rolls the Control Plane back", () => {
+test("rollback enables predecessor sessions, then rolls back Panel before Control Plane", () => {
   const fixture = makeFakePnpm();
   const result = runRollback(fixture);
 
@@ -129,12 +156,22 @@ test("rollback stops before the Control Plane if the panel version cannot be act
   assert.equal(readCalls(fixture.callsPath).length, 2);
 });
 
+test("rollback leaves signed V2 active if compatibility deployment fails", () => {
+  const fixture = makeFakePnpm("1");
+  const result = runRollback(fixture);
+
+  assert.equal(result.status, 19);
+  assert.equal(readCalls(fixture.callsPath).length, 1);
+  assertProtocolAvailable("signed", "final");
+});
+
 test("rollback leaves the compatibility Control Plane active if its final version fails", () => {
   const fixture = makeFakePnpm("3");
   const result = runRollback(fixture);
 
   assert.equal(result.status, 19);
   assert.equal(readCalls(fixture.callsPath).length, 3);
+  assertProtocolAvailable("base", "compat");
 });
 
 function runRollback(fixture) {
@@ -175,4 +212,12 @@ function readCalls(path) {
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
+}
+
+function assertProtocolAvailable(panel, plane) {
+  assert.equal(
+    protocolPairs.has(`${panel}:${plane}`),
+    true,
+    `${panel} panel must interoperate with ${plane} Control Plane`,
+  );
 }

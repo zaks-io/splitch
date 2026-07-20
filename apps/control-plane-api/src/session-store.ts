@@ -13,10 +13,20 @@
  */
 
 const REVOKED_PREFIX = "revoked:";
+const PANEL_SESSION_PREFIX = "session:";
+
+interface PanelSessionActor {
+  userId: string;
+}
 
 export interface SessionStore {
   /** True iff the session/token was revoked. Throws on a KV fault (never silent). */
   isRevoked(sessionId: string): Promise<boolean>;
+}
+
+export interface PanelSessionStore {
+  /** Redeem the predecessor Panel's SHA-256 session handle during the bounded bridge only. */
+  loadPanelSessionActor(tokenHash: string, nowSeconds: number): Promise<PanelSessionActor | null>;
 }
 
 export function makeSessionStore(kv: KVNamespace): SessionStore {
@@ -28,7 +38,41 @@ export function makeSessionStore(kv: KVNamespace): SessionStore {
   };
 }
 
+/** Construct only for the self-expiring predecessor binding entrypoint. */
+export function makePanelSessionStore(kv: KVNamespace): PanelSessionStore {
+  return {
+    async loadPanelSessionActor(tokenHash, nowSeconds) {
+      if (!/^[a-f0-9]{64}$/u.test(tokenHash)) return null;
+      const raw = await kv.get(`${PANEL_SESSION_PREFIX}${tokenHash}`, "text");
+      return raw ? parsePanelSessionActor(raw, nowSeconds) : null;
+    },
+  };
+}
+
 /** Build a revocation key for writers/tests (single authoring point for the shape). */
 export function revocationKey(sessionId: string): string {
   return `${REVOKED_PREFIX}${sessionId}`;
+}
+
+function parsePanelSessionActor(raw: string, nowSeconds: number): PanelSessionActor | null {
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      Array.isArray(value) ||
+      !("userId" in value) ||
+      !("expiresAt" in value) ||
+      typeof value.userId !== "string" ||
+      value.userId.length === 0 ||
+      typeof value.expiresAt !== "number" ||
+      !Number.isInteger(value.expiresAt) ||
+      value.expiresAt <= nowSeconds
+    ) {
+      return null;
+    }
+    return { userId: value.userId };
+  } catch {
+    return null;
+  }
 }

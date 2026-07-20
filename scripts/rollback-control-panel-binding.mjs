@@ -11,11 +11,11 @@ const controlPanelVersion = requiredVersion("SPLITCH_ROLLBACK_CONTROL_PANEL_VERS
 const controlPlaneVersion = requiredVersion("SPLITCH_ROLLBACK_CONTROL_PLANE_VERSION_ID");
 
 run([`deploy:cloudflare:control-plane-compat:${environment}`]);
-deployVersion("apps/control-panel", controlPanelVersion, "Control Panel V1 binding rollback");
+deployVersion("apps/control-panel", controlPanelVersion, "Control Panel predecessor rollback");
 deployVersion(
   "apps/control-plane-api",
   controlPlaneVersion,
-  "Control Plane rollback after panel V1",
+  "Control Plane rollback after predecessor Panel",
 );
 
 function deployVersion(directory, version, message) {

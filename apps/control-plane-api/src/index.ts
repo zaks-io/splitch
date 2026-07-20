@@ -9,7 +9,7 @@ import {
 } from "@splitch/observability/worker";
 import { createApp } from "./app";
 import { authJwksUri } from "./auth-jwks-config";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
+import { type ControlPlaneAuthOptions, makeControlPlaneAuthResolver } from "./auth-resolver";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
@@ -24,7 +24,7 @@ import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do
 import { makePanelDelegationReplayStore } from "./panel-identity-replay";
 import { makePanelSessionAccess } from "./panel-session-access";
 import { rateLimiterForTarget } from "./rate-limit";
-import { makeSessionStore } from "./session-store";
+import { makePanelSessionStore, makeSessionStore } from "./session-store";
 
 const service = "splitch-control-plane-api";
 const handler = {
@@ -40,16 +40,16 @@ const handler = {
 
 export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
 
-/** Bounded V1 bridge used only while an old Control Panel remains live during deploy or rollback. */
+/** Bounded bridge for the predecessor Panel's session-handle binding protocol. */
 export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    if (!boundedLegacyIdentityEnabled(this.env)) {
+    if (!boundedPanelSessionEnabled(this.env)) {
       return new Response("not found", { status: 404 });
     }
     if (!parseControlPanelBindingOperation(request)) {
       return new Response("not found", { status: 404 });
     }
-    return handleRequest(request, this.env, this.ctx, "bounded-legacy");
+    return handleRequest(request, this.env, this.ctx, "bounded-session");
   }
 }
 
@@ -63,7 +63,7 @@ export class SignedControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneA
   }
 }
 
-type PanelProtocol = "none" | "signed" | "bounded-legacy";
+type PanelProtocol = "none" | "signed" | "bounded-session";
 
 async function handleRequest(
   request: Request,
@@ -105,19 +105,7 @@ async function handleRequest(
         verifier,
         sessions: makeSessionStore(env.SESSION_STORE),
       },
-      {
-        allowPanelDelegation: panelProtocol === "signed",
-        allowBoundedLegacyPanelIdentity: panelProtocol === "bounded-legacy",
-        ...(panelProtocol !== "none"
-          ? {
-              ...(panelProtocol === "signed"
-                ? { panelDelegationSecret: requiredPanelDelegationSecret(env) }
-                : {}),
-              panelAccess: makePanelSessionAccess(repo),
-              panelDelegationReplay: makePanelDelegationReplayStore(env.PANEL_DELEGATION_REPLAY),
-            }
-          : {}),
-      },
+      controlPanelAuthOptions(env, repo, panelProtocol),
     ),
     rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET, panelProtocol !== "none"),
     repo,
@@ -223,10 +211,30 @@ function requiredPanelDelegationSecret(env: ControlPlaneApiEnv): string {
   throw new Error("control-plane-api: CONTROL_PANEL_DELEGATION_SECRET is required");
 }
 
-function boundedLegacyIdentityEnabled(env: ControlPlaneApiEnv): boolean {
-  const expiresAt = env.CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT;
+function controlPanelAuthOptions(
+  env: ControlPlaneApiEnv,
+  repo: ReturnType<typeof createRepository>,
+  protocol: PanelProtocol,
+): ControlPlaneAuthOptions {
+  if (protocol === "none") return {};
+  if (protocol === "signed") {
+    return {
+      allowPanelDelegation: true,
+      panelDelegationSecret: requiredPanelDelegationSecret(env),
+      panelAccess: makePanelSessionAccess(repo),
+      panelDelegationReplay: makePanelDelegationReplayStore(env.PANEL_DELEGATION_REPLAY),
+    };
+  }
+  return {
+    allowBoundedPanelSession: true,
+    boundedPanelSessions: makePanelSessionStore(env.SESSION_STORE),
+  };
+}
+
+function boundedPanelSessionEnabled(env: ControlPlaneApiEnv): boolean {
+  const expiresAt = env.CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT;
   return (
-    env.CONTROL_PANEL_LEGACY_IDENTITY_MODE === "bounded-rollout" &&
+    env.CONTROL_PANEL_LEGACY_SESSION_MODE === "bounded-rollout" &&
     typeof expiresAt === "string" &&
     /^\d{10}$/u.test(expiresAt) &&
     Number(expiresAt) > Math.floor(Date.now() / 1000)

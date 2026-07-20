@@ -3,11 +3,11 @@ import {
   issueControlPanelDelegation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { describe, expect, it, vi } from "vitest";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
+import { makeControlPlaneAuthResolver, PANEL_SESSION_HEADER } from "./auth-resolver";
 import type { JwksVerifier } from "./jwks-verify";
 import type { PanelDelegationReplayStore } from "./panel-identity-replay";
 import type { PanelSessionAccess } from "./panel-session-access";
-import type { SessionStore } from "./session-store";
+import type { PanelSessionStore, SessionStore } from "./session-store";
 
 const NOW = 1_800_000_000;
 const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
@@ -72,25 +72,23 @@ describe("Control Panel Flags principal", () => {
     expect(authorizeApp).not.toHaveBeenCalled();
   });
 
-  it("supports the old panel only when the bounded compatibility mode is explicit", async () => {
-    const authorizeApp = vi.fn<PanelSessionAccess["authorizeApp"]>(async () => ({
-      appId: "app_1",
-      appRole: "admin",
-      orgId: "org_1",
-      orgRole: "member",
-    }));
-    const replay = vi.fn(async () => true);
+  it("does not broaden the bounded predecessor session protocol to Flags", async () => {
+    const loadPanelSessionActor = vi.fn(async () => ({ userId: "user_1" }));
     const resolver = makeControlPlaneAuthResolver(deps(), {
-      allowBoundedLegacyPanelIdentity: true,
-      panelAccess: { authorizeApp },
-      panelDelegationReplay: { consume: replay },
+      allowBoundedPanelSession: true,
+      boundedPanelSessions: { loadPanelSessionActor } as PanelSessionStore,
+    });
+    const request = new Request("https://control-plane.internal/apps/app_1/flags", {
+      headers: {
+        "x-splitch-panel-environment": "env_1",
+        [PANEL_SESSION_HEADER]: "a".repeat(64),
+      },
     });
 
-    const result = await resolver(legacyPanelRequest());
+    const result = await resolver(request);
 
-    expect(result).toMatchObject({ ok: true, principal: { id: "user_1", appId: "app_1" } });
-    expect(authorizeApp).toHaveBeenCalledWith("user_1", "app_1", "env_1");
-    expect(replay).toHaveBeenCalledWith("nonce_legacy_1234567890", NOW + 30, NOW);
+    expect(result).toEqual({ ok: false, reason: "UNAUTHORIZED" });
+    expect(loadPanelSessionActor).not.toHaveBeenCalled();
   });
 });
 
@@ -106,7 +104,9 @@ function makeResolver(panelAccess: PanelSessionAccess) {
 function deps(verify = async () => null) {
   return {
     verifier: { verify } as unknown as JwksVerifier,
-    sessions: { isRevoked: async () => false } as SessionStore,
+    sessions: {
+      isRevoked: async () => false,
+    } as SessionStore,
     now: () => NOW * 1000,
   };
 }
@@ -139,21 +139,4 @@ async function panelRequest(method: string, path: string): Promise<Request> {
     ),
   );
   return request;
-}
-
-function legacyPanelRequest(): Request {
-  return new Request("https://control-plane.internal/apps/app_1/flags", {
-    headers: {
-      "x-splitch-panel-environment": "env_1",
-      "x-splitch-panel-identity": encodeURIComponent(
-        JSON.stringify({
-          version: 1,
-          operation: { id: "flags_list", appId: "app_1", environmentId: "env_1" },
-          actorId: "user_1",
-          expiresAt: NOW + 30,
-          nonce: "nonce_legacy_1234567890",
-        }),
-      ),
-    },
-  });
 }

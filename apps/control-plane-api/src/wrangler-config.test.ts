@@ -51,9 +51,9 @@ describe("Control Plane API Wrangler runtime config", () => {
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
-  ])("keeps the legacy panel identity entrypoint disabled for %s", (_target, target) => {
-    expect(target?.vars?.CONTROL_PANEL_LEGACY_IDENTITY_MODE).toBe("disabled");
-    expect(target?.vars?.CONTROL_PANEL_LEGACY_IDENTITY_EXPIRES_AT).toBe("0");
+  ])("keeps predecessor session redemption disabled for %s", (_target, target) => {
+    expect(target?.vars?.CONTROL_PANEL_LEGACY_SESSION_MODE).toBe("disabled");
+    expect(target?.vars?.CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT).toBe("0");
   });
 });
 
