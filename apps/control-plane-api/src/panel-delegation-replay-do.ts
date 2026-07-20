@@ -29,6 +29,6 @@ export class PanelDelegationReplayDurableObject extends DurableObject<ControlPla
   }
 
   override async alarm(): Promise<void> {
-    await this.ctx.storage.deleteAll();
+    this.ctx.storage.sql.exec("DELETE FROM redemption");
   }
 }
