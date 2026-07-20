@@ -3,17 +3,7 @@ import { Table, TableBody, TableHead, TableHeader, TableRow } from "@splitch/ui/
 import type { FlagsPageItem } from "#lib/flags-page-data";
 import { FlagsTableRow } from "./flags-table-row";
 
-export function FlagsTable({
-  appSlug,
-  env,
-  items,
-  orgSlug,
-}: {
-  appSlug: string;
-  env: string;
-  items: FlagsPageItem[];
-  orgSlug: string;
-}) {
+export function FlagsTable({ env, items }: { env: string; items: FlagsPageItem[] }) {
   return (
     <Card>
       <CardHeader className="border-border border-b py-4">
@@ -33,13 +23,7 @@ export function FlagsTable({
           </TableHeader>
           <TableBody>
             {items.map((item) => (
-              <FlagsTableRow
-                appSlug={appSlug}
-                env={env}
-                item={item}
-                key={item.definition.id}
-                orgSlug={orgSlug}
-              />
+              <FlagsTableRow item={item} key={item.definition.id} />
             ))}
           </TableBody>
         </Table>

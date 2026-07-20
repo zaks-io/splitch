@@ -34,11 +34,9 @@ function FlagsSectionRoute() {
     <>
       <FlagsPage
         appId={scope.appId}
-        appSlug={scope.appSlug}
         env={scope.env}
         environmentId={scope.environmentId}
         items={items}
-        orgSlug={scope.orgSlug}
       />
       <Outlet />
     </>

@@ -12,7 +12,7 @@ describe("Control Panel binding operation allowlist", () => {
     [
       "GET",
       "/apps/app_1/envs/env_1/flags/flag_1/config",
-      { id: "flag_config_get", appId: "app_1", environmentId: "env_1" },
+      { id: "flag_config_get", appId: "app_1", environmentId: "env_1", flagId: "flag_1" },
     ],
   ])("allows %s %s", (method, pathname, expected) => {
     expect(parseControlPanelOperation(method, pathname, "env_1")).toEqual(expected);

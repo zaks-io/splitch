@@ -123,7 +123,7 @@ async function panelRequest(method: string, path: string): Promise<Request> {
           appId: "app_1",
           environmentId: "env_1",
         }
-      : { id: "flag_config_get", appId: "app_1", environmentId: "env_1" };
+      : { id: "flag_config_get", appId: "app_1", environmentId: "env_1", flagId: "flag_1" };
   request.headers.set(
     CONTROL_PANEL_DELEGATION_HEADER,
     await issueControlPanelDelegation(

@@ -7,7 +7,7 @@ export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 export type ControlPanelOperation =
   | { id: "apps_create"; orgId: string }
   | { id: "flags_list" | "flags_create"; appId: string; environmentId: string }
-  | { id: "flag_config_get"; appId: string; environmentId: string };
+  | { id: "flag_config_get"; appId: string; environmentId: string; flagId: string };
 
 export interface ControlPanelDelegationClaims {
   version: 1;
@@ -26,7 +26,7 @@ interface DelegationOptions {
 
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
 const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
-const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/[^/]+\/config\/?$/;
+const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
 const NONCE = /^[A-Za-z0-9_-]{16,128}$/;
 const BODY_DIGEST = /^sha256:[A-Za-z0-9_-]{43}$/;
 
@@ -133,10 +133,13 @@ function parseFlags(
 
 function parseConfig(method: string, pathname: string): ControlPanelOperation | null {
   const match = pathname.match(FLAG_CONFIG_PATH);
-  if (method !== "GET" || !match?.[1] || !match[2]) return null;
+  if (method !== "GET" || !match?.[1] || !match[2] || !match[3]) return null;
   const appId = decodeSegment(match[1]);
   const environmentId = decodeSegment(match[2]);
-  return appId && environmentId ? { id: "flag_config_get", appId, environmentId } : null;
+  const flagId = decodeSegment(match[3]);
+  return appId && environmentId && flagId
+    ? { id: "flag_config_get", appId, environmentId, flagId }
+    : null;
 }
 
 function parseCompactDelegation(
@@ -247,7 +250,15 @@ function isControlPanelOperation(value: unknown): value is ControlPanelOperation
   if (value.id === "apps_create") {
     return hasKeys(value, ["id", "orgId"]) && isNonEmptyString(value.orgId);
   }
-  if (value.id === "flags_list" || value.id === "flags_create" || value.id === "flag_config_get") {
+  if (value.id === "flag_config_get") {
+    return (
+      hasKeys(value, ["id", "appId", "environmentId", "flagId"]) &&
+      isNonEmptyString(value.appId) &&
+      isNonEmptyString(value.environmentId) &&
+      isNonEmptyString(value.flagId)
+    );
+  }
+  if (value.id === "flags_list" || value.id === "flags_create") {
     return (
       hasKeys(value, ["id", "appId", "environmentId"]) &&
       isNonEmptyString(value.appId) &&
@@ -261,7 +272,11 @@ function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation
   if (left.id !== right.id) return false;
   if (left.id === "apps_create" && right.id === "apps_create") return left.orgId === right.orgId;
   if (left.id === "apps_create" || right.id === "apps_create") return false;
-  return left.appId === right.appId && left.environmentId === right.environmentId;
+  if (left.appId !== right.appId || left.environmentId !== right.environmentId) return false;
+  if (left.id === "flag_config_get" && right.id === "flag_config_get") {
+    return left.flagId === right.flagId;
+  }
+  return left.id !== "flag_config_get" && right.id !== "flag_config_get";
 }
 
 function assertSecret(secret: string): void {

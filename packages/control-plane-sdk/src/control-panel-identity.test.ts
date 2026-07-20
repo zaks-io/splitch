@@ -103,6 +103,31 @@ describe("Control Panel delegation", () => {
     ).resolves.toBeNull();
   });
 
+  it("rejects a flag_config_get delegation for a different Flag", async () => {
+    const request = new Request(
+      "https://control-plane.internal/apps/app_1/envs/env_1/flags/flag_1/config",
+    );
+    const operation = parseControlPanelOperation("GET", new URL(request.url).pathname);
+    const otherFlagOperation = parseControlPanelOperation(
+      "GET",
+      "/apps/app_1/envs/env_1/flags/flag_2/config",
+    );
+    expect(operation).not.toBeNull();
+    expect(otherFlagOperation).not.toBeNull();
+    if (!operation || !otherFlagOperation)
+      throw new Error("expected Flag Configuration operations");
+
+    const delegation = await issueControlPanelDelegation(request, operation, "user_1", SECRET, {
+      nowSeconds: NOW,
+      sessionExpiresAt: NOW + 30,
+      nonce: "nonce_flag_config_123456",
+    });
+
+    await expect(
+      verifyControlPanelDelegation(delegation, request, otherFlagOperation, SECRET, NOW),
+    ).resolves.toBeNull();
+  });
+
   it("parses only the binding allowlist", () => {
     expect(parseControlPanelOperation("POST", "/orgs/org_1/apps")).toEqual({
       id: "apps_create",
@@ -114,6 +139,14 @@ describe("Control Panel delegation", () => {
       environmentId: "env_1",
     });
     expect(parseControlPanelOperation("PATCH", "/apps/app_1/flags", "env_1")).toBeNull();
+    expect(parseControlPanelOperation("GET", "/apps/app_1/envs/env_1/flags/flag_1/config")).toEqual(
+      {
+        id: "flag_config_get",
+        appId: "app_1",
+        environmentId: "env_1",
+        flagId: "flag_1",
+      },
+    );
   });
 });
 

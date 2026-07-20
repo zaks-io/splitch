@@ -5,11 +5,9 @@ import { FlagsTable } from "./flags-table";
 
 type FlagsPageProps = {
   appId: string;
-  appSlug: string;
   env: string;
   environmentId: string;
   items: FlagsPageItem[];
-  orgSlug: string;
 };
 
 export function FlagsPage(props: FlagsPageProps) {
@@ -35,12 +33,7 @@ export function FlagsPage(props: FlagsPageProps) {
       {props.items.length === 0 ? (
         <FlagsEmptyState appId={props.appId} environmentId={props.environmentId} />
       ) : (
-        <FlagsTable
-          appSlug={props.appSlug}
-          env={props.env}
-          items={props.items}
-          orgSlug={props.orgSlug}
-        />
+        <FlagsTable env={props.env} items={props.items} />
       )}
     </section>
   );

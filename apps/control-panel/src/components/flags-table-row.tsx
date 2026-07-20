@@ -2,26 +2,13 @@ import { Badge } from "@splitch/ui/components/badge";
 import { TableCell, TableRow } from "@splitch/ui/components/table";
 import type { FlagsPageItem } from "#lib/flags-page-data";
 
-export function FlagsTableRow({
-  appSlug,
-  env,
-  item,
-  orgSlug,
-}: {
-  appSlug: string;
-  env: string;
-  item: FlagsPageItem;
-  orgSlug: string;
-}) {
+export function FlagsTableRow({ item }: { item: FlagsPageItem }) {
   const config = item.configuration;
-  const href = `/${encodeURIComponent(orgSlug)}/${encodeURIComponent(appSlug)}/${encodeURIComponent(env)}/flags/${encodeURIComponent(item.definition.key)}`;
 
   return (
     <TableRow data-flag-key={item.definition.key}>
-      <TableCell className="px-4">
-        <a className="font-mono font-medium text-foreground hover:underline" href={href}>
-          {item.definition.key}
-        </a>
+      <TableCell className="px-4 font-mono font-medium text-foreground">
+        {item.definition.key}
       </TableCell>
       <TableCell>
         {config ? (

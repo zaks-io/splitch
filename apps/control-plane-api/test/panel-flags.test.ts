@@ -187,6 +187,24 @@ describe("SignedControlPanelEntrypoint Flags operations", () => {
   });
 });
 
+describe("SignedControlPanelEntrypoint Flag resource binding", () => {
+  it("rejects a flag_config_get delegation for a different Flag", async () => {
+    const wrongFlag = await request(
+      "GET",
+      `/apps/${APP_ID}/envs/${ENV_ID}/flags/${FLAG_ID}/config`,
+      undefined,
+      {
+        id: "flag_config_get",
+        appId: APP_ID,
+        environmentId: ENV_ID,
+        flagId: "flag_other",
+      },
+    );
+
+    expect((await entrypoint.fetch(wrongFlag)).status).toBe(401);
+  });
+});
+
 async function panelRequest(method: string, path: string, body?: unknown): Promise<Response> {
   return entrypoint.fetch(await request(method, path, body));
 }
