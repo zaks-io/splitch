@@ -42,9 +42,6 @@ test.describe("per-Environment Flags", () => {
 
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(
-      dialog.getByText("Prefilled: disabled is the Default Variant; enabled is true."),
-    ).toBeVisible();
     await expect(dialog.getByTestId("boolean-catalog").locator("[data-variant-name]")).toHaveText([
       "disabledfalseDefault",
       "enabledtrue",

@@ -29,7 +29,7 @@ export async function parseInput<Schema extends z.ZodTypeAny>(
     params,
     query: queryToRecord(request),
     headers: headersToRecord(request.headers),
-    body: await readBody(request),
+    body: await readBody(request.clone()),
   };
 
   const result = schema.safeParse(raw);
@@ -69,7 +69,7 @@ function headersToRecord(headers: Headers): Record<string, string> {
   return out;
 }
 
-async function readBody(request: Request): Promise<unknown> {
+async function readBody(request: Pick<Request, "method" | "text">): Promise<unknown> {
   if (request.method === "GET" || request.method === "HEAD") {
     return undefined;
   }

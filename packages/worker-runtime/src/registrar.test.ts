@@ -84,6 +84,29 @@ describe("guard: input validation", () => {
 });
 
 describe("guard: authentication", () => {
+  it("preserves the request body for signed authentication after input parsing", async () => {
+    const reg = createRegistrar(
+      deps({
+        authResolvers: {
+          "control-plane-token": async (request) => {
+            expect(await request.clone().json()).toEqual({ name: "ok" });
+            return { ok: true as const, principal: principal() };
+          },
+        },
+      }),
+    );
+    const app = new Hono();
+    reg.mount(app, route({ auth: "control-plane-token", input: BodyInput }), okHandler);
+
+    const res = await app.request("/things", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "ok" }),
+    });
+
+    expect(res.status).toBe(200);
+  });
+
   it("returns UNAUTHORIZED when the resolver rejects", async () => {
     const reg = createRegistrar(
       deps({ authResolvers: { "control-plane-token": rejectingResolver } }),
