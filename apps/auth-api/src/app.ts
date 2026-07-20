@@ -7,7 +7,7 @@ import type { DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { verifyIdJag } from "./idjag-verify";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
-import { mountOAuthRoutes, type SmokeClientCredentials } from "./oauth-routes";
+import { audienceForResource, mountOAuthRoutes, type SmokeClientCredentials } from "./oauth-routes";
 import { type RegisterDeps, registerAnonymous } from "./register";
 import type { RevocationStore } from "./revocation";
 import {
@@ -190,6 +190,7 @@ async function handleClaim(deps: AppDeps, request: Request): Promise<Response> {
         identityAssertion: parsed.data.identity_assertion,
         email: parsed.data.email,
         remoteIp,
+        resource: audienceForResource(deps, parsed.data.resource),
       });
       return Response.json(result);
     }
@@ -205,6 +206,9 @@ async function handleClaim(deps: AppDeps, request: Request): Promise<Response> {
       email: parsed.data.email,
       idempotencyKey: parsed.data.idempotency_key,
       remoteIp,
+      ...(parsed.data.resource === undefined
+        ? {}
+        : { resource: audienceForResource(deps, parsed.data.resource) }),
     });
     return Response.json(result);
   } catch (cause) {

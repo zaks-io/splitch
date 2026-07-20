@@ -11,6 +11,7 @@ export interface ClaimIdentityHashes extends ClaimHashes {
 
 export interface ClaimVerification extends ClaimHashes {
   id: string;
+  selectedResource: string | null;
   expiresAt: string;
   attempts: number;
   verifiedAt: string | null;

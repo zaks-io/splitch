@@ -1,5 +1,5 @@
-import { access, readFile, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK } from "./exit-codes.js";
@@ -37,8 +37,15 @@ describe("login exit code", () => {
       },
     ]);
 
-    const code = await runCli(["login", "--json"], { credentialPath, fetch: transport.fetch });
+    const code = await runCli(["login", "--json", "--app", "app_1"], {
+      credentialPath,
+      fetch: transport.fetch,
+    });
     expect(code).toBe(EXIT_OK);
+    expect(transport.requests.map((request) => request.body?.scope)).toEqual([
+      "app:app_1:owner",
+      "app:app_1:owner",
+    ]);
     const saved = JSON.parse(await readFile(credentialPath, "utf8")) as {
       credential: { refreshToken: string };
     };

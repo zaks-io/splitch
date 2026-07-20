@@ -2,6 +2,7 @@ import { createRepository } from "@splitch/db";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { DeviceFlowPort } from "./device-flow";
+import { sealDeviceGrant } from "./device-grant";
 import {
   type DeviceRefreshSessionStore,
   makeD1DeviceRefreshSessionStore,
@@ -31,6 +32,13 @@ const emptyMembershipRepo = {
 
 function form(body: Record<string, string>): string {
   return new URLSearchParams(body).toString();
+}
+
+function selectedDeviceCode(deviceCode: string, scope: string): Promise<string> {
+  return sealDeviceGrant(
+    { deviceCode, selectedAppScope: scope, expiresAt: 1_780_000_300_000 },
+    "test-access-secret",
+  );
 }
 
 function staleMissCache(keys: string[] = []): KVNamespace {
@@ -109,8 +117,8 @@ describe("OAuth device token authority", () => {
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: form({
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-        device_code: "approved",
-        scope: "app:app_selected:admin app:app_victim:admin",
+        device_code: await selectedDeviceCode("approved", "app:app_selected:admin"),
+        scope: "app:app_selected:admin",
         resource: "https://cp.splitch.test",
       }),
     });
@@ -210,14 +218,20 @@ describe("OAuth revoke route", () => {
             userId: "user_workos",
             refreshToken: providerRefreshToken,
             providerSessionId: "session_workos",
-            scopes: [],
+            scopes: ["app:app_selected:owner"],
           }),
           revokeProviderToken: async (params) => {
             providerRevokes.push(params);
           },
         } satisfies DeviceFlowPort,
         deviceRefreshSessions,
-        repo,
+        repo: {
+          identity: {
+            listOrgMembershipsForUser: async () => [{ orgId: "org_selected", role: "owner" }],
+            listAppsForOrg: async () => [{ id: "app_selected" }],
+            getAppMembership: async () => ({ role: "owner" }),
+          },
+        } as unknown as MembershipAuthorityRepo,
       });
 
       const tokenRes = await app.request("/oauth2/token", {
@@ -225,7 +239,8 @@ describe("OAuth revoke route", () => {
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: form({
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-          device_code: "device-code",
+          device_code: await selectedDeviceCode("device-code", "app:app_selected:owner"),
+          scope: "app:app_selected:owner",
         }),
       });
       expect(tokenRes.status).toBe(200);

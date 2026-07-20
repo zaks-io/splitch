@@ -16,11 +16,12 @@ export interface AuthDeps extends SdkFactoryOptions {
   readonly fetch?: typeof fetch;
 }
 
-export async function loginWithDeviceFlow(deps: AuthDeps): Promise<AuthSession> {
+export async function loginWithDeviceFlow(deps: AuthDeps, appId: string): Promise<AuthSession> {
   const fetchImpl = deps.fetch ?? fetch;
   const authBaseUrl = resolveAuthBaseUrl(deps);
   const auth = await formPost(fetchImpl, `${authBaseUrl}/oauth2/device_authorization`, {
     client_id: CLI_CLIENT_ID,
+    scope: selectedAppScope(appId),
   });
   if (!auth.ok) {
     throw new Error(`splitch login: device authorization failed (${auth.status})`);
@@ -42,6 +43,7 @@ export async function loginWithDeviceFlow(deps: AuthDeps): Promise<AuthSession> 
     fetchImpl,
     authBaseUrl,
     grant.device_code,
+    selectedAppScope(appId),
     intervalMs,
     maxAttempts,
   );
@@ -57,6 +59,7 @@ async function pollDeviceApproval(
   fetchImpl: typeof fetch,
   authBaseUrl: string,
   deviceCode: string,
+  scope: string,
   intervalMs: number,
   maxAttempts: number,
 ): Promise<{
@@ -72,6 +75,7 @@ async function pollDeviceApproval(
       grant_type: DEVICE_CODE_GRANT,
       device_code: deviceCode,
       client_id: CLI_CLIENT_ID,
+      scope,
     });
     if (token.status === 200) {
       return (await token.json()) as {
@@ -88,6 +92,10 @@ async function pollDeviceApproval(
     }
   }
   throw new Error("splitch login: timed out waiting for device approval");
+}
+
+function selectedAppScope(appId: string): string {
+  return `app:${appId}:owner`;
 }
 
 function buildCredentialFile(body: {

@@ -28,6 +28,7 @@ const CP_AUDIENCE = "https://cp.splitch.test";
 const MCP_AUDIENCE = "https://mcp.splitch.test/mcp";
 const NOW_MS = 1_780_000_000_000;
 const ORG = "org_device";
+const APP = "app_device";
 const DEVICE_USER = "user_device_fixture";
 const NOW_ISO = "2026-06-29T00:00:00.000Z";
 
@@ -90,6 +91,16 @@ async function seedDeviceOwner(): Promise<void> {
     .prepare("INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES (?,?,?,?)")
     .bind(ORG, DEVICE_USER, "owner", NOW_ISO)
     .run();
+  await local.d1
+    .prepare(
+      "INSERT INTO apps (id, organization_id, name, key, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+    )
+    .bind(APP, ORG, "Device App", "device-app", NOW_ISO, NOW_ISO)
+    .run();
+  await local.d1
+    .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
+    .bind(APP, DEVICE_USER, "owner", NOW_ISO)
+    .run();
 }
 
 async function formPost(
@@ -114,7 +125,11 @@ async function mintDeviceToken(
   app: ReturnType<typeof buildApp>,
   resource?: string,
 ): Promise<MintedDeviceToken> {
-  const auth = await formPost(app, "/oauth2/device_authorization", { client_id: "splitch-cli" });
+  const scope = `app:${APP}:owner`;
+  const auth = await formPost(app, "/oauth2/device_authorization", {
+    client_id: "splitch-cli",
+    scope,
+  });
   expect(auth.status).toBe(200);
   const grant = (await auth.json()) as { device_code: string };
 
@@ -122,6 +137,7 @@ async function mintDeviceToken(
     grant_type: DEVICE_CODE_GRANT,
     device_code: grant.device_code,
     client_id: "splitch-cli",
+    scope,
     ...(resource ? { resource } : {}),
   });
   expect(token.status).toBe(200);
@@ -209,13 +225,14 @@ describe("Door C discovery and device flow", () => {
     expect(await rejected.json()).toMatchObject({ error: "invalid_request" });
   });
 
-  it("revoking a token makes the protected route reject it with 401", async () => {
+  it("revoking a valid App-only token makes authentication reject it with 401", async () => {
     const app = buildApp();
     const { accessToken } = await mintDeviceToken(app);
     const headers = { authorization: `Bearer ${accessToken}` };
 
     const before = await app.request(`/orgs/${ORG}/trusted-idps`, { headers });
-    expect(before.status).toBe(200);
+    expect(before.status).toBe(403);
+    expect((await before.json()) as { code: string }).toMatchObject({ code: "FORBIDDEN" });
 
     const revoke = await formPost(app, "/oauth2/revoke", {
       token: accessToken,
@@ -242,6 +259,7 @@ describe("Door C discovery and device flow", () => {
       grant_type: DEVICE_CODE_GRANT,
       device_code: deviceCode,
       client_id: "splitch-cli",
+      scope: `app:${APP}:owner`,
     });
     expect(token.status).toBe(400);
     expect(await token.json()).toMatchObject({ error: "authorization_pending" });

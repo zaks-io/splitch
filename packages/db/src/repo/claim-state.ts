@@ -8,21 +8,35 @@ export type { ClaimHashes, ClaimVerification } from "./claim-types";
 export function makeClaimStateRepo(d1: D1Database) {
   const reservations = makeClaimReservationRepo(d1);
   return {
-    async createVerification(input: ClaimHashes & { id: string; expiresAt: string; now: string }) {
+    async createVerification(
+      input: ClaimHashes & {
+        id: string;
+        selectedResource?: string;
+        expiresAt: string;
+        now: string;
+      },
+    ) {
       await d1
         .prepare(
           `INSERT INTO claim_verifications
-             (id, provisional_user_hash, email_hash, expires_at, attempts, created_at)
-           VALUES (?, ?, ?, ?, 0, ?)`,
+             (id, provisional_user_hash, email_hash, selected_resource, expires_at, attempts, created_at)
+           VALUES (?, ?, ?, ?, ?, 0, ?)`,
         )
-        .bind(input.id, input.provisionalUserHash, input.emailHash, input.expiresAt, input.now)
+        .bind(
+          input.id,
+          input.provisionalUserHash,
+          input.emailHash,
+          input.selectedResource ?? null,
+          input.expiresAt,
+          input.now,
+        )
         .run();
     },
 
     async getVerification(id: string): Promise<ClaimVerification | null> {
       const row = await d1
         .prepare(
-          `SELECT id, provisional_user_hash, email_hash, expires_at, attempts, verified_at, consumed_at
+          `SELECT id, provisional_user_hash, email_hash, selected_resource, expires_at, attempts, verified_at, consumed_at
              FROM claim_verifications WHERE id = ?`,
         )
         .bind(id)
@@ -33,7 +47,7 @@ export function makeClaimStateRepo(d1: D1Database) {
     async getLatestVerification(input: ClaimHashes): Promise<ClaimVerification | null> {
       const row = await d1
         .prepare(
-          `SELECT id, provisional_user_hash, email_hash, expires_at, attempts, verified_at, consumed_at
+          `SELECT id, provisional_user_hash, email_hash, selected_resource, expires_at, attempts, verified_at, consumed_at
              FROM claim_verifications WHERE provisional_user_hash = ? AND email_hash = ?
              ORDER BY created_at DESC LIMIT 1`,
         )
@@ -165,6 +179,7 @@ export function makeClaimStateRepo(d1: D1Database) {
 function asVerification(row: Record<string, unknown>): ClaimVerification {
   return {
     id: requiredString(row.id),
+    selectedResource: typeof row.selected_resource === "string" ? row.selected_resource : null,
     provisionalUserHash: requiredString(row.provisional_user_hash),
     emailHash: requiredString(row.email_hash),
     expiresAt: requiredString(row.expires_at),

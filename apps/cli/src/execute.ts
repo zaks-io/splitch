@@ -1,7 +1,6 @@
 import type { CliCommandDefinition } from "./command-registry.js";
 import { findCommand } from "./command-registry.js";
 import { resolveContext, writeNearestConfig } from "./context.js";
-import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { consoleIo, emit } from "./execute-io.js";
 import {
   executeApiOperation,
@@ -11,6 +10,7 @@ import {
   validateCommandScope,
 } from "./execute-operations.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
+import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { buildOperationInput } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
 
@@ -47,7 +47,16 @@ async function executeMeta(
     }
     case "login": {
       const { loginWithDeviceFlow } = await import("./auth.js");
-      const session = await loginWithDeviceFlow(deps);
+      const context = await resolveContext({
+        flags: { app: invocation.flags.app, env: invocation.flags.env },
+        env: deps.env,
+        cwd: deps.cwd,
+      });
+      if (!context.appId) {
+        io.error("splitch login requires a selected App. Pass --app <app_id> or set SPLITCH_APP.");
+        return { exitCode: EXIT_USAGE };
+      }
+      const session = await loginWithDeviceFlow(deps, context.appId);
       const payload = { principal: session.principal };
       emit(io, invocation.flags.json, payload);
       return { exitCode: EXIT_OK, payload };

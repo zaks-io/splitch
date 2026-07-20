@@ -46,14 +46,37 @@ describe("local Auth-to-MCP integration", () => {
     const handlerModule = (await import(
       new URL("../../mcp-server/src/mcp-handler.ts", import.meta.url).href
     )) as McpHandlerModule;
+    const authorization = await authFetch(
+      new Request("https://auth.splitch.test/oauth2/device_authorization", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ scope: `app:${SELECTED_APP}:owner` }),
+      }),
+    );
+    expect(authorization.status).toBe(200);
+    const deviceCode = ((await authorization.json()) as { device_code: string }).device_code;
+    const widenedToken = await authFetch(
+      new Request("https://auth.splitch.test/oauth2/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+          device_code: deviceCode,
+          scope: `app:${VICTIM_APP}:owner`,
+          resource: "https://mcp.splitch.test/mcp",
+        }),
+      }),
+    );
+    expect(widenedToken.status).toBe(400);
+    expect(await widenedToken.json()).toMatchObject({ error: "invalid_grant" });
     const tokenResponse = await authFetch(
       new Request("https://auth.splitch.test/oauth2/token", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-          device_code: "fixture-approved-device-code",
-          scope: [`app:${SELECTED_APP}:admin`, `app:${VICTIM_APP}:admin`].join(" "),
+          device_code: deviceCode,
+          scope: `app:${SELECTED_APP}:owner`,
           resource: "https://mcp.splitch.test/mcp",
         }),
       }),
@@ -179,6 +202,10 @@ async function seedMemberships(): Promise<void> {
     .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
     .bind(SELECTED_APP, DEVICE_USER, "admin", NOW_ISO)
     .run();
+  await local.d1
+    .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
+    .bind(VICTIM_APP, DEVICE_USER, "admin", NOW_ISO)
+    .run();
 }
 
 function mcpRequest(
@@ -250,7 +277,8 @@ function decodeJwtHeader(token: string): Record<string, unknown> {
 
 function decodeDelegationScopes(request: Request): string[] {
   const delegation = request.headers.get(MCP_DELEGATION_HEADER);
-  const payload = delegation?.split(".")[0];
+  if (!delegation) return [];
+  const payload = delegation.split(".")[0];
   if (!payload) throw new Error("missing MCP delegation payload");
   const padded = payload
     .replace(/-/g, "+")

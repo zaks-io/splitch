@@ -148,6 +148,7 @@ export const claimIdempotency = sqliteTable(
     organizationHash: text("organization_hash").notNull(),
     appHash: text("app_hash").notNull(),
     verifiedUserHash: text("verified_user_hash").notNull(),
+    selectedResource: text("selected_resource"),
     // NULL owns an in-flight ceremony; a timestamp makes its retry replayable.
     completedAt: text("completed_at"),
     // Set before the one-use provider confirmation so a retry can reconcile an

@@ -115,7 +115,7 @@ On re-login for device flow, CLI outputs the verification URL and polls until ap
 override. Flags that resolve from context are marked `[ctx]`.
 
 ```
-splitch login                        # device flow; writes to credential store
+splitch login --app <app_id>         # App-bound device flow; writes to credential store
 splitch logout                       # revokes token; removes credential file entry
 splitch use --app <app|slug> [--env <env|slug>]   # set active context (writes .splitch/config.json)
 splitch context                                    # show resolved app/env and source
@@ -175,9 +175,9 @@ Agent connects to MCP server URL
         → POST /oauth2/token with identity_assertion + resource=<exact MCP resource>
         → Auth API issues the exact-resource access_token for the anonymous identity
       Door C (device flow):
-        → POST /oauth2/device_authorization → device_code + human verification URL
+        → POST /oauth2/device_authorization with one canonical App scope → device_code + human verification URL
         → Human approves in WorkOS
-        → Poll POST /oauth2/token with the device-code grant + resource=<exact MCP resource>
+        → Poll POST /oauth2/token with the same App scope + resource=<exact MCP resource>
         → Auth API issues the exact-resource access_token for the authenticated WorkOS User
   → Subsequent tool calls: Authorization: Bearer <access_token>
 ```

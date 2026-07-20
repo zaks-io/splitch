@@ -1,3 +1,4 @@
+import type { ClaimDeps, ClaimResult, VerifyInput } from "./claim";
 import { consentRequired, createConsent } from "./claim-consent";
 import {
   assertClaimMemberships,
@@ -8,7 +9,6 @@ import {
   resolveIdentity,
 } from "./claim-identity";
 import { OAuthError } from "./oauth-errors";
-import type { ClaimDeps, ClaimResult, VerifyInput } from "./claim";
 
 const IN_FLIGHT_LEASE_MS = 5 * 60 * 1000;
 const COMPLETED_REPLAY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -34,7 +34,8 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
     keyHash,
   });
   if (existingReservation?.completedAt && existingReservation.expiresAt > nowIso) {
-    return tokenize(deps, claimant, verifiedUserId, now);
+    assertSameResource(input.resource, existingReservation.selectedResource);
+    return tokenize(deps, claimant, verifiedUserId, now, existingReservation.selectedResource);
   }
   if (
     existingReservation &&
@@ -52,7 +53,10 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
       verifiedUserId,
       nowIso,
     );
-    if (reconciled) return tokenize(deps, claimant, verifiedUserId, now);
+    if (reconciled) {
+      assertSameResource(input.resource, existingReservation.selectedResource);
+      return tokenize(deps, claimant, verifiedUserId, now, existingReservation.selectedResource);
+    }
     throw new OAuthError("invalid_request", "a claim with this idempotency_key is in progress");
   }
   await assertClaimMemberships(deps, claimant);
@@ -71,6 +75,8 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
       "claim verification is expired or does not match this identity",
     );
   }
+  assertSameResource(input.resource, verification.selectedResource);
+  const selectedResource = verification.selectedResource ?? input.resource ?? null;
   const existingHash = existing ? await hashIdentifier(existing) : null;
   const collision = Boolean(existing && existing !== claimant.userId);
   const approvedConsent =
@@ -96,13 +102,14 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
     ...identityHashes,
     keyHash,
     verificationId: verification.id,
+    selectedResource,
     expiresAt: iso(now + IN_FLIGHT_LEASE_MS),
   };
   // Reserve before WorkOS consumes the one-use OTP. A same-key loser therefore
   // observes the durable reservation, never a provider-specific OTP failure.
   if (!(await deps.repo.claim.reserveClaim(reservation))) {
     if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
-      return tokenize(deps, claimant, verifiedUserId, now);
+      return tokenize(deps, claimant, verifiedUserId, now, selectedResource);
     }
     throw new OAuthError("invalid_request", "a claim with this idempotency_key is in progress");
   }
@@ -176,10 +183,10 @@ export async function verifyClaim(deps: ClaimDeps, input: VerifyInput): Promise<
       }
     }
     if (await deps.repo.claim.completeClaim(transfer)) {
-      return tokenize(deps, claimant, verifiedUserId, now);
+      return tokenize(deps, claimant, verifiedUserId, now, selectedResource);
     }
     if (await deps.repo.claim.completedClaim({ ...identityHashes, keyHash, now: nowIso })) {
-      return tokenize(deps, claimant, verifiedUserId, now);
+      return tokenize(deps, claimant, verifiedUserId, now, selectedResource);
     }
     // A failed acquisition guard is terminal for this claim attempt. It is
     // different from a provider call whose result may have been interrupted,
@@ -205,6 +212,7 @@ async function reconcileProviderConfirmation(
   keyHash: string,
   reservation: {
     verificationId: string;
+    selectedResource: string | null;
     completedAt: string | null;
     providerConfirmationStartedAt: string | null;
   },
@@ -247,6 +255,7 @@ async function tokenize(
   claimant: Provisional,
   userId: string,
   now: number,
+  audience?: string | null,
 ): Promise<ClaimResult> {
   return {
     access_token: await deps.tokenSigner.mintAccessToken(
@@ -254,9 +263,16 @@ async function tokenize(
       [`app:${claimant.appId}:owner`],
       "anonymous",
       Math.floor(now / 1000),
+      audience ?? undefined,
     ),
     user_id: userId,
     org_id: claimant.orgId,
     app_id: claimant.appId,
   };
+}
+
+function assertSameResource(requested: string | undefined, selected: string | null): void {
+  if (requested !== undefined && selected !== null && requested !== selected) {
+    throw new OAuthError("invalid_request", "claim resource does not match the initiated ceremony");
+  }
 }

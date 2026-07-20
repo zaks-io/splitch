@@ -1,4 +1,5 @@
 import { appScope, type Repository } from "@splitch/db";
+import { OAuthError } from "./oauth-errors";
 
 type MembershipRole = "owner" | "admin" | "member";
 const ROLE_RANK: Record<MembershipRole, number> = { member: 1, admin: 2, owner: 3 };
@@ -55,6 +56,14 @@ export function narrowMembershipAuthority(
 
 export function parseRequestedScopes(scope: string | undefined): string[] | undefined {
   return scope === undefined ? undefined : scope.trim().split(/\s+/).filter(Boolean);
+}
+
+export function parseSelectedAppScope(scope: string | undefined): string[] {
+  const requested = parseRequestedScopes(scope);
+  if (requested?.length !== 1 || parseMembershipScope(requested[0] as string)?.kind !== "app") {
+    throw new OAuthError("invalid_request", "device grant requires one canonical App scope");
+  }
+  return requested;
 }
 
 function scopeFor(kind: "org" | "app", id: string, role: string): string {

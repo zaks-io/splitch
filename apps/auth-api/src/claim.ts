@@ -7,11 +7,11 @@ import {
   iso,
   resolveIdentity,
 } from "./claim-identity";
+import { verifyClaim } from "./claim-verify";
 import { OAuthError } from "./oauth-errors";
 import type { RateLimiter } from "./rate-limit";
 import type { TokenSigner } from "./token-exchange";
 import type { WorkOsPort } from "./workos";
-import { verifyClaim } from "./claim-verify";
 
 export { verifyClaim };
 
@@ -33,6 +33,7 @@ export interface InitiateInput {
   identityAssertion: string;
   email: string;
   remoteIp: string | undefined;
+  resource?: string;
 }
 
 export interface VerifyInput extends InitiateInput {
@@ -63,6 +64,7 @@ export async function initiateClaim(
   await deps.repo.claim.createVerification({
     ...hashes,
     id: verificationId,
+    ...(input.resource === undefined ? {} : { selectedResource: input.resource }),
     expiresAt: iso(now + CLAIM_CEREMONY_TTL_MS),
     now: iso(now),
   });

@@ -3,19 +3,13 @@ import { verifyAccessToken } from "./access-token";
 import { accessTokenJwks } from "./access-token-key";
 import { authMarkdown } from "./auth-markdown";
 import { DEVICE_CODE_GRANT, type DeviceFlowPort } from "./device-flow";
+import { authorizeDevice, exchangeDeviceCode } from "./device-oauth";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
-import {
-  type MembershipAuthorityRepo,
-  narrowMembershipAuthority,
-  parseRequestedScopes,
-  resolveMembershipAuthority,
-} from "./membership-authority";
+import type { MembershipAuthorityRepo } from "./membership-authority";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
 import type { RevocationStore } from "./revocation";
 import {
   ClientCredentialsRequestSchema,
-  DeviceAuthorizationRequestSchema,
-  DeviceTokenRequestSchema,
   RevokeTokenRequestSchema,
   TokenExchangeRequestSchema,
 } from "./schemas";
@@ -99,17 +93,7 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
   });
 
   app.post("/oauth2/device_authorization", async (c) => {
-    const parsed = DeviceAuthorizationRequestSchema.safeParse(await readBody(c.req.raw));
-    if (!parsed.success) {
-      return renderOAuthError(
-        new OAuthError("invalid_request", "malformed /oauth2/device_authorization body"),
-      );
-    }
-    try {
-      return Response.json(await deps.deviceFlow.authorizeDevice(parsed.data));
-    } catch (cause) {
-      return renderDoorFault(cause);
-    }
+    return authorizeDevice(deps, await readBody(c.req.raw));
   });
 
   app.post("/oauth2/token", async (c) => {
@@ -119,7 +103,9 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
       return exchangeIdentityAssertion(deps, body, nowSeconds());
     }
     if (grantType === DEVICE_CODE_GRANT) {
-      return exchangeDeviceCode(deps, body, nowSeconds());
+      return exchangeDeviceCode(deps, body, nowSeconds(), (resource) =>
+        audienceForResource(deps, resource),
+      );
     }
     if (grantType === CLIENT_CREDENTIALS_GRANT && deps.smokeClientCredentials) {
       return exchangeClientCredentials(deps, body, nowSeconds());
@@ -223,56 +209,18 @@ async function exchangeIdentityAssertion(
   }
 }
 
-async function exchangeDeviceCode(
-  deps: OAuthRouteDeps,
-  body: unknown,
-  nowSeconds: number,
-): Promise<Response> {
-  const parsed = DeviceTokenRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/token body"));
-  }
-  try {
-    const audience = audienceForResource(deps, parsed.data.resource);
-    const deviceToken = await deps.deviceFlow.exchangeDeviceCode({
-      clientId: parsed.data.client_id,
-      deviceCode: parsed.data.device_code,
-    });
-    if (deviceToken.refreshToken) {
-      if (!deviceToken.providerSessionId) {
-        throw new OAuthError("server_error", "device refresh token missing session id");
-      }
-      await deps.deviceRefreshSessions.remember(
-        deviceToken.refreshToken,
-        deviceToken.providerSessionId,
-      );
-    }
-    const authority = await resolveMembershipAuthority(deps.repo, deviceToken.userId);
-    const scopes = narrowMembershipAuthority(
-      authority,
-      deviceToken.scopes,
-      parseRequestedScopes(parsed.data.scope),
-    );
-    const accessToken = await deps.tokenSigner.mintAccessToken(
-      deviceToken.userId,
-      scopes,
-      "device_flow",
-      nowSeconds,
-      audience,
-    );
-    return tokenResponse(accessToken, deviceToken.refreshToken);
-  } catch (cause) {
-    return renderDoorFault(cause);
-  }
-}
-
-function audienceForResource(deps: OAuthRouteDeps, resource: string | undefined): string {
+export function audienceForResource(
+  deps: Pick<OAuthRouteDeps, "controlPlaneAudience" | "mcpAudience">,
+  resource: string | undefined,
+): string {
   if (!resource) return deps.controlPlaneAudience;
   if (allowedAccessTokenAudiences(deps).includes(resource)) return resource;
   throw new OAuthError("invalid_request", "requested resource is not supported");
 }
 
-function allowedAccessTokenAudiences(deps: OAuthRouteDeps): string[] {
+function allowedAccessTokenAudiences(
+  deps: Pick<OAuthRouteDeps, "controlPlaneAudience" | "mcpAudience">,
+): string[] {
   if (!deps.mcpAudience) return [deps.controlPlaneAudience];
   const mcpRoot = deps.mcpAudience.replace(/\/+$/, "");
   return [deps.controlPlaneAudience, mcpRoot, `${mcpRoot}/mcp`];
