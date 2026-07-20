@@ -4,14 +4,14 @@ import { requireAppDelete, requireAppWrite } from "./app-authz";
 import { deleteEnvironmentCredentials } from "./app-environment-credentials";
 import {
   ALLOW_POLICY,
-  CONFIRM_POLICY,
   type AppEnvironmentDeps,
   type AppRow,
-  type EnvironmentRow,
   appNotFound,
   appResponse,
+  CONFIRM_POLICY,
   createEnvironmentRecord,
   deleteAppBlockedByChildren,
+  type EnvironmentRow,
   environmentResponse,
   firstRunningExperiment,
   nowIso,
@@ -27,13 +27,7 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
   return {
     async listApps({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const orgId = pathParam(input, "orgId");
-      const forbidden = await requireOrgRole(
-        deps,
-        orgId,
-        principal.id,
-        ORG_MEMBER_ROLES,
-        requestId,
-      );
+      const forbidden = await requireOrgRole(deps, orgId, principal, ORG_MEMBER_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const org = await deps.repo.identity.getOrg(orgId);
@@ -45,7 +39,7 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
 
     async createApp({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const orgId = pathParam(input, "orgId");
-      const forbidden = await requireOrgRole(deps, orgId, principal.id, ORG_ADMIN_ROLES, requestId);
+      const forbidden = await requireOrgRole(deps, orgId, principal, ORG_ADMIN_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const org = await deps.repo.identity.getOrg(orgId);
@@ -108,7 +102,7 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
       const app = await deps.repo.identity.getApp(appId);
       if (!app) return appNotFound(requestId);
 
-      const writeError = await requireAppWrite(deps, appId, principal.id, requestId);
+      const writeError = await requireAppWrite(deps, appId, principal, requestId);
       if (writeError) return writeError;
 
       const body = objectBody(input);
@@ -126,7 +120,7 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
       const app = await deps.repo.identity.getApp(appId);
       if (!app) return appNotFound(requestId);
 
-      const deleteError = await requireAppDelete(deps, appId, principal.id, requestId);
+      const deleteError = await requireAppDelete(deps, appId, principal, requestId);
       if (deleteError) return deleteError;
 
       return deleteAppAfterAuth(deps, app, requestId);

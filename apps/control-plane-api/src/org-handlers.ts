@@ -32,13 +32,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
 
     async getOrg({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const orgId = pathParam(input, "orgId");
-      const forbidden = await requireOrgRole(
-        deps,
-        orgId,
-        principal.id,
-        ORG_MEMBER_ROLES,
-        requestId,
-      );
+      const forbidden = await requireOrgRole(deps, orgId, principal, ORG_MEMBER_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const org = await deps.repo.identity.getOrg(orgId);
@@ -48,7 +42,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
 
     async updateOrg({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const orgId = pathParam(input, "orgId");
-      const forbidden = await requireOrgRole(deps, orgId, principal.id, ORG_OWNER_ROLES, requestId);
+      const forbidden = await requireOrgRole(deps, orgId, principal, ORG_OWNER_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const payload = objectBody(input);
@@ -65,7 +59,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
 
     async listMembers({ input, request, principal, requestId }: HandlerArgs<unknown>) {
       const orgId = pathParam(input, "orgId");
-      const forbidden = await requireOrgRole(deps, orgId, principal.id, ORG_ADMIN_ROLES, requestId);
+      const forbidden = await requireOrgRole(deps, orgId, principal, ORG_ADMIN_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const org = await deps.repo.identity.getOrg(orgId);
@@ -83,7 +77,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
 
     async addMember({ input, request, principal, requestId }: HandlerArgs<unknown>) {
       const orgId = pathParam(input, "orgId");
-      const forbidden = await requireOrgRole(deps, orgId, principal.id, ORG_ADMIN_ROLES, requestId);
+      const forbidden = await requireOrgRole(deps, orgId, principal, ORG_ADMIN_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const org = await deps.repo.identity.getOrg(orgId);
@@ -92,7 +86,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
       const payload = objectBody(input);
       const userId = payload.userId as string;
       const role = UserRoleSchema.parse(payload.role);
-      const grantGuard = await requireOwnerToGrantOwner(deps, orgId, principal.id, role, requestId);
+      const grantGuard = await requireOwnerToGrantOwner(deps, orgId, principal, role, requestId);
       if (grantGuard) return grantGuard;
 
       const profile = await resolveProfile(deps, orgId, userId, request, requestId);
@@ -113,7 +107,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
     async updateMember({ input, request, principal, requestId }: HandlerArgs<unknown>) {
       const orgId = pathParam(input, "orgId");
       const userId = pathParam(input, "userId");
-      const forbidden = await requireOrgRole(deps, orgId, principal.id, ORG_OWNER_ROLES, requestId);
+      const forbidden = await requireOrgRole(deps, orgId, principal, ORG_OWNER_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const current = await existingMember(deps, orgId, userId, requestId);
@@ -134,7 +128,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
     async removeMember({ input, principal, requestId }: HandlerArgs<unknown>) {
       const orgId = pathParam(input, "orgId");
       const userId = pathParam(input, "userId");
-      const forbidden = await requireOrgRole(deps, orgId, principal.id, ORG_OWNER_ROLES, requestId);
+      const forbidden = await requireOrgRole(deps, orgId, principal, ORG_OWNER_ROLES, requestId);
       if (forbidden) return forbidden;
 
       const current = await existingMember(deps, orgId, userId, requestId);
@@ -156,12 +150,12 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
 async function requireOwnerToGrantOwner(
   deps: OrgHandlerDeps,
   orgId: string,
-  userId: string,
+  actor: { id: string; scopes: readonly string[] },
   role: UserRole,
   requestId: string,
 ): Promise<Response | null> {
   if (role !== "owner") return null;
-  return requireOrgRole(deps, orgId, userId, ORG_OWNER_ROLES, requestId);
+  return requireOrgRole(deps, orgId, actor, ORG_OWNER_ROLES, requestId);
 }
 
 function failedMemberUpdate(

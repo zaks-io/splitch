@@ -7,14 +7,14 @@ import {
   runNotFound,
   runNotRunning,
 } from "./experiment-errors";
-import { runResponse } from "./experiment-model";
 import {
+  type ExperimentDeps,
   experimentFromPath,
   optionalBody,
   requireWritableEnvironment,
   syncExperimentConfigFromD1,
-  type ExperimentDeps,
 } from "./experiment-handler-shared";
+import { runResponse } from "./experiment-model";
 import { pathParam } from "./handler-input";
 
 export function makeRunHandlers(deps: ExperimentDeps) {
@@ -49,12 +49,7 @@ async function endRun(deps: ExperimentDeps, args: HandlerArgs<unknown>): Promise
   const scope = envScope(pathParam(args.input, "appId"), pathParam(args.input, "environmentId"));
   const run = await deps.repo.experiments.getRun(scope, pathParam(args.input, "runId"));
   if (!run) return runNotFound(args.requestId);
-  const writeError = await requireWritableEnvironment(
-    deps,
-    scope,
-    args.principal.id,
-    args.requestId,
-  );
+  const writeError = await requireWritableEnvironment(deps, scope, args.principal, args.requestId);
   if (writeError) return writeError;
   if (run.status !== "running") {
     await syncExperimentConfigFromD1(configStore, scope, run.experimentId);

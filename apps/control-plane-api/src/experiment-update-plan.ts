@@ -2,17 +2,17 @@ import type { EnvScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { nowIso } from "./app-environment-model";
 import { decisionLocked, experimentNotFound, runFrozen } from "./experiment-errors";
-import { json, type ExperimentRow } from "./experiment-model";
 import {
   draftPatch,
+  type ExperimentDeps,
   loadFlagConfig,
   nullableString,
   presentFields,
   requireWritableEnvironment,
   runningRunForExperiment,
   validateMetricRefs,
-  type ExperimentDeps,
 } from "./experiment-handler-shared";
+import { type ExperimentRow, json } from "./experiment-model";
 import { validationError } from "./flag-definition-errors";
 import { pathParam } from "./handler-input";
 
@@ -55,12 +55,7 @@ export async function loadUpdateContext(
     pathParam(args.input, "experimentId"),
   );
   if (!experiment) return { ok: false as const, response: experimentNotFound(args.requestId) };
-  const writeError = await requireWritableEnvironment(
-    deps,
-    scope,
-    args.principal.id,
-    args.requestId,
-  );
+  const writeError = await requireWritableEnvironment(deps, scope, args.principal, args.requestId);
   if (writeError) return { ok: false as const, response: writeError };
   return { ok: true as const, experiment };
 }

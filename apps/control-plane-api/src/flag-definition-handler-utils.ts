@@ -65,7 +65,7 @@ export async function loadWritableFlag(
   const flag = await deps.repo.flags.getFlag(scope, flagId);
   if (!flag) return fail(flagNotFound(requestId));
 
-  const writeError = await requireAppWrite(deps, appId, principal.id, requestId);
+  const writeError = await requireAppWrite(deps, appId, principal, requestId);
   if (writeError) return fail(writeError);
   return ok({ appId, scope, flag });
 }
@@ -73,11 +73,11 @@ export async function loadWritableFlag(
 export async function requireWritableApp(
   deps: FlagDefinitionDeps,
   appId: string,
-  userId: string,
+  actor: { id: string; scopes: readonly string[] },
   requestId: string,
 ): Promise<Response | null> {
   if (!(await deps.repo.identity.getApp(appId))) return appNotFound(requestId);
-  return requireAppWrite(deps, appId, userId, requestId);
+  return requireAppWrite(deps, appId, actor, requestId);
 }
 
 export function serializeSchema(schema: Record<string, unknown> | null | undefined): string | null {

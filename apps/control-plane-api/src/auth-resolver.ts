@@ -134,9 +134,9 @@ async function resolvePanelAppsCreatePrincipal(
   return {
     kind: "control-plane-token" as const,
     id: actor.userId,
-    // Cached panel roles never authorize the mutation. This minimal member scope
-    // binds the path; the apps_create handler performs the live D1 owner/admin gate.
-    scopes: [`org:${orgId}:member`],
+    // Cached panel roles never authorize the mutation. This ceiling scope binds
+    // the path while the apps_create handler still requires the live D1 role.
+    scopes: [`org:${orgId}:owner`],
     orgId,
     appId: null,
     environmentId: null,

@@ -8,15 +8,15 @@ import { objectBody, pathParam } from "./handler-input";
 import {
   decisionLockedError,
   fail,
+  type MetricRow,
+  type MetricSegmentDeps,
   metricFromPath,
   metricNotFound,
   metricResponse,
   ok,
+  type Result,
   requireWritableApp,
   runningMetricReference,
-  type MetricRow,
-  type MetricSegmentDeps,
-  type Result,
 } from "./metric-segment-shared";
 
 export function makeMetricHandlers(deps: MetricSegmentDeps) {
@@ -45,7 +45,7 @@ async function createMetric(
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
   const body = objectBody(input);
-  const writeError = await requireWritableApp(deps, appId, principal.id, requestId);
+  const writeError = await requireWritableApp(deps, appId, principal, requestId);
   if (writeError) return writeError;
   if (body.appId !== appId) {
     return validationError(requestId, [["body", "appId"], "appId must match path appId"]);
@@ -88,7 +88,7 @@ async function updateMetric(
   const metric = await metricFromPath(deps, args.input);
   if (!metric) return metricNotFound(args.requestId);
 
-  const writeError = await requireWritableApp(deps, appId, args.principal.id, args.requestId);
+  const writeError = await requireWritableApp(deps, appId, args.principal, args.requestId);
   if (writeError) return writeError;
 
   const body = objectBody(args.input);
@@ -115,7 +115,7 @@ async function deleteMetric(
   const metric = await metricFromPath(deps, args.input);
   if (!metric) return metricNotFound(args.requestId);
 
-  const writeError = await requireWritableApp(deps, appId, args.principal.id, args.requestId);
+  const writeError = await requireWritableApp(deps, appId, args.principal, args.requestId);
   if (writeError) return writeError;
 
   const blocker = await runningMetricReference(deps, appId, metric.id);

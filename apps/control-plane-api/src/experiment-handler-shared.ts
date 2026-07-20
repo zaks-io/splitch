@@ -1,9 +1,9 @@
 import type { MetricRef, Variant } from "@splitch/contracts";
-import { appScope, envScope, type EnvScope, type Repository } from "@splitch/db";
+import { appScope, type EnvScope, envScope, type Repository } from "@splitch/db";
 import { requireAppWrite } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
 import type { ConfigStoreAccess } from "./config-store-do";
-import { equalAllocation, json, type ExperimentRow, type RunRow } from "./experiment-model";
+import { type ExperimentRow, equalAllocation, json, type RunRow } from "./experiment-model";
 import { flagNotFound, validationError } from "./flag-definition-errors";
 import { pathParam } from "./handler-input";
 
@@ -107,11 +107,11 @@ export async function validateMetricRefs(
 export async function requireWritableEnvironment(
   deps: ExperimentDeps,
   scope: EnvScope,
-  userId: string,
+  actor: { id: string; scopes: readonly string[] },
   requestId: string,
 ): Promise<Response | null> {
   if (!(await environmentExists(deps, scope))) return appNotFound(requestId);
-  return requireAppWrite(deps, scope.appId, userId, requestId);
+  return requireAppWrite(deps, scope.appId, actor, requestId);
 }
 
 export async function environmentExists(deps: ExperimentDeps, scope: EnvScope): Promise<boolean> {
