@@ -132,6 +132,7 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
       {
         ...env,
         SPLITCH_PLATFORM_TARGET: "shared-preview",
+        ACCESS_TOKEN_SECRET: "test-access-token-secret",
         TURNSTILE_SECRET: "test-turnstile-secret",
         WORKOS_API_KEY: "test-workos-api-key",
         WORKOS_CLIENT_ID: "test-workos-client-id",
