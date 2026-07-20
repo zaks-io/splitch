@@ -1,8 +1,10 @@
-import { expect, test as base, type APIRequestContext, type APIResponse } from "@playwright/test";
+import { type APIRequestContext, type APIResponse, test as base, expect } from "@playwright/test";
+import { deviceAuthorizationRequestForApp } from "../../apps/auth-api/src/device-authorization-contract";
 import { verifyHealthObservation } from "../../scripts/lib/shared-preview-deployment-evidence.mjs";
 import { type HealthRoute, readSmokeConfig, type SmokeConfig } from "./smoke-config";
 
 export { expect };
+
 interface JsonRpcEnvelope {
   readonly jsonrpc: "2.0";
   readonly id: string;
@@ -73,7 +75,7 @@ class SmokeClient {
   async deviceAuthorization(): Promise<Record<string, unknown>> {
     const response = await this.request.post(
       `${this.config.authBaseUrl}/oauth2/device_authorization`,
-      { form: {} },
+      { form: deviceAuthorizationRequestForApp(this.config.smokeAppId) },
     );
     await expect(response, "WorkOS device authorization").toBeOK();
     return (await response.json()) as Record<string, unknown>;
