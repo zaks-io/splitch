@@ -148,7 +148,6 @@ export function makeEnv(
     SPLITCH_EVENT_INGEST_TOKEN: "internal_ingest_secret",
     TINYBIRD_API_URL: "https://tinybird.test",
     TINYBIRD_INGEST_TOKEN: "tb_ingest_secret",
-    TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN: "tb_raw_evaluations_ingest_secret",
     EVALUATION_USAGE_REPLAY_WINDOW: replayWindow,
     EVALUATION_COMMIT_OUTBOX: evaluationCommitOutbox,
   };
@@ -177,8 +176,10 @@ export function expectRow(rows: Record<string, unknown>[]): Record<string, unkno
   return row;
 }
 
-export class TestExecutionContext {
+export class TestExecutionContext implements ExecutionContext {
+  readonly exports: Cloudflare.Exports = {};
   readonly props = {};
+  readonly tracing = {} as Tracing;
   waits: Promise<unknown>[] = [];
 
   waitUntil(promise: Promise<unknown>): void {

@@ -1,3 +1,5 @@
+import { SectionEyebrow } from "./section-eyebrow";
+
 const features = [
   {
     title: "Flags and Experiments together",
@@ -15,30 +17,26 @@ const features = [
 
 export function FeatureSection() {
   return (
-    <section
-      className="border-border border-t bg-background px-6 py-20 sm:px-8"
-      id="flags-experiments"
-    >
-      <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.85fr_1.15fr]">
+    <section className="border-border border-t bg-muted px-4 py-16 sm:px-6 sm:py-20" id="product">
+      <div className="mx-auto grid w-full max-w-6xl gap-10 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <div className="grid content-start gap-4">
-          <p className="font-mono text-muted-foreground text-xs uppercase tracking-wide">
-            Flags + Experiments
-          </p>
-          <h2 className="max-w-xl font-display font-bold text-4xl text-foreground tracking-tight">
-            One product surface for what ships and what proves it.
+          <SectionEyebrow>Flags + Experiments</SectionEyebrow>
+          <h2 className="max-w-xl font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
+            One product surface for what ships and what proves it
+            <span className="text-arm-control">.</span>
           </h2>
         </div>
 
         <div className="grid gap-4">
-          {features.map((feature, index) => (
-            <article className="feature-row" key={feature.title}>
-              <span className="feature-index">0{index + 1}</span>
-              <div className="grid gap-2">
-                <h3 className="font-display font-semibold text-xl text-foreground">
-                  {feature.title}
-                </h3>
-                <p className="text-muted-foreground leading-relaxed">{feature.body}</p>
-              </div>
+          {features.map((feature) => (
+            <article
+              className="grid gap-2 rounded-xl border border-border bg-card p-5 shadow-xs sm:p-6"
+              key={feature.title}
+            >
+              <h3 className="font-display font-semibold text-foreground text-xl">
+                {feature.title}
+              </h3>
+              <p className="text-muted-foreground leading-relaxed">{feature.body}</p>
             </article>
           ))}
         </div>

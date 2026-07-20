@@ -14,8 +14,11 @@ should resolve these into config, not leave the loop to guess them.
   environments, and implementation dispatches that have not yet returned a PR.
 - Do not double-count a PR and its normal linked preview as two delivery slots.
   Count each open PR once, add active previews that are not clearly linked to an
-  already counted PR, then add unreturned implementation dispatches. If the
-  preview provider has a stricter separate limit, obey the stricter limit.
+  already counted PR, then add unreturned implementation dispatches. Reconcile
+  missing dispatches from repo-scoped active tracker claims and dirty,
+  baseline-unmerged, or uncertain non-default worktrees; deduplicate them by
+  issue, branch, head, worktree, and open PR. If the preview provider has a
+  stricter separate limit, obey the stricter limit.
 - Dispatch new work only when active delivery slots are below the cap. If the cap
   is reached or exceeded, advance, merge, route fixes, clean up previews, or
   escalate existing PRs and previews before starting more work.
@@ -144,8 +147,7 @@ Delivery modes:
 head and no `FAIL` rows,
 required CI checks pass, no unresolved blocking review comments, PR non-draft and
 ready-for-review, the configured review evidence label current for the PR head,
-and required hosted bot review escalation complete or recorded as skipped by
-policy.
+and the required hosted-bot review complete or recorded as skipped by policy.
 
 Rules that do not change with tier or delivery mode:
 

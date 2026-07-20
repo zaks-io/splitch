@@ -16,7 +16,6 @@ export type Env = {
   SPLITCH_SOURCE_ID?: string;
   TINYBIRD_API_URL?: string;
   TINYBIRD_INGEST_TOKEN?: string;
-  TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN?: string;
   EVALUATION_USAGE_REPLAY_WINDOW?:
     | EvaluationUsageReplayWindow
     | EvaluationUsageReplayWindowNamespace;

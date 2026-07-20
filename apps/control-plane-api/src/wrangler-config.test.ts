@@ -41,10 +41,20 @@ describe("Control Plane API Wrangler runtime config", () => {
       name: "PANEL_DELEGATION_REPLAY",
       class_name: "PanelDelegationReplayDurableObject",
     });
-    expect(target?.migrations).toContainEqual({
-      tag: "v3_panel_delegation_replay",
-      new_sqlite_classes: ["PanelDelegationReplayDurableObject"],
+  });
+
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("declaratively provisions every Durable Object for %s", (_target, target) => {
+    expect(effectiveExports(target)).toEqual({
+      ConfigStoreDurableObject: { type: "durable-object", storage: "sqlite" },
+      CredentialCacheWriterDurableObject: { type: "durable-object", storage: "sqlite" },
+      CredentialCacheBackfillDurableObject: { type: "durable-object", storage: "sqlite" },
+      PanelDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
     });
+    expect(target?.migrations).toBeUndefined();
   });
 
   it("binds the actor-scoped limiter in production", () => {
@@ -69,7 +79,8 @@ interface WranglerConfig {
   d1_databases?: unknown[];
   durable_objects?: DurableObjectsConfig;
   env?: Record<string, WranglerTarget | undefined>;
-  migrations?: DurableObjectMigration[];
+  exports?: DurableObjectExports;
+  migrations?: unknown[];
   ratelimits?: RateLimitConfig[];
   triggers?: { crons?: string[] };
   vars?: Record<string, unknown>;
@@ -78,7 +89,8 @@ interface WranglerConfig {
 interface WranglerTarget {
   d1_databases?: unknown[];
   durable_objects?: DurableObjectsConfig;
-  migrations?: DurableObjectMigration[];
+  exports?: DurableObjectExports;
+  migrations?: unknown[];
   ratelimits?: RateLimitConfig[];
   triggers?: { crons?: string[] };
   vars?: Record<string, unknown>;
@@ -88,19 +100,23 @@ interface DurableObjectsConfig {
   bindings?: Array<{ name: string; class_name: string }>;
 }
 
-interface DurableObjectMigration {
-  tag: string;
-  new_sqlite_classes?: string[];
-}
-
 interface RateLimitConfig {
   name: string;
   namespace_id: string;
   simple: { limit: number; period: number };
 }
 
+type DurableObjectExports = Record<
+  string,
+  { type: "durable-object"; storage: "sqlite" | "legacy-kv" }
+>;
+
 function effectiveCrons(target: WranglerTarget | undefined): string[] | undefined {
   return target?.triggers?.crons ?? config.triggers?.crons;
+}
+
+function effectiveExports(target: WranglerTarget | undefined): DurableObjectExports | undefined {
+  return target?.exports ?? config.exports;
 }
 
 function readWranglerConfig(): WranglerConfig {

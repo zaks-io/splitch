@@ -51,20 +51,12 @@
       { "name": "PANEL_DELEGATION_REPLAY", "class_name": "PanelDelegationReplayDurableObject" }
     ]
   },
-  "migrations": [
-    { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] },
-    {
-      "tag": "v2_credential_cache_backfill",
-      "new_sqlite_classes": [
-        "CredentialCacheWriterDurableObject",
-        "CredentialCacheBackfillDurableObject"
-      ]
-    },
-    {
-      "tag": "v3_panel_delegation_replay",
-      "new_sqlite_classes": ["PanelDelegationReplayDurableObject"]
-    }
-  ],
+  "exports": {
+    "ConfigStoreDurableObject": { "type": "durable-object", "storage": "sqlite" },
+    "CredentialCacheWriterDurableObject": { "type": "durable-object", "storage": "sqlite" },
+    "CredentialCacheBackfillDurableObject": { "type": "durable-object", "storage": "sqlite" },
+    "PanelDelegationReplayDurableObject": { "type": "durable-object", "storage": "sqlite" }
+  },
   "secrets": {
     "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
   },
@@ -128,21 +120,7 @@
             "class_name": "PanelDelegationReplayDurableObject"
           }
         ]
-      },
-      "migrations": [
-        { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] },
-        {
-          "tag": "v2_credential_cache_backfill",
-          "new_sqlite_classes": [
-            "CredentialCacheWriterDurableObject",
-            "CredentialCacheBackfillDurableObject"
-          ]
-        },
-        {
-          "tag": "v3_panel_delegation_replay",
-          "new_sqlite_classes": ["PanelDelegationReplayDurableObject"]
-        }
-      ]
+      }
     },
     "production": {
       "name": "splitch-control-plane-api",
@@ -204,21 +182,7 @@
             "class_name": "PanelDelegationReplayDurableObject"
           }
         ]
-      },
-      "migrations": [
-        { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] },
-        {
-          "tag": "v2_credential_cache_backfill",
-          "new_sqlite_classes": [
-            "CredentialCacheWriterDurableObject",
-            "CredentialCacheBackfillDurableObject"
-          ]
-        },
-        {
-          "tag": "v3_panel_delegation_replay",
-          "new_sqlite_classes": ["PanelDelegationReplayDurableObject"]
-        }
-      ]
+      }
     }
   }
 }
