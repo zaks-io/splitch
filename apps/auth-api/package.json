@@ -18,10 +18,10 @@
     "@splitch/contracts": "workspace:*",
     "@splitch/db": "workspace:*",
     "@splitch/observability": "workspace:*",
-    "hono": "^4.12.27",
+    "hono": "^4.12.30",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "miniflare": "^4.20260701.0"
+    "miniflare": "^4.20260708.1"
   }
 }
