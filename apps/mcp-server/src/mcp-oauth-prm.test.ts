@@ -67,6 +67,35 @@ describe("MCP OAuth protected-resource boundary", () => {
     }
   });
 
+  it("returns 401 for malformed JWT JSON shapes without downstream dispatch", async () => {
+    let downstreamCalls = 0;
+
+    for (const token of malformedShapeTokens()) {
+      const response = await request(
+        new Request("https://mcp.splitch.test/mcp", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "flags_list", arguments: { appId: "app_local" } },
+          }),
+        }),
+        {
+          authBaseUrl: "https://auth.splitch.test",
+          controlPlaneFetch: async () => {
+            downstreamCalls += 1;
+            return Response.json(flagPage);
+          },
+        },
+      );
+      expect(response.status).toBe(401);
+    }
+
+    expect(downstreamCalls).toBe(0);
+  });
+
   it("serves same-target Auth API metadata for preview and production", async () => {
     for (const target of [
       ["shared-preview", "https://auth.preview.splitch.dev"],
@@ -201,6 +230,7 @@ async function request(
     platformTarget?: string;
     authBaseUrl?: string;
     controlPlaneBaseUrl?: string;
+    controlPlaneFetch?: typeof fetch;
     sessionStore?: McpSessionStore;
     now?: () => number;
   } = {},
@@ -319,6 +349,26 @@ function base64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function malformedShapeTokens(): string[] {
+  const header = encodeJwtSegment({ alg: "RS256", typ: "JWT", kid: "fake-auth" });
+  const payload = encodeJwtSegment({
+    ...actorClaims("https://auth.splitch.test"),
+    aud: "https://mcp.splitch.test/mcp",
+    exp: NOW_SECONDS + 60,
+  });
+  const invalidJson = base64Url(new TextEncoder().encode("{"));
+  const nonRecords: unknown[] = [null, true, 42, "jwt", []];
+
+  return [
+    ...nonRecords.map((value) => `${encodeJwtSegment(value)}.${payload}.signature`),
+    ...nonRecords.map((value) => `${header}.${encodeJwtSegment(value)}.signature`),
+    `%%%.${payload}.signature`,
+    `${header}.%%%.signature`,
+    `${invalidJson}.${payload}.signature`,
+    `${header}.${invalidJson}.signature`,
+  ];
 }
 
 async function bootControlPlaneApi(seen: SeenDownstream[]): Promise<string> {

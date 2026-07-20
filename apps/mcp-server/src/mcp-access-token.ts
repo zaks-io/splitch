@@ -36,7 +36,10 @@ export function makeHttpMcpAccessTokenVerifier(options: {
       if (!token) return null;
       const parsed = parseJwt(token);
       if (parsed?.header.alg !== "RS256") return null;
-      const key = selectKey(await fetchJwks(), parsed.header.kid);
+      const key = selectKey(
+        await fetchJwks(),
+        typeof parsed.header.kid === "string" ? parsed.header.kid : undefined,
+      );
       if (!key || !(await safeSignatureValid(parsed, key))) return null;
       return actorFromClaims(parsed.payload, { issuer, expectedAudience, nowSeconds });
     },
@@ -44,7 +47,7 @@ export function makeHttpMcpAccessTokenVerifier(options: {
 }
 
 interface ParsedJwt {
-  header: { alg?: unknown; kid?: string };
+  header: Record<string, unknown>;
   payload: Record<string, unknown>;
   signingInput: string;
   signature: string;
@@ -55,9 +58,12 @@ function parseJwt(token: string): ParsedJwt | null {
   if (parts.length !== 3) return null;
   const [header, payload, signature] = parts as [string, string, string];
   try {
+    const decodedHeader = decodeSegment(header);
+    const decodedPayload = decodeSegment(payload);
+    if (!isPlainRecord(decodedHeader) || !isPlainRecord(decodedPayload)) return null;
     return {
-      header: decodeSegment(header),
-      payload: decodeSegment(payload),
+      header: decodedHeader,
+      payload: decodedPayload,
       signingInput: `${header}.${payload}`,
       signature,
     };
@@ -131,8 +137,14 @@ async function safeSignatureValid(
   }
 }
 
-function decodeSegment(segment: string): Record<string, unknown> {
-  return JSON.parse(new TextDecoder().decode(base64UrlToBytes(segment))) as Record<string, unknown>;
+function decodeSegment(segment: string): unknown {
+  return JSON.parse(new TextDecoder().decode(base64UrlToBytes(segment))) as unknown;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function base64UrlToBytes(input: string): Uint8Array {

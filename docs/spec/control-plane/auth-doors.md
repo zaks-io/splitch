@@ -4,7 +4,7 @@ How a principal authenticates: the three identity doors (ID-JAG, anonymous/pre-c
 the shared-preview `client_credentials` smoke grant, the claim ceremony, the `interaction_required`
 error shape, and the provisional demo lifecycle.
 
-For the scopes enumeration, control-plane token shape, trusted-IdP table, and the Worker
+For the scopes enumeration, resource access-token shape, trusted-IdP table, and the Worker
 responsibility split, see [access-control-matrix.md](access-control-matrix.md).
 
 ## One principal, three identity doors
@@ -17,13 +17,16 @@ to Control Plane verification in smoke tests.
 
 ```
 Door A: ID-JAG   ──┐
-Door B: Anonymous ─┼──► /oauth2/token ──► control-plane access token ──► D1 membership check
+Door B: Anonymous ─┼──► /oauth2/token ──► resource-bound access token ──► resource verification
 Door C: Device flow┘
 
 Shared-preview smoke client_credentials ──► /oauth2/token ──► scoped smoke access token
 ```
 
-## Door A: ID-JAG (agent-IdP-verified)
+## Door A: ID-JAG (agent-IdP-verified, paused)
+
+Door A remains disabled and absent from authorization-server discovery and `auth.md`. The flow below
+records the approved design for later activation; it is not an enabled runtime path.
 
 **Endpoint:** `POST /agent/identity` on the auth-api Worker
 
@@ -38,7 +41,7 @@ Shared-preview smoke client_credentials ──► /oauth2/token ──► scoped
 
 **Validation steps (all must pass; fail loud on any failure):**
 
-1. Decode JWT header, extract `iss` (issuer)
+1. Decode the JWT payload, extract `iss` (issuer), and read `kid`/`alg` from the header
 2. Look up `iss` in `trusted_idps` D1 table; reject with 401 if not found
 3. Fetch JWKS from `trusted_idps.jwks_uri`; verify JWT signature
 4. Assert `aud` matches splitch's auth-api origin
@@ -49,9 +52,10 @@ Shared-preview smoke client_credentials ──► /oauth2/token ──► scoped
 8. Resolve WorkOS user by `email`; create in WorkOS if first-seen. D1 stores membership references only.
 9. Return: `{ identity_assertion: string, user_id: string }`
 
-**Follow-up exchange at `/oauth2/token`:** presents `identity_assertion`, receives short-lived
-control-plane access token. No refresh token on ID-JAG path. Hosted access tokens use the
-RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md).
+**Follow-up exchange at `/oauth2/token`:** presents `identity_assertion` and the selected protected
+resource, then receives a short-lived access token whose `aud` is that exact resource. No refresh
+token on the ID-JAG path. Every runtime target uses the RS256/JWKS trust contract in
+[access-control-matrix.md](access-control-matrix.md).
 
 ## Door B: Anonymous / pre-claim
 
@@ -156,7 +160,9 @@ Org — all through the D1 data-access seam (app_id scoping enforced, never bypa
 ## Door C: Device flow (human at terminal / agent no-IdP fallback)
 
 WorkOS device flow. Auth-issuer Worker exposes the standard `device_authorization` and `token` endpoints
-as thin proxies to WorkOS. The CLI stores the resulting **refresh token** in keychain or `~/.splitch/credentials.json` (mode 0600). The MCP server does not touch disk; it holds its token in the transport session.
+as thin proxies to WorkOS. The CLI stores the resulting **refresh token** in keychain or
+`~/.splitch/credentials.json` (mode 0600). The MCP server does not touch disk or forward the client
+bearer; MCP clients present their exact-resource access token on transport requests.
 
 ## Shared-preview smoke grant: client_credentials
 
@@ -172,6 +178,7 @@ The grant is advertised in OAuth discovery only while enabled.
   grant_type: "client_credentials",
   client_id: string,
   client_secret: string,
+  resource?: string,
   scope?: string
 }
 ```
@@ -182,8 +189,10 @@ The grant is advertised in OAuth discovery only while enabled.
 2. Compare `client_id` and `client_secret` against the configured smoke client.
 3. Resolve the principal to `SPLITCH_SMOKE_USER_ID` (default `user_shared_preview_smoke`).
 4. Use configured `SPLITCH_SMOKE_SCOPES`; an optional requested `scope` must be a subset.
-5. Mint a short-lived control-plane access token with `auth_door = "client_credentials"`.
-6. Hosted access tokens use the RS256/JWKS trust contract in
+5. Mint a short-lived resource-bound access token with `auth_door = "client_credentials"`. The
+   Control Plane is the default resource; an explicitly requested MCP resource must exactly match the
+   configured MCP origin or its `/mcp` endpoint.
+6. Every runtime target uses the RS256/JWKS trust contract in
    [access-control-matrix.md](access-control-matrix.md). No refresh token is issued.
 
 This grant is not a production user or agent auth path. It exists to validate the hosted

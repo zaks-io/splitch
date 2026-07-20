@@ -1,6 +1,16 @@
 # Remote MCP server and CLI as parity skins over the Control Plane SDK; thin 1:1; invariants in the Worker
 
-**Status:** accepted
+**Status:** accepted; amended 2026-07-19
+
+## 2026-07-19 amendment: MCP is its own protected resource
+
+The MCP Worker is not the same origin as Auth API or the Control Plane protected resource. Its PRM
+advertises the exact challenged MCP resource, and Auth API mints an RS256 access token with that exact
+`aud`. MCP verifies the bearer locally through Auth API JWKS and never forwards it. Each tool call is
+instead carried over the owning Worker's service-binding entrypoint with a short-lived, one-use
+delegated credential. Control Plane, Evaluation, and Analysis each have a separate pairwise secret;
+the three credentials are not interchangeable. This amends only the transport trust boundary. The
+original parity, remote-only, and Worker-owned-invariant decisions remain accepted.
 
 The control plane is operated through **two interfaces** — a **remote MCP server** (the primary surface for
 AI agents) and a **CLI** (for humans at a terminal, and as an agent fallback). They are kept **in parity by
@@ -34,11 +44,11 @@ agent-actionable error; ADR-0002/0003). Invariant logic lives in **one place** a
 correctness for free; no invariant lives in a tool or a command.
 
 **Remote MCP only — no stdio.** The MCP server is a **Worker URL**, not a local subprocess. It authenticates
-the agent **in-band** via the auth.md discovery handshake (a `401 + WWW-Authenticate` kicks off the ID-JAG /
-device flow of ADR-0022; subsequent tool calls carry the resulting control-plane token). The MCP server is
-therefore the **same origin as the auth-api's protected resource**. Consequently the **on-disk credential
-store is CLI-only** (keychain, with a mode-0600 `~/.<cli>/credentials.json` fallback for sandboxes); the MCP
-server holds its token in the transport session and never touches disk.
+the agent **in-band** via the auth.md discovery handshake (a `401 + WWW-Authenticate` leads through PRM and
+authorization-server metadata; subsequent tool calls carry an access token bound to the exact MCP
+resource). The MCP Worker verifies that bearer locally and contains it at that boundary. Consequently the
+**on-disk credential store is CLI-only** (keychain, with a mode-0600
+`~/.<cli>/credentials.json` fallback for sandboxes); the MCP server never touches disk.
 
 ## Considered options
 
@@ -68,7 +78,8 @@ server holds its token in the transport session and never touches disk.
   states, returning clear errors both a human and an agent can act on. This is not new work caused by this
   ADR; it is where ADR-0002/0003 invariants must live regardless, now made the _sole_ guardian.
 - **The remote MCP server composes with ADR-0022** — it is an auth-api-gated Worker; connecting _is_
-  authenticating. No separate "log in then connect" step for agents.
+  authenticating. No separate "log in then connect" step for agents. Client bearers terminate at MCP;
+  downstream calls use separate, resource-narrow delegated credentials over service bindings.
 - **Credential storage is CLI-only** (keychain / 0600 file, holding the ID-JAG `identity_assertion` or the
   device-flow refresh token); the MCP server is stateless on disk.
 - **A human CLI is a first-class deliverable**, not an afterthought — it shares the SDK and credential
