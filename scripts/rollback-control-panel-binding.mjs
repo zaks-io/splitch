@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const environment = process.argv[2];
 const environments = new Set(["production", "shared-preview"]);
@@ -8,15 +9,12 @@ if (!environments.has(environment)) {
 }
 
 const controlPanelVersion = requiredVersion("SPLITCH_ROLLBACK_CONTROL_PANEL_VERSION_ID");
-const controlPlaneVersion = requiredVersion("SPLITCH_ROLLBACK_CONTROL_PLANE_VERSION_ID");
-
-run([`deploy:cloudflare:control-plane-compat:${environment}`]);
-deployVersion("apps/control-panel", controlPanelVersion, "Control Panel predecessor rollback");
-deployVersion(
-  "apps/control-plane-api",
-  controlPlaneVersion,
-  "Control Plane rollback after predecessor Panel",
+const compatDeployScript = fileURLToPath(
+  new URL("./deploy-control-plane-compat.mjs", import.meta.url),
 );
+
+runNode(compatDeployScript, environment);
+deployVersion("apps/control-panel", controlPanelVersion, "Control Panel predecessor rollback");
 
 function deployVersion(directory, version, message) {
   run([
@@ -45,6 +43,11 @@ function requiredVersion(name) {
 
 function run(args) {
   const result = spawnSync("pnpm", args, { stdio: "inherit" });
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
+function runNode(script, ...args) {
+  const result = spawnSync(process.execPath, [script, ...args], { stdio: "inherit" });
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 

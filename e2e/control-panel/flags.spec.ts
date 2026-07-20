@@ -18,6 +18,9 @@ test.describe("per-Environment Flags", () => {
     await expect(row).toContainText("Enabled");
     await expect(row).toContainText("2 of 2");
     await expect(row).toContainText("No percentage rollout");
+    await expect(row.getByRole("link", { name: "new-checkout" })).toHaveCount(0);
+    await row.getByText("new-checkout", { exact: true }).click();
+    await expect(page).toHaveURL("/acme-labs/checkout-api/dev/flags");
     await captureThemeScreenshots(page, testInfo, "flags-list-dev");
 
     await chooseEnvironment(page, "/acme-labs/checkout-api/prod/flags");

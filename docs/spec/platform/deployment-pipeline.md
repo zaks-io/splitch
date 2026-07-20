@@ -515,11 +515,11 @@ Worker code-only rollback:
 - Use `wrangler rollback <version_id>` or deploy a previous version to 100 percent traffic.
 - Cloudflare only supports rollback to recent versions, and rollback immediately changes active traffic.
 - A Control Panel protocol rollback must run
-  `rollback:cloudflare:panel-binding:<platform-target>` with the prior panel and Control Plane Worker
-  version IDs. It first enables bounded predecessor session redemption on the current Control Plane,
-  activates the prior Panel version, and only then activates the prior Control Plane version. Failure at either
-  version activation leaves a compatible Control Plane active for the currently active panel; the
-  compatibility entrypoint closes automatically at its transition deadline if recovery stalls.
+  `rollback:cloudflare:panel-binding:<platform-target>` with the prior Panel Worker version ID. It first
+  enables bounded predecessor session redemption on the current Control Plane, then activates the prior
+  Panel version while leaving that self-expiring compatibility Control Plane active. The prior Control Plane
+  must not be restored because it has no bounded predecessor-session deadline. If recovery stalls, the
+  compatibility entrypoint closes automatically at its transition deadline.
 
 Rollback limits:
 

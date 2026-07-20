@@ -1,18 +1,9 @@
 import { Card, CardContent, CardHeader } from "@splitch/ui/components/card";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@splitch/ui/components/table";
-import type { UrlScope } from "#lib/app-shell-navigation";
 import type { FlagsPageItem } from "#lib/flags-page-data";
 import { FlagsTableRow } from "./flags-table-row";
 
-export function FlagsTable({
-  env,
-  items,
-  scope,
-}: {
-  env: string;
-  items: FlagsPageItem[];
-  scope: UrlScope;
-}) {
+export function FlagsTable({ env, items }: { env: string; items: FlagsPageItem[] }) {
   return (
     <Card>
       <CardHeader className="border-border border-b py-4">
@@ -32,7 +23,7 @@ export function FlagsTable({
           </TableHeader>
           <TableBody>
             {items.map((item) => (
-              <FlagsTableRow item={item} key={item.definition.id} scope={scope} />
+              <FlagsTableRow item={item} key={item.definition.id} />
             ))}
           </TableBody>
         </Table>

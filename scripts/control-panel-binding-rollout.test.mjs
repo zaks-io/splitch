@@ -121,13 +121,30 @@ test("compatibility deploy enables predecessor sessions with a self-expiring dea
   assert.ok(expiresAt <= Math.floor(Date.now() / 1000) + 30 * 60);
 });
 
-test("rollback enables predecessor sessions, then rolls back Panel before Control Plane", () => {
+test("completed rollback keeps self-expiring compatibility authority active", () => {
   const fixture = makeFakePnpm();
+  const before = Math.floor(Date.now() / 1000);
   const result = runRollback(fixture);
 
   assert.equal(result.status, 0, result.stderr);
   const calls = readCalls(fixture.callsPath);
-  assert.deepEqual(calls[0], ["deploy:cloudflare:control-plane-compat:production"]);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0].slice(0, 10), [
+    "turbo",
+    "run",
+    "deploy",
+    "--filter=@splitch/control-plane-api",
+    "--",
+    "--env",
+    "production",
+    "--strict",
+    "--var",
+    "CONTROL_PANEL_LEGACY_SESSION_MODE:bounded-rollout",
+  ]);
+  const expiry = calls[0].find((arg) => arg.startsWith("CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT:"));
+  const expiresAt = Number(expiry?.split(":", 2)[1]);
+  assert.ok(expiresAt >= before + 30 * 60);
+  assert.ok(expiresAt <= Math.floor(Date.now() / 1000) + 30 * 60);
   assert.deepEqual(calls[1].slice(0, 7), [
     "--dir",
     "apps/control-panel",
@@ -137,23 +154,16 @@ test("rollback enables predecessor sessions, then rolls back Panel before Contro
     "deploy",
     "11111111-1111-1111-1111-111111111111@100%",
   ]);
-  assert.deepEqual(calls[2].slice(0, 7), [
-    "--dir",
-    "apps/control-plane-api",
-    "exec",
-    "wrangler",
-    "versions",
-    "deploy",
-    "22222222-2222-2222-2222-222222222222@100%",
-  ]);
+  assertProtocolAvailable("base", "compat");
 });
 
-test("rollback stops before the Control Plane if the panel version cannot be activated", () => {
+test("rollback leaves compatibility authority active if the Panel cannot be activated", () => {
   const fixture = makeFakePnpm("2");
   const result = runRollback(fixture);
 
   assert.equal(result.status, 19);
   assert.equal(readCalls(fixture.callsPath).length, 2);
+  assertProtocolAvailable("signed", "compat");
 });
 
 test("rollback leaves signed V2 active if compatibility deployment fails", () => {
@@ -165,15 +175,6 @@ test("rollback leaves signed V2 active if compatibility deployment fails", () =>
   assertProtocolAvailable("signed", "final");
 });
 
-test("rollback leaves the compatibility Control Plane active if its final version fails", () => {
-  const fixture = makeFakePnpm("3");
-  const result = runRollback(fixture);
-
-  assert.equal(result.status, 19);
-  assert.equal(readCalls(fixture.callsPath).length, 3);
-  assertProtocolAvailable("base", "compat");
-});
-
 function runRollback(fixture) {
   return spawnSync(process.execPath, [rollbackScript, "production"], {
     encoding: "utf8",
@@ -183,7 +184,6 @@ function runRollback(fixture) {
       SPLITCH_FAKE_PNPM_CALLS: fixture.callsPath,
       SPLITCH_FAKE_PNPM_FAIL_CALL: fixture.failCall,
       SPLITCH_ROLLBACK_CONTROL_PANEL_VERSION_ID: "11111111-1111-1111-1111-111111111111",
-      SPLITCH_ROLLBACK_CONTROL_PLANE_VERSION_ID: "22222222-2222-2222-2222-222222222222",
     },
   });
 }

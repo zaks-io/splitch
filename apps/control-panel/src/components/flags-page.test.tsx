@@ -8,7 +8,7 @@ vi.mock("./create-flag-dialog", () => ({
 }));
 
 describe("Flags page", () => {
-  it("links each row to the env-scoped Flag detail route", () => {
+  it("keeps rows non-navigable until the Flag detail route is implemented", () => {
     const html = renderToStaticMarkup(
       <FlagsTable
         env="dev"
@@ -22,7 +22,6 @@ describe("Flags page", () => {
             },
           },
         ]}
-        scope={{ orgSlug: "acme-labs", appSlug: "checkout-api", env: "dev" }}
       />,
     );
 
@@ -31,8 +30,8 @@ describe("Flags page", () => {
     expect(html).toContain("Enabled");
     expect(html).toContain("25% rollout");
     expect(html).toContain("2 of 2");
-    expect(html).toContain("/acme-labs/checkout-api/dev/flags/flag_checkout");
-    expect(html).toContain("<a");
+    expect(html).not.toContain("/acme-labs/checkout-api/dev/flags/");
+    expect(html).not.toContain("<a");
   });
 
   it("teaches the Flag concept and the CLI/MCP equivalents in the empty state", () => {
