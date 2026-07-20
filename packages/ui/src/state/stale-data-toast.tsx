@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { RefreshCwIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "#components/alert";
 import { cn } from "#lib/utils";

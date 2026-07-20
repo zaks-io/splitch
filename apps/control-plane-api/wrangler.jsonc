@@ -57,16 +57,11 @@
       { "name": "CREDENTIAL_CACHE_BACKFILL", "class_name": "CredentialCacheBackfillDurableObject" }
     ]
   },
-  "migrations": [
-    { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] },
-    {
-      "tag": "v2_credential_cache_backfill",
-      "new_sqlite_classes": [
-        "CredentialCacheWriterDurableObject",
-        "CredentialCacheBackfillDurableObject"
-      ]
-    }
-  ],
+  "exports": {
+    "ConfigStoreDurableObject": { "type": "durable-object", "storage": "sqlite" },
+    "CredentialCacheWriterDurableObject": { "type": "durable-object", "storage": "sqlite" },
+    "CredentialCacheBackfillDurableObject": { "type": "durable-object", "storage": "sqlite" }
+  },
   "secrets": {
     "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
   },
@@ -128,17 +123,7 @@
             "class_name": "CredentialCacheBackfillDurableObject"
           }
         ]
-      },
-      "migrations": [
-        { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] },
-        {
-          "tag": "v2_credential_cache_backfill",
-          "new_sqlite_classes": [
-            "CredentialCacheWriterDurableObject",
-            "CredentialCacheBackfillDurableObject"
-          ]
-        }
-      ]
+      }
     },
     "production": {
       "name": "splitch-control-plane-api",
@@ -194,17 +179,7 @@
             "class_name": "CredentialCacheBackfillDurableObject"
           }
         ]
-      },
-      "migrations": [
-        { "tag": "v1_config_store_writer", "new_sqlite_classes": ["ConfigStoreDurableObject"] },
-        {
-          "tag": "v2_credential_cache_backfill",
-          "new_sqlite_classes": [
-            "CredentialCacheWriterDurableObject",
-            "CredentialCacheBackfillDurableObject"
-          ]
-        }
-      ]
+      }
     }
   }
 }

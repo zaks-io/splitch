@@ -43,18 +43,35 @@ describe("Control Plane API Wrangler runtime config", () => {
       entrypoint: "ControlPlaneEntrypoint",
     });
   });
+
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
+  ])("declaratively provisions every Durable Object for %s", (_target, target) => {
+    expect(effectiveExports(target)).toEqual({
+      ConfigStoreDurableObject: { type: "durable-object", storage: "sqlite" },
+      CredentialCacheWriterDurableObject: { type: "durable-object", storage: "sqlite" },
+      CredentialCacheBackfillDurableObject: { type: "durable-object", storage: "sqlite" },
+    });
+    expect(target?.migrations).toBeUndefined();
+  });
 });
 
 interface WranglerConfig {
   d1_databases?: unknown[];
   env?: Record<string, WranglerTarget | undefined>;
   services?: ServiceBinding[];
+  exports?: DurableObjectExports;
+  migrations?: unknown[];
   triggers?: { crons?: string[] };
 }
 
 interface WranglerTarget {
   d1_databases?: unknown[];
   services?: ServiceBinding[];
+  exports?: DurableObjectExports;
+  migrations?: unknown[];
   triggers?: { crons?: string[] };
   vars?: Record<string, unknown>;
 }
@@ -65,8 +82,17 @@ interface ServiceBinding {
   entrypoint: string;
 }
 
+type DurableObjectExports = Record<
+  string,
+  { type: "durable-object"; storage: "sqlite" | "legacy-kv" }
+>;
+
 function effectiveCrons(target: WranglerTarget | undefined): string[] | undefined {
   return target?.triggers?.crons ?? config.triggers?.crons;
+}
+
+function effectiveExports(target: WranglerTarget | undefined): DurableObjectExports | undefined {
+  return target?.exports ?? config.exports;
 }
 
 function readWranglerConfig(): WranglerConfig {

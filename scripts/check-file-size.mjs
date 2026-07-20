@@ -17,7 +17,9 @@ const staged = execFileSync("git", ["diff", "--cached", "--name-only", "--diff-f
   .filter(Boolean)
   .filter((f) => EXTENSIONS.some((ext) => f.endsWith(ext)))
   // Vendored generated skill copies from zaks-io/skills; never hand-edited here.
-  .filter((f) => !f.startsWith(".agents/"));
+  .filter((f) => !f.startsWith(".agents/"))
+  // Vendored shadcn component copies; upstream sizes, kept diffable for `shadcn add --diff`.
+  .filter((f) => !f.startsWith("packages/ui/src/components/"));
 
 const offenders = [];
 for (const file of staged) {

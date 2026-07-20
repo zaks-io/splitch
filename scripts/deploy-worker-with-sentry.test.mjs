@@ -19,17 +19,13 @@ const deployedCommitSha = "a".repeat(40);
 
 test("passes required Worker secrets to wrangler deploy as a temporary secrets file", () => {
   const fixture = createFixture({
-    requiredSecrets: [
-      "SENTRY_DSN",
-      "SPLITCH_EVENT_INGEST_TOKEN",
-      "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN",
-    ],
+    requiredSecrets: ["SENTRY_DSN", "SPLITCH_EVENT_INGEST_TOKEN", "TINYBIRD_INGEST_TOKEN"],
   });
 
   const result = runDeploy(fixture, ["--env", "production", "--strict"], {
     SENTRY_DSN: "https://example.invalid/1",
     SPLITCH_EVENT_INGEST_TOKEN: "fake-event-ingest-token",
-    TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN: "fake-raw-evaluations-token",
+    TINYBIRD_INGEST_TOKEN: "fake-ingest-token",
     SPLITCH_REQUIRE_WORKER_SECRET_ENV: "1",
   });
 
@@ -44,7 +40,7 @@ test("passes required Worker secrets to wrangler deploy as a temporary secrets f
   assert.deepEqual(Object.keys(call.secrets).sort(), [
     "SENTRY_DSN",
     "SPLITCH_EVENT_INGEST_TOKEN",
-    "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN",
+    "TINYBIRD_INGEST_TOKEN",
   ]);
   assert.equal(existsSync(call.secretsFile), false);
 });
@@ -240,7 +236,7 @@ function runDeploy(fixture, args, extraEnv = {}, fakeWranglerExit = "0") {
     "SENTRY_PROJECT",
     "SPLITCH_EVENT_INGEST_TOKEN",
     "SPLITCH_DEPLOYED_COMMIT_SHA",
-    "TINYBIRD_RAW_EVALUATIONS_INGEST_TOKEN",
+    "TINYBIRD_INGEST_TOKEN",
     "SPLITCH_GENERATED_WRANGLER_ENV",
     "SPLITCH_PLATFORM_TARGET",
     "SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV",

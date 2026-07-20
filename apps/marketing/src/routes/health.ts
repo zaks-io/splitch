@@ -1,6 +1,6 @@
+import { env } from "cloudflare:workers";
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createFileRoute } from "@tanstack/react-router";
-import { env } from "cloudflare:workers";
 
 const service = "splitch-marketing";
 const workerEnv = env as {

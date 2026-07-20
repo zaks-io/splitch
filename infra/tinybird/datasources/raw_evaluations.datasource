@@ -16,5 +16,5 @@ ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(server_received_at)"
 ENGINE_SORTING_KEY "organization_id, app_id, environment_id, server_received_at"
 ENGINE_TTL "toDateTime(server_received_at) + toIntervalDay(90)"
-TOKEN raw_evaluations_ingest APPEND
+TOKEN raw_events_ingest APPEND
 # DEDUP_KEY=dedup_key
