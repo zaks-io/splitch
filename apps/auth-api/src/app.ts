@@ -5,13 +5,12 @@ import { type ClaimDeps, initiateClaim, verifyClaim } from "./claim";
 import { handleConsent } from "./claim-consent-route";
 import type { DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
-import { type IdJagDeps, verifyIdJag } from "./idjag-verify";
+import type { IdJagDeps } from "./idjag-verify";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
 import { mountOAuthRoutes, type SmokeClientCredentials } from "./oauth-routes";
 import { type RegisterDeps, registerAnonymous } from "./register";
 import type { RevocationStore } from "./revocation";
 import {
-  AgentIdentityRequestSchema,
   AnonymousIdentityRequestSchema,
   ClaimRequestSchema,
   CreateTrustedIdpRequestSchema,
@@ -58,11 +57,6 @@ export interface AppDeps {
   now: () => number;
 }
 
-/** Default scopes for an ID-JAG-resolved identity assertion when none requested. */
-function assertionScopes(requested: string[] | undefined): string[] {
-  return requested ?? [];
-}
-
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
   const crud = makeTrustedIdpCrud(deps.repo, deps.now);
@@ -70,7 +64,7 @@ export function createApp(deps: AppDeps): Hono {
 
   mountOAuthRoutes(app, deps);
 
-  // --- Doors A + B: /agent/identity (presence of `id_jag` selects the door) ---
+  // --- Door B + paused Door A: /agent/identity -------------------------------
   app.post("/agent/identity", async (c) => {
     const body = await readJson(c.req.raw);
     // Door B: an anonymous body carries no `id_jag` (auth-doors.md). Route there
@@ -79,21 +73,10 @@ export function createApp(deps: AppDeps): Hono {
     if (isAnonymousBody(body)) {
       return handleAnonymousRegister(deps, c.req.raw, body);
     }
-    const parsed = AgentIdentityRequestSchema.safeParse(body);
-    if (!parsed.success) {
-      return renderOAuthError(new OAuthError("invalid_request", "malformed /agent/identity body"));
+    if (hasIdJag(body)) {
+      return renderOAuthError(new OAuthError("invalid_request", "ID-JAG authentication is paused"));
     }
-    try {
-      const result = await verifyIdJag(deps.idJag, parsed.data.id_jag);
-      const assertion = await deps.tokenSigner.mintIdentityAssertion(
-        result.userId,
-        assertionScopes(parsed.data.requested_scopes),
-        nowSeconds(),
-      );
-      return Response.json({ identity_assertion: assertion, user_id: result.userId });
-    } catch (cause) {
-      return renderDoorFault(cause);
-    }
+    return renderOAuthError(new OAuthError("invalid_request", "malformed /agent/identity body"));
   });
 
   // --- Door B: claim ceremony (agent endpoint + human-UI alias) ---------------
@@ -157,6 +140,10 @@ async function readJson(request: Request): Promise<unknown> {
 /** A /agent/identity body is the anonymous (Door B) flow iff it has no `id_jag`. */
 function isAnonymousBody(body: unknown): boolean {
   return typeof body === "object" && body !== null && !("id_jag" in body);
+}
+
+function hasIdJag(body: unknown): boolean {
+  return typeof body === "object" && body !== null && "id_jag" in body;
 }
 
 /** Client IP at the Cloudflare edge; the rate ceiling keys on it (ADR-0034). */
