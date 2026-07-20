@@ -84,4 +84,4 @@ function TableCaption({ className, ...props }: ComponentProps<"caption">) {
   );
 }
 
-export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption };
+export { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow };

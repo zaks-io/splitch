@@ -1,5 +1,5 @@
-import type { ComponentProps } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import type { ComponentProps } from "react";
 
 import { cn } from "#lib/utils";
 
@@ -66,4 +66,4 @@ function AlertAction({ className, ...props }: ComponentProps<"div">) {
   );
 }
 
-export { Alert, AlertTitle, AlertDescription, AlertAction };
+export { Alert, AlertAction, AlertDescription, AlertTitle };

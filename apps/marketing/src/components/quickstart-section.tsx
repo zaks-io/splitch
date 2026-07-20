@@ -1,4 +1,5 @@
-import { CtaLink } from "./cta-link";
+import { Button } from "@splitch/ui/components/button";
+import { SectionEyebrow } from "./section-eyebrow";
 
 const steps = [
   [
@@ -15,39 +16,43 @@ const steps = [
 
 export function QuickstartSection() {
   return (
-    <section className="border-border border-t bg-background px-6 py-20 sm:px-8" id="quickstart">
-      <div className="mx-auto grid max-w-6xl gap-10">
+    <section
+      className="border-border border-t bg-muted px-4 py-16 sm:px-6 sm:py-20"
+      id="quickstart"
+    >
+      <div className="mx-auto grid w-full max-w-6xl gap-10">
         <div className="grid max-w-3xl gap-4">
-          <p className="font-mono text-muted-foreground text-xs uppercase tracking-wide">
-            Docs / MCP quickstart
-          </p>
-          <h2 className="font-display font-bold text-4xl text-foreground tracking-tight">
-            The first run ends on verify, not hope.
+          <SectionEyebrow>Quickstart</SectionEyebrow>
+          <h2 className="font-bold font-display text-3xl text-foreground tracking-tight sm:text-4xl">
+            The first run ends on verify, not hope<span className="text-arm-control">.</span>
           </h2>
           <p className="text-muted-foreground leading-relaxed">
-            The same quickstart is exposed to agents through the MCP resource
-            <span className="font-mono text-foreground"> splitch://quickstart</span>. This page
-            links to the live panel and remote MCP host without pretending the docs site exists yet.
+            Four steps from zero to a measured result. The same quickstart is exposed to agents
+            through the MCP resource
+            <span className="font-mono text-foreground"> splitch://quickstart</span>.
           </p>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-4">
+        <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {steps.map(([title, body], index) => (
-            <article className="quickstart-card" key={title}>
+            <li
+              className="grid content-start gap-2.5 rounded-xl border border-border bg-card p-5 shadow-xs"
+              key={title}
+            >
               <p className="font-mono text-muted-foreground text-xs uppercase tracking-wide">
                 Step {index + 1}
               </p>
-              <h3 className="font-display font-semibold text-xl text-foreground">{title}</h3>
+              <h3 className="font-display font-semibold text-foreground text-lg">{title}</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">{body}</p>
-            </article>
+            </li>
           ))}
-        </div>
+        </ol>
 
         <div className="flex flex-wrap gap-3">
-          <CtaLink href="https://mcp.splitch.dev">Open MCP host</CtaLink>
-          <CtaLink href="https://app.splitch.dev" variant="secondary">
-            Start in the panel
-          </CtaLink>
+          <Button render={<a href="/quickstart" />}>Read the quickstart</Button>
+          <Button render={<a href="https://mcp.splitch.dev" />} variant="outline">
+            Open MCP host
+          </Button>
         </div>
       </div>
     </section>
