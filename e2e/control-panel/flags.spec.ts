@@ -40,10 +40,7 @@ test.describe("per-Environment Flags", () => {
     const flagKey = `billing-refresh-${testInfo.retry}`;
     await page.goto("/acme-labs/billing-api/prod/flags");
 
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute(
-      "data-hydrated",
-      "true",
-    );
+    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByTestId("boolean-catalog").locator("[data-variant-name]")).toHaveText([
