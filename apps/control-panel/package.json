@@ -21,18 +21,18 @@
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
   },
   "dependencies": {
-    "@sentry/cloudflare": "^10.63.0",
-    "@sentry/react": "^10.63.0",
+    "@sentry/cloudflare": "^10.66.0",
+    "@sentry/react": "^10.66.0",
     "@splitch/contracts": "workspace:*",
     "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/db": "workspace:*",
     "@splitch/observability": "workspace:*",
     "@splitch/ui": "workspace:*",
     "@tanstack/react-query": "^5.101.2",
-    "@tanstack/react-router": "^1.170.17",
+    "@tanstack/react-router": "^1.170.18",
     "@tanstack/react-router-ssr-query": "^1.167.1",
-    "@tanstack/react-start": "^1.168.27",
-    "@workos-inc/node": "^10.7.0",
+    "@tanstack/react-start": "^1.168.32",
+    "@workos-inc/node": "^10.8.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
