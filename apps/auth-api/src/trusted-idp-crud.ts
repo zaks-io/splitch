@@ -20,7 +20,7 @@ interface TrustedIdpInput {
   enabled?: boolean;
 }
 
-export interface TrustedIdpActor {
+interface TrustedIdpActor {
   userId: string;
   scopes: readonly string[];
 }
