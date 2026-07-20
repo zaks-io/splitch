@@ -2,19 +2,23 @@
 /**
  * Consumer smoke: install the packed SDK tarball outside the monorepo workspace
  * and verify ESM runtime import, TypeScript declaration resolution, and the
- * canonical consumer snippet (including required idempotencyKey) against packed
- * public declarations.
+ * exact docs/spec/quickstart.md §8 fenced snippet against packed public
+ * declarations.
  */
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  extractQuickstartSdkSnippet,
+  stripIdempotencyKeyFromSnippet,
+  wrapQuickstartSnippetForTypecheck,
+} from "./extract-quickstart-snippet.mjs";
 import { assertReleaseBundleJs } from "./pack-staging.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(packageRoot, "../..");
-const canonicalSnippetPath = join(packageRoot, "fixtures/canonical-consumer-snippet.ts");
 const quickstartPath = join(repoRoot, "docs/spec/quickstart.md");
 const consumerRoot = mkdtempSync(join(tmpdir(), "splitch-sdk-consumer-"));
 
@@ -46,9 +50,9 @@ function expectTypecheckFailure(cwd, label) {
   }
 }
 
-function writeConsumerTsconfig(include) {
+function writeConsumerTsconfig(include, cwd = consumerRoot) {
   writeFileSync(
-    join(consumerRoot, "tsconfig.json"),
+    join(cwd, "tsconfig.json"),
     JSON.stringify(
       {
         compilerOptions: {
@@ -66,28 +70,14 @@ function writeConsumerTsconfig(include) {
   );
 }
 
-function assertQuickstartRequiresIdempotencyKey() {
-  const quickstart = readFileSync(quickstartPath, "utf8");
-  const sectionStart = quickstart.indexOf("## 8. Wire the SDK and fire the first real Exposure");
-  if (sectionStart === -1) {
-    throw new Error("quickstart.md is missing section 8 SDK snippet");
-  }
-  const section = quickstart.slice(sectionStart, sectionStart + 2500);
-  if (!section.includes("idempotencyKey")) {
-    throw new Error("quickstart.md section 8 must document idempotencyKey on evaluate calls");
-  }
-  if (!section.includes("crypto.randomUUID()")) {
-    throw new Error("quickstart.md section 8 must show a stable per-evaluation idempotency key");
-  }
-}
-
-function stripIdempotencyKey(source) {
-  return source
-    .replace(/\n\s*const evaluationId = crypto\.randomUUID\(\);.*\n/, "\n")
-    .replace(/,?\s*\n\s*idempotencyKey:\s*evaluationId/g, "");
-}
-
 try {
+  execFileSync("node", ["--test", "scripts/extract-quickstart-snippet.test.mjs"], {
+    cwd: packageRoot,
+    stdio: "inherit",
+  });
+
+  const quickstartSnippet = extractQuickstartSdkSnippet(readFileSync(quickstartPath, "utf8"));
+
   run("npx", ["tsup", "--config", "tsup.contract-surface.config.ts"], { cwd: packageRoot });
   run("npx", ["tsup", "--config", "tsup.config.ts"], { cwd: packageRoot });
 
@@ -129,9 +119,11 @@ console.log("runtime import ok");
 `,
   );
 
-  copyFileSync(canonicalSnippetPath, join(consumerRoot, "canonical-consumer-snippet.ts"));
-  writeConsumerTsconfig(["canonical-consumer-snippet.ts"]);
-  assertQuickstartRequiresIdempotencyKey();
+  writeFileSync(
+    join(consumerRoot, "quickstart-snippet.ts"),
+    wrapQuickstartSnippetForTypecheck(quickstartSnippet),
+  );
+  writeConsumerTsconfig(["quickstart-snippet.ts"]);
 
   run("node", ["runtime.mjs"]);
   runTypecheck();
@@ -147,29 +139,12 @@ console.log("runtime import ok");
       ),
     );
     run("npm", ["install", tarballPath, "typescript@6.0.3", "zod@4.4.3"], { cwd: staleRoot });
-    const canonicalSource = readFileSync(canonicalSnippetPath, "utf8");
     writeFileSync(
-      join(staleRoot, "stale-consumer-snippet.ts"),
-      stripIdempotencyKey(canonicalSource),
+      join(staleRoot, "stale-quickstart-snippet.ts"),
+      wrapQuickstartSnippetForTypecheck(stripIdempotencyKeyFromSnippet(quickstartSnippet)),
     );
-    writeFileSync(
-      join(staleRoot, "tsconfig.json"),
-      JSON.stringify(
-        {
-          compilerOptions: {
-            module: "NodeNext",
-            moduleResolution: "NodeNext",
-            strict: true,
-            noEmit: true,
-            skipLibCheck: true,
-          },
-          include: ["stale-consumer-snippet.ts"],
-        },
-        null,
-        2,
-      ),
-    );
-    expectTypecheckFailure(staleRoot, "drift guard");
+    writeConsumerTsconfig(["stale-quickstart-snippet.ts"], staleRoot);
+    expectTypecheckFailure(staleRoot, "quickstart drift guard");
   } finally {
     rmSync(staleRoot, { recursive: true, force: true });
   }

@@ -42,5 +42,5 @@ const variant = await splitch.evaluate("new-checkout", {
 });
 ```
 
-See `docs/spec/quickstart.md` and `docs/spec/sdk/exposure-accessor.md` for the full onboarding
-path.
+See `docs/spec/quickstart.md` §8 (compile-checked by `test:consumer-smoke`) and
+`docs/spec/sdk/exposure-accessor.md` for the full onboarding path.

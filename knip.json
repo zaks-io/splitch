@@ -22,7 +22,7 @@
       "entry": ["src/sdk-data-plane-surface.ts", "src/leaves/**/*.ts"]
     },
     "packages/sdk": {
-      "entry": ["fixtures/canonical-consumer-snippet.ts", "scripts/pack-release.mjs"]
+      "entry": ["scripts/pack-release.mjs"]
     }
   }
 }
