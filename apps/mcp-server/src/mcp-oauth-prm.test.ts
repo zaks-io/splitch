@@ -205,6 +205,32 @@ describe("MCP OAuth protected-resource boundary", () => {
   });
 });
 
+describe("MCP held-scope authentication boundary", () => {
+  it("returns 401 for a correctly signed malformed scope without downstream dispatch", async () => {
+    const auth = await bootAuthApi([]);
+    let downstreamCalls = 0;
+
+    const response = await mcp(
+      "tools/call",
+      { name: "flags_list", arguments: { appId: "app_local" } },
+      `Bearer ${auth.malformedScopeToken}`,
+      {
+        controlPlaneBaseUrl: "https://control-plane.splitch.test",
+        controlPlaneFetch: async () => {
+          downstreamCalls += 1;
+          return Response.json(flagPage);
+        },
+        sessionStore: memorySessionStore(),
+        authBaseUrl: auth.baseUrl,
+        now: () => NOW_SECONDS * 1000,
+      },
+    );
+
+    expect(response.status).toBe(401);
+    expect(downstreamCalls).toBe(0);
+  });
+});
+
 interface JsonRpcSuccess<T> {
   result: T;
 }
@@ -253,6 +279,7 @@ async function mcp(
   authorization: string,
   options: {
     controlPlaneBaseUrl: string;
+    controlPlaneFetch?: typeof fetch;
     sessionStore: McpSessionStore;
     sessionId?: string;
     authBaseUrl?: string;
@@ -277,6 +304,7 @@ async function bootAuthApi(seen: SeenRequest[]): Promise<{
   baseUrl: string;
   controlPlaneToken: string;
   expiredMcpToken: string;
+  malformedScopeToken: string;
 }> {
   const pair = (await crypto.subtle.generateKey(
     {
@@ -321,6 +349,12 @@ async function bootAuthApi(seen: SeenRequest[]): Promise<{
       ...actorClaims(issuer),
       aud: "https://mcp.splitch.test/mcp",
       exp: NOW_SECONDS - 1,
+    }),
+    malformedScopeToken: await signAccessToken(pair.privateKey, {
+      ...actorClaims(issuer),
+      aud: "https://mcp.splitch.test/mcp",
+      exp: NOW_SECONDS + 60,
+      scopes: ["bogus"],
     }),
   };
 }

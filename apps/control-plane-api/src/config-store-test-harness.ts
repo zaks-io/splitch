@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type DeltaNudge, type EnvironmentPolicy, flagConfigKey } from "@splitch/contracts";
@@ -8,15 +8,17 @@ import type { Hono } from "hono";
 import { Miniflare } from "miniflare";
 import { createApp } from "./app";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
+import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
 import { ids, NOW, NOW_MS, seedConfigGraph } from "./config-store-fixture-data";
-import { makeConfigStore, type ConfigStoreWriter } from "./config-store";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { appAdminScope } from "./scope-binding";
 import { makeSessionStore } from "./session-store";
+import { seedAppMember } from "./test-fixtures";
 
 const AUDIENCE = "https://cp.splitch.test";
 const USER_ID = "user_config_admin";
+
 export { ids, NOW, NOW_MS };
 
 export interface Harness {
@@ -45,6 +47,7 @@ export async function makeHarness(): Promise<Harness> {
   const sessions = (await mf.getKVNamespace("SESSION_STORE")) as unknown as KVNamespace;
   await applyMigrations(d1);
   await seedConfigGraph(d1);
+  await seedAppMember(d1, { appId: ids.appId, userId: USER_ID, role: "owner" });
 
   const repo = createRepository(d1);
   const signer = await makeFixtureSigner();

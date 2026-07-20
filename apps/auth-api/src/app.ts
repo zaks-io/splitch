@@ -1,6 +1,6 @@
 import type { Repository } from "@splitch/db";
 import { Hono } from "hono";
-import { verifyAccessToken } from "./access-token";
+import { type VerifiedActor, verifyAccessToken } from "./access-token";
 import { type ClaimDeps, initiateClaim, verifyClaim } from "./claim";
 import { handleConsent } from "./claim-consent-route";
 import type { DeviceFlowPort } from "./device-flow";
@@ -28,7 +28,7 @@ import type { WorkOsAccessTokenVerifier } from "./workos-access-token";
  * worker-runtime spec assigns the auth-api "token issuance, token revocation,
  * trusted IdP validation, provisional create" as Worker-local; that local logic
  * lives here. The trusted-IdP CRUD speaks the control-plane shape and does its
- * own Org-owner authz in the CRUD layer (single-sourced on D1 membership).
+ * own Org-owner authz in the CRUD layer (held scope intersected with live D1 membership).
  */
 
 export interface AppDeps {
@@ -99,17 +99,17 @@ export function createApp(deps: AppDeps): Hono {
 
   // --- Trusted-IdP CRUD (Org owner only, control-plane shape) -----------------
   app.get("/orgs/:orgId/trusted-idps", async (c) =>
-    withActor(c, deps, async (userId) => asResponse(await crud.list(c.req.param("orgId"), userId))),
+    withActor(c, deps, async (actor) => asResponse(await crud.list(c.req.param("orgId"), actor))),
   );
 
   app.post("/orgs/:orgId/trusted-idps", async (c) =>
-    withActor(c, deps, async (userId) => {
+    withActor(c, deps, async (actor) => {
       const parsed = CreateTrustedIdpRequestSchema.safeParse(await readJson(c.req.raw));
       if (!parsed.success) {
         return errorResponse(400, "VALIDATION_ERROR");
       }
       return asResponse(
-        await crud.create(c.req.param("orgId"), userId, {
+        await crud.create(c.req.param("orgId"), actor, {
           issuer: parsed.data.issuer,
           jwksUri: parsed.data.jwks_uri,
           clientIds: parsed.data.client_ids,
@@ -121,8 +121,8 @@ export function createApp(deps: AppDeps): Hono {
   );
 
   app.delete("/orgs/:orgId/trusted-idps/:idpId", async (c) =>
-    withActor(c, deps, async (userId) =>
-      asResponse(await crud.remove(c.req.param("orgId"), userId, c.req.param("idpId"))),
+    withActor(c, deps, async (actor) =>
+      asResponse(await crud.remove(c.req.param("orgId"), actor, c.req.param("idpId"))),
     ),
   );
 
@@ -224,7 +224,7 @@ function renderDoorFault(cause: unknown): Response {
 async function withActor(
   c: { req: { raw: Request } },
   deps: AppDeps,
-  run: (userId: string) => Promise<Response>,
+  run: (actor: VerifiedActor) => Promise<Response>,
 ): Promise<Response> {
   const actor = await verifyAccessToken(
     c.req.raw.headers.get("authorization"),
@@ -237,7 +237,7 @@ async function withActor(
   if (await deps.revocations.isRevoked(actor.userId)) {
     return errorResponse(401, "UNAUTHORIZED");
   }
-  return run(actor.userId);
+  return run(actor);
 }
 
 function errorResponse(status: number, code: string): Response {

@@ -87,13 +87,23 @@ function actorFromClaims(
     claims.sub.length > 256 ||
     !Array.isArray(claims.scopes) ||
     claims.scopes.length > 64 ||
-    !claims.scopes.every(
-      (scope) => typeof scope === "string" && scope.length > 0 && scope.length <= 512,
-    )
+    !claims.scopes.every(isCanonicalHeldScope)
   ) {
     return null;
   }
   return { subject: claims.sub, scopes: claims.scopes as string[] };
+}
+
+function isCanonicalHeldScope(scope: unknown): scope is string {
+  if (typeof scope !== "string" || scope.length === 0 || scope.length > 512) return false;
+  const segments = scope.split(":");
+  if (segments.length !== 3) return false;
+  const [kind, id, role] = segments;
+  return (
+    (kind === "org" || kind === "app") &&
+    id !== "" &&
+    (role === "owner" || role === "admin" || role === "member")
+  );
 }
 
 function bearerToken(header: string | null): string | null {

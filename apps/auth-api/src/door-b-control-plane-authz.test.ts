@@ -52,6 +52,49 @@ describe("Door B Control Plane authorization", () => {
     });
     expect(appRead.status).toBe(200);
 
+    const idpId = `idp_${registration.app_id}`;
+    await local.d1
+      .prepare(
+        "INSERT INTO trusted_idps (idp_id, org_id, issuer, jwks_uri, client_ids, enabled, created_at) VALUES (?,?,?,?,?,?,?)",
+      )
+      .bind(
+        idpId,
+        registration.org_id,
+        "https://door-b-idp.test",
+        "https://door-b-idp.test/jwks",
+        JSON.stringify(["door-b-client"]),
+        1,
+        "2026-07-18T00:00:00.000Z",
+      )
+      .run();
+
+    const trustedIdpResponses = await Promise.all([
+      authFetch(
+        new Request(`${AUTH_ORIGIN}/orgs/${registration.org_id}/trusted-idps`, {
+          method: "POST",
+          headers: authorization(accessToken, true),
+          body: JSON.stringify({
+            issuer: "https://attacker-idp.test",
+            jwks_uri: "https://attacker-idp.test/jwks",
+            client_ids: ["attacker-client"],
+          }),
+        }),
+      ),
+      authFetch(
+        new Request(`${AUTH_ORIGIN}/orgs/${registration.org_id}/trusted-idps/${idpId}`, {
+          method: "DELETE",
+          headers: authorization(accessToken),
+        }),
+      ),
+    ]);
+    expect(trustedIdpResponses.map((response) => response.status)).toEqual([403, 403]);
+    expect(
+      await local.d1
+        .prepare("SELECT idp_id FROM trusted_idps WHERE idp_id = ?")
+        .bind(idpId)
+        .first(),
+    ).not.toBeNull();
+
     for (const response of await Promise.all([
       controlPlane.request(`/apps/${registration.app_id}`, {
         method: "PATCH",

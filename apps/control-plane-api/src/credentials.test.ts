@@ -1,9 +1,9 @@
 import {
   apiKeyCacheKey,
-  clientKeyCacheKey,
   CredentialCacheKVSchema,
-  kvEnvelope,
+  clientKeyCacheKey,
   type ErrorResponse,
+  kvEnvelope,
 } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
@@ -18,6 +18,7 @@ import { makeSessionStore } from "./session-store";
 import {
   type LocalBindings,
   makeLocalBindings,
+  seedAppMember,
   seedEnvironment,
   seedOrgApp,
 } from "./test-fixtures";
@@ -50,6 +51,8 @@ let h: Harness;
 beforeEach(async () => {
   const bindings = await makeLocalBindings();
   await seedOrgApp(bindings.d1, APP);
+  await seedAppMember(bindings.d1, { appId: APP.appId, userId: ADMIN, role: "admin" });
+  await seedAppMember(bindings.d1, { appId: APP.appId, userId: MEMBER, role: "member" });
   await seedEnvironment(bindings.d1, { appId: APP.appId, ...ENV });
   const signer = await makeFixtureSigner();
   h = { app: makeApp(bindings, signer, bindings.credentialKv), signer, bindings };
