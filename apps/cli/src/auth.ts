@@ -21,7 +21,7 @@ export async function loginWithDeviceFlow(deps: AuthDeps, appId: string): Promis
   const authBaseUrl = resolveAuthBaseUrl(deps);
   const auth = await formPost(fetchImpl, `${authBaseUrl}/oauth2/device_authorization`, {
     client_id: CLI_CLIENT_ID,
-    scope: selectedAppScope(appId),
+    app: appId,
   });
   if (!auth.ok) {
     throw new Error(`splitch login: device authorization failed (${auth.status})`);
@@ -43,7 +43,6 @@ export async function loginWithDeviceFlow(deps: AuthDeps, appId: string): Promis
     fetchImpl,
     authBaseUrl,
     grant.device_code,
-    selectedAppScope(appId),
     intervalMs,
     maxAttempts,
   );
@@ -59,7 +58,6 @@ async function pollDeviceApproval(
   fetchImpl: typeof fetch,
   authBaseUrl: string,
   deviceCode: string,
-  scope: string,
   intervalMs: number,
   maxAttempts: number,
 ): Promise<{
@@ -68,6 +66,7 @@ async function pollDeviceApproval(
   expires_in?: number;
   user_id?: string;
   email?: string;
+  app_id: string;
 }> {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     await sleep(intervalMs);
@@ -75,7 +74,6 @@ async function pollDeviceApproval(
       grant_type: DEVICE_CODE_GRANT,
       device_code: deviceCode,
       client_id: CLI_CLIENT_ID,
-      scope,
     });
     if (token.status === 200) {
       return (await token.json()) as {
@@ -84,6 +82,7 @@ async function pollDeviceApproval(
         expires_in?: number;
         user_id?: string;
         email?: string;
+        app_id: string;
       };
     }
     const pending = (await token.json()) as { error?: string };
@@ -94,16 +93,13 @@ async function pollDeviceApproval(
   throw new Error("splitch login: timed out waiting for device approval");
 }
 
-function selectedAppScope(appId: string): string {
-  return `app:${appId}:owner`;
-}
-
 function buildCredentialFile(body: {
   access_token: string;
   refresh_token: string;
   expires_in?: number;
   user_id?: string;
   email?: string;
+  app_id: string;
 }): CliCredentialFile {
   return {
     version: 1,
@@ -116,6 +112,7 @@ function buildCredentialFile(body: {
       refreshToken: body.refresh_token,
       accessToken: body.access_token,
       accessTokenExpiresAt: new Date(Date.now() + (body.expires_in ?? 3600) * 1000).toISOString(),
+      selectedAppId: body.app_id,
     },
   };
 }
@@ -199,6 +196,7 @@ async function refreshAccessToken(
     access_token: string;
     refresh_token?: string;
     expires_in?: number;
+    app_id: string;
   };
   const next: CliCredentialFile = {
     ...stored,
@@ -207,6 +205,7 @@ async function refreshAccessToken(
       accessToken: body.access_token,
       refreshToken: body.refresh_token ?? stored.credential.refreshToken,
       accessTokenExpiresAt: new Date(Date.now() + (body.expires_in ?? 3600) * 1000).toISOString(),
+      selectedAppId: body.app_id,
     },
   };
   await deps.credentialStore.save(next);

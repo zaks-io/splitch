@@ -2,7 +2,8 @@ import { OAuthError } from "./oauth-errors";
 
 interface DeviceGrant {
   deviceCode: string;
-  selectedAppScope: string;
+  selectedAppSelector: string;
+  requestedRole: "owner" | "admin" | "member";
   expiresAt: number;
 }
 
@@ -24,7 +25,10 @@ export async function openDeviceGrant(
     const parsed = JSON.parse(decode(payload)) as Partial<DeviceGrant>;
     if (
       typeof parsed.deviceCode !== "string" ||
-      typeof parsed.selectedAppScope !== "string" ||
+      typeof parsed.selectedAppSelector !== "string" ||
+      (parsed.requestedRole !== "owner" &&
+        parsed.requestedRole !== "admin" &&
+        parsed.requestedRole !== "member") ||
       typeof parsed.expiresAt !== "number" ||
       parsed.expiresAt <= now
     ) {

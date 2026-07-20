@@ -23,6 +23,7 @@ export interface ClaimDeps {
   tokenSigner: TokenSigner;
   rateLimiter: RateLimiter;
   consentBaseUrl: string;
+  defaultResource: string;
   now: () => number;
   /** Legacy local fixture seams; hosted claims never use them. */
   otp?: unknown;
@@ -64,7 +65,7 @@ export async function initiateClaim(
   await deps.repo.claim.createVerification({
     ...hashes,
     id: verificationId,
-    ...(input.resource === undefined ? {} : { selectedResource: input.resource }),
+    selectedResource: input.resource ?? deps.defaultResource,
     expiresAt: iso(now + CLAIM_CEREMONY_TTL_MS),
     now: iso(now),
   });

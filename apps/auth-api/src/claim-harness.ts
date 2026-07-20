@@ -3,13 +3,13 @@ import { afterAll, beforeAll, beforeEach } from "vitest";
 import { initiateClaim, verifyClaim } from "./claim";
 import { FIXTURE_OTP } from "./otp";
 import { registerAnonymous } from "./register";
-import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import {
   type DoorBFixtures,
   type LocalBindings,
   makeDoorBDeps,
   makeLocalBindings,
 } from "./test-fixtures";
+import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 
 /**
  * Shared Door B claim TEST HARNESS. The claim suite is split across two files
@@ -43,6 +43,7 @@ export interface ClaimHarness {
   setProvisional(orgId: string, provisional: boolean): Promise<void>;
   removeMemberships(orgId: string, appId: string, userId: string): Promise<void>;
   isConsumed(table: "claim_verifications" | "claim_consent_attempts", id: string): Promise<boolean>;
+  clearVerificationResource(id: string): Promise<void>;
 }
 
 export function setupClaimHarness(): ClaimHarness {
@@ -152,6 +153,13 @@ export function setupClaimHarness(): ClaimHarness {
     return row?.consumed_at !== null && row?.consumed_at !== undefined;
   }
 
+  async function clearVerificationResource(id: string) {
+    await local.d1
+      .prepare("UPDATE claim_verifications SET selected_resource = NULL WHERE id = ?")
+      .bind(id)
+      .run();
+  }
+
   return {
     deps,
     register,
@@ -161,5 +169,6 @@ export function setupClaimHarness(): ClaimHarness {
     setProvisional,
     removeMemberships,
     isConsumed,
+    clearVerificationResource,
   };
 }

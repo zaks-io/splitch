@@ -53,7 +53,9 @@ async function executeMeta(
         cwd: deps.cwd,
       });
       if (!context.appId) {
-        io.error("splitch login requires a selected App. Pass --app <app_id> or set SPLITCH_APP.");
+        io.error(
+          "splitch login requires a selected App. Pass --app <app_id|slug> or set SPLITCH_APP.",
+        );
         return { exitCode: EXIT_USAGE };
       }
       const session = await loginWithDeviceFlow(deps, context.appId);

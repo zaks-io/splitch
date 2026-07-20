@@ -58,12 +58,46 @@ export function parseRequestedScopes(scope: string | undefined): string[] | unde
   return scope === undefined ? undefined : scope.trim().split(/\s+/).filter(Boolean);
 }
 
-export function parseSelectedAppScope(scope: string | undefined): string[] {
+function parseSelectedAppScope(scope: string | undefined): string[] {
   const requested = parseRequestedScopes(scope);
   if (requested?.length !== 1 || parseMembershipScope(requested[0] as string)?.kind !== "app") {
     throw new OAuthError("invalid_request", "device grant requires one canonical App scope");
   }
   return requested;
+}
+
+export function parseSelectedAppRequest(scope: string | undefined): {
+  selector: string;
+  role: MembershipRole;
+} {
+  const [selectedScope] = parseSelectedAppScope(scope);
+  const parsed = parseMembershipScope(selectedScope as string);
+  return { selector: parsed?.id as string, role: parsed?.role as MembershipRole };
+}
+
+export async function resolveSelectedAppAuthority(
+  repo: MembershipAuthorityRepo,
+  userId: string,
+  providerOrganizationId: string,
+  selector: string,
+  requestedRole: MembershipRole,
+): Promise<{ appId: string; scope: string }> {
+  const apps = await repo.identity.listAppsForOrg(providerOrganizationId);
+  const selectedApp =
+    apps.find((app) => app.id === selector) ?? apps.find((app) => app.key === selector);
+  if (!selectedApp) {
+    throw new OAuthError(
+      "invalid_grant",
+      "selected App does not belong to the approving provider Organization",
+    );
+  }
+  const requestedScope = `app:${selectedApp.id}:${requestedRole}`;
+  const authority = await resolveMembershipAuthority(repo, userId);
+  const [scope] = narrowMembershipAuthority(authority, [requestedScope]);
+  if (!scope) {
+    throw new OAuthError("invalid_grant", "selected App is not authorized by live membership");
+  }
+  return { appId: selectedApp.id, scope };
 }
 
 function scopeFor(kind: "org" | "app", id: string, role: string): string {

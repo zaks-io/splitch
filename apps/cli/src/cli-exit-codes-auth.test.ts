@@ -21,7 +21,7 @@ afterEach(async () => {
 });
 
 describe("login exit code", () => {
-  it("login returns 0 and stores credentials", async () => {
+  it("passes an App slug as a selector and stores the canonical App ID", async () => {
     const { credentialPath } = await makeTempHome();
     const transport = new FakeCliTransport([
       {
@@ -37,19 +37,21 @@ describe("login exit code", () => {
       },
     ]);
 
-    const code = await runCli(["login", "--json", "--app", "app_1"], {
+    const code = await runCli(["login", "--json", "--app", "checkout-app"], {
       credentialPath,
       fetch: transport.fetch,
     });
     expect(code).toBe(EXIT_OK);
-    expect(transport.requests.map((request) => request.body?.scope)).toEqual([
-      "app:app_1:owner",
-      "app:app_1:owner",
+    expect(transport.requests.map((request) => request.body?.app)).toEqual([
+      "checkout-app",
+      undefined,
     ]);
+    expect(transport.requests.some((request) => request.body?.scope !== undefined)).toBe(false);
     const saved = JSON.parse(await readFile(credentialPath, "utf8")) as {
-      credential: { refreshToken: string };
+      credential: { refreshToken: string; selectedAppId: string };
     };
     expect(saved.credential.refreshToken).toBe("fixture-refresh-token");
+    expect(saved.credential.selectedAppId).toBe("app_1");
   });
 });
 

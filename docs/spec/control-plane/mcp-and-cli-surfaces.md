@@ -45,7 +45,8 @@ Credentials stored in order of preference:
     "type": "device_flow",
     "refresh_token": "<WorkOS refresh token>",
     "access_token": "<short-lived; cached>",
-    "access_token_expires_at": "2026-06-20T14:00:00Z"
+    "access_token_expires_at": "2026-06-20T14:00:00Z",
+    "selected_app_id": "app_..."
   }
 }
 ```
@@ -104,9 +105,12 @@ it; subsequent tool calls inherit `app_id`/`environment_id` from the session unl
 them explicitly. This is what stops an agent from re-passing full scope on every tool call. The
 session context is never persisted server-side beyond the session and never widens token scope.
 
-**Auto-refresh on 401:** CLI exchanges refresh token or identity_assertion for a new access token
-silently. Only prompts for re-login if the refresh fails (expired refresh token or revoked assertion).
-On re-login for device flow, CLI outputs the verification URL and polls until approved.
+**Auto-refresh on 401:** CLI exchanges the refresh token or identity_assertion for a new access token
+silently. Device refresh tokens rotate. Auth API retains the canonical selected App authority and
+reintersects it with the WorkOS Organization grant and live membership before minting. Only prompts
+for re-login if refresh fails because the provider session, selected authority, or live membership is
+no longer valid. On re-login for device flow, CLI outputs the verification URL and polls until
+approved.
 
 ### Command structure (illustrative; mirrors endpoint inventory)
 
@@ -115,7 +119,7 @@ On re-login for device flow, CLI outputs the verification URL and polls until ap
 override. Flags that resolve from context are marked `[ctx]`.
 
 ```
-splitch login --app <app_id>         # App-bound device flow; writes to credential store
+splitch login --app <app_id|slug>    # Auth canonicalizes within the approved WorkOS Organization
 splitch logout                       # revokes token; removes credential file entry
 splitch use --app <app|slug> [--env <env|slug>]   # set active context (writes .splitch/config.json)
 splitch context                                    # show resolved app/env and source
@@ -175,9 +179,10 @@ Agent connects to MCP server URL
         → POST /oauth2/token with identity_assertion + resource=<exact MCP resource>
         → Auth API issues the exact-resource access_token for the anonymous identity
       Door C (device flow):
-        → POST /oauth2/device_authorization with one canonical App scope → device_code + human verification URL
+        → POST /oauth2/device_authorization with one App ID or slug selector → device_code + human verification URL
         → Human approves in WorkOS
-        → Poll POST /oauth2/token with the same App scope + resource=<exact MCP resource>
+        → Poll POST /oauth2/token with the sealed device grant + resource=<exact MCP resource>
+        → Auth resolves the selector to a canonical App ID inside WorkOS organization_id
         → Auth API issues the exact-resource access_token for the authenticated WorkOS User
   → Subsequent tool calls: Authorization: Bearer <access_token>
 ```

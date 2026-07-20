@@ -200,6 +200,7 @@ export function deviceTokenResponse() {
     expires_in: 3600,
     user_id: "user_test",
     email: "test@example.com",
+    app_id: "app_1",
   };
 }
 
@@ -209,6 +210,7 @@ function refreshTokenResponse() {
     refresh_token: refreshToken,
     token_type: "Bearer",
     expires_in: 3600,
+    app_id: "app_1",
   };
 }
 
@@ -221,6 +223,7 @@ export function storedCredential() {
       refreshToken,
       accessToken,
       accessTokenExpiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      selectedAppId: "app_1",
     },
   };
 }

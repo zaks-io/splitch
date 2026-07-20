@@ -84,6 +84,8 @@ flags with long-lived KV-validated API keys. **This agent-auth work touches zero
   ID-JAG's `aud` points at it) and the credential-minting surface is isolated for security review.
 - **The durable client-side artifact is splitch's `identity_assertion`** (re-exchanged for short-lived access
   tokens), _not_ a refresh token, on the ID-JAG path. The device-flow path stores a WorkOS refresh token.
+  Auth API stores only its hash with the provider Organization/session and canonical selected App
+  authority, rotates it through WorkOS, and rechecks live membership before each mint.
 - **Anonymous registration is the abuse surface** (mints accounts with no auth), so the auth-api Worker
   **rate-limits it at the Cloudflare edge** (per-IP / per-issuer).
 - **24h provisional demos must be reaped.** Unclaimed provisional Orgs/Apps are swept from D1 by a Cloudflare

@@ -119,6 +119,9 @@ token on the ID-JAG path. Every runtime target uses the RS256/JWKS trust contrac
 
 1. Validate `identity_assertion`; assert provisional. Initiation first asks WorkOS whether the normalized email already belongs to a verified user. A free address is then assigned to the provisional WorkOS user and the email-verification code is sent; a collision creates only durable verification and consent state and returns `interaction_required` without mutating the provisional user.
 2. D1 stores only SHA-256 identifier digests plus bounded TTL, attempt, one-use, consent, and idempotency state. It never stores an OTP or a hosted fixture code.
+   The initiation row also stores the exact selected protected resource, using the Control Plane as
+   the default. A legacy row without persisted resource authority cannot adopt a verifier-supplied
+   resource and fails loud.
 3. For a free address, WorkOS confirms the OTP. Its result is the email-ownership authority.
 4. For an existing verified address, the existing AuthKit principal authenticates at the consent URL. The browser can approve or refuse with POST; no provisional WorkOS user email is changed in this branch.
 5. The consent page is a dedicated Control Panel route. Its URL is built from the explicit `CONTROL_PANEL_ORIGIN`, never the Control Plane API origin. Its opaque browser session maps to a server-side WorkOS access JWT; the panel forwards that JWT only server-to-server. Auth API verifies its RS256 signature, configured issuer, `client_id`, expiry, and `sub` against WorkOS JWKS. The panel session is bounded by the JWT expiry. Existing splitch membership is not an authorization input for this route.
@@ -164,11 +167,18 @@ Org — all through the D1 data-access seam (app_id scoping enforced, never bypa
 
 ## Door C: Device flow (human at terminal / agent no-IdP fallback)
 
-WorkOS device flow. Auth-issuer Worker exposes the standard `device_authorization` and `token` endpoints
-as thin proxies to WorkOS. Both requests carry exactly one canonical selected App scope. Auth API
-intersects that selection with the provider grant and live D1 membership before minting, so a
-multi-App User receives one App-bound token and cannot widen the approved selection while polling.
-The CLI stores the resulting **refresh token** in keychain or
+WorkOS device flow. Auth-issuer Worker exposes the standard `device_authorization` and `token`
+endpoints. The client starts with one App ID or slug selector. After approval, Auth API uses the
+WorkOS `organization_id` grant to resolve that selector to an App owned by the same Organization,
+then intersects the canonical App ID with live D1 Org/App membership before constructing the token
+scope. A multi-App User therefore receives one App-bound token and cannot widen the approved
+selection while polling.
+
+Auth API stores only a hash of the provider refresh token plus its provider session ID, WorkOS User
+and Organization grants, and canonical selected App scope. `grant_type=refresh_token` rotates the
+WorkOS token and reintersects that durable grant with the provider response and live membership
+before every new access-token mint. Missing or changed authority, expired/revoked provider sessions,
+and removed membership fail loud. The CLI stores the resulting **refresh token** in keychain or
 `~/.splitch/credentials.json` (mode 0600). The MCP server does not touch disk or forward the client
 bearer; MCP clients present their exact-resource access token on transport requests.
 

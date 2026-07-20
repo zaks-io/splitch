@@ -2,8 +2,8 @@ import type { Hono } from "hono";
 import { verifyAccessToken } from "./access-token";
 import { accessTokenJwks } from "./access-token-key";
 import { authMarkdown } from "./auth-markdown";
-import { DEVICE_CODE_GRANT, type DeviceFlowPort } from "./device-flow";
-import { authorizeDevice, exchangeDeviceCode } from "./device-oauth";
+import { DEVICE_CODE_GRANT, type DeviceFlowPort, REFRESH_TOKEN_GRANT } from "./device-flow";
+import { authorizeDevice, exchangeDeviceCode, exchangeRefreshToken } from "./device-oauth";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
@@ -62,6 +62,7 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
       grant_types_supported: [
         ACCESS_TOKEN_GRANT,
         DEVICE_CODE_GRANT,
+        REFRESH_TOKEN_GRANT,
         ...(smokeEnabled ? [CLIENT_CREDENTIALS_GRANT] : []),
       ],
       token_endpoint_auth_methods_supported: [
@@ -97,25 +98,7 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
   });
 
   app.post("/oauth2/token", async (c) => {
-    const body = await readBody(c.req.raw);
-    const grantType = grantTypeOf(body);
-    if (grantType === ACCESS_TOKEN_GRANT) {
-      return exchangeIdentityAssertion(deps, body, nowSeconds());
-    }
-    if (grantType === DEVICE_CODE_GRANT) {
-      return exchangeDeviceCode(deps, body, nowSeconds(), (resource) =>
-        audienceForResource(deps, resource),
-      );
-    }
-    if (grantType === CLIENT_CREDENTIALS_GRANT && deps.smokeClientCredentials) {
-      return exchangeClientCredentials(deps, body, nowSeconds());
-    }
-    if (grantType) {
-      return renderOAuthError(
-        new OAuthError("unsupported_grant_type", `grant_type "${grantType}" not supported`),
-      );
-    }
-    return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/token body"));
+    return handleTokenRequest(deps, await readBody(c.req.raw), nowSeconds());
   });
 
   app.post("/oauth2/revoke", async (c) => {
@@ -129,11 +112,15 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
       if (actor) {
         await deps.revocations.revoke(actor.userId, actor.expiresAt - nowSeconds());
       } else {
-        const sessionId = await deps.deviceRefreshSessions.lookup(parsed.data.token);
-        if (!sessionId) {
+        const session = await deps.deviceRefreshSessions.lookup(parsed.data.token);
+        if (!session) {
           throw new OAuthError("invalid_grant", "refresh token session is unknown");
         }
-        await deps.deviceFlow.revokeProviderToken({ token: parsed.data.token, sessionId });
+        await deps.deviceFlow.revokeProviderToken({
+          token: parsed.data.token,
+          sessionId: session.providerSessionId,
+        });
+        await deps.deviceRefreshSessions.forget(parsed.data.token);
       }
     } catch (cause) {
       return renderDoorFault(cause);
@@ -141,6 +128,33 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
 
     return new Response(null, { status: 200 });
   });
+}
+
+function handleTokenRequest(
+  deps: OAuthRouteDeps,
+  body: unknown,
+  nowSeconds: number,
+): Response | Promise<Response> {
+  const grantType = grantTypeOf(body);
+  const resolveAudience = (resource: string | undefined) => audienceForResource(deps, resource);
+  if (grantType === ACCESS_TOKEN_GRANT) {
+    return exchangeIdentityAssertion(deps, body, nowSeconds);
+  }
+  if (grantType === DEVICE_CODE_GRANT) {
+    return exchangeDeviceCode(deps, body, nowSeconds, resolveAudience);
+  }
+  if (grantType === REFRESH_TOKEN_GRANT) {
+    return exchangeRefreshToken(deps, body, nowSeconds, resolveAudience);
+  }
+  if (grantType === CLIENT_CREDENTIALS_GRANT && deps.smokeClientCredentials) {
+    return exchangeClientCredentials(deps, body, nowSeconds);
+  }
+  if (grantType) {
+    return renderOAuthError(
+      new OAuthError("unsupported_grant_type", `grant_type "${grantType}" not supported`),
+    );
+  }
+  return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/token body"));
 }
 
 async function exchangeClientCredentials(

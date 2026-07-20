@@ -8,7 +8,7 @@ Use one of the supported auth doors, then exchange the resulting credential at $
 
 - Anonymous: POST ${issuer}/agent/identity
 - Claim ceremony: POST ${issuer}/agent/identity/claim
-- Device flow: POST ${issuer}/oauth2/device_authorization with one App scope, then poll ${issuer}/oauth2/token with the device_code grant and the same scope
+- Device flow: POST ${issuer}/oauth2/device_authorization with one App ID or slug selector, then poll ${issuer}/oauth2/token with the sealed device_code grant
 - Revoke: POST ${issuer}/oauth2/revoke
 ${smokeLine}
 `;

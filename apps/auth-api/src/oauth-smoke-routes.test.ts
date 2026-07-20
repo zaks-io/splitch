@@ -51,6 +51,9 @@ function unusedDeviceFlow(): DeviceFlowPort {
     exchangeDeviceCode: async () => {
       throw new Error("not used");
     },
+    refreshProviderToken: async () => {
+      throw new Error("not used");
+    },
     revokeProviderToken: async () => {
       throw new Error("not used");
     },
@@ -71,7 +74,12 @@ function routeApp(params: {
   mountOAuthRoutes(app, {
     tokenSigner: params.tokenSigner ?? tokenSigner,
     deviceFlow: unusedDeviceFlow(),
-    deviceRefreshSessions: { remember: async () => {}, lookup: async () => null },
+    deviceRefreshSessions: {
+      remember: async () => {},
+      lookup: async () => null,
+      rotate: async () => {},
+      forget: async () => {},
+    },
     revocations,
     accessSecret: params.accessSecret ?? "test-access-secret",
     controlPlaneAudience: "https://cp.splitch.test",

@@ -91,7 +91,17 @@ const handler = {
         authApiOrigin: origin,
       },
       register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },
-      claim: { repo, workos, otp, idempotency, tokenSigner, rateLimiter, consentBaseUrl, now },
+      claim: {
+        repo,
+        workos,
+        otp,
+        idempotency,
+        tokenSigner,
+        rateLimiter,
+        consentBaseUrl,
+        defaultResource: controlPlaneAudience,
+        now,
+      },
       workosAccessTokens: workosAccessTokenVerifier(env),
       deviceFlow,
       deviceRefreshSessions: makeD1DeviceRefreshSessionStore(repo, {

@@ -47,10 +47,13 @@ export const TokenExchangeRequestSchema = z.object({
 });
 
 /** POST /oauth2/device_authorization: starts Door C's device-code flow. */
-export const DeviceAuthorizationRequestSchema = z.object({
-  client_id: z.string().min(1).optional(),
-  scope: z.string().min(1).optional(),
-});
+export const DeviceAuthorizationRequestSchema = z
+  .object({
+    client_id: z.string().min(1).optional(),
+    app: z.string().min(1).optional(),
+    scope: z.string().min(1).optional(),
+  })
+  .refine((value) => value.app !== undefined || value.scope !== undefined);
 
 /** POST /oauth2/token: Door C device-code polling grant. */
 export const DeviceTokenRequestSchema = z.object({
@@ -58,6 +61,14 @@ export const DeviceTokenRequestSchema = z.object({
   device_code: z.string().min(1),
   client_id: z.string().min(1).optional(),
   scope: z.string().min(1).optional(),
+  resource: z.url().optional(),
+});
+
+/** POST /oauth2/token: rotates a Door C provider refresh token. */
+export const RefreshTokenRequestSchema = z.object({
+  grant_type: z.string(),
+  refresh_token: z.string().min(1),
+  client_id: z.string().min(1).optional(),
   resource: z.url().optional(),
 });
 
