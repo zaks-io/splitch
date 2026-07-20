@@ -24,7 +24,7 @@ describe("Door A: paused", () => {
       idJag: {
         repo,
         jtiCache: {} as AppDeps["idJag"]["jtiCache"],
-        workos: { resolveOrCreateUser } as AppDeps["idJag"]["workos"],
+        workos: { resolveOrCreateUser } as unknown as AppDeps["idJag"]["workos"],
         fetchJwks,
         authApiOrigin: "https://auth.splitch.test",
         now: () => 1_780_000_000_000,
