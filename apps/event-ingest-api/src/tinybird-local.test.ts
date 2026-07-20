@@ -46,4 +46,15 @@ describe("Tinybird local validator", () => {
       rmSync(tempRoot, { recursive: true, force: true });
     }
   });
+
+  it("uses one Event Ingest writer token for both raw datasources", () => {
+    const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
+    const datasourceDir = join(repoRoot, "infra", "tinybird", "datasources");
+
+    for (const name of ["raw_events.datasource", "raw_evaluations.datasource"]) {
+      expect(readFileSync(join(datasourceDir, name), "utf8")).toContain(
+        "TOKEN raw_events_ingest APPEND",
+      );
+    }
+  });
 });

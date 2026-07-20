@@ -60,7 +60,7 @@ describe("Evaluation usage ingest", () => {
       "https://tinybird.test/v0/events?name=raw_evaluations",
     );
     expect(calls.fetch.mock.calls[0]?.[1]?.headers).toMatchObject({
-      authorization: "Bearer tb_raw_evaluations_ingest_secret",
+      authorization: "Bearer tb_ingest_secret",
     });
     expect(row).toMatchObject({
       organization_id: organizationId,
