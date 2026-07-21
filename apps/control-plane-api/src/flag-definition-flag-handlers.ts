@@ -3,7 +3,11 @@ import { appScope, type TenantScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
-import { initializeFlagConfigsForFlag, removeFlagConfigsForFlag } from "./flag-config-lifecycle";
+import {
+  deleteFlagD1Cascade,
+  initializeFlagConfigsForFlag,
+  purgeFlagConfigsKvForFlag,
+} from "./flag-config-lifecycle";
 import {
   flagNotFound,
   resourceNotEmpty,
@@ -71,7 +75,7 @@ export async function createFlag(
     await insertVariants(deps, prepared.value.scope, flag.id, prepared.value.variantRows, now);
     await initializeFlagConfigsForFlag(deps, { appId, flagId: flag.id, defaultVariantId });
   } catch (cause) {
-    await rollbackCreatedFlag(deps, appId, prepared.value.scope, flag.id);
+    await rollbackCreatedFlag(deps, appId, flag.id);
     throw cause;
   }
   return Response.json(await flagResponse(deps.repo, appId, flag));
@@ -120,9 +124,8 @@ export async function deleteFlag(
   const blocked = await flagDeleteBlocker(deps, loaded.value, args.requestId);
   if (blocked) return blocked;
 
-  await removeFlagConfigsForFlag(deps, loaded.value.appId, loaded.value.flag.id);
-  await deps.repo.flags.removeVariantsForFlag(loaded.value.scope, loaded.value.flag.id);
-  await deps.repo.flags.removeFlag(loaded.value.scope, loaded.value.flag.id);
+  await purgeFlagConfigsKvForFlag(deps, loaded.value.appId, loaded.value.flag.id);
+  await deleteFlagD1Cascade(deps, loaded.value.appId, loaded.value.flag.id);
   return Response.json({ deleted: true });
 }
 
@@ -220,12 +223,10 @@ async function insertVariants(
 async function rollbackCreatedFlag(
   deps: FlagDefinitionDeps,
   appId: string,
-  scope: TenantScope,
   flagId: string,
 ): Promise<void> {
-  await removeFlagConfigsForFlag(deps, appId, flagId);
-  await deps.repo.flags.removeVariantsForFlag(scope, flagId);
-  await deps.repo.flags.removeFlag(scope, flagId);
+  await purgeFlagConfigsKvForFlag(deps, appId, flagId);
+  await deleteFlagD1Cascade(deps, appId, flagId);
 }
 
 async function prepareSchemaPatch(

@@ -48,23 +48,26 @@ export async function experimentReferencingFlag(
   flagId: string,
   envs: EnvironmentRows,
 ): Promise<ExperimentReference | null> {
+  let fallback: ExperimentReference | null = null;
   for (const env of envs) {
     const scope = envScope(appId, env.id);
     const experiments = await repo.experiments.listExperiments(scope);
-    const match = experiments.find((experiment) => experiment.flagId === flagId);
-    if (!match) continue;
-
-    if (match.status === "running") {
-      const run = match.liveRunId ? await repo.experiments.getRun(scope, match.liveRunId) : null;
-      return {
-        experimentId: match.id,
-        status: match.status,
-        runId: run?.id ?? match.liveRunId ?? "unknown",
-      };
+    for (const experiment of experiments) {
+      if (experiment.flagId !== flagId) continue;
+      if (experiment.status === "running") {
+        const run = experiment.liveRunId
+          ? await repo.experiments.getRun(scope, experiment.liveRunId)
+          : null;
+        return {
+          experimentId: experiment.id,
+          status: experiment.status,
+          runId: run?.id ?? experiment.liveRunId ?? "unknown",
+        };
+      }
+      fallback ??= { experimentId: experiment.id, status: experiment.status };
     }
-    return { experimentId: match.id, status: match.status };
   }
-  return null;
+  return fallback;
 }
 
 export async function runningExperimentForVariant(

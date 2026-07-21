@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index";
 import type { Db } from "./client";
 import type { EnvScope, TenantScope } from "./scope";
-import { assertMintedScope } from "./scope";
+import { assertMintedScope, envScope } from "./scope";
 import { scopedTable } from "./scoped-table";
 
 /**
@@ -52,6 +52,8 @@ export function makeFlagRepo(db: Db) {
     removeFlag(scope: TenantScope, flagId: string): Promise<number> {
       return flagsTable.remove(scope, eq(flags.id, flagId));
     },
+
+    deleteFlagCascade: makeDeleteFlagCascade(db, flagInScope),
 
     ...makeVariantOps(db, flagInScope),
 
@@ -195,6 +197,34 @@ function scopedFlagConfig(scope: EnvScope, flagId: string) {
     eq(flagConfigs.environmentId, scope.environmentId),
     eq(flagConfigs.flagId, flagId),
   );
+}
+
+function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
+  return async function deleteFlagCascade(
+    scope: TenantScope,
+    flagId: string,
+    environmentIds: readonly string[],
+  ): Promise<boolean> {
+    const flag = await flagInScope(scope, flagId);
+    if (!flag) return false;
+
+    const batch = [
+      ...environmentIds.flatMap((environmentId) => {
+        const env = envScope(scope.appId, environmentId);
+        return [
+          db.delete(targetingRules).where(scopedTargetingRule(env, flagId)).returning(),
+          db.delete(flagConfigs).where(scopedFlagConfig(env, flagId)).returning(),
+        ];
+      }),
+      db.delete(variants).where(eq(variants.flagId, flagId)).returning(),
+      db
+        .delete(flags)
+        .where(and(eq(flags.appId, scope.appId), eq(flags.id, flagId)))
+        .returning(),
+    ];
+    await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
+    return true;
+  };
 }
 
 type FlagInScope = (

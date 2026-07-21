@@ -54,7 +54,7 @@ export async function initializeFlagConfigsForEnvironment(
   }
 }
 
-export async function removeFlagConfigsForFlag(
+export async function purgeFlagConfigsKvForFlag(
   deps: FlagConfigLifecycleDeps,
   appId: string,
   flagId: string,
@@ -64,8 +64,22 @@ export async function removeFlagConfigsForFlag(
 
   const environments = await deps.repo.identity.listEnvironments(appScope(appId));
   for (const environment of environments) {
-    await removeFlagConfigAt(deps, appId, environment.id, flagId, flag.key);
+    await purgeFlagConfigKv(deps, appId, environment.id, flagId, flag.key);
   }
+}
+
+export async function deleteFlagD1Cascade(
+  deps: FlagConfigLifecycleDeps,
+  appId: string,
+  flagId: string,
+): Promise<void> {
+  const scope = appScope(appId);
+  const environments = await deps.repo.identity.listEnvironments(scope);
+  await deps.repo.flags.deleteFlagCascade(
+    scope,
+    flagId,
+    environments.map((environment) => environment.id),
+  );
 }
 
 async function removeFlagConfigsForEnvironment(
