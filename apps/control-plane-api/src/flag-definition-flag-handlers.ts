@@ -267,12 +267,5 @@ async function flagDeleteBlocker(
       requestId,
     );
   }
-  return resourceNotEmpty(
-    "flag",
-    loaded.flag.id,
-    "experiment",
-    1,
-    "DELETE_FLAG",
-    requestId,
-  );
+  return resourceNotEmpty("flag", loaded.flag.id, "experiment", 1, "DELETE_FLAG", requestId);
 }
