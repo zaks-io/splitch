@@ -24,11 +24,13 @@ import {
 import type { ControlPlaneApiEnv } from "./env";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
+import { panelExperimentsList } from "./panel-experiments";
 import { rateLimiterForTarget } from "./rate-limit";
 import { makeSessionStore } from "./session-store";
 
 const service = "splitch-control-plane-api";
 const CONTROL_PANEL_APPS_CREATE_PATH = /^\/orgs\/[^/]+\/apps\/?$/;
+const CONTROL_PANEL_EXPERIMENTS_PATH = "/control-panel/experiments/list";
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -47,6 +49,9 @@ export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
 export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === CONTROL_PANEL_EXPERIMENTS_PATH) {
+      return handlePanelExperimentsRequest(request, this.env);
+    }
     if (request.method !== "POST" || !CONTROL_PANEL_APPS_CREATE_PATH.test(url.pathname)) {
       return new Response("not found", { status: 404 });
     }
@@ -59,6 +64,64 @@ export class McpEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
     return handleRequest(request, this.env, this.ctx, "mcp");
   }
+}
+
+async function handlePanelExperimentsRequest(
+  request: Request,
+  env: ControlPlaneApiEnv,
+): Promise<Response> {
+  if (request.headers.has("authorization")) return new Response("not found", { status: 404 });
+  const sessionHash = request.headers.get("x-splitch-panel-session");
+  if (!sessionHash) return unauthorized();
+  const actor = await makeSessionStore(env.SESSION_STORE).loadPanelSessionActor(
+    sessionHash,
+    Math.floor(Date.now() / 1000),
+  );
+  if (!actor) return unauthorized();
+  const input = await request.json().catch(() => null);
+  if (!isPanelExperimentsInput(input)) {
+    return Response.json(
+      { code: "VALIDATION_ERROR", message: "appId and environmentId are required", details: {} },
+      { status: 400 },
+    );
+  }
+  try {
+    return await panelExperimentsList(
+      { repo: createRepository(env.DB), analysis: env.ANALYSIS_API },
+      { actorId: actor.userId, ...input },
+    );
+  } catch {
+    return Response.json(
+      {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Experiment Run health is unavailable",
+        details: { retryAfterMs: 30_000 },
+      },
+      { status: 503 },
+    );
+  }
+}
+
+function isPanelExperimentsInput(
+  value: unknown,
+): value is { appId: string; environmentId: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "appId" in value &&
+    typeof value.appId === "string" &&
+    value.appId.length > 0 &&
+    "environmentId" in value &&
+    typeof value.environmentId === "string" &&
+    value.environmentId.length > 0
+  );
+}
+
+function unauthorized(): Response {
+  return Response.json(
+    { code: "UNAUTHORIZED", message: "authentication required", details: {} },
+    { status: 401 },
+  );
 }
 
 async function handleRequest(

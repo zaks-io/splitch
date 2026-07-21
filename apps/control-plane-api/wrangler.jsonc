@@ -22,6 +22,13 @@
   "triggers": {
     "crons": ["0 8 * * *"]
   },
+  "services": [
+    {
+      "binding": "ANALYSIS_API",
+      "service": "splitch-analysis-api",
+      "entrypoint": "ControlPlaneEntrypoint"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -84,6 +91,13 @@
         }
       },
       "routes": [{ "pattern": "api.preview.splitch.dev", "custom_domain": true }],
+      "services": [
+        {
+          "binding": "ANALYSIS_API",
+          "service": "splitch-analysis-api-shared-preview",
+          "entrypoint": "ControlPlaneEntrypoint"
+        }
+      ],
       "secrets": {
         "required": [
           "SENTRY_DSN",
@@ -138,6 +152,13 @@
         }
       },
       "routes": [{ "pattern": "api.splitch.dev", "custom_domain": true }],
+      "services": [
+        {
+          "binding": "ANALYSIS_API",
+          "service": "splitch-analysis-api",
+          "entrypoint": "ControlPlaneEntrypoint"
+        }
+      ],
       "secrets": {
         "required": [
           "SENTRY_DSN",

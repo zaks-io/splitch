@@ -33,7 +33,7 @@ test("local full-stack principals are explicit and unambiguous", () => {
   assert.match(LOCAL_E2E_D1_SEED, /'app_checkout_e2e', 'user_local_member_e2e', 'member'/);
 });
 
-test("fixture App has explicit dev and prod Environments with one SRM attention source", () => {
+test("fixture App has explicit Environments and Run-scoped Experiment health states", () => {
   const environments = LOCAL_E2E_FIXTURE_CONTRACT.app.environments;
   assert.deepEqual(
     environments.map(({ id, key }) => ({ id, key })),
@@ -58,24 +58,38 @@ test("fixture App has explicit dev and prod Environments with one SRM attention 
     },
   ]);
 
-  const inputByEnvironment = new Map(
-    LOCAL_E2E_ANALYSIS_INPUTS.map((fixture) => [fixture.environmentId, fixture]),
+  const inputByExperiment = new Map(
+    LOCAL_E2E_ANALYSIS_INPUTS.map((fixture) => [fixture.experimentId, fixture]),
   );
-  assert.equal(inputByEnvironment.size, 2);
-  assert.deepEqual(inputByEnvironment.get("env_checkout_dev_e2e")?.counts, {
+  assert.equal(inputByExperiment.size, 4);
+  assert.deepEqual(inputByExperiment.get("experiment_checkout_dev_e2e")?.counts, {
     control: 10,
     treatment: 10,
   });
-  assert.deepEqual(inputByEnvironment.get("env_checkout_prod_e2e")?.counts, {
+  assert.deepEqual(inputByExperiment.get("experiment_checkout_prod_e2e")?.counts, {
     control: 19,
     treatment: 1,
   });
-  assert.equal(inputByEnvironment.get("env_checkout_dev_e2e")?.exposures.length, 20);
-  assert.equal(inputByEnvironment.get("env_checkout_prod_e2e")?.exposures.length, 20);
+  assert.deepEqual(inputByExperiment.get("experiment_checkout_significance_e2e")?.decisionFamily, [
+    { metric_id: "checkout-conversion", variant: "treatment" },
+  ]);
+  assert.deepEqual(inputByExperiment.get("experiment_checkout_guardrail_e2e")?.guardrailDecisions, [
+    {
+      metric_id: "checkout-reliability",
+      variant: "treatment",
+      downside_threshold: -10,
+      guardrail_locked_at_run_start: true,
+      threshold_locked_at_run_start: true,
+    },
+  ]);
+  assert.equal(inputByExperiment.get("experiment_checkout_dev_e2e")?.exposures.length, 20);
+  assert.equal(inputByExperiment.get("experiment_checkout_prod_e2e")?.exposures.length, 20);
   assert.match(LOCAL_E2E_D1_SEED, /variant_checkout_control_e2e/);
   assert.match(LOCAL_E2E_D1_SEED, /config_checkout_dev_e2e/);
   assert.match(LOCAL_E2E_D1_SEED, /config_checkout_prod_e2e/);
   assert.match(LOCAL_E2E_D1_SEED, /sha256:[0-9a-f]{64}/);
   assert.match(LOCAL_E2E_D1_SEED, /experiment_checkout_dev_e2e[\s\S]*'running'/);
   assert.match(LOCAL_E2E_D1_SEED, /experiment_checkout_prod_e2e[\s\S]*'running'/);
+  assert.match(LOCAL_E2E_D1_SEED, /experiment_checkout_draft_e2e[\s\S]*'draft'/);
+  assert.match(LOCAL_E2E_D1_SEED, /experiment_checkout_ended_e2e[\s\S]*'ended'/);
 });

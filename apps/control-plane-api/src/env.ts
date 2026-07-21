@@ -1,7 +1,7 @@
+import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
 import type { ConfigStoreDurableObjectNamespace } from "./config-store-do";
 import type { CredentialCacheBackfillDurableObjectNamespace } from "./credential-cache-backfill-do";
 import type { CredentialCacheWriterDurableObjectNamespace } from "./credential-cache-writer-do";
-import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
 
 /**
  * Control Plane API Worker bindings.
@@ -28,6 +28,8 @@ export interface ControlPlaneApiEnv {
   CREDENTIAL_CACHE_BACKFILL: CredentialCacheBackfillDurableObjectNamespace;
   /** Strongly consistent one-use claims for binding-only MCP delegations. */
   MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
+  /** Binding-only Run-results reader on the Analysis Worker. */
+  ANALYSIS_API: Fetcher;
   /** CI-only bearer token for the hosted credential-cache rollout gate. */
   SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */

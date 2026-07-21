@@ -134,9 +134,16 @@ import { createSplitchClient } from "@splitch/sdk";
 
 const splitch = createSplitchClient({ clientKey: "ck_live_..." }); // defaults: edge endpoint, 1s timeout
 
-const variant = await splitch.evaluate("new-checkout", { targetingKey: userId });
+const evaluationId = crypto.randomUUID(); // retain for retries of this logical Evaluation
+const variant = await splitch.evaluate("new-checkout", {
+  targetingKey: userId,
+  idempotencyKey: evaluationId,
+});
 // or branch on details — fail-loud is one check:
-const d = await splitch.evaluateDetails("new-checkout", { targetingKey: userId });
+const d = await splitch.evaluateDetails("new-checkout", {
+  targetingKey: userId,
+  idempotencyKey: evaluationId,
+});
 if (d.reason === "ERROR") renderFallback(d.errorCode);
 else render(d.value);
 ```
