@@ -12,12 +12,12 @@ import {
 
 const CONTROL_PLANE_INTERNAL_ORIGIN = "https://control-plane.internal";
 
-interface ControlPanelActor {
+export interface ControlPanelActor {
   actorId: string;
   sessionExpiresAt: number;
 }
 
-interface DelegationOptions {
+export interface DelegationOptions {
   nowSeconds?: () => number;
   nonce?: () => string;
 }
@@ -61,7 +61,7 @@ export function createControlPanelFlagsClient(
   }).flags;
 }
 
-function panelDelegationFetch(
+export function panelDelegationFetch(
   controlPlane: Fetcher,
   actor: ControlPanelActor,
   delegationSecret: string,

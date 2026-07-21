@@ -182,6 +182,19 @@ async function resolvePanelPrincipal(
       },
     };
   }
+  if (operation.id === "experiments_list") {
+    return {
+      ok: true as const,
+      principal: {
+        kind: "control-plane-token" as const,
+        id: delegation.actorId,
+        scopes: [],
+        orgId: null,
+        appId: null,
+        environmentId: null,
+      },
+    };
+  }
 
   return resolvePanelFlagsPrincipal(operation, delegation.actorId, panelAccess);
 }
@@ -214,7 +227,7 @@ async function resolveBoundedPanelSessionPrincipal(
 async function resolvePanelFlagsPrincipal(
   operation: Exclude<
     ReturnType<typeof parseControlPanelBindingOperation>,
-    { id: "apps_create" } | null
+    { id: "apps_create" | "experiments_list" } | null
   >,
   actorId: string,
   panelAccess?: PanelSessionAccess,

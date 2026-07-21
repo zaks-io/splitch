@@ -6,6 +6,7 @@ export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 
 export type ControlPanelOperation =
   | { id: "apps_create"; orgId: string }
+  | { id: "experiments_list" }
   | { id: "flags_list" | "flags_create"; appId: string; environmentId: string }
   | { id: "flag_config_get"; appId: string; environmentId: string; flagId: string };
 
@@ -25,6 +26,7 @@ interface DelegationOptions {
 }
 
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
+const EXPERIMENTS_PATH = "/control-panel/experiments/list";
 const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
 const NONCE = /^[A-Za-z0-9_-]{16,128}$/;
@@ -37,9 +39,14 @@ export function parseControlPanelOperation(
 ): ControlPanelOperation | null {
   return (
     parseAppsCreate(method, pathname) ??
+    parseExperimentsList(method, pathname) ??
     parseFlags(method, pathname, panelEnvironmentId) ??
     parseConfig(method, pathname)
   );
+}
+
+function parseExperimentsList(method: string, pathname: string): ControlPanelOperation | null {
+  return method === "POST" && pathname === EXPERIMENTS_PATH ? { id: "experiments_list" } : null;
 }
 
 export async function issueControlPanelDelegation(
@@ -250,6 +257,7 @@ function isControlPanelOperation(value: unknown): value is ControlPanelOperation
   if (value.id === "apps_create") {
     return hasKeys(value, ["id", "orgId"]) && isNonEmptyString(value.orgId);
   }
+  if (value.id === "experiments_list") return hasKeys(value, ["id"]);
   if (value.id === "flag_config_get") {
     return (
       hasKeys(value, ["id", "appId", "environmentId", "flagId"]) &&
@@ -270,13 +278,25 @@ function isControlPanelOperation(value: unknown): value is ControlPanelOperation
 
 function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation): boolean {
   if (left.id !== right.id) return false;
-  if (left.id === "apps_create" && right.id === "apps_create") return left.orgId === right.orgId;
-  if (left.id === "apps_create" || right.id === "apps_create") return false;
-  if (left.appId !== right.appId || left.environmentId !== right.environmentId) return false;
-  if (left.id === "flag_config_get" && right.id === "flag_config_get") {
-    return left.flagId === right.flagId;
+  switch (left.id) {
+    case "apps_create":
+      return right.id === "apps_create" && left.orgId === right.orgId;
+    case "experiments_list":
+      return true;
+    case "flag_config_get":
+      return (
+        right.id === "flag_config_get" &&
+        left.appId === right.appId &&
+        left.environmentId === right.environmentId &&
+        left.flagId === right.flagId
+      );
+    default:
+      return (
+        (right.id === "flags_list" || right.id === "flags_create") &&
+        left.appId === right.appId &&
+        left.environmentId === right.environmentId
+      );
   }
-  return left.id !== "flag_config_get" && right.id !== "flag_config_get";
 }
 
 function assertSecret(secret: string): void {

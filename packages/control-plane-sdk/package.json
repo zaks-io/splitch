@@ -16,6 +16,10 @@
     "./control-panel-identity": {
       "types": "./src/control-panel-identity.ts",
       "default": "./src/control-panel-identity.ts"
+    },
+    "./panel-experiments": {
+      "types": "./src/panel-experiments.ts",
+      "default": "./src/panel-experiments.ts"
     }
   },
   "files": [

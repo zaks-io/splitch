@@ -133,6 +133,9 @@ describe("Control Panel delegation", () => {
       id: "apps_create",
       orgId: "org_1",
     });
+    expect(parseControlPanelOperation("POST", "/control-panel/experiments/list")).toEqual({
+      id: "experiments_list",
+    });
     expect(parseControlPanelOperation("GET", "/apps/app_1/flags", "env_1")).toEqual({
       id: "flags_list",
       appId: "app_1",

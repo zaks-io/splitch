@@ -23,6 +23,7 @@ import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { makePanelDelegationReplayStore } from "./panel-identity-replay";
 import { makePanelSessionAccess } from "./panel-session-access";
+import { panelExperimentsList } from "./panel-experiments";
 import { rateLimiterForTarget } from "./rate-limit";
 import { makePanelSessionStore, makeSessionStore } from "./session-store";
 
@@ -64,6 +65,56 @@ export class SignedControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneA
 }
 
 type PanelProtocol = "none" | "signed" | "bounded-session";
+async function handlePanelExperimentsRequest(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  actorId: string,
+): Promise<Response> {
+  const input = await request.json().catch(() => null);
+  if (!isPanelExperimentsInput(input)) {
+    return Response.json(
+      { code: "VALIDATION_ERROR", message: "appId and environmentId are required", details: {} },
+      { status: 400 },
+    );
+  }
+  try {
+    return await panelExperimentsList(
+      { repo: createRepository(env.DB), analysis: env.ANALYSIS_API },
+      { actorId, ...input },
+    );
+  } catch {
+    return Response.json(
+      {
+        code: "SERVICE_UNAVAILABLE",
+        message: "Experiment Run health is unavailable",
+        details: { retryAfterMs: 30_000 },
+      },
+      { status: 503 },
+    );
+  }
+}
+
+function isPanelExperimentsInput(
+  value: unknown,
+): value is { appId: string; environmentId: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "appId" in value &&
+    typeof value.appId === "string" &&
+    value.appId.length > 0 &&
+    "environmentId" in value &&
+    typeof value.environmentId === "string" &&
+    value.environmentId.length > 0
+  );
+}
+
+function unauthorized(): Response {
+  return Response.json(
+    { code: "UNAUTHORIZED", message: "authentication required", details: {} },
+    { status: 401 },
+  );
+}
 
 async function handleRequest(
   request: Request,
@@ -99,14 +150,22 @@ async function handleRequest(
   });
 
   const repo = createRepository(env.DB);
+  const authResolver = makeControlPlaneAuthResolver(
+    {
+      verifier,
+      sessions: makeSessionStore(env.SESSION_STORE),
+    },
+    controlPanelAuthOptions(env, repo, panelProtocol),
+  );
+  const panelExperiments = await handleSignedPanelExperiments(
+    request,
+    env,
+    panelProtocol,
+    authResolver,
+  );
+  if (panelExperiments) return panelExperiments;
   const app = createApp({
-    authResolver: makeControlPlaneAuthResolver(
-      {
-        verifier,
-        sessions: makeSessionStore(env.SESSION_STORE),
-      },
-      controlPanelAuthOptions(env, repo, panelProtocol),
-    ),
+    authResolver,
     rateLimiter: rateLimiterForTarget(
       env.SPLITCH_PLATFORM_TARGET,
       env.CONTROL_PLANE_ACTOR_RATE_LIMITER,
@@ -124,6 +183,19 @@ async function handleRequest(
   });
 
   return app.fetch(request, env);
+}
+
+async function handleSignedPanelExperiments(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  protocol: PanelProtocol,
+  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
+): Promise<Response | null> {
+  if (protocol !== "signed") return null;
+  if (parseControlPanelBindingOperation(request)?.id !== "experiments_list") return null;
+  const auth = await authResolver(request);
+  if (!auth.ok) return unauthorized();
+  return handlePanelExperimentsRequest(request, env, auth.principal.id);
 }
 
 async function runDemoReaper(
