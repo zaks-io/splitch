@@ -7,13 +7,13 @@ const ORG_SCOPE = /^org:([^:]+):(owner|admin|member)$/;
 type ScopeAxis = "app" | "org";
 type ScopeRole = "owner" | "admin" | "member";
 
-export interface McpToolCapability {
+interface McpToolCapability {
   readonly name: string;
   readonly gate: readonly string[];
   readonly grantedBy: readonly string[];
 }
 
-export interface McpCapabilitiesResource {
+interface McpCapabilitiesResource {
   readonly scopes: readonly string[];
   readonly tools: readonly McpToolCapability[];
 }

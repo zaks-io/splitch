@@ -19,7 +19,7 @@ export const MCP_RESOURCE_URIS = [
   "splitch://quickstart",
 ] as const;
 
-export type McpResourceUri = (typeof MCP_RESOURCE_URIS)[number];
+type McpResourceUri = (typeof MCP_RESOURCE_URIS)[number];
 
 export interface McpResourceDefinition {
   readonly uri: McpResourceUri;
@@ -28,20 +28,20 @@ export interface McpResourceDefinition {
   readonly mimeType: string;
 }
 
-export interface McpResourceContent {
+interface McpResourceContent {
   readonly uri: McpResourceUri;
   readonly mimeType: string;
   readonly text: string;
 }
 
-export interface McpActiveContextResource {
+interface McpActiveContextResource {
   readonly app: { readonly id: string } | null;
   readonly environment: { readonly id: string } | null;
   readonly source: "session" | null;
   readonly demoExpiresAt?: string;
 }
 
-export interface ReadMcpResourceContext {
+interface ReadMcpResourceContext {
   readonly actor: McpAccessTokenActor;
   readonly sessionId: string | null;
   readonly sessionStore: McpSessionStore;
@@ -50,7 +50,7 @@ export interface ReadMcpResourceContext {
   readonly fetchAuthMarkdown?: (authBaseUrl: string) => Promise<string>;
 }
 
-export interface ReadMcpResourceOptions extends ReadMcpResourceContext {
+interface ReadMcpResourceOptions extends ReadMcpResourceContext {
   readonly uri: string;
 }
 
@@ -113,7 +113,7 @@ export async function readMcpResourceRpc(
   }
 }
 
-export async function readMcpResource(
+async function readMcpResource(
   options: ReadMcpResourceOptions,
 ): Promise<McpResourceContent | null> {
   if (!isMcpResourceUri(options.uri)) return null;
