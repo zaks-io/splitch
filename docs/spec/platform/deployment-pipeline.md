@@ -313,11 +313,13 @@ Tinybird flow:
    runs query GitHub Actions and require a successful `ci` push run on `main` for that exact SHA. The
    deployment job then waits for the GitHub `production` environment, runs
    `tb deploy --check` and `tb deploy --wait` through environment-scoped `TB_TOKEN` and `TB_HOST`,
-   applies D1 migrations, deploys the backward-compatible Control Plane Worker, then uses its
-   CI-only backfill gate to run and verify every credential-cache v2 rewrite before deploying the
-   Evaluation Worker or any v2-only billing behavior. The gate is bearer-protected by the hosted
-   `SPLITCH_DEPLOY_GATE_TOKEN`, reports only migration checkpoints, and fails the release instead
-   of allowing a partial rollout. Remaining Workers deploy only after that verification.
+   applies D1 migrations, deploys the Analysis Worker so the Control Plane service-binding target
+   exists, deploys the backward-compatible Control Plane Worker, then uses its CI-only backfill gate
+   to run and verify every credential-cache v2 rewrite before deploying the Evaluation Worker or any
+   v2-only billing behavior. The gate is bearer-protected by the hosted
+   `SPLITCH_DEPLOY_GATE_TOKEN`, reports only migration checkpoints, and fails the release instead of
+   allowing a partial rollout. The remaining Worker phase excludes Analysis and Control Plane and
+   runs only after that verification.
 4. Destructive Tinybird deploys require explicit human approval and `--allow-destructive-operations`.
    They are not allowed in the default production deploy workflow.
 
@@ -345,8 +347,10 @@ drift from the release path.
 3. Run Tinybird deployment check with the environment-scoped production Tinybird token.
 4. Deploy Tinybird to Cloud main.
 5. Apply D1 migrations to production.
-6. Sync Worker secrets, then deploy Workers through Turborepo package deploy tasks. The Turbo graph
-   enforces service-binding order where it matters: Evaluation deploy waits for Event Ingest deploy.
+6. Sync Worker secrets, then deploy Workers through Turborepo package deploy tasks. Deploy Analysis
+   before Control Plane so its service-binding target exists, deploy Control Plane, complete the
+   credential-cache backfill, then deploy the remaining Workers. The backfill gate keeps Evaluation
+   from deploying against incomplete credential state.
 7. Verify cron trigger registration on Control Plane API and Analysis Workers.
 8. Run route and binding smoke checks before marking the GitHub deployment complete.
 9. Record Worker version IDs, D1 migration names, Tinybird deployment URL, commit SHA, and smoke results

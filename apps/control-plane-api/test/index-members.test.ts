@@ -96,6 +96,26 @@ describe("index.ts: Control Panel binding boundary", () => {
       app: { organizationId: ORG.orgId, key: "binding-create" },
     });
   });
+
+  it("does not expose the panel Experiments operation through public HTTP", async () => {
+    const response = await worker.fetch(
+      panelExperimentsRequest("c".repeat(64)) as unknown as Parameters<typeof worker.fetch>[0],
+      testEnv,
+      testCtx,
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects bearer material on the panel Experiments binding operation", async () => {
+    const entrypoint = new ControlPanelEntrypoint(testCtx, testEnv);
+    const request = panelExperimentsRequest("d".repeat(64));
+    request.headers.set("authorization", "Bearer must-not-forward");
+
+    const response = await entrypoint.fetch(request);
+
+    expect(response.status).toBe(404);
+  });
 });
 
 async function token(sub: string, scopes: string[]): Promise<string> {
@@ -165,6 +185,17 @@ async function storePanelSession(sessionHash: string): Promise<void> {
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     }),
   );
+}
+
+function panelExperimentsRequest(sessionHash: string): Request {
+  return new Request(`${AUDIENCE}/control-panel/experiments/list`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-splitch-panel-session": sessionHash,
+    },
+    body: JSON.stringify({ appId: ORG.appId, environmentId: "env_index_members" }),
+  });
 }
 
 async function cacheMemberProfile(userId: string, email: string): Promise<void> {

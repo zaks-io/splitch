@@ -18,7 +18,7 @@ export function createControlPanelAppsClient(
   }).apps;
 }
 
-function panelSessionFetch(controlPlane: Fetcher, sessionTokenHash: string): typeof fetch {
+export function panelSessionFetch(controlPlane: Fetcher, sessionTokenHash: string): typeof fetch {
   return async (input, init) => {
     const request = input instanceof Request ? new Request(input, init) : new Request(input, init);
     const headers = new Headers(request.headers);

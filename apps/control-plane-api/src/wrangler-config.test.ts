@@ -33,6 +33,18 @@ describe("Control Plane API Wrangler runtime config", () => {
   });
 
   it.each([
+    ["local", config, "splitch-analysis-api"],
+    ["shared-preview", config.env?.["shared-preview"], "splitch-analysis-api-shared-preview"],
+    ["production", config.env?.production, "splitch-analysis-api"],
+  ])("binds %s to the Analysis Worker's named entrypoint", (_target, target, service) => {
+    expect(target?.services).toContainEqual({
+      binding: "ANALYSIS_API",
+      service,
+      entrypoint: "ControlPlaneEntrypoint",
+    });
+  });
+
+  it.each([
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
@@ -49,6 +61,7 @@ describe("Control Plane API Wrangler runtime config", () => {
 interface WranglerConfig {
   d1_databases?: unknown[];
   env?: Record<string, WranglerTarget | undefined>;
+  services?: ServiceBinding[];
   exports?: DurableObjectExports;
   migrations?: unknown[];
   triggers?: { crons?: string[] };
@@ -56,10 +69,17 @@ interface WranglerConfig {
 
 interface WranglerTarget {
   d1_databases?: unknown[];
+  services?: ServiceBinding[];
   exports?: DurableObjectExports;
   migrations?: unknown[];
   triggers?: { crons?: string[] };
   vars?: Record<string, unknown>;
+}
+
+interface ServiceBinding {
+  binding: string;
+  service: string;
+  entrypoint: string;
 }
 
 type DurableObjectExports = Record<
