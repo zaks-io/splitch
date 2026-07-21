@@ -1,4 +1,4 @@
-import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
+import { appScope, createRepository, type Repository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { Miniflare } from "miniflare";
@@ -122,41 +122,6 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
       await configKvBinding.dispose();
     },
   };
-}
-
-export async function provisionEnvironmentFlagConfigs(
-  harness: QuickstartHarness,
-  flag: { id: string; defaultVariantId: string; variants: Array<{ name: string }> },
-  options: { devEnabled: boolean; prodEnabled: boolean },
-): Promise<void> {
-  const variantNames = flag.variants.map((variant) => variant.name);
-  const rows = [
-    { environmentId: harness.devEnvironmentId, enabled: options.devEnabled },
-    { environmentId: harness.prodEnvironmentId, enabled: options.prodEnabled },
-  ];
-  for (const row of rows) {
-    await harness.repo.flags.flagConfigs.insert(envScope(harness.appId, row.environmentId), {
-      id: `flag_config_${row.environmentId}_${flag.id}`,
-      appId: harness.appId,
-      environmentId: row.environmentId,
-      flagId: flag.id,
-      enabled: row.enabled,
-      availableVariantNames: JSON.stringify(variantNames),
-      defaultVariantId: flag.defaultVariantId,
-      createdAt: NOW_ISO,
-      updatedAt: NOW_ISO,
-    });
-    const synced = await harness.configStore.resyncFlagConfig({
-      appId: harness.appId,
-      environmentId: row.environmentId,
-      flagId: flag.id,
-    });
-    if (!synced.ok) {
-      throw new Error(
-        `quickstart harness: resync failed for ${row.environmentId}: ${synced.reason}`,
-      );
-    }
-  }
 }
 
 export async function findFlagByKey(

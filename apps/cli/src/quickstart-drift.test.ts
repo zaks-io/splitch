@@ -2,12 +2,11 @@ import { CreateFlagRequestSchema } from "@splitch/contracts";
 import { writeFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_API, EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
+import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { parseBooleanVariantsFlag } from "./flag-create-input.js";
 import {
   findFlagByKey,
   makeQuickstartHarness,
-  provisionEnvironmentFlagConfigs,
   quickstartOrigins,
   storedHarnessCredential,
   type QuickstartHarness,
@@ -111,7 +110,7 @@ describe("quickstart flag create drift", () => {
       await harness.dispose();
     });
 
-    it("executes create, promote, and verify from the quickstart sequence", async () => {
+    it("executes create, configure dev, promote prod, and verify prod from the quickstart sequence", async () => {
       const { credentialPath } = await makeTempHome();
       await writeFile(credentialPath, `${JSON.stringify(storedHarnessCredential(harness))}\n`);
       const cliOptions = {
@@ -141,15 +140,12 @@ describe("quickstart flag create drift", () => {
           flag.id,
           "--enabled",
           "true",
+          "--body-json",
+          JSON.stringify({ availableVariantNames: ["on", "off"] }),
         ],
         cliOptions,
       );
-      expect(configureCode).toBe(EXIT_API);
-
-      await provisionEnvironmentFlagConfigs(harness, flag, {
-        devEnabled: true,
-        prodEnabled: false,
-      });
+      expect(configureCode).toBe(EXIT_OK);
 
       const promoteCode = await runCli(
         [
@@ -177,7 +173,7 @@ describe("quickstart flag create drift", () => {
           "--app",
           harness.appId,
           "--env",
-          harness.devEnvironmentId,
+          harness.prodEnvironmentId,
           "new-checkout",
           "--targeting-key",
           "test-user-1",
