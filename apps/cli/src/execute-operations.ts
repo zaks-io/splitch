@@ -149,7 +149,7 @@ export async function executeApiOperation(
   }
 }
 
-function handleExecutionError(error: unknown, io: CliIo): CliResult {
+export function handleExecutionError(error: unknown, io: CliIo): CliResult {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes("not logged in") || message.includes("session expired")) {
     io.error(message);

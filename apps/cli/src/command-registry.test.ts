@@ -28,6 +28,8 @@ describe("cli command parity", () => {
       "app_1",
       "--key",
       "checkout",
+      "--variants",
+      "on,off",
     ]);
     const matched = longestMatchingCommandPath(parsed.commandPath, keys);
     expect(findCommand(matched)?.operationId).toBe("flags_create");

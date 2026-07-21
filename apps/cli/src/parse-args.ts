@@ -10,6 +10,7 @@ export interface ParsedGlobalFlags {
   readonly targetingKey?: string;
   readonly contextJson?: string;
   readonly bodyJson?: string;
+  readonly variants?: string;
   readonly fromEnvironmentId?: string;
   readonly enabled?: boolean;
 }
@@ -110,6 +111,7 @@ function toParsedFlags(flags: Record<string, string | boolean>): ParsedGlobalFla
     targetingKey: stringFlag(flags.targetingKey),
     contextJson: stringFlag(flags.contextJson),
     bodyJson: stringFlag(flags.bodyJson),
+    variants: stringFlag(flags.variants),
     fromEnvironmentId: stringFlag(flags.fromEnvironmentId),
     enabled: parseEnabledFlag(flags.enabled),
   };

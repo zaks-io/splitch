@@ -51,7 +51,7 @@ describe("api command exit codes", () => {
     ]);
 
     const code = await runCli(
-      ["flags", "create", "--json", "--app", "app_1", "--key", "checkout", "--name", "Checkout"],
+      ["flags", "create", "--json", "--app", "app_1", "--key", "checkout", "--variants", "on,off"],
       { credentialPath, fetch: transport.fetch },
     );
     expect(code).toBe(EXIT_OK);

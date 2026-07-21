@@ -7,10 +7,12 @@ import {
   executeEnvPolicyGet,
   executeEnvPolicySet,
   executeFlagsVerify,
+  handleExecutionError,
   validateCommandScope,
 } from "./execute-operations.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
+import { CliInputError } from "./flag-create-input.js";
 import { buildOperationInput } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
 
@@ -123,6 +125,20 @@ async function executeCommand(
     return executeEnvPolicySet(invocation, deps, io, context);
   }
 
-  const input = buildOperationInput(command, invocation, context);
+  let input: Record<string, unknown>;
+  try {
+    input = buildOperationInput(command, invocation, context);
+  } catch (error) {
+    return handleInputError(error, invocation, io);
+  }
   return executeApiOperation(command.operationId, input, invocation, deps, io);
+}
+
+function handleInputError(error: unknown, invocation: ParsedInvocation, io: CliIo): CliResult {
+  if (error instanceof CliInputError) {
+    emit(io, invocation.flags.json, error.payload);
+    io.error(error.message);
+    return { exitCode: EXIT_USAGE, payload: error.payload };
+  }
+  return handleExecutionError(error, io);
 }
