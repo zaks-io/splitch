@@ -2,6 +2,10 @@ import { getRoute } from "@splitch/contracts";
 import type { EvaluateContext } from "@splitch/sdk";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
+import {
+  applyFlagsCreateConvenienceFields,
+  assertContractValidFlagsCreateInput,
+} from "./flag-create-input.js";
 import type { ParsedGlobalFlags, ParsedInvocation } from "./parse-args.js";
 
 export function buildOperationInput(
@@ -105,6 +109,14 @@ function applyCommandSpecificFields(
       invocation.flags.targetingKey,
       invocation.flags.contextJson,
     );
+  }
+  if (command.operationId === "flags_create") {
+    applyFlagsCreateConvenienceFields(input, {
+      key: invocation.flags.key,
+      name: invocation.flags.name,
+      variants: invocation.flags.variants,
+    });
+    assertContractValidFlagsCreateInput(input);
   }
 }
 

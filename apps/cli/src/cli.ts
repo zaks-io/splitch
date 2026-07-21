@@ -78,6 +78,7 @@ function printUsage(): void {
       "Usage:",
       "  splitch login | logout | use --app <id> [--env <id>] | context | health",
       "  splitch <resource> <action> [args] [--json] [--app <id>] [--env <id>]",
+      "  splitch flags create --key <key> --variants on,off",
       "",
       `Meta commands: ${META_COMMANDS.join(", ")}`,
     ].join("\n"),
