@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
-import worker, { ControlPanelEntrypoint } from "../src/index.js";
+import worker from "../src/index.js";
 import { memberProfileCacheKey } from "../src/member-profile-cache.js";
 
 const AUDIENCE = "https://cp.splitch.test";
@@ -68,55 +68,6 @@ describe("index.ts: member endpoints use the live session-cache profile resolver
   });
 });
 
-describe("index.ts: Control Panel binding boundary", () => {
-  it("rejects a valid panel session on the public Worker export", async () => {
-    const sessionHash = "a".repeat(64);
-    await storePanelSession(sessionHash);
-
-    const response = await callAppsCreate(worker.fetch, sessionHash, "public-replay");
-
-    expect(response.status).toBe(401);
-    expect(await response.json()).toMatchObject({ code: "UNAUTHORIZED" });
-  });
-
-  it("redeems a valid panel session only through the named binding entrypoint", async () => {
-    const sessionHash = "b".repeat(64);
-    await storePanelSession(sessionHash);
-    const entrypoint = new ControlPanelEntrypoint(testCtx, testEnv);
-
-    const response = await callAppsCreate(
-      (request) => entrypoint.fetch(request),
-      sessionHash,
-      "binding-create",
-    );
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      app: { organizationId: ORG.orgId, key: "binding-create" },
-    });
-  });
-
-  it("does not expose the panel Experiments operation through public HTTP", async () => {
-    const response = await worker.fetch(
-      panelExperimentsRequest("c".repeat(64)) as unknown as Parameters<typeof worker.fetch>[0],
-      testEnv,
-      testCtx,
-    );
-
-    expect(response.status).toBe(404);
-  });
-
-  it("rejects bearer material on the panel Experiments binding operation", async () => {
-    const entrypoint = new ControlPanelEntrypoint(testCtx, testEnv);
-    const request = panelExperimentsRequest("d".repeat(64));
-    request.headers.set("authorization", "Bearer must-not-forward");
-
-    const response = await entrypoint.fetch(request);
-
-    expect(response.status).toBe(404);
-  });
-});
-
 async function token(sub: string, scopes: string[]): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   return signer.sign({
@@ -149,52 +100,6 @@ function call(method: string, path: string, jwt: string, body?: unknown): Promis
       testCtx,
     ),
   );
-}
-
-async function callAppsCreate(
-  fetcher: (
-    request: Request,
-    env: ControlPlaneApiEnv,
-    ctx: ExecutionContext,
-  ) => Response | Promise<Response>,
-  sessionHash: string,
-  key: string,
-): Promise<Response> {
-  return fetcher(
-    new Request(`${AUDIENCE}/orgs/${ORG.orgId}/apps`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-splitch-panel-session": sessionHash,
-      },
-      body: JSON.stringify({ organizationId: ORG.orgId, name: key, key }),
-    }),
-    testEnv,
-    testCtx,
-  );
-}
-
-async function storePanelSession(sessionHash: string): Promise<void> {
-  await env.SESSION_STORE.put(
-    `session:${sessionHash}`,
-    JSON.stringify({
-      version: 2,
-      userId: OWNER,
-      orgs: [],
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-    }),
-  );
-}
-
-function panelExperimentsRequest(sessionHash: string): Request {
-  return new Request(`${AUDIENCE}/control-panel/experiments/list`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-splitch-panel-session": sessionHash,
-    },
-    body: JSON.stringify({ appId: ORG.appId, environmentId: "env_index_members" }),
-  });
 }
 
 async function cacheMemberProfile(userId: string, email: string): Promise<void> {

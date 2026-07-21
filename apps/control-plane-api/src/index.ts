@@ -14,8 +14,9 @@ import {
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import { authJwksUri } from "./auth-jwks-config";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
+import { type ControlPlaneAuthOptions, makeControlPlaneAuthResolver } from "./auth-resolver";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
+import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
 import {
   CredentialCacheWriterDurableObject,
@@ -24,14 +25,14 @@ import {
 import type { ControlPlaneApiEnv } from "./env";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
+import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
+import { makePanelDelegationReplayStore } from "./panel-identity-replay";
+import { makePanelSessionAccess } from "./panel-session-access";
 import { panelExperimentsList } from "./panel-experiments";
 import { rateLimiterForTarget } from "./rate-limit";
-import { makeSessionStore } from "./session-store";
+import { makePanelSessionStore, makeSessionStore } from "./session-store";
 
 const service = "splitch-control-plane-api";
-const CONTROL_PANEL_APPS_CREATE_PATH = /^\/orgs\/[^/]+\/apps\/?$/;
-const CONTROL_PANEL_EXPERIMENTS_PATH = "/control-panel/experiments/list";
-
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
     return handleRequest(request, env, ctx);
@@ -45,17 +46,16 @@ const handler = {
 
 export default wrapWorkerHandler(handler, { surface: "control-plane-api" });
 
-/** Binding-only entrypoint used by the Control Panel for authenticated mutations. */
+/** Bounded bridge for the predecessor Panel's session-handle binding protocol. */
 export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-    if (request.method === "POST" && url.pathname === CONTROL_PANEL_EXPERIMENTS_PATH) {
-      return handlePanelExperimentsRequest(request, this.env);
-    }
-    if (request.method !== "POST" || !CONTROL_PANEL_APPS_CREATE_PATH.test(url.pathname)) {
+    if (!boundedPanelSessionEnabled(this.env)) {
       return new Response("not found", { status: 404 });
     }
-    return handleRequest(request, this.env, this.ctx, "panel");
+    if (!parseControlPanelBindingOperation(request)) {
+      return new Response("not found", { status: 404 });
+    }
+    return handleRequest(request, this.env, this.ctx, "bounded-session");
   }
 }
 
@@ -66,18 +66,23 @@ export class McpEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   }
 }
 
+/** Binding-only V2 entrypoint used by the Control Panel for signed least-privilege delegation. */
+export class SignedControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
+  override async fetch(request: Request): Promise<Response> {
+    if (!parseControlPanelBindingOperation(request)) {
+      return new Response("not found", { status: 404 });
+    }
+    return handleRequest(request, this.env, this.ctx, "signed");
+  }
+}
+
+type PanelProtocol = "none" | "signed" | "bounded-session";
+type AuthMode = PanelProtocol | "mcp";
 async function handlePanelExperimentsRequest(
   request: Request,
   env: ControlPlaneApiEnv,
+  actorId: string,
 ): Promise<Response> {
-  if (request.headers.has("authorization")) return new Response("not found", { status: 404 });
-  const sessionHash = request.headers.get("x-splitch-panel-session");
-  if (!sessionHash) return unauthorized();
-  const actor = await makeSessionStore(env.SESSION_STORE).loadPanelSessionActor(
-    sessionHash,
-    Math.floor(Date.now() / 1000),
-  );
-  if (!actor) return unauthorized();
   const input = await request.json().catch(() => null);
   if (!isPanelExperimentsInput(input)) {
     return Response.json(
@@ -88,7 +93,7 @@ async function handlePanelExperimentsRequest(
   try {
     return await panelExperimentsList(
       { repo: createRepository(env.DB), analysis: env.ANALYSIS_API },
-      { actorId: actor.userId, ...input },
+      { actorId, ...input },
     );
   } catch {
     return Response.json(
@@ -128,7 +133,7 @@ async function handleRequest(
   request: Request,
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
-  authMode: "public" | "panel" | "mcp" = "public",
+  authMode: AuthMode = "none",
 ): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/health" || url.pathname === "/") {
@@ -157,26 +162,39 @@ async function handleRequest(
     controlPlaneAudience,
   });
 
-  const publicAuthResolver = makeControlPlaneAuthResolver(
+  const repo = createRepository(env.DB);
+  const panelProtocol = authMode === "mcp" ? "none" : authMode;
+  const panelAuthResolver = makeControlPlaneAuthResolver(
     {
       verifier,
       sessions: makeSessionStore(env.SESSION_STORE),
     },
-    { allowPanelSession: authMode === "panel" },
+    controlPanelAuthOptions(env, repo, panelProtocol),
   );
+  const authResolver =
+    authMode === "mcp"
+      ? makeMcpDelegationAuthResolver({
+          owner: "control-plane-api",
+          secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
+          replayGuard: makeDurableMcpDelegationReplayGuard(
+            requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
+          ),
+        })
+      : panelAuthResolver;
+  const panelExperiments = await handleSignedPanelExperiments(
+    request,
+    env,
+    panelProtocol,
+    authResolver,
+  );
+  if (panelExperiments) return panelExperiments;
   const app = createApp({
-    authResolver:
-      authMode === "mcp"
-        ? makeMcpDelegationAuthResolver({
-            owner: "control-plane-api",
-            secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
-            replayGuard: makeDurableMcpDelegationReplayGuard(
-              requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
-            ),
-          })
-        : publicAuthResolver,
-    rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET),
-    repo: createRepository(env.DB),
+    authResolver,
+    rateLimiter: rateLimiterForTarget(
+      env.SPLITCH_PLATFORM_TARGET,
+      env.CONTROL_PLANE_ACTOR_RATE_LIMITER,
+    ),
+    repo,
     credentialStore: env.CREDENTIAL_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
     configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
@@ -191,18 +209,17 @@ async function handleRequest(
   return app.fetch(request, env);
 }
 
-function requiredMcpDelegationSecret(secret: string | undefined): string {
-  if (!secret) {
-    throw new Error("control-plane-api: MCP_CONTROL_PLANE_DELEGATION_SECRET is required");
-  }
-  return secret;
-}
-
-function requiredMcpReplayBinding(
-  binding: ControlPlaneApiEnv["MCP_DELEGATION_REPLAY"],
-): NonNullable<ControlPlaneApiEnv["MCP_DELEGATION_REPLAY"]> {
-  if (!binding) throw new Error("control-plane-api: MCP_DELEGATION_REPLAY is required");
-  return binding;
+async function handleSignedPanelExperiments(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  protocol: PanelProtocol,
+  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
+): Promise<Response | null> {
+  if (protocol !== "signed") return null;
+  if (parseControlPanelBindingOperation(request)?.id !== "experiments_list") return null;
+  const auth = await authResolver(request);
+  if (!auth.ok) return unauthorized();
+  return handlePanelExperimentsRequest(request, env, auth.principal.id);
 }
 
 async function runDemoReaper(
@@ -286,4 +303,54 @@ export {
   CredentialCacheBackfillDurableObject,
   CredentialCacheWriterDurableObject,
   McpDelegationReplayDurableObject,
+  PanelDelegationReplayDurableObject,
 };
+
+function requiredMcpDelegationSecret(secret: string | undefined): string {
+  if (!secret) {
+    throw new Error("control-plane-api: MCP_CONTROL_PLANE_DELEGATION_SECRET is required");
+  }
+  return secret;
+}
+
+function requiredMcpReplayBinding(
+  binding: ControlPlaneApiEnv["MCP_DELEGATION_REPLAY"],
+): NonNullable<ControlPlaneApiEnv["MCP_DELEGATION_REPLAY"]> {
+  if (!binding) throw new Error("control-plane-api: MCP_DELEGATION_REPLAY is required");
+  return binding;
+}
+
+function requiredPanelDelegationSecret(env: ControlPlaneApiEnv): string {
+  if (env.CONTROL_PANEL_DELEGATION_SECRET) return env.CONTROL_PANEL_DELEGATION_SECRET;
+  throw new Error("control-plane-api: CONTROL_PANEL_DELEGATION_SECRET is required");
+}
+
+function controlPanelAuthOptions(
+  env: ControlPlaneApiEnv,
+  repo: ReturnType<typeof createRepository>,
+  protocol: PanelProtocol,
+): ControlPlaneAuthOptions {
+  if (protocol === "none") return {};
+  if (protocol === "signed") {
+    return {
+      allowPanelDelegation: true,
+      panelDelegationSecret: requiredPanelDelegationSecret(env),
+      panelAccess: makePanelSessionAccess(repo),
+      panelDelegationReplay: makePanelDelegationReplayStore(env.PANEL_DELEGATION_REPLAY),
+    };
+  }
+  return {
+    allowBoundedPanelSession: true,
+    boundedPanelSessions: makePanelSessionStore(env.SESSION_STORE),
+  };
+}
+
+function boundedPanelSessionEnabled(env: ControlPlaneApiEnv): boolean {
+  const expiresAt = env.CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT;
+  return (
+    env.CONTROL_PANEL_LEGACY_SESSION_MODE === "bounded-rollout" &&
+    typeof expiresAt === "string" &&
+    /^\d{10}$/u.test(expiresAt) &&
+    Number(expiresAt) > Math.floor(Date.now() / 1000)
+  );
+}

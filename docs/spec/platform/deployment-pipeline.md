@@ -348,9 +348,12 @@ drift from the release path.
 4. Deploy Tinybird to Cloud main.
 5. Apply D1 migrations to production.
 6. Sync Worker secrets, then deploy Workers through Turborepo package deploy tasks. Deploy Analysis
-   before Control Plane so its service-binding target exists, deploy Control Plane, complete the
-   credential-cache backfill, then deploy the remaining Workers. The backfill gate keeps Evaluation
-   from deploying against incomplete credential state.
+   before Control Plane so its service-binding target exists. The Control Panel delegation protocol
+   then uses a bounded cutover: deploy the Control Plane with the predecessor session-handle binding
+   entrypoint enabled with a 30-minute expiry, deploy the V2 Panel bound to the signed entrypoint, then
+   immediately redeploy the Control Plane from its checked-in config with predecessor session
+   redemption disabled. Complete credential-cache backfill before deploying the remaining Workers;
+   the backfill gate keeps Evaluation from deploying against incomplete credential state.
 7. Verify cron trigger registration on Control Plane API and Analysis Workers.
 8. Run route and binding smoke checks before marking the GitHub deployment complete.
 9. Record Worker version IDs, D1 migration names, Tinybird deployment URL, commit SHA, and smoke results
@@ -513,6 +516,12 @@ Worker code-only rollback:
 
 - Use `wrangler rollback <version_id>` or deploy a previous version to 100 percent traffic.
 - Cloudflare only supports rollback to recent versions, and rollback immediately changes active traffic.
+- A Control Panel protocol rollback must run
+  `rollback:cloudflare:panel-binding:<platform-target>` with the prior Panel Worker version ID. It first
+  enables bounded predecessor session redemption on the current Control Plane, then activates the prior
+  Panel version while leaving that self-expiring compatibility Control Plane active. The prior Control Plane
+  must not be restored because it has no bounded predecessor-session deadline. If recovery stalls, the
+  compatibility entrypoint closes automatically at its transition deadline.
 
 Rollback limits:
 

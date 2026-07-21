@@ -18,7 +18,9 @@ export const loadControlPanelExperiments = createServerFn({ method: "GET" })
         error: { code: "UNAUTHORIZED", message: "authentication required", details: {} },
       };
     }
-    return createControlPanelExperimentsClient(bindings.CONTROL_PLANE_API, loaded.tokenHash).list(
-      data,
-    );
+    return createControlPanelExperimentsClient(
+      bindings.CONTROL_PLANE_API,
+      { actorId: loaded.session.userId, sessionExpiresAt: loaded.session.expiresAt },
+      bindings.CONTROL_PANEL_DELEGATION_SECRET,
+    ).list(data);
   });

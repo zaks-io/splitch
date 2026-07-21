@@ -22,7 +22,10 @@ interface PanelSessionActor {
 export interface SessionStore {
   /** True iff the session/token was revoked. Throws on a KV fault (never silent). */
   isRevoked(sessionId: string): Promise<boolean>;
-  /** Resolve a still-live server-side Control Panel session by its SHA-256 handle. */
+}
+
+export interface PanelSessionStore {
+  /** Redeem the predecessor Panel's SHA-256 session handle during the bounded bridge only. */
   loadPanelSessionActor(tokenHash: string, nowSeconds: number): Promise<PanelSessionActor | null>;
 }
 
@@ -32,15 +35,16 @@ export function makeSessionStore(kv: KVNamespace): SessionStore {
       const marker = await kv.get(`${REVOKED_PREFIX}${sessionId}`);
       return marker !== null;
     },
+  };
+}
+
+/** Construct only for the self-expiring predecessor binding entrypoint. */
+export function makePanelSessionStore(kv: KVNamespace): PanelSessionStore {
+  return {
     async loadPanelSessionActor(tokenHash, nowSeconds) {
-      if (!/^[a-f0-9]{64}$/.test(tokenHash)) {
-        return null;
-      }
+      if (!/^[a-f0-9]{64}$/u.test(tokenHash)) return null;
       const raw = await kv.get(`${PANEL_SESSION_PREFIX}${tokenHash}`, "text");
-      if (!raw) {
-        return null;
-      }
-      return parsePanelSessionActor(raw, nowSeconds);
+      return raw ? parsePanelSessionActor(raw, nowSeconds) : null;
     },
   };
 }

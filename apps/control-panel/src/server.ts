@@ -3,12 +3,15 @@ import { wrapWorkerHandler } from "@splitch/observability/worker";
 import handler from "@tanstack/react-start/server-entry";
 import { controlPanelLiveUpdateBindings } from "#lib/bindings";
 import { createControlPanelApp } from "#lib/control-plane-app-functions";
+import { createControlPanelFlag, loadControlPanelFlags } from "#lib/control-plane-flag-functions";
 import { authorizeLiveUpdateUpgrade } from "#lib/live-update-authorization";
 import { handleLiveUpdateUpgrade } from "#lib/live-update-upgrade";
 import { setControlPanelSentryClient } from "#lib/panel-observability";
 
-// Keep the mutation server function in the Worker graph before its SPL-103 UI caller lands.
+// Keep server functions in the Worker graph so their handlers are deployed with the app.
 void createControlPanelApp;
+void createControlPanelFlag;
+void loadControlPanelFlags;
 
 type ControlPanelWorkerEnv = {
   DB: D1Database;
@@ -19,6 +22,7 @@ type ControlPanelWorkerEnv = {
   WORKOS_API_KEY: string;
   WORKOS_CLIENT_ID: string;
   AUTH_API_ORIGIN: string;
+  CONTROL_PANEL_DELEGATION_SECRET: string;
   CONTROL_PLANE_API: Fetcher;
   SENTRY_DSN?: string;
   SENTRY_RELEASE?: string;

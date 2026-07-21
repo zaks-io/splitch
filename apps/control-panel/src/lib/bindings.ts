@@ -4,6 +4,7 @@ export interface ControlPanelBindings {
   WORKOS_API_KEY: string;
   WORKOS_CLIENT_ID: string;
   AUTH_API_ORIGIN: string;
+  CONTROL_PANEL_DELEGATION_SECRET?: string;
   CONTROL_PLANE_API?: Fetcher;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
@@ -11,6 +12,7 @@ export interface ControlPanelBindings {
 
 interface ControlPanelMutationBindings extends ControlPanelBindings {
   CONTROL_PLANE_API: Fetcher;
+  CONTROL_PANEL_DELEGATION_SECRET: string;
 }
 
 export interface ControlPanelLiveUpdateBindings extends ControlPanelBindings {
@@ -30,6 +32,7 @@ export function controlPanelBindings(raw: unknown): ControlPanelBindings {
     WORKOS_API_KEY: requiredString(raw.WORKOS_API_KEY, "WORKOS_API_KEY"),
     WORKOS_CLIENT_ID: requiredString(raw.WORKOS_CLIENT_ID, "WORKOS_CLIENT_ID"),
     AUTH_API_ORIGIN: requiredString(raw.AUTH_API_ORIGIN, "AUTH_API_ORIGIN"),
+    CONTROL_PANEL_DELEGATION_SECRET: optionalString(raw.CONTROL_PANEL_DELEGATION_SECRET),
     CONTROL_PLANE_API: optionalFetcher(raw.CONTROL_PLANE_API),
     SPLITCH_PLATFORM_TARGET: optionalString(raw.SPLITCH_PLATFORM_TARGET),
     SENTRY_DSN: optionalString(raw.SENTRY_DSN),
@@ -41,7 +44,14 @@ export function controlPanelMutationBindings(raw: unknown): ControlPanelMutation
   if (!bindings.CONTROL_PLANE_API) {
     throw new Error("control-panel missing required CONTROL_PLANE_API binding");
   }
-  return { ...bindings, CONTROL_PLANE_API: bindings.CONTROL_PLANE_API };
+  if (!bindings.CONTROL_PANEL_DELEGATION_SECRET) {
+    throw new Error("control-panel missing required CONTROL_PANEL_DELEGATION_SECRET binding");
+  }
+  return {
+    ...bindings,
+    CONTROL_PLANE_API: bindings.CONTROL_PLANE_API,
+    CONTROL_PANEL_DELEGATION_SECRET: bindings.CONTROL_PANEL_DELEGATION_SECRET,
+  };
 }
 
 export function controlPanelLiveUpdateBindings(raw: unknown): ControlPanelLiveUpdateBindings {
@@ -70,6 +80,7 @@ function isBindings(value: unknown): value is {
   WORKOS_API_KEY?: unknown;
   WORKOS_CLIENT_ID?: unknown;
   AUTH_API_ORIGIN?: unknown;
+  CONTROL_PANEL_DELEGATION_SECRET?: unknown;
   CONTROL_PLANE_API?: unknown;
   SPLITCH_PLATFORM_TARGET?: unknown;
   SENTRY_DSN?: unknown;

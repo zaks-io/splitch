@@ -1,18 +1,24 @@
 import type { ErrorResponse } from "@splitch/contracts";
+import {
+  CONTROL_PANEL_DELEGATION_HEADER,
+  issueControlPanelDelegation,
+} from "@splitch/control-plane-sdk/control-panel-identity";
 import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "./app";
-import { makeControlPlaneAuthResolver, PANEL_SESSION_HEADER } from "./auth-resolver";
+import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
+import type { PanelDelegationReplayStore } from "./panel-identity-replay";
 import { makeSessionStore } from "./session-store";
 import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 18, 22, 0, 0);
 const NOW_SECONDS = Math.floor(NOW_MS / 1000);
+const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
 const PRIMARY = {
   orgId: "org_panel_primary",
   orgName: "Panel Primary",
@@ -62,7 +68,11 @@ beforeEach(async () => {
   };
   app = createApp({
     ...appDeps,
-    authResolver: makeControlPlaneAuthResolver(authDeps, { allowPanelSession: true }),
+    authResolver: makeControlPlaneAuthResolver(authDeps, {
+      allowPanelDelegation: true,
+      panelDelegationSecret: DELEGATION_SECRET,
+      panelDelegationReplay: { consume: async () => true } as PanelDelegationReplayStore,
+    }),
   });
   publicApp = createApp({
     ...appDeps,
@@ -72,16 +82,9 @@ beforeEach(async () => {
 
 afterEach(async () => bindings.dispose());
 
-describe("Control Panel server session transport for apps_create", () => {
-  it("rejects panel session handles at the public Control Plane boundary", async () => {
-    const tokenHash = await storePanelSession(OWNER, "0");
-    const response = await createAppRequest(
-      PRIMARY.orgId,
-      tokenHash,
-      "public-replay",
-      {},
-      publicApp,
-    );
+describe("Control Panel delegation for apps_create", () => {
+  it("rejects panel delegations at the public Control Plane boundary", async () => {
+    const response = await createAppRequest(PRIMARY.orgId, OWNER, "public-replay", {}, publicApp);
 
     expect(response.status).toBe(401);
     expect((await response.json()) satisfies ErrorResponse).toMatchObject({ code: "UNAUTHORIZED" });
@@ -91,8 +94,7 @@ describe("Control Panel server session transport for apps_create", () => {
     ["owner", OWNER, "a"],
     ["admin", ADMIN, "b"],
   ])("allows an authenticated %s while the Worker performs the live role gate", async (_, userId, suffix) => {
-    const tokenHash = await storePanelSession(userId, suffix);
-    const response = await createAppRequest(PRIMARY.orgId, tokenHash, `checkout-${suffix}`);
+    const response = await createAppRequest(PRIMARY.orgId, userId, `checkout-${suffix}`);
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -105,36 +107,36 @@ describe("Control Panel server session transport for apps_create", () => {
     ["member", MEMBER, "c"],
     ["unrelated principal", UNRELATED, "d"],
   ])("returns the Worker's typed refusal for a %s", async (_, userId, suffix) => {
-    const tokenHash = await storePanelSession(userId, suffix);
-    const response = await createAppRequest(PRIMARY.orgId, tokenHash, `denied-${suffix}`);
+    const response = await createAppRequest(PRIMARY.orgId, userId, `denied-${suffix}`);
 
     expect(response.status).toBe(403);
     expect((await response.json()) satisfies ErrorResponse).toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("does not let a session for another Organization cross the live D1 boundary", async () => {
-    const tokenHash = await storePanelSession(OWNER, "e");
-    const response = await createAppRequest(SECONDARY.orgId, tokenHash, "cross-org");
+    const response = await createAppRequest(SECONDARY.orgId, OWNER, "cross-org");
 
     expect(response.status).toBe(403);
     expect((await response.json()) satisfies ErrorResponse).toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("rejects expired, unknown, and malformed session handles", async () => {
-    const expired = await storePanelSession(OWNER, "f", NOW_SECONDS - 1);
+  it("rejects expired and malformed downstream identities", async () => {
+    const expired = await createAppRequest(PRIMARY.orgId, OWNER, "expired", {}, app, NOW_SECONDS);
+    expect(expired.status).toBe(401);
 
-    for (const tokenHash of [expired, "0".repeat(64), "not-a-session-handle"]) {
-      const response = await createAppRequest(PRIMARY.orgId, tokenHash, "rejected");
-      expect(response.status).toBe(401);
-      expect((await response.json()) satisfies ErrorResponse).toMatchObject({
-        code: "UNAUTHORIZED",
-      });
-    }
+    const malformed = await app.request(`/orgs/${PRIMARY.orgId}/apps`, {
+      method: "POST",
+      headers: {
+        [CONTROL_PANEL_DELEGATION_HEADER]: "not-a-delegation",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ organizationId: PRIMARY.orgId, name: "bad", key: "bad" }),
+    });
+    expect(malformed.status).toBe(401);
   });
 
   it("never falls back to a panel session when an Authorization header is present but invalid", async () => {
-    const tokenHash = await storePanelSession(OWNER, "1");
-    const response = await createAppRequest(PRIMARY.orgId, tokenHash, "no-fallback", {
+    const response = await createAppRequest(PRIMARY.orgId, OWNER, "no-fallback", {
       authorization: "Bearer invalid",
     });
 
@@ -143,33 +145,38 @@ describe("Control Panel server session transport for apps_create", () => {
   });
 });
 
-async function storePanelSession(
-  userId: string,
-  hashCharacter: string,
-  expiresAt = NOW_SECONDS + 3600,
-): Promise<string> {
-  const tokenHash = hashCharacter.repeat(64);
-  await bindings.kv.put(
-    `session:${tokenHash}`,
-    JSON.stringify({ version: 2, userId, orgs: [], expiresAt }),
-  );
-  return tokenHash;
-}
-
 async function createAppRequest(
   orgId: string,
-  tokenHash: string,
+  actorId: string,
   key: string,
   headers: Record<string, string> = {},
   targetApp = app,
+  expiresAt = NOW_SECONDS + 30,
 ): Promise<Response> {
+  const body = JSON.stringify({ organizationId: orgId, name: key, key });
+  const request = new Request(`${AUDIENCE}/orgs/${orgId}/apps`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+  });
+  const delegation = await issueControlPanelDelegation(
+    request,
+    { id: "apps_create", orgId },
+    actorId,
+    DELEGATION_SECRET,
+    {
+      nowSeconds: NOW_SECONDS - (expiresAt === NOW_SECONDS ? 30 : 0),
+      sessionExpiresAt: expiresAt,
+      nonce: `nonce_${key.padEnd(16, "0")}`,
+    },
+  );
   return targetApp.request(`/orgs/${orgId}/apps`, {
     method: "POST",
     headers: {
-      [PANEL_SESSION_HEADER]: tokenHash,
+      [CONTROL_PANEL_DELEGATION_HEADER]: delegation,
       "content-type": "application/json",
       ...headers,
     },
-    body: JSON.stringify({ organizationId: orgId, name: key, key }),
+    body,
   });
 }

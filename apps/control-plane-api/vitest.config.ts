@@ -4,6 +4,13 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@splitch/control-plane-sdk/control-panel-identity",
+        replacement: new URL(
+          "../../packages/control-plane-sdk/src/control-panel-identity.ts",
+          import.meta.url,
+        ).pathname,
+      },
+      {
         find: "@splitch/control-plane-sdk/panel-experiments",
         replacement: new URL(
           "../../packages/control-plane-sdk/src/panel-experiments.ts",

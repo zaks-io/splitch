@@ -55,6 +55,7 @@
       { "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" },
       { "name": "CREDENTIAL_CACHE_WRITER", "class_name": "CredentialCacheWriterDurableObject" },
       { "name": "CREDENTIAL_CACHE_BACKFILL", "class_name": "CredentialCacheBackfillDurableObject" },
+      { "name": "PANEL_DELEGATION_REPLAY", "class_name": "PanelDelegationReplayDurableObject" },
       { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
     ]
   },
@@ -62,6 +63,7 @@
     "ConfigStoreDurableObject": { "type": "durable-object", "storage": "sqlite" },
     "CredentialCacheWriterDurableObject": { "type": "durable-object", "storage": "sqlite" },
     "CredentialCacheBackfillDurableObject": { "type": "durable-object", "storage": "sqlite" },
+    "PanelDelegationReplayDurableObject": { "type": "durable-object", "storage": "sqlite" },
     "McpDelegationReplayDurableObject": { "type": "durable-object", "storage": "sqlite" }
   },
   "secrets": {
@@ -70,7 +72,10 @@
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
     "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
-    "MCP_CONTROL_PLANE_DELEGATION_SECRET": "local-mcp-control-plane-delegation-secret"
+    "CONTROL_PANEL_DELEGATION_SECRET": "local-control-panel-delegation-secret",
+    "MCP_CONTROL_PLANE_DELEGATION_SECRET": "local-mcp-control-plane-delegation-secret",
+    "CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT": "0",
+    "CONTROL_PANEL_LEGACY_SESSION_MODE": "disabled"
   },
   "env": {
     "shared-preview": {
@@ -102,13 +107,16 @@
         "required": [
           "SENTRY_DSN",
           "SPLITCH_DEPLOY_GATE_TOKEN",
+          "CONTROL_PANEL_DELEGATION_SECRET",
           "MCP_CONTROL_PLANE_DELEGATION_SECRET"
         ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev"
+        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
+        "CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT": "0",
+        "CONTROL_PANEL_LEGACY_SESSION_MODE": "disabled"
       },
       "d1_databases": [
         {
@@ -129,6 +137,10 @@
           {
             "name": "CREDENTIAL_CACHE_BACKFILL",
             "class_name": "CredentialCacheBackfillDurableObject"
+          },
+          {
+            "name": "PANEL_DELEGATION_REPLAY",
+            "class_name": "PanelDelegationReplayDurableObject"
           },
           { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
         ]
@@ -163,13 +175,16 @@
         "required": [
           "SENTRY_DSN",
           "SPLITCH_DEPLOY_GATE_TOKEN",
+          "CONTROL_PANEL_DELEGATION_SECRET",
           "MCP_CONTROL_PLANE_DELEGATION_SECRET"
         ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
         "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev"
+        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
+        "CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT": "0",
+        "CONTROL_PANEL_LEGACY_SESSION_MODE": "disabled"
       },
       "d1_databases": [
         {
@@ -183,6 +198,13 @@
         { "binding": "CONFIG_STORE", "id": "b67d6cd1db424778a6dec24f64cbaa8d" },
         { "binding": "CREDENTIAL_STORE", "id": "2c0082cdd2f4426f8cfeb4d2bbd62277" }
       ],
+      "ratelimits": [
+        {
+          "name": "CONTROL_PLANE_ACTOR_RATE_LIMITER",
+          "namespace_id": "1102",
+          "simple": { "limit": 600, "period": 60 }
+        }
+      ],
       "durable_objects": {
         "bindings": [
           { "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" },
@@ -190,6 +212,10 @@
           {
             "name": "CREDENTIAL_CACHE_BACKFILL",
             "class_name": "CredentialCacheBackfillDurableObject"
+          },
+          {
+            "name": "PANEL_DELEGATION_REPLAY",
+            "class_name": "PanelDelegationReplayDurableObject"
           },
           { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
         ]

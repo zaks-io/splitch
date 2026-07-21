@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { readFile } from "node:fs/promises";
+import test from "node:test";
 
 const packageJson = new URL("../package.json", import.meta.url);
 
@@ -11,6 +11,8 @@ for (const environment of ["production", "shared-preview"]) {
 
     assert.deepEqual(rollout.split(" && "), [
       `pnpm deploy:cloudflare:analysis:${environment}`,
+      `pnpm deploy:cloudflare:control-plane-compat:${environment}`,
+      `pnpm deploy:cloudflare:control-panel:${environment}`,
       `pnpm deploy:cloudflare:control-plane:${environment}`,
       `pnpm credential-cache:backfill:${environment}`,
       `pnpm deploy:cloudflare:remaining:${environment}`,
@@ -29,6 +31,12 @@ for (const environment of ["production", "shared-preview"]) {
     const { scripts } = JSON.parse(await readFile(packageJson, "utf8"));
     const rollout = scripts[`deploy:cloudflare:${environment}`];
 
+    assert.match(
+      rollout,
+      new RegExp(
+        `^pnpm deploy:cloudflare:analysis:${environment} && pnpm deploy:cloudflare:control-plane-compat:${environment}`,
+      ),
+    );
     assert.ok(
       rollout.indexOf(`deploy:cloudflare:control-plane:${environment}`) <
         rollout.indexOf(`credential-cache:backfill:${environment}`) &&

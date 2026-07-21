@@ -171,7 +171,7 @@ INSERT INTO variants (id, flag_id, name, value, created_at) VALUES
   ('variant_ended_control_e2e', 'flag_checkout_ended_e2e', 'control', 'false', '${createdAt}');
 INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, available_variant_names, default_variant_id, created_at, updated_at) VALUES
   ('config_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_e2e', 1, '["control","treatment"]', 'variant_checkout_control_e2e', '${createdAt}', '${createdAt}'),
-  ('config_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'flag_checkout_e2e', 1, '["control","treatment"]', 'variant_checkout_control_e2e', '${createdAt}', '${createdAt}'),
+  ('config_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'flag_checkout_e2e', 0, '["control"]', 'variant_checkout_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_significance_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_significance_e2e', 1, '["control","treatment"]', 'variant_significance_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_guardrail_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_guardrail_e2e', 1, '["control","treatment"]', 'variant_guardrail_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_draft_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_draft_e2e', 1, '["control"]', 'variant_draft_control_e2e', '${createdAt}', '${createdAt}'),
