@@ -1,27 +1,83 @@
 #!/usr/bin/env node
 /**
  * Consumer smoke: install the packed SDK tarball outside the monorepo workspace
- * and verify ESM runtime import plus TypeScript declaration resolution.
+ * and verify ESM runtime import, TypeScript declaration resolution, and the
+ * exact docs/spec/quickstart.md §8 fenced snippet against packed public
+ * declarations.
  */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  extractQuickstartSdkSnippet,
+  stripIdempotencyKeyFromSnippet,
+  wrapQuickstartSnippetForTypecheck,
+} from "./extract-quickstart-snippet.mjs";
 import { assertReleaseBundleJs } from "./pack-staging.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = resolve(packageRoot, "../..");
+const quickstartPath = join(repoRoot, "docs/spec/quickstart.md");
 const consumerRoot = mkdtempSync(join(tmpdir(), "splitch-sdk-consumer-"));
 
 function run(command, args, options = {}) {
   execFileSync(command, args, {
     cwd: options.cwd ?? consumerRoot,
-    stdio: "inherit",
+    stdio: options.stdio ?? "inherit",
     env: { ...process.env, ...options.env },
   });
 }
 
+function runTypecheck(cwd = consumerRoot) {
+  run("npx", ["tsc", "-p", "tsconfig.json"], { cwd });
+}
+
+function expectTypecheckFailure(cwd, label) {
+  try {
+    execFileSync("npx", ["tsc", "-p", "tsconfig.json"], {
+      cwd,
+      stdio: "pipe",
+      encoding: "utf8",
+    });
+    throw new Error(`${label}: expected TypeScript to reject the stale snippet`);
+  } catch (error) {
+    if (error instanceof Error && "status" in error && error.status === 2) {
+      return;
+    }
+    throw error;
+  }
+}
+
+function writeConsumerTsconfig(include, cwd = consumerRoot) {
+  writeFileSync(
+    join(cwd, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          strict: true,
+          noEmit: true,
+          skipLibCheck: true,
+        },
+        include,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 try {
+  execFileSync("node", ["--test", "scripts/extract-quickstart-snippet.test.mjs"], {
+    cwd: packageRoot,
+    stdio: "inherit",
+  });
+
+  const quickstartSnippet = extractQuickstartSdkSnippet(readFileSync(quickstartPath, "utf8"));
+
   run("npx", ["tsup", "--config", "tsup.contract-surface.config.ts"], { cwd: packageRoot });
   run("npx", ["tsup", "--config", "tsup.config.ts"], { cwd: packageRoot });
 
@@ -34,6 +90,7 @@ try {
     throw new Error(`pack-release did not report a tarball path:\n${packOutput}`);
   }
   const tarballPath = resolve(consumerRoot, tarballName);
+  const installCommand = `npm install ${tarballPath}`;
 
   writeFileSync(
     join(consumerRoot, "package.json"),
@@ -63,39 +120,34 @@ console.log("runtime import ok");
   );
 
   writeFileSync(
-    join(consumerRoot, "types.ts"),
-    `import { createSplitchClient, type ResolutionDetails, type VariantValue } from "@splitch/sdk";
-
-export async function smoke(): Promise<VariantValue> {
-  const client = createSplitchClient({ clientKey: "ck_smoke" });
-  const details: ResolutionDetails = await client.evaluateDetails("flag", {
-    targetingKey: "user-1",
-  });
-  return details.value;
-}
-`,
+    join(consumerRoot, "quickstart-snippet.ts"),
+    wrapQuickstartSnippetForTypecheck(quickstartSnippet),
   );
-
-  writeFileSync(
-    join(consumerRoot, "tsconfig.json"),
-    JSON.stringify(
-      {
-        compilerOptions: {
-          module: "NodeNext",
-          moduleResolution: "NodeNext",
-          strict: true,
-          noEmit: true,
-          skipLibCheck: true,
-        },
-        include: ["types.ts"],
-      },
-      null,
-      2,
-    ),
-  );
+  writeConsumerTsconfig(["quickstart-snippet.ts"]);
 
   run("node", ["runtime.mjs"]);
-  run("npx", ["tsc", "-p", "tsconfig.json"]);
+  runTypecheck();
+
+  const staleRoot = mkdtempSync(join(tmpdir(), "splitch-sdk-consumer-stale-"));
+  try {
+    writeFileSync(
+      join(staleRoot, "package.json"),
+      JSON.stringify(
+        { name: "splitch-sdk-consumer-stale", private: true, type: "module" },
+        null,
+        2,
+      ),
+    );
+    run("npm", ["install", tarballPath, "typescript@6.0.3", "zod@4.4.3"], { cwd: staleRoot });
+    writeFileSync(
+      join(staleRoot, "stale-quickstart-snippet.ts"),
+      wrapQuickstartSnippetForTypecheck(stripIdempotencyKeyFromSnippet(quickstartSnippet)),
+    );
+    writeConsumerTsconfig(["stale-quickstart-snippet.ts"], staleRoot);
+    expectTypecheckFailure(staleRoot, "quickstart drift guard");
+  } finally {
+    rmSync(staleRoot, { recursive: true, force: true });
+  }
 
   const packedManifest = JSON.parse(
     readFileSync(join(consumerRoot, "node_modules/@splitch/sdk/package.json"), "utf8"),
@@ -125,6 +177,7 @@ export async function smoke(): Promise<VariantValue> {
   );
   assertReleaseBundleJs(bundleJs);
 
+  console.log(`dogfood install: ${installCommand}`);
   console.log("consumer smoke passed");
 } finally {
   rmSync(consumerRoot, { recursive: true, force: true });
