@@ -53,6 +53,7 @@ export function makeAppForRepo(
   h: Pick<FlagDefinitionHarness, "bindings" | "signer">,
   repo: Repository,
   configStore?: ConfigStoreAccess,
+  credentialStore: KVNamespace = h.bindings.credentialKv,
 ): Hono {
   const verifier = makeJwksVerifier({
     fetchJwks: async () => h.signer.jwks,
@@ -67,7 +68,7 @@ export function makeAppForRepo(
     rateLimiter: allowLimiter,
     repo,
     configStore,
-    credentialStore: h.bindings.credentialKv,
+    credentialStore,
     nowIso: () => NOW_ISO,
   });
 }

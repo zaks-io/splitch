@@ -89,6 +89,12 @@ export class ConfigStoreDurableObject
     return this.store().resyncFlagConfig(input);
   }
 
+  deleteFlagConfig(
+    input: Parameters<ConfigStoreWriter["deleteFlagConfig"]>[0],
+  ): ReturnType<ConfigStoreWriter["deleteFlagConfig"]> {
+    return this.store().deleteFlagConfig(input);
+  }
+
   override async fetch(request: Request): Promise<Response> {
     if (request.method !== "GET" || request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
       return new Response("expected WebSocket upgrade", { status: 426 });

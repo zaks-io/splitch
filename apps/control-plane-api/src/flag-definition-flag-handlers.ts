@@ -6,11 +6,12 @@ import { randomHex } from "./credential-cache";
 import { initializeFlagConfigsForFlag, removeFlagConfigsForFlag } from "./flag-config-lifecycle";
 import {
   flagNotFound,
+  resourceNotEmpty,
   runningExperimentError,
   validationError,
   validationErrors,
 } from "./flag-definition-errors";
-import { runningExperimentForFlag } from "./flag-definition-guards";
+import { experimentReferencingFlag } from "./flag-definition-guards";
 import {
   type FlagDefinitionDeps,
   type FlagRow,
@@ -257,6 +258,21 @@ async function flagDeleteBlocker(
   requestId: string,
 ): Promise<Response | null> {
   const envs = await deps.repo.identity.listEnvironments(loaded.scope);
-  const running = await runningExperimentForFlag(deps.repo, loaded.appId, loaded.flag.id, envs);
-  return running ? runningExperimentError(running, "DELETE_FLAG", requestId) : null;
+  const reference = await experimentReferencingFlag(deps.repo, loaded.appId, loaded.flag.id, envs);
+  if (!reference) return null;
+  if (reference.status === "running") {
+    return runningExperimentError(
+      { experimentId: reference.experimentId, runId: reference.runId ?? "unknown" },
+      "DELETE_FLAG",
+      requestId,
+    );
+  }
+  return resourceNotEmpty(
+    "flag",
+    loaded.flag.id,
+    "experiment",
+    1,
+    "DELETE_FLAG",
+    requestId,
+  );
 }

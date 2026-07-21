@@ -1,10 +1,14 @@
 import { appScope, envScope, type Repository } from "@splitch/db";
+import { deleteEnvironmentCredentials } from "./app-environment-credentials";
+import type { AppEnvironmentDeps } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
 import type { ConfigStoreAccess } from "./config-store-do";
 
 export interface FlagConfigLifecycleDeps {
   repo: Repository;
   configStore?: ConfigStoreAccess;
+  credentialStore?: KVNamespace;
+  credentialCacheWriter?: AppEnvironmentDeps["credentialCacheWriter"];
   nowIso?: () => string;
 }
 
@@ -55,12 +59,50 @@ export async function removeFlagConfigsForFlag(
   appId: string,
   flagId: string,
 ): Promise<void> {
+  const flag = await deps.repo.flags.getFlag(appScope(appId), flagId);
+  if (!flag) return;
+
   const environments = await deps.repo.identity.listEnvironments(appScope(appId));
   for (const environment of environments) {
-    const scope = envScope(appId, environment.id);
-    await deps.repo.flags.removeTargetingRules(scope, flagId);
-    await deps.repo.flags.removeFlagConfig(scope, flagId);
+    await removeFlagConfigAt(deps, appId, environment.id, flagId, flag.key);
   }
+}
+
+export async function removeFlagConfigsForEnvironment(
+  deps: FlagConfigLifecycleDeps,
+  appId: string,
+  environmentId: string,
+): Promise<void> {
+  const scope = envScope(appId, environmentId);
+  const configs = await deps.repo.flags.flagConfigs.findMany(scope);
+  for (const config of configs) {
+    const flag = await deps.repo.flags.getFlag(appScope(appId), config.flagId);
+    if (!flag) continue;
+    await removeFlagConfigAt(deps, appId, environmentId, config.flagId, flag.key);
+  }
+}
+
+export async function rollbackCreatedEnvironment(
+  deps: FlagConfigLifecycleDeps,
+  appId: string,
+  environmentId: string,
+): Promise<void> {
+  await removeFlagConfigsForEnvironment(deps, appId, environmentId);
+  await deleteEnvironmentCredentials(deps, appId, environmentId);
+  await deps.repo.identity.deleteEnvironment(appScope(appId), environmentId);
+}
+
+async function removeFlagConfigAt(
+  deps: FlagConfigLifecycleDeps,
+  appId: string,
+  environmentId: string,
+  flagId: string,
+  flagKey: string,
+): Promise<void> {
+  await purgeFlagConfigKv(deps, appId, environmentId, flagId, flagKey);
+  const scope = envScope(appId, environmentId);
+  await deps.repo.flags.removeTargetingRules(scope, flagId);
+  await deps.repo.flags.removeFlagConfig(scope, flagId);
 }
 
 async function ensureInitialFlagConfig(
@@ -101,6 +143,27 @@ async function syncFlagConfigToKv(
   if (!result.ok) {
     throw new Error(
       `flag-config lifecycle: KV resync failed for flag ${flagId} in ${environmentId}`,
+    );
+  }
+}
+
+async function purgeFlagConfigKv(
+  deps: FlagConfigLifecycleDeps,
+  appId: string,
+  environmentId: string,
+  flagId: string,
+  flagKey: string,
+): Promise<void> {
+  if (!deps.configStore) return;
+  const result = await deps.configStore.writerFor(appId, environmentId).deleteFlagConfig({
+    appId,
+    environmentId,
+    flagId,
+    flagKey,
+  });
+  if (!result.ok) {
+    throw new Error(
+      `flag-config lifecycle: KV purge failed for flag ${flagId} in ${environmentId}`,
     );
   }
 }

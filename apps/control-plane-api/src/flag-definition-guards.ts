@@ -31,14 +31,38 @@ export async function runningExperimentForFlag(
   flagId: string,
   envs: EnvironmentRows,
 ): Promise<RunningBlocker | null> {
+  const reference = await experimentReferencingFlag(repo, appId, flagId, envs);
+  if (!reference || reference.status !== "running") return null;
+  return { experimentId: reference.experimentId, runId: reference.runId ?? "unknown" };
+}
+
+export interface ExperimentReference {
+  experimentId: string;
+  status: string;
+  runId?: string;
+}
+
+export async function experimentReferencingFlag(
+  repo: Repository,
+  appId: string,
+  flagId: string,
+  envs: EnvironmentRows,
+): Promise<ExperimentReference | null> {
   for (const env of envs) {
     const scope = envScope(appId, env.id);
-    const experiment = await repo.experiments.findRunningExperimentForFlag(scope, flagId);
-    if (!experiment) continue;
-    const run = experiment.liveRunId
-      ? await repo.experiments.getRun(scope, experiment.liveRunId)
-      : null;
-    return { experimentId: experiment.id, runId: run?.id ?? experiment.liveRunId ?? "unknown" };
+    const experiments = await repo.experiments.listExperiments(scope);
+    const match = experiments.find((experiment) => experiment.flagId === flagId);
+    if (!match) continue;
+
+    if (match.status === "running") {
+      const run = match.liveRunId ? await repo.experiments.getRun(scope, match.liveRunId) : null;
+      return {
+        experimentId: match.id,
+        status: match.status,
+        runId: run?.id ?? match.liveRunId ?? "unknown",
+      };
+    }
+    return { experimentId: match.id, status: match.status };
   }
   return null;
 }

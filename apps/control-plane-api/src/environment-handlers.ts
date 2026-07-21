@@ -15,7 +15,10 @@ import {
   runningExperimentError,
 } from "./app-environment-model";
 import { provisionClientKey } from "./client-key-provisioning";
-import { initializeFlagConfigsForEnvironment } from "./flag-config-lifecycle";
+import {
+  initializeFlagConfigsForEnvironment,
+  rollbackCreatedEnvironment,
+} from "./flag-config-lifecycle";
 import { objectBody, pathParam } from "./handler-input";
 
 export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
@@ -50,16 +53,16 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       });
       try {
         await initializeFlagConfigsForEnvironment(deps, appId, environment.id);
+        await provisionClientKey(deps, {
+          appId,
+          environmentId: environment.id,
+          organizationId: app.organizationId,
+          scope: envScope(appId, environment.id),
+        });
       } catch (cause) {
-        await deps.repo.identity.deleteEnvironment(appScope(appId), environment.id);
+        await rollbackCreatedEnvironment(deps, appId, environment.id);
         throw cause;
       }
-      await provisionClientKey(deps, {
-        appId,
-        environmentId: environment.id,
-        organizationId: app.organizationId,
-        scope: envScope(appId, environment.id),
-      });
       return Response.json(environmentResponse(environment));
     },
 
