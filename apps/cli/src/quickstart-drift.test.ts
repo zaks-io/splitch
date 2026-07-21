@@ -1,25 +1,24 @@
 import { CreateFlagRequestSchema } from "@splitch/contracts";
 import { writeFile } from "node:fs/promises";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
+import { EXIT_API, EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { parseBooleanVariantsFlag } from "./flag-create-input.js";
 import {
-  authHeader,
-  clientKeyMaterial,
-  flagConfigResponse,
-  FakeCliTransport,
-  storedCredential,
-  verifyResolutionDetails,
-} from "./test-fixtures.js";
+  findFlagByKey,
+  makeQuickstartHarness,
+  provisionEnvironmentFlagConfigs,
+  quickstartOrigins,
+  storedHarnessCredential,
+  type QuickstartHarness,
+} from "./quickstart-local-harness.js";
+import { authHeader, FakeCliTransport, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
 const quickstartCreateArgs = [
   "flags",
   "create",
   "--json",
-  "--app",
-  "app_1",
   "--key",
   "new-checkout",
   "--variants",
@@ -57,7 +56,7 @@ describe("quickstart flag create drift", () => {
       },
     ]);
 
-    const code = await runCli([...quickstartCreateArgs], {
+    const code = await runCli([...quickstartCreateArgs, "--app", "app_1"], {
       credentialPath,
       fetch: transport.fetch,
     });
@@ -101,86 +100,91 @@ describe("quickstart flag create drift", () => {
     expect(transport.requests).toHaveLength(0);
   });
 
-  it("executes create, configure, and verify from the quickstart sequence", async () => {
-    const { credentialPath } = await makeTempHome();
-    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    const transport = new FakeCliTransport([
-      {
-        match: (request) => request.url.includes("/apps/app_1/flags") && request.method === "POST",
-        status: 200,
-        body: createdFlag,
-      },
-      {
-        match: (request) => request.url.includes("/config") && request.method === "PATCH",
-        status: 200,
-        body: flagConfigResponse,
-      },
-      {
-        match: (request) => request.url.includes("/client-key"),
-        status: 200,
-        body: {
-          keyId: "ck_1",
-          appId: "app_1",
-          environmentId: "env_1",
-          keyMaterial: clientKeyMaterial,
-          isOriginOpen: true,
-          createdAt: "2026-07-03T00:00:00.000Z",
-        },
-      },
-      {
-        match: (request) => request.url.includes("/api/sdk/verify"),
-        status: 200,
-        body: verifyResolutionDetails,
-      },
-    ]);
+  describe("local control-plane lifecycle", () => {
+    let harness: QuickstartHarness;
 
-    const createCode = await runCli([...quickstartCreateArgs], {
-      credentialPath,
-      fetch: transport.fetch,
+    beforeEach(async () => {
+      harness = await makeQuickstartHarness();
     });
-    expect(createCode).toBe(EXIT_OK);
 
-    const configureCode = await runCli(
-      [
-        "flag-config",
-        "update",
-        "--json",
-        "--confirm",
-        "--app",
-        "app_1",
-        "--env",
-        "env_1",
-        "flag_new_checkout",
-        "--enabled",
-        "true",
-      ],
-      { credentialPath, fetch: transport.fetch },
-    );
-    expect(configureCode).toBe(EXIT_OK);
+    afterEach(async () => {
+      await harness.dispose();
+    });
 
-    const verifyCode = await runCli(
-      [
-        "flags",
-        "verify",
-        "--json",
-        "--app",
-        "app_1",
-        "--env",
-        "env_1",
-        "new-checkout",
-        "--targeting-key",
-        "test-user-1",
-      ],
-      { credentialPath, fetch: transport.fetch },
-    );
-    expect(verifyCode).toBe(EXIT_OK);
+    it("executes create, promote, and verify from the quickstart sequence", async () => {
+      const { credentialPath } = await makeTempHome();
+      await writeFile(credentialPath, `${JSON.stringify(storedHarnessCredential(harness))}\n`);
+      const cliOptions = {
+        credentialPath,
+        fetch: harness.routingFetch,
+        controlPlaneBaseUrl: quickstartOrigins.controlPlaneBaseUrl,
+        evaluationBaseUrl: quickstartOrigins.evaluationBaseUrl,
+      };
 
-    const verifyCall = transport.requests.find((request) =>
-      request.url.includes("/api/sdk/verify"),
-    );
-    expect(verifyCall?.body).toMatchObject({
-      flagKey: "new-checkout",
-      targetingKey: "test-user-1",
+      const createCode = await runCli(
+        [...quickstartCreateArgs, "--app", harness.appId],
+        cliOptions,
+      );
+      expect(createCode).toBe(EXIT_OK);
+
+      const flag = await findFlagByKey(harness, "new-checkout");
+
+      const configureCode = await runCli(
+        [
+          "flag-config",
+          "update",
+          "--json",
+          "--app",
+          harness.appId,
+          "--env",
+          harness.devEnvironmentId,
+          flag.id,
+          "--enabled",
+          "true",
+        ],
+        cliOptions,
+      );
+      expect(configureCode).toBe(EXIT_API);
+
+      await provisionEnvironmentFlagConfigs(harness, flag, {
+        devEnabled: true,
+        prodEnabled: false,
+      });
+
+      const promoteCode = await runCli(
+        [
+          "flags",
+          "promote",
+          "--json",
+          "--confirm",
+          "--app",
+          harness.appId,
+          "--env",
+          harness.prodEnvironmentId,
+          flag.id,
+          "--from-environment-id",
+          harness.devEnvironmentId,
+        ],
+        cliOptions,
+      );
+      expect(promoteCode).toBe(EXIT_OK);
+
+      const verifyCode = await runCli(
+        [
+          "flags",
+          "verify",
+          "--json",
+          "--app",
+          harness.appId,
+          "--env",
+          harness.devEnvironmentId,
+          "new-checkout",
+          "--targeting-key",
+          "test-user-1",
+        ],
+        cliOptions,
+      );
+      expect(verifyCode).toBe(EXIT_OK);
     });
   });
 });
