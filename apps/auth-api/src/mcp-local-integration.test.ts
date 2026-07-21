@@ -243,7 +243,12 @@ interface McpAccessTokenVerifier {
     authorization: string | null,
     expectedAudience: string,
     nowSeconds: number,
-  ): Promise<{ subject: string; scopes: string[]; authDoor?: string; demoExpiresAt?: string } | null>;
+  ): Promise<{
+    subject: string;
+    scopes: string[];
+    authDoor?: string;
+    demoExpiresAt?: string;
+  } | null>;
 }
 
 interface McpAccessTokenModule {
