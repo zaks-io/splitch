@@ -110,9 +110,7 @@ function assertUniqueBooleanValues(
   }
 }
 
-function resolveDefaultVariantName(
-  entries: ReadonlyArray<{ readonly name: string }>,
-): string {
+function resolveDefaultVariantName(entries: ReadonlyArray<{ readonly name: string }>): string {
   const falseAliases = entries.filter((entry) => FALSE_VARIANT_ALIASES.has(entry.name));
   const defaultName =
     falseAliases.length === 1
