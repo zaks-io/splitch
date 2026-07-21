@@ -36,7 +36,7 @@ describe("mcp tool membership gates", () => {
   it.each([
     ["flags_delete", "flag catalog deletes"],
     ["flag_variants_delete", "flag variant deletes"],
-  ] as const)("requires app admin for %s (%s), not app member", (operationId) => {
+  ] as const)("requires app admin for %s (%s), not app member", (operationId, _description) => {
     const gate = membershipGatePatterns(getRouteMembershipGate(operationId));
     expect(gate).toEqual(["app:admin"]);
     expect(scopeSatisfiesMembershipGate("app:app_local:member", gate[0] as string)).toBe(false);
@@ -48,7 +48,7 @@ describe("mcp tool membership gates", () => {
     ["segments_delete", "segment deletes"],
     ["experiments_delete", "experiment deletes"],
     ["metrics_delete", "metric deletes"],
-  ] as const)("requires app admin for %s (%s), not app member", (operationId) => {
+  ] as const)("requires app admin for %s (%s), not app member", (operationId, _description) => {
     const gate = membershipGatePatterns(getRouteMembershipGate(operationId));
     expect(gate).toEqual(["app:admin"]);
     expect(scopeSatisfiesMembershipGate("app:app_local:member", gate[0] as string)).toBe(false);
