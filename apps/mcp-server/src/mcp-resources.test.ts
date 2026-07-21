@@ -192,6 +192,10 @@ describe("MCP resources discovery", () => {
       gate: ["org:admin"],
       grantedBy: [],
     });
+    expect(payload.tools.find((tool) => tool.name === "flags_delete")).toMatchObject({
+      gate: ["app:admin"],
+      grantedBy: ["app:app_local:admin"],
+    });
   });
 
   it("performs zero writes while reading every resource", async () => {

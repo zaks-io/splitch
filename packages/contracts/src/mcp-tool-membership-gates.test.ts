@@ -32,4 +32,27 @@ describe("mcp tool membership gates", () => {
     expect(scopeSatisfiesMembershipGate("app:app_local:admin", updateGate[0] as string)).toBe(true);
     expect(scopeSatisfiesMembershipGate("app:app_local:owner", deleteGate[0] as string)).toBe(true);
   });
+
+  it.each([
+    ["flags_delete", "flag catalog deletes"],
+    ["flag_variants_delete", "flag variant deletes"],
+  ] as const)("requires app admin for %s (%s), not app member", (operationId) => {
+    const gate = membershipGatePatterns(getRouteMembershipGate(operationId));
+    expect(gate).toEqual(["app:admin"]);
+    expect(scopeSatisfiesMembershipGate("app:app_local:member", gate[0] as string)).toBe(false);
+    expect(scopeSatisfiesMembershipGate("app:app_local:admin", gate[0] as string)).toBe(true);
+    expect(scopeSatisfiesMembershipGate("app:app_local:owner", gate[0] as string)).toBe(true);
+  });
+
+  it.each([
+    ["segments_delete", "segment deletes"],
+    ["experiments_delete", "experiment deletes"],
+    ["metrics_delete", "metric deletes"],
+  ] as const)("requires app admin for %s (%s), not app member", (operationId) => {
+    const gate = membershipGatePatterns(getRouteMembershipGate(operationId));
+    expect(gate).toEqual(["app:admin"]);
+    expect(scopeSatisfiesMembershipGate("app:app_local:member", gate[0] as string)).toBe(false);
+    expect(scopeSatisfiesMembershipGate("app:app_local:admin", gate[0] as string)).toBe(true);
+    expect(scopeSatisfiesMembershipGate("app:app_local:owner", gate[0] as string)).toBe(true);
+  });
 });
