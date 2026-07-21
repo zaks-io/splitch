@@ -18,7 +18,7 @@ import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
-export const ORG = {
+const ORG = {
   orgId: "org_app_env_credential_revoke",
   orgName: "App Env Credential Revoke Co",
   appId: "app_existing_credential_revoke",
