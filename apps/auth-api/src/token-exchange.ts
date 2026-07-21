@@ -143,6 +143,53 @@ function assertionAuthDoor(claims: Record<string, unknown>): AssertionAuthDoor {
   return claims.auth_door;
 }
 
+function demoExpiresAtClaim(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+interface ExchangedAssertion {
+  sub: string;
+  scopes: string[];
+  authDoor: AssertionAuthDoor;
+  demoExpiresAt?: string;
+}
+
+function exchangedAssertionClaims(
+  claims: Record<string, unknown>,
+  nowSeconds: number,
+): ExchangedAssertion {
+  if (claims.typ !== "identity_assertion" || typeof claims.sub !== "string") {
+    throw new OAuthError("invalid_grant", "not a valid identity_assertion");
+  }
+  if (typeof claims.exp !== "number" || claims.exp < nowSeconds) {
+    throw new OAuthError("invalid_grant", "identity_assertion is missing exp or has expired");
+  }
+  const demoExpiresAt = demoExpiresAtClaim(claims.demo_expires_at);
+  return {
+    sub: claims.sub,
+    scopes: Array.isArray(claims.scopes) ? (claims.scopes as string[]) : [],
+    authDoor: assertionAuthDoor(claims),
+    ...(demoExpiresAt ? { demoExpiresAt } : {}),
+  };
+}
+
+function accessTokenClaimsForExchange(
+  exchanged: ExchangedAssertion,
+  options: { issuer: string; audience: string; nowSeconds: number },
+): AccessTokenClaims {
+  return {
+    typ: "access_token",
+    sub: exchanged.sub,
+    iss: options.issuer,
+    aud: options.audience,
+    iat: options.nowSeconds,
+    exp: options.nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
+    scopes: exchanged.scopes,
+    auth_door: exchanged.authDoor,
+    ...(exchanged.demoExpiresAt ? { demo_expires_at: exchanged.demoExpiresAt } : {}),
+  };
+}
+
 async function verifyAndDecode(token: string, secret: string): Promise<Record<string, unknown>> {
   const parts = token.split(".");
   if (parts.length !== 3) {
@@ -221,37 +268,19 @@ export function makeTokenSigner(opts: {
         iat: nowSeconds,
         exp: nowSeconds + ASSERTION_TTL_SECONDS,
         auth_door: authDoor,
-        ...(demoExpiresAt ? { demo_expires_at: demoExpiresAt } : {}),
+        ...(demoExpiresAtClaim(demoExpiresAt) ? { demo_expires_at: demoExpiresAt } : {}),
       };
       return signHmacJwt(claims, opts.assertionSecret);
     },
 
     async exchangeForAccessToken(assertion, nowSeconds, audience = opts.controlPlaneAudience) {
       const claims = await verifyAndDecode(assertion, opts.assertionSecret);
-      if (claims.typ !== "identity_assertion" || typeof claims.sub !== "string") {
-        throw new OAuthError("invalid_grant", "not a valid identity_assertion");
-      }
-      const authDoor = assertionAuthDoor(claims);
-      // exp is REQUIRED: a missing exp must not mean never-expires (fail-loud).
-      if (typeof claims.exp !== "number" || claims.exp < nowSeconds) {
-        throw new OAuthError("invalid_grant", "identity_assertion is missing exp or has expired");
-      }
-      const scopes = Array.isArray(claims.scopes) ? (claims.scopes as string[]) : [];
-      const demoExpiresAt =
-        typeof claims.demo_expires_at === "string" && claims.demo_expires_at.length > 0
-          ? claims.demo_expires_at
-          : undefined;
-      const access: AccessTokenClaims = {
-        typ: "access_token",
-        sub: claims.sub,
-        iss: opts.issuer,
-        aud: audience,
-        iat: nowSeconds,
-        exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
-        scopes,
-        auth_door: authDoor,
-        ...(demoExpiresAt ? { demo_expires_at: demoExpiresAt } : {}),
-      };
+      const exchanged = exchangedAssertionClaims(claims, nowSeconds);
+      const access = accessTokenClaimsForExchange(exchanged, {
+        issuer: opts.issuer,
+        audience,
+        nowSeconds,
+      });
       return signAccessJwt(access, opts.accessSecret, accessTokenTrustContract);
     },
 
