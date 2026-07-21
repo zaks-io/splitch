@@ -37,7 +37,7 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       const app = await deps.repo.identity.getApp(appId);
       if (!app) return appNotFound(requestId);
 
-      const writeError = await requireAppWrite(deps, appId, principal.id, requestId);
+      const writeError = await requireAppWrite(deps, appId, principal, requestId);
       if (writeError) return writeError;
 
       const body = objectBody(input);
@@ -74,7 +74,7 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       const app = await deps.repo.identity.getApp(appId);
       if (!app) return appNotFound(requestId);
 
-      const writeError = await requireAppWrite(deps, appId, principal.id, requestId);
+      const writeError = await requireAppWrite(deps, appId, principal, requestId);
       if (writeError) return writeError;
 
       const body = objectBody(input);
@@ -99,7 +99,7 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       const app = await deps.repo.identity.getApp(appId);
       if (!app) return appNotFound(requestId);
 
-      const deleteError = await requireAppDelete(deps, appId, principal.id, requestId);
+      const deleteError = await requireAppDelete(deps, appId, principal, requestId);
       if (deleteError) return deleteError;
 
       return deleteEnvironmentAfterAuth(deps, appId, environmentId, requestId);

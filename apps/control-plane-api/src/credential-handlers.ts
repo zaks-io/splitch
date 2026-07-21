@@ -31,7 +31,7 @@ type ApiKeyRow = Awaited<ReturnType<Repository["credentials"]["listApiKeys"]>>[n
 export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
   return {
     async getClientKey({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const adminError = requireCredentialAdmin(input, principal.scopes, requestId);
+      const adminError = await requireCredentialAdmin(deps, input, principal, requestId);
       if (adminError) return adminError;
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
@@ -45,7 +45,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       principal,
       requestId,
     }: HandlerArgs<unknown>): Promise<Response> {
-      const adminError = requireCredentialAdmin(input, principal.scopes, requestId);
+      const adminError = await requireCredentialAdmin(deps, input, principal, requestId);
       if (adminError) return adminError;
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
@@ -70,7 +70,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       principal,
       requestId,
     }: HandlerArgs<unknown>): Promise<Response> {
-      const adminError = requireCredentialAdmin(input, principal.scopes, requestId);
+      const adminError = await requireCredentialAdmin(deps, input, principal, requestId);
       if (adminError) return adminError;
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
@@ -94,7 +94,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
     },
 
     async listApiKeys({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const adminError = requireCredentialAdmin(input, principal.scopes, requestId);
+      const adminError = await requireCredentialAdmin(deps, input, principal, requestId);
       if (adminError) return adminError;
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
@@ -104,7 +104,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
     },
 
     async createApiKey({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const adminError = requireCredentialAdmin(input, principal.scopes, requestId);
+      const adminError = await requireCredentialAdmin(deps, input, principal, requestId);
       if (adminError) return adminError;
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
@@ -127,7 +127,7 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
     },
 
     async revokeApiKey({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
-      const adminError = requireCredentialAdmin(input, principal.scopes, requestId);
+      const adminError = await requireCredentialAdmin(deps, input, principal, requestId);
       if (adminError) return adminError;
       const ctx = await credentialContext(deps, input, requestId);
       if (ctx instanceof Response) return ctx;
@@ -150,11 +150,12 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
 }
 
 function requireCredentialAdmin(
+  deps: CredentialHandlerDeps,
   input: unknown,
-  heldScopes: readonly string[],
+  actor: { id: string; scopes: readonly string[] },
   requestId: string,
-): Response | null {
-  return requireAppAdmin(pathParam(input, "appId"), heldScopes, requestId);
+): Promise<Response | null> {
+  return requireAppAdmin(deps, pathParam(input, "appId"), actor, requestId);
 }
 
 async function credentialContext(

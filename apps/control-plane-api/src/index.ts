@@ -7,6 +7,11 @@ import {
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
+import {
+  makeDurableMcpDelegationReplayGuard,
+  makeMcpDelegationAuthResolver,
+  McpDelegationReplayDurableObject,
+} from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import { authJwksUri } from "./auth-jwks-config";
 import { type ControlPlaneAuthOptions, makeControlPlaneAuthResolver } from "./auth-resolver";
@@ -54,6 +59,13 @@ export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv>
   }
 }
 
+/** Binding-only entrypoint for one-operation MCP delegations. */
+export class McpEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
+  override async fetch(request: Request): Promise<Response> {
+    return handleRequest(request, this.env, this.ctx, "mcp");
+  }
+}
+
 /** Binding-only V2 entrypoint used by the Control Panel for signed least-privilege delegation. */
 export class SignedControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
   override async fetch(request: Request): Promise<Response> {
@@ -65,6 +77,7 @@ export class SignedControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneA
 }
 
 type PanelProtocol = "none" | "signed" | "bounded-session";
+type AuthMode = PanelProtocol | "mcp";
 async function handlePanelExperimentsRequest(
   request: Request,
   env: ControlPlaneApiEnv,
@@ -120,7 +133,7 @@ async function handleRequest(
   request: Request,
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
-  panelProtocol: PanelProtocol = "none",
+  authMode: AuthMode = "none",
 ): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/health" || url.pathname === "/") {
@@ -150,13 +163,24 @@ async function handleRequest(
   });
 
   const repo = createRepository(env.DB);
-  const authResolver = makeControlPlaneAuthResolver(
+  const panelProtocol = authMode === "mcp" ? "none" : authMode;
+  const panelAuthResolver = makeControlPlaneAuthResolver(
     {
       verifier,
       sessions: makeSessionStore(env.SESSION_STORE),
     },
     controlPanelAuthOptions(env, repo, panelProtocol),
   );
+  const authResolver =
+    authMode === "mcp"
+      ? makeMcpDelegationAuthResolver({
+          owner: "control-plane-api",
+          secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
+          replayGuard: makeDurableMcpDelegationReplayGuard(
+            requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
+          ),
+        })
+      : panelAuthResolver;
   const panelExperiments = await handleSignedPanelExperiments(
     request,
     env,
@@ -278,8 +302,23 @@ export {
   ConfigStoreDurableObject,
   CredentialCacheBackfillDurableObject,
   CredentialCacheWriterDurableObject,
+  McpDelegationReplayDurableObject,
   PanelDelegationReplayDurableObject,
 };
+
+function requiredMcpDelegationSecret(secret: string | undefined): string {
+  if (!secret) {
+    throw new Error("control-plane-api: MCP_CONTROL_PLANE_DELEGATION_SECRET is required");
+  }
+  return secret;
+}
+
+function requiredMcpReplayBinding(
+  binding: ControlPlaneApiEnv["MCP_DELEGATION_REPLAY"],
+): NonNullable<ControlPlaneApiEnv["MCP_DELEGATION_REPLAY"]> {
+  if (!binding) throw new Error("control-plane-api: MCP_DELEGATION_REPLAY is required");
+  return binding;
+}
 
 function requiredPanelDelegationSecret(env: ControlPlaneApiEnv): string {
   if (env.CONTROL_PANEL_DELEGATION_SECRET) return env.CONTROL_PANEL_DELEGATION_SECRET;

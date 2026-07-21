@@ -5,23 +5,29 @@
  * (`flags`, `experiments`, …). This adapter exists for dynamic MCP tool execution
  * where the tool name is an `operationId` string resolved at runtime.
  */
-import type { ApiRouteContract, ErrorResponse } from "@splitch/contracts";
-import { getRoute } from "@splitch/contracts";
+import type { ApiRouteContract, ErrorResponse, McpDelegationActor } from "@splitch/contracts";
+import { createMcpDelegationHeader, getRoute, MCP_DELEGATION_HEADER } from "@splitch/contracts";
 import { type ControlPlaneHcOptions, resolveControlPlaneUrl, withAuthorization } from "./hc-client";
 import {
-  parseControlPlaneResponse,
   type ControlPlaneOperationOptions,
   type ControlPlaneOperationResult,
+  parseControlPlaneResponse,
 } from "./operation-result";
 
-export interface McpOperationAdapterOptions extends ControlPlaneHcOptions {}
+export interface McpOperationAdapterOptions extends ControlPlaneHcOptions {
+  delegationSecret?: string;
+}
 
 export interface McpOperationAdapter {
   callOperationById(
     operationId: string,
     input: unknown,
-    options?: ControlPlaneOperationOptions,
+    options?: McpOperationCallOptions,
   ): Promise<ControlPlaneOperationResult>;
+}
+
+export interface McpOperationCallOptions extends ControlPlaneOperationOptions {
+  delegation?: McpDelegationActor;
 }
 
 export function createMcpOperationAdapter(
@@ -30,20 +36,70 @@ export function createMcpOperationAdapter(
   const requestFetch = options.fetch ?? fetch;
 
   return {
-    async callOperationById(operationId, input, callOptions) {
+    async callOperationById(operationId, input, callOptions: McpOperationCallOptions | undefined) {
       const route = getRoute(operationId);
       if (!route) {
         throw new Error(`control-plane-sdk: unknown operation "${operationId}"`);
       }
 
       const hcOptions = withAuthorization(options, callOptions);
-      const response = await requestFetch(
-        buildRequest(route, new URL(options.baseUrl), input, hcOptions.authorization),
+      const request = buildRequest(
+        route,
+        new URL(options.baseUrl),
+        input,
+        callOptions?.delegation ? null : hcOptions.authorization,
       );
+      if (callOptions?.delegation) {
+        request.headers.set(
+          MCP_DELEGATION_HEADER,
+          await createMcpDelegationHeader({
+            operationId,
+            actor: scopedDelegationActor(route, input, callOptions.delegation),
+            request,
+            secret: requiredDelegationSecret(options.delegationSecret),
+          }),
+        );
+      }
+      const response = await requestFetch(request);
 
       return parseControlPlaneResponse(response, operationId, route.output);
     },
   };
+}
+
+function scopedDelegationActor(
+  route: ApiRouteContract,
+  input: unknown,
+  actor: NonNullable<McpOperationCallOptions["delegation"]>,
+) {
+  const record = inputRecord(input);
+  const targets = [
+    route.path.includes(":orgId") ? scopeTarget("org", record.orgId) : null,
+    route.path.includes(":appId") ? scopeTarget("app", record.appId) : null,
+  ].filter((target): target is string => target !== null);
+  return {
+    subject: actor.subject,
+    scopes:
+      targets.length === 0
+        ? actor.scopes
+        : actor.scopes.filter((scope) =>
+            targets.some((target) => scopeMatchesTarget(scope, target)),
+          ),
+  };
+}
+
+function scopeTarget(kind: "org" | "app", id: unknown): string | null {
+  return typeof id === "string" ? `${kind}:${id}:` : null;
+}
+
+function scopeMatchesTarget(scope: string, target: string): boolean {
+  const role = scope.slice(target.length);
+  return scope.startsWith(target) && (role === "owner" || role === "admin" || role === "member");
+}
+
+function requiredDelegationSecret(secret: string | undefined): string {
+  if (!secret) throw new Error("control-plane-sdk: MCP delegation secret is required");
+  return secret;
 }
 
 function buildRequest(

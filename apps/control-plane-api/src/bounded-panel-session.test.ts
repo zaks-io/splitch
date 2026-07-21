@@ -18,7 +18,7 @@ describe("bounded predecessor Panel session protocol", () => {
       principal: {
         kind: "control-plane-token",
         id: "user_1",
-        scopes: ["org:org_1:member"],
+        scopes: ["org:org_1:owner"],
         orgId: "org_1",
         appId: null,
         environmentId: null,

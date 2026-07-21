@@ -1,3 +1,4 @@
+import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
 import type { ConfigStoreDurableObjectNamespace } from "./config-store-do";
 import type { CredentialCacheBackfillDurableObjectNamespace } from "./credential-cache-backfill-do";
 import type { CredentialCacheWriterDurableObjectNamespace } from "./credential-cache-writer-do";
@@ -27,6 +28,8 @@ export interface ControlPlaneApiEnv {
   CREDENTIAL_CACHE_WRITER: CredentialCacheWriterDurableObjectNamespace;
   CREDENTIAL_CACHE_BACKFILL: CredentialCacheBackfillDurableObjectNamespace;
   PANEL_DELEGATION_REPLAY: PanelDelegationReplayDurableObjectNamespace;
+  /** Strongly consistent one-use claims for binding-only MCP delegations. */
+  MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
   /** Cloudflare-native counter keyed by the authenticated Control Plane actor. */
   CONTROL_PLANE_ACTOR_RATE_LIMITER?: RateLimit;
   /** Binding-only Run-results reader on the Analysis Worker. */
@@ -40,6 +43,8 @@ export interface ControlPlaneApiEnv {
   CONTROL_PANEL_DELEGATION_SECRET?: string;
   CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT?: string;
   CONTROL_PANEL_LEGACY_SESSION_MODE?: string;
+  /** Verifies signed one-call credentials accepted only by McpEntrypoint. */
+  MCP_CONTROL_PLANE_DELEGATION_SECRET?: string;
   SPLITCH_LOCAL_E2E_RUN_ID?: string;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;

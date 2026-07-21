@@ -1,21 +1,22 @@
-import { OAuthError } from "./oauth-errors";
 import { accessTokenPrivateJwkFromSecret } from "./access-token-key";
+import { OAuthError } from "./oauth-errors";
 
 /**
  * identity_assertion mint + /oauth2/token exchange.
  *
  * Door A returns an `identity_assertion` (the durable client-side artifact,
  * ADR-0022), which the agent presents at `/oauth2/token` for a short-lived
- * control-plane access token. No refresh token on the ID-JAG path. Both are
- * HMAC-SHA256-signed JWTs for local fixtures. Hosted access tokens are RS256
- * JWTs backed by the Auth API JWKS route so downstream Workers can verify them.
+ * resource-bound access token. No refresh token on the ID-JAG path. Both are
+ * HMAC-SHA256 signs identity assertions and isolated unit-test access tokens.
+ * The real Auth Worker issues RS256 access tokens on every target, backed by
+ * the Auth API JWKS route so downstream Workers share one verification contract.
  *
  * The two token classes are signed with SEPARATE secrets (`assertionSecret` vs
  * `accessSecret`) so an identity_assertion can NEVER verify as a control-plane
  * Bearer (type confusion): even if the typ/aud guards were bypassed, the access
  * verifier keys off a secret the assertion was not signed with. Both also carry
- * a `typ` discriminator and the access token binds `aud` to the control-plane
- * origin — defense in depth (access-control-matrix.md).
+ * a `typ` discriminator and the access token binds `aud` to an explicitly
+ * allowed protected resource — defense in depth (access-control-matrix.md).
  */
 
 const ASSERTION_TTL_SECONDS = 15 * 60; // aligns with the Door B claim ceremony
@@ -28,8 +29,10 @@ interface AssertionClaims {
   iss: string;
   iat: number;
   exp: number;
+  auth_door: AssertionAuthDoor;
 }
 
+type AssertionAuthDoor = "id_jag" | "anonymous";
 type AccessTokenAuthDoor = "id_jag" | "anonymous" | "device_flow" | "client_credentials";
 
 export type AccessTokenTrustContract = "local-hs256" | "rs256-jwks";
@@ -131,6 +134,13 @@ function base64UrlToBytes(input: string): Uint8Array {
   return out;
 }
 
+function assertionAuthDoor(claims: Record<string, unknown>): AssertionAuthDoor {
+  if (claims.auth_door !== "anonymous" && claims.auth_door !== "id_jag") {
+    throw new OAuthError("invalid_grant", "identity_assertion auth door is invalid");
+  }
+  return claims.auth_door;
+}
+
 async function verifyAndDecode(token: string, secret: string): Promise<Record<string, unknown>> {
   const parts = token.split(".");
   if (parts.length !== 3) {
@@ -156,8 +166,13 @@ interface AssertionIdentity {
 }
 
 export interface TokenSigner {
-  mintIdentityAssertion(userId: string, scopes: string[], nowSeconds: number): Promise<string>;
-  exchangeForAccessToken(assertion: string, nowSeconds: number): Promise<string>;
+  mintIdentityAssertion(
+    userId: string,
+    scopes: string[],
+    authDoor: AssertionAuthDoor,
+    nowSeconds: number,
+  ): Promise<string>;
+  exchangeForAccessToken(assertion: string, nowSeconds: number, audience?: string): Promise<string>;
   /**
    * Verify a provisional identity_assertion and return its claims (the claim
    * ceremony needs the `sub` + pre-claim `scopes`, not an access token yet).
@@ -174,16 +189,16 @@ export interface TokenSigner {
     scopes: string[],
     authDoor: AccessTokenClaims["auth_door"],
     nowSeconds: number,
+    audience?: string,
   ): Promise<string>;
 }
 
 /**
  * Build the token signer bound to the two signing secrets + the issuer/audience
  * origins. The identity_assertion is signed with `assertionSecret`; the
- * control-plane access token with `accessSecret` (deliberately distinct — see the
- * type-confusion note above). `iss` is the auth-api origin; the access token `aud`
- * is the control-plane protected-resource origin so a downstream Worker can
- * assert it (matrix.md).
+ * access token with `accessSecret` (deliberately distinct — see the type-confusion
+ * note above). `iss` is the auth-api origin; callers select an already-approved
+ * protected-resource audience when minting.
  */
 export function makeTokenSigner(opts: {
   assertionSecret: string;
@@ -194,7 +209,7 @@ export function makeTokenSigner(opts: {
 }): TokenSigner {
   const accessTokenTrustContract = opts.accessTokenTrustContract ?? "local-hs256";
   return {
-    async mintIdentityAssertion(userId, scopes, nowSeconds) {
+    async mintIdentityAssertion(userId, scopes, authDoor, nowSeconds) {
       const claims: AssertionClaims = {
         typ: "identity_assertion",
         sub: userId,
@@ -202,15 +217,17 @@ export function makeTokenSigner(opts: {
         iss: opts.issuer,
         iat: nowSeconds,
         exp: nowSeconds + ASSERTION_TTL_SECONDS,
+        auth_door: authDoor,
       };
       return signHmacJwt(claims, opts.assertionSecret);
     },
 
-    async exchangeForAccessToken(assertion, nowSeconds) {
+    async exchangeForAccessToken(assertion, nowSeconds, audience = opts.controlPlaneAudience) {
       const claims = await verifyAndDecode(assertion, opts.assertionSecret);
       if (claims.typ !== "identity_assertion" || typeof claims.sub !== "string") {
         throw new OAuthError("invalid_grant", "not a valid identity_assertion");
       }
+      const authDoor = assertionAuthDoor(claims);
       // exp is REQUIRED: a missing exp must not mean never-expires (fail-loud).
       if (typeof claims.exp !== "number" || claims.exp < nowSeconds) {
         throw new OAuthError("invalid_grant", "identity_assertion is missing exp or has expired");
@@ -220,11 +237,11 @@ export function makeTokenSigner(opts: {
         typ: "access_token",
         sub: claims.sub,
         iss: opts.issuer,
-        aud: opts.controlPlaneAudience,
+        aud: audience,
         iat: nowSeconds,
         exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
         scopes,
-        auth_door: "id_jag",
+        auth_door: authDoor,
       };
       return signAccessJwt(access, opts.accessSecret, accessTokenTrustContract);
     },
@@ -243,12 +260,18 @@ export function makeTokenSigner(opts: {
       };
     },
 
-    async mintAccessToken(userId, scopes, authDoor, nowSeconds) {
+    async mintAccessToken(
+      userId,
+      scopes,
+      authDoor,
+      nowSeconds,
+      audience = opts.controlPlaneAudience,
+    ) {
       const access: AccessTokenClaims = {
         typ: "access_token",
         sub: userId,
         iss: opts.issuer,
-        aud: opts.controlPlaneAudience,
+        aud: audience,
         iat: nowSeconds,
         exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
         scopes,

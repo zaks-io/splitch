@@ -128,6 +128,7 @@ export async function registerAnonymous(
   const assertion = await deps.tokenSigner.mintIdentityAssertion(
     userId,
     preClaimScopes(appId),
+    "anonymous",
     Math.floor(nowMs / 1000),
   );
 

@@ -2,6 +2,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
+import {
+  allowMcpRevocations,
+  staticMcpTokenVerifier,
+  TEST_MCP_DELEGATION_SECRET,
+} from "./mcp-test-verifier";
 
 const service = "splitch-mcp-server";
 const token = "Bearer local-test-token";
@@ -56,7 +61,12 @@ describe("mcp server owner routing", () => {
           },
         },
       },
-      { controlPlaneBaseUrl, evaluationBaseUrl, platformTarget: "shared-preview" },
+      {
+        controlPlaneBaseUrl,
+        evaluationBaseUrl,
+        evaluationFetch: fetch,
+        platformTarget: "shared-preview",
+      },
     );
     const body = (await response.json()) as JsonRpcSuccess<ToolResult<typeof testEvaluation>>;
 
@@ -65,7 +75,7 @@ describe("mcp server owner routing", () => {
       {
         method: "POST",
         path: "/apps/app_local/envs/env_prod/flags/flag_checkout/test-eval",
-        authorization: token,
+        authorization: null,
         body: JSON.stringify({
           evaluationContext: {
             targetingKey: "user_1",
@@ -102,7 +112,7 @@ describe("mcp server owner routing", () => {
       {
         method: "GET",
         path: "/apps/app_local/audit-log?limit=10&environmentId=env_prod",
-        authorization: token,
+        authorization: null,
         body: "",
       },
     ]);
@@ -134,7 +144,7 @@ describe("mcp server owner routing", () => {
       {
         method: "GET",
         path: "/apps/app_local/audit-log?limit=10&environmentId=env_prod",
-        authorization: token,
+        authorization: null,
         body: "",
       },
     ]);
@@ -169,6 +179,7 @@ async function mcp(
   options: {
     controlPlaneBaseUrl?: string;
     evaluationBaseUrl?: string;
+    evaluationFetch?: typeof fetch;
     analysisBaseUrl?: string;
     analysisFetch?: typeof fetch;
     platformTarget?: string;
@@ -182,6 +193,14 @@ async function mcp(
     }),
     service,
     platformTarget: options.platformTarget ?? "local",
+    tokenVerifier: staticMcpTokenVerifier(),
+    revocations: allowMcpRevocations(),
+    controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    evaluationDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    analysisDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    controlPlaneFetch: options.controlPlaneBaseUrl ? fetch : undefined,
+    evaluationFetch: options.evaluationBaseUrl ? fetch : undefined,
+    analysisFetch: options.analysisBaseUrl ? fetch : undefined,
     ...options,
   });
 }

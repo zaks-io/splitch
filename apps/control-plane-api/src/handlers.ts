@@ -2,9 +2,9 @@ import type { TargetingRule } from "@splitch/contracts";
 import { envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
+import { requireAppAdmin } from "./app-authz";
 import type { ConfigStoreWriter } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-do";
-import { requireAppAdmin } from "./app-authz";
 import {
   confirmationRequired,
   flagConfigPatchGates,
@@ -12,7 +12,7 @@ import {
   readEnvironmentPolicy,
 } from "./flag-config-policy";
 import { objectBody, pathParam } from "./handler-input";
-import { makeOrgHandlers, type MemberProfileResolver } from "./org-handlers";
+import { type MemberProfileResolver, makeOrgHandlers } from "./org-handlers";
 
 /**
  * Minimal-but-real control-plane handlers for the mounted routes. They run AFTER
@@ -71,7 +71,7 @@ export function makeHandlers(deps: HandlerDeps) {
       const appId = pathParam(input, "appId");
       const environmentId = pathParam(input, "environmentId");
       const flagId = pathParam(input, "flagId");
-      const adminError = requireAppAdmin(appId, principal.scopes, requestId);
+      const adminError = await requireAppAdmin(deps, appId, principal, requestId);
       if (adminError) return adminError;
 
       const body = objectBody(input);
@@ -104,7 +104,7 @@ export function makeHandlers(deps: HandlerDeps) {
       const appId = pathParam(input, "appId");
       const environmentId = pathParam(input, "environmentId");
       const flagId = pathParam(input, "flagId");
-      const adminError = requireAppAdmin(appId, principal.scopes, requestId);
+      const adminError = await requireAppAdmin(deps, appId, principal, requestId);
       if (adminError) return adminError;
 
       const body = objectBody(input);
@@ -140,7 +140,7 @@ export function makeHandlers(deps: HandlerDeps) {
       const appId = pathParam(input, "appId");
       const targetEnvironmentId = pathParam(input, "targetEnvironmentId");
       const flagId = pathParam(input, "flagId");
-      const adminError = requireAppAdmin(appId, principal.scopes, requestId);
+      const adminError = await requireAppAdmin(deps, appId, principal, requestId);
       if (adminError) return adminError;
 
       const body = objectBody(input);

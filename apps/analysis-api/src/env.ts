@@ -1,7 +1,11 @@
+import type { McpDelegationReplayDurableObjectNamespace } from "@splitch/worker-runtime";
+
 export interface AnalysisApiEnv {
   AUTH_API_ORIGIN?: string;
   AUTH_JWKS_URI?: string;
   CONTROL_PLANE_ORIGIN?: string;
+  MCP_ANALYSIS_DELEGATION_SECRET?: string;
+  MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
   SESSION_STORE?: KVNamespace;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;

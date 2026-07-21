@@ -16,11 +16,12 @@ export interface AuthDeps extends SdkFactoryOptions {
   readonly fetch?: typeof fetch;
 }
 
-export async function loginWithDeviceFlow(deps: AuthDeps): Promise<AuthSession> {
+export async function loginWithDeviceFlow(deps: AuthDeps, appId: string): Promise<AuthSession> {
   const fetchImpl = deps.fetch ?? fetch;
   const authBaseUrl = resolveAuthBaseUrl(deps);
   const auth = await formPost(fetchImpl, `${authBaseUrl}/oauth2/device_authorization`, {
     client_id: CLI_CLIENT_ID,
+    app: appId,
   });
   if (!auth.ok) {
     throw new Error(`splitch login: device authorization failed (${auth.status})`);
@@ -65,6 +66,7 @@ async function pollDeviceApproval(
   expires_in?: number;
   user_id?: string;
   email?: string;
+  app_id: string;
 }> {
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     await sleep(intervalMs);
@@ -80,6 +82,7 @@ async function pollDeviceApproval(
         expires_in?: number;
         user_id?: string;
         email?: string;
+        app_id: string;
       };
     }
     const pending = (await token.json()) as { error?: string };
@@ -96,6 +99,7 @@ function buildCredentialFile(body: {
   expires_in?: number;
   user_id?: string;
   email?: string;
+  app_id: string;
 }): CliCredentialFile {
   return {
     version: 1,
@@ -108,6 +112,7 @@ function buildCredentialFile(body: {
       refreshToken: body.refresh_token,
       accessToken: body.access_token,
       accessTokenExpiresAt: new Date(Date.now() + (body.expires_in ?? 3600) * 1000).toISOString(),
+      selectedAppId: body.app_id,
     },
   };
 }
@@ -191,6 +196,7 @@ async function refreshAccessToken(
     access_token: string;
     refresh_token?: string;
     expires_in?: number;
+    app_id: string;
   };
   const next: CliCredentialFile = {
     ...stored,
@@ -199,6 +205,7 @@ async function refreshAccessToken(
       accessToken: body.access_token,
       refreshToken: body.refresh_token ?? stored.credential.refreshToken,
       accessTokenExpiresAt: new Date(Date.now() + (body.expires_in ?? 3600) * 1000).toISOString(),
+      selectedAppId: body.app_id,
     },
   };
   await deps.credentialStore.save(next);

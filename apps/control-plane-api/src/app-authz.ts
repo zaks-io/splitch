@@ -1,4 +1,4 @@
-import { appScope, type Repository } from "@splitch/db";
+import { appScope } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import { appAdminScope } from "./scope-binding";
 
@@ -6,51 +6,61 @@ const APP_WRITE_ROLES = ["owner", "admin"] as const;
 const APP_DELETE_ROLES = ["owner"] as const;
 
 type AppRole = "owner" | "admin" | "member";
-type AppAuthzDeps = { repo: Pick<Repository, "identity"> };
+interface AppAuthzDeps {
+  repo: {
+    identity: {
+      getAppMembership(
+        scope: ReturnType<typeof appScope>,
+        userId: string,
+      ): PromiseLike<{ role: string } | null>;
+    };
+  };
+}
+export interface ScopedActor {
+  id: string;
+  scopes: readonly string[];
+}
 
-export function requireAppAdmin(
+export async function requireAppAdmin(
+  deps: AppAuthzDeps,
   appId: string,
-  heldScopes: readonly string[],
+  actor: ScopedActor,
   requestId: string,
-): Response | null {
-  // owner ⊇ admin everywhere in the role lattice (APP_WRITE_ROLES); the claim
-  // ceremony mints `app:{appId}:owner`, so admin-gated routes must accept it.
-  return requireAppRoleFromScopes(appId, heldScopes, ["owner", "admin"], requestId);
+): Promise<Response | null> {
+  return requireAppRole(deps, appId, actor, APP_WRITE_ROLES, requestId);
 }
 
 export async function requireAppWrite(
   deps: AppAuthzDeps,
   appId: string,
-  userId: string,
+  actor: ScopedActor,
   requestId: string,
 ): Promise<Response | null> {
-  return requireAppRoleFromMembership(deps, appId, userId, APP_WRITE_ROLES, requestId);
+  return requireAppRole(deps, appId, actor, APP_WRITE_ROLES, requestId);
 }
 
 export async function requireAppDelete(
   deps: AppAuthzDeps,
   appId: string,
-  userId: string,
+  actor: ScopedActor,
   requestId: string,
 ): Promise<Response | null> {
-  return requireAppRoleFromMembership(deps, appId, userId, APP_DELETE_ROLES, requestId);
+  return requireAppRole(deps, appId, actor, APP_DELETE_ROLES, requestId);
 }
 
-async function requireAppRoleFromMembership(
+async function requireAppRole(
   deps: AppAuthzDeps,
   appId: string,
-  userId: string,
+  actor: ScopedActor,
   allowedRoles: readonly AppRole[],
   requestId: string,
 ): Promise<Response | null> {
-  const membership = await deps.repo.identity.getAppMembership(appScope(appId), userId);
+  const scopeError = requireAppRoleFromScopes(appId, actor.scopes, allowedRoles, requestId);
+  if (scopeError) return scopeError;
+
+  const membership = await deps.repo.identity.getAppMembership(appScope(appId), actor.id);
   if (membership && allowedRoles.includes(membership.role as AppRole)) return null;
-  return insufficientAppRole(
-    appId,
-    allowedRoles,
-    membership ? [`app:${appId}:${membership.role}`] : [],
-    requestId,
-  );
+  return insufficientAppRole(appId, allowedRoles, actor.scopes, requestId);
 }
 
 function requireAppRoleFromScopes(

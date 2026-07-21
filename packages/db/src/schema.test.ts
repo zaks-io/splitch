@@ -1,8 +1,10 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createLocalD1 } from "./repo/test-d1";
+import { claimVerifications } from "./schema";
 
 /**
  * Asserts the GENERATED migration SQL — the exact DDL `wrangler d1 migrations
@@ -171,10 +173,21 @@ describe("device refresh session storage", () => {
   it("stores provider session id keyed by a refresh token hash", () => {
     expect(block).toContain("`refresh_token_hash`");
     expect(block).toContain("`provider_session_id`");
+    expect(migrationSql).toContain("`provider_organization_id`");
+    expect(migrationSql).toContain("`selected_app_scope`");
   });
 
   it("does not add a raw refresh_token column", () => {
     expect(block).not.toContain("`refresh_token`");
+  });
+});
+
+describe("Door B verification resource authority", () => {
+  it("keeps selected_resource in the canonical Drizzle schema and migrations", () => {
+    expect(getTableColumns(claimVerifications).selectedResource?.name).toBe("selected_resource");
+    expect(migrationSql).toContain(
+      "ALTER TABLE `claim_verifications` ADD `selected_resource` text",
+    );
   });
 });
 

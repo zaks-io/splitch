@@ -10,6 +10,7 @@ import { makeSessionStore } from "./session-store";
 import {
   type LocalBindings,
   makeLocalBindings,
+  seedAppMember,
   seedEnvironment,
   seedOrgApp,
 } from "./test-fixtures";
@@ -39,6 +40,7 @@ let h: Harness;
 beforeEach(async () => {
   const bindings = await makeLocalBindings();
   await seedOrgApp(bindings.d1, APP);
+  await seedAppMember(bindings.d1, { appId: APP.appId, userId: ADMIN, role: "admin" });
   await seedEnvironment(bindings.d1, { appId: APP.appId, ...ENV });
   const signer = await makeFixtureSigner();
   h = { app: makeApp(bindings, signer), signer, bindings };

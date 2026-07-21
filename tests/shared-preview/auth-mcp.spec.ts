@@ -1,7 +1,7 @@
 import { expect, test } from "./fixtures";
 
 test.describe("shared-preview auth and MCP", () => {
-  test("OAuth discovery exposes agent auth and smoke client credentials", async ({ smoke }) => {
+  test("OAuth discovery exposes Doors B and C only while Door A is paused", async ({ smoke }) => {
     const metadata = await smoke.authDiscovery();
 
     expect(metadata.issuer).toBe(smoke.config.authBaseUrl);
@@ -12,9 +12,28 @@ test.describe("shared-preview auth and MCP", () => {
     );
     expect(metadata.grant_types_supported).toContain("client_credentials");
     expect(metadata.agent_auth).toBeDefined();
-    expect(
-      (metadata.agent_auth as { identity_types_supported?: string[] }).identity_types_supported,
-    ).toContain("device_flow");
+    const identityTypes = (metadata.agent_auth as { identity_types_supported?: string[] })
+      .identity_types_supported;
+    expect(identityTypes).toEqual(expect.arrayContaining(["anonymous", "device_flow"]));
+    expect(identityTypes).not.toContain("id_jag");
+    expect(JSON.stringify(metadata)).not.toContain("id_jag");
+  });
+
+  test("MCP challenges unauthenticated connects with protected-resource metadata", async ({
+    smoke,
+  }) => {
+    const response = await smoke.mcpUnauthorizedConnect();
+
+    expect(response.status()).toBe(401);
+    expect(response.headers()["www-authenticate"]).toBe(
+      `Bearer realm="splitch", resource_metadata="${smoke.config.mcpBaseUrl}/.well-known/oauth-protected-resource/mcp"`,
+    );
+
+    const metadata = await smoke.mcpProtectedResourceMetadata();
+    expect(metadata).toMatchObject({
+      resource: smoke.config.mcpProtectedResource,
+      authorization_servers: [smoke.config.authBaseUrl],
+    });
   });
 
   test("WorkOS device authorization returns a real verification URL", async ({ smoke }) => {
@@ -40,8 +59,8 @@ test.describe("shared-preview auth and MCP", () => {
     await smoke.assertFixtureTurnstileRejected();
   });
 
-  test("MCP lists agent tools from route contracts", async ({ smoke }) => {
-    const tools = await smoke.listTools();
+  test("MCP lists agent tools from route contracts", async ({ accessToken, smoke }) => {
+    const tools = await smoke.listTools(accessToken);
     const names = tools.map((tool) => tool.name);
 
     expect(names).toContain("apps_create");
@@ -50,13 +69,16 @@ test.describe("shared-preview auth and MCP", () => {
     expect(names).toContain("flags_test_eval");
   });
 
-  test("MCP forwards unauthenticated tool calls to an auth rejection", async ({ smoke }) => {
-    const error = await smoke.callToolError("apps_get", { appId: smoke.config.smokeAppId });
+  test("MCP rejects unauthenticated tool calls at the transport boundary", async ({ smoke }) => {
+    const response = await smoke.callToolUnauthorized("apps_get", {
+      appId: smoke.config.smokeAppId,
+    });
 
-    expect(error).toMatchObject({ code: "UNAUTHORIZED" });
+    expect(response.status()).toBe(401);
+    expect(response.headers()["www-authenticate"]).toContain("resource_metadata=");
   });
 
-  test("smoke token reaches Control Plane through MCP without rate limiting", async ({
+  test("MCP-audience smoke token reaches Control Plane through delegation", async ({
     accessToken,
     smoke,
   }) => {
@@ -70,15 +92,18 @@ test.describe("shared-preview auth and MCP", () => {
     });
   });
 
-  test("smoke token authenticates direct Control Plane reads", async ({ accessToken, smoke }) => {
+  test("control-plane smoke token authenticates direct Control Plane reads", async ({
+    controlPlaneAccessToken,
+    smoke,
+  }) => {
     const org = await smoke.controlPlaneGet<Record<string, unknown>>(
-      accessToken,
+      controlPlaneAccessToken,
       `/orgs/${smoke.config.smokeOrgId}`,
     );
     expect(org).toMatchObject({ id: smoke.config.smokeOrgId });
 
     const apps = await smoke.controlPlaneGet<{ items: Array<Record<string, unknown>> }>(
-      accessToken,
+      controlPlaneAccessToken,
       `/orgs/${smoke.config.smokeOrgId}/apps`,
     );
     expect(apps.items).toEqual(
@@ -91,7 +116,7 @@ test.describe("shared-preview auth and MCP", () => {
     );
 
     const app = await smoke.controlPlaneGet<Record<string, unknown>>(
-      accessToken,
+      controlPlaneAccessToken,
       `/apps/${smoke.config.smokeAppId}`,
     );
     expect(app).toMatchObject({
@@ -100,7 +125,7 @@ test.describe("shared-preview auth and MCP", () => {
     });
 
     const envs = await smoke.controlPlaneGet<{ items: Array<Record<string, unknown>> }>(
-      accessToken,
+      controlPlaneAccessToken,
       `/apps/${smoke.config.smokeAppId}/envs`,
     );
     expect(envs.items).toEqual(

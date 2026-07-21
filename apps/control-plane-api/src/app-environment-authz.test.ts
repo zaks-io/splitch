@@ -69,14 +69,14 @@ beforeEach(async () => {
 
 afterEach(async () => h.bindings.dispose());
 
-function orgToken(): Promise<string> {
+function orgToken(role: AppRole = "owner"): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
     iss: "https://auth.splitch.test",
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
-    scopes: [`org:${ORG.orgId}:owner`],
+    scopes: [`org:${ORG.orgId}:${role}`],
   });
 }
 
@@ -231,5 +231,33 @@ describe("control-plane App and Environment role gates", () => {
     const deleteApp = await request("DELETE", `/apps/${created.app.id}`, forgedOwnerJwt);
     expect(deleteApp.status).toBe(403);
     expect((await errorBody(deleteApp)).code).toBe("INSUFFICIENT_SCOPES");
+  });
+
+  it("denies narrowed member credentials held by live owners without narrowing reads", async () => {
+    const created = await createDefaultApp("narrowed-owner");
+    const narrowedOrgJwt = await orgToken("member");
+    const narrowedAppJwt = await appToken(OWNER, created.app.id, "member");
+
+    const [orgRead, appRead] = await Promise.all([
+      request("GET", `/orgs/${ORG.orgId}`, narrowedOrgJwt),
+      request("GET", `/apps/${created.app.id}`, narrowedAppJwt),
+    ]);
+    expect(orgRead.status).toBe(200);
+    expect(appRead.status).toBe(200);
+
+    const privileged = await Promise.all([
+      request("PATCH", `/orgs/${ORG.orgId}`, narrowedOrgJwt, { name: "Narrowed Org" }),
+      request("DELETE", `/orgs/${ORG.orgId}`, narrowedOrgJwt),
+      request("PATCH", `/apps/${created.app.id}`, narrowedAppJwt, { name: "Narrowed App" }),
+      request("DELETE", `/apps/${created.app.id}`, narrowedAppJwt),
+    ]);
+
+    for (const response of privileged) {
+      expect(response.status).toBe(403);
+    }
+    expect((await errorBody(privileged[0] as Response)).code).toBe("FORBIDDEN");
+    expect((await errorBody(privileged[1] as Response)).code).toBe("FORBIDDEN");
+    expect((await errorBody(privileged[2] as Response)).code).toBe("INSUFFICIENT_SCOPES");
+    expect((await errorBody(privileged[3] as Response)).code).toBe("INSUFFICIENT_SCOPES");
   });
 });

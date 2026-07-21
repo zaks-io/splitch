@@ -21,7 +21,7 @@
   },
   // D1 carries the trusted-IdP allow-list + Org membership (accessed only through
   // @splitch/db createRepository). KV backs the jti replay cache (`jti:{jti}`)
-  // and the shared control-plane session revocation markers (`revoked:{sub}`).
+  // and the shared control-plane/MCP revocation markers (`revoked:{sub}`).
   "d1_databases": [
     {
       "binding": "DB",
@@ -46,6 +46,7 @@
     "SPLITCH_PLATFORM_TARGET": "local",
     "AUTH_API_ORIGIN": "http://localhost:8791",
     "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
+    "MCP_ORIGIN": "http://localhost:8792",
     "CONTROL_PANEL_ORIGIN": "http://localhost:8787"
   },
   "env": {
@@ -71,6 +72,7 @@
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
         "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
+        "MCP_ORIGIN": "https://mcp.preview.splitch.dev",
         "CONTROL_PANEL_ORIGIN": "https://app.preview.splitch.dev",
         "TURNSTILE_SITE_KEY": "0x4AAAAAADsCXVP9TRrC6c6N",
         "SPLITCH_SMOKE_CLIENT_ID": "splitch-shared-preview-smoke",
@@ -124,6 +126,7 @@
         "SPLITCH_PLATFORM_TARGET": "production",
         "AUTH_API_ORIGIN": "https://auth.splitch.dev",
         "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
+        "MCP_ORIGIN": "https://mcp.splitch.dev",
         "CONTROL_PANEL_ORIGIN": "https://app.splitch.dev",
         "TURNSTILE_SITE_KEY": "0x4AAAAAADsCY8JNBv2vrTFC"
       },

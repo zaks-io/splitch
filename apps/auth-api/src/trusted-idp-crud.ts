@@ -3,11 +3,10 @@ import type { Repository } from "@splitch/db";
 /**
  * Trusted-IdP CRUD — Org `owner` role only (access-control-matrix.md).
  *
- * Authorization is single-sourced on D1 Org membership (ADR-0018): a caller may
- * manage an Org's trusted IdPs only if they hold the `owner` role on that Org.
- * The check is the repo's `getOrgMembership` — never a token scope alone, so a
- * forged scope cannot grant access. Fail-loud: a non-owner is FORBIDDEN, an
- * unknown Org is FORBIDDEN (we do not leak existence), never a silent allow.
+ * Authorization intersects the credential's exact Org-owner scope with live D1
+ * Org-owner membership (ADR-0018). Neither a stale/forged scope nor a broader
+ * live membership can grant access alone. Fail-loud: a non-owner is FORBIDDEN,
+ * an unknown Org is FORBIDDEN (we do not leak existence), never a silent allow.
  *
  * The handlers return a plain result; the route layer maps it to a Response. CRUD
  * here speaks the control-plane shape, not the OAuth-door error namespace — these
@@ -21,6 +20,11 @@ interface TrustedIdpInput {
   enabled?: boolean;
 }
 
+interface TrustedIdpActor {
+  userId: string;
+  scopes: readonly string[];
+}
+
 type CrudResult<T> =
   | { ok: true; value: T }
   | {
@@ -32,10 +36,13 @@ type CrudResult<T> =
 async function assertOwner(
   repo: Repository,
   orgId: string,
-  userId: string,
+  actor: TrustedIdpActor,
 ): Promise<CrudResult<true>> {
-  const membership = await repo.identity.getOrgMembership(orgId, userId);
-  if (!membership || membership.role !== "owner") {
+  if (!actor.scopes.includes(`org:${orgId}:owner`)) {
+    return { ok: false, status: 403, code: "FORBIDDEN" };
+  }
+  const membership = await repo.identity.getOrgMembership(orgId, actor.userId);
+  if (membership?.role !== "owner") {
     return { ok: false, status: 403, code: "FORBIDDEN" };
   }
   return { ok: true, value: true };
@@ -46,15 +53,23 @@ function newIdpId(): string {
 }
 
 export interface TrustedIdpCrud {
-  list(orgId: string, userId: string): Promise<CrudResult<unknown[]>>;
-  create(orgId: string, userId: string, input: TrustedIdpInput): Promise<CrudResult<unknown>>;
-  remove(orgId: string, userId: string, idpId: string): Promise<CrudResult<{ deleted: true }>>;
+  list(orgId: string, actor: TrustedIdpActor): Promise<CrudResult<unknown[]>>;
+  create(
+    orgId: string,
+    actor: TrustedIdpActor,
+    input: TrustedIdpInput,
+  ): Promise<CrudResult<unknown>>;
+  remove(
+    orgId: string,
+    actor: TrustedIdpActor,
+    idpId: string,
+  ): Promise<CrudResult<{ deleted: true }>>;
 }
 
 export function makeTrustedIdpCrud(repo: Repository, now: () => number): TrustedIdpCrud {
   return {
-    async list(orgId, userId) {
-      const owner = await assertOwner(repo, orgId, userId);
+    async list(orgId, actor) {
+      const owner = await assertOwner(repo, orgId, actor);
       if (!owner.ok) {
         return owner;
       }
@@ -62,8 +77,8 @@ export function makeTrustedIdpCrud(repo: Repository, now: () => number): Trusted
       return { ok: true, value: await repo.privacy.listTrustedIdps(orgId) };
     },
 
-    async create(orgId, userId, input) {
-      const owner = await assertOwner(repo, orgId, userId);
+    async create(orgId, actor, input) {
+      const owner = await assertOwner(repo, orgId, actor);
       if (!owner.ok) {
         return owner;
       }
@@ -81,8 +96,8 @@ export function makeTrustedIdpCrud(repo: Repository, now: () => number): Trusted
       return { ok: true, value: row };
     },
 
-    async remove(orgId, userId, idpId) {
-      const owner = await assertOwner(repo, orgId, userId);
+    async remove(orgId, actor, idpId) {
+      const owner = await assertOwner(repo, orgId, actor);
       if (!owner.ok) {
         return owner;
       }

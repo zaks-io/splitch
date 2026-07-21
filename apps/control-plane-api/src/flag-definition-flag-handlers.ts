@@ -1,9 +1,8 @@
 import type { Variant } from "@splitch/contracts";
 import { appScope, type TenantScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { nowIso } from "./app-environment-model";
+import { appNotFound, nowIso } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
-import { flagConfigReferenceCount, runningExperimentForFlag } from "./flag-definition-guards";
 import {
   flagNotFound,
   resourceNotEmpty,
@@ -11,14 +10,15 @@ import {
   validationError,
   validationErrors,
 } from "./flag-definition-errors";
+import { flagConfigReferenceCount, runningExperimentForFlag } from "./flag-definition-guards";
 import {
   type FlagDefinitionDeps,
   type FlagRow,
-  type LoadedFlag,
-  type Result,
   fail,
+  type LoadedFlag,
   loadWritableFlag,
   ok,
+  type Result,
   requireWritableApp,
   serializeSchema,
 } from "./flag-definition-handler-utils";
@@ -33,7 +33,6 @@ import {
 } from "./flag-definition-model";
 import { schemaDefinitionIssues } from "./flag-definition-schema";
 import { objectBody, pathParam } from "./handler-input";
-import { appNotFound } from "./app-environment-model";
 
 export async function listFlags(
   deps: FlagDefinitionDeps,
@@ -53,7 +52,7 @@ export async function createFlag(
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
   const body = objectBody(input);
-  const writeError = await requireWritableApp(deps, appId, principal.id, requestId);
+  const writeError = await requireWritableApp(deps, appId, principal, requestId);
   if (writeError) return writeError;
 
   const prepared = await prepareCreateFlag(deps, appId, body, requestId);

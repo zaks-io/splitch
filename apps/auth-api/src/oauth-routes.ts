@@ -1,20 +1,20 @@
 import type { Hono } from "hono";
-import { DEVICE_CODE_GRANT, type DeviceFlowPort } from "./device-flow";
+import { verifyAccessToken } from "./access-token";
+import { accessTokenJwks } from "./access-token-key";
+import { authMarkdown } from "./auth-markdown";
+import { DEVICE_CODE_GRANT, type DeviceFlowPort, REFRESH_TOKEN_GRANT } from "./device-flow";
+import { authorizeDevice, exchangeDeviceCode, exchangeRefreshToken } from "./device-oauth";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
+import type { MembershipAuthorityRepo } from "./membership-authority";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
 import type { RevocationStore } from "./revocation";
-import { authMarkdown } from "./auth-markdown";
 import {
   ClientCredentialsRequestSchema,
-  DeviceAuthorizationRequestSchema,
-  DeviceTokenRequestSchema,
   RevokeTokenRequestSchema,
   TokenExchangeRequestSchema,
 } from "./schemas";
 import { timingSafeEqualString } from "./secret-compare";
 import type { TokenSigner } from "./token-exchange";
-import { verifyAccessToken } from "./access-token";
-import { accessTokenJwks } from "./access-token-key";
 
 const ACCESS_TOKEN_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
 const CLIENT_CREDENTIALS_GRANT = "client_credentials";
@@ -33,8 +33,10 @@ export interface OAuthRouteDeps {
   revocations: RevocationStore;
   accessSecret: string;
   controlPlaneAudience: string;
+  mcpAudience?: string;
   smokeClientCredentials?: SmokeClientCredentials;
   now: () => number;
+  repo: MembershipAuthorityRepo;
 }
 
 export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
@@ -60,6 +62,7 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
       grant_types_supported: [
         ACCESS_TOKEN_GRANT,
         DEVICE_CODE_GRANT,
+        REFRESH_TOKEN_GRANT,
         ...(smokeEnabled ? [CLIENT_CREDENTIALS_GRANT] : []),
       ],
       token_endpoint_auth_methods_supported: [
@@ -70,7 +73,7 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
         skill: `${issuer}/auth.md`,
         identity_endpoint: `${issuer}/agent/identity`,
         claim_endpoint: `${issuer}/agent/identity/claim`,
-        identity_types_supported: ["id_jag", "anonymous", "device_flow"],
+        identity_types_supported: ["anonymous", "device_flow"],
       },
     });
   });
@@ -91,37 +94,11 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
   });
 
   app.post("/oauth2/device_authorization", async (c) => {
-    const parsed = DeviceAuthorizationRequestSchema.safeParse(await readBody(c.req.raw));
-    if (!parsed.success) {
-      return renderOAuthError(
-        new OAuthError("invalid_request", "malformed /oauth2/device_authorization body"),
-      );
-    }
-    try {
-      return Response.json(await deps.deviceFlow.authorizeDevice(parsed.data));
-    } catch (cause) {
-      return renderDoorFault(cause);
-    }
+    return authorizeDevice(deps, await readBody(c.req.raw));
   });
 
   app.post("/oauth2/token", async (c) => {
-    const body = await readBody(c.req.raw);
-    const grantType = grantTypeOf(body);
-    if (grantType === ACCESS_TOKEN_GRANT) {
-      return exchangeIdentityAssertion(deps, body, nowSeconds());
-    }
-    if (grantType === DEVICE_CODE_GRANT) {
-      return exchangeDeviceCode(deps, body, nowSeconds());
-    }
-    if (grantType === CLIENT_CREDENTIALS_GRANT && deps.smokeClientCredentials) {
-      return exchangeClientCredentials(deps, body, nowSeconds());
-    }
-    if (grantType) {
-      return renderOAuthError(
-        new OAuthError("unsupported_grant_type", `grant_type "${grantType}" not supported`),
-      );
-    }
-    return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/token body"));
+    return handleTokenRequest(deps, await readBody(c.req.raw), nowSeconds());
   });
 
   app.post("/oauth2/revoke", async (c) => {
@@ -131,19 +108,19 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
     }
 
     try {
-      const actor = await verifyAccessToken(
-        `Bearer ${parsed.data.token}`,
-        { accessSecret: deps.accessSecret, controlPlaneAudience: deps.controlPlaneAudience },
-        nowSeconds(),
-      );
+      const actor = await verifyRevocableAccessToken(deps, parsed.data.token, nowSeconds());
       if (actor) {
         await deps.revocations.revoke(actor.userId, actor.expiresAt - nowSeconds());
       } else {
-        const sessionId = await deps.deviceRefreshSessions.lookup(parsed.data.token);
-        if (!sessionId) {
+        const session = await deps.deviceRefreshSessions.lookup(parsed.data.token);
+        if (!session) {
           throw new OAuthError("invalid_grant", "refresh token session is unknown");
         }
-        await deps.deviceFlow.revokeProviderToken({ token: parsed.data.token, sessionId });
+        await deps.deviceFlow.revokeProviderToken({
+          token: parsed.data.token,
+          sessionId: session.providerSessionId,
+        });
+        await deps.deviceRefreshSessions.forget(parsed.data.token);
       }
     } catch (cause) {
       return renderDoorFault(cause);
@@ -151,6 +128,33 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
 
     return new Response(null, { status: 200 });
   });
+}
+
+function handleTokenRequest(
+  deps: OAuthRouteDeps,
+  body: unknown,
+  nowSeconds: number,
+): Response | Promise<Response> {
+  const grantType = grantTypeOf(body);
+  const resolveAudience = (resource: string | undefined) => audienceForResource(deps, resource);
+  if (grantType === ACCESS_TOKEN_GRANT) {
+    return exchangeIdentityAssertion(deps, body, nowSeconds);
+  }
+  if (grantType === DEVICE_CODE_GRANT) {
+    return exchangeDeviceCode(deps, body, nowSeconds, resolveAudience);
+  }
+  if (grantType === REFRESH_TOKEN_GRANT) {
+    return exchangeRefreshToken(deps, body, nowSeconds, resolveAudience);
+  }
+  if (grantType === CLIENT_CREDENTIALS_GRANT && deps.smokeClientCredentials) {
+    return exchangeClientCredentials(deps, body, nowSeconds);
+  }
+  if (grantType) {
+    return renderOAuthError(
+      new OAuthError("unsupported_grant_type", `grant_type "${grantType}" not supported`),
+    );
+  }
+  return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/token body"));
 }
 
 async function exchangeClientCredentials(
@@ -190,6 +194,7 @@ async function exchangeClientCredentials(
       scopes,
       "client_credentials",
       nowSeconds,
+      audienceForResource(deps, parsed.data.resource),
     );
     return tokenResponse(accessToken);
   } catch (cause) {
@@ -210,6 +215,7 @@ async function exchangeIdentityAssertion(
     const accessToken = await deps.tokenSigner.exchangeForAccessToken(
       parsed.data.identity_assertion,
       nowSeconds,
+      audienceForResource(deps, parsed.data.resource),
     );
     return tokenResponse(accessToken);
   } catch (cause) {
@@ -217,40 +223,33 @@ async function exchangeIdentityAssertion(
   }
 }
 
-async function exchangeDeviceCode(
-  deps: OAuthRouteDeps,
-  body: unknown,
-  nowSeconds: number,
-): Promise<Response> {
-  const parsed = DeviceTokenRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return renderOAuthError(new OAuthError("invalid_request", "malformed /oauth2/token body"));
-  }
-  try {
-    const deviceToken = await deps.deviceFlow.exchangeDeviceCode({
-      clientId: parsed.data.client_id,
-      deviceCode: parsed.data.device_code,
-      scope: parsed.data.scope,
-    });
-    if (deviceToken.refreshToken) {
-      if (!deviceToken.providerSessionId) {
-        throw new OAuthError("server_error", "device refresh token missing session id");
-      }
-      await deps.deviceRefreshSessions.remember(
-        deviceToken.refreshToken,
-        deviceToken.providerSessionId,
-      );
-    }
-    const accessToken = await deps.tokenSigner.mintAccessToken(
-      deviceToken.userId,
-      deviceToken.scopes,
-      "device_flow",
+export function audienceForResource(
+  deps: Pick<OAuthRouteDeps, "controlPlaneAudience" | "mcpAudience">,
+  resource: string | undefined,
+): string {
+  if (!resource) return deps.controlPlaneAudience;
+  if (allowedAccessTokenAudiences(deps).includes(resource)) return resource;
+  throw new OAuthError("invalid_request", "requested resource is not supported");
+}
+
+function allowedAccessTokenAudiences(
+  deps: Pick<OAuthRouteDeps, "controlPlaneAudience" | "mcpAudience">,
+): string[] {
+  if (!deps.mcpAudience) return [deps.controlPlaneAudience];
+  const mcpRoot = deps.mcpAudience.replace(/\/+$/, "");
+  return [deps.controlPlaneAudience, mcpRoot, `${mcpRoot}/mcp`];
+}
+
+async function verifyRevocableAccessToken(deps: OAuthRouteDeps, token: string, nowSeconds: number) {
+  for (const audience of allowedAccessTokenAudiences(deps)) {
+    const actor = await verifyAccessToken(
+      `Bearer ${token}`,
+      { accessSecret: deps.accessSecret, controlPlaneAudience: audience },
       nowSeconds,
     );
-    return tokenResponse(accessToken, deviceToken.refreshToken);
-  } catch (cause) {
-    return renderDoorFault(cause);
+    if (actor) return actor;
   }
+  return null;
 }
 
 function tokenResponse(accessToken: string, refreshToken?: string): Response {

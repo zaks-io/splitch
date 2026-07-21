@@ -4,7 +4,7 @@ How a principal authenticates: the three identity doors (ID-JAG, anonymous/pre-c
 the shared-preview `client_credentials` smoke grant, the claim ceremony, the `interaction_required`
 error shape, and the provisional demo lifecycle.
 
-For the scopes enumeration, control-plane token shape, trusted-IdP table, and the Worker
+For the scopes enumeration, resource access-token shape, trusted-IdP table, and the Worker
 responsibility split, see [access-control-matrix.md](access-control-matrix.md).
 
 ## One principal, three identity doors
@@ -17,13 +17,16 @@ to Control Plane verification in smoke tests.
 
 ```
 Door A: ID-JAG   ──┐
-Door B: Anonymous ─┼──► /oauth2/token ──► control-plane access token ──► D1 membership check
+Door B: Anonymous ─┼──► /oauth2/token ──► resource-bound access token ──► resource verification
 Door C: Device flow┘
 
 Shared-preview smoke client_credentials ──► /oauth2/token ──► scoped smoke access token
 ```
 
-## Door A: ID-JAG (agent-IdP-verified)
+## Door A: ID-JAG (agent-IdP-verified, paused)
+
+Door A remains disabled and absent from authorization-server discovery and `auth.md`. The flow below
+records the approved design for later activation; it is not an enabled runtime path.
 
 **Endpoint:** `POST /agent/identity` on the auth-api Worker
 
@@ -38,7 +41,7 @@ Shared-preview smoke client_credentials ──► /oauth2/token ──► scoped
 
 **Validation steps (all must pass; fail loud on any failure):**
 
-1. Decode JWT header, extract `iss` (issuer)
+1. Decode the JWT payload, extract `iss` (issuer), and read `kid`/`alg` from the header
 2. Look up `iss` in `trusted_idps` D1 table; reject with 401 if not found
 3. Fetch JWKS from `trusted_idps.jwks_uri`; verify JWT signature
 4. Assert `aud` matches splitch's auth-api origin
@@ -49,9 +52,10 @@ Shared-preview smoke client_credentials ──► /oauth2/token ──► scoped
 8. Resolve WorkOS user by `email`; create in WorkOS if first-seen. D1 stores membership references only.
 9. Return: `{ identity_assertion: string, user_id: string }`
 
-**Follow-up exchange at `/oauth2/token`:** presents `identity_assertion`, receives short-lived
-control-plane access token. No refresh token on ID-JAG path. Hosted access tokens use the
-RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md).
+**Follow-up exchange at `/oauth2/token`:** presents `identity_assertion` and the selected protected
+resource, then receives a short-lived access token whose `aud` is that exact resource. No refresh
+token on the ID-JAG path. Every runtime target uses the RS256/JWKS trust contract in
+[access-control-matrix.md](access-control-matrix.md).
 
 ## Door B: Anonymous / pre-claim
 
@@ -82,7 +86,8 @@ RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md
 ```
 {
   identity_assertion: string,   // the provisional assertion
-  email: string                 // address to verify or link
+  email: string,                // address to verify or link
+  resource?: string             // exact protected resource; defaults to Control Plane
 }
 ```
 
@@ -93,7 +98,8 @@ RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md
   identity_assertion: string,
   email: string,
   otp: string,                  // one-time password delivered to the user's email
-  idempotency_key: string       // caller-supplied; prevents double-claim on retry
+  idempotency_key: string,      // caller-supplied; prevents double-claim on retry
+  resource?: string             // must match initiation when provided
 }
 ```
 
@@ -104,7 +110,8 @@ RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md
   identity_assertion: string,
   email: string,
   verification_id: string,      // returned with interaction_required
-  idempotency_key: string
+  idempotency_key: string,
+  resource?: string             // must match initiation when provided
 }
 ```
 
@@ -112,11 +119,16 @@ RS256/JWKS trust contract in [access-control-matrix.md](access-control-matrix.md
 
 1. Validate `identity_assertion`; assert provisional. Initiation first asks WorkOS whether the normalized email already belongs to a verified user. A free address is then assigned to the provisional WorkOS user and the email-verification code is sent; a collision creates only durable verification and consent state and returns `interaction_required` without mutating the provisional user.
 2. D1 stores only SHA-256 identifier digests plus bounded TTL, attempt, one-use, consent, and idempotency state. It never stores an OTP or a hosted fixture code.
+   The initiation row also stores the exact selected protected resource, using the Control Plane as
+   the default. A legacy row without persisted resource authority cannot adopt a verifier-supplied
+   resource and fails loud.
 3. For a free address, WorkOS confirms the OTP. Its result is the email-ownership authority.
 4. For an existing verified address, the existing AuthKit principal authenticates at the consent URL. The browser can approve or refuse with POST; no provisional WorkOS user email is changed in this branch.
 5. The consent page is a dedicated Control Panel route. Its URL is built from the explicit `CONTROL_PANEL_ORIGIN`, never the Control Plane API origin. Its opaque browser session maps to a server-side WorkOS access JWT; the panel forwards that JWT only server-to-server. Auth API verifies its RS256 signature, configured issuer, `client_id`, expiry, and `sub` against WorkOS JWKS. The panel session is bounded by the JWT expiry. Existing splitch membership is not an authorization input for this route.
 6. After WorkOS verification or authenticated consent, one guarded D1 batch first acquires the still-provisional Organization only while the signed provisional User still has the matching Org and App memberships. Every membership mutation, state consumption, and idempotency insert is conditional on that acquisition. Retries after a pre-batch failure are safe.
-7. Return: `{ access_token, user_id, org_id, app_id }`.
+7. Mint the access token for the canonical protected resource selected at initiation. The selected
+   resource is part of the durable idempotency result, so retries cannot fall back to Control Plane
+   or widen to another resource. Return: `{ access_token, user_id, org_id, app_id }`.
 
 ### Claim-state retention
 
@@ -155,8 +167,20 @@ Org — all through the D1 data-access seam (app_id scoping enforced, never bypa
 
 ## Door C: Device flow (human at terminal / agent no-IdP fallback)
 
-WorkOS device flow. Auth-issuer Worker exposes the standard `device_authorization` and `token` endpoints
-as thin proxies to WorkOS. The CLI stores the resulting **refresh token** in keychain or `~/.splitch/credentials.json` (mode 0600). The MCP server does not touch disk; it holds its token in the transport session.
+WorkOS device flow. Auth-issuer Worker exposes the standard `device_authorization` and `token`
+endpoints. The client starts with one App ID or slug selector. After approval, Auth API uses the
+WorkOS `organization_id` grant to resolve that selector to an App owned by the same Organization,
+then intersects the canonical App ID with live D1 Org/App membership before constructing the token
+scope. A multi-App User therefore receives one App-bound token and cannot widen the approved
+selection while polling.
+
+Auth API stores only a hash of the provider refresh token plus its provider session ID, WorkOS User
+and Organization grants, and canonical selected App scope. `grant_type=refresh_token` rotates the
+WorkOS token and reintersects that durable grant with the provider response and live membership
+before every new access-token mint. Missing or changed authority, expired/revoked provider sessions,
+and removed membership fail loud. The CLI stores the resulting **refresh token** in keychain or
+`~/.splitch/credentials.json` (mode 0600). The MCP server does not touch disk or forward the client
+bearer; MCP clients present their exact-resource access token on transport requests.
 
 ## Shared-preview smoke grant: client_credentials
 
@@ -172,6 +196,7 @@ The grant is advertised in OAuth discovery only while enabled.
   grant_type: "client_credentials",
   client_id: string,
   client_secret: string,
+  resource?: string,
   scope?: string
 }
 ```
@@ -182,8 +207,10 @@ The grant is advertised in OAuth discovery only while enabled.
 2. Compare `client_id` and `client_secret` against the configured smoke client.
 3. Resolve the principal to `SPLITCH_SMOKE_USER_ID` (default `user_shared_preview_smoke`).
 4. Use configured `SPLITCH_SMOKE_SCOPES`; an optional requested `scope` must be a subset.
-5. Mint a short-lived control-plane access token with `auth_door = "client_credentials"`.
-6. Hosted access tokens use the RS256/JWKS trust contract in
+5. Mint a short-lived resource-bound access token with `auth_door = "client_credentials"`. The
+   Control Plane is the default resource; an explicitly requested MCP resource must exactly match the
+   configured MCP origin or its `/mcp` endpoint.
+6. Every runtime target uses the RS256/JWKS trust contract in
    [access-control-matrix.md](access-control-matrix.md). No refresh token is issued.
 
 This grant is not a production user or agent auth path. It exists to validate the hosted

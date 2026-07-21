@@ -21,11 +21,11 @@ export type Result<T> = { ok: true; value: T } | { ok: false; response: Response
 export async function requireWritableApp(
   deps: MetricSegmentDeps,
   appId: string,
-  userId: string,
+  actor: { id: string; scopes: readonly string[] },
   requestId: string,
 ): Promise<Response | null> {
   if (!(await deps.repo.identity.getApp(appId))) return appNotFound(requestId);
-  return requireAppWriteAuthz(deps, appId, userId, requestId);
+  return requireAppWriteAuthz(deps, appId, actor, requestId);
 }
 
 export function metricResponse(row: MetricRow): Metric {

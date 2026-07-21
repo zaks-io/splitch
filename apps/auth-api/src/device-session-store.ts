@@ -2,9 +2,22 @@ import type { Repository } from "@splitch/db";
 
 const DEVICE_REFRESH_SESSION_PREFIX = "device-refresh-session:";
 
+export interface DeviceRefreshSession {
+  providerSessionId: string;
+  userId: string;
+  providerOrganizationId: string;
+  selectedAppScope: string;
+}
+
 export interface DeviceRefreshSessionStore {
-  remember(refreshToken: string, providerSessionId: string): Promise<void>;
-  lookup(refreshToken: string): Promise<string | null>;
+  remember(refreshToken: string, session: DeviceRefreshSession): Promise<void>;
+  lookup(refreshToken: string): Promise<DeviceRefreshSession | null>;
+  rotate(
+    previousRefreshToken: string,
+    nextRefreshToken: string,
+    session: DeviceRefreshSession,
+  ): Promise<void>;
+  forget(refreshToken: string): Promise<void>;
 }
 
 interface DeviceRefreshSessionStoreOptions {
@@ -17,50 +30,62 @@ export function makeD1DeviceRefreshSessionStore(
   opts: DeviceRefreshSessionStoreOptions,
 ): DeviceRefreshSessionStore {
   return {
-    async remember(refreshToken, providerSessionId) {
+    async remember(refreshToken, session) {
       const hash = await refreshTokenHash(refreshToken);
       await repo.identity.rememberDeviceRefreshSession({
         refreshTokenHash: hash,
-        providerSessionId,
+        ...session,
         createdAt: new Date(opts.now()).toISOString(),
       });
-      await putCache(opts.cache, cacheKey(hash), providerSessionId);
+      await putCache(opts.cache, cacheKey(hash), session);
     },
 
     async lookup(refreshToken) {
       const hash = await refreshTokenHash(refreshToken);
-      const cachedSessionId = await getCache(opts.cache, cacheKey(hash));
-      if (cachedSessionId) {
-        return cachedSessionId;
-      }
-
       const row = await repo.identity.getDeviceRefreshSession(hash);
       if (!row) {
         return null;
       }
+      const session = {
+        providerSessionId: row.providerSessionId,
+        userId: row.userId,
+        providerOrganizationId: row.providerOrganizationId,
+        selectedAppScope: row.selectedAppScope,
+      };
+      await putCache(opts.cache, cacheKey(hash), session);
+      return session;
+    },
 
-      await putCache(opts.cache, cacheKey(hash), row.providerSessionId);
-      return row.providerSessionId;
+    async rotate(previousRefreshToken, nextRefreshToken, session) {
+      await this.remember(nextRefreshToken, session);
+      if (previousRefreshToken !== nextRefreshToken) {
+        await this.forget(previousRefreshToken);
+      }
+    },
+
+    async forget(refreshToken) {
+      const hash = await refreshTokenHash(refreshToken);
+      await repo.identity.deleteDeviceRefreshSession(hash);
+      await deleteCache(opts.cache, cacheKey(hash));
     },
   };
 }
 
-async function getCache(cache: KVNamespace | undefined, key: string): Promise<string | null> {
+async function deleteCache(cache: KVNamespace | undefined, key: string): Promise<void> {
   try {
-    return (await cache?.get(key)) ?? null;
+    await cache?.delete(key);
   } catch {
     // KV is a cache only; D1 remains the consistency authority.
-    return null;
   }
 }
 
 async function putCache(
   cache: KVNamespace | undefined,
   key: string,
-  providerSessionId: string,
+  session: DeviceRefreshSession,
 ): Promise<void> {
   try {
-    await cache?.put(key, providerSessionId);
+    await cache?.put(key, JSON.stringify(session));
   } catch {
     // KV is a cache only; D1 remains the consistency authority.
   }

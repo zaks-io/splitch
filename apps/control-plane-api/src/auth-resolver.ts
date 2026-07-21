@@ -174,8 +174,9 @@ async function resolvePanelPrincipal(
       principal: {
         kind: "control-plane-token" as const,
         id: delegation.actorId,
-        // The apps_create handler rechecks the live owner/admin role in D1.
-        scopes: [`org:${operation.orgId}:member`],
+        // This ceiling scope binds the delegated path; the handler still rechecks
+        // the actor's live owner/admin role in D1 before creating the App.
+        scopes: [`org:${operation.orgId}:owner`],
         orgId: operation.orgId,
         appId: null,
         environmentId: null,
@@ -215,8 +216,9 @@ async function resolveBoundedPanelSessionPrincipal(
     principal: {
       kind: "control-plane-token" as const,
       id: actor.userId,
-      // The handler rechecks the live owner/admin role in D1.
-      scopes: [`org:${operation.orgId}:member`],
+      // Cached panel roles never authorize the mutation. This ceiling scope binds
+      // the path while the apps_create handler still requires the live D1 role.
+      scopes: [`org:${operation.orgId}:owner`],
       orgId: operation.orgId,
       appId: null,
       environmentId: null,

@@ -1,10 +1,32 @@
 import { evictDurableObject, runDurableObjectAlarm, SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { McpSessionDurableObjectNamespace } from "../src/mcp-session-store";
 
 const namespace = (env as unknown as { MCP_SESSIONS: McpSessionDurableObjectNamespace })
   .MCP_SESSIONS;
+let authorization = "";
+
+beforeAll(async () => {
+  const pair = (await crypto.subtle.generateKey(
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    true,
+    ["sign", "verify"],
+  )) as CryptoKeyPair;
+  const publicJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ keys: [{ ...publicJwk, kty: "RSA", kid: "test" }] })),
+  );
+  authorization = `Bearer ${await signToken(pair.privateKey)}`;
+});
+
+afterAll(() => vi.unstubAllGlobals());
 
 describe("MCP session Worker transport", () => {
   it("preserves session context after the Durable Object isolate is evicted", async () => {
@@ -27,7 +49,7 @@ describe("MCP session Worker transport", () => {
 
     const ended = await SELF.fetch("https://mcp.test/mcp", {
       method: "DELETE",
-      headers: { "mcp-session-id": sessionId },
+      headers: { authorization, "mcp-session-id": sessionId },
     });
 
     expect(ended.status).toBe(204);
@@ -81,7 +103,7 @@ async function useContext(sessionId: string): Promise<void> {
 async function expectDeadSession(sessionId: string): Promise<void> {
   const response = await SELF.fetch("https://mcp.test/mcp", {
     method: "POST",
-    headers: { "content-type": "application/json", "mcp-session-id": sessionId },
+    headers: { authorization, "content-type": "application/json", "mcp-session-id": sessionId },
     body: "{malformed-dispatch-sentinel",
   });
 
@@ -94,9 +116,39 @@ function rpc(method: string, params?: unknown, sessionId?: string): Promise<Resp
   return SELF.fetch("https://mcp.test/mcp", {
     method: "POST",
     headers: {
+      authorization,
       "content-type": "application/json",
       ...(sessionId ? { "mcp-session-id": sessionId } : {}),
     },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
+}
+
+async function signToken(privateKey: CryptoKey): Promise<string> {
+  const header = encode({ alg: "RS256", typ: "JWT", kid: "test" });
+  const payload = encode({
+    typ: "access_token",
+    sub: "worker-test-user",
+    iss: "http://localhost:8791",
+    aud: "https://mcp.test/mcp",
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    scopes: ["app:app_session:admin"],
+  });
+  const input = `${header}.${payload}`;
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    privateKey,
+    new TextEncoder().encode(input),
+  );
+  return `${input}.${base64Url(new Uint8Array(signature))}`;
+}
+
+function encode(value: unknown): string {
+  return base64Url(new TextEncoder().encode(JSON.stringify(value)));
+}
+
+function base64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }

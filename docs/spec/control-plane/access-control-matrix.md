@@ -1,28 +1,29 @@
-# Access control matrix: scopes, control-plane token, trusted IdPs, Worker split
+# Access control matrix: scopes, resource access tokens, trusted IdPs, Worker split
 
-The control-plane access token shape and claims, the `app:{app_id}:{role}` scope format, the
+The resource access-token shape and claims, the `app:{app_id}:{role}` scope format, the
 trusted-IdP allow-list table, the Worker responsibility split, and revocation.
 
 For how a principal authenticates (the three identity doors, claim ceremony, and shared-preview
 `client_credentials` smoke grant), see [auth-doors.md](auth-doors.md).
 
-## Control-plane access token
+## Resource access token
 
 Short-lived bearer token (JWT, default TTL 1h) issued by `/oauth2/token`.
 
-Hosted environments use one trust contract: Auth API signs access tokens with RS256 using
-`ACCESS_TOKEN_SECRET` as an RSA private JWK, serves the matching public key at
-`/.well-known/jwks.json`, and Control Plane verifies against its explicit `AUTH_JWKS_URI`. Auth API
-must fail closed instead of minting a hosted access token when the hosted secret is not an RSA private
-JWK. HMAC access tokens are local/test fixtures only.
+Every runtime target uses one trust contract: Auth API signs access tokens with RS256 and serves the
+matching public key at `/.well-known/jwks.json`. Hosted targets read the RSA private JWK from
+`ACCESS_TOKEN_SECRET` and fail closed when it is missing or invalid. Local runtime generates one
+ephemeral RSA private JWK and exercises the same Auth API JWKS verification path end to end. HS256
+access tokens exist only in isolated unit-test fixtures; they are not the local Worker contract.
 
 **Claims:**
 
 ```
 {
+  typ: "access_token",
   sub: string,             // WorkOS user_id
   iss: string,             // auth-api origin
-  aud: string,             // control-plane protected-resource origin
+  aud: string,             // exact selected protected resource
   exp: number,             // unix timestamp
   iat: number,
   scopes: string[],        // e.g. ["app:app_abc123:admin"]
@@ -30,18 +31,20 @@ JWK. HMAC access tokens are local/test fixtures only.
 }
 ```
 
-`client_credentials` is reserved for the shared-preview smoke client. It mints a short-lived
-control-plane token for the configured seeded smoke user and scopes; it is not a general user or
-agent onboarding path.
+`aud` is either the Control Plane protected-resource origin or the exact MCP resource advertised for
+the challenged endpoint (the MCP origin or its `/mcp` URL). A token for one is rejected by every
+other resource. `client_credentials` is reserved for the shared-preview smoke client. It mints a
+short-lived resource-bound token for the configured seeded smoke user and scopes; it is not a general
+user or agent onboarding path.
 
 **Scope format:** `app:{app_id}:{role}` where role is `owner`, `admin`, or `member`.
 A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-level operations require
 `org:{org_id}:owner` or `org:{org_id}:admin`.
 
-**Token validation on any control-plane-authorized Worker:**
+**Token validation at the selected protected resource:**
 
 1. Verify JWT signature as RS256 against the configured Auth API `AUTH_JWKS_URI`
-2. Assert `aud` matches the control-plane protected resource
+2. Assert `aud` exactly matches the protected resource handling the request
 3. Assert `exp` not passed
 4. Extract `scopes`; match against required scope for the requested operation
 5. Extract `sub` as `user_id` for audit logging
@@ -101,8 +104,17 @@ only (seeded at deploy; not user-facing).
 **MCP Worker** owns the remote MCP protocol surface:
 
 - MCP OAuth PRM/auth.md handshake
+- RS256/JWKS verification of the exact MCP-resource bearer; the client bearer terminates here and is
+  never forwarded to a downstream Worker
 - Tool registry and schema derivation
 - Calls the Control Plane SDK; no direct D1/KV/Tinybird bindings and no domain invariants
+
+Each MCP tool call receives a separate 30-second, one-use delegated credential over a named Worker
+service-binding entrypoint. Control Plane, Evaluation, and Analysis use separate least-privilege
+credentials: `MCP_CONTROL_PLANE_DELEGATION_SECRET`, `MCP_EVALUATION_DELEGATION_SECRET`, and
+`MCP_ANALYSIS_DELEGATION_SECRET`. For each pair, MCP and the owning downstream Worker receive the
+same named value; the three values must be distinct. Hosted workflows validate this contract before
+deploying, and missing secrets or replay bindings fail closed.
 
 **Evaluation Worker** owns resolution:
 
@@ -126,7 +138,7 @@ only (seeded at deploy; not user-facing).
 
 ## Revocation
 
-- `/oauth2/revoke` (RFC 7009): revokes a control-plane token or refresh token
+- `/oauth2/revoke` (RFC 7009): revokes a resource access token or refresh token
 - `POST /agent/event/notify`: receives provider-signed SET (Security Event Token) for session revocation
 - Killing the WorkOS user session revokes agent reach (agent is that user)
 

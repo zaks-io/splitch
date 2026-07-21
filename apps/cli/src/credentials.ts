@@ -12,6 +12,7 @@ interface DeviceFlowCredential {
   readonly refreshToken: string;
   readonly accessToken: string;
   readonly accessTokenExpiresAt: string;
+  readonly selectedAppId?: string;
 }
 
 export interface CliCredentialFile {

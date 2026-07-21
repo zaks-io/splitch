@@ -45,7 +45,8 @@ Credentials stored in order of preference:
     "type": "device_flow",
     "refresh_token": "<WorkOS refresh token>",
     "access_token": "<short-lived; cached>",
-    "access_token_expires_at": "2026-06-20T14:00:00Z"
+    "access_token_expires_at": "2026-06-20T14:00:00Z",
+    "selected_app_id": "app_..."
   }
 }
 ```
@@ -104,9 +105,12 @@ it; subsequent tool calls inherit `app_id`/`environment_id` from the session unl
 them explicitly. This is what stops an agent from re-passing full scope on every tool call. The
 session context is never persisted server-side beyond the session and never widens token scope.
 
-**Auto-refresh on 401:** CLI exchanges refresh token or identity_assertion for a new access token
-silently. Only prompts for re-login if the refresh fails (expired refresh token or revoked assertion).
-On re-login for device flow, CLI outputs the verification URL and polls until approved.
+**Auto-refresh on 401:** CLI exchanges the refresh token or identity_assertion for a new access token
+silently. Device refresh tokens rotate. Auth API retains the canonical selected App authority and
+reintersects it with the WorkOS Organization grant and live membership before minting. Only prompts
+for re-login if refresh fails because the provider session, selected authority, or live membership is
+no longer valid. On re-login for device flow, CLI outputs the verification URL and polls until
+approved.
 
 ### Command structure (illustrative; mirrors endpoint inventory)
 
@@ -115,7 +119,7 @@ On re-login for device flow, CLI outputs the verification URL and polls until ap
 override. Flags that resolve from context are marked `[ctx]`.
 
 ```
-splitch login                        # device flow; writes to credential store
+splitch login --app <app_id|slug>    # Auth canonicalizes within the approved WorkOS Organization
 splitch logout                       # revokes token; removes credential file entry
 splitch use --app <app|slug> [--env <env|slug>]   # set active context (writes .splitch/config.json)
 splitch context                                    # show resolved app/env and source
@@ -156,23 +160,46 @@ default.
 **Who:** AI agents (Claude, Cursor, OpenAI Agents SDK).
 **Auth:** In-band via MCP OAuth Protected Resource Metadata (PRM), with `auth.md` as the
 human/agent-readable companion. Connecting triggers the handshake (401 + WWW-Authenticate
-→ agent follows PRM + authorization-server metadata → control-plane token → subsequent tool
-calls carry token in Authorization header). No on-disk credential; token lives in the transport
-session only.
+→ agent follows PRM + authorization-server metadata → exact MCP-resource token → subsequent tool
+calls carry that token in the Authorization header). The MCP Worker validates issuer, expiry,
+exact audience, and scope shape before JSON-RPC dispatch. No on-disk credential; the client token
+lives only in the transport session and is never forwarded downstream.
 **Deployment:** Remote Worker URL (not stdio/subprocess). Zero install for agents.
 
 ### OAuth PRM + auth.md discovery chain
 
 ```
 Agent connects to MCP server URL
-  → 401 + WWW-Authenticate: Bearer realm="splitch" resource_metadata_url="/.well-known/oauth-protected-resource"
-  → GET /.well-known/oauth-protected-resource   → { authorization_servers: [...] }
+  → 401 + WWW-Authenticate: Bearer realm="splitch", resource_metadata="${mcpOrigin}/.well-known/oauth-protected-resource{/mcp}"
+  → GET ${mcpOrigin}/.well-known/oauth-protected-resource{/mcp}   → { resource, authorization_servers }
   → GET /.well-known/oauth-authorization-server  → { agent_auth: { identity_endpoint, claim_endpoint, ... } }
-  → Agent picks door (ID-JAG preferred, device flow fallback)
-  → POST /agent/identity → identity_assertion
-  → POST /oauth2/token   → access_token
+  → Agent picks an advertised door
+      Door B (anonymous / pre-claim):
+        → POST /agent/identity with Turnstile token → identity_assertion
+        → POST /oauth2/token with identity_assertion + resource=<exact MCP resource>
+        → Auth API issues the exact-resource access_token for the anonymous identity
+      Door C (device flow):
+        → POST /oauth2/device_authorization with one App ID or slug selector → device_code + human verification URL
+        → Human approves in WorkOS
+        → Poll POST /oauth2/token with the sealed device grant + resource=<exact MCP resource>
+        → Auth resolves the selector to a canonical App ID inside WorkOS organization_id
+        → Auth API issues the exact-resource access_token for the authenticated WorkOS User
   → Subsequent tool calls: Authorization: Bearer <access_token>
 ```
+
+For each tool call, MCP creates a separate short-lived delegated credential bound to the derived
+operation, owning Worker, verified actor and scopes, method, exact downstream path/query, and body
+digest. The credential is signed with the owning service's delegation key, expires after 30 seconds,
+and carries a one-use identifier consumed by the Worker's replay guard. Only named Worker
+service-binding entrypoints accept it. Public Worker entrypoints do not, and downstream requests
+never contain the client bearer. The signed delegated principal carries only the already-verified
+actor and scopes, so it cannot be forged or widen the caller's authority. Replay identifiers are
+claimed atomically through a Durable Object; missing secrets or replay bindings and storage errors
+fail closed before downstream route dispatch.
+
+Door A (ID-JAG) is paused. While paused, authorization-server metadata and `auth.md` advertise only
+Door B (anonymous) and Door C (device flow). A paused door is absent from discovery rather than a
+broken endpoint an agent can select.
 
 ### MCP tool schema derivation
 

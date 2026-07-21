@@ -65,6 +65,7 @@ describe("Control Plane API Wrangler runtime config", () => {
       CredentialCacheWriterDurableObject: { type: "durable-object", storage: "sqlite" },
       CredentialCacheBackfillDurableObject: { type: "durable-object", storage: "sqlite" },
       PanelDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
+      McpDelegationReplayDurableObject: { type: "durable-object", storage: "sqlite" },
     });
     expect(target?.migrations).toBeUndefined();
   });

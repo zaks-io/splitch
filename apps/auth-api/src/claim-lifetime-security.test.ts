@@ -73,6 +73,7 @@ describe("Door B's 24-hour idempotency replay lifetime", () => {
     const replayAssertion = await d.tokenSigner.mintIdentityAssertion(
       userId,
       [`app:${appId}:member`],
+      "anonymous",
       Math.floor(replayAt / 1000),
     );
     await expect(
@@ -97,6 +98,7 @@ describe("Door B's 24-hour idempotency replay lifetime", () => {
     const replayAssertion = await d.tokenSigner.mintIdentityAssertion(
       userId,
       [`app:${appId}:member`],
+      "anonymous",
       Math.floor(replayAt / 1000),
     );
     await expect(

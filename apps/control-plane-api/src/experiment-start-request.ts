@@ -4,9 +4,9 @@ import { appNotFound } from "./app-environment-model";
 import { experimentAlreadyRunningForFlag } from "./experiment-errors";
 import {
   blockingRunningExperimentForStart,
+  type ExperimentDeps,
   optionalBody,
   requireWritableEnvironment,
-  type ExperimentDeps,
 } from "./experiment-handler-shared";
 import type { ExperimentRow } from "./experiment-model";
 import { confirmationRequired, readEnvironmentPolicy } from "./flag-config-policy";
@@ -17,12 +17,7 @@ export async function validateStartRequest(
   scope: EnvScope,
   experiment: ExperimentRow,
 ): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; response: Response }> {
-  const writeError = await requireWritableEnvironment(
-    deps,
-    scope,
-    args.principal.id,
-    args.requestId,
-  );
+  const writeError = await requireWritableEnvironment(deps, scope, args.principal, args.requestId);
   if (writeError) return { ok: false, response: writeError };
 
   const body = optionalBody(args.input);

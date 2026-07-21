@@ -8,7 +8,6 @@ import { memberProfileCacheKey } from "../src/member-profile-cache.js";
 const AUDIENCE = "https://cp.splitch.test";
 const JWKS_URI = "https://auth.splitch.test/.well-known/jwks.json";
 const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);
-
 const ORG = {
   orgId: "org_index_members_241b",
   orgName: "Index Members",

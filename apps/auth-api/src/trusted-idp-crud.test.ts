@@ -5,19 +5,20 @@ import { makeFixtureDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import { makeJtiCache } from "./jti-cache";
 import { makeKvRevocationStore } from "./revocation";
-import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import {
   type LocalBindings,
   makeDoorBDeps,
   makeFixtureKeypair,
   makeLocalBindings,
 } from "./test-fixtures";
+import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import { makeFixtureWorkOs } from "./workos";
 
 /**
  * Trusted-IdP CRUD is Org-owner only (access-control-matrix.md). A valid Bearer
- * access token authenticates the actor; the CRUD layer then checks the actor's
- * Org membership role against D1. A non-owner (or no membership) is FORBIDDEN.
+ * access token authenticates the actor; the CRUD layer then intersects its exact
+ * Org-owner scope with the actor's live Org membership role in D1. A caller
+ * missing either grant is FORBIDDEN.
  */
 
 const ASSERTION_SECRET = "test-assertion-secret";
@@ -35,8 +36,13 @@ const NOW_ISO = "2026-06-29T00:00:00.000Z";
 let local: LocalBindings;
 let signer: TokenSigner;
 
-async function accessTokenFor(userId: string): Promise<string> {
-  const assertion = await signer.mintIdentityAssertion(userId, [], Math.floor(NOW_MS / 1000));
+async function accessTokenFor(userId: string, scopes: string[]): Promise<string> {
+  const assertion = await signer.mintIdentityAssertion(
+    userId,
+    scopes,
+    "id_jag",
+    Math.floor(NOW_MS / 1000),
+  );
   return signer.exchangeForAccessToken(assertion, Math.floor(NOW_MS / 1000));
 }
 
@@ -137,7 +143,7 @@ async function createIdp(
 describe("trusted-idp CRUD: Org owner only", () => {
   it("an owner can create, list, and delete a trusted IdP (org_id stamped)", async () => {
     const app = buildApp();
-    const token = await accessTokenFor(OWNER);
+    const token = await accessTokenFor(OWNER, [`org:${ORG_A}:owner`]);
     const auth = { authorization: `Bearer ${token}` };
 
     const idp = await createIdp(app, ORG_A, token, "https://idp.openai.test");
@@ -158,7 +164,7 @@ describe("trusted-idp CRUD: Org owner only", () => {
 
   it("a non-owner member is FORBIDDEN", async () => {
     const app = buildApp();
-    const token = await accessTokenFor(MEMBER);
+    const token = await accessTokenFor(MEMBER, [`org:${ORG_A}:member`]);
     const res = await app.request(`/orgs/${ORG_A}/trusted-idps`, {
       headers: { authorization: `Bearer ${token}` },
     });
@@ -177,8 +183,8 @@ describe("trusted-idp CRUD: Org owner only", () => {
 describe("B1: trusted-idp CRUD is tenant-isolated", () => {
   it("list returns only the tenant's OWN rows — not the global seeds, not another tenant's", async () => {
     const app = buildApp();
-    const tokenA = await accessTokenFor(OWNER);
-    const tokenB = await accessTokenFor(OWNER_B);
+    const tokenA = await accessTokenFor(OWNER, [`org:${ORG_A}:owner`]);
+    const tokenB = await accessTokenFor(OWNER_B, [`org:${ORG_B}:owner`]);
 
     const idpA = await createIdp(app, ORG_A, tokenA, "https://a-only.test");
     await createIdp(app, ORG_B, tokenB, "https://b-only.test");
@@ -202,7 +208,7 @@ describe("B1: trusted-idp CRUD is tenant-isolated", () => {
 
   it("org_b cannot DELETE a global seed (the Anthropic seed survives) — 404", async () => {
     const app = buildApp();
-    const tokenB = await accessTokenFor(OWNER_B);
+    const tokenB = await accessTokenFor(OWNER_B, [`org:${ORG_B}:owner`]);
     const res = await app.request(`/orgs/${ORG_B}/trusted-idps/idp_seed_anthropic`, {
       method: "DELETE",
       headers: { authorization: `Bearer ${tokenB}` },
@@ -219,8 +225,8 @@ describe("B1: trusted-idp CRUD is tenant-isolated", () => {
 
   it("org_b cannot DELETE org_a's IdP — 404, row survives", async () => {
     const app = buildApp();
-    const tokenA = await accessTokenFor(OWNER);
-    const tokenB = await accessTokenFor(OWNER_B);
+    const tokenA = await accessTokenFor(OWNER, [`org:${ORG_A}:owner`]);
+    const tokenB = await accessTokenFor(OWNER_B, [`org:${ORG_B}:owner`]);
     const idpA = await createIdp(app, ORG_A, tokenA, "https://a-target.test");
 
     const res = await app.request(`/orgs/${ORG_B}/trusted-idps/${idpA.idpId}`, {
@@ -244,6 +250,7 @@ describe("H1: an identity_assertion cannot be replayed as a control-plane Bearer
     const assertion = await signer.mintIdentityAssertion(
       OWNER,
       ["app:x:owner"],
+      "id_jag",
       Math.floor(NOW_MS / 1000),
     );
     const res = await app.request(`/orgs/${ORG_A}/trusted-idps`, {
@@ -255,7 +262,7 @@ describe("H1: an identity_assertion cannot be replayed as a control-plane Bearer
 
   it("a genuine exchanged access token still works (control)", async () => {
     const app = buildApp();
-    const token = await accessTokenFor(OWNER);
+    const token = await accessTokenFor(OWNER, [`org:${ORG_A}:owner`]);
     const res = await app.request(`/orgs/${ORG_A}/trusted-idps`, {
       headers: { authorization: `Bearer ${token}` },
     });

@@ -249,10 +249,18 @@ that retry should always supply one. (Mirrors the auth-claim idempotency key, au
 
 ## Authorization
 
-Each tool call carries the control-plane token in the transport (MCP OAuth PRM/auth.md handshake, ADR-0022).
-The Worker validates the token and enforces scopes — MCP tool schemas do NOT encode auth. If auth
-fails, the Worker returns `UNAUTHORIZED`; if scopes insufficient, `INSUFFICIENT_SCOPES`. The agent
-never needs to know "this tool requires role X" — the Worker says so via the error code.
+Each tool call carries an exact MCP-resource token in the transport (MCP OAuth PRM/auth.md
+handshake, ADR-0022). MCP validates that client token at its own boundary, then calls the owning
+Worker through a named service-binding entrypoint with a separate signed, one-use, short-lived
+delegation bound to the operation, Worker owner, exact downstream target, body digest, verified
+actor, and scopes. The client bearer is never forwarded. Public Worker entrypoints never accept the
+delegation credential. The owning Worker verifies the signature, consumes the replay identifier,
+through a strongly consistent Durable Object claim, and still enforces the delegated principal's
+scopes — MCP tool schemas do NOT encode auth. Missing signing secrets or replay bindings, storage
+failures, and duplicate identifiers all fail closed before route dispatch. If auth fails, MCP returns
+HTTP `401`; if Worker scopes are insufficient, the Worker returns
+`INSUFFICIENT_SCOPES`. The agent never needs to know "this tool requires role X" — the Worker says
+so via the error code.
 
 Data-plane evaluate (`POST /api/sdk/evaluate`), peek (`POST /api/sdk/peek`, ADR-0034), and verify
 (`POST /api/sdk/verify`, ADR-0037) are NOT MCP tools — they are data-plane endpoints called
