@@ -1,7 +1,6 @@
 import { appScope, createRepository, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  ORG,
   appToken,
   bodyOf,
   clientCacheKey,

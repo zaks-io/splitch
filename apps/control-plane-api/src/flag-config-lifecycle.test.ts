@@ -293,7 +293,9 @@ describe("flag delete guards and cascade cleanup", () => {
     expect((await del.json()) as { code: string }).toMatchObject({ code: "RESOURCE_NOT_EMPTY" });
     expect(await repo.flags.getFlag(appScope(createdApp.app.id), flag.id)).toBeTruthy();
   });
+});
 
+describe("flag delete running experiment guards", () => {
   it("returns EXPERIMENT_RUNNING when a draft Experiment precedes a running one in the same Environment", async () => {
     const createdApp = await lifecycleCreateDefaultApp(h);
     const jwt = await lifecycleAppToken(h, createdApp.app.id);
@@ -407,7 +409,9 @@ describe("flag delete guards and cascade cleanup", () => {
     expect((await del.json()) as { code: string }).toMatchObject({ code: "EXPERIMENT_RUNNING" });
     expect(await repo.flags.getFlag(appScope(createdApp.app.id), flag.id)).toBeTruthy();
   });
+});
 
+describe("flag delete cascade cleanup", () => {
   it("cascade-deletes Environment configs and KV snapshots when a Flag is deleted", async () => {
     const createdApp = await lifecycleCreateDefaultApp(h);
     const jwt = await lifecycleAppToken(h, createdApp.app.id);

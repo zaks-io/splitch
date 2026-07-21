@@ -1,7 +1,6 @@
 import { apiKeyCacheKey } from "@splitch/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  ORG,
   appToken,
   credentialCreatingOnFirstTombstone,
   createDefaultApp,
