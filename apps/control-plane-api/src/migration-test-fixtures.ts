@@ -30,7 +30,7 @@ export async function makeMigratedLocalBindings(): Promise<MigratedLocalBindings
   return { d1, kv, credentialKv, configKv, dispose: () => mf.dispose() };
 }
 
-export async function applyMigrations(d1: D1Database): Promise<void> {
+async function applyMigrations(d1: D1Database): Promise<void> {
   const migrationsDir = join(
     dirname(fileURLToPath(import.meta.url)),
     "..",

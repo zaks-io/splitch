@@ -68,7 +68,7 @@ export async function removeFlagConfigsForFlag(
   }
 }
 
-export async function removeFlagConfigsForEnvironment(
+async function removeFlagConfigsForEnvironment(
   deps: FlagConfigLifecycleDeps,
   appId: string,
   environmentId: string,

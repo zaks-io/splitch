@@ -54,7 +54,7 @@ interface FlagConfigDeleteInput {
   flagKey?: string;
 }
 
-export type FlagConfigDeleteResult =
+type FlagConfigDeleteResult =
   | { ok: true; nudge: import("@splitch/contracts").DeltaNudge }
   | { ok: false; reason: "FLAG_NOT_FOUND" };
 

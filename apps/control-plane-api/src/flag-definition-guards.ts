@@ -25,7 +25,7 @@ export async function availableVariantReferenceCount(
   return count;
 }
 
-export async function runningExperimentForFlag(
+async function runningExperimentForFlag(
   repo: Repository,
   appId: string,
   flagId: string,
