@@ -47,6 +47,19 @@ export type { McpDelegationActor, McpDelegationReplayGuard } from "./mcp-delegat
 export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
 export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
 export type { McpProtocolToolDefinition, McpToolDefinition } from "./mcp-tools";
+export {
+  getRouteMembershipGate,
+  membershipAxes,
+  membershipGatePatterns,
+  membershipRoles,
+  scopeSatisfiesMembershipGate,
+} from "./mcp-tool-membership-gates";
+export type {
+  MembershipAxis,
+  MembershipRole,
+  McpToolOperationId,
+  RouteMembershipGate,
+} from "./mcp-tool-membership-gates";
 export { DeltaNudgeEntitySchema, deltaNudgeEntities, DeltaNudgeSchema } from "./delta-nudge";
 export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
 export {

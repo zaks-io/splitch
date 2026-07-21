@@ -17,6 +17,7 @@ import { createOperationSdks, type OperationSdks } from "./mcp-operation-sdks";
 import { readJsonRpcRequest } from "./mcp-request";
 import {
   type McpSessionStore,
+  type McpSessionTransport,
   parseToolCall,
   resolveScope,
   setSessionContext,
@@ -50,7 +51,6 @@ export interface McpServerRequestOptions {
   readonly sessionStore?: McpSessionStore;
   readonly tokenVerifier?: McpAccessTokenVerifier;
   readonly revocations?: McpRevocationReader;
-  readonly demoExpiresAt?: string | null;
   readonly fetchAuthMarkdown?: (authBaseUrl: string) => Promise<string>;
   readonly now?: () => number;
 }
@@ -92,7 +92,9 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
   const sessionId = options.request.headers.get("mcp-session-id");
   const response = await dispatch(request.value, sdks, actor, sessionId, sessionStore, options);
   const responseSessionId =
-    request.value.method === "initialize" ? await sessionStore.create() : undefined;
+    request.value.method === "initialize"
+      ? await sessionStore.create(sessionTransportFromActor(actor))
+      : undefined;
   return jsonResponse(response, 200, responseSessionId);
 }
 
@@ -122,7 +124,6 @@ async function dispatch(
       sessionId,
       sessionStore,
       authBaseUrl: authIssuer(options.authBaseUrl, options.platformTarget),
-      demoExpiresAt: options.demoExpiresAt,
       fetchAuthMarkdown: options.fetchAuthMarkdown,
     });
   }
@@ -182,6 +183,14 @@ function authIssuer(configured: string | undefined, platformTarget: string | und
   throw new Error(`mcp-server: AUTH_API_ORIGIN is required for ${target}`);
 }
 
+function sessionTransportFromActor(actor: McpAccessTokenActor): McpSessionTransport | undefined {
+  if (!actor.authDoor && !actor.demoExpiresAt) return undefined;
+  return {
+    ...(actor.authDoor ? { authDoor: actor.authDoor } : {}),
+    ...(actor.demoExpiresAt ? { demoExpiresAt: actor.demoExpiresAt } : {}),
+  };
+}
+
 async function contextUse(
   id: JsonRpcId,
   arguments_: unknown,
@@ -231,6 +240,9 @@ const unconfiguredSessionStore: McpSessionStore = {
     throw new Error("mcp-server: MCP session store is not configured");
   },
   async get() {
+    return undefined;
+  },
+  async getTransport() {
     return undefined;
   },
   async set() {

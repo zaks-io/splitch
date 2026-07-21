@@ -46,7 +46,6 @@ interface ReadMcpResourceContext {
   readonly sessionId: string | null;
   readonly sessionStore: McpSessionStore;
   readonly authBaseUrl: string;
-  readonly demoExpiresAt?: string | null;
   readonly fetchAuthMarkdown?: (authBaseUrl: string) => Promise<string>;
 }
 
@@ -131,7 +130,7 @@ async function readMcpResource(
     case "splitch://active-context":
       return jsonResource(
         "splitch://active-context",
-        await buildActiveContext(options.sessionId, options.sessionStore, options.demoExpiresAt),
+        await buildActiveContext(options.sessionId, options.sessionStore),
       );
     case "splitch://capabilities":
       return jsonResource("splitch://capabilities", buildCapabilitiesResource(options.actor));
@@ -161,16 +160,16 @@ function jsonResource(uri: McpResourceUri, value: unknown): McpResourceContent {
 async function buildActiveContext(
   sessionId: string | null,
   sessionStore: McpSessionStore,
-  demoExpiresAt: string | null | undefined,
 ): Promise<McpActiveContextResource> {
   const context = sessionId ? await readSessionContext(sessionId, sessionStore) : undefined;
+  const transport = sessionId ? await readSessionTransport(sessionId, sessionStore) : undefined;
   const payload: McpActiveContextResource = {
     app: context ? { id: context.appId } : null,
     environment: context ? { id: context.environmentId } : null,
     source: context ? "session" : null,
   };
-  if (demoExpiresAt) {
-    return { ...payload, demoExpiresAt };
+  if (transport?.demoExpiresAt) {
+    return { ...payload, demoExpiresAt: transport.demoExpiresAt };
   }
   return payload;
 }
@@ -181,9 +180,24 @@ async function readSessionContext(
 ): Promise<McpSessionContext | undefined> {
   try {
     return await sessionStore.get(sessionId);
-  } catch {
-    return undefined;
+  } catch (error) {
+    throw resourceReadError(error);
   }
+}
+
+async function readSessionTransport(
+  sessionId: string,
+  sessionStore: McpSessionStore,
+): Promise<{ demoExpiresAt?: string } | undefined> {
+  try {
+    return await sessionStore.getTransport(sessionId);
+  } catch (error) {
+    throw resourceReadError(error);
+  }
+}
+
+function resourceReadError(error: unknown): Error {
+  return new Error(error instanceof Error ? error.message : String(error));
 }
 
 async function defaultFetchAuthMarkdown(authBaseUrl: string): Promise<string> {

@@ -1,24 +1,33 @@
 import { DurableObject } from "cloudflare:workers";
-import type { McpSessionContext } from "./mcp-session-context";
+import type { McpSessionContext, McpSessionTransport } from "./mcp-session-context";
 import type { McpSessionResult } from "./mcp-session-store";
 
 interface SessionRecord {
   readonly expiresAt: number;
   readonly context?: McpSessionContext;
+  readonly transport?: McpSessionTransport;
 }
 
 const SESSION_KEY = "session";
 
 export class McpSessionDurableObject extends DurableObject {
-  async initialize(expiresAt: number): Promise<McpSessionResult<void>> {
+  async initialize(
+    expiresAt: number,
+    transport?: McpSessionTransport,
+  ): Promise<McpSessionResult<void>> {
     return this.ctx.blockConcurrencyWhile(async () => {
       if (await this.ctx.storage.get(SESSION_KEY)) {
         return { ok: false, message: "mcp-server: MCP session already initialized" };
       }
-      await this.ctx.storage.put(SESSION_KEY, { expiresAt } satisfies SessionRecord);
+      await this.ctx.storage.put(SESSION_KEY, { expiresAt, transport } satisfies SessionRecord);
       await this.ctx.storage.setAlarm(expiresAt);
       return { ok: true, value: undefined };
     });
+  }
+
+  async getTransport(now: number): Promise<McpSessionResult<McpSessionTransport | undefined>> {
+    const session = await this.activeRecord(now);
+    return session.ok ? { ok: true, value: session.value.transport } : session;
   }
 
   async getContext(now: number): Promise<McpSessionResult<McpSessionContext | undefined>> {

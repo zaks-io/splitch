@@ -30,6 +30,7 @@ interface AssertionClaims {
   iat: number;
   exp: number;
   auth_door: AssertionAuthDoor;
+  demo_expires_at?: string;
 }
 
 type AssertionAuthDoor = "id_jag" | "anonymous";
@@ -46,6 +47,7 @@ interface AccessTokenClaims {
   exp: number;
   scopes: string[];
   auth_door: AccessTokenAuthDoor;
+  demo_expires_at?: string;
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
@@ -171,6 +173,7 @@ export interface TokenSigner {
     scopes: string[],
     authDoor: AssertionAuthDoor,
     nowSeconds: number,
+    demoExpiresAt?: string,
   ): Promise<string>;
   exchangeForAccessToken(assertion: string, nowSeconds: number, audience?: string): Promise<string>;
   /**
@@ -209,7 +212,7 @@ export function makeTokenSigner(opts: {
 }): TokenSigner {
   const accessTokenTrustContract = opts.accessTokenTrustContract ?? "local-hs256";
   return {
-    async mintIdentityAssertion(userId, scopes, authDoor, nowSeconds) {
+    async mintIdentityAssertion(userId, scopes, authDoor, nowSeconds, demoExpiresAt) {
       const claims: AssertionClaims = {
         typ: "identity_assertion",
         sub: userId,
@@ -218,6 +221,7 @@ export function makeTokenSigner(opts: {
         iat: nowSeconds,
         exp: nowSeconds + ASSERTION_TTL_SECONDS,
         auth_door: authDoor,
+        ...(demoExpiresAt ? { demo_expires_at: demoExpiresAt } : {}),
       };
       return signHmacJwt(claims, opts.assertionSecret);
     },
@@ -233,6 +237,10 @@ export function makeTokenSigner(opts: {
         throw new OAuthError("invalid_grant", "identity_assertion is missing exp or has expired");
       }
       const scopes = Array.isArray(claims.scopes) ? (claims.scopes as string[]) : [];
+      const demoExpiresAt =
+        typeof claims.demo_expires_at === "string" && claims.demo_expires_at.length > 0
+          ? claims.demo_expires_at
+          : undefined;
       const access: AccessTokenClaims = {
         typ: "access_token",
         sub: claims.sub,
@@ -242,6 +250,7 @@ export function makeTokenSigner(opts: {
         exp: nowSeconds + ACCESS_TOKEN_TTL_SECONDS,
         scopes,
         auth_door: authDoor,
+        ...(demoExpiresAt ? { demo_expires_at: demoExpiresAt } : {}),
       };
       return signAccessJwt(access, opts.accessSecret, accessTokenTrustContract);
     },

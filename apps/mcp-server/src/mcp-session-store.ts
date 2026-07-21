@@ -1,10 +1,15 @@
-import type { McpSessionContext, McpSessionStore } from "./mcp-session-context";
+import type {
+  McpSessionContext,
+  McpSessionStore,
+  McpSessionTransport,
+} from "./mcp-session-context";
 
 const MCP_SESSION_TTL_MS = 24 * 60 * 60 * 1_000;
 
 interface McpSessionDurableObjectStub {
-  initialize(expiresAt: number): Promise<McpSessionResult<void>>;
+  initialize(expiresAt: number, transport?: McpSessionTransport): Promise<McpSessionResult<void>>;
   getContext(now: number): Promise<McpSessionResult<McpSessionContext | undefined>>;
+  getTransport(now: number): Promise<McpSessionResult<McpSessionTransport | undefined>>;
   setContext(context: McpSessionContext, now: number): Promise<McpSessionResult<void>>;
   end(): Promise<void>;
 }
@@ -30,13 +35,18 @@ export function durableMcpSessionStore(
   const now = options.now ?? Date.now;
   const ttlMs = options.ttlMs ?? MCP_SESSION_TTL_MS;
   return {
-    async create() {
+    async create(transport) {
       const id = crypto.randomUUID();
-      unwrap(await namespace.getByName(id).initialize(now() + ttlMs));
+      unwrap(await namespace.getByName(id).initialize(now() + ttlMs, transport));
       return id;
     },
     async get(id) {
       const result = await namespace.getByName(id).getContext(now());
+      if (!result.ok) throw new McpSessionNotFoundError();
+      return result.value;
+    },
+    async getTransport(id) {
+      const result = await namespace.getByName(id).getTransport(now());
       if (!result.ok) throw new McpSessionNotFoundError();
       return result.value;
     },

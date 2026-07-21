@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
-import type { McpSessionContext, McpSessionStore } from "./mcp-session-context";
+import type {
+  McpSessionContext,
+  McpSessionStore,
+  McpSessionTransport,
+} from "./mcp-session-context";
 import { MCP_RESOURCE_URIS } from "./mcp-resources";
 import {
   allowMcpRevocations,
@@ -13,6 +17,12 @@ const service = "splitch-mcp-server";
 const defaultAuthorization = "Bearer local-test-token";
 const demoExpiresAt = "2026-07-22T00:00:00.000Z";
 const authIssuer = "http://localhost:8791";
+const anonymousActor = {
+  subject: "user_anon",
+  scopes: ["app:app_session:member"],
+  authDoor: "anonymous",
+  demoExpiresAt,
+};
 const authFixture = `# splitch auth
 
 Use one of the supported auth doors, then exchange the resulting credential at ${authIssuer}/oauth2/token.
@@ -76,20 +86,20 @@ describe("MCP resources discovery", () => {
     expect(text).not.toMatch(/\bID-JAG\b/);
   });
 
-  it("reflects a prior context_use in splitch://active-context", async () => {
+  it("reflects a prior context_use and anonymous-door demo expiry from the session transport", async () => {
     const sessionStore = trackingSessionStore();
-    const sessionId = await initializeSession(sessionStore);
+    const sessionId = await initializeSession(sessionStore, anonymousActor);
 
     await mcp(
       "tools/call",
       { name: "context_use", arguments: { appId: "app_session", environmentId: "env_session" } },
-      { sessionId, sessionStore },
+      { sessionId, sessionStore, actor: anonymousActor },
     );
 
     const response = await mcp(
       "resources/read",
       { uri: "splitch://active-context" },
-      { sessionId, sessionStore, demoExpiresAt },
+      { sessionId, sessionStore, actor: anonymousActor },
     );
     const body = (await response.json()) as JsonRpcSuccess<{
       contents: Array<{ text: string }>;
@@ -101,9 +111,51 @@ describe("MCP resources discovery", () => {
       source: "session",
       demoExpiresAt,
     });
+    expect(await sessionStore.getTransport(sessionId)).toEqual({
+      authDoor: "anonymous",
+      demoExpiresAt,
+    });
   });
 
-  it("derives splitch://capabilities scopes from the session token", async () => {
+  it("returns a structured resource-read error when the session store fails", async () => {
+    const sessionStore = failingSessionStore();
+    const sessionId = await initializeSession(sessionStore);
+
+    const response = await mcp(
+      "resources/read",
+      { uri: "splitch://active-context" },
+      { sessionId, sessionStore },
+    );
+    const body = (await response.json()) as JsonRpcError;
+
+    expect(body.error).toMatchObject({
+      code: -32603,
+      message: "Internal error",
+      data: { message: "mcp-server: session store read failed" },
+    });
+  });
+
+  it("returns null active-context fields when the session has no selected context", async () => {
+    const sessionStore = trackingSessionStore();
+    const sessionId = await initializeSession(sessionStore);
+
+    const response = await mcp(
+      "resources/read",
+      { uri: "splitch://active-context" },
+      { sessionId, sessionStore },
+    );
+    const body = (await response.json()) as JsonRpcSuccess<{
+      contents: Array<{ text: string }>;
+    }>;
+
+    expect(JSON.parse(body.result.contents[0]?.text ?? "{}")).toEqual({
+      app: null,
+      environment: null,
+      source: null,
+    });
+  });
+
+  it("derives splitch://capabilities scopes from the session token using Worker membership gates", async () => {
     const response = await mcp(
       "resources/read",
       { uri: "splitch://capabilities" },
@@ -132,15 +184,23 @@ describe("MCP resources discovery", () => {
       gate: ["token"],
       grantedBy: ["app:app_local:admin", "org:org_local:member"],
     });
+    expect(payload.tools.find((tool) => tool.name === "organizations_update")).toMatchObject({
+      gate: ["org:owner"],
+      grantedBy: [],
+    });
+    expect(payload.tools.find((tool) => tool.name === "organization_members_list")).toMatchObject({
+      gate: ["org:admin"],
+      grantedBy: [],
+    });
   });
 
   it("performs zero writes while reading every resource", async () => {
     const sessionStore = trackingSessionStore();
-    const sessionId = await initializeSession(sessionStore);
+    const sessionId = await initializeSession(sessionStore, anonymousActor);
     await mcp(
       "tools/call",
       { name: "context_use", arguments: { appId: "app_session", environmentId: "env_session" } },
-      { sessionId, sessionStore },
+      { sessionId, sessionStore, actor: anonymousActor },
     );
 
     for (const uri of MCP_RESOURCE_URIS) {
@@ -148,7 +208,7 @@ describe("MCP resources discovery", () => {
       const response = await mcp(
         "resources/read",
         { uri },
-        { sessionId, sessionStore, demoExpiresAt },
+        { sessionId, sessionStore, actor: anonymousActor },
       );
       expect(response.status).toBe(200);
       expect(sessionStore.writes).toBe(before);
@@ -156,8 +216,14 @@ describe("MCP resources discovery", () => {
   });
 });
 
-async function initializeSession(sessionStore: McpSessionStore): Promise<string> {
-  const response = await mcp("initialize", undefined, { sessionStore });
+async function initializeSession(
+  sessionStore: McpSessionStore,
+  actor: { subject: string; scopes: string[]; authDoor?: string; demoExpiresAt?: string } = {
+    subject: "user_local_test",
+    scopes: ["app:app_local:admin"],
+  },
+): Promise<string> {
+  const response = await mcp("initialize", undefined, { sessionStore, actor });
   const sessionId = response.headers.get("mcp-session-id");
   expect(sessionId).toBeTruthy();
   return sessionId as string;
@@ -170,8 +236,7 @@ async function mcp(
     authorization?: string;
     sessionId?: string;
     sessionStore?: McpSessionStore;
-    demoExpiresAt?: string;
-    actor?: { subject: string; scopes: string[] };
+    actor?: { subject: string; scopes: string[]; authDoor?: string; demoExpiresAt?: string };
   } = {},
 ): Promise<Response> {
   return handleMcpServerRequest({
@@ -197,29 +262,36 @@ async function mcp(
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
     controlPlaneFetch: async () => Response.json({ items: [] }),
     sessionStore: options.sessionStore ?? trackingSessionStore(),
-    demoExpiresAt: options.demoExpiresAt,
     fetchAuthMarkdown: async () => authFixture,
   });
 }
 
 function trackingSessionStore(): McpSessionStore & { writes: number } {
-  const sessions = new Map<string, McpSessionContext | undefined>();
+  const sessions = new Map<
+    string,
+    { context?: McpSessionContext; transport?: McpSessionTransport }
+  >();
   return {
     writes: 0,
-    async create() {
+    async create(transport) {
       this.writes += 1;
       const id = crypto.randomUUID();
-      sessions.set(id, undefined);
+      sessions.set(id, { transport });
       return id;
     },
     async get(id) {
       if (!sessions.has(id)) throw new Error("mcp-server: MCP session is unknown or expired");
-      return sessions.get(id);
+      return sessions.get(id)?.context;
+    },
+    async getTransport(id) {
+      if (!sessions.has(id)) throw new Error("mcp-server: MCP session is unknown or expired");
+      return sessions.get(id)?.transport;
     },
     async set(id, context) {
       this.writes += 1;
       if (!sessions.has(id)) throw new Error("mcp-server: MCP session is unknown or expired");
-      sessions.set(id, context);
+      const record = sessions.get(id);
+      sessions.set(id, { ...record, context });
     },
     async end(id) {
       this.writes += 1;
@@ -228,6 +300,32 @@ function trackingSessionStore(): McpSessionStore & { writes: number } {
   };
 }
 
+function failingSessionStore(): McpSessionStore {
+  return {
+    async create() {
+      return crypto.randomUUID();
+    },
+    async get() {
+      return undefined;
+    },
+    async getTransport() {
+      throw new Error("mcp-server: session store read failed");
+    },
+    async set() {
+      throw new Error("mcp-server: session store write failed");
+    },
+    async end() {},
+  };
+}
+
 interface JsonRpcSuccess<T> {
   result: T;
+}
+
+interface JsonRpcError {
+  error: {
+    code: number;
+    message: string;
+    data?: { message?: string };
+  };
 }
