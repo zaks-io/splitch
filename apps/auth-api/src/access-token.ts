@@ -5,9 +5,8 @@
  * the Bearer access token minted by /oauth2/token. We verify its signature (with
  * the ACCESS secret — distinct from the assertion secret), then assert it is
  * genuinely an access token bound to the control-plane audience, before handing
- * the `sub` (WorkOS user_id) to the CRUD layer, which does the real Org-owner
- * authorization against D1. The token scope is audit context, not the authz
- * decision (ADR-0022).
+ * the verified actor to the CRUD layer, which intersects the exact held Org-owner
+ * scope with live D1 Org-owner membership (ADR-0022).
  *
  * Type-confusion guard: an identity_assertion (whose scopes are attacker-
  * influenced via requested_scopes) must NEVER pass as a Bearer. Three independent
@@ -16,7 +15,7 @@
  * must equal the control-plane audience.
  */
 
-import { accessTokenPublicJwkFromSecret, type AccessTokenPublicJwk } from "./access-token-key";
+import { type AccessTokenPublicJwk, accessTokenPublicJwkFromSecret } from "./access-token-key";
 
 export interface VerifiedActor {
   userId: string;

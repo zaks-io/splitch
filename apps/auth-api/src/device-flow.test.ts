@@ -22,6 +22,30 @@ function expectCall(call: { url: string; init: RequestInit } | undefined): {
 }
 
 describe("WorkOS device flow adapter", () => {
+  it("starts device authorization with the documented JSON contract", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const flow = makeWorkOsDeviceFlow({
+      clientId: "client_123",
+      baseUrl: "https://api.workos.test/user_management",
+      fetcher: async (input, init) => {
+        calls.push({ url: String(input), init: init ?? {} });
+        return Response.json({
+          device_code: "device_123",
+          user_code: "ABCD-EFGH",
+          verification_uri: "https://authkit.test/device",
+          expires_in: 300,
+        });
+      },
+    });
+
+    await flow.authorizeDevice({ clientId: "client_override" });
+
+    const authorizeCall = expectCall(calls[0]);
+    expect(authorizeCall.url).toBe("https://api.workos.test/user_management/authorize/device");
+    expect(authorizeCall.init.headers).toEqual({ "content-type": "application/json" });
+    expect(JSON.parse(String(authorizeCall.init.body))).toEqual({ client_id: "client_override" });
+  });
+
   it("returns the WorkOS session id from the device-token response", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const fetcher: typeof fetch = async (input, init) => {
@@ -32,6 +56,7 @@ describe("WorkOS device flow adapter", () => {
           user: { id: "user_workos" },
           access_token: jwtWithClaims({ sub: "user_workos", sid: "session_workos" }),
           refresh_token: "refresh_original",
+          organization_id: "org_workos",
         });
       }
       return Response.json({ error: "invalid_request" }, { status: 400 });
@@ -51,6 +76,7 @@ describe("WorkOS device flow adapter", () => {
       userId: "user_workos",
       refreshToken: "refresh_original",
       providerSessionId: "session_workos",
+      organizationId: "org_workos",
     });
     expect(calls).toHaveLength(1);
     const authenticateCall = expectCall(calls[0]);
@@ -120,6 +146,7 @@ describe("WorkOS device flow adapter", () => {
           user: { id: "user_workos" },
           access_token: jwtWithClaims({ sub: "user_workos" }),
           refresh_token: "refresh_rotated",
+          organization_id: "org_workos",
         }),
     });
 
@@ -130,6 +157,61 @@ describe("WorkOS device flow adapter", () => {
       }),
     ).rejects.toMatchObject({
       code: "server_error",
+    });
+  });
+
+  it("fails device-token exchange without a WorkOS Organization grant", async () => {
+    const flow = makeWorkOsDeviceFlow({
+      clientId: "client_123",
+      fetcher: async () =>
+        Response.json({
+          user: { id: "user_workos" },
+          access_token: jwtWithClaims({ sub: "user_workos", sid: "session_workos" }),
+          refresh_token: "refresh_original",
+        }),
+    });
+
+    await expect(
+      flow.exchangeDeviceCode({ deviceCode: "device_123", clientId: "client_123" }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+  });
+});
+
+describe("WorkOS refresh flow adapter", () => {
+  it("rotates a refresh token through WorkOS with the selected Organization", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const flow = makeWorkOsDeviceFlow({
+      clientId: "client_123",
+      apiKey: "sk_test_123",
+      baseUrl: "https://api.workos.test/user_management",
+      fetcher: async (input, init) => {
+        calls.push({ url: String(input), init: init ?? {} });
+        return Response.json({
+          user: { id: "user_workos" },
+          organization_id: "org_workos",
+          access_token: jwtWithClaims({ sub: "user_workos", sid: "session_workos" }),
+          refresh_token: "refresh_rotated",
+        });
+      },
+    });
+
+    await expect(
+      flow.refreshProviderToken({
+        clientId: "client_123",
+        refreshToken: "refresh_original",
+        organizationId: "org_workos",
+      }),
+    ).resolves.toMatchObject({
+      userId: "user_workos",
+      organizationId: "org_workos",
+      refreshToken: "refresh_rotated",
+      providerSessionId: "session_workos",
+    });
+    expect(calls[0]?.init.headers).toEqual({ "content-type": "application/json" });
+    expect(JSON.parse(String(calls[0]?.init.body))).toMatchObject({
+      grant_type: "refresh_token",
+      organization_id: "org_workos",
+      client_secret: "sk_test_123",
     });
   });
 

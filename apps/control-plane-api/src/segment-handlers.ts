@@ -5,12 +5,12 @@ import { randomHex } from "./credential-cache";
 import { runningExperimentError } from "./flag-definition-errors";
 import { objectBody, pathParam } from "./handler-input";
 import {
+  type MetricSegmentDeps,
   requireWritableApp,
   runningSegmentReference,
   segmentFromPath,
   segmentNotFound,
   segmentResponse,
-  type MetricSegmentDeps,
 } from "./metric-segment-shared";
 
 export function makeSegmentHandlers(deps: MetricSegmentDeps) {
@@ -39,7 +39,7 @@ async function createSegment(
 ): Promise<Response> {
   const appId = pathParam(input, "appId");
   const body = objectBody(input);
-  const writeError = await requireWritableApp(deps, appId, principal.id, requestId);
+  const writeError = await requireWritableApp(deps, appId, principal, requestId);
   if (writeError) return writeError;
 
   const now = nowIso(deps);
@@ -72,7 +72,7 @@ async function updateSegment(
   const segment = await segmentFromPath(deps, args.input);
   if (!segment) return segmentNotFound(args.requestId);
 
-  const writeError = await requireWritableApp(deps, appId, args.principal.id, args.requestId);
+  const writeError = await requireWritableApp(deps, appId, args.principal, args.requestId);
   if (writeError) return writeError;
 
   const body = objectBody(args.input);
@@ -94,7 +94,7 @@ async function deleteSegment(
   const segment = await segmentFromPath(deps, args.input);
   if (!segment) return segmentNotFound(args.requestId);
 
-  const writeError = await requireWritableApp(deps, appId, args.principal.id, args.requestId);
+  const writeError = await requireWritableApp(deps, appId, args.principal, args.requestId);
   if (writeError) return writeError;
 
   const blocker = await runningSegmentReference(deps, appId, segment.id);

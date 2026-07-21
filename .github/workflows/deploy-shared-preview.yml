@@ -42,6 +42,9 @@ jobs:
       SENTRY_ORG: ${{ vars.SENTRY_ORG || secrets.SENTRY_ORG }}
       SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT || secrets.SENTRY_PROJECT }}
       EVALUATION_PRIVACY_SALT: ${{ secrets.EVALUATION_PRIVACY_SALT }}
+      MCP_CONTROL_PLANE_DELEGATION_SECRET: ${{ secrets.MCP_CONTROL_PLANE_DELEGATION_SECRET }}
+      MCP_EVALUATION_DELEGATION_SECRET: ${{ secrets.MCP_EVALUATION_DELEGATION_SECRET }}
+      MCP_ANALYSIS_DELEGATION_SECRET: ${{ secrets.MCP_ANALYSIS_DELEGATION_SECRET }}
       SPLITCH_EVENT_INGEST_TOKEN: ${{ secrets.SPLITCH_EVENT_INGEST_TOKEN }}
       SPLITCH_DEPLOY_GATE_TOKEN: ${{ secrets.SPLITCH_DEPLOY_GATE_TOKEN }}
       TINYBIRD_INGEST_TOKEN: ${{ secrets.TINYBIRD_INGEST_TOKEN }}
@@ -99,6 +102,7 @@ jobs:
               exit 1
             fi
           done
+          node scripts/validate-hosted-worker-secret-env.mjs shared-preview
 
       - name: Check Turbo remote cache inputs
         run: node scripts/check-turbo-remote-cache-env.mjs

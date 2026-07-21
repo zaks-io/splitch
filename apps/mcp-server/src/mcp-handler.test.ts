@@ -4,6 +4,11 @@ import type { AddressInfo } from "node:net";
 import { deriveMcpProtocolTools, type ErrorResponse } from "@splitch/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
+import {
+  allowMcpRevocations,
+  staticMcpTokenVerifier,
+  TEST_MCP_DELEGATION_SECRET,
+} from "./mcp-test-verifier";
 
 const service = "splitch-mcp-server";
 const token = "Bearer local-test-token";
@@ -83,7 +88,7 @@ describe("mcp server Streamable HTTP transport", () => {
       {
         method: "GET",
         path: "/apps/app_local/flags",
-        authorization: token,
+        authorization: null,
         body: "",
       },
     ]);
@@ -128,7 +133,7 @@ describe("mcp server Streamable HTTP transport", () => {
     expect(seen[0]).toMatchObject({
       method: "PATCH",
       path: "/apps/app_local/flags/flag_checkout",
-      authorization: token,
+      authorization: null,
     });
     expect(JSON.parse(seen[0]?.body ?? "{}")).toEqual({
       name: "Checkout v2",
@@ -139,6 +144,45 @@ describe("mcp server Streamable HTTP transport", () => {
 });
 
 describe("mcp server errors and config", () => {
+  it("fails closed when shared revocation state is missing or unavailable", async () => {
+    const options = {
+      service,
+      platformTarget: "local",
+      tokenVerifier: staticMcpTokenVerifier(),
+      controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    };
+
+    await expect(
+      handleMcpServerRequest({ ...options, request: toolsListRequest() }),
+    ).rejects.toThrow("mcp-server: SESSION_STORE revocation binding is required");
+    await expect(
+      handleMcpServerRequest({
+        ...options,
+        request: toolsListRequest(),
+        revocations: {
+          isRevoked: async () => {
+            throw new Error("revocation KV unavailable");
+          },
+        },
+      }),
+    ).rejects.toThrow("revocation KV unavailable");
+  });
+
+  it("fails closed without a local named service binding instead of using public HTTP", async () => {
+    const response = await mcp("tools/call", {
+      name: "flags_list",
+      arguments: { appId: "app_local" },
+    });
+    const body = (await response.json()) as JsonRpcFailure & {
+      error: { code: number; message: string; data?: { message?: string } };
+    };
+
+    expect(body.error).toMatchObject({
+      code: -32603,
+      data: { message: "mcp-server: CONTROL_PLANE_API service binding is required" },
+    });
+  });
+
   it("returns MCP method-not-found for an unknown tool name", async () => {
     const response = await mcp("tools/call", { name: "missing_tool", arguments: {} });
     const body = (await response.json()) as JsonRpcFailure;
@@ -170,13 +214,14 @@ describe("mcp server errors and config", () => {
     expect(body.result.structuredContent).toEqual(validationError);
   });
 
-  it("keeps wrangler config limited to the MCP session Durable Object", async () => {
+  it("keeps wrangler state limited to sessions and shared token revocation", async () => {
     const config = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
 
-    expect(config).not.toMatch(/d1_databases|kv_namespaces/i);
+    expect(config).not.toMatch(/d1_databases/i);
     expect(config).not.toMatch(/tinybird|analytics_engine_datasets/i);
     expect(config.match(/"name": "MCP_SESSIONS"/g)).toHaveLength(3);
     expect(config.match(/"class_name": "McpSessionDurableObject"/g)).toHaveLength(3);
+    expect(config.match(/"binding": "SESSION_STORE"/g)).toHaveLength(3);
   });
 });
 
@@ -205,6 +250,14 @@ interface ToolResult<T> {
   isError?: boolean;
 }
 
+function toolsListRequest(): Request {
+  return new Request("https://mcp.test/mcp", {
+    method: "POST",
+    headers: { authorization: token, "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+  });
+}
+
 async function mcp(
   method: string,
   params?: unknown,
@@ -229,6 +282,14 @@ async function mcp(
     }),
     service,
     platformTarget: "local",
+    tokenVerifier: staticMcpTokenVerifier(),
+    revocations: allowMcpRevocations(),
+    controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    evaluationDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    analysisDelegationSecret: TEST_MCP_DELEGATION_SECRET,
+    controlPlaneFetch: origins.controlPlaneBaseUrl ? fetch : undefined,
+    evaluationFetch: origins.evaluationBaseUrl ? fetch : undefined,
+    analysisFetch: origins.analysisBaseUrl ? fetch : undefined,
     ...origins,
   });
 }

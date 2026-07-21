@@ -226,6 +226,12 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
         .limit(1);
       return rows[0] ?? null;
     },
+
+    deleteDeviceRefreshSession(refreshTokenHash: string) {
+      return db
+        .delete(deviceRefreshSessions)
+        .where(eq(deviceRefreshSessions.refreshTokenHash, refreshTokenHash));
+    },
   };
 }
 

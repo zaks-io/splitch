@@ -1,6 +1,15 @@
 # Agent and human auth via the auth.md protocol: one principal, three doors, splitch as resource server
 
-**Status:** accepted
+**Status:** accepted; amended 2026-07-19
+
+## 2026-07-19 amendment: resource-bound access tokens
+
+The original phrase "the same control-plane access token" meant one principal, claim shape, signing
+contract, and authorization model. It did not authorize one bearer across resources. `/oauth2/token`
+now binds each access token to the exact selected protected resource: the Control Plane origin, the
+MCP origin, or the MCP `/mcp` endpoint. All runtime targets, including local, mint RS256 tokens and
+publish the verification key through Auth API JWKS. Door A remains paused and absent from discovery;
+this amendment does not enable it.
 
 The control plane is driven by both **AI agents** and **humans**, and the design goal is **minimum friction
 for both** — especially for an agent logging in on a user's behalf. splitch adopts WorkOS's **auth.md**
@@ -14,7 +23,8 @@ ADR-0018/0021); _which_ door was used is recorded for **audit only** and never b
 An agent can do exactly what the user it acts for can do — no more, no less. Future per-session limits are
 expressed as **scopes on the issued credential**, not as a new class of principal.
 
-**Three doors, all terminating at the same auth-api and minting the same control-plane access token:**
+**Three doors, all terminating at the same auth-api and minting the same resource-bound access-token
+shape:**
 
 1. **ID-JAG (agent-verified)** — the frictionless primary for agents. The agent's IdP (Anthropic, OpenAI,
    Cursor) issues an audience-specific ID-JAG attesting to the user; the agent POSTs it to splitch's
@@ -38,9 +48,9 @@ an email that already maps to a real user, splitch returns `interaction_required
 user to authenticate through splitch's own login and **consent** to linking the provider identity. Binding on
 verified email alone is an account-takeover vector and is forbidden — matching the auth.md spec.
 
-**Two credential systems, deliberately not unified.** The control-plane access token from this flow is
+**Two credential systems, deliberately not unified.** The resource access token from this flow is
 **separate from the SDK data-plane API key** (ADR-0018, validated per-request in KV on the hot path). They
-never mix: agents/humans _manage_ config with short-lived control-plane tokens; deployed SDKs _evaluate_
+never mix: agents/humans _manage_ config with short-lived resource tokens; deployed SDKs _evaluate_
 flags with long-lived KV-validated API keys. **This agent-auth work touches zero of the serving hot path.**
 
 ## Considered options
@@ -74,6 +84,8 @@ flags with long-lived KV-validated API keys. **This agent-auth work touches zero
   ID-JAG's `aud` points at it) and the credential-minting surface is isolated for security review.
 - **The durable client-side artifact is splitch's `identity_assertion`** (re-exchanged for short-lived access
   tokens), _not_ a refresh token, on the ID-JAG path. The device-flow path stores a WorkOS refresh token.
+  Auth API stores only its hash with the provider Organization/session and canonical selected App
+  authority, rotates it through WorkOS, and rechecks live membership before each mint.
 - **Anonymous registration is the abuse surface** (mints accounts with no auth), so the auth-api Worker
   **rate-limits it at the Cloudflare edge** (per-IP / per-issuer).
 - **24h provisional demos must be reaped.** Unclaimed provisional Orgs/Apps are swept from D1 by a Cloudflare

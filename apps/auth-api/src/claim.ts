@@ -7,11 +7,11 @@ import {
   iso,
   resolveIdentity,
 } from "./claim-identity";
+import { verifyClaim } from "./claim-verify";
 import { OAuthError } from "./oauth-errors";
 import type { RateLimiter } from "./rate-limit";
 import type { TokenSigner } from "./token-exchange";
 import type { WorkOsPort } from "./workos";
-import { verifyClaim } from "./claim-verify";
 
 export { verifyClaim };
 
@@ -23,6 +23,7 @@ export interface ClaimDeps {
   tokenSigner: TokenSigner;
   rateLimiter: RateLimiter;
   consentBaseUrl: string;
+  defaultResource: string;
   now: () => number;
   /** Legacy local fixture seams; hosted claims never use them. */
   otp?: unknown;
@@ -33,6 +34,7 @@ export interface InitiateInput {
   identityAssertion: string;
   email: string;
   remoteIp: string | undefined;
+  resource?: string;
 }
 
 export interface VerifyInput extends InitiateInput {
@@ -63,6 +65,7 @@ export async function initiateClaim(
   await deps.repo.claim.createVerification({
     ...hashes,
     id: verificationId,
+    selectedResource: input.resource ?? deps.defaultResource,
     expiresAt: iso(now + CLAIM_CEREMONY_TTL_MS),
     now: iso(now),
   });

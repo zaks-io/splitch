@@ -7,6 +7,11 @@ import {
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
+import {
+  makeDurableMcpDelegationReplayGuard,
+  makeMcpDelegationAuthResolver,
+  McpDelegationReplayDurableObject,
+} from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import { authJwksUri } from "./auth-jwks-config";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
@@ -50,7 +55,14 @@ export class ControlPanelEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv>
     if (request.method !== "POST" || !CONTROL_PANEL_APPS_CREATE_PATH.test(url.pathname)) {
       return new Response("not found", { status: 404 });
     }
-    return handleRequest(request, this.env, this.ctx, true);
+    return handleRequest(request, this.env, this.ctx, "panel");
+  }
+}
+
+/** Binding-only entrypoint for one-operation MCP delegations. */
+export class McpEntrypoint extends WorkerEntrypoint<ControlPlaneApiEnv> {
+  override async fetch(request: Request): Promise<Response> {
+    return handleRequest(request, this.env, this.ctx, "mcp");
   }
 }
 
@@ -116,7 +128,7 @@ async function handleRequest(
   request: Request,
   env: ControlPlaneApiEnv,
   ctx: ExecutionContext,
-  allowPanelSession = false,
+  authMode: "public" | "panel" | "mcp" = "public",
 ): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/health" || url.pathname === "/") {
@@ -145,14 +157,24 @@ async function handleRequest(
     controlPlaneAudience,
   });
 
+  const publicAuthResolver = makeControlPlaneAuthResolver(
+    {
+      verifier,
+      sessions: makeSessionStore(env.SESSION_STORE),
+    },
+    { allowPanelSession: authMode === "panel" },
+  );
   const app = createApp({
-    authResolver: makeControlPlaneAuthResolver(
-      {
-        verifier,
-        sessions: makeSessionStore(env.SESSION_STORE),
-      },
-      { allowPanelSession },
-    ),
+    authResolver:
+      authMode === "mcp"
+        ? makeMcpDelegationAuthResolver({
+            owner: "control-plane-api",
+            secret: requiredMcpDelegationSecret(env.MCP_CONTROL_PLANE_DELEGATION_SECRET),
+            replayGuard: makeDurableMcpDelegationReplayGuard(
+              requiredMcpReplayBinding(env.MCP_DELEGATION_REPLAY),
+            ),
+          })
+        : publicAuthResolver,
     rateLimiter: rateLimiterForTarget(env.SPLITCH_PLATFORM_TARGET),
     repo: createRepository(env.DB),
     credentialStore: env.CREDENTIAL_STORE,
@@ -167,6 +189,20 @@ async function handleRequest(
   });
 
   return app.fetch(request, env);
+}
+
+function requiredMcpDelegationSecret(secret: string | undefined): string {
+  if (!secret) {
+    throw new Error("control-plane-api: MCP_CONTROL_PLANE_DELEGATION_SECRET is required");
+  }
+  return secret;
+}
+
+function requiredMcpReplayBinding(
+  binding: ControlPlaneApiEnv["MCP_DELEGATION_REPLAY"],
+): NonNullable<ControlPlaneApiEnv["MCP_DELEGATION_REPLAY"]> {
+  if (!binding) throw new Error("control-plane-api: MCP_DELEGATION_REPLAY is required");
+  return binding;
 }
 
 async function runDemoReaper(
@@ -249,4 +285,5 @@ export {
   ConfigStoreDurableObject,
   CredentialCacheBackfillDurableObject,
   CredentialCacheWriterDurableObject,
+  McpDelegationReplayDurableObject,
 };

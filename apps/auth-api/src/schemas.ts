@@ -6,12 +6,6 @@ import { z } from "zod";
  * focused on flow, not parsing.
  */
 
-/** POST /agent/identity (ID-JAG door): a signed JWT + optional requested scopes. */
-export const AgentIdentityRequestSchema = z.object({
-  id_jag: z.string().min(1),
-  requested_scopes: z.array(z.string()).optional(),
-});
-
 /**
  * POST /agent/identity (Door B anonymous): NO `id_jag`; a Turnstile token gates
  * the write (ADR-0034). The presence/absence of `id_jag` is what routes the
@@ -35,6 +29,7 @@ export const AnonymousIdentityRequestSchema = z.object({
 export const ClaimRequestSchema = z.object({
   identity_assertion: z.string().min(1),
   email: z.string().min(1),
+  resource: z.url().optional(),
   otp: z.string().min(1).optional(),
   verification_id: z.string().min(1).optional(),
   idempotency_key: z.string().min(1).optional(),
@@ -48,13 +43,17 @@ export const ClaimConsentRequestSchema = z.object({
 export const TokenExchangeRequestSchema = z.object({
   grant_type: z.string(),
   identity_assertion: z.string().min(1),
+  resource: z.url().optional(),
 });
 
 /** POST /oauth2/device_authorization: starts Door C's device-code flow. */
-export const DeviceAuthorizationRequestSchema = z.object({
-  client_id: z.string().min(1).optional(),
-  scope: z.string().min(1).optional(),
-});
+export const DeviceAuthorizationRequestSchema = z
+  .object({
+    client_id: z.string().min(1).optional(),
+    app: z.string().min(1).optional(),
+    scope: z.string().min(1).optional(),
+  })
+  .refine((value) => value.app !== undefined || value.scope !== undefined);
 
 /** POST /oauth2/token: Door C device-code polling grant. */
 export const DeviceTokenRequestSchema = z.object({
@@ -62,6 +61,15 @@ export const DeviceTokenRequestSchema = z.object({
   device_code: z.string().min(1),
   client_id: z.string().min(1).optional(),
   scope: z.string().min(1).optional(),
+  resource: z.url().optional(),
+});
+
+/** POST /oauth2/token: rotates a Door C provider refresh token. */
+export const RefreshTokenRequestSchema = z.object({
+  grant_type: z.string(),
+  refresh_token: z.string().min(1),
+  client_id: z.string().min(1).optional(),
+  resource: z.url().optional(),
 });
 
 /** POST /oauth2/token: shared-preview smoke client_credentials grant. */
@@ -70,6 +78,7 @@ export const ClientCredentialsRequestSchema = z.object({
   client_id: z.string().min(1),
   client_secret: z.string().min(1),
   scope: z.string().min(1).optional(),
+  resource: z.url().optional(),
 });
 
 /** POST /oauth2/revoke: RFC 7009 token revocation. */

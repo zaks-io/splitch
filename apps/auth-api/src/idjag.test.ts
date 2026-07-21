@@ -3,9 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { makeFixtureDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
+import { verifyIdJag } from "./idjag-verify";
 import { makeJtiCache } from "./jti-cache";
-import { makeKvRevocationStore } from "./revocation";
 import type { Jwks } from "./jwks";
+import { makeKvRevocationStore } from "./revocation";
 import {
   type FixtureKeypair,
   type LocalBindings,
@@ -17,10 +18,9 @@ import {
 import { makeFixtureWorkOs } from "./workos";
 
 /**
- * ID-JAG door integration: a fixture ID-JAG -> identity_assertion -> control-plane
- * token (happy path), plus the fail-loud security cases (unknown issuer, disabled
- * IdP, replayed jti, bad signature). The auth-api app boots in-process on the same
- * code the Worker exports; the port-8791 boot is exercised by `wrangler dev`.
+ * Dormant ID-JAG verifier coverage: a fixture ID-JAG is checked directly at the
+ * verifier boundary, preserving the happy path and fail-loud security cases while
+ * Door A remains paused at the HTTP route.
  */
 
 const ORIGIN = "https://auth.splitch.test";
@@ -29,7 +29,6 @@ const CLIENT_ID = "splitch-control-plane";
 const ACCESS_SECRET = "test-access-secret";
 const CP_AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = 1_780_000_000_000;
-const GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
 
 let local: LocalBindings;
 let keys: FixtureKeypair;
@@ -56,7 +55,19 @@ async function seedIdp(_jwks: Jwks, enabled: boolean): Promise<void> {
     .run();
 }
 
-function buildApp(jwksOverride?: Jwks) {
+function buildVerifierDeps(jwksOverride?: Jwks): Parameters<typeof verifyIdJag>[0] {
+  const repo = createRepository(local.d1);
+  return {
+    repo,
+    jtiCache: makeJtiCache(local.kv),
+    workos: makeFixtureWorkOs(),
+    fetchJwks: async () => jwksOverride ?? keys.jwks,
+    authApiOrigin: ORIGIN,
+    now: () => NOW_MS,
+  };
+}
+
+function buildApp() {
   const repo = createRepository(local.d1);
   const doorB = makeDoorBDeps(repo, () => NOW_MS);
   return createApp({
@@ -64,14 +75,7 @@ function buildApp(jwksOverride?: Jwks) {
     accessSecret: ACCESS_SECRET,
     controlPlaneAudience: CP_AUDIENCE,
     now: () => NOW_MS,
-    idJag: {
-      repo,
-      jtiCache: makeJtiCache(local.kv),
-      workos: makeFixtureWorkOs(),
-      fetchJwks: async () => jwksOverride ?? keys.jwks,
-      authApiOrigin: ORIGIN,
-      now: () => NOW_MS,
-    },
+    idJag: buildVerifierDeps(),
     tokenSigner: doorB.tokenSigner,
     register: doorB.register,
     claim: doorB.claim,
@@ -112,138 +116,113 @@ afterAll(async () => {
   await local.dispose();
 });
 
-describe("Door A: ID-JAG happy path", () => {
-  it("exchanges a fixture ID-JAG for an identity_assertion then a control-plane token", async () => {
-    const app = buildApp();
+describe("Dormant ID-JAG verifier: happy path", () => {
+  it("verifies a fixture ID-JAG before assertion and control-plane token minting", async () => {
+    const deps = buildVerifierDeps();
     const idJag = await signIdJag(keys.privateKey, validClaims());
 
-    const idRes = await app.request("/agent/identity", {
-      method: "POST",
-      body: JSON.stringify({ id_jag: idJag }),
+    const verified = await verifyIdJag(deps, idJag);
+    expect(verified).toEqual({
+      userId: "user_fixture_agent_user_example_com",
+      issuer: ISSUER,
     });
-    expect(idRes.status).toBe(200);
-    const idBody = (await idRes.json()) as { identity_assertion: string; user_id: string };
-    expect(idBody.user_id).toBe("user_fixture_agent_user_example_com");
-    expect(idBody.identity_assertion.split(".")).toHaveLength(3);
 
-    const tokRes = await app.request("/oauth2/token", {
-      method: "POST",
-      body: JSON.stringify({ grant_type: GRANT, identity_assertion: idBody.identity_assertion }),
-    });
-    expect(tokRes.status).toBe(200);
-    const tokBody = (await tokRes.json()) as { access_token: string; token_type: string };
-    expect(tokBody.token_type).toBe("Bearer");
-    expect(tokBody.access_token.split(".")).toHaveLength(3);
+    const signer = makeDoorBDeps(deps.repo, () => NOW_MS).tokenSigner;
+    const identityAssertion = await signer.mintIdentityAssertion(
+      verified.userId,
+      [],
+      "id_jag",
+      Math.floor(NOW_MS / 1000),
+    );
+    expect(identityAssertion.split(".")).toHaveLength(3);
+    const accessToken = await signer.exchangeForAccessToken(
+      identityAssertion,
+      Math.floor(NOW_MS / 1000),
+    );
+    expect(accessToken.split(".")).toHaveLength(3);
   });
 });
 
-describe("Door A: fail-loud security paths", () => {
+describe("Dormant ID-JAG verifier: fail-loud security paths", () => {
   it("rejects an unknown iss with 401 unknown_issuer (never silently trusted)", async () => {
-    const app = buildApp();
     const idJag = await signIdJag(keys.privateKey, validClaims({ iss: "https://evil.test" }));
-    const res = await app.request("/agent/identity", {
-      method: "POST",
-      body: JSON.stringify({ id_jag: idJag }),
+    await expect(verifyIdJag(buildVerifierDeps(), idJag)).rejects.toMatchObject({
+      code: "unknown_issuer",
+      status: 401,
     });
-    expect(res.status).toBe(401);
-    expect(await errorOf(res)).toBe("unknown_issuer");
   });
 
   it("rejects a disabled trusted_idp (not silently skipped)", async () => {
     await seedIdp(keys.jwks, false);
-    const app = buildApp();
     const idJag = await signIdJag(keys.privateKey, validClaims());
-    const res = await app.request("/agent/identity", {
-      method: "POST",
-      body: JSON.stringify({ id_jag: idJag }),
+    await expect(verifyIdJag(buildVerifierDeps(), idJag)).rejects.toMatchObject({
+      code: "issuer_disabled",
+      status: 401,
     });
-    expect(res.status).toBe(401);
-    expect(await errorOf(res)).toBe("issuer_disabled");
     await seedIdp(keys.jwks, true);
   });
 
   it("rejects a replayed jti", async () => {
-    const app = buildApp();
+    const deps = buildVerifierDeps();
     const claims = validClaims({ jti: "fixed-replay-jti" });
     const idJag = await signIdJag(keys.privateKey, claims);
-    const first = await app.request("/agent/identity", {
-      method: "POST",
-      body: JSON.stringify({ id_jag: idJag }),
+    await expect(verifyIdJag(deps, idJag)).resolves.toMatchObject({ issuer: ISSUER });
+    await expect(verifyIdJag(deps, idJag)).rejects.toMatchObject({
+      code: "replayed_jti",
+      status: 401,
     });
-    expect(first.status).toBe(200);
-    const second = await app.request("/agent/identity", {
-      method: "POST",
-      body: JSON.stringify({ id_jag: idJag }),
-    });
-    expect(second.status).toBe(401);
-    expect(await errorOf(second)).toBe("replayed_jti");
   });
 
   it("rejects a token signed by the wrong key (signature actually verified)", async () => {
     const other = await makeFixtureKeypair();
-    const app = buildApp(); // verifier uses `keys.jwks`
     const idJag = await signIdJag(other.privateKey, validClaims());
-    const res = await app.request("/agent/identity", {
-      method: "POST",
-      body: JSON.stringify({ id_jag: idJag }),
+    await expect(verifyIdJag(buildVerifierDeps(), idJag)).rejects.toMatchObject({
+      code: "invalid_token",
+      status: 401,
     });
-    expect(res.status).toBe(401);
-    expect(await errorOf(res)).toBe("invalid_token");
   });
 
   it("rejects an unverified email", async () => {
-    const app = buildApp();
     const idJag = await signIdJag(keys.privateKey, validClaims({ email_verified: false }));
-    const res = await app.request("/agent/identity", {
-      method: "POST",
-      body: JSON.stringify({ id_jag: idJag }),
+    await expect(verifyIdJag(buildVerifierDeps(), idJag)).rejects.toMatchObject({
+      code: "invalid_token",
+      status: 401,
     });
-    expect(res.status).toBe(401);
-    expect(await errorOf(res)).toBe("invalid_token");
   });
 
   it("rejects a phone-verified token whose email is unverified", async () => {
-    const app = buildApp();
     const idJag = await signIdJag(
       keys.privateKey,
       validClaims({ email_verified: false, phone_verified: true }),
     );
-    const res = await app.request("/agent/identity", {
-      method: "POST",
-      body: JSON.stringify({ id_jag: idJag }),
+    await expect(verifyIdJag(buildVerifierDeps(), idJag)).rejects.toMatchObject({
+      code: "invalid_token",
+      status: 401,
     });
-    expect(res.status).toBe(401);
-    expect(await errorOf(res)).toBe("invalid_token");
   });
 
   it("rejects an expired token", async () => {
-    const app = buildApp();
     const idJag = await signIdJag(
       keys.privateKey,
       validClaims({ exp: Math.floor(NOW_MS / 1000) - 1 }),
     );
-    const res = await app.request("/agent/identity", {
-      method: "POST",
-      body: JSON.stringify({ id_jag: idJag }),
+    await expect(verifyIdJag(buildVerifierDeps(), idJag)).rejects.toMatchObject({
+      code: "invalid_token",
+      status: 401,
     });
-    expect(res.status).toBe(401);
-    expect(await errorOf(res)).toBe("invalid_token");
   });
 
   it("rejects a far-future auth_time (H4: forward-skew bound)", async () => {
-    const app = buildApp();
     // auth_time well beyond the 60s forward-skew tolerance. Pre-fix this passed
     // freshness (only `now - authTime` was checked); post-fix it is invalid_token.
     const idJag = await signIdJag(
       keys.privateKey,
       validClaims({ auth_time: Math.floor(NOW_MS / 1000) + 3600 }),
     );
-    const res = await app.request("/agent/identity", {
-      method: "POST",
-      body: JSON.stringify({ id_jag: idJag }),
+    await expect(verifyIdJag(buildVerifierDeps(), idJag)).rejects.toMatchObject({
+      code: "invalid_token",
+      status: 401,
     });
-    expect(res.status).toBe(401);
-    expect(await errorOf(res)).toBe("invalid_token");
   });
 
   it("rejects an unsupported grant_type at /oauth2/token", async () => {
@@ -257,7 +236,7 @@ describe("Door A: fail-loud security paths", () => {
   });
 });
 
-describe("B1: cross-tenant issuer is NOT honored at the ID-JAG door", () => {
+describe("B1: cross-tenant issuer is NOT honored by the ID-JAG verifier", () => {
   it("a tenant-registered issuer (org_id set) is rejected as unknown_issuer", async () => {
     // org_a registers an attacker-controlled issuer as ITS OWN trusted IdP.
     const attackerIssuer = "https://attacker.evil";
@@ -277,18 +256,14 @@ describe("B1: cross-tenant issuer is NOT honored at the ID-JAG door", () => {
       .run();
 
     // The attacker signs an ID-JAG asserting a victim in a DIFFERENT tenant.
-    const app = buildApp();
     const idJag = await signIdJag(
       keys.privateKey,
       validClaims({ iss: attackerIssuer, email: "victim@bigcorp.com" }),
     );
-    const res = await app.request("/agent/identity", {
-      method: "POST",
-      body: JSON.stringify({ id_jag: idJag }),
+    await expect(verifyIdJag(buildVerifierDeps(), idJag)).rejects.toMatchObject({
+      code: "unknown_issuer",
+      status: 401,
     });
-    // The door lookup is global-seed-only: a tenant row is never honored here.
-    expect(res.status).toBe(401);
-    expect(await errorOf(res)).toBe("unknown_issuer");
 
     await local.d1.prepare("DELETE FROM trusted_idps WHERE idp_id = ?").bind("idp_attacker").run();
   });

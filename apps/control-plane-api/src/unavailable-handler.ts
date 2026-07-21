@@ -49,19 +49,14 @@ async function authorizeUnavailableOperation(
       return requireOrgRole(
         deps,
         pathParam(args.input, "orgId"),
-        args.principal.id,
+        args.principal,
         ORG_OWNER_ROLES,
         args.requestId,
       );
     case "app_privacy_export":
     case "entity_privacy_export":
     case "entity_privacy_delete":
-      return requireAppWrite(
-        deps,
-        pathParam(args.input, "appId"),
-        args.principal.id,
-        args.requestId,
-      );
+      return requireAppWrite(deps, pathParam(args.input, "appId"), args.principal, args.requestId);
     case "privacy_requests_get":
       return authorizePrivacyRequestStatus(deps, args);
     case "current_user_privacy_export":
@@ -110,7 +105,7 @@ async function requireScopedOrgOwner(
   return requireOrgRole(
     deps,
     privacyRequest.orgId,
-    args.principal.id,
+    args.principal,
     ORG_OWNER_ROLES,
     args.requestId,
   );
@@ -122,7 +117,7 @@ async function requireScopedAppAdmin(
   appId: string,
 ): Promise<Response | null | undefined> {
   if (args.principal.appId !== appId) return undefined;
-  return requireAppWrite(deps, appId, args.principal.id, args.requestId);
+  return requireAppWrite(deps, appId, args.principal, args.requestId);
 }
 
 function resourceScopeForbidden(resource: string, requestId: string): Response {

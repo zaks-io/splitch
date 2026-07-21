@@ -14,7 +14,7 @@ import type { WorkOsPort } from "./workos";
 const DEFAULT_AUTH_TIME_FRESHNESS_SECONDS = 300; // 5 min (auth-doors.md step 5)
 const MAX_AUTH_TIME_FORWARD_SKEW_SECONDS = 60; // tolerate minor clock skew, no more
 
-export interface IdJagDeps {
+interface IdJagDeps {
   repo: Repository;
   jtiCache: JtiCache;
   workos: WorkOsPort;
@@ -25,7 +25,7 @@ export interface IdJagDeps {
   now?: () => number;
 }
 
-export interface IdJagResult {
+interface IdJagResult {
   userId: string;
   issuer: string;
 }

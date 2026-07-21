@@ -1,3 +1,4 @@
+import { accessTokenRevocationKey } from "@splitch/contracts";
 import {
   createWorkerObservability,
   workerObservabilityWithWaitUntil,
@@ -11,12 +12,19 @@ const service = "splitch-mcp-server";
 
 type Env = {
   ANALYSIS_API?: Fetcher;
+  CONTROL_PLANE_API?: Fetcher;
+  EVALUATION_API?: Fetcher;
+  AUTH_API_ORIGIN?: string;
   CONTROL_PLANE_API_ORIGIN?: string;
   EVALUATION_API_ORIGIN?: string;
   ANALYSIS_API_ORIGIN?: string;
+  MCP_CONTROL_PLANE_DELEGATION_SECRET?: string;
+  MCP_EVALUATION_DELEGATION_SECRET?: string;
+  MCP_ANALYSIS_DELEGATION_SECRET?: string;
   SPLITCH_DEPLOYED_COMMIT_SHA?: string;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
+  SESSION_STORE?: KVNamespace;
   MCP_SESSIONS: McpSessionDurableObjectNamespace;
 };
 
@@ -37,10 +45,17 @@ const handler = {
       service,
       deployedCommitSha: env.SPLITCH_DEPLOYED_COMMIT_SHA,
       platformTarget: env.SPLITCH_PLATFORM_TARGET,
+      authBaseUrl: env.AUTH_API_ORIGIN,
       controlPlaneBaseUrl: env.CONTROL_PLANE_API_ORIGIN,
       evaluationBaseUrl: env.EVALUATION_API_ORIGIN,
       analysisBaseUrl: env.ANALYSIS_API_ORIGIN,
+      controlPlaneFetch: serviceBindingFetch(env.CONTROL_PLANE_API),
+      evaluationFetch: serviceBindingFetch(env.EVALUATION_API),
       analysisFetch: serviceBindingFetch(env.ANALYSIS_API),
+      controlPlaneDelegationSecret: env.MCP_CONTROL_PLANE_DELEGATION_SECRET,
+      evaluationDelegationSecret: env.MCP_EVALUATION_DELEGATION_SECRET,
+      analysisDelegationSecret: env.MCP_ANALYSIS_DELEGATION_SECRET,
+      revocations: kvRevocations(requiredSessionStore(env.SESSION_STORE)),
       sessionStore: durableMcpSessionStore(env.MCP_SESSIONS),
     });
   },
@@ -58,5 +73,18 @@ function serviceBindingFetch(service: Fetcher | undefined): typeof fetch | undef
   return async (input, init) => {
     const request = input instanceof Request ? input : new Request(input, init);
     return service.fetch(request);
+  };
+}
+
+function requiredSessionStore(store: KVNamespace | undefined): KVNamespace {
+  if (!store) throw new Error("mcp-server: SESSION_STORE revocation binding is required");
+  return store;
+}
+
+function kvRevocations(store: KVNamespace) {
+  return {
+    async isRevoked(subject: string) {
+      return (await store.get(accessTokenRevocationKey(subject))) !== null;
+    },
   };
 }

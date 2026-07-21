@@ -1,4 +1,5 @@
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the contracts surface is intentionally aggregated here
+export { accessTokenRevocationKey, accessTokenRevocationTtl } from "./access-token-revocation";
 export { errorStatusByCode, httpStatusForError } from "./error-status";
 export {
   ErrorCodeSchema,
@@ -37,6 +38,12 @@ export { defineApiRoute } from "./openapi-route";
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
 export { controlPlaneRpcApp, type ControlPlaneRpcApp } from "./openapi-rpc";
 export { getRoute, operationIds, routeRegistry } from "./route-registry";
+export {
+  createMcpDelegationHeader,
+  MCP_DELEGATION_HEADER,
+  parseMcpDelegation,
+} from "./mcp-delegation";
+export type { McpDelegationActor, McpDelegationReplayGuard } from "./mcp-delegation";
 export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
 export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
 export type { McpProtocolToolDefinition, McpToolDefinition } from "./mcp-tools";

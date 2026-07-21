@@ -5,12 +5,14 @@ import {
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
+import { makeEphemeralAccessTokenPrivateJwk } from "./access-token-key";
 import { createApp } from "./app";
 import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
 import type { AuthApiEnv } from "./env";
-import { fetchJwks } from "./jwks";
 import { makeJtiCache } from "./jti-cache";
+import { fetchJwks } from "./jwks";
+import type { SmokeClientCredentials } from "./oauth-routes";
 import { makeFixtureOtp, makeIdempotencyStore } from "./otp";
 import { makeRateLimiter } from "./rate-limit";
 import { makeKvRevocationStore } from "./revocation";
@@ -18,7 +20,6 @@ import { makeTokenSigner } from "./token-exchange";
 import { makeFixtureTurnstile, makeRuntimeTurnstile } from "./turnstile";
 import { makeFixtureWorkOs, makeHostedWorkOs } from "./workos";
 import { makeWorkOsAccessTokenVerifier } from "./workos-access-token";
-import type { SmokeClientCredentials } from "./oauth-routes";
 
 const service = "splitch-auth-api";
 
@@ -27,6 +28,7 @@ const otp = makeFixtureOtp();
 const fixtureTurnstile = makeFixtureTurnstile();
 const rateLimiter = makeRateLimiter();
 const idempotency = makeIdempotencyStore();
+let localAccessTokenSecret: Promise<string> | undefined;
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -59,8 +61,9 @@ const handler = {
     const repo = createRepository(env.DB);
     const origin = env.AUTH_API_ORIGIN ?? url.origin;
     const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
+    const mcpAudience = env.MCP_ORIGIN;
     const assertionSecret = env.ASSERTION_SIGNING_SECRET ?? "local-dev-assertion-secret";
-    const accessSecret = env.ACCESS_TOKEN_SECRET ?? "local-dev-access-secret";
+    const accessSecret = await accessTokenSecret(env);
     const consentBaseUrl = env.CONTROL_PANEL_ORIGIN ?? "http://localhost:8787";
     const now = () => Date.now();
     const workos = hostedWorkOs(env);
@@ -68,7 +71,7 @@ const handler = {
     const tokenSigner = makeTokenSigner({
       assertionSecret,
       accessSecret,
-      accessTokenTrustContract: accessTokenTrustContract(env.SPLITCH_PLATFORM_TARGET),
+      accessTokenTrustContract: "rs256-jwks",
       issuer: origin,
       controlPlaneAudience,
     });
@@ -77,6 +80,7 @@ const handler = {
       repo,
       accessSecret,
       controlPlaneAudience,
+      mcpAudience,
       now,
       tokenSigner,
       idJag: {
@@ -87,7 +91,17 @@ const handler = {
         authApiOrigin: origin,
       },
       register: { repo, turnstile, rateLimiter, workos, tokenSigner, now },
-      claim: { repo, workos, otp, idempotency, tokenSigner, rateLimiter, consentBaseUrl, now },
+      claim: {
+        repo,
+        workos,
+        otp,
+        idempotency,
+        tokenSigner,
+        rateLimiter,
+        consentBaseUrl,
+        defaultResource: controlPlaneAudience,
+        now,
+      },
       workosAccessTokens: workosAccessTokenVerifier(env),
       deviceFlow,
       deviceRefreshSessions: makeD1DeviceRefreshSessionStore(repo, {
@@ -188,6 +202,13 @@ function workosAccessTokenVerifier(env: AuthApiEnv) {
   });
 }
 
-function accessTokenTrustContract(target: string | undefined): "local-hs256" | "rs256-jwks" {
-  return target === "shared-preview" || target === "production" ? "rs256-jwks" : "local-hs256";
+function accessTokenSecret(env: AuthApiEnv): Promise<string> {
+  if (env.ACCESS_TOKEN_SECRET) {
+    return Promise.resolve(env.ACCESS_TOKEN_SECRET);
+  }
+  if (isHostedTarget(env.SPLITCH_PLATFORM_TARGET)) {
+    throw new Error("ACCESS_TOKEN_SECRET is required for hosted targets");
+  }
+  localAccessTokenSecret ??= makeEphemeralAccessTokenPrivateJwk();
+  return localAccessTokenSecret;
 }

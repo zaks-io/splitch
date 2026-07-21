@@ -1,29 +1,10 @@
 import { createRepository } from "@splitch/db";
-import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { DeviceFlowPort } from "./device-flow";
-import {
-  type DeviceRefreshSessionStore,
-  makeD1DeviceRefreshSessionStore,
-} from "./device-session-store";
-import { mountOAuthRoutes } from "./oauth-routes";
-import type { TokenSigner } from "./token-exchange";
+import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
+import type { MembershipAuthorityRepo } from "./membership-authority";
+import { form, routeApp, selectedDeviceCode, unusedRefreshStore } from "./oauth-route-test-harness";
 import { makeLocalBindings } from "./test-fixtures";
-
-const tokenSigner = {
-  mintIdentityAssertion: async () => "identity-assertion",
-  exchangeForAccessToken: async () => "access-token",
-  verifyIdentityAssertion: async () => ({ userId: "user_workos", scopes: [] }),
-  mintAccessToken: async () => "access-token",
-} satisfies TokenSigner;
-const revocations = {
-  revoke: async () => {},
-  isRevoked: async () => false,
-};
-
-function form(body: Record<string, string>): string {
-  return new URLSearchParams(body).toString();
-}
 
 function staleMissCache(keys: string[] = []): KVNamespace {
   return {
@@ -36,42 +17,12 @@ function staleMissCache(keys: string[] = []): KVNamespace {
   } as unknown as KVNamespace;
 }
 
-function routeApp(params: {
-  deviceFlow: DeviceFlowPort;
-  deviceRefreshSessions: DeviceRefreshSessionStore;
-}): Hono {
-  const app = new Hono();
-  mountOAuthRoutes(app, {
-    tokenSigner,
-    deviceFlow: params.deviceFlow,
-    deviceRefreshSessions: params.deviceRefreshSessions,
-    revocations,
-    accessSecret: "test-access-secret",
-    controlPlaneAudience: "https://cp.splitch.test",
-    now: () => 1_780_000_000_000,
-  });
-  return app;
-}
-
 describe("OAuth revoke route", () => {
   it("fails before calling the provider when a refresh token cannot resolve a session", async () => {
     const providerRevokes: Array<{ token: string; sessionId: string }> = [];
     const app = routeApp({
-      deviceFlow: {
-        authorizeDevice: async () => {
-          throw new Error("not used");
-        },
-        exchangeDeviceCode: async () => {
-          throw new Error("not used");
-        },
-        revokeProviderToken: async (params) => {
-          providerRevokes.push(params);
-        },
-      } satisfies DeviceFlowPort,
-      deviceRefreshSessions: {
-        remember: async () => {},
-        lookup: async () => null,
-      },
+      deviceFlow: unusedDeviceFlow((params) => providerRevokes.push(params)),
+      deviceRefreshSessions: unusedRefreshStore,
     });
 
     const res = await app.request("/oauth2/revoke", {
@@ -89,20 +40,20 @@ describe("OAuth revoke route", () => {
     const providerRevokes: Array<{ token: string; sessionId: string }> = [];
     const refreshToken = "provider-refresh-token";
     const app = routeApp({
-      deviceFlow: {
-        authorizeDevice: async () => {
-          throw new Error("not used");
-        },
-        exchangeDeviceCode: async () => {
-          throw new Error("not used");
-        },
-        revokeProviderToken: async (params) => {
-          providerRevokes.push(params);
-        },
-      } satisfies DeviceFlowPort,
+      deviceFlow: unusedDeviceFlow((params) => providerRevokes.push(params)),
       deviceRefreshSessions: {
         remember: async () => {},
-        lookup: async (token) => (token === refreshToken ? "session_workos" : null),
+        lookup: async (token) =>
+          token === refreshToken
+            ? {
+                providerSessionId: "session_workos",
+                userId: "user_workos",
+                providerOrganizationId: "org_selected",
+                selectedAppScope: "app:app_selected:owner",
+              }
+            : null,
+        rotate: async () => {},
+        forget: async () => {},
       },
     });
 
@@ -129,20 +80,16 @@ describe("OAuth revoke route", () => {
       });
       const app = routeApp({
         deviceFlow: {
-          authorizeDevice: async () => {
-            throw new Error("not used");
-          },
+          ...unusedDeviceFlow((params) => providerRevokes.push(params)),
           exchangeDeviceCode: async () => ({
             userId: "user_workos",
+            organizationId: "org_selected",
             refreshToken: providerRefreshToken,
             providerSessionId: "session_workos",
-            scopes: [],
           }),
-          revokeProviderToken: async (params) => {
-            providerRevokes.push(params);
-          },
-        } satisfies DeviceFlowPort,
+        },
         deviceRefreshSessions,
+        repo: selectedMembershipRepo(),
       });
 
       const tokenRes = await app.request("/oauth2/token", {
@@ -150,7 +97,8 @@ describe("OAuth revoke route", () => {
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: form({
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-          device_code: "device-code",
+          device_code: await selectedDeviceCode("device-code", "app_selected", "owner"),
+          scope: "app:app_selected:owner",
         }),
       });
       expect(tokenRes.status).toBe(200);
@@ -174,3 +122,30 @@ describe("OAuth revoke route", () => {
     }
   });
 });
+
+function unusedDeviceFlow(
+  revoke: (params: { token: string; sessionId: string }) => void,
+): DeviceFlowPort {
+  return {
+    authorizeDevice: async () => {
+      throw new Error("not used");
+    },
+    exchangeDeviceCode: async () => {
+      throw new Error("not used");
+    },
+    refreshProviderToken: async () => {
+      throw new Error("not used");
+    },
+    revokeProviderToken: async (params) => revoke(params),
+  };
+}
+
+function selectedMembershipRepo(): MembershipAuthorityRepo {
+  return {
+    identity: {
+      listOrgMembershipsForUser: async () => [{ orgId: "org_selected", role: "owner" }],
+      listAppsForOrg: async () => [{ id: "app_selected", key: "selected-app" }],
+      getAppMembership: async () => ({ role: "owner" }),
+    },
+  } as unknown as MembershipAuthorityRepo;
+}

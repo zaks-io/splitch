@@ -24,9 +24,36 @@
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
-    "CONTROL_PLANE_API_ORIGIN": "http://127.0.0.1:8787",
-    "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788"
+    "AUTH_API_ORIGIN": "http://localhost:8791",
+    "CONTROL_PLANE_API_ORIGIN": "http://localhost:8787",
+    "EVALUATION_API_ORIGIN": "http://127.0.0.1:8788",
+    "MCP_CONTROL_PLANE_DELEGATION_SECRET": "local-mcp-control-plane-delegation-secret",
+    "MCP_EVALUATION_DELEGATION_SECRET": "local-mcp-evaluation-delegation-secret",
+    "MCP_ANALYSIS_DELEGATION_SECRET": "local-mcp-analysis-delegation-secret"
   },
+  "services": [
+    {
+      "binding": "CONTROL_PLANE_API",
+      "service": "splitch-control-plane-api",
+      "entrypoint": "McpEntrypoint"
+    },
+    {
+      "binding": "EVALUATION_API",
+      "service": "splitch-evaluation-api",
+      "entrypoint": "McpEntrypoint"
+    },
+    {
+      "binding": "ANALYSIS_API",
+      "service": "splitch-analysis-api",
+      "entrypoint": "McpEntrypoint"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "SESSION_STORE",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
   "durable_objects": {
     "bindings": [{ "name": "MCP_SESSIONS", "class_name": "McpSessionDurableObject" }]
   },
@@ -51,18 +78,41 @@
       },
       "routes": [{ "pattern": "mcp.preview.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN"]
+        "required": [
+          "SENTRY_DSN",
+          "MCP_CONTROL_PLANE_DELEGATION_SECRET",
+          "MCP_EVALUATION_DELEGATION_SECRET",
+          "MCP_ANALYSIS_DELEGATION_SECRET"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
+        "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
         "CONTROL_PLANE_API_ORIGIN": "https://api.preview.splitch.dev",
         "EVALUATION_API_ORIGIN": "https://edge.preview.splitch.dev"
       },
       "durable_objects": {
         "bindings": [{ "name": "MCP_SESSIONS", "class_name": "McpSessionDurableObject" }]
       },
+      "kv_namespaces": [{ "binding": "SESSION_STORE", "id": "673d17e768eb45f5bfc5275fbd0e9320" }],
       "migrations": [{ "tag": "v1", "new_classes": ["McpSessionDurableObject"] }],
-      "services": [{ "binding": "ANALYSIS_API", "service": "splitch-analysis-api-shared-preview" }]
+      "services": [
+        {
+          "binding": "CONTROL_PLANE_API",
+          "service": "splitch-control-plane-api-shared-preview",
+          "entrypoint": "McpEntrypoint"
+        },
+        {
+          "binding": "EVALUATION_API",
+          "service": "splitch-evaluation-api-shared-preview",
+          "entrypoint": "McpEntrypoint"
+        },
+        {
+          "binding": "ANALYSIS_API",
+          "service": "splitch-analysis-api-shared-preview",
+          "entrypoint": "McpEntrypoint"
+        }
+      ]
     },
     "production": {
       "name": "splitch-mcp-server",
@@ -83,18 +133,41 @@
       },
       "routes": [{ "pattern": "mcp.splitch.dev", "custom_domain": true }],
       "secrets": {
-        "required": ["SENTRY_DSN"]
+        "required": [
+          "SENTRY_DSN",
+          "MCP_CONTROL_PLANE_DELEGATION_SECRET",
+          "MCP_EVALUATION_DELEGATION_SECRET",
+          "MCP_ANALYSIS_DELEGATION_SECRET"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
+        "AUTH_API_ORIGIN": "https://auth.splitch.dev",
         "CONTROL_PLANE_API_ORIGIN": "https://api.splitch.dev",
         "EVALUATION_API_ORIGIN": "https://edge.splitch.dev"
       },
       "durable_objects": {
         "bindings": [{ "name": "MCP_SESSIONS", "class_name": "McpSessionDurableObject" }]
       },
+      "kv_namespaces": [{ "binding": "SESSION_STORE", "id": "bdfa1197123d4eef945c5a703d63a572" }],
       "migrations": [{ "tag": "v1", "new_classes": ["McpSessionDurableObject"] }],
-      "services": [{ "binding": "ANALYSIS_API", "service": "splitch-analysis-api" }]
+      "services": [
+        {
+          "binding": "CONTROL_PLANE_API",
+          "service": "splitch-control-plane-api",
+          "entrypoint": "McpEntrypoint"
+        },
+        {
+          "binding": "EVALUATION_API",
+          "service": "splitch-evaluation-api",
+          "entrypoint": "McpEntrypoint"
+        },
+        {
+          "binding": "ANALYSIS_API",
+          "service": "splitch-analysis-api",
+          "entrypoint": "McpEntrypoint"
+        }
+      ]
     }
   }
 }

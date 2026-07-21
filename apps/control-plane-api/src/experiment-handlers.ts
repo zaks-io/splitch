@@ -1,26 +1,26 @@
-import { envScope, type EnvScope, type Repository } from "@splitch/db";
+import { type EnvScope, envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { randomHex } from "./credential-cache";
 import {
-  experimentAlreadyRunningForFlag,
   configStoreUnavailable,
+  experimentAlreadyRunningForFlag,
   experimentNoDraft,
   experimentNotFound,
 } from "./experiment-errors";
-import { experimentResponse, json, runResponse, type ExperimentRow } from "./experiment-model";
 import {
   blockingRunningExperimentForStart,
   draftPatch,
+  type ExperimentDeps,
   environmentExists,
   experimentFromPath,
   nullableString,
   requireWritableEnvironment,
   runningRunForExperiment,
   syncExperimentConfigFromD1,
-  type ExperimentDeps,
 } from "./experiment-handler-shared";
+import { type ExperimentRow, experimentResponse, json, runResponse } from "./experiment-model";
 import { makeRunHandlers } from "./experiment-run-handlers";
 import { prepareStart } from "./experiment-start";
 import { validateStartRequest } from "./experiment-start-request";
@@ -61,7 +61,7 @@ async function createExperiment(
 ): Promise<Response> {
   const scope = envScope(pathParam(input, "appId"), pathParam(input, "environmentId"));
   const body = objectBody(input);
-  const writeError = await requireWritableEnvironment(deps, scope, principal.id, requestId);
+  const writeError = await requireWritableEnvironment(deps, scope, principal, requestId);
   if (writeError) return writeError;
 
   const ready = await validateCreateExperiment(deps, scope, body, requestId);
@@ -144,12 +144,7 @@ async function deleteExperiment(
   const scope = envScope(pathParam(args.input, "appId"), pathParam(args.input, "environmentId"));
   const experiment = await experimentFromPath(deps, args.input);
   if (!experiment) return experimentNotFound(args.requestId);
-  const writeError = await requireWritableEnvironment(
-    deps,
-    scope,
-    args.principal.id,
-    args.requestId,
-  );
+  const writeError = await requireWritableEnvironment(deps, scope, args.principal, args.requestId);
   if (writeError) return writeError;
   const runningRun = await runningRunForExperiment(deps.repo, scope, experiment);
   if (runningRun) {

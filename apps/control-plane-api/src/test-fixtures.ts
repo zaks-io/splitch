@@ -106,6 +106,20 @@ export async function seedOrgMember(d1: D1Database, row: SeedOrgMember): Promise
     .run();
 }
 
+export interface SeedAppMember {
+  appId: string;
+  userId: string;
+  role: "owner" | "admin" | "member";
+  createdAt?: string;
+}
+
+export async function seedAppMember(d1: D1Database, row: SeedAppMember): Promise<void> {
+  await d1
+    .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
+    .bind(row.appId, row.userId, row.role, row.createdAt ?? NOW)
+    .run();
+}
+
 export interface SeedEnvironment {
   appId: string;
   environmentId: string;

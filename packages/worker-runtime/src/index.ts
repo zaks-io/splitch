@@ -1,10 +1,17 @@
-// biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the worker-runtime surface is intentionally aggregated here
-export { createRegistrar, PUBLIC_PRINCIPAL } from "./registrar";
-export type { HandlerArgs, Registrar, RouteHandler } from "./registrar";
+// biome-ignore-all lint/performance/noBarrelFile: package public API entry intentionally aggregates the worker runtime surface
+
 export type { Observability, RegistrarDeps, ResolvableAuthKind } from "./deps";
+export { makeMcpDelegationAuthResolver } from "./mcp-delegation-auth";
+export {
+  makeDurableMcpDelegationReplayGuard,
+  McpDelegationReplayDurableObject,
+} from "./mcp-delegation-replay";
+export type { McpDelegationReplayDurableObjectNamespace } from "./mcp-delegation-replay";
+export type { RawInput } from "./parse-input";
+export { MALFORMED_BODY } from "./parse-input";
 export type { AuthResolver, AuthResult, Principal } from "./principal";
 export type { RateLimitDecision, RateLimiter } from "./rate-limit";
-export { emptyError, renderError } from "./respond";
+export type { HandlerArgs, Registrar, RouteHandler } from "./registrar";
+export { createRegistrar, PUBLIC_PRINCIPAL } from "./registrar";
 export type { EmptyDetailCode } from "./respond";
-export { MALFORMED_BODY } from "./parse-input";
-export type { RawInput } from "./parse-input";
+export { emptyError, renderError } from "./respond";

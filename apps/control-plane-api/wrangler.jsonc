@@ -54,19 +54,23 @@
     "bindings": [
       { "name": "CONFIG_STORE_WRITER", "class_name": "ConfigStoreDurableObject" },
       { "name": "CREDENTIAL_CACHE_WRITER", "class_name": "CredentialCacheWriterDurableObject" },
-      { "name": "CREDENTIAL_CACHE_BACKFILL", "class_name": "CredentialCacheBackfillDurableObject" }
+      { "name": "CREDENTIAL_CACHE_BACKFILL", "class_name": "CredentialCacheBackfillDurableObject" },
+      { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
     ]
   },
   "exports": {
     "ConfigStoreDurableObject": { "type": "durable-object", "storage": "sqlite" },
     "CredentialCacheWriterDurableObject": { "type": "durable-object", "storage": "sqlite" },
-    "CredentialCacheBackfillDurableObject": { "type": "durable-object", "storage": "sqlite" }
+    "CredentialCacheBackfillDurableObject": { "type": "durable-object", "storage": "sqlite" },
+    "McpDelegationReplayDurableObject": { "type": "durable-object", "storage": "sqlite" }
   },
   "secrets": {
     "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
   },
   "vars": {
-    "SPLITCH_PLATFORM_TARGET": "local"
+    "SPLITCH_PLATFORM_TARGET": "local",
+    "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
+    "MCP_CONTROL_PLANE_DELEGATION_SECRET": "local-mcp-control-plane-delegation-secret"
   },
   "env": {
     "shared-preview": {
@@ -95,7 +99,11 @@
         }
       ],
       "secrets": {
-        "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
+        "required": [
+          "SENTRY_DSN",
+          "SPLITCH_DEPLOY_GATE_TOKEN",
+          "MCP_CONTROL_PLANE_DELEGATION_SECRET"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
@@ -121,7 +129,8 @@
           {
             "name": "CREDENTIAL_CACHE_BACKFILL",
             "class_name": "CredentialCacheBackfillDurableObject"
-          }
+          },
+          { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
         ]
       }
     },
@@ -151,7 +160,11 @@
         }
       ],
       "secrets": {
-        "required": ["SENTRY_DSN", "SPLITCH_DEPLOY_GATE_TOKEN"]
+        "required": [
+          "SENTRY_DSN",
+          "SPLITCH_DEPLOY_GATE_TOKEN",
+          "MCP_CONTROL_PLANE_DELEGATION_SECRET"
+        ]
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
@@ -177,7 +190,8 @@
           {
             "name": "CREDENTIAL_CACHE_BACKFILL",
             "class_name": "CredentialCacheBackfillDurableObject"
-          }
+          },
+          { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
         ]
       }
     }

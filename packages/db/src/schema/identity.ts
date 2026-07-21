@@ -106,6 +106,9 @@ export const environments = sqliteTable(
 export const deviceRefreshSessions = sqliteTable("device_refresh_sessions", {
   refreshTokenHash: text("refresh_token_hash").primaryKey(),
   providerSessionId: text("provider_session_id").notNull(),
+  userId: text("user_id").notNull(),
+  providerOrganizationId: text("provider_organization_id").notNull(),
+  selectedAppScope: text("selected_app_scope").notNull(),
   createdAt: createdAt(),
 });
 
@@ -117,6 +120,7 @@ export const claimVerifications = sqliteTable("claim_verifications", {
   id: text("id").primaryKey(),
   provisionalUserHash: text("provisional_user_hash").notNull(),
   emailHash: text("email_hash").notNull(),
+  selectedResource: text("selected_resource"),
   expiresAt: text("expires_at").notNull(),
   attempts: integer("attempts").notNull().default(0),
   verifiedAt: text("verified_at"),
@@ -148,6 +152,7 @@ export const claimIdempotency = sqliteTable(
     organizationHash: text("organization_hash").notNull(),
     appHash: text("app_hash").notNull(),
     verifiedUserHash: text("verified_user_hash").notNull(),
+    selectedResource: text("selected_resource"),
     // NULL owns an in-flight ceremony; a timestamp makes its retry replayable.
     completedAt: text("completed_at"),
     // Set before the one-use provider confirmation so a retry can reconcile an

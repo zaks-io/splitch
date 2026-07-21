@@ -1,17 +1,16 @@
 import type { Repository } from "@splitch/db";
 import { Hono } from "hono";
-import { verifyAccessToken } from "./access-token";
+import { type VerifiedActor, verifyAccessToken } from "./access-token";
 import { type ClaimDeps, initiateClaim, verifyClaim } from "./claim";
 import { handleConsent } from "./claim-consent-route";
 import type { DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
-import { type IdJagDeps, verifyIdJag } from "./idjag-verify";
+import type { verifyIdJag } from "./idjag-verify";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
-import { mountOAuthRoutes, type SmokeClientCredentials } from "./oauth-routes";
+import { audienceForResource, mountOAuthRoutes, type SmokeClientCredentials } from "./oauth-routes";
 import { type RegisterDeps, registerAnonymous } from "./register";
 import type { RevocationStore } from "./revocation";
 import {
-  AgentIdentityRequestSchema,
   AnonymousIdentityRequestSchema,
   ClaimRequestSchema,
   CreateTrustedIdpRequestSchema,
@@ -29,11 +28,11 @@ import type { WorkOsAccessTokenVerifier } from "./workos-access-token";
  * worker-runtime spec assigns the auth-api "token issuance, token revocation,
  * trusted IdP validation, provisional create" as Worker-local; that local logic
  * lives here. The trusted-IdP CRUD speaks the control-plane shape and does its
- * own Org-owner authz in the CRUD layer (single-sourced on D1 membership).
+ * own Org-owner authz in the CRUD layer (held scope intersected with live D1 membership).
  */
 
 export interface AppDeps {
-  idJag: IdJagDeps;
+  idJag: Parameters<typeof verifyIdJag>[0];
   tokenSigner: TokenSigner;
   repo: Repository;
   /** Door B anonymous register (Turnstile + rate ceiling + provisional create). */
@@ -45,6 +44,8 @@ export interface AppDeps {
   accessSecret: string;
   /** Audience the access token must bind to (control-plane protected-resource origin). */
   controlPlaneAudience: string;
+  /** MCP protected-resource origin allowed by RFC 8707 resource selection. */
+  mcpAudience?: string;
   /** Door C device-flow adapter (real WorkOS in deployed envs, fixture in tests/local). */
   deviceFlow: DeviceFlowPort;
   /** Resolves provider refresh tokens to provider session ids for fail-loud revoke. */
@@ -56,11 +57,6 @@ export interface AppDeps {
   now: () => number;
 }
 
-/** Default scopes for an ID-JAG-resolved identity assertion when none requested. */
-function assertionScopes(requested: string[] | undefined): string[] {
-  return requested ?? [];
-}
-
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
   const crud = makeTrustedIdpCrud(deps.repo, deps.now);
@@ -68,7 +64,7 @@ export function createApp(deps: AppDeps): Hono {
 
   mountOAuthRoutes(app, deps);
 
-  // --- Doors A + B: /agent/identity (presence of `id_jag` selects the door) ---
+  // --- Door B + paused Door A: /agent/identity -------------------------------
   app.post("/agent/identity", async (c) => {
     const body = await readJson(c.req.raw);
     // Door B: an anonymous body carries no `id_jag` (auth-doors.md). Route there
@@ -77,21 +73,10 @@ export function createApp(deps: AppDeps): Hono {
     if (isAnonymousBody(body)) {
       return handleAnonymousRegister(deps, c.req.raw, body);
     }
-    const parsed = AgentIdentityRequestSchema.safeParse(body);
-    if (!parsed.success) {
-      return renderOAuthError(new OAuthError("invalid_request", "malformed /agent/identity body"));
+    if (hasIdJag(body)) {
+      return renderOAuthError(new OAuthError("invalid_request", "ID-JAG authentication is paused"));
     }
-    try {
-      const result = await verifyIdJag(deps.idJag, parsed.data.id_jag);
-      const assertion = await deps.tokenSigner.mintIdentityAssertion(
-        result.userId,
-        assertionScopes(parsed.data.requested_scopes),
-        nowSeconds(),
-      );
-      return Response.json({ identity_assertion: assertion, user_id: result.userId });
-    } catch (cause) {
-      return renderDoorFault(cause);
-    }
+    return renderOAuthError(new OAuthError("invalid_request", "malformed /agent/identity body"));
   });
 
   // --- Door B: claim ceremony (agent endpoint + human-UI alias) ---------------
@@ -114,17 +99,17 @@ export function createApp(deps: AppDeps): Hono {
 
   // --- Trusted-IdP CRUD (Org owner only, control-plane shape) -----------------
   app.get("/orgs/:orgId/trusted-idps", async (c) =>
-    withActor(c, deps, async (userId) => asResponse(await crud.list(c.req.param("orgId"), userId))),
+    withActor(c, deps, async (actor) => asResponse(await crud.list(c.req.param("orgId"), actor))),
   );
 
   app.post("/orgs/:orgId/trusted-idps", async (c) =>
-    withActor(c, deps, async (userId) => {
+    withActor(c, deps, async (actor) => {
       const parsed = CreateTrustedIdpRequestSchema.safeParse(await readJson(c.req.raw));
       if (!parsed.success) {
         return errorResponse(400, "VALIDATION_ERROR");
       }
       return asResponse(
-        await crud.create(c.req.param("orgId"), userId, {
+        await crud.create(c.req.param("orgId"), actor, {
           issuer: parsed.data.issuer,
           jwksUri: parsed.data.jwks_uri,
           clientIds: parsed.data.client_ids,
@@ -136,8 +121,8 @@ export function createApp(deps: AppDeps): Hono {
   );
 
   app.delete("/orgs/:orgId/trusted-idps/:idpId", async (c) =>
-    withActor(c, deps, async (userId) =>
-      asResponse(await crud.remove(c.req.param("orgId"), userId, c.req.param("idpId"))),
+    withActor(c, deps, async (actor) =>
+      asResponse(await crud.remove(c.req.param("orgId"), actor, c.req.param("idpId"))),
     ),
   );
 
@@ -155,6 +140,10 @@ async function readJson(request: Request): Promise<unknown> {
 /** A /agent/identity body is the anonymous (Door B) flow iff it has no `id_jag`. */
 function isAnonymousBody(body: unknown): boolean {
   return typeof body === "object" && body !== null && !("id_jag" in body);
+}
+
+function hasIdJag(body: unknown): boolean {
+  return typeof body === "object" && body !== null && "id_jag" in body;
 }
 
 /** Client IP at the Cloudflare edge; the rate ceiling keys on it (ADR-0034). */
@@ -201,6 +190,7 @@ async function handleClaim(deps: AppDeps, request: Request): Promise<Response> {
         identityAssertion: parsed.data.identity_assertion,
         email: parsed.data.email,
         remoteIp,
+        resource: audienceForResource(deps, parsed.data.resource),
       });
       return Response.json(result);
     }
@@ -216,6 +206,9 @@ async function handleClaim(deps: AppDeps, request: Request): Promise<Response> {
       email: parsed.data.email,
       idempotencyKey: parsed.data.idempotency_key,
       remoteIp,
+      ...(parsed.data.resource === undefined
+        ? {}
+        : { resource: audienceForResource(deps, parsed.data.resource) }),
     });
     return Response.json(result);
   } catch (cause) {
@@ -235,7 +228,7 @@ function renderDoorFault(cause: unknown): Response {
 async function withActor(
   c: { req: { raw: Request } },
   deps: AppDeps,
-  run: (userId: string) => Promise<Response>,
+  run: (actor: VerifiedActor) => Promise<Response>,
 ): Promise<Response> {
   const actor = await verifyAccessToken(
     c.req.raw.headers.get("authorization"),
@@ -248,7 +241,7 @@ async function withActor(
   if (await deps.revocations.isRevoked(actor.userId)) {
     return errorResponse(401, "UNAUTHORIZED");
   }
-  return run(actor.userId);
+  return run(actor);
 }
 
 function errorResponse(status: number, code: string): Response {
