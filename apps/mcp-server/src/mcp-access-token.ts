@@ -1,6 +1,8 @@
 export interface McpAccessTokenActor {
   subject: string;
   scopes: string[];
+  authDoor?: string;
+  demoExpiresAt?: string;
 }
 
 interface Jwks {
@@ -91,7 +93,29 @@ function actorFromClaims(
   ) {
     return null;
   }
-  return { subject: claims.sub, scopes: claims.scopes as string[] };
+  return {
+    subject: claims.sub,
+    scopes: claims.scopes as string[],
+    ...(transportFromClaims(claims) ?? {}),
+  };
+}
+
+function transportFromClaims(
+  claims: Record<string, unknown>,
+): Pick<McpAccessTokenActor, "authDoor" | "demoExpiresAt"> | null {
+  const authDoor = claims.auth_door;
+  if (authDoor !== "anonymous" && authDoor !== "id_jag" && authDoor !== "device_flow") {
+    return null;
+  }
+  const demoExpiresAt =
+    typeof claims.demo_expires_at === "string" && claims.demo_expires_at.length > 0
+      ? claims.demo_expires_at
+      : undefined;
+  if (authDoor !== "anonymous" && demoExpiresAt) return null;
+  return {
+    authDoor,
+    ...(demoExpiresAt ? { demoExpiresAt } : {}),
+  };
 }
 
 function isCanonicalHeldScope(scope: unknown): scope is string {

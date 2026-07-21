@@ -130,6 +130,7 @@ export async function registerAnonymous(
     preClaimScopes(appId),
     "anonymous",
     Math.floor(nowMs / 1000),
+    demoExpiresAt,
   );
 
   return {

@@ -104,7 +104,11 @@ describe("local Auth-to-MCP integration", () => {
         "https://mcp.splitch.test/mcp",
         Math.floor(Date.now() / 1000),
       ),
-    ).resolves.toEqual({ subject: DEVICE_USER, scopes: [`app:${SELECTED_APP}:admin`] });
+    ).resolves.toEqual({
+      subject: DEVICE_USER,
+      scopes: [`app:${SELECTED_APP}:admin`],
+      authDoor: "device_flow",
+    });
     const accepted = await mcpRequest(
       handlerModule.handleMcpServerRequest,
       accessToken,
@@ -239,7 +243,12 @@ interface McpAccessTokenVerifier {
     authorization: string | null,
     expectedAudience: string,
     nowSeconds: number,
-  ): Promise<{ subject: string; scopes: string[] } | null>;
+  ): Promise<{
+    subject: string;
+    scopes: string[];
+    authDoor?: string;
+    demoExpiresAt?: string;
+  } | null>;
 }
 
 interface McpAccessTokenModule {

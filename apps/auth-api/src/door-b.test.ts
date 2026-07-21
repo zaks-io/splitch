@@ -175,6 +175,7 @@ describe("Door B register: Turnstile-before-write, provisional Org+App+Environme
     expect(decodeJwtPayload(body.access_token)).toMatchObject({
       sub: registration.user_id,
       auth_door: "anonymous",
+      demo_expires_at: registration.demo_expires_at,
     });
   });
 

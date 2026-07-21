@@ -1,5 +1,4 @@
 import { getRoute, parsePlatformTarget, type RouteOwner } from "@splitch/contracts";
-import { createMcpOperationAdapter } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import {
   JSON_RPC_INTERNAL_ERROR,
   JSON_RPC_METHOD_NOT_FOUND,
@@ -14,26 +13,21 @@ import {
   type McpAccessTokenVerifier,
   makeHttpMcpAccessTokenVerifier,
 } from "./mcp-access-token";
+import { createOperationSdks, type OperationSdks } from "./mcp-operation-sdks";
 import { readJsonRpcRequest } from "./mcp-request";
 import {
   type McpSessionStore,
+  type McpSessionTransport,
   parseToolCall,
   resolveScope,
   setSessionContext,
 } from "./mcp-session-context";
+import { listMcpResources, readMcpResourceRpc } from "./mcp-resources";
 import { corsHeaders, jsonResponse, routeTransportRequest } from "./mcp-transport";
 import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
 
 const protocolVersion = "2025-06-18";
-const defaultControlPlaneBaseUrl = "http://localhost:8787";
-const defaultEvaluationBaseUrl = "http://127.0.0.1:8788";
-const defaultAnalysisBaseUrl = "http://127.0.0.1:8790";
-const internalAnalysisBaseUrl = "https://analysis-api.internal";
 const toolNames = new Set(MCP_TOOL_DEFINITIONS.map((tool) => tool.name));
-type McpRoutableOwner = "control-plane-api" | "evaluation-api" | "analysis-api";
-type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
-type OperationSdkResolver = () => OperationSdk;
-type OperationSdks = Record<McpRoutableOwner, OperationSdkResolver>;
 
 export interface McpRevocationReader {
   isRevoked(subject: string): Promise<boolean>;
@@ -57,6 +51,7 @@ export interface McpServerRequestOptions {
   readonly sessionStore?: McpSessionStore;
   readonly tokenVerifier?: McpAccessTokenVerifier;
   readonly revocations?: McpRevocationReader;
+  readonly fetchAuthMarkdown?: (authBaseUrl: string) => Promise<string>;
   readonly now?: () => number;
 }
 
@@ -95,107 +90,17 @@ export async function handleMcpServerRequest(options: McpServerRequestOptions): 
   const sdks = createOperationSdks(options);
   const sessionStore = options.sessionStore ?? unconfiguredSessionStore;
   const sessionId = options.request.headers.get("mcp-session-id");
-  const response = await dispatch(request.value, sdks, actor, sessionId, sessionStore);
+  const response = await dispatch(request.value, sdks, actor, sessionId, sessionStore, options);
   const responseSessionId =
-    request.value.method === "initialize" ? await sessionStore.create() : undefined;
+    request.value.method === "initialize"
+      ? await sessionStore.create(sessionTransportFromActor(actor))
+      : undefined;
   return jsonResponse(response, 200, responseSessionId);
-}
-
-function createOperationSdks(options: McpServerRequestOptions): OperationSdks {
-  const platformTarget = parsePlatformTarget(options.platformTarget);
-  return {
-    "control-plane-api": createLazyOperationSdk(() =>
-      createMcpOperationAdapter({
-        baseUrl: apiBaseUrl(
-          "CONTROL_PLANE_API_ORIGIN",
-          options.controlPlaneBaseUrl,
-          defaultControlPlaneBaseUrl,
-          platformTarget,
-        ),
-        fetch: downstreamFetch("CONTROL_PLANE_API", options.controlPlaneFetch),
-        delegationSecret: requiredDelegationSecret(
-          "CONTROL_PLANE_API",
-          options.controlPlaneDelegationSecret,
-        ),
-      }),
-    ),
-    "evaluation-api": createLazyOperationSdk(() =>
-      createMcpOperationAdapter({
-        baseUrl: apiBaseUrl(
-          "EVALUATION_API_ORIGIN",
-          options.evaluationBaseUrl,
-          defaultEvaluationBaseUrl,
-          platformTarget,
-        ),
-        fetch: downstreamFetch("EVALUATION_API", options.evaluationFetch),
-        delegationSecret: requiredDelegationSecret(
-          "EVALUATION_API",
-          options.evaluationDelegationSecret,
-        ),
-      }),
-    ),
-    "analysis-api": createLazyOperationSdk(() =>
-      createMcpOperationAdapter({
-        baseUrl: analysisApiBaseUrl(options.analysisBaseUrl, platformTarget),
-        fetch: downstreamFetch("ANALYSIS_API", options.analysisFetch),
-        delegationSecret: requiredDelegationSecret(
-          "ANALYSIS_API",
-          options.analysisDelegationSecret,
-        ),
-      }),
-    ),
-  };
-}
-
-function requiredDelegationSecret(bindingName: string, secret: string | undefined): string {
-  if (!secret) throw new Error(`mcp-server: ${bindingName} delegation secret is required`);
-  return secret;
 }
 
 function requiredRevocations(revocations: McpRevocationReader | undefined): McpRevocationReader {
   if (!revocations) throw new Error("mcp-server: SESSION_STORE revocation binding is required");
   return revocations;
-}
-
-function createLazyOperationSdk(createSdk: () => OperationSdk): OperationSdkResolver {
-  let sdk: OperationSdk | undefined;
-  return () => {
-    sdk ??= createSdk();
-    return sdk;
-  };
-}
-
-function analysisApiBaseUrl(configured: string | undefined, platformTarget: string): string {
-  if (configured) {
-    return configured;
-  }
-  if (platformTarget === "local" || platformTarget === "pr-ci") {
-    return defaultAnalysisBaseUrl;
-  }
-  return internalAnalysisBaseUrl;
-}
-
-function apiBaseUrl(
-  envName: string,
-  configured: string | undefined,
-  localDefault: string,
-  platformTarget: string,
-): string {
-  if (configured) {
-    return configured;
-  }
-  if (platformTarget === "local" || platformTarget === "pr-ci") {
-    return localDefault;
-  }
-  throw new Error(`mcp-server: ${envName} is required for ${platformTarget}`);
-}
-
-function downstreamFetch(
-  bindingName: string,
-  requestFetch: typeof fetch | undefined,
-): typeof fetch {
-  if (!requestFetch) throw new Error(`mcp-server: ${bindingName} service binding is required`);
-  return requestFetch;
 }
 
 async function dispatch(
@@ -204,10 +109,23 @@ async function dispatch(
   actor: McpAccessTokenActor,
   sessionId: string | null,
   sessionStore: McpSessionStore,
+  options: McpServerRequestOptions,
 ): Promise<JsonRpcResponse> {
   const id = request.id ?? null;
   if (request.method === "initialize") {
     return jsonRpcResult(id, initializeResult());
+  }
+  if (request.method === "resources/list") {
+    return jsonRpcResult(id, listMcpResources());
+  }
+  if (request.method === "resources/read") {
+    return readMcpResourceRpc(id, request.params, {
+      actor,
+      sessionId,
+      sessionStore,
+      authBaseUrl: authIssuer(options.authBaseUrl, options.platformTarget),
+      fetchAuthMarkdown: options.fetchAuthMarkdown,
+    });
   }
   if (request.method === "tools/list") {
     return jsonRpcResult(id, { tools: MCP_TOOL_DEFINITIONS });
@@ -265,6 +183,14 @@ function authIssuer(configured: string | undefined, platformTarget: string | und
   throw new Error(`mcp-server: AUTH_API_ORIGIN is required for ${target}`);
 }
 
+function sessionTransportFromActor(actor: McpAccessTokenActor): McpSessionTransport | undefined {
+  if (!actor.authDoor && !actor.demoExpiresAt) return undefined;
+  return {
+    ...(actor.authDoor ? { authDoor: actor.authDoor } : {}),
+    ...(actor.demoExpiresAt ? { demoExpiresAt: actor.demoExpiresAt } : {}),
+  };
+}
+
 async function contextUse(
   id: JsonRpcId,
   arguments_: unknown,
@@ -280,7 +206,10 @@ async function contextUse(
   );
 }
 
-function sdkForOwner(sdks: OperationSdks, owner: RouteOwner): OperationSdk {
+function sdkForOwner(
+  sdks: OperationSdks,
+  owner: RouteOwner,
+): ReturnType<OperationSdks["control-plane-api"]> {
   if (owner === "control-plane-api" || owner === "evaluation-api" || owner === "analysis-api") {
     return sdks[owner]();
   }
@@ -290,7 +219,10 @@ function sdkForOwner(sdks: OperationSdks, owner: RouteOwner): OperationSdk {
 function initializeResult(): Record<string, unknown> {
   return {
     protocolVersion,
-    capabilities: { tools: { listChanged: false } },
+    capabilities: {
+      tools: { listChanged: false },
+      resources: { listChanged: false },
+    },
     serverInfo: { name: "splitch-mcp-server", version: "0.0.0" },
   };
 }
@@ -308,6 +240,9 @@ const unconfiguredSessionStore: McpSessionStore = {
     throw new Error("mcp-server: MCP session store is not configured");
   },
   async get() {
+    return undefined;
+  },
+  async getTransport() {
     return undefined;
   },
   async set() {

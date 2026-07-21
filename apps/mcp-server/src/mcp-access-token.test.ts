@@ -42,6 +42,23 @@ describe("MCP access-token verifier", () => {
       verifier.verify(`Bearer ${await sign(validClaims)}`, AUDIENCE, NOW),
     ).resolves.toEqual({ subject: "user_mcp", scopes: ["app:app_local:admin"] });
 
+    await expect(
+      verifier.verify(
+        `Bearer ${await sign({
+          ...validClaims,
+          auth_door: "anonymous",
+          demo_expires_at: "2026-07-22T00:00:00.000Z",
+        })}`,
+        AUDIENCE,
+        NOW,
+      ),
+    ).resolves.toEqual({
+      subject: "user_mcp",
+      scopes: ["app:app_local:admin"],
+      authDoor: "anonymous",
+      demoExpiresAt: "2026-07-22T00:00:00.000Z",
+    });
+
     for (const claims of [
       { ...validClaims, iss: "https://attacker.test" },
       { ...validClaims, aud: "https://api.splitch.test" },
