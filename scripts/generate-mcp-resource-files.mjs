@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,4 +16,11 @@ export const QUICKSTART_MD = ${JSON.stringify(quickstartMd)};
 `;
 
 writeFileSync(outputPath, contents, "utf8");
+const format = spawnSync("npx", ["biome", "format", "--write", outputPath], {
+  cwd: repoRoot,
+  stdio: "inherit",
+});
+if (format.status !== 0) {
+  process.exit(format.status ?? 1);
+}
 console.log(`wrote ${outputPath}`);

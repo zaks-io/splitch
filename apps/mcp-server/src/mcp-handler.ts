@@ -197,7 +197,10 @@ async function contextUse(
   );
 }
 
-function sdkForOwner(sdks: OperationSdks, owner: RouteOwner): ReturnType<OperationSdks["control-plane-api"]> {
+function sdkForOwner(
+  sdks: OperationSdks,
+  owner: RouteOwner,
+): ReturnType<OperationSdks["control-plane-api"]> {
   if (owner === "control-plane-api" || owner === "evaluation-api" || owner === "analysis-api") {
     return sdks[owner]();
   }

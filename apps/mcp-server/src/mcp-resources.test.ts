@@ -104,13 +104,17 @@ describe("MCP resources discovery", () => {
   });
 
   it("derives splitch://capabilities scopes from the session token", async () => {
-    const response = await mcp("resources/read", { uri: "splitch://capabilities" }, {
-      authorization: "Bearer scoped-token",
-      actor: {
-        subject: "user_scoped",
-        scopes: ["app:app_local:admin", "org:org_local:member"],
+    const response = await mcp(
+      "resources/read",
+      { uri: "splitch://capabilities" },
+      {
+        authorization: "Bearer scoped-token",
+        actor: {
+          subject: "user_scoped",
+          scopes: ["app:app_local:admin", "org:org_local:member"],
+        },
       },
-    });
+    );
     const body = (await response.json()) as JsonRpcSuccess<{
       contents: Array<{ text: string }>;
     }>;
@@ -141,7 +145,11 @@ describe("MCP resources discovery", () => {
 
     for (const uri of MCP_RESOURCE_URIS) {
       const before = sessionStore.writes;
-      const response = await mcp("resources/read", { uri }, { sessionId, sessionStore, demoExpiresAt });
+      const response = await mcp(
+        "resources/read",
+        { uri },
+        { sessionId, sessionStore, demoExpiresAt },
+      );
       expect(response.status).toBe(200);
       expect(sessionStore.writes).toBe(before);
     }

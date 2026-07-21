@@ -34,7 +34,9 @@ export function buildCapabilitiesResource(actor: McpAccessTokenActor): McpCapabi
     return {
       name: tool.name,
       gate,
-      grantedBy: actor.scopes.filter((scope) => gate.some((pattern) => scopeSatisfiesGate(scope, pattern))),
+      grantedBy: actor.scopes.filter((scope) =>
+        gate.some((pattern) => scopeSatisfiesGate(scope, pattern)),
+      ),
     };
   });
   return { scopes: [...actor.scopes], tools };

@@ -41,14 +41,17 @@ export interface McpActiveContextResource {
   readonly demoExpiresAt?: string;
 }
 
-export interface ReadMcpResourceOptions {
-  readonly uri: string;
+export interface ReadMcpResourceContext {
   readonly actor: McpAccessTokenActor;
   readonly sessionId: string | null;
   readonly sessionStore: McpSessionStore;
   readonly authBaseUrl: string;
   readonly demoExpiresAt?: string | null;
   readonly fetchAuthMarkdown?: (authBaseUrl: string) => Promise<string>;
+}
+
+export interface ReadMcpResourceOptions extends ReadMcpResourceContext {
+  readonly uri: string;
 }
 
 const RESOURCE_DEFINITIONS: readonly McpResourceDefinition[] = [
@@ -91,14 +94,14 @@ export function listMcpResources(): { resources: readonly McpResourceDefinition[
 export async function readMcpResourceRpc(
   id: JsonRpcId,
   params: unknown,
-  options: ReadMcpResourceOptions,
+  context: ReadMcpResourceContext,
 ): Promise<JsonRpcResponse> {
   const uri = resourceUri(params);
   if (!uri) {
     return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
   }
   try {
-    const content = await readMcpResource({ ...options, uri });
+    const content = await readMcpResource({ ...context, uri });
     if (!content) {
       return jsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, "Method not found");
     }
