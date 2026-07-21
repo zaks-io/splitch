@@ -114,19 +114,10 @@ describe("control-plane Flag definition invariants", () => {
 
     const prod = createdApp.environments.find((env) => env.key === "prod");
     expect(prod).toBeDefined();
-    await createRepository(h.bindings.d1).flags.flagConfigs.insert(
+    await createRepository(h.bindings.d1).flags.updateFlagConfig(
       envScope(createdApp.app.id, prod?.id ?? ""),
-      {
-        id: "cfg_flag_definition_guard",
-        appId: createdApp.app.id,
-        environmentId: prod?.id ?? "",
-        flagId: flag.id,
-        enabled: false,
-        availableVariantNames: JSON.stringify(["beta"]),
-        defaultVariantId: flag.defaultVariantId,
-        createdAt: NOW_ISO,
-        updatedAt: NOW_ISO,
-      },
+      flag.id,
+      { availableVariantNames: JSON.stringify(["beta"]) },
     );
 
     const blocked = await request(

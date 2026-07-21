@@ -10,10 +10,13 @@ import { renderError } from "@splitch/worker-runtime";
 import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning";
 import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
 
+import type { ConfigStoreAccess } from "./config-store-do";
+
 export interface AppEnvironmentDeps {
   repo: Repository;
   credentialStore?: KVNamespace;
   credentialCacheWriter?: CredentialCacheWriterAccess;
+  configStore?: ConfigStoreAccess;
   nowIso?: () => string;
 }
 

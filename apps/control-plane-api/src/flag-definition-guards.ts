@@ -9,19 +9,6 @@ export interface RunningBlocker {
   runId: string;
 }
 
-export async function flagConfigReferenceCount(
-  repo: Repository,
-  appId: string,
-  flagId: string,
-  envs: EnvironmentRows,
-): Promise<number> {
-  let count = 0;
-  for (const env of envs) {
-    if (await repo.flags.getFlagConfig(envScope(appId, env.id), flagId)) count += 1;
-  }
-  return count;
-}
-
 export async function availableVariantReferenceCount(
   repo: Repository,
   appId: string,

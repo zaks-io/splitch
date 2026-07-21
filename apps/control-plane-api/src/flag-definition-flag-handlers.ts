@@ -3,14 +3,14 @@ import { appScope, type TenantScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
+import { initializeFlagConfigsForFlag, removeFlagConfigsForFlag } from "./flag-config-lifecycle";
 import {
   flagNotFound,
-  resourceNotEmpty,
   runningExperimentError,
   validationError,
   validationErrors,
 } from "./flag-definition-errors";
-import { flagConfigReferenceCount, runningExperimentForFlag } from "./flag-definition-guards";
+import { runningExperimentForFlag } from "./flag-definition-guards";
 import {
   type FlagDefinitionDeps,
   type FlagRow,
@@ -60,11 +60,17 @@ export async function createFlag(
 
   const now = nowIso(deps);
   const flag = await insertFlag(deps, appId, body, prepared.value, now, principal.id);
+  const defaultVariantId =
+    prepared.value.variantRows.find((variant) => variant.input.isDefault)?.id ??
+    flag.defaultVariantId;
+  if (!defaultVariantId) {
+    throw new Error("createFlag: catalog has no default Variant");
+  }
   try {
     await insertVariants(deps, prepared.value.scope, flag.id, prepared.value.variantRows, now);
+    await initializeFlagConfigsForFlag(deps, { appId, flagId: flag.id, defaultVariantId });
   } catch (cause) {
-    await deps.repo.flags.removeVariantsForFlag(prepared.value.scope, flag.id);
-    await deps.repo.flags.removeFlag(prepared.value.scope, flag.id);
+    await rollbackCreatedFlag(deps, appId, prepared.value.scope, flag.id);
     throw cause;
   }
   return Response.json(await flagResponse(deps.repo, appId, flag));
@@ -113,6 +119,7 @@ export async function deleteFlag(
   const blocked = await flagDeleteBlocker(deps, loaded.value, args.requestId);
   if (blocked) return blocked;
 
+  await removeFlagConfigsForFlag(deps, loaded.value.appId, loaded.value.flag.id);
   await deps.repo.flags.removeVariantsForFlag(loaded.value.scope, loaded.value.flag.id);
   await deps.repo.flags.removeFlag(loaded.value.scope, loaded.value.flag.id);
   return Response.json({ deleted: true });
@@ -209,6 +216,17 @@ async function insertVariants(
   }
 }
 
+async function rollbackCreatedFlag(
+  deps: FlagDefinitionDeps,
+  appId: string,
+  scope: TenantScope,
+  flagId: string,
+): Promise<void> {
+  await removeFlagConfigsForFlag(deps, appId, flagId);
+  await deps.repo.flags.removeVariantsForFlag(scope, flagId);
+  await deps.repo.flags.removeFlag(scope, flagId);
+}
+
 async function prepareSchemaPatch(
   deps: FlagDefinitionDeps,
   loaded: LoadedFlag,
@@ -239,18 +257,6 @@ async function flagDeleteBlocker(
   requestId: string,
 ): Promise<Response | null> {
   const envs = await deps.repo.identity.listEnvironments(loaded.scope);
-  const configCount = await flagConfigReferenceCount(deps.repo, loaded.appId, loaded.flag.id, envs);
-  if (configCount > 0) {
-    return resourceNotEmpty(
-      "flag",
-      loaded.flag.id,
-      "flag_configs",
-      configCount,
-      "DELETE_FLAG",
-      requestId,
-    );
-  }
-
   const running = await runningExperimentForFlag(deps.repo, loaded.appId, loaded.flag.id, envs);
   return running ? runningExperimentError(running, "DELETE_FLAG", requestId) : null;
 }

@@ -60,15 +60,9 @@ export async function experimentFixture(ctx: ExperimentRunHarness, environmentKe
   const environmentId = createdApp.environments.find((env) => env.key === environmentKey)?.id ?? "";
   const jwt = await appToken(ctx.h, appId);
   const flag = await createFlag(ctx.h, appId, jwt);
-  await ctx.repo.flags.flagConfigs.insert(envScope(appId, environmentId), {
-    id: `flag_config_${environmentKey}`,
-    appId,
-    environmentId,
-    flagId: flag.id,
+  await ctx.repo.flags.updateFlagConfig(envScope(appId, environmentId), flag.id, {
     enabled: true,
     availableVariantNames: JSON.stringify(["control", "treatment"]),
-    defaultVariantId: flag.defaultVariantId,
-    createdAt: NOW_ISO,
     updatedAt: NOW_ISO,
   });
   const metric = await ctx.repo.experiments.metrics.insert(appScope(appId), {

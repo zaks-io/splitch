@@ -59,6 +59,40 @@ export function makeFlagRepo(db: Db) {
       return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
     },
 
+    /**
+     * Insert the initial disabled Flag Configuration when absent. Retries against
+     * the `(flag_id, environment_id)` unique index return the existing row.
+     */
+    async ensureInitialFlagConfig(
+      scope: EnvScope,
+      values: Omit<typeof flagConfigs.$inferInsert, "appId" | "environmentId"> & {
+        flagId: string;
+      },
+    ): Promise<typeof flagConfigs.$inferSelect> {
+      const existing = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, values.flagId));
+      if (existing) return existing;
+
+      try {
+        return await flagConfigsTable.insert(scope, {
+          ...values,
+          appId: scope.appId,
+          environmentId: scope.environmentId,
+        });
+      } catch (cause) {
+        const winner = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, values.flagId));
+        if (winner) return winner;
+        throw cause;
+      }
+    },
+
+    removeFlagConfig(scope: EnvScope, flagId: string): Promise<number> {
+      return flagConfigsTable.remove(scope, eq(flagConfigs.flagId, flagId));
+    },
+
+    removeTargetingRules(scope: EnvScope, flagId: string): Promise<number> {
+      return targetingRulesTable.remove(scope, eq(targetingRules.flagId, flagId));
+    },
+
     async updateFlagConfig(
       scope: EnvScope,
       flagId: string,

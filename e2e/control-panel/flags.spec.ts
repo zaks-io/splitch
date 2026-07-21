@@ -61,7 +61,8 @@ test.describe("per-Environment Flags", () => {
       .locator("[data-slot='dialog-footer']")
       .getByRole("button", { name: "Close" })
       .click();
-    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("Not configured");
+    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("Disabled");
+    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("0 of 2");
     await captureThemeScreenshots(page, testInfo, "flags-list");
 
     await page.getByRole("button", { name: "Create Flag" }).click();
