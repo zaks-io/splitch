@@ -64,8 +64,10 @@ referenced in a running Experiment.
 
 ### `DELETE /apps/{app_id}/flags/{flag_id}`
 
-Blocked if any Environment has a Flag Configuration for it or if it is referenced by a running
-Experiment in any Environment.
+Auto-provisioned per-Environment Flag Configurations are **cascade-deleted** with the Flag
+(SPL-164). Blocked if the Flag is referenced by any Experiment in any Environment. A **running**
+Experiment returns `EXPERIMENT_RUNNING`; draft or ended Experiments return `RESOURCE_NOT_EMPTY`
+with `childType: "experiment"`.
 
 ## Flag Configuration endpoints (per-Environment)
 

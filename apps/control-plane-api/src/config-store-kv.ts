@@ -23,6 +23,19 @@ export function parseFlagConfigEnvelope(raw: string): FlagConfigKV {
   return FlagConfigEnvelope.parse(JSON.parse(raw)).data;
 }
 
+export async function deleteFlagConfigSnapshot(
+  kv: KVNamespace,
+  scope: EnvScope,
+  flagKey: string,
+  experimentId?: string | null,
+): Promise<void> {
+  await kv.delete(flagConfigKey(scope.appId, scope.environmentId, flagKey));
+  if (experimentId) {
+    await kv.delete(experimentConfigKey(scope.appId, scope.environmentId, experimentId));
+    await kv.delete(liveRunKey(scope.appId, scope.environmentId, experimentId));
+  }
+}
+
 export async function writeSnapshot(
   kv: KVNamespace,
   scope: EnvScope,

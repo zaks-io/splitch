@@ -96,6 +96,7 @@ export function createApp(deps: AppDeps): Hono {
     repo: deps.repo,
     credentialStore: deps.credentialStore,
     credentialCacheWriter: deps.credentialCacheWriter,
+    configStore: deps.configStore,
     nowIso: deps.nowIso,
   });
   const registrar = controlPlaneRegistrar(deps);

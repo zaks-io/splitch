@@ -1,4 +1,6 @@
-import { envScope, type EnvScope } from "@splitch/db";
+import { DeltaNudgeSchema } from "@splitch/contracts";
+import { appScope, envScope, type EnvScope } from "@splitch/db";
+import { deleteFlagConfigSnapshot } from "./config-store-kv";
 import { promoteFlagConfig, replaceTargetingRules } from "./config-store-mutations";
 import {
   buildExperimentSnapshotFromD1,
@@ -38,7 +40,23 @@ export interface ConfigStoreWriter {
    * (nothing to resync), not an error.
    */
   resyncFlagConfig(input: FlagConfigResyncInput): Promise<FlagConfigWriteResult>;
+  /**
+   * Idempotently remove one Environment's KV Flag snapshot and broadcast cache
+   * invalidation. Safe to retry after D1 rows are already gone.
+   */
+  deleteFlagConfig(input: FlagConfigDeleteInput): Promise<FlagConfigDeleteResult>;
 }
+
+interface FlagConfigDeleteInput {
+  appId: string;
+  environmentId: string;
+  flagId: string;
+  flagKey?: string;
+}
+
+type FlagConfigDeleteResult =
+  | { ok: true; nudge: import("@splitch/contracts").DeltaNudge }
+  | { ok: false; reason: "FLAG_NOT_FOUND" };
 
 interface ExperimentConfigSyncInput {
   appId: string;
@@ -83,7 +101,36 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
       if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
       return writeSnapshotAndBroadcast(deps, scope, snapshot.flag.id, snapshot);
     },
+
+    async deleteFlagConfig(input) {
+      return deleteFlagConfigFromStore(deps, input);
+    },
   };
+}
+
+async function deleteFlagConfigFromStore(
+  deps: ConfigStoreDeps,
+  input: FlagConfigDeleteInput,
+): Promise<FlagConfigDeleteResult> {
+  const scope = envScope(input.appId, input.environmentId);
+  const flag =
+    (input.flagKey
+      ? { key: input.flagKey }
+      : await deps.repo.flags.getFlag(appScope(input.appId), input.flagId)) ?? null;
+  if (!flag) return { ok: false, reason: "FLAG_NOT_FOUND" };
+
+  const existing = await readFlagSnapshot(deps, scope, input.flagId);
+  const experimentId = existing?.flag.experimentId ?? null;
+  await deleteFlagConfigSnapshot(deps.kv, scope, flag.key, experimentId);
+
+  const nudge = DeltaNudgeSchema.parse({
+    type: "config.changed",
+    entity: "flag",
+    id: input.flagId,
+    version: 0,
+  });
+  await deps.broadcaster.broadcast(nudge);
+  return { ok: true, nudge };
 }
 
 async function syncExperimentConfig(

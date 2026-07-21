@@ -220,6 +220,46 @@ describe("config store variant catalog resync", () => {
     expect(after.data.variants.find((v) => v.name === "treatment")?.value).toBe("changed");
   });
 
+  it("deleteFlagConfig removes the KV snapshot and broadcasts invalidation", async () => {
+    const store = makeConfigStore({
+      repo: h.repo,
+      kv: h.kv,
+      broadcaster: { broadcast: (nudge) => void h.nudges.push(nudge) },
+      now: () => new Date(NOW_MS),
+    });
+    await store.resyncFlagConfig({
+      appId: ids.appId,
+      environmentId: ids.environmentId,
+      flagId: ids.flagId,
+    });
+    const key = flagConfigKey(ids.appId, ids.environmentId, ids.flagKey);
+    expect(await h.kv.get(key, "text")).toEqual(expect.any(String));
+
+    const result = await store.deleteFlagConfig({
+      appId: ids.appId,
+      environmentId: ids.environmentId,
+      flagId: ids.flagId,
+    });
+    expect(result.ok).toBe(true);
+    expect(await h.kv.get(key, "text")).toBeNull();
+    expect(h.nudges).toContainEqual(
+      expect.objectContaining({
+        type: "config.changed",
+        entity: "flag",
+        id: ids.flagId,
+        version: 0,
+      }),
+    );
+
+    const retry = await store.deleteFlagConfig({
+      appId: ids.appId,
+      environmentId: ids.environmentId,
+      flagId: ids.flagId,
+      flagKey: ids.flagKey,
+    });
+    expect(retry.ok).toBe(true);
+  });
+
   it("resyncFlagConfig reports FLAG_NOT_FOUND when the Environment has no config for the Flag", async () => {
     const store = makeConfigStore({
       repo: h.repo,

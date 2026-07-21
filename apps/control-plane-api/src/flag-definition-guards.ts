@@ -9,19 +9,6 @@ export interface RunningBlocker {
   runId: string;
 }
 
-export async function flagConfigReferenceCount(
-  repo: Repository,
-  appId: string,
-  flagId: string,
-  envs: EnvironmentRows,
-): Promise<number> {
-  let count = 0;
-  for (const env of envs) {
-    if (await repo.flags.getFlagConfig(envScope(appId, env.id), flagId)) count += 1;
-  }
-  return count;
-}
-
 export async function availableVariantReferenceCount(
   repo: Repository,
   appId: string,
@@ -38,22 +25,59 @@ export async function availableVariantReferenceCount(
   return count;
 }
 
-export async function runningExperimentForFlag(
+export interface ExperimentReference {
+  experimentId: string;
+  status: string;
+  runId?: string;
+}
+
+export async function experimentReferencingFlag(
   repo: Repository,
   appId: string,
   flagId: string,
   envs: EnvironmentRows,
-): Promise<RunningBlocker | null> {
+): Promise<ExperimentReference | null> {
+  let fallback: ExperimentReference | null = null;
   for (const env of envs) {
     const scope = envScope(appId, env.id);
-    const experiment = await repo.experiments.findRunningExperimentForFlag(scope, flagId);
-    if (!experiment) continue;
-    const run = experiment.liveRunId
-      ? await repo.experiments.getRun(scope, experiment.liveRunId)
-      : null;
-    return { experimentId: experiment.id, runId: run?.id ?? experiment.liveRunId ?? "unknown" };
+    const reference = await firstFlagExperimentReference(repo, scope, flagId);
+    if (!reference) continue;
+    if (reference.status === "running") return reference;
+    fallback ??= reference;
   }
-  return null;
+  return fallback;
+}
+
+async function firstFlagExperimentReference(
+  repo: Repository,
+  scope: ReturnType<typeof envScope>,
+  flagId: string,
+): Promise<ExperimentReference | null> {
+  let fallback: ExperimentReference | null = null;
+  const experiments = await repo.experiments.listExperiments(scope);
+  for (const experiment of experiments) {
+    if (experiment.flagId !== flagId) continue;
+    if (experiment.status === "running") {
+      return runningExperimentReference(repo, scope, experiment);
+    }
+    fallback ??= { experimentId: experiment.id, status: experiment.status };
+  }
+  return fallback;
+}
+
+function runningExperimentReference(
+  repo: Repository,
+  scope: ReturnType<typeof envScope>,
+  experiment: { id: string; status: string; liveRunId: string | null },
+): Promise<ExperimentReference> {
+  const runPromise = experiment.liveRunId
+    ? repo.experiments.getRun(scope, experiment.liveRunId)
+    : Promise.resolve(null);
+  return runPromise.then((run) => ({
+    experimentId: experiment.id,
+    status: experiment.status,
+    runId: run?.id ?? experiment.liveRunId ?? "unknown",
+  }));
 }
 
 export async function runningExperimentForVariant(
