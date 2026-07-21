@@ -3,9 +3,15 @@ export interface McpSessionContext {
   readonly environmentId: string;
 }
 
+export interface McpSessionTransport {
+  readonly authDoor?: string;
+  readonly demoExpiresAt?: string;
+}
+
 export interface McpSessionStore {
-  create(): Promise<string>;
+  create(transport?: McpSessionTransport): Promise<string>;
   get(id: string): Promise<McpSessionContext | undefined>;
+  getTransport(id: string): Promise<McpSessionTransport | undefined>;
   set(id: string, context: McpSessionContext): Promise<void>;
   end(id: string): Promise<void>;
 }
