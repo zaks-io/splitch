@@ -24,11 +24,9 @@ export async function controlPlaneCall(deps, method, path, body) {
   return { status: response.status, body: json, ok: response.ok };
 }
 
-export async function requireOk(result, label) {
+async function requireOk(result, label) {
   if (!result.ok) {
-    throw new Error(
-      `${label} failed with HTTP ${result.status}: ${JSON.stringify(result.body)}`,
-    );
+    throw new Error(`${label} failed with HTTP ${result.status}: ${JSON.stringify(result.body)}`);
   }
   return result.body;
 }

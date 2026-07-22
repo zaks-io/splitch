@@ -23,12 +23,7 @@ import {
   requireFullCommitSha,
   resolveDeployedCommitSha,
 } from "../lib/shared-preview-deployment-evidence.mjs";
-import {
-  listApps,
-  listFlags,
-  PROPAGATION_WINDOW_MS,
-  runDarkLaunchJourney,
-} from "./journey.mjs";
+import { listApps, listFlags, PROPAGATION_WINDOW_MS, runDarkLaunchJourney } from "./journey.mjs";
 import { installPackedSdkConsumer, runExternalResolve, writeEvidence } from "./pack-consumer.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -40,7 +35,10 @@ const evidencePath =
 const config = readConfig();
 const deployedCommitSha = await resolveCommitSha(config);
 const consumer = installPackedSdkConsumer();
-const installCommand = consumer.installCommand.replace(consumer.tarballPath, "<packed-tarball.tgz>");
+const installCommand = consumer.installCommand.replace(
+  consumer.tarballPath,
+  "<packed-tarball.tgz>",
+);
 
 const runResults = [];
 try {
@@ -183,8 +181,7 @@ function readConfig() {
     smokeClientSecret,
     smokeOrgId: process.env.SPLITCH_SMOKE_ORG_ID ?? "org_shared_preview_smoke",
     smokeAppId: process.env.SPLITCH_SMOKE_APP_ID ?? "app_shared_preview_smoke",
-    smokeEnvironmentId:
-      process.env.SPLITCH_SMOKE_ENVIRONMENT_ID ?? "env_shared_preview_smoke_dev",
+    smokeEnvironmentId: process.env.SPLITCH_SMOKE_ENVIRONMENT_ID ?? "env_shared_preview_smoke_dev",
     runId: (process.env.SPLITCH_SMOKE_RUN_ID ?? process.env.GITHUB_RUN_ID ?? String(Date.now()))
       .toLowerCase()
       .replaceAll(/[^a-z0-9-]/g, "-")
@@ -260,9 +257,7 @@ function runSharedPreviewTransientCleanup() {
     env: process.env,
   });
   if (result.status !== 0) {
-    throw new Error(
-      `shared-preview:cleanup-smoke failed with exit ${result.status ?? "unknown"}`,
-    );
+    throw new Error(`shared-preview:cleanup-smoke failed with exit ${result.status ?? "unknown"}`);
   }
 }
 

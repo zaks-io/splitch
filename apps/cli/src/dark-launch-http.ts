@@ -1,18 +1,11 @@
 import { expect } from "vitest";
 import { appScope } from "@splitch/db";
-import {
-  quickstartOrigins,
-  type QuickstartHarness,
-} from "./quickstart-local-harness.js";
+import { quickstartOrigins, type QuickstartHarness } from "./quickstart-local-harness.js";
 
 const FLAG_KEY = "dark-launch-demo";
 
 export type PackedSdk = {
-  createSplitchClient(options: {
-    clientKey: string;
-    endpoint: string;
-    fetch: typeof fetch;
-  }): {
+  createSplitchClient(options: { clientKey: string; endpoint: string; fetch: typeof fetch }): {
     verify(
       flagKey: string,
       context: { targetingKey: string; attributes?: Record<string, unknown> },
@@ -37,8 +30,7 @@ export async function expectVariant(
   const details = await client.verify(FLAG_KEY, { targetingKey, attributes });
   expect(details.reason).not.toBe("ERROR");
   const name =
-    details.variantName ??
-    (details.value === true ? "on" : details.value === false ? "off" : null);
+    details.variantName ?? (details.value === true ? "on" : details.value === false ? "off" : null);
   expect(name).toBe(expectedName);
 }
 

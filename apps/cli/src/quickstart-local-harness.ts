@@ -91,10 +91,7 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
   const controlPlaneApp = flagHarness.app;
   const evaluationUsageSink = new RecordingEvaluationUsageSink();
   const exposureSink = new RecordingExposureSink();
-  const evaluationCommitSink = new RecordingEvaluationCommitSink(
-    exposureSink,
-    evaluationUsageSink,
-  );
+  const evaluationCommitSink = new RecordingEvaluationCommitSink(exposureSink, evaluationUsageSink);
   const provider = new KvProvider(configKv);
   const evaluationApp = createEvaluationApp({
     authResolver: () => ({ ok: false, reason: "UNAUTHORIZED" }),

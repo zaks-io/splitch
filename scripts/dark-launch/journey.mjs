@@ -5,32 +5,13 @@
 
 export {
   assertVariant,
-  COHORT_ATTRIBUTE,
-  COHORT_VALUE,
   DEFAULT_VARIANT,
-  FLAG_KEY_PREFIX,
   LAUNCH_VARIANT,
   PROPAGATION_WINDOW_MS,
   syntheticKeys,
-  TARGETED_KEY,
-  UNTARGETED_KEY,
   variantName,
 } from "./constants.mjs";
-export {
-  clientKeyMaterialFromCreate,
-  controlPlaneCall,
-  createDarkLaunchApp,
-  createDarkLaunchFlag,
-  deleteApp,
-  deleteFlag,
-  getClientKey,
-  listApps,
-  listFlags,
-  replaceTargetingRules,
-  rotateClientKey,
-  updateFlagConfig,
-} from "./control-plane.mjs";
-export { cleanupDarkLaunch } from "./cleanup.mjs";
+export { listApps, listFlags } from "./control-plane.mjs";
 
 import {
   assertVariant,

@@ -11,6 +11,8 @@
     "src/test-fixtures.ts",
     "src/test-helpers.ts",
     "src/fetch-recording.ts",
-    "src/quickstart-local-harness.ts"
+    "src/quickstart-local-harness.ts",
+    "src/dark-launch-http.ts",
+    "src/dark-launch-scenario.ts"
   ]
 }
