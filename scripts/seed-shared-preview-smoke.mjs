@@ -10,6 +10,7 @@ const dbDir = join(repoRoot, "packages", "db");
 const configPath = join(dbDir, "wrangler.jsonc");
 const now = new Date().toISOString();
 const transientSmokeAppKeyPattern = "playwright-smoke-app-%";
+const darkLaunchAppKeyPattern = "dark-launch-app-%";
 const seedTimeoutMs = 60_000;
 const cleanupOnly = process.argv.includes("--cleanup-transient");
 
@@ -41,34 +42,36 @@ const confirmPolicy = JSON.stringify({
   startExperimentRun: "confirm",
 });
 
+const transientAppPredicate = `(key LIKE '${transientSmokeAppKeyPattern}' OR key LIKE '${darkLaunchAppKeyPattern}')`;
+
 const cleanupSql = `
 DELETE FROM targeting_rules WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
 );
 DELETE FROM flag_configs WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
 );
 DELETE FROM variants WHERE flag_id IN (
   SELECT id FROM flags WHERE app_id IN (
-    SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
+    SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
   )
 );
 DELETE FROM flags WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
 );
 DELETE FROM client_keys WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
 );
 DELETE FROM api_keys WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
 );
 DELETE FROM environments WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
 );
 DELETE FROM app_memberships WHERE app_id IN (
-  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}'
+  SELECT id FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate}
 );
-DELETE FROM apps WHERE organization_id = '${ids.org}' AND key LIKE '${transientSmokeAppKeyPattern}';
+DELETE FROM apps WHERE organization_id = '${ids.org}' AND ${transientAppPredicate};
 `;
 
 const seedSql = `
@@ -105,17 +108,19 @@ INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at,
 VALUES ('${ids.envProd}', '${ids.app}', 'prod', 'Prod', '${confirmPolicy}', '${now}', '${now}', '${ids.user}')
 ON CONFLICT(id) DO UPDATE SET policy = excluded.policy, updated_at = excluded.updated_at;
 
-INSERT INTO client_keys (
-  key_id, app_id, environment_id, key_material, origin_allowlist, rate_limit_rps, revoked_at, created_at, created_by
-)
-VALUES ('${ids.clientKeyDev}', '${ids.app}', '${ids.envDev}', 'pk_shared_preview_smoke_dev', NULL, NULL, NULL, '${now}', '${ids.user}')
-ON CONFLICT(key_id) DO UPDATE SET revoked_at = NULL;
+-- Clear active Client Keys so rotate-during-smoke cannot leave a second active
+-- row that blocks re-seed (client_keys_active_env_unique).
+DELETE FROM client_keys WHERE app_id = '${ids.app}';
 
 INSERT INTO client_keys (
   key_id, app_id, environment_id, key_material, origin_allowlist, rate_limit_rps, revoked_at, created_at, created_by
 )
-VALUES ('${ids.clientKeyProd}', '${ids.app}', '${ids.envProd}', 'pk_shared_preview_smoke_prod', NULL, NULL, NULL, '${now}', '${ids.user}')
-ON CONFLICT(key_id) DO UPDATE SET revoked_at = NULL;
+VALUES ('${ids.clientKeyDev}', '${ids.app}', '${ids.envDev}', 'pk_shared_preview_smoke_dev', NULL, NULL, NULL, '${now}', '${ids.user}');
+
+INSERT INTO client_keys (
+  key_id, app_id, environment_id, key_material, origin_allowlist, rate_limit_rps, revoked_at, created_at, created_by
+)
+VALUES ('${ids.clientKeyProd}', '${ids.app}', '${ids.envProd}', 'pk_shared_preview_smoke_prod', NULL, NULL, NULL, '${now}', '${ids.user}');
 
 INSERT INTO flags (
   id, app_id, key, name, description, schema, default_variant_id, created_at, updated_at, created_by, updated_by

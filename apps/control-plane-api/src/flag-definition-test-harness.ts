@@ -73,7 +73,7 @@ export function makeAppForRepo(
   });
 }
 
-function orgToken(h: FlagDefinitionHarness): Promise<string> {
+export function orgToken(h: FlagDefinitionHarness): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
     iss: "https://auth.splitch.test",

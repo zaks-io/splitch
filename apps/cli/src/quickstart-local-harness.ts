@@ -15,6 +15,7 @@ import {
   makeAppForRepo,
   makeFlagDefinitionHarness,
   NOW_ISO,
+  orgToken,
 } from "../../control-plane-api/src/flag-definition-test-harness.js";
 import { StaticSaltStore } from "../../evaluation-api/src/assignment/assignment-store-test-fixtures.js";
 import { createApp as createEvaluationApp } from "../../evaluation-api/src/app.js";
@@ -43,7 +44,12 @@ export interface QuickstartHarness {
   readonly prodEnvironmentId: string;
   readonly orgId: string;
   readonly accessToken: string;
+  readonly orgAccessToken: string;
   readonly routingFetch: typeof fetch;
+  readonly evaluationUsageSink: RecordingEvaluationUsageSink;
+  readonly exposureSink: RecordingExposureSink;
+  readonly evaluationCommitSink: RecordingEvaluationCommitSink;
+  invalidateFlagCache(appId?: string): void;
   dispose: () => Promise<void>;
 }
 
@@ -81,13 +87,20 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
   }
 
   const accessToken = await appToken(flagHarness, appId);
+  const orgAccessToken = await orgToken(flagHarness);
   const controlPlaneApp = flagHarness.app;
   const evaluationUsageSink = new RecordingEvaluationUsageSink();
+  const exposureSink = new RecordingExposureSink();
+  const evaluationCommitSink = new RecordingEvaluationCommitSink(
+    exposureSink,
+    evaluationUsageSink,
+  );
+  const provider = new KvProvider(configKv);
   const evaluationApp = createEvaluationApp({
     authResolver: () => ({ ok: false, reason: "UNAUTHORIZED" }),
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(flagHarness.bindings.credentialKv),
     rateLimiter: allowLimiter,
-    provider: new KvProvider(configKv),
+    provider,
     assignmentStore: new RecordingAssignmentStore(),
     exposureAssembly: {
       saltStore: new StaticSaltStore(),
@@ -95,10 +108,7 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
       newEventId: () => "evt-quickstart-1",
       now: () => new Date(Date.parse(NOW_ISO)),
     },
-    evaluationCommitSink: new RecordingEvaluationCommitSink(
-      new RecordingExposureSink(),
-      evaluationUsageSink,
-    ),
+    evaluationCommitSink,
     evaluationUsageSink,
   });
 
@@ -116,7 +126,19 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     prodEnvironmentId,
     orgId: "org_flag_definition_crud",
     accessToken,
+    orgAccessToken,
     routingFetch,
+    evaluationUsageSink,
+    exposureSink,
+    evaluationCommitSink,
+    invalidateFlagCache(targetAppId = appId) {
+      provider.invalidate(targetAppId, {
+        type: "config.changed",
+        entity: "flag",
+        id: "*",
+        version: Date.now(),
+      });
+    },
     dispose: async () => {
       await flagHarness.bindings.dispose();
       await configKvBinding.dispose();
