@@ -13,6 +13,7 @@
     "src/fetch-recording.ts",
     "src/quickstart-local-harness.ts",
     "src/dark-launch-http.ts",
-    "src/dark-launch-scenario.ts"
+    "src/dark-launch-scenario.ts",
+    "src/dark-launch-negative-auth.ts"
   ]
 }

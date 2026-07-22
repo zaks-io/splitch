@@ -35,9 +35,11 @@ import {
 /**
  * Full dark-launch journey.
  *
- * When `deps.appId` + `deps.environmentId` are set (shared-preview smoke App), the
- * journey creates only a transient Flag on that App. Otherwise it creates a
- * transient App (local harness / open org token).
+ * When `deps.appId` + `deps.environmentId` are set (shared-preview smoke App
+ * bound by co-scope), the journey creates only a transient Flag on that App and
+ * never rotates its Client Key. Otherwise it creates a fully deletable transient
+ * App. Negative proofs use seeded fixture keys when provided; otherwise they
+ * create and delete probe Apps through normal Control Plane operations.
  */
 export async function runDarkLaunchJourney(deps) {
   const keys = syntheticKeys(deps.runId);

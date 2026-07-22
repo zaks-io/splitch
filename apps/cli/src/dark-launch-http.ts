@@ -9,7 +9,12 @@ export type PackedSdk = {
     verify(
       flagKey: string,
       context: { targetingKey: string; attributes?: Record<string, unknown> },
-    ): Promise<{ value: unknown; variantName: string | null; reason: string }>;
+    ): Promise<{
+      value: unknown;
+      variantName: string | null;
+      reason: string;
+      errorCode?: string;
+    }>;
     evaluateDetails(
       flagKey: string,
       context: {
@@ -17,7 +22,12 @@ export type PackedSdk = {
         attributes?: Record<string, unknown>;
         idempotencyKey: string;
       },
-    ): Promise<{ value: unknown; variantName: string | null; reason: string }>;
+    ): Promise<{
+      value: unknown;
+      variantName: string | null;
+      reason: string;
+      errorCode?: string;
+    }>;
   };
 };
 

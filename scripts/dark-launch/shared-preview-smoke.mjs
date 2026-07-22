@@ -4,26 +4,27 @@
  *
  * Runs the external-product dark-launch journey twice consecutively against the
  * pre-authorized shared-preview smoke identity. Records one exact deployed commit
- * and asserts cleanup leaves no orphans.
+ * observed from Worker health and asserts cleanup leaves no orphans — using only
+ * normal Control Plane operations (no D1/KV/Tinybird writes in the journey).
  *
  * Required env:
  *   SPLITCH_SMOKE_CLIENT_SECRET
+ *   SPLITCH_SMOKE_COMMIT_SHA or SPLITCH_DEPLOYED_COMMIT_SHA (must match health)
  * Optional:
- *   SPLITCH_SMOKE_COMMIT_SHA / SPLITCH_DEPLOYED_COMMIT_SHA (required when health
- *     does not surface deployedCommitSha)
  *   SPLITCH_SMOKE_RUNS (default 2)
  *   SPLITCH_DARK_LAUNCH_EVIDENCE (evidence output path)
+ *   SPLITCH_SMOKE_WRONG_APP_CLIENT_KEY (default: seeded sibling App key)
+ *   SPLITCH_SMOKE_REVOKED_CLIENT_KEY (default: seeded revoked key material)
  */
-import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createFleetEvidence,
   requireFullCommitSha,
-  resolveDeployedCommitSha,
 } from "../lib/shared-preview-deployment-evidence.mjs";
 import { listApps, listFlags, PROPAGATION_WINDOW_MS, runDarkLaunchJourney } from "./journey.mjs";
+import { getClientKey } from "./control-plane.mjs";
 import { installPackedSdkConsumer, runExternalResolve, writeEvidence } from "./pack-consumer.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -33,7 +34,10 @@ const evidencePath =
   resolve(repoRoot, "test-results/shared-preview/dark-launch-evidence.json");
 
 const config = readConfig();
-const deployedCommitSha = await resolveCommitSha(config);
+const expectedCommitSha = requireFullCommitSha(
+  process.env.SPLITCH_SMOKE_COMMIT_SHA ?? process.env.SPLITCH_DEPLOYED_COMMIT_SHA,
+  "SPLITCH_SMOKE_COMMIT_SHA",
+);
 const consumer = installPackedSdkConsumer();
 const installCommand = consumer.installCommand.replace(
   consumer.tarballPath,
@@ -55,35 +59,25 @@ try {
       evaluationBaseUrl: config.evaluationBaseUrl,
       runId,
       propagationWindowMs: PROPAGATION_WINDOW_MS,
+      wrongAppClientKey: config.wrongAppClientKey,
+      revokedClientKey: config.revokedClientKey,
       resolve: (action, options) => runExternalResolve(consumer, action, options),
       assertVerifyClean: async () => {
         // Hosted: verify is a non-exposing path by construction (no ingest call).
         // Local integration tests assert recording sinks separately.
       },
       assertEvaluateObservation: async ({ first, retry }) => {
+        // Flag-only evaluate cannot produce an ExposureEvent (requires liveRunId).
+        // See PR report: SPL-168 scope/spec contradiction with Exposure contract.
         if (first.reason === "ERROR" || retry.reason === "ERROR") {
           throw new Error("evaluate observation failed loud");
         }
-        // Retry-safe: same Variant; hosted commit outbox seals one logical Evaluation.
         if (first.value !== retry.value) {
           throw new Error("retry-safe evaluate returned a different Variant");
         }
       },
-      assertCleanup: async ({ keys }) => {
-        // Flag on the smoke App must be gone. Sibling wrong-Apps are co-scope
-        // blocked for delete; the post-run D1 cleanup removes dark-launch-app-%.
-        const flags = await listFlags(
-          {
-            fetch,
-            accessToken,
-            controlPlaneBaseUrl: config.controlPlaneBaseUrl,
-          },
-          config.smokeAppId,
-        );
-        const flagItems = Array.isArray(flags) ? flags : (flags.items ?? []);
-        if (flagItems.some((flag) => flag.key === keys.flagKey)) {
-          throw new Error(`cleanup left orphaned Flag key ${keys.flagKey}`);
-        }
+      assertCleanup: async ({ keys, activeKeyBefore }) => {
+        await assertHostedCleanup(config, accessToken, keys, activeKeyBefore);
       },
     });
     runResults.push({
@@ -97,15 +91,26 @@ try {
   consumer.dispose();
 }
 
-// Remove transient wrong-Apps created for negative proofs (D1 only; not journey path).
-runSharedPreviewTransientCleanup();
 const accessToken = await clientCredentialsToken(config);
 const orphanedApps = await findOrphanedDarkLaunchApps(config, accessToken);
 const orphanedFlags = await findOrphanedDarkLaunchFlags(config, accessToken, runResults);
+const activeKey = await getClientKey(
+  { fetch, accessToken, controlPlaneBaseUrl: config.controlPlaneBaseUrl },
+  config.smokeAppId,
+  config.smokeEnvironmentId,
+);
 if (orphanedApps.length > 0 || orphanedFlags.length > 0) {
   throw new Error(
     `cleanup assertion found orphans: apps=${JSON.stringify(orphanedApps)} flags=${JSON.stringify(orphanedFlags)}`,
   );
+}
+if (activeKey.keyMaterial !== config.expectedActiveClientKey) {
+  throw new Error(
+    `smoke App Client Key material drifted (expected seeded active key, got different material)`,
+  );
+}
+if (activeKey.revokedAt) {
+  throw new Error("smoke App active Client Key is revoked after dark-launch runs");
 }
 
 const healthRoutes = config.healthRoutes;
@@ -118,34 +123,22 @@ for (const route of healthRoutes) {
   observations.push({ body: await response.json(), route });
 }
 
-let evidence;
-try {
-  evidence = createFleetEvidence({
-    expectedCommitSha: deployedCommitSha,
-    expectedPlatformTarget: "shared-preview",
-    observations,
-  });
-} catch (error) {
-  // Older shared-preview fleets may not yet advertise deployedCommitSha on health.
-  // Still record the operator-supplied exact commit and the journey results.
-  evidence = {
-    deployedCommitSha,
-    platformTarget: "shared-preview",
-    healthCommitShaMissing: true,
-    healthNote: error instanceof Error ? error.message : String(error),
-    routes: healthRoutes.map((route) => ({
-      surface: route.surface,
-      service: route.service,
-      url: route.url,
-    })),
-  };
-}
+const evidence = createFleetEvidence({
+  expectedCommitSha,
+  expectedPlatformTarget: "shared-preview",
+  observations,
+});
 
 const payload = {
   ...evidence,
   consumerInstall: installCommand,
   consecutiveRuns: runResults,
-  cleanup: { orphanedApps: false, orphanedFlags: false },
+  cleanup: {
+    orphanedApps: false,
+    orphanedFlags: false,
+    orphanedCredentials: false,
+    activeClientKeyPreserved: true,
+  },
   checks: {
     packedSdkConsumer: true,
     darkLaunchJourney: true,
@@ -157,7 +150,7 @@ mkdirSync(dirname(evidencePath), { recursive: true });
 writeEvidence(evidencePath, payload);
 console.log(`dark-launch smoke passed (${runs} consecutive runs)`);
 console.log(`evidence: ${evidencePath}`);
-console.log(`deployedCommitSha: ${deployedCommitSha}`);
+console.log(`deployedCommitSha: ${evidence.deployedCommitSha}`);
 
 function readConfig() {
   const authBaseUrl = originUrl("SPLITCH_SMOKE_AUTH_BASE_URL", "https://auth.preview.splitch.dev");
@@ -182,6 +175,12 @@ function readConfig() {
     smokeOrgId: process.env.SPLITCH_SMOKE_ORG_ID ?? "org_shared_preview_smoke",
     smokeAppId: process.env.SPLITCH_SMOKE_APP_ID ?? "app_shared_preview_smoke",
     smokeEnvironmentId: process.env.SPLITCH_SMOKE_ENVIRONMENT_ID ?? "env_shared_preview_smoke_dev",
+    expectedActiveClientKey:
+      process.env.SPLITCH_SMOKE_ACTIVE_CLIENT_KEY ?? "pk_shared_preview_smoke_dev",
+    wrongAppClientKey:
+      process.env.SPLITCH_SMOKE_WRONG_APP_CLIENT_KEY ?? "pk_shared_preview_smoke_other_dev",
+    revokedClientKey:
+      process.env.SPLITCH_SMOKE_REVOKED_CLIENT_KEY ?? "pk_shared_preview_smoke_dev_revoked",
     runId: (process.env.SPLITCH_SMOKE_RUN_ID ?? process.env.GITHUB_RUN_ID ?? String(Date.now()))
       .toLowerCase()
       .replaceAll(/[^a-z0-9-]/g, "-")
@@ -208,24 +207,6 @@ function route(surface, service, fallback) {
   return { surface, service, url: fallback };
 }
 
-async function resolveCommitSha(cfg) {
-  const supplied =
-    process.env.SPLITCH_SMOKE_COMMIT_SHA ?? process.env.SPLITCH_DEPLOYED_COMMIT_SHA ?? null;
-  if (supplied) {
-    return requireFullCommitSha(supplied, "SPLITCH_SMOKE_COMMIT_SHA");
-  }
-  const authRoute = cfg.healthRoutes[0];
-  const response = await fetch(authRoute.url);
-  if (!response.ok) {
-    throw new Error(`Auth API health returned HTTP ${response.status}`);
-  }
-  return resolveDeployedCommitSha({
-    body: await response.json(),
-    expectedPlatformTarget: "shared-preview",
-    route: authRoute,
-  });
-}
-
 async function clientCredentialsToken(cfg) {
   const response = await fetch(`${cfg.authBaseUrl}/oauth2/token`, {
     method: "POST",
@@ -250,14 +231,37 @@ function originUrl(name, fallback) {
   return new URL(process.env[name] ?? fallback).origin;
 }
 
-function runSharedPreviewTransientCleanup() {
-  const result = spawnSync("pnpm", ["shared-preview:cleanup-smoke"], {
-    cwd: repoRoot,
-    stdio: "inherit",
-    env: process.env,
-  });
-  if (result.status !== 0) {
-    throw new Error(`shared-preview:cleanup-smoke failed with exit ${result.status ?? "unknown"}`);
+async function assertHostedCleanup(cfg, accessToken, keys, activeKeyBefore) {
+  const deps = { fetch, accessToken, controlPlaneBaseUrl: cfg.controlPlaneBaseUrl };
+  const flags = await listFlags(deps, cfg.smokeAppId);
+  const flagItems = Array.isArray(flags) ? flags : (flags.items ?? []);
+  if (flagItems.some((flag) => flag.key === keys.flagKey)) {
+    throw new Error(`cleanup left orphaned Flag key ${keys.flagKey}`);
+  }
+
+  const apps = await listApps(deps, cfg.smokeOrgId);
+  const appItems = Array.isArray(apps) ? apps : (apps.items ?? apps.apps ?? []);
+  const watched = new Set([
+    keys.appKey,
+    `${keys.appKey}-wrong`,
+    `${keys.appKey}-revoked`,
+    `${keys.appKey}-cross-org`,
+  ]);
+  const orphanApp = appItems.find((app) => watched.has(app.key));
+  if (orphanApp) {
+    throw new Error(`cleanup left orphaned App ${orphanApp.id} (${orphanApp.key})`);
+  }
+
+  const activeKey = await getClientKey(deps, cfg.smokeAppId, cfg.smokeEnvironmentId);
+  const expectedMaterial =
+    typeof activeKeyBefore === "string" && activeKeyBefore.length > 0
+      ? activeKeyBefore
+      : cfg.expectedActiveClientKey;
+  if (activeKey.keyMaterial !== expectedMaterial) {
+    throw new Error("cleanup left rotated or replaced smoke App Client Key");
+  }
+  if (activeKey.revokedAt) {
+    throw new Error("smoke App active Client Key is revoked after cleanup");
   }
 }
 

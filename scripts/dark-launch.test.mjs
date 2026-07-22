@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { assertStructuredAuthFailure } from "./dark-launch/cleanup.mjs";
 import {
   assertVariant,
   DEFAULT_VARIANT,
@@ -32,4 +33,44 @@ test("assertVariant rejects ERROR resolutions", () => {
 
 test("propagation window matches the documented 60s KV lag", () => {
   assert.equal(PROPAGATION_WINDOW_MS, 60_000);
+});
+
+test("assertStructuredAuthFailure requires the expected errorCode", async () => {
+  await assertStructuredAuthFailure(
+    async () => ({ reason: "ERROR", errorCode: "FLAG_NOT_FOUND", value: false }),
+    "FLAG_NOT_FOUND",
+    "wrong-App",
+  );
+
+  await assert.rejects(
+    () =>
+      assertStructuredAuthFailure(
+        async () => ({ reason: "ERROR", errorCode: "UNAUTHORIZED", value: false }),
+        "FLAG_NOT_FOUND",
+        "wrong-App",
+      ),
+    /expected errorCode FLAG_NOT_FOUND/,
+  );
+
+  await assert.rejects(
+    () =>
+      assertStructuredAuthFailure(
+        async () => {
+          throw new Error("network down");
+        },
+        "CREDENTIAL_REVOKED",
+        "revoked",
+      ),
+    /but the call threw/,
+  );
+
+  await assert.rejects(
+    () =>
+      assertStructuredAuthFailure(
+        async () => ({ reason: "DEFAULT", value: false }),
+        "CREDENTIAL_REVOKED",
+        "revoked",
+      ),
+    /expected reason ERROR/,
+  );
 });

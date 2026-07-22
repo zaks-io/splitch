@@ -54,6 +54,9 @@ export function installPackedSdkConsumer() {
 
 /**
  * Run the external product resolve.mjs script and parse its JSON stdout.
+ * ERROR resolutions still print ResolutionDetails and exit 2 — surface the
+ * structured details so callers can assert errorCode without treating any throw
+ * as success.
  */
 export function runExternalResolve(consumer, action, options) {
   const args = [
@@ -71,15 +74,43 @@ export function runExternalResolve(consumer, action, options) {
     args.push("--attribute", `${key}=${value}`);
   }
 
-  const stdout = execFileSync(process.execPath, args, {
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      SPLITCH_CLIENT_KEY: options.clientKey,
-      SPLITCH_ENDPOINT: options.endpoint,
-    },
-  });
-  return JSON.parse(stdout.trim().split("\n").at(-1));
+  let stdout;
+  try {
+    stdout = execFileSync(process.execPath, args, {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        SPLITCH_CLIENT_KEY: options.clientKey,
+        SPLITCH_ENDPOINT: options.endpoint,
+      },
+    });
+  } catch (error) {
+    const captured =
+      error && typeof error === "object" && "stdout" in error ? String(error.stdout ?? "") : "";
+    const details = parseLastJsonLine(captured);
+    if (details) return details;
+    throw error;
+  }
+  const details = parseLastJsonLine(stdout);
+  if (!details) {
+    throw new Error(`external resolve produced no JSON details:\n${stdout}`);
+  }
+  return details;
+}
+
+function parseLastJsonLine(text) {
+  const line = text
+    .trim()
+    .split("\n")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .at(-1);
+  if (!line) return null;
+  try {
+    return JSON.parse(line);
+  } catch {
+    return null;
+  }
 }
 
 export function writeEvidence(path, evidence) {

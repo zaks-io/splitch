@@ -1,15 +1,8 @@
 import { writeFile } from "node:fs/promises";
 import { expect } from "vitest";
-import { appToken } from "../../control-plane-api/src/flag-definition-test-harness.js";
 import { runCli } from "./cli.js";
-import {
-  controlPlaneDelete,
-  controlPlaneGet,
-  controlPlanePost,
-  expectVariant,
-  type PackedSdk,
-  variantId,
-} from "./dark-launch-http.js";
+import { controlPlaneGet, expectVariant, type PackedSdk, variantId } from "./dark-launch-http.js";
+import { proveLocalNegativeAuth } from "./dark-launch-negative-auth.js";
 import { EXIT_OK } from "./exit-codes.js";
 import {
   findFlagByKey,
@@ -32,6 +25,8 @@ type CliOptions = {
   evaluationBaseUrl: string;
 };
 
+type PackedClient = ReturnType<PackedSdk["createSplitchClient"]>;
+
 export async function runLocalDarkLaunchScenario(
   harness: QuickstartHarness,
   packedSdk: PackedSdk,
@@ -42,8 +37,9 @@ export async function runLocalDarkLaunchScenario(
     harness,
     `/apps/${harness.appId}/envs/${harness.devEnvironmentId}/client-key`,
   );
+  const activeKeyMaterial = clientKey.keyMaterial;
   const client = packedSdk.createSplitchClient({
-    clientKey: clientKey.keyMaterial,
+    clientKey: activeKeyMaterial,
     endpoint: quickstartOrigins.evaluationBaseUrl,
     fetch: harness.routingFetch,
   });
@@ -57,7 +53,14 @@ export async function runLocalDarkLaunchScenario(
 
   await proveEvaluateObservation(harness, client);
   await killSwitchOff(harness, cli, flag.id, client);
-  await proveNegativeAuth(harness, packedSdk, clientKey.keyMaterial, flag.id);
+  await proveLocalNegativeAuth(harness, packedSdk, flag.id);
+
+  const activeAfter = await controlPlaneGet<{ keyMaterial: string; revokedAt?: string | null }>(
+    harness,
+    `/apps/${harness.appId}/envs/${harness.devEnvironmentId}/client-key`,
+  );
+  expect(activeAfter.keyMaterial).toBe(activeKeyMaterial);
+  expect(activeAfter.revokedAt ?? null).toBeNull();
 }
 
 async function openCli(harness: QuickstartHarness): Promise<CliOptions> {
@@ -150,9 +153,15 @@ async function enableTargetedRule(
   harness.invalidateFlagCache();
 }
 
+/**
+ * Verify is non-exposing. Flag-only evaluate commits usage with hasExposure=false:
+ * ExposureEvent requires experimentId+runId, and assembleEvaluateExposures returns
+ * [] when liveRunId is null. SPL-168 excludes experiments, so one observable
+ * Exposure cannot be proven in-scope (scope/spec contradiction — reported, not fabricated).
+ */
 async function proveEvaluateObservation(
   harness: QuickstartHarness,
-  client: ReturnType<PackedSdk["createSplitchClient"]>,
+  client: PackedClient,
 ): Promise<void> {
   expect(harness.evaluationCommitSink.writes.length).toBe(0);
   expect(harness.exposureSink.writes.length).toBe(0);
@@ -173,11 +182,16 @@ async function proveEvaluateObservation(
   });
   expect(retry.value).toBe(true);
 
-  expect(harness.evaluationCommitSink.writes.length).toBeGreaterThanOrEqual(1);
-  expect(harness.evaluationCommitSink.writes[0]?.usage.idempotencyKey).toBe(idempotencyKey);
-  expect(
-    harness.evaluationCommitSink.writes.every((write) => write.usage.flagKey === FLAG_KEY),
-  ).toBe(true);
+  const commits = harness.evaluationCommitSink.writes.filter(
+    (write) => write.usage.idempotencyKey === idempotencyKey,
+  );
+  // Flag-only evaluate has no liveRunId, so the SDK seen-set cannot cache and a
+  // retry re-contacts the server. Server-side usage sealing is out of band here;
+  // every commit for this key must still be non-exposing.
+  expect(commits.length).toBeGreaterThanOrEqual(1);
+  expect(commits.every((write) => write.usage.flagKey === FLAG_KEY)).toBe(true);
+  expect(commits.every((write) => write.usage.hasExposure === false)).toBe(true);
+  expect(commits.every((write) => write.exposures.length === 0)).toBe(true);
   expect(harness.exposureSink.writes).toEqual([]);
 }
 
@@ -185,7 +199,7 @@ async function killSwitchOff(
   harness: QuickstartHarness,
   cli: CliOptions,
   flagId: string,
-  client: ReturnType<PackedSdk["createSplitchClient"]>,
+  client: PackedClient,
 ): Promise<void> {
   expect(
     await runCli(
@@ -207,86 +221,4 @@ async function killSwitchOff(
   harness.invalidateFlagCache();
   await expectVariant(client, TARGETED_KEY, { [COHORT_ATTRIBUTE]: COHORT_VALUE }, "off");
   await expectVariant(client, UNTARGETED_KEY, { [COHORT_ATTRIBUTE]: "other" }, "off");
-}
-
-async function proveNegativeAuth(
-  harness: QuickstartHarness,
-  packedSdk: PackedSdk,
-  priorKeyMaterial: string,
-  flagId: string,
-): Promise<void> {
-  const wrongApp = await controlPlanePost<{
-    app: { id: string };
-    environments: { id: string; key: string }[];
-    clientKeys: { environmentId: string; keyMaterial: string }[];
-  }>(
-    harness,
-    `/orgs/${harness.orgId}/apps`,
-    { organizationId: harness.orgId, name: "Wrong App", key: `wrong-app-${Date.now()}` },
-    harness.orgAccessToken,
-  );
-  const wrongDev = wrongApp.environments.find((environment) => environment.key === "dev");
-  expect(wrongDev).toBeDefined();
-  const wrongKeyMaterial = wrongApp.clientKeys.find(
-    (key) => key.environmentId === wrongDev?.id,
-  )?.keyMaterial;
-  expect(wrongKeyMaterial).toBeDefined();
-
-  const wrongDetails = await packedSdk
-    .createSplitchClient({
-      clientKey: wrongKeyMaterial ?? "",
-      endpoint: quickstartOrigins.evaluationBaseUrl,
-      fetch: harness.routingFetch,
-    })
-    .verify(FLAG_KEY, {
-      targetingKey: TARGETED_KEY,
-      attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
-    });
-  expect(wrongDetails.reason).toBe("ERROR");
-
-  const rotated = await controlPlanePost<{ newKey: { keyMaterial: string } }>(
-    harness,
-    `/apps/${harness.appId}/envs/${harness.devEnvironmentId}/client-key/revoke`,
-    {},
-  );
-  expect(rotated.newKey.keyMaterial).not.toBe(priorKeyMaterial);
-  const revokedDetails = await packedSdk
-    .createSplitchClient({
-      clientKey: priorKeyMaterial,
-      endpoint: quickstartOrigins.evaluationBaseUrl,
-      fetch: harness.routingFetch,
-    })
-    .verify(FLAG_KEY, {
-      targetingKey: TARGETED_KEY,
-      attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
-    });
-  expect(revokedDetails.reason).toBe("ERROR");
-
-  const crossOrg = await harness.routingFetch(
-    `${quickstartOrigins.controlPlaneBaseUrl}/orgs/org_not_a_member/apps`,
-    {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${harness.accessToken}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        orgId: "org_not_a_member",
-        organizationId: "org_not_a_member",
-        name: "Should Fail",
-        key: "should-fail",
-      }),
-    },
-  );
-  expect(crossOrg.ok).toBe(false);
-  expect([401, 403, 404]).toContain(crossOrg.status);
-
-  const wrongAppToken = await appToken(harness.flagHarness, wrongApp.app.id);
-  await controlPlaneDelete(harness, `/apps/${wrongApp.app.id}`, wrongAppToken);
-  await controlPlaneDelete(harness, `/apps/${harness.appId}/flags/${flagId}`);
-  const flags = await controlPlaneGet<{ items: { key: string }[] }>(
-    harness,
-    `/apps/${harness.appId}/flags`,
-  );
-  expect(flags.items.some((item) => item.key === FLAG_KEY)).toBe(false);
 }
