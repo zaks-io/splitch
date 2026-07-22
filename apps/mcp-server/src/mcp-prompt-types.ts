@@ -11,7 +11,7 @@ export const MCP_PROMPT_NAMES = [
 
 export type McpPromptName = (typeof MCP_PROMPT_NAMES)[number];
 
-export interface McpPromptArgumentDefinition {
+interface McpPromptArgumentDefinition {
   readonly name: string;
   readonly description: string;
   readonly required: boolean;
