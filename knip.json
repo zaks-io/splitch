@@ -10,7 +10,8 @@
     ".": {
       "entry": [
         "scripts/check-cli-mcp-parity.ts",
-        "scripts/sdk-release/check-published-version.mjs"
+        "scripts/sdk-release/check-published-version.mjs",
+        "fixtures/external-dark-launch-product/resolve.mjs"
       ]
     },
     "apps/control-panel": {

@@ -87,6 +87,7 @@ test("deploy and reset summaries retain the independently verified deployed SHA"
   const deploy = summary("deploy", evidencePath, sha);
   assert.equal(deploy.status, 0, deploy.stderr);
   assert.match(deploy.stdout, new RegExp(String.raw`Deployed commit SHA: \`${sha}\``));
+  assert.match(deploy.stdout, /Dark-launch outcome: `success`/);
   assert.match(deploy.stdout, /Tinybird Branch/);
   assert.match(deploy.stdout, /Applied D1 migrations/);
 
@@ -104,6 +105,8 @@ test("shared-preview workflow resolves one immutable SHA before deploy and verif
     workflow,
     /SPLITCH_SMOKE_COMMIT_SHA="\$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke/,
   );
+  assert.match(workflow, /pnpm smoke:dark-launch:shared-preview/);
+  assert.match(workflow, /SPLITCH_SMOKE_RUNS: "2"/);
   assert.doesNotMatch(workflow, /SPLITCH_SMOKE_COMMIT_SHA="\$\(git rev-parse HEAD\)"/);
 });
 
@@ -126,6 +129,7 @@ function summary(mode, evidencePath, workflowRef) {
     env: {
       ...process.env,
       SPLITCH_CLEANUP_OUTCOME: "success",
+      SPLITCH_DARK_LAUNCH_OUTCOME: "success",
       SPLITCH_DEPLOY_OUTCOME: "success",
       SPLITCH_RESET_OUTCOME: "success",
       SPLITCH_SMOKE_EVIDENCE_FILE: evidencePath,

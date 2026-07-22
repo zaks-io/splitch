@@ -25,7 +25,7 @@ zero superposition — every branch is visible, every decision maps to one point
 1. **Assignment is pure.** No I/O, no side effects. Determinism requires a frozen RunConfig.
 2. **Exposure is the only event.** No "assignment event" exists. Holdovers are proven by Exposure records, not assignment records.
 3. **Provider and Assignment Store are siblings.** Neither is behind the other. Evaluate path orchestrates both.
-4. **Zero superposition.** `evaluate()` returns `isHoldover` vs fresh-assign vs no-live-run vs disabled as structurally different shapes. `evaluate()` always fires Exposure; `peekVariant()`/`verify()` never do.
+4. **Zero superposition.** `evaluate()` returns holdover vs fresh assignment vs no-live-Run vs disabled as structurally different shapes. A successful fresh assignment under a live Experiment Run fires an Exposure; holdover/default/error branches do not. `peekVariant()`/`verify()` never fire.
 5. **Test-evaluation writes nothing.** Structural, not a parameter. The endpoint has no wiring to
    Exposure log or Assignment Store `put()`. Read-only holdover diagnostics are allowed.
 

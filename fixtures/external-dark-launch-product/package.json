@@ -1,0 +1,10 @@
+{
+  "name": "external-dark-launch-product",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal external product fixture that installs @splitch/sdk from a packed tarball (SPL-168).",
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -60,8 +60,9 @@ reach config returns `reason: ERROR` + `errorCode`, loudly. A green verify is an
 - **Let the public tier reveal the resolution reason for parity with the debugger** — rejected:
   that hands the experiment design to anyone holding the public key (ADR-0018). Disclosure is
   tiered by credential trust, full stop.
-- **Reuse `evaluate` as the verify call** — rejected: `evaluate` fires an Exposure (ADR-0004),
-  so a setup loop would inject phantom Exposures. Verification must be structurally
+- **Reuse `evaluate` as the verify call** — rejected: `evaluate` fires an Exposure for a successful
+  fresh assignment under a live Experiment Run (ADR-0004), so a setup loop would inject phantom
+  Exposures once the Run is live. Verification must be structurally
   non-exposing, like peek and the dry-run.
 
 ## Consequences

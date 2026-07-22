@@ -137,6 +137,14 @@ jobs:
           SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
         run: SPLITCH_SMOKE_COMMIT_SHA="$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke
 
+      - name: Dark-launch shared preview
+        id: dark_launch
+        env:
+          SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
+          SPLITCH_SMOKE_COMMIT_SHA: ${{ env.SPLITCH_DEPLOYED_COMMIT_SHA }}
+          SPLITCH_SMOKE_RUNS: "2"
+        run: pnpm smoke:dark-launch:shared-preview
+
       - name: Clean up shared preview smoke data
         id: cleanup
         if: always()
@@ -157,5 +165,6 @@ jobs:
         env:
           SPLITCH_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           SPLITCH_SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+          SPLITCH_DARK_LAUNCH_OUTCOME: ${{ steps.dark_launch.outcome }}
           SPLITCH_CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
         run: node scripts/render-shared-preview-summary.mjs deploy >> "$GITHUB_STEP_SUMMARY"

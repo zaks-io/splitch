@@ -127,9 +127,11 @@ surface; Exposure event assembly; seen-set optimization; holdover short-circuit.
 **What's NOT here:** dedup logic (pipeline), first-touch write (pipeline via DO), rule
 matching (evaluate path).
 
-**No superposition:** `evaluate()` always fires Exposure (unless holdover). `peekVariant()` and
-`verify()` never fire. There is no third state. A caller cannot accidentally skip Exposure on
-the `evaluate()` path.
+**No caller-controlled suppression:** `evaluate()` fires an Exposure for every successful fresh
+assignment under a live Experiment Run. Holdovers, disabled Flags, no-Experiment, no-live-Run, and
+error/default branches fire none because no new measurable assignment occurred. `peekVariant()` and
+`verify()` never fire. A caller cannot accidentally skip Exposure for a successful fresh assignment
+on the `evaluate()` path.
 
 ## Sources
 
