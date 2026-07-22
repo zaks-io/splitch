@@ -14,7 +14,8 @@ serves this file verbatim, so an agent never needs the docs site to onboard (mcp
 ```
 authenticate → pick an Org → create an App (dev+prod Envs auto-provisioned)
             → select the dev Environment → get a Client Key → create a Flag
-            → VERIFY (one round-trip) → wire the SDK → first real Exposure
+            → VERIFY (one round-trip) → create an Experiment → Start its Run
+            → wire the SDK → first real Exposure
 ```
 
 Every path ends on a **verify** round-trip, so time-to-first-confidence is a single call on any
@@ -127,7 +128,28 @@ flags_test_eval { flagId, evaluationContext: { targetingKey, idType: "user" } } 
 A green verify is your one-call confidence that auth, Environment, credential, and Flag config all
 line up. If it fails, the error is structured and names the next step (see Recovery below).
 
-## 8. Wire the SDK and fire the first real Exposure
+## 8. Start an Experiment Run, wire the SDK, and fire the first real Exposure
+
+An Exposure is a first-touch fact for an Entity in an **Experiment Run**. It carries the Experiment,
+Run, Variant, and Targeting Key identity used by analysis. A plain Flag evaluation has no Run to own
+that fact, so it returns the Default Variant and records no Exposure.
+
+Create the smallest useful Experiment draft around the Flag, then Start its first Run. Metrics may be
+empty for this integration checkpoint; Exposure collection does not require statistical-result work.
+The draft must include the Variants, allocation, Targeting Key field and type, and any Targeting Rules
+that define the eligible cohort.
+
+```
+splitch experiments create --body-json '<CreateExperimentRequest JSON>'
+splitch experiments start --confirm <experiment_id>
+
+experiments_create { ...typed Experiment draft... }
+experiments_start { experimentId, confirm: true }
+```
+
+Use `flags verify` / `flags_test_eval` again after Start to confirm the live Run resolves the expected
+Variant without recording an Exposure. Then make the first Exposure-bearing call from the external
+product:
 
 ```ts
 import { createSplitchClient } from "@splitch/sdk";
@@ -148,8 +170,10 @@ if (d.reason === "ERROR") renderFallback(d.errorCode);
 else render(d.value);
 ```
 
-`evaluate` fires an Exposure (ADR-0004); `peekVariant`/`verify` do not. Defaults and the full
-status→result mapping are in
+For a successful fresh assignment under a live Experiment Run, `evaluate` fires an Exposure (ADR-0004);
+`peekVariant`/`verify` do not. Disabled Flags, Flags without a controlling Experiment, and Experiments
+without a live Run return the Default Variant and record no Exposure. Holdovers replay their prior
+Variant without recording a new Exposure. Defaults and the full status→result mapping are in
 [sdk/public-evaluate-endpoint.md](sdk/public-evaluate-endpoint.md#sdk-initialization-defaults).
 
 **The loop closes here.** Deploy, call `evaluate()` with a real user, and the dashboard's empty
@@ -179,5 +203,6 @@ The `recover_from_error` MCP prompt turns a token into a full remediation plan.
 - [ADR-0027](../adr/0027-environment-is-a-first-class-axis-under-app.md) — Environment is first-class
 - [ADR-0036](../adr/0036-evaluation-is-fail-loud-no-silent-fallback-openfeature-resolution-details.md) — fail-loud
 - [ADR-0037](../adr/0037-client-side-configuration-verification-tiered-by-credential.md) — verify ends every workflow
+- [control-plane/endpoints-experiment-run.md](control-plane/endpoints-experiment-run.md) — create and Start the Experiment Run that owns Exposures
 - [control-plane/mcp-discovery.md](control-plane/mcp-discovery.md) — the prompts/resources that automate this
 - [CONTEXT.md](../../CONTEXT.md) — the glossary

@@ -1,8 +1,11 @@
-# SDK accessors: evaluate / evaluateDetails (fire Exposure), peekVariant + verify (no Exposure)
+# SDK accessors: evaluate / evaluateDetails (fire Exposure for a live Run), peekVariant + verify (no Exposure)
 
-Accessors for reading a Variant. `evaluate` and `evaluateDetails` fire an Exposure as a
-structural side effect; `peekVariant` and `verify` do not. The non-exposing paths are
-distinctly-named methods — never a boolean parameter on `evaluate`. Every accessor speaks the
+Accessors for reading a Variant. On a successful fresh assignment under a live Experiment Run,
+`evaluate` and `evaluateDetails` fire an Exposure as a structural side effect; `peekVariant` and
+`verify` do not. Disabled Flags, Flags without a controlling Experiment, Experiments without a live
+Run, holdovers, and failed resolutions record no new Exposure because no new measurable assignment
+occurred. The non-exposing paths are distinctly-named methods — never a boolean parameter on
+`evaluate`. Every accessor speaks the
 OpenFeature [`ResolutionDetails`](https://openfeature.dev/specification/types/) shape under
 the hood (ADR-0036); the value accessors just unwrap it to the Variant value.
 
@@ -34,9 +37,10 @@ sdk.evaluateDetails(flagKey: string, context: EvaluationContext): Promise<Resolu
 ```
 
 `evaluate` returns the resolved Variant value; `evaluateDetails` returns the full OpenFeature
-`ResolutionDetails` (`value`, `variantName`, `reason`, `errorCode?`, `errorMessage?`). Both
-**always** fire an Exposure as a side effect — there is no way to call them without firing one
-(ADR-0004: the safe default eliminates the forget-to-expose bug). Use `evaluateDetails` to
+`ResolutionDetails` (`value`, `variantName`, `reason`, `errorCode?`, `errorMessage?`). Both fire an
+Exposure for every successful fresh assignment under a live Experiment Run; there is no caller
+option to suppress that side effect (ADR-0004: the safe default eliminates the forget-to-expose bug).
+Use `evaluateDetails` to
 branch on `reason` / `errorCode` (e.g. surface a banner on `STALE`, throw in your own code on
 `ERROR`).
 
@@ -48,7 +52,8 @@ branch on `reason` / `errorCode` (e.g. surface a banner on `STALE`, throw in you
    caller-owned idempotency key, and SDK/runtime to non-billable cache telemetry. That telemetry never
    carries a Targeting Key; a telemetry failure is logged loudly but cannot change the cached result.
 3. On seen-set miss: calls `POST /api/sdk/evaluate` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
-4. Worker fires Exposure to raw log (server-side; client does not send a separate track call).
+4. Worker fires Exposure to the raw log when the result carries a live Run (server-side; client does
+   not send a separate track call). A disabled, no-Experiment, or no-live-Run result records none.
 5. SDK updates seen-set with `(flagKey, runId, targetingKey) -> VariantValue`.
 6. Returns resolved Variant (or full details).
 7. **On failure (network, 503, 404): returns Default Variant with `reason: ERROR` + an
@@ -149,7 +154,8 @@ fallback.
 
 ## Exposure row on the wire (Exposure pipeline schema cross-reference)
 
-The Worker appends the following to the raw Exposure log on every `evaluate` call.
+When `evaluate` resolves through a live Experiment Run, the Worker appends the following to the raw
+Exposure log.
 **The SDK does not own this schema** — it is owned by the [pipeline area spec](../pipeline/).
 This table is a cross-reference only; do not duplicate the authoritative definition.
 

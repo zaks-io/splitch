@@ -123,14 +123,17 @@ design. This is a hard endpoint-design constraint, not a later policy bolt-on.
 
 ## Exposure side effect
 
-Calling this endpoint (via the `evaluate` SDK accessor) fires an Exposure as a side effect.
-The Exposure is appended to the raw log by the Worker, never by the client.
+Calling this endpoint (via the `evaluate` SDK accessor) for a successful live Experiment Run
+resolution fires an Exposure as a side effect. The Exposure is appended to the raw log by the
+Worker, never by the client. Disabled Flags, Flags without a controlling Experiment, Experiments
+without a live Run, holdovers, and failed resolutions record no new Exposure.
 See [exposure-accessor.md](./exposure-accessor.md) for the full accessor contract.
 
 The `peekVariant` accessor calls a **separate** peek endpoint that does NOT fire the Exposure.
 Peek is a **server-side (API Key) path, not this public Client Key path** (ADR-0034): a silent,
 SRM-invisible read under a public key is an allocation oracle. This public endpoint is
-`evaluate`-only and always Exposure-bearing — see [exposure-accessor.md](./exposure-accessor.md).
+`evaluate`-only: callers cannot suppress the Exposure on a successful live-Run resolution. See
+[exposure-accessor.md](./exposure-accessor.md).
 
 ## Init and lazy-fetch
 

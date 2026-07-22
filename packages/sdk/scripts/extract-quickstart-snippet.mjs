@@ -3,7 +3,8 @@
  * Consumer smoke compiles the extracted fenced block verbatim (plus minimal
  * stubs) so documentation drift fails typecheck, not just string checks.
  */
-const QUICKSTART_SDK_SECTION_HEADING = "## 8. Wire the SDK and fire the first real Exposure";
+const QUICKSTART_SDK_SECTION_HEADING =
+  "## 8. Start an Experiment Run, wire the SDK, and fire the first real Exposure";
 
 /**
  * @param {string} markdown

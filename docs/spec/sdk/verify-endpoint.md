@@ -11,8 +11,9 @@ control-plane dry-run ([test-evaluation-endpoint.md](./test-evaluation-endpoint.
 
 ## Why a separate endpoint and not `evaluate`
 
-`evaluate` fires an Exposure as a structural side effect (ADR-0004). A setup loop built on
-`evaluate` would inject phantom Exposures into the Run denominator. Verification must be
+`evaluate` fires an Exposure as a structural side effect for every successful fresh assignment under
+a live Experiment Run (ADR-0004). A setup loop built on `evaluate` would inject phantom Exposures into
+the Run denominator once the Run is live. Verification must be
 **structurally non-exposing**, like peek and the control-plane dry-run — there is no
 "suppress exposure" flag a caller could set on `evaluate` (ADR-0026). `verify` is the distinct,
 loudly-named path for "confirm reachability + configuration," same as `peekVariant` is the

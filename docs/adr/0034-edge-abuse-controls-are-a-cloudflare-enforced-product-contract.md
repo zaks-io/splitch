@@ -42,7 +42,9 @@ Peek therefore requires an **API Key** (trusted server runtime), not a Client Ke
 use cases (server-side pre-computation, below-the-fold decisions made server-side) are predominantly
 server-side already. Client-side below-the-fold deferral is served by firing `evaluate` when the element
 scrolls into view, not by a silent client peek. The public Client Key keeps exactly one capability:
-`evaluate`, which always leaves an Exposure.
+`evaluate`, whose successful fresh assignment under a live Experiment Run always leaves an Exposure.
+Disabled, no-Experiment, no-live-Run, holdover, and error branches reveal no live allocation and leave
+no new Exposure.
 
 ### 3. Credential revocation fails loud and fast
 
