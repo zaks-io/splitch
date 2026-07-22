@@ -14,7 +14,9 @@ import {
   makeHttpMcpAccessTokenVerifier,
 } from "./mcp-access-token";
 import { createOperationSdks, type OperationSdks } from "./mcp-operation-sdks";
+import { getMcpPromptRpc, listMcpPrompts } from "./mcp-prompts";
 import { readJsonRpcRequest } from "./mcp-request";
+import { listMcpResources, readMcpResourceRpc } from "./mcp-resources";
 import {
   type McpSessionStore,
   type McpSessionTransport,
@@ -22,7 +24,6 @@ import {
   resolveScope,
   setSessionContext,
 } from "./mcp-session-context";
-import { listMcpResources, readMcpResourceRpc } from "./mcp-resources";
 import { corsHeaders, jsonResponse, routeTransportRequest } from "./mcp-transport";
 import { MCP_TOOL_DEFINITIONS } from "./tool-registry";
 
@@ -127,6 +128,12 @@ async function dispatch(
       fetchAuthMarkdown: options.fetchAuthMarkdown,
     });
   }
+  if (request.method === "prompts/list") {
+    return jsonRpcResult(id, listMcpPrompts());
+  }
+  if (request.method === "prompts/get") {
+    return getMcpPromptRpc(id, request.params);
+  }
   if (request.method === "tools/list") {
     return jsonRpcResult(id, { tools: MCP_TOOL_DEFINITIONS });
   }
@@ -222,6 +229,7 @@ function initializeResult(): Record<string, unknown> {
     capabilities: {
       tools: { listChanged: false },
       resources: { listChanged: false },
+      prompts: { listChanged: false },
     },
     serverInfo: { name: "splitch-mcp-server", version: "0.0.0" },
   };
