@@ -76,6 +76,20 @@ describe("baseline rollout ambiguity gate", () => {
     expect(await storedRollout()).toBeNull();
   });
 
+  it("allows widening under a live baseline while it stays unambiguous", async () => {
+    // The gate tests the RESULTING candidate count, not the direction of the
+    // edit: going from Default-only to Default-plus-one widens availability but
+    // leaves exactly one candidate, so the baseline still resolves.
+    await patchFlagConfig(h, { availableVariantNames: ["control"] });
+    await patchFlagConfig(h, { availableVariantNames: ["control", "treatment"] });
+    await patchFlagConfig(h, { rollout: { percentage: 25 } });
+
+    const res = await patchFlagConfig(h, { availableVariantNames: ["control", "treatment"] });
+
+    expect(res.status).toBe(200);
+    expect(JSON.parse((await storedRollout()) as string)).toMatchObject({ percentage: 25 });
+  });
+
   it("rejects a baseline and a widening availability set in the SAME write", async () => {
     await addThirdVariant();
 

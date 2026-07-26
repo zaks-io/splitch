@@ -27,8 +27,8 @@ anyone out. Clearing the rollout is the one visible way to drop that cohort; re-
 afterwards starts a new one.
 
 A baseline change is a rollout **value** change, so it falls under the Environment Policy's
-`targeting_rollout_value` gate — in a `confirm` environment, changing the production percentage takes
-an explicit confirmation like any other rollout edit.
+`targeting_rollout_value` gate — in a `confirm` Environment, changing the baseline rollout percentage
+takes an explicit confirmation like any other rollout edit.
 
 Because the baseline resolves against exactly two Variants (the Default, and the one Variant it rolls
 _into_), it requires exactly one non-Default candidate. Anything else is ambiguous and fails loud
@@ -42,10 +42,11 @@ accepted write would fail at evaluation time instead.
 
 That is enforced at **write** time, not at evaluation time, and against the state the write **lands**
 rather than the fields the caller happened to touch. A Configuration can be stranded from either side:
-setting a baseline under an already-wide available set, or widening the available set out from under an
-existing baseline. Both are rejected with `VALIDATION_ERROR` on `rollout`, naming the available
-Variants. The operator finds out at the keystroke that caused it instead of from production traffic
-later.
+setting a baseline under an available set that leaves two-plus candidates, or widening the available
+set out from under an existing baseline until it does. The test is the resulting candidate count, not
+the direction of the edit — widening that still leaves exactly one non-Default candidate stays valid.
+Ambiguous results are rejected with `VALIDATION_ERROR` on `rollout`, naming the available Variants, so
+the operator finds out at the keystroke that caused it instead of from production traffic later.
 
 Clearing the baseline (`rollout: null`) is always allowed, and widening availability in the same write
 that clears the baseline succeeds, so an ambiguous Configuration is never wedged.
