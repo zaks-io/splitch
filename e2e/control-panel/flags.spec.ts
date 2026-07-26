@@ -46,10 +46,16 @@ test.describe("per-Environment Flags", () => {
     await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByTestId("boolean-catalog").locator("[data-variant-name]")).toHaveText([
-      "disabledfalseDefault",
-      "enabledtrue",
-    ]);
+    // The on/off pair is the zero-configuration preset: a new Flag opens ready
+    // to submit, so the operator never has to touch the Variant editor.
+    const catalog = dialog.getByTestId("variant-catalog");
+    await expect(catalog.locator("[data-variant-name]")).toHaveCount(2);
+    await expect(dialog.getByLabel("Variant value type")).toHaveValue("boolean");
+    await expect(catalog.locator("#variant-name-0")).toHaveValue("disabled");
+    await expect(catalog.locator("#variant-value-0")).toHaveValue("false");
+    await expect(catalog.locator("#variant-default-0")).toBeChecked();
+    await expect(catalog.locator("#variant-name-1")).toHaveValue("enabled");
+    await expect(catalog.locator("#variant-value-1")).toHaveValue("true");
 
     await dialog.getByLabel("Flag key").fill(flagKey);
     await dialog.getByRole("button", { name: "Create Flag" }).click();
@@ -70,6 +76,43 @@ test.describe("per-Environment Flags", () => {
     await page.getByRole("dialog").getByRole("button", { name: "Create Flag" }).click();
     await expect(page.getByText("flag key already exists in this App")).toBeVisible();
     await expect(page.getByLabel("Flag key")).toHaveAttribute("aria-invalid", "true");
+  });
+
+  test("creates a three-Variant string Flag through the Worker", async ({ page }, testInfo) => {
+    const flagKey = `checkout-copy-${testInfo.retry}`;
+    await page.goto("/acme-labs/billing-api/prod/flags");
+
+    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await page.getByRole("button", { name: "Create Flag" }).click();
+    const dialog = page.getByRole("dialog");
+    const catalog = dialog.getByTestId("variant-catalog");
+
+    await dialog.getByLabel("Flag key").fill(flagKey);
+    // Switching away from boolean clears the preset values, since "false"/"true"
+    // cannot survive as strings the operator meant to write.
+    page.once("dialog", (confirm) => confirm.accept());
+    await dialog.getByLabel("Variant value type").selectOption("string");
+
+    await catalog.locator("#variant-name-0").fill("control");
+    await catalog.locator("#variant-value-0").fill("Buy now");
+    await catalog.locator("#variant-name-1").fill("urgent");
+    await catalog.locator("#variant-value-1").fill("Buy now, limited stock");
+
+    await dialog.getByRole("button", { name: "Add Variant" }).click();
+    await catalog.locator("#variant-name-2").fill("calm");
+    await catalog.locator("#variant-value-2").fill("Add to cart");
+    await expect(catalog.locator("[data-variant-name]")).toHaveCount(3);
+
+    await catalog.locator("#variant-default-1").check();
+    await captureThemeScreenshots(page, testInfo, "flags-create-variant-catalog");
+
+    await dialog.getByRole("button", { name: "Create Flag" }).click();
+    await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();
+    await dialog
+      .locator("[data-slot='dialog-footer']")
+      .getByRole("button", { name: "Close" })
+      .click();
+    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("0 of 3");
   });
 });
 

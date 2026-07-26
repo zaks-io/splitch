@@ -34,13 +34,18 @@ export function VariantRowEditor({
   const valueError = issueFor(issues, `variants.${index}.value`);
 
   return (
-    <div className="grid gap-2 px-3 py-3" data-testid={`variant-row-${index}`}>
+    <div
+      className="grid gap-2 px-3 py-3"
+      data-variant-name={variant.name}
+      data-testid={`variant-row-${index}`}
+    >
       <div className="flex items-start gap-2">
         <div className="grid flex-1 gap-1">
           <label className="text-muted-foreground text-xs" htmlFor={`variant-name-${index}`}>
             Name
           </label>
           <Input
+            aria-describedby={nameError ? `variant-name-error-${index}` : undefined}
             aria-invalid={Boolean(nameError)}
             autoComplete="off"
             id={`variant-name-${index}`}
@@ -54,6 +59,7 @@ export function VariantRowEditor({
             Value
           </label>
           <Input
+            aria-describedby={valueError ? `variant-value-error-${index}` : undefined}
             aria-invalid={Boolean(valueError)}
             autoComplete="off"
             id={`variant-value-${index}`}
@@ -107,8 +113,15 @@ export function VariantRowEditor({
         </Button>
       </div>
 
-      {nameError || valueError ? (
-        <p className="text-destructive text-xs">{nameError ?? valueError}</p>
+      {nameError ? (
+        <p className="text-destructive text-xs" id={`variant-name-error-${index}`}>
+          {nameError}
+        </p>
+      ) : null}
+      {valueError ? (
+        <p className="text-destructive text-xs" id={`variant-value-error-${index}`}>
+          {valueError}
+        </p>
       ) : null}
     </div>
   );

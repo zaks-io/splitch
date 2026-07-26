@@ -1,4 +1,5 @@
 import type { FlagsCreateInput } from "@splitch/contracts/route-types";
+import { z } from "zod";
 import type { MutationErrorSurface } from "./api";
 
 /**
@@ -9,20 +10,28 @@ import type { MutationErrorSurface } from "./api";
 export const VARIANT_VALUE_TYPES = ["boolean", "string", "number", "object"] as const;
 export type VariantValueType = (typeof VARIANT_VALUE_TYPES)[number];
 
-export type VariantDraft = {
-  name: string;
+const VariantDraftSchema = z.object({
+  name: z.string(),
   /** Raw editor text. Parsed against `valueType` only at validation time. */
-  value: string;
-  description: string;
-};
+  value: z.string(),
+  description: z.string(),
+});
 
-export type FlagDraft = {
-  key: string;
-  valueType: VariantValueType;
-  variants: VariantDraft[];
+/**
+ * The draft crosses the wire to the create server fn, so its shape is parsed
+ * rather than cast. Semantic rules live in `draftIssues`; this only guarantees
+ * the fields exist with the right primitive types (ADR-0025, ADR-0036).
+ */
+export const FlagDraftSchema = z.object({
+  key: z.string(),
+  valueType: z.enum(VARIANT_VALUE_TYPES),
+  variants: z.array(VariantDraftSchema),
   /** Index into `variants`. -1 once the Default is removed — never auto-promoted. */
-  defaultIndex: number;
-};
+  defaultIndex: z.number().int(),
+});
+
+export type VariantDraft = z.infer<typeof VariantDraftSchema>;
+export type FlagDraft = z.infer<typeof FlagDraftSchema>;
 
 export type DraftIssue = { path: string; message: string };
 

@@ -5,6 +5,7 @@ import {
   booleanPresetDraft,
   draftIssues,
   type FlagDraft,
+  FlagDraftSchema,
   flagCreateInput,
   flagFieldError,
   issueFor,
@@ -158,6 +159,31 @@ describe("Create Flag catalog invariants", () => {
       "refusing to build an invalid Flag",
     );
   });
+});
+
+describe("Flag draft wire shape", () => {
+  it("accepts a well-formed draft", () => {
+    expect(FlagDraftSchema.safeParse(draft()).success).toBe(true);
+  });
+
+  /**
+   * The create server fn parses rather than casts, so a malformed body is
+   * rejected before `draftIssues` dereferences it into a 500 (ADR-0036).
+   */
+  const malformed: Array<[string, unknown]> = [
+    ["a missing draft", undefined],
+    ["a non-object draft", "new-checkout"],
+    ["missing variants", { key: "k", valueType: "boolean", defaultIndex: 0 }],
+    ["variants as a non-array", { ...draft(), variants: "disabled" }],
+    ["a variant missing its value", { ...draft(), variants: [{ name: "disabled" }] }],
+    ["an unknown value type", { ...draft(), valueType: "date" }],
+    ["a non-numeric defaultIndex", { ...draft(), defaultIndex: "0" }],
+  ];
+  for (const [label, input] of malformed) {
+    it(`refuses ${label}`, () => {
+      expect(FlagDraftSchema.safeParse(input).success).toBe(false);
+    });
+  }
 });
 
 describe("Create Flag error surfacing", () => {
