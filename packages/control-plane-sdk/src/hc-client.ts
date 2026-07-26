@@ -1,5 +1,7 @@
 import type {
   AppsControlPlaneClientApp,
+  CredentialsControlPlaneClientApp,
+  EnvironmentsControlPlaneClientApp,
   ExperimentsControlPlaneClientApp,
   FlagsControlPlaneClientApp,
 } from "@splitch/contracts/client-app";
@@ -20,6 +22,30 @@ export type ExperimentsHcClient = ReturnType<typeof createExperimentsHcClient>;
 
 /** Hono `hc` client over the App emit-only app type. */
 export type AppsHcClient = ReturnType<typeof createAppsHcClient>;
+
+/** Hono `hc` client over the Environment emit-only app type. */
+export type EnvironmentsHcClient = ReturnType<typeof createEnvironmentsHcClient>;
+
+/** Hono `hc` client over the SDK credential emit-only app type. */
+export type CredentialsHcClient = ReturnType<typeof createCredentialsHcClient>;
+
+export function createEnvironmentsHcClient(options: ControlPlaneHcOptions) {
+  const headers = options.authorization ? { authorization: options.authorization } : undefined;
+
+  return hc<EnvironmentsControlPlaneClientApp>(options.baseUrl, {
+    fetch: options.fetch,
+    ...(headers ? { headers } : {}),
+  });
+}
+
+export function createCredentialsHcClient(options: ControlPlaneHcOptions) {
+  const headers = options.authorization ? { authorization: options.authorization } : undefined;
+
+  return hc<CredentialsControlPlaneClientApp>(options.baseUrl, {
+    fetch: options.fetch,
+    ...(headers ? { headers } : {}),
+  });
+}
 
 export function createAppsHcClient(options: ControlPlaneHcOptions) {
   const headers = options.authorization ? { authorization: options.authorization } : undefined;
