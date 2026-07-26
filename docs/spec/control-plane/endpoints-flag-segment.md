@@ -74,14 +74,26 @@ with `childType: "experiment"`.
 ### `GET /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
 
 Returns: the Flag's Configuration in this Environment:
-`{ flag_id, environment_id, enabled, available_variant_names: string[], targeting_rules: TargetingRule[] }`.
+`{ flag_id, environment_id, enabled, available_variant_names: string[], targeting_rules: TargetingRule[],
+rollout: { percentage: number, salt: string } | null }`.
+
+`rollout` is the config-level **baseline** and is `null` when no baseline is set. The `salt` is
+returned for transparency and diffing; it is server-owned and cannot be written (see PATCH).
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
 
-Body: `{ enabled?: boolean, available_variant_names?: string[] }`.
+Body: `{ enabled?: boolean, available_variant_names?: string[], rollout?: { percentage: number } | null }`.
 `available_variant_names` must be a subset of the Flag's catalog (ADR-0028). Subject to this
 Environment's Policy (ADR-0029): the "Variant availability" and "enabled state" change types may
 require a Confirmation. **Turning `enabled` off is never gated** (kill-switch exemption).
+
+`rollout` takes a **percentage only** — a caller-supplied `salt` is rejected. The salt IS the bucket
+assignment, so the server mints it once when the baseline is first established and carries it through
+every later percentage change; letting a caller set it would silently reshuffle who is in the rollout.
+`rollout: null` clears the baseline (and drops that cohort); omitting the field leaves it untouched.
+A baseline change is a rollout **value** change, so it falls under the `targeting_rollout_value`
+Policy gate. Rejected with `VALIDATION_ERROR` on `rollout` when the resulting state has anything other
+than exactly one non-Default candidate to roll into (see the ambiguity rule below).
 Returns: updated Flag Configuration.
 
 ### `PUT /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/targeting-rules`
@@ -105,7 +117,7 @@ only if it is being promoted, so absence means "leave the target's value untouch
   select: {
     availability?: string[],           // Variant names whose source availability to copy (per-Variant act)
     targeting?: true,                   // promote the whole ordered targeting-rule list (atomic; never per-rule)
-    rollout?: true,                     // promote the rollout
+    rollout?: true,                     // promote the config-level baseline rollout (percentage only)
     enabled?: true                      // promote the enabled state
   },
   confirm?: boolean                     // required when the target Policy gates any selected act at confirm
@@ -115,6 +127,16 @@ only if it is being promoted, so absence means "leave the target's value untouch
 The two named UX presets are just shapes of `select`: **"whole config"** ticks every field-group
 (`availability` = the source's full available set, `targeting`, `rollout`, `enabled`); **"one Variant's
 availability"** sends `{ availability: ["variant_name"] }`. There is no separate `scope` enum.
+
+**`rollout` and `targeting` are disjoint.** `select.rollout` moves the config-level baseline and
+nothing else. A Targeting Rule's own `percentage_rollout` is part of that rule and moves only under
+`select.targeting`, which moves each rule whole (conditions and percentage together). The two never
+overlap: a rule's percentage is the split of that one rule's matched traffic and is meaningless apart
+from its conditions, and rules have no cross-Environment identity to match on anyway (`priority` is a
+sort key, and source and target rule lists routinely differ — that is what Promotion is for).
+
+The baseline moves as a **percentage only**: the target keeps its own salt, or mints a fresh one if it
+had no baseline. Adopting the source's salt would reshuffle every already-bucketed Entity in the target.
 
 Returns: the updated target Flag Configuration + a diff summary `{ before, after }`.
 
@@ -127,6 +149,16 @@ Returns: the updated target Flag Configuration + a diff summary `{ before, after
   availability (`select.availability`), but never auto-applies it silently and the Worker blocks the submit
   regardless of skin (ADR-0023/0028). See
   [../frontend/screen-inventory.md](../frontend/screen-inventory.md) for the diff UX.
+- **Ambiguous-baseline check:** a non-null baseline rolls traffic away from the Default Variant into the
+  one other candidate, so it requires exactly one non-Default candidate. Candidates are the available
+  set, or the Flag's Variant catalog when the available set is **empty** (empty means never-narrowed,
+  not zero-servable, so a freshly created Flag accepts a baseline in one call). Otherwise the
+  destination is unknowable and the request is **rejected** with `VALIDATION_ERROR` on
+  `rollout`, listing the available Variants. The check runs against the **resulting** Configuration, so
+  it fires in both directions: promoting a baseline into a wide target, and promoting `availability`
+  that would strand the target's existing baseline (even when `select.rollout` is absent). The same
+  rule gates a direct `PATCH .../config` from either side. Clearing the baseline is always permitted,
+  including in the same write that widens availability.
 
 ## Segment endpoints
 

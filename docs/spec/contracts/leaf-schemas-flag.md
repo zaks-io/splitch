@@ -61,10 +61,24 @@ First-match over priority-ascending order.
 
 ## PercentageRollout
 
-| Field        | Type     | Required | Meaning                                                       |
-| ------------ | -------- | -------- | ------------------------------------------------------------- |
-| `percentage` | `number` | yes      | 0–100 (inclusive); fractional allowed                         |
-| `salt`       | `string` | yes      | Per-rule deterministic bucketing salt; distinct from Run salt |
+| Field        | Type     | Required | Meaning                                                                   |
+| ------------ | -------- | -------- | ------------------------------------------------------------------------- |
+| `percentage` | `number` | yes      | 0–100 (inclusive); fractional allowed                                     |
+| `salt`       | `string` | yes      | Deterministic bucketing salt for this rollout; distinct from the Run salt |
+
+Used in two places: on a `TargetingRule` as `percentageRollout` (rolls the traffic that matched that
+rule), and on a Flag Configuration as the baseline `rollout` (rolls the traffic that matched **no**
+rule). Both bucket identically via `fractionalEval(salt, targetingKey, weights)`.
+
+**The salt is server-owned and never reminted.** The salt _is_ the bucket assignment, so replacing it
+reshuffles which Entities sit inside the rollout. The control plane mints it on the first write that
+sets a non-null rollout and carries it verbatim through every later percentage change, so raising
+10% → 25% only widens the band and never moves anyone out of it. Callers may therefore send a
+percentage but never a salt — a caller-supplied `salt` is rejected. Clearing a rollout to `null` is
+the one way to drop a salt; it is explicit and visible, and re-establishing afterwards mints a fresh
+one. Under **promotion**, the source's percentage moves but the target Environment keeps its own salt
+(a target with no prior baseline mints one), because each Environment's cohort is its own. Silently
+reshuffling a live cohort is exactly the invisible-change failure ADR-0036 forbids.
 
 ---
 

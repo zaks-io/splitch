@@ -20,6 +20,7 @@ import {
   type ReplaceTargetingRulesInput,
   type Snapshot,
 } from "./config-store-shared";
+import { baselineIsUnresolvable, nextBaselineRollout } from "./flag-config-rollout";
 
 export type { ConfigStoreDeps } from "./config-store-shared";
 
@@ -168,7 +169,26 @@ async function writeFlagConfig(
     return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants: missingRuleVariants };
   }
 
-  const commit = await commitFlagConfigPatch(deps, scope, input);
+  // Both fields are checked against the state this write LANDS, not against the
+  // patch: widening availability strands an existing baseline just as surely as
+  // setting a baseline under an already-wide available set.
+  const available = input.availableVariantNames ?? snapshot.flag.availableVariantNames;
+  const rollout = input.rollout === undefined ? snapshot.flag.rollout : input.rollout;
+  const defaultVariant = snapshot.flag.variants.find(
+    (variant) => variant.id === snapshot.flag.defaultVariantId,
+  );
+  if (
+    baselineIsUnresolvable(
+      rollout,
+      available,
+      defaultVariant?.name,
+      snapshot.flag.variants.map((variant) => variant.name),
+    )
+  ) {
+    return { ok: false, reason: "ROLLOUT_AMBIGUOUS", availableVariantNames: available };
+  }
+
+  const commit = await commitFlagConfigPatch(deps, scope, input, snapshot);
   if (!commit) return { ok: false, reason: "FLAG_NOT_FOUND" };
   return writeSnapshotAndBroadcast(deps, scope, input.flagId, commit);
 }
@@ -177,12 +197,17 @@ async function commitFlagConfigPatch(
   deps: ConfigStoreDeps,
   scope: EnvScope,
   input: PatchFlagConfigInput,
+  current: Snapshot,
 ): Promise<Snapshot | null> {
+  // Resolved against the CURRENT stored rollout so an existing salt survives a
+  // percentage change (see flag-config-rollout.ts); `undefined` leaves it alone.
+  const rollout = nextBaselineRollout(current.flag.rollout, input.rollout);
   const updated = await deps.repo.flags.updateFlagConfig(scope, input.flagId, {
     ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
     ...(input.availableVariantNames !== undefined
       ? { availableVariantNames: json(input.availableVariantNames) }
       : {}),
+    ...(rollout !== undefined ? { rollout: rollout === null ? null : json(rollout) } : {}),
     updatedAt: (deps.now?.() ?? new Date()).toISOString(),
   });
   return updated ? buildSnapshotFromD1(deps.repo, scope, input.flagId) : null;

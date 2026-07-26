@@ -8,6 +8,7 @@ import {
   findFlagByKey,
   makeQuickstartHarness,
   quickstartOrigins,
+  readConfigRollout,
   storedHarnessCredential,
   type QuickstartHarness,
 } from "./quickstart-local-harness.js";
@@ -99,36 +100,118 @@ describe("quickstart flag create drift", () => {
     expect(transport.requests).toHaveLength(0);
   });
 
-  describe("local control-plane lifecycle", () => {
-    let harness: QuickstartHarness;
+  it('rejects a --rollout that is neither a 0-100 number nor "none"', async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = new FakeCliTransport([]);
 
-    beforeEach(async () => {
-      harness = await makeQuickstartHarness();
-    });
+    const code = await runCli(
+      ["flag-config", "update", "--json", "--app", "app_1", "flag_1", "--rollout", "110"],
+      { credentialPath, fetch: transport.fetch },
+    );
 
-    afterEach(async () => {
-      await harness.dispose();
-    });
+    expect(code).toBe(EXIT_USAGE);
+    expect(transport.requests).toHaveLength(0);
+  });
+});
 
-    it("executes create, configure dev, promote prod, and verify prod from the quickstart sequence", async () => {
-      const { credentialPath } = await makeTempHome();
-      await writeFile(credentialPath, `${JSON.stringify(storedHarnessCredential(harness))}\n`);
-      const cliOptions = {
-        credentialPath,
-        fetch: harness.routingFetch,
-        controlPlaneBaseUrl: quickstartOrigins.controlPlaneBaseUrl,
-        evaluationBaseUrl: quickstartOrigins.evaluationBaseUrl,
-      };
+describe("quickstart local control-plane lifecycle", () => {
+  let harness: QuickstartHarness;
 
-      const createCode = await runCli(
-        [...quickstartCreateArgs, "--app", harness.appId],
-        cliOptions,
-      );
-      expect(createCode).toBe(EXIT_OK);
+  beforeEach(async () => {
+    harness = await makeQuickstartHarness();
+  });
 
-      const flag = await findFlagByKey(harness, "new-checkout");
+  afterEach(async () => {
+    await harness.dispose();
+  });
 
-      const configureCode = await runCli(
+  it("executes create, configure dev, promote prod, and verify prod from the quickstart sequence", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedHarnessCredential(harness))}\n`);
+    const cliOptions = {
+      credentialPath,
+      fetch: harness.routingFetch,
+      controlPlaneBaseUrl: quickstartOrigins.controlPlaneBaseUrl,
+      evaluationBaseUrl: quickstartOrigins.evaluationBaseUrl,
+    };
+
+    const createCode = await runCli([...quickstartCreateArgs, "--app", harness.appId], cliOptions);
+    expect(createCode).toBe(EXIT_OK);
+
+    const flag = await findFlagByKey(harness, "new-checkout");
+
+    const configureCode = await runCli(
+      [
+        "flag-config",
+        "update",
+        "--json",
+        "--app",
+        harness.appId,
+        "--env",
+        harness.devEnvironmentId,
+        flag.id,
+        "--enabled",
+        "true",
+        "--body-json",
+        JSON.stringify({ availableVariantNames: ["on", "off"] }),
+      ],
+      cliOptions,
+    );
+    expect(configureCode).toBe(EXIT_OK);
+
+    const promoteCode = await runCli(
+      [
+        "flags",
+        "promote",
+        "--json",
+        "--confirm",
+        "--app",
+        harness.appId,
+        "--env",
+        harness.prodEnvironmentId,
+        flag.id,
+        "--from-environment-id",
+        harness.devEnvironmentId,
+      ],
+      cliOptions,
+    );
+    expect(promoteCode).toBe(EXIT_OK);
+
+    const verifyCode = await runCli(
+      [
+        "flags",
+        "verify",
+        "--json",
+        "--app",
+        harness.appId,
+        "--env",
+        harness.prodEnvironmentId,
+        "new-checkout",
+        "--targeting-key",
+        "test-user-1",
+      ],
+      cliOptions,
+    );
+    expect(verifyCode).toBe(EXIT_OK);
+  });
+
+  it("sets and widens the documented baseline rollout, keeping the server-minted salt", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedHarnessCredential(harness))}\n`);
+    const cliOptions = {
+      credentialPath,
+      fetch: harness.routingFetch,
+      controlPlaneBaseUrl: quickstartOrigins.controlPlaneBaseUrl,
+      evaluationBaseUrl: quickstartOrigins.evaluationBaseUrl,
+    };
+
+    const createCode = await runCli([...quickstartCreateArgs, "--app", harness.appId], cliOptions);
+    expect(createCode).toBe(EXIT_OK);
+    const flag = await findFlagByKey(harness, "new-checkout");
+
+    const rollout = async (percentage: string) => {
+      const code = await runCli(
         [
           "flag-config",
           "update",
@@ -138,49 +221,20 @@ describe("quickstart flag create drift", () => {
           "--env",
           harness.devEnvironmentId,
           flag.id,
-          "--enabled",
-          "true",
-          "--body-json",
-          JSON.stringify({ availableVariantNames: ["on", "off"] }),
+          "--rollout",
+          percentage,
         ],
         cliOptions,
       );
-      expect(configureCode).toBe(EXIT_OK);
+      expect(code).toBe(EXIT_OK);
+      return await readConfigRollout(harness, flag.id, harness.devEnvironmentId);
+    };
 
-      const promoteCode = await runCli(
-        [
-          "flags",
-          "promote",
-          "--json",
-          "--confirm",
-          "--app",
-          harness.appId,
-          "--env",
-          harness.prodEnvironmentId,
-          flag.id,
-          "--from-environment-id",
-          harness.devEnvironmentId,
-        ],
-        cliOptions,
-      );
-      expect(promoteCode).toBe(EXIT_OK);
+    const minted = await rollout("10");
+    expect(minted).toMatchObject({ percentage: 10, salt: expect.any(String) });
 
-      const verifyCode = await runCli(
-        [
-          "flags",
-          "verify",
-          "--json",
-          "--app",
-          harness.appId,
-          "--env",
-          harness.prodEnvironmentId,
-          "new-checkout",
-          "--targeting-key",
-          "test-user-1",
-        ],
-        cliOptions,
-      );
-      expect(verifyCode).toBe(EXIT_OK);
-    });
+    // The quickstart promises widening is safe; that promise is only true if the
+    // salt survives, so assert it here rather than trusting the prose.
+    expect(await rollout("25")).toEqual({ percentage: 25, salt: minted?.salt });
   });
 });

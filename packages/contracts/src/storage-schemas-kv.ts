@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ExperimentStatusSchema } from "./leaf-schemas-experiment";
-import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
+import { PercentageRolloutSchema, TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
 
 /**
  * The one schema version every KV blob is written and read at. The envelope below
@@ -41,6 +41,13 @@ export const CURRENT_KV_SCHEMA_VERSION = 1;
 // "no live Run" branch. Because the field is required (not `.optional()`), an
 // OMITTED `experimentId` fails the parse — the writer must commit to null or an
 // id, never leave the controlling-Experiment pointer ambiguous.
+//
+// `rollout` is the baseline PercentageRollout applied to traffic that matches no
+// Targeting Rule (a matched rule wins and honours its own `percentageRollout`).
+// Like `experimentId` it is NULLABLE-NOT-ABSENT so the writer must commit to a
+// rollout or to `null`, never leave the baseline ambiguous. Its `salt` is minted
+// server-side once and carried verbatim through every rewrite of this blob, so
+// bucket membership is stable across percentage changes.
 // ---------------------------------------------------------------------------
 
 export const FlagConfigKVSchema = z
@@ -54,6 +61,7 @@ export const FlagConfigKVSchema = z
     variants: z.array(VariantSchema),
     availableVariantNames: z.array(z.string()),
     targetingRules: z.array(TargetingRuleSchema),
+    rollout: PercentageRolloutSchema.nullable(),
     updatedAt: z.string(),
   })
   .strict();

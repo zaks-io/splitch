@@ -132,6 +132,7 @@ export const flagConfigResponse = {
   enabled: true,
   availableVariantNames: ["on"],
   targetingRules: [],
+  rollout: null,
 };
 
 export const promoteResponse = {

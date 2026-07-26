@@ -1,4 +1,10 @@
-import type { ErrorCode, ExperimentStatus, TargetingRule, Variant } from "@splitch/contracts";
+import type {
+  ErrorCode,
+  ExperimentStatus,
+  PercentageRollout,
+  TargetingRule,
+  Variant,
+} from "@splitch/contracts";
 import type { RunConfig } from "../assignment/run-config";
 
 /**
@@ -55,7 +61,15 @@ export interface FlagConfig {
   /** Variant NAME returned when disabled or no rule matches (resolved from the stored id). */
   defaultVariant: string;
   variants: Variant[];
+  /**
+   * Variant NAMES this Environment serves — the App-level catalog narrowed by
+   * the Configuration. The baseline rollout needs it to resolve which Variant it
+   * rolls traffic INTO, so it is part of the resolved view, not just storage.
+   */
+  availableVariantNames: string[];
   targetingRules: TargetingRule[];
+  /** Baseline rollout for traffic matching no Targeting Rule; null = none. */
+  rollout: PercentageRollout | null;
 }
 
 /**

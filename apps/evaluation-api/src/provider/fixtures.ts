@@ -20,6 +20,7 @@ export function flagConfigKV(overrides: Partial<FlagConfigKV> = {}): FlagConfigK
     ],
     availableVariantNames: ["control", "treatment"],
     targetingRules: [],
+    rollout: null,
     updatedAt: "2026-06-28T00:00:00.000Z",
     ...overrides,
   };

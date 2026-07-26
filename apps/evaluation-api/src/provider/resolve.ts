@@ -37,7 +37,9 @@ export function flagConfigFromKV(appId: string, blob: FlagConfigKV): FlagConfig 
     enabled: blob.enabled,
     defaultVariant: defaultVariant.name,
     variants: blob.variants,
+    availableVariantNames: blob.availableVariantNames,
     targetingRules: blob.targetingRules,
+    rollout: blob.rollout,
   };
 }
 

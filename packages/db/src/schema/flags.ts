@@ -71,6 +71,10 @@ export const flagConfigs = sqliteTable(
     // JSON string array; subset of the Flag's Variant catalog.
     availableVariantNames: text("available_variant_names").notNull(),
     defaultVariantId: text("default_variant_id"),
+    // JSON PercentageRollout (nullable): the baseline rollout for traffic that
+    // matches no Targeting Rule. Its salt is minted once server-side and never
+    // regenerated on a percentage change, so buckets stay stable (ADR-0036).
+    rollout: text("rollout"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     version: integer("version").notNull().default(1),

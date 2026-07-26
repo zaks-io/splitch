@@ -111,21 +111,26 @@ CONFIGURATION (enabled state, available Variant subset, targeting, rollout) live
 Per-Environment Flag CONFIGURATION (ADR-0027): the `available_variant_names` subset of the App-level
 Variant catalog, targeting, rollout, and enabled state. One row per `(flag_id, environment_id)`.
 
-| Column                    | Type        | Constraints                                                        |
-| ------------------------- | ----------- | ------------------------------------------------------------------ |
-| `id`                      | text        | PK                                                                 |
-| `app_id`                  | text        | FK → apps, not null                                                |
-| `environment_id`          | text        | FK → environments, not null (co-scoped with `app_id`)              |
-| `flag_id`                 | text        | FK → flags, not null                                               |
-| `enabled`                 | boolean     | not null, default false                                            |
-| `available_variant_names` | text        | not null (JSON string array; subset of the Flag's Variant catalog) |
-| `default_variant_id`      | text        | FK → variants                                                      |
-| `created_at`              | timestamptz | not null                                                           |
-| `updated_at`              | timestamptz | not null                                                           |
-| `version`                 | integer     | not null, default 1; optimistic-lock counter                       |
+| Column                    | Type        | Constraints                                                          |
+| ------------------------- | ----------- | -------------------------------------------------------------------- |
+| `id`                      | text        | PK                                                                   |
+| `app_id`                  | text        | FK → apps, not null                                                  |
+| `environment_id`          | text        | FK → environments, not null (co-scoped with `app_id`)                |
+| `flag_id`                 | text        | FK → flags, not null                                                 |
+| `enabled`                 | boolean     | not null, default false                                              |
+| `available_variant_names` | text        | not null (JSON string array; subset of the Flag's Variant catalog)   |
+| `default_variant_id`      | text        | FK → variants                                                        |
+| `rollout`                 | text        | nullable (JSON `PercentageRollout`); baseline rollout, `null` = none |
+| `created_at`              | timestamptz | not null                                                             |
+| `updated_at`              | timestamptz | not null                                                             |
+| `version`                 | integer     | not null, default 1; optimistic-lock counter                         |
 
-UNIQUE constraint: `(flag_id, environment_id)`. Targeting rules and rollout for the config live in the
-per-Environment `targeting_rules` rows (`environment_id` co-scoped).
+UNIQUE constraint: `(flag_id, environment_id)`. Per-rule rollouts live on the per-Environment
+`targeting_rules` rows (`environment_id` co-scoped); the `rollout` column here is the config-level
+**baseline** that applies only to traffic matching no rule. Its `salt` is minted server-side once and
+never regenerated on a percentage change (see `PercentageRollout` in `leaf-schemas-flag.md`). A
+malformed value is corrupt config, not "no rollout", so reads fail loud rather than degrading to
+`null` (ADR-0036).
 
 ### `variants`
 

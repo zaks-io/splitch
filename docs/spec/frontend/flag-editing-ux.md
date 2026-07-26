@@ -11,6 +11,46 @@ client-held pending draft.
 Flag never creates a Run. A Flag that is not under a running Experiment has no Run at all; its
 edits are plain config changes plus an audit entry.
 
+## Baseline rollout — the one-control path to a percentage
+
+A Flag Configuration carries a first-class **baseline rollout**: a single percentage that applies to
+traffic matching **no** Targeting Rule. It is the shortest path from "flag exists" to "flag is rolled
+out to 10% of users" — one control, no rule to author, no segment to define. A matched Targeting Rule
+still wins outright and honours its own `percentageRollout`; the baseline only decides the fall-through
+that would otherwise go straight to the Default Variant.
+
+The control is a percentage only. **The operator never sees or sets the bucketing salt**, because the
+salt _is_ the bucket assignment: reminting it on a percentage change would silently reshuffle who is
+in the rollout. The server mints the salt once when the baseline is first set and keeps it through
+every later change, so dragging 10% → 25% only ever _adds_ users to the treatment and never swaps
+anyone out. Clearing the rollout is the one visible way to drop that cohort; re-establishing it
+afterwards starts a new one.
+
+A baseline change is a rollout **value** change, so it falls under the Environment Policy's
+`targeting_rollout_value` gate — in a `confirm` Environment, changing the baseline rollout percentage
+takes an explicit confirmation like any other rollout edit.
+
+Because the baseline resolves against exactly two Variants (the Default, and the one Variant it rolls
+_into_), it requires exactly one non-Default candidate. Anything else is ambiguous and fails loud
+rather than guessing a target (ADR-0036).
+
+Candidates come from `availableVariantNames`, except when that set is **empty** — an empty set means
+the Configuration was never narrowed (it is initialized empty), not that zero Variants are servable,
+so candidates fall back to the Flag's Variant catalog. That is what lets the one-call rollout work on
+a freshly created Flag. The write gate and the evaluator apply this identically; if they disagreed, an
+accepted write would fail at evaluation time instead.
+
+That is enforced at **write** time, not at evaluation time, and against the state the write **lands**
+rather than the fields the caller happened to touch. A Configuration can be stranded from either side:
+setting a baseline under an available set that leaves two-plus candidates, or widening the available
+set out from under an existing baseline until it does. The test is the resulting candidate count, not
+the direction of the edit — widening that still leaves exactly one non-Default candidate stays valid.
+Ambiguous results are rejected with `VALIDATION_ERROR` on `rollout`, naming the available Variants, so
+the operator finds out at the keystroke that caused it instead of from production traffic later.
+
+Clearing the baseline (`rollout: null`) is always allowed, and widening availability in the same write
+that clears the baseline succeeds, so an ambiguous Configuration is never wedged.
+
 ## Production-change confirmation (resolved)
 
 A production-affecting flag edit must be **intentional**, and that gate is **not flag-specific** — it

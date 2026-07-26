@@ -101,8 +101,8 @@ function applyCommandSpecificFields(
     input.fromEnvironmentId = invocation.flags.fromEnvironmentId;
     input.select = input.select ?? { enabled: true };
   }
-  if (command.operationId === "flag_config_update" && invocation.flags.enabled !== undefined) {
-    input.enabled = invocation.flags.enabled;
+  if (command.operationId === "flag_config_update") {
+    applyFlagConfigUpdateFields(invocation.flags, input);
   }
   if (command.operationId === "flags_test_eval") {
     input.evaluationContext = parseEvaluationContext(
@@ -117,6 +117,20 @@ function applyCommandSpecificFields(
       variants: invocation.flags.variants,
     });
     assertContractValidFlagsCreateInput(input);
+  }
+}
+
+function applyFlagConfigUpdateFields(
+  flags: ParsedGlobalFlags,
+  input: Record<string, unknown>,
+): void {
+  if (flags.enabled !== undefined) {
+    input.enabled = flags.enabled;
+  }
+  if (flags.rollout !== undefined) {
+    // Percentage only; the salt is the server's to mint and preserve, so there is
+    // deliberately no CLI surface for it.
+    input.rollout = flags.rollout === null ? null : { percentage: flags.rollout };
   }
 }
 

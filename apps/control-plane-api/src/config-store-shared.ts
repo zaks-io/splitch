@@ -5,82 +5,33 @@ import {
   RunConfigKVSchema,
   TargetingRuleSchema,
   flagConfigKey,
-  type DeltaNudge,
-  type ExperimentConfigKV,
-  type FlagConfigKV,
-  type RunConfigKV,
   type TargetingRule,
   type Variant,
 } from "@splitch/contracts";
 import { appScope, type EnvScope, type Repository } from "@splitch/db";
 import { parseFlagConfigEnvelope, writeSnapshot } from "./config-store-kv";
+import type {
+  ConfigStoreDeps,
+  FlagConfigResult,
+  FlagConfigWriteResult,
+  PatchFlagConfigInput,
+  PromoteFlagConfigInput,
+  PromoteFlagConfigResult,
+  ReplaceTargetingRulesInput,
+  Snapshot,
+} from "./config-store-types";
+import { parseStoredRollout } from "./flag-config-rollout";
 
-export interface FlagConfigResult {
-  flagId: string;
-  environmentId: string;
-  version: number;
-  enabled: boolean;
-  availableVariantNames: string[];
-  targetingRules: TargetingRule[];
-}
-
-export interface PatchFlagConfigInput {
-  appId: string;
-  environmentId: string;
-  flagId: string;
-  enabled?: boolean;
-  availableVariantNames?: string[];
-}
-
-export interface ReplaceTargetingRulesInput {
-  appId: string;
-  environmentId: string;
-  flagId: string;
-  targetingRules: TargetingRule[];
-}
-
-export interface PromoteFlagConfigInput {
-  appId: string;
-  targetEnvironmentId: string;
-  flagId: string;
-  fromEnvironmentId: string;
-  select: {
-    availability?: string[];
-    targeting?: true;
-    rollout?: true;
-    enabled?: true;
-  };
-}
-
-export type FlagConfigWriteResult =
-  | { ok: true; config: FlagConfigResult; nudge: DeltaNudge }
-  | { ok: false; reason: "FLAG_NOT_FOUND" }
-  | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] };
-
-export type PromoteFlagConfigResult =
-  | {
-      ok: true;
-      config: FlagConfigResult;
-      diff: { before: FlagConfigResult; after: FlagConfigResult };
-      nudge: DeltaNudge;
-    }
-  | { ok: false; reason: "FLAG_NOT_FOUND" }
-  | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] };
-
-export interface ConfigStoreDeps {
-  repo: Repository;
-  kv: KVNamespace;
-  broadcaster: { broadcast(nudge: DeltaNudge): Promise<void> | void };
-  logger?: Pick<Console, "warn">;
-  now?: () => Date;
-}
-
-export interface Snapshot {
-  flag: FlagConfigKV;
-  experiment: ExperimentConfigKV | null;
-  run: RunConfigKV | null;
-  version: number;
-}
+export type {
+  ConfigStoreDeps,
+  FlagConfigResult,
+  FlagConfigWriteResult,
+  PatchFlagConfigInput,
+  PromoteFlagConfigInput,
+  PromoteFlagConfigResult,
+  ReplaceTargetingRulesInput,
+  Snapshot,
+};
 
 export async function readFlagSnapshot(
   deps: ConfigStoreDeps,
@@ -161,6 +112,7 @@ async function buildSnapshot(
       variants,
       availableVariantNames: JSON.parse(config.availableVariantNames) as string[],
       targetingRules,
+      rollout: parseStoredRollout(config.rollout),
       updatedAt: config.updatedAt,
     }),
     experiment: experimentConfig(scope, experiment),
@@ -195,6 +147,7 @@ export function responseFromSnapshot(snapshot: Snapshot): FlagConfigResult {
     enabled: snapshot.flag.enabled,
     availableVariantNames: snapshot.flag.availableVariantNames,
     targetingRules: snapshot.flag.targetingRules,
+    rollout: snapshot.flag.rollout,
   };
 }
 

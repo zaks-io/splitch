@@ -128,11 +128,36 @@ flags_test_eval { flagId, evaluationContext: { targetingKey, idType: "user" } } 
 A green verify is your one-call confidence that auth, Environment, credential, and Flag config all
 line up. If it fails, the error is structured and names the next step (see Recovery below).
 
-## 8. Start an Experiment Run, wire the SDK, and fire the first real Exposure
+## 8. Roll it out to a percentage (no Experiment required)
+
+A verified Flag is already servable. To put it in front of a slice of real traffic, set the Flag
+Configuration's **baseline rollout** — one percentage, no Targeting Rule, no Experiment:
+
+```
+splitch flag-config update --rollout 10                        # CLI
+flag_config_update { flagId, rollout: { percentage: 10 } }     # MCP tool
+```
+
+That is the whole step. The baseline applies to traffic matching no Targeting Rule; if you later add
+rules, a matched rule wins and the baseline keeps deciding the rest.
+
+Widening it is safe by construction: **you set a percentage, never a salt.** The server mints the
+bucketing salt on the first write and never regenerates it, so 10 → 25 only _adds_ Entities to the
+treatment. Nobody already inside the rollout is silently moved out. Clearing the rollout to `null` is
+the one visible way to drop the cohort, and re-establishing it starts a fresh one.
+
+In an Environment whose Policy gates `targeting_rollout_value`, this call answers `409
+CONFIRMATION_REQUIRED`; repeat it with `confirm: true`. That is the gate working, not an error.
+
+Reach for step 9 when you need to _measure_ the rollout rather than just serve it: Exposures,
+allocation, and statistical results all belong to an Experiment Run.
+
+## 9. Start an Experiment Run, wire the SDK, and fire the first real Exposure
 
 An Exposure is a first-touch fact for an Entity in an **Experiment Run**. It carries the Experiment,
 Run, Variant, and Targeting Key identity used by analysis. A plain Flag evaluation has no Run to own
-that fact, so it returns the Default Variant and records no Exposure.
+that fact, so it records no Exposure. It still resolves normally: Targeting Rules first, then the
+config-level baseline rollout from step 8, then the Default Variant.
 
 Create the smallest useful Experiment draft around the Flag, then Start its first Run. Metrics may be
 empty for this integration checkpoint; Exposure collection does not require statistical-result work.
@@ -171,9 +196,10 @@ else render(d.value);
 ```
 
 For a successful fresh assignment under a live Experiment Run, `evaluate` fires an Exposure (ADR-0004);
-`peekVariant`/`verify` do not. Disabled Flags, Flags without a controlling Experiment, and Experiments
-without a live Run return the Default Variant and record no Exposure. Holdovers replay their prior
-Variant without recording a new Exposure. Defaults and the full status→result mapping are in
+`peekVariant`/`verify` do not. A **disabled** Flag returns the Default Variant outright. Flags without
+a controlling Experiment and Experiments without a live Run still resolve their Targeting Rules and
+baseline rollout; only the Exposure is skipped. Holdovers replay their prior Variant without recording
+a new Exposure. Defaults and the full status→result mapping are in
 [sdk/public-evaluate-endpoint.md](sdk/public-evaluate-endpoint.md#sdk-initialization-defaults).
 
 **The loop closes here.** Deploy, call `evaluate()` with a real user, and the dashboard's empty

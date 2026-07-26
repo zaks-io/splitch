@@ -23,6 +23,7 @@ const config = {
   enabled: true,
   availableVariantNames: ["off", "on"],
   targetingRules: [],
+  rollout: null,
 };
 
 function sdkWith(response: () => Response) {

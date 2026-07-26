@@ -1,6 +1,7 @@
-import type { TargetingRule, Variant } from "@splitch/contracts";
+import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { envScope, type EnvScope } from "@splitch/db";
 import { randomHex } from "./credential-cache";
+import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
 import {
   buildSnapshotFromD1,
   json,
@@ -16,6 +17,14 @@ import {
   type ReplaceTargetingRulesInput,
   type Snapshot,
 } from "./config-store-shared";
+
+interface PreparedPromotion {
+  availableVariantNames: string[];
+  enabled: boolean;
+  targetingRules: TargetingRule[];
+  /** `undefined` = the baseline was not selected, so leave the target's alone. */
+  rollout: PercentageRollout | null | undefined;
+}
 
 export async function replaceTargetingRules(
   deps: ConfigStoreDeps,
@@ -92,11 +101,9 @@ function preparePromotion(
   source: Snapshot,
   target: Snapshot,
 ):
-  | {
-      ok: true;
-      value: { availableVariantNames: string[]; enabled: boolean; targetingRules: TargetingRule[] };
-    }
-  | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] } {
+  | { ok: true; value: PreparedPromotion }
+  | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] }
+  | { ok: false; reason: "ROLLOUT_AMBIGUOUS"; availableVariantNames: string[] } {
   const selectedAvailability = input.select.availability;
   const missingSelectedVariants = missingAvailableVariants(
     selectedAvailability,
@@ -110,21 +117,8 @@ function preparePromotion(
     };
   }
 
-  const availableVariantNames =
-    selectedAvailability === undefined
-      ? target.flag.availableVariantNames
-      : copySelectedAvailability(
-          target.flag.availableVariantNames,
-          source.flag.availableVariantNames,
-          selectedAvailability,
-          target.flag.variants,
-        );
-  const selectedTargetingRules = input.select.targeting
-    ? promotedTargetingRules(source.flag.targetingRules)
-    : target.flag.targetingRules;
-  const targetingRules = input.select.rollout
-    ? promotedRollouts(source.flag.targetingRules, selectedTargetingRules)
-    : selectedTargetingRules;
+  const availableVariantNames = promotedAvailability(selectedAvailability, source, target);
+  const targetingRules = promotedRules(input, source, target);
   const missingRuleVariants = missingRuleVariantNames(
     targetingRules,
     target.flag.variants,
@@ -133,9 +127,102 @@ function preparePromotion(
   if (missingRuleVariants.length > 0) {
     return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants: missingRuleVariants };
   }
+
+  const rollout = input.select.rollout
+    ? promotedBaselineRollout(source.flag.rollout, target.flag.rollout)
+    : undefined;
+  // Checked against the state this Promotion LANDS. `select.availability` alone
+  // can strand the target's existing baseline, so an unselected `rollout` still
+  // has to be judged against the availability that is about to replace it.
+  const landedRollout = rollout === undefined ? target.flag.rollout : rollout;
+  const defaultVariant = target.flag.variants.find(
+    (variant) => variant.id === target.flag.defaultVariantId,
+  );
+  if (
+    baselineIsUnresolvable(
+      landedRollout,
+      availableVariantNames,
+      defaultVariant?.name,
+      target.flag.variants.map((variant) => variant.name),
+    )
+  ) {
+    return { ok: false, reason: "ROLLOUT_AMBIGUOUS", availableVariantNames };
+  }
+
   return {
     ok: true,
-    value: { availableVariantNames, enabled: source.flag.enabled, targetingRules },
+    value: {
+      availableVariantNames,
+      enabled: source.flag.enabled,
+      targetingRules,
+      rollout,
+    },
+  };
+}
+
+function promotedAvailability(
+  selectedAvailability: string[] | undefined,
+  source: Snapshot,
+  target: Snapshot,
+): string[] {
+  if (selectedAvailability === undefined) return target.flag.availableVariantNames;
+  return copySelectedAvailability(
+    target.flag.availableVariantNames,
+    source.flag.availableVariantNames,
+    selectedAvailability,
+    target.flag.variants,
+  );
+}
+
+/**
+ * Targeting Rules move only under `select.targeting`, and they move WHOLE:
+ * conditions and `percentageRollout` together, because a percentage is the split
+ * of one rule's matched traffic and means nothing apart from that rule.
+ *
+ * `select.rollout` therefore means exactly one thing — the config-level baseline.
+ * It used to ALSO graft each source rule's percentage onto the target rule with
+ * the same `priority`, but `priority` is a sort key, not an identity: Dev and
+ * Prod rule lists are routinely out of sync (that is what promotion is for), so
+ * that matched unrelated rules and silently wrote the wrong percentage onto them.
+ */
+function promotedRules(
+  input: PromoteFlagConfigInput,
+  source: Snapshot,
+  target: Snapshot,
+): TargetingRule[] {
+  return input.select.targeting
+    ? promotedTargetingRules(source.flag.targetingRules)
+    : target.flag.targetingRules;
+}
+
+/**
+ * Promotion moves the source's baseline PERCENTAGE, never its salt: the target
+ * Environment's cohort is its own, and adopting the source salt would reshuffle
+ * every bucketed Entity in the target. The target keeps its salt if it already
+ * has one and mints a fresh one only when it had no baseline at all.
+ */
+function promotedBaselineRollout(
+  source: PercentageRollout | null,
+  target: PercentageRollout | null,
+): PercentageRollout | null {
+  if (source === null) return null;
+  return { percentage: source.percentage, salt: target?.salt ?? mintSalt() };
+}
+
+function promotionConfigPatch(
+  input: PromoteFlagConfigInput,
+  prepared: PreparedPromotion,
+  now: Date,
+) {
+  return {
+    ...(input.select.availability !== undefined
+      ? { availableVariantNames: json(prepared.availableVariantNames) }
+      : {}),
+    ...(input.select.enabled ? { enabled: prepared.enabled } : {}),
+    ...(prepared.rollout !== undefined
+      ? { rollout: prepared.rollout === null ? null : json(prepared.rollout) }
+      : {}),
+    updatedAt: now.toISOString(),
   };
 }
 
@@ -143,17 +230,15 @@ async function commitPromotion(
   deps: ConfigStoreDeps,
   input: PromoteFlagConfigInput,
   targetScope: EnvScope,
-  prepared: { availableVariantNames: string[]; enabled: boolean; targetingRules: TargetingRule[] },
+  prepared: PreparedPromotion,
 ): Promise<FlagConfigWriteResult> {
   const now = deps.now?.() ?? new Date();
-  const configPatch = {
-    ...(input.select.availability !== undefined
-      ? { availableVariantNames: json(prepared.availableVariantNames) }
-      : {}),
-    ...(input.select.enabled ? { enabled: prepared.enabled } : {}),
-    updatedAt: now.toISOString(),
-  };
-  if (input.select.targeting || input.select.rollout) {
+  const configPatch = promotionConfigPatch(input, prepared, now);
+  // Only `select.targeting` moves rules. Since SPL-170 `select.rollout` means the
+  // config-level baseline, which lives on flag_configs — routing it through
+  // replaceTargetingRules (a DELETE + re-INSERT) would re-stamp `createdAt` on
+  // every rule the caller never touched, destroying their creation history.
+  if (input.select.targeting) {
     const replaced = await deps.repo.flags.replaceTargetingRules(
       targetScope,
       input.flagId,
@@ -193,17 +278,4 @@ function promotedTargetingRules(rules: TargetingRule[]): TargetingRule[] {
     ...rule,
     id: `rule_${randomHex(12)}`,
   }));
-}
-
-function promotedRollouts(
-  sourceRules: TargetingRule[],
-  targetRules: TargetingRule[],
-): TargetingRule[] {
-  const rolloutsByPriority = new Map(
-    sourceRules.map((rule) => [rule.priority, rule.percentageRollout ?? null]),
-  );
-  return targetRules.map((rule) => {
-    if (!rolloutsByPriority.has(rule.priority)) return rule;
-    return { ...rule, percentageRollout: rolloutsByPriority.get(rule.priority) ?? null };
-  });
 }

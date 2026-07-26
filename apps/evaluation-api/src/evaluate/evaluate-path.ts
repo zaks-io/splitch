@@ -4,9 +4,11 @@ import { AssignmentStoreError } from "../assignment/assignment-store";
 import { fractionalEval } from "../assignment/fractional-eval";
 import type { RunConfig } from "../assignment/run-config";
 import type { ExperimentConfig, FlagConfig } from "../provider/provider";
+import { unmatchedResult } from "./baseline-rollout";
 import { matchesConditions } from "./conditions";
 import { EvaluatePathError, errorResult } from "./evaluate-errors";
 import type {
+  BaselineRolloutEvaluateResult,
   EvaluatePathDeps,
   EvaluatePathInput,
   EvaluateResult,
@@ -76,21 +78,14 @@ function evaluateFlagOnly(
   flag: FlagConfig,
   experimentId: string | null,
   logger: EvaluatePathDeps["logger"],
-): RuleMatchEvaluateResult | NoMatchEvaluateResult {
+): RuleMatchEvaluateResult | BaselineRolloutEvaluateResult | NoMatchEvaluateResult {
   const rules = [...flag.targetingRules].sort((a, b) => a.priority - b.priority);
   for (const rule of rules) {
     const match = evaluateTargetingRule(input, flag, experimentId, null, rule, logger);
     if (match !== null) return match;
   }
 
-  return {
-    kind: "no_match_default",
-    variant: flag.defaultVariant,
-    reason: { type: "no_match_default" },
-    ...(experimentId === null ? {} : { experimentId }),
-    liveRunId: null,
-    exposure: null,
-  };
+  return unmatchedResult(input, flag, experimentId);
 }
 
 function withValidatedIdType(
@@ -150,6 +145,9 @@ function evaluateLiveRun(
   run: RunConfig,
   logger: EvaluatePathDeps["logger"],
 ): FreshAssignmentEvaluateResult | RuleMatchEvaluateResult | NoMatchEvaluateResult {
+  // NOTE: the config-level baseline rollout deliberately does NOT apply here. A
+  // live Run's allocation is the authority for its traffic; letting a flag-level
+  // percentage reshape it would corrupt the Experiment's own split.
   const rules = [...run.targetingRules].sort((a, b) => a.priority - b.priority);
   if (rules.length === 0) {
     const variant = assign(run, input.evaluationContext.targetingKey);

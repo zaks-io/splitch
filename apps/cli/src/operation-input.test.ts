@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { findCommand } from "./command-registry.js";
+import { findCommand, type CliCommandDefinition } from "./command-registry.js";
 import { buildOperationInput } from "./operation-input.js";
 import { parseInvocation } from "./parse-args.js";
 
+function requireCommand(path: string[]): CliCommandDefinition {
+  const command = findCommand(path);
+  if (!command) throw new Error(`no CLI command registered for "${path.join(" ")}"`);
+  return command;
+}
+
 describe("buildOperationInput", () => {
   it("flags update keeps explicit appId and flagId over --body-json route overrides", () => {
-    const command = findCommand(["flags", "update"]);
-    expect(command).toBeDefined();
+    const command = requireCommand(["flags", "update"]);
     const invocation = parseInvocation([
       "flags",
       "update",
@@ -22,7 +27,7 @@ describe("buildOperationInput", () => {
       }),
     ]);
 
-    const input = buildOperationInput(command!, invocation, { appId: "app_flag" });
+    const input = buildOperationInput(command, invocation, { appId: "app_flag" });
 
     expect(input.appId).toBe("app_flag");
     expect(input.flagId).toBe("flag_pos");
@@ -30,8 +35,7 @@ describe("buildOperationInput", () => {
   });
 
   it("flag-config update keeps explicit appId, environmentId, and flagId over --body-json", () => {
-    const command = findCommand(["flag-config", "update"]);
-    expect(command).toBeDefined();
+    const command = requireCommand(["flag-config", "update"]);
     const invocation = parseInvocation([
       "flag-config",
       "update",
@@ -52,7 +56,7 @@ describe("buildOperationInput", () => {
       }),
     ]);
 
-    const input = buildOperationInput(command!, invocation, {
+    const input = buildOperationInput(command, invocation, {
       appId: "app_cli",
       environmentId: "env_cli",
     });
@@ -77,7 +81,7 @@ describe("buildOperationInput", () => {
       "false",
     ]);
 
-    const input = buildOperationInput(command!, invocation, {
+    const input = buildOperationInput(command, invocation, {
       appId: "app_cli",
       environmentId: "env_cli",
     });
@@ -102,8 +106,7 @@ describe("buildOperationInput", () => {
   });
 
   it("flags promote keeps explicit target environment over --body-json", () => {
-    const command = findCommand(["flags", "promote"]);
-    expect(command).toBeDefined();
+    const command = requireCommand(["flags", "promote"]);
     const invocation = parseInvocation([
       "flags",
       "promote",
@@ -124,7 +127,7 @@ describe("buildOperationInput", () => {
       }),
     ]);
 
-    const input = buildOperationInput(command!, invocation, {
+    const input = buildOperationInput(command, invocation, {
       appId: "app_cli",
       environmentId: "env_target",
     });

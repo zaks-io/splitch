@@ -60,11 +60,15 @@ export type Condition = z.infer<typeof ConditionSchema>;
 // PercentageRollout
 // ---------------------------------------------------------------------------
 
-export const PercentageRolloutSchema = z.object({
-  // 0–100 inclusive; fractional allowed
-  percentage: z.number().min(0).max(100),
-  salt: z.string(),
-});
+// Strict: a stored rollout carrying an unexpected key means something wrote a
+// shape we do not understand, and stripping it would degrade silently (ADR-0036).
+export const PercentageRolloutSchema = z
+  .object({
+    // 0–100 inclusive; fractional allowed
+    percentage: z.number().min(0).max(100),
+    salt: z.string(),
+  })
+  .strict();
 export type PercentageRollout = z.infer<typeof PercentageRolloutSchema>;
 
 // ---------------------------------------------------------------------------

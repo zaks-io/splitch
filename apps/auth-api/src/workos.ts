@@ -152,7 +152,7 @@ export function makeHostedWorkOs(input: { apiKey: string; baseUrl?: string }): W
     method: string,
     body?: object,
     allowNotFound = false,
-  ): Promise<Record<string, any> | null> {
+  ): Promise<Record<string, unknown> | null> {
     const response = await fetch(`${baseUrl}${path}`, {
       method,
       headers: {
@@ -163,11 +163,11 @@ export function makeHostedWorkOs(input: { apiKey: string; baseUrl?: string }): W
     });
     if (allowNotFound && response.status === 404) return null;
     if (!response.ok) throw new Error(`WorkOS user management request failed (${response.status})`);
-    return (await response.json()) as Record<string, any>;
+    return (await response.json()) as Record<string, unknown>;
   }
 }
 
-function userId(response: Record<string, any> | null): string {
+function userId(response: Record<string, unknown> | null): string {
   if (!response || typeof response.id !== "string")
     throw new Error("WorkOS user response missing id");
   return response.id;

@@ -93,7 +93,7 @@ export function decodeJwt(token: string): DecodedJwt {
 
 function selectKey(jwks: Jwks, kid: string | undefined): Jwk {
   const key = kid ? jwks.keys.find((k) => k.kid === kid) : jwks.keys[0];
-  if (!key || key.kty !== "RSA" || !key.n || !key.e) {
+  if (key?.kty !== "RSA" || !key.n || !key.e) {
     throw new OAuthError("invalid_token", "no matching RSA JWK for the token's kid");
   }
   return key;

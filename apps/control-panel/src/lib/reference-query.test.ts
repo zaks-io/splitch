@@ -145,6 +145,7 @@ function config(input: { version: number; enabled: boolean }): FlagConfigGetOutp
     environmentId: "env_1",
     availableVariantNames: ["control", "treatment"],
     targetingRules: [],
+    rollout: null,
     ...input,
   };
 }

@@ -142,6 +142,14 @@ export const TestEvaluationReasonSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("fresh_assignment") }),
   z.object({ type: z.literal("default_disabled") }),
+  // The config-level baseline rollout decided this, not a Targeting Rule. It is
+  // its own reason so an operator can tell a baseline hit from a plain fall-
+  // through to the Default Variant — the two produce the same Variant whenever
+  // the key lands outside the band, and conflating them would hide the rollout.
+  z.object({
+    type: z.literal("baseline_rollout"),
+    rollout: z.object({ variantWeights: z.array(RolloutWeightSchema) }),
+  }),
   z.object({ type: z.literal("no_match_default") }),
 ]);
 export type TestEvaluationReason = z.infer<typeof TestEvaluationReasonSchema>;
