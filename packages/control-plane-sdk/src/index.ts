@@ -1,11 +1,15 @@
 import type { HealthResponse } from "@splitch/contracts";
 import { HealthResponseSchema } from "@splitch/contracts";
 import { type AppsClient, createAppsClient } from "./apps-client";
+import { type CredentialsClient, createCredentialsClient } from "./credentials-client";
+import { createEnvironmentsClient, type EnvironmentsClient } from "./environments-client";
 import { createExperimentsClient, type ExperimentsClient } from "./experiments-client";
 import { createFlagsClient, type FlagsClient } from "./flags-client";
 import {
   type ControlPlaneHcOptions,
   createAppsHcClient,
+  createCredentialsHcClient,
+  createEnvironmentsHcClient,
   createExperimentsHcClient,
   createFlagsHcClient,
   resolveControlPlaneUrl,
@@ -25,6 +29,8 @@ export interface ControlPlaneSdkOptions {
 export interface ControlPlaneSdk {
   health(): Promise<HealthResponse>;
   readonly apps: AppsClient;
+  readonly environments: EnvironmentsClient;
+  readonly credentials: CredentialsClient;
   readonly flags: FlagsClient;
   readonly experiments: ExperimentsClient;
 }
@@ -39,6 +45,8 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
   const flagsHcClient = createFlagsHcClient(hcOptions);
   const experimentsHcClient = createExperimentsHcClient(hcOptions);
   const appsHcClient = createAppsHcClient(hcOptions);
+  const environmentsHcClient = createEnvironmentsHcClient(hcOptions);
+  const credentialsHcClient = createCredentialsHcClient(hcOptions);
 
   return {
     async health() {
@@ -51,6 +59,8 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
       return HealthResponseSchema.parse(await response.json());
     },
     apps: createAppsClient(hcOptions, appsHcClient),
+    environments: createEnvironmentsClient(hcOptions, environmentsHcClient),
+    credentials: createCredentialsClient(hcOptions, credentialsHcClient),
     flags: createFlagsClient(hcOptions, flagsHcClient),
     experiments: createExperimentsClient(hcOptions, experimentsHcClient),
   };
@@ -68,6 +78,8 @@ export type {
   RouteOutput,
 } from "@splitch/contracts/route-types";
 export type { AppsClient } from "./apps-client";
+export type { CredentialsClient } from "./credentials-client";
+export type { EnvironmentsClient } from "./environments-client";
 export type { ExperimentsClient } from "./experiments-client";
 export type { FlagsClient } from "./flags-client";
 export type {

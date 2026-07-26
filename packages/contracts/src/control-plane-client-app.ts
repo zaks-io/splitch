@@ -1,6 +1,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { ApiRouteContract } from "./openapi-route";
 import { accountRoutes } from "./routes/routes-account";
+import { credentialRoutes } from "./routes/routes-credentials";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagRoutes } from "./routes/routes-flags";
 
@@ -23,14 +24,27 @@ function emitOnlyHandler(
   };
 }
 
+/**
+ * Route subsets are selected by INDEX because `hc` needs the statically-typed
+ * tuple element to infer per-route input/output — `getRoute(operationId)` widens
+ * to `ApiRouteContract` and collapses inference. Indices are fragile under a
+ * route reorder, so `control-plane-client-app.test.ts` asserts the selected
+ * operationIds BY NAME: a reorder fails that test loudly instead of silently
+ * changing which operations the SDK exposes.
+ */
 const flagsSdkRoutes = [
   flagRoutes[0],
   flagRoutes[1],
   flagRoutes[2],
   flagRoutes[3],
   flagRoutes[4],
+  flagRoutes[5],
+  flagRoutes[6],
+  flagRoutes[7],
   flagRoutes[8],
   flagRoutes[9],
+  flagRoutes[10],
+  flagRoutes[11],
 ] as const;
 
 const experimentsSdkRoutes = [
@@ -42,7 +56,30 @@ const experimentsSdkRoutes = [
   experimentRoutes[5],
 ] as const;
 
-const appsSdkRoutes = [accountRoutes[9]] as const;
+const appsSdkRoutes = [
+  accountRoutes[8],
+  accountRoutes[9],
+  accountRoutes[10],
+  accountRoutes[11],
+  accountRoutes[12],
+] as const;
+
+const environmentsSdkRoutes = [
+  accountRoutes[13],
+  accountRoutes[14],
+  accountRoutes[15],
+  accountRoutes[16],
+  accountRoutes[17],
+] as const;
+
+const credentialsSdkRoutes = [
+  credentialRoutes[0],
+  credentialRoutes[1],
+  credentialRoutes[2],
+  credentialRoutes[3],
+  credentialRoutes[4],
+  credentialRoutes[5],
+] as const;
 
 const flagsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: flagsSdkRoutes[0].openapi, handler: emitOnlyHandler(flagsSdkRoutes[0]) },
@@ -52,6 +89,11 @@ const flagsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: flagsSdkRoutes[4].openapi, handler: emitOnlyHandler(flagsSdkRoutes[4]) },
   { route: flagsSdkRoutes[5].openapi, handler: emitOnlyHandler(flagsSdkRoutes[5]) },
   { route: flagsSdkRoutes[6].openapi, handler: emitOnlyHandler(flagsSdkRoutes[6]) },
+  { route: flagsSdkRoutes[7].openapi, handler: emitOnlyHandler(flagsSdkRoutes[7]) },
+  { route: flagsSdkRoutes[8].openapi, handler: emitOnlyHandler(flagsSdkRoutes[8]) },
+  { route: flagsSdkRoutes[9].openapi, handler: emitOnlyHandler(flagsSdkRoutes[9]) },
+  { route: flagsSdkRoutes[10].openapi, handler: emitOnlyHandler(flagsSdkRoutes[10]) },
+  { route: flagsSdkRoutes[11].openapi, handler: emitOnlyHandler(flagsSdkRoutes[11]) },
 ] as const);
 
 const experimentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
@@ -65,6 +107,27 @@ const experimentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
 
 const appsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: appsSdkRoutes[0].openapi, handler: emitOnlyHandler(appsSdkRoutes[0]) },
+  { route: appsSdkRoutes[1].openapi, handler: emitOnlyHandler(appsSdkRoutes[1]) },
+  { route: appsSdkRoutes[2].openapi, handler: emitOnlyHandler(appsSdkRoutes[2]) },
+  { route: appsSdkRoutes[3].openapi, handler: emitOnlyHandler(appsSdkRoutes[3]) },
+  { route: appsSdkRoutes[4].openapi, handler: emitOnlyHandler(appsSdkRoutes[4]) },
+] as const);
+
+const environmentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
+  { route: environmentsSdkRoutes[0].openapi, handler: emitOnlyHandler(environmentsSdkRoutes[0]) },
+  { route: environmentsSdkRoutes[1].openapi, handler: emitOnlyHandler(environmentsSdkRoutes[1]) },
+  { route: environmentsSdkRoutes[2].openapi, handler: emitOnlyHandler(environmentsSdkRoutes[2]) },
+  { route: environmentsSdkRoutes[3].openapi, handler: emitOnlyHandler(environmentsSdkRoutes[3]) },
+  { route: environmentsSdkRoutes[4].openapi, handler: emitOnlyHandler(environmentsSdkRoutes[4]) },
+] as const);
+
+const credentialsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
+  { route: credentialsSdkRoutes[0].openapi, handler: emitOnlyHandler(credentialsSdkRoutes[0]) },
+  { route: credentialsSdkRoutes[1].openapi, handler: emitOnlyHandler(credentialsSdkRoutes[1]) },
+  { route: credentialsSdkRoutes[2].openapi, handler: emitOnlyHandler(credentialsSdkRoutes[2]) },
+  { route: credentialsSdkRoutes[3].openapi, handler: emitOnlyHandler(credentialsSdkRoutes[3]) },
+  { route: credentialsSdkRoutes[4].openapi, handler: emitOnlyHandler(credentialsSdkRoutes[4]) },
+  { route: credentialsSdkRoutes[5].openapi, handler: emitOnlyHandler(credentialsSdkRoutes[5]) },
 ] as const);
 
 /** `hc<FlagsControlPlaneClientApp>()` — flag route group client type. */
@@ -76,11 +139,19 @@ export type ExperimentsControlPlaneClientApp = typeof experimentsControlPlaneCli
 /** `hc<AppsControlPlaneClientApp>()` — App route group client type. */
 export type AppsControlPlaneClientApp = typeof appsControlPlaneClientApp;
 
+/** `hc<EnvironmentsControlPlaneClientApp>()` — Environment route group client type. */
+export type EnvironmentsControlPlaneClientApp = typeof environmentsControlPlaneClientApp;
+
+/** `hc<CredentialsControlPlaneClientApp>()` — SDK credential route group client type. */
+export type CredentialsControlPlaneClientApp = typeof credentialsControlPlaneClientApp;
+
 /** Union of SDK emit-only apps; prefer domain-specific types for `hc`. */
 export type ControlPlaneClientApp =
   | FlagsControlPlaneClientApp
   | ExperimentsControlPlaneClientApp
-  | AppsControlPlaneClientApp;
+  | AppsControlPlaneClientApp
+  | EnvironmentsControlPlaneClientApp
+  | CredentialsControlPlaneClientApp;
 
 export function createFlagsControlPlaneClientApp(): FlagsControlPlaneClientApp {
   return flagsControlPlaneClientApp;
@@ -92,6 +163,14 @@ export function createExperimentsControlPlaneClientApp(): ExperimentsControlPlan
 
 export function createAppsControlPlaneClientApp(): AppsControlPlaneClientApp {
   return appsControlPlaneClientApp;
+}
+
+export function createEnvironmentsControlPlaneClientApp(): EnvironmentsControlPlaneClientApp {
+  return environmentsControlPlaneClientApp;
+}
+
+export function createCredentialsControlPlaneClientApp(): CredentialsControlPlaneClientApp {
+  return credentialsControlPlaneClientApp;
 }
 
 /** @deprecated Use {@link createFlagsControlPlaneClientApp} or {@link createExperimentsControlPlaneClientApp}. */
