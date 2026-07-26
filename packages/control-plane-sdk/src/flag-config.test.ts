@@ -8,6 +8,7 @@ const flagConfig = {
   enabled: true,
   availableVariantNames: ["on"],
   targetingRules: [],
+  rollout: null,
 };
 
 describe("typed Flag Configuration routes", () => {

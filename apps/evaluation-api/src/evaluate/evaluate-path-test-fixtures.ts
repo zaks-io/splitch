@@ -40,7 +40,9 @@ export function flagConfig(overrides: Partial<FlagConfig> = {}): FlagConfig {
     enabled: true,
     defaultVariant: "control",
     variants,
+    availableVariantNames: variants.map((variant) => variant.name),
     targetingRules: [],
+    rollout: null,
     ...overrides,
   };
 }

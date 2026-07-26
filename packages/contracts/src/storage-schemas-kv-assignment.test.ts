@@ -80,6 +80,7 @@ describe("kvEnvelope", () => {
         variants: [{ id: "var_1", name: "control", value: false }],
         availableVariantNames: ["control"],
         targetingRules: [],
+        rollout: null,
         updatedAt: "2024-01-01T00:00:00Z",
       },
     };

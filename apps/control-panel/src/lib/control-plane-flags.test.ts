@@ -23,6 +23,7 @@ describe("Control Panel Flags transport", () => {
             enabled: true,
             availableVariantNames: ["disabled", "enabled"],
             targetingRules: [],
+            rollout: null,
           });
     });
     const flags = createControlPanelFlagsClient(

@@ -11,6 +11,29 @@ client-held pending draft.
 Flag never creates a Run. A Flag that is not under a running Experiment has no Run at all; its
 edits are plain config changes plus an audit entry.
 
+## Baseline rollout — the one-control path to a percentage
+
+A Flag Configuration carries a first-class **baseline rollout**: a single percentage that applies to
+traffic matching **no** Targeting Rule. It is the shortest path from "flag exists" to "flag is rolled
+out to 10% of users" — one control, no rule to author, no segment to define. A matched Targeting Rule
+still wins outright and honours its own `percentageRollout`; the baseline only decides the fall-through
+that would otherwise go straight to the Default Variant.
+
+The control is a percentage only. **The operator never sees or sets the bucketing salt**, because the
+salt _is_ the bucket assignment: reminting it on a percentage change would silently reshuffle who is
+in the rollout. The server mints the salt once when the baseline is first set and keeps it through
+every later change, so dragging 10% → 25% only ever _adds_ users to the treatment and never swaps
+anyone out. Clearing the rollout is the one visible way to drop that cohort; re-establishing it
+afterwards starts a new one.
+
+A baseline change is a rollout **value** change, so it falls under the Environment Policy's
+`targeting_rollout_value` gate — in a `confirm` environment, changing the production percentage takes
+an explicit confirmation like any other rollout edit.
+
+Because the baseline resolves against exactly two Variants (the Default, and the one Variant it rolls
+_into_), it requires a Configuration whose `availableVariantNames` names exactly one non-Default
+Variant. Anything else is ambiguous and fails loud rather than guessing a target (ADR-0036).
+
 ## Production-change confirmation (resolved)
 
 A production-affecting flag edit must be **intentional**, and that gate is **not flag-specific** — it

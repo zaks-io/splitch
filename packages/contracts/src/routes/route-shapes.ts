@@ -1,5 +1,9 @@
 import { z } from "@hono/zod-openapi";
-import { ConditionSchema, TargetingRuleSchema } from "../leaf-schemas-flag";
+import {
+  ConditionSchema,
+  PercentageRolloutSchema,
+  TargetingRuleSchema,
+} from "../leaf-schemas-flag";
 import { EnvironmentPolicySchema, UserRoleSchema } from "../leaf-schemas-runtime";
 
 /**
@@ -103,12 +107,23 @@ export const FlagConfigResponseSchema = z.object({
   enabled: z.boolean(),
   availableVariantNames: z.array(z.string()),
   targetingRules: z.array(TargetingRuleSchema),
+  // Baseline rollout for traffic that matches no Targeting Rule; null = none.
+  rollout: PercentageRolloutSchema.nullable(),
 });
 
 export const PatchFlagConfigRequestSchema = z
   .object({
     enabled: z.boolean().optional(),
     availableVariantNames: z.array(z.string()).optional(),
+    // Percentage only, never a salt: the salt is minted server-side on the first
+    // write that sets a non-null rollout and is never regenerated, so bucket
+    // membership cannot silently reshuffle under a percentage change (ADR-0036).
+    // `null` clears the baseline; a later re-establish mints a fresh salt.
+    rollout: z
+      .object({ percentage: z.number().min(0).max(100) })
+      .strict()
+      .nullable()
+      .optional(),
     // Gated change types require an explicit confirm under the Env Policy.
     confirm: z.boolean().optional(),
   })

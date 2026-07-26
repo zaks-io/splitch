@@ -10,6 +10,7 @@ type EvaluateKind =
   | "fresh_assignment"
   | "rule_match_direct"
   | "rule_match_percentage"
+  | "baseline_rollout"
   | "no_match_default"
   | "error";
 
@@ -82,6 +83,21 @@ export interface FreshAssignmentEvaluateResult extends BaseEvaluateResult {
   variant: VariantName;
 }
 
+/**
+ * The config-level baseline rollout decided this: no Targeting Rule matched and
+ * the Flag Configuration carries a `rollout`. Distinct from `no_match_default`
+ * so the two are never conflated — they return the same Variant whenever the key
+ * falls outside the band, and only the reason tells them apart.
+ */
+export interface BaselineRolloutEvaluateResult extends BaseEvaluateResult {
+  kind: "baseline_rollout";
+  exposure: null;
+  experimentId?: string;
+  liveRunId: null;
+  reason: Extract<TestEvaluationReason, { type: "baseline_rollout" }>;
+  variant: VariantName;
+}
+
 export interface NoMatchEvaluateResult extends BaseEvaluateResult {
   kind: "no_match_default";
   exposure: ExposureDecision | null;
@@ -105,5 +121,6 @@ export type EvaluateResult =
   | HoldoverEvaluateResult
   | FreshAssignmentEvaluateResult
   | RuleMatchEvaluateResult
+  | BaselineRolloutEvaluateResult
   | NoMatchEvaluateResult
   | ErrorEvaluateResult;

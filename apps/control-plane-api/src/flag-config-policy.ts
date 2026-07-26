@@ -21,6 +21,9 @@ export async function readEnvironmentPolicy(
 export function flagConfigPatchGates(payload: Record<string, unknown>): PolicyChangeType[] {
   const gates: PolicyChangeType[] = [];
   if (payload.availableVariantNames !== undefined) gates.push("variant_availability");
+  // The baseline rollout is a rollout VALUE, so it falls under the same gate the
+  // per-rule rollout does — a prod percentage change is not a free action.
+  if (payload.rollout !== undefined) gates.push("targeting_rollout_value");
   if (payload.enabled === true) gates.push("enabled_state");
   return gates;
 }

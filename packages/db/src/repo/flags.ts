@@ -1,8 +1,9 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index";
 import type { Db } from "./client";
-import type { EnvScope, TenantScope } from "./scope";
-import { assertMintedScope, envScope } from "./scope";
+import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
+import type { TenantScope } from "./scope";
+import { envScope } from "./scope";
 import { scopedTable } from "./scoped-table";
 
 /**
@@ -57,103 +58,7 @@ export function makeFlagRepo(db: Db) {
 
     ...makeVariantOps(db, flagInScope),
 
-    getFlagConfig(scope: EnvScope, flagId: string) {
-      return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
-    },
-
-    /**
-     * Insert the initial disabled Flag Configuration when absent. Retries against
-     * the `(flag_id, environment_id)` unique index return the existing row.
-     */
-    async ensureInitialFlagConfig(
-      scope: EnvScope,
-      values: Omit<typeof flagConfigs.$inferInsert, "appId" | "environmentId"> & {
-        flagId: string;
-      },
-    ): Promise<typeof flagConfigs.$inferSelect> {
-      const existing = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, values.flagId));
-      if (existing) return existing;
-
-      try {
-        return await flagConfigsTable.insert(scope, {
-          ...values,
-          appId: scope.appId,
-          environmentId: scope.environmentId,
-        });
-      } catch (cause) {
-        const winner = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, values.flagId));
-        if (winner) return winner;
-        throw cause;
-      }
-    },
-
-    removeFlagConfig(scope: EnvScope, flagId: string): Promise<number> {
-      return flagConfigsTable.remove(scope, eq(flagConfigs.flagId, flagId));
-    },
-
-    removeTargetingRules(scope: EnvScope, flagId: string): Promise<number> {
-      return targetingRulesTable.remove(scope, eq(targetingRules.flagId, flagId));
-    },
-
-    async updateFlagConfig(
-      scope: EnvScope,
-      flagId: string,
-      patch: Partial<
-        Pick<
-          typeof flagConfigs.$inferInsert,
-          "enabled" | "availableVariantNames" | "defaultVariantId" | "updatedAt" | "version"
-        >
-      >,
-    ): Promise<typeof flagConfigs.$inferSelect | null> {
-      const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
-      if (!current) return null;
-      const rows = await flagConfigsTable.update(
-        scope,
-        { ...patch, version: current.version + 1 },
-        eq(flagConfigs.flagId, flagId),
-      );
-      return rows[0] ?? null;
-    },
-
-    listTargetingRules(scope: EnvScope, flagId: string) {
-      return targetingRulesTable.findMany(scope, eq(targetingRules.flagId, flagId));
-    },
-
-    async replaceTargetingRules(
-      scope: EnvScope,
-      flagId: string,
-      rows: Array<Omit<typeof targetingRules.$inferInsert, "appId" | "environmentId" | "flagId">>,
-      configPatch: Partial<
-        Pick<typeof flagConfigs.$inferInsert, "enabled" | "availableVariantNames" | "updatedAt">
-      >,
-    ): Promise<typeof flagConfigs.$inferSelect | null> {
-      assertMintedScope(scope);
-      const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
-      if (!current) return null;
-
-      const batch = [
-        db.delete(targetingRules).where(scopedTargetingRule(scope, flagId)).returning(),
-        ...rows.map((row) =>
-          db
-            .insert(targetingRules)
-            .values({
-              ...row,
-              appId: scope.appId,
-              environmentId: scope.environmentId,
-              flagId,
-            })
-            .returning(),
-        ),
-        db
-          .update(flagConfigs)
-          .set({ ...configPatch, version: current.version + 1 })
-          .where(scopedFlagConfig(scope, flagId))
-          .returning(),
-      ];
-      const results = await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
-      const updated = results.at(-1) as (typeof flagConfigs.$inferSelect)[] | undefined;
-      return updated?.[0] ?? null;
-    },
+    ...makeFlagConfigOps(db, flagConfigsTable, targetingRulesTable),
 
     /** App-scoped Segment fetch by a set of IDs (e.g. for a draft Run snapshot). */
     listSegmentsByIds(scope: TenantScope, ids: readonly string[]) {
@@ -181,22 +86,6 @@ export function makeFlagRepo(db: Db) {
       return segmentsTable.remove(scope, eq(segments.id, segmentId));
     },
   };
-}
-
-function scopedTargetingRule(scope: EnvScope, flagId: string) {
-  return and(
-    eq(targetingRules.appId, scope.appId),
-    eq(targetingRules.environmentId, scope.environmentId),
-    eq(targetingRules.flagId, flagId),
-  );
-}
-
-function scopedFlagConfig(scope: EnvScope, flagId: string) {
-  return and(
-    eq(flagConfigs.appId, scope.appId),
-    eq(flagConfigs.environmentId, scope.environmentId),
-    eq(flagConfigs.flagId, flagId),
-  );
 }
 
 function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {

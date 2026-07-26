@@ -44,9 +44,19 @@ Per-Environment resolved Flag CONFIGURATION (ADR-0027): the App-level Variant ca
   variants:              Variant[]
   availableVariantNames: string[]
   targetingRules:        TargetingRule[]
+  rollout:               PercentageRollout | null  // baseline rollout for traffic matching NO
+                                          // Targeting Rule; null = none. NULLABLE-NOT-ABSENT, like
+                                          // experimentId, so the writer must commit to a rollout or
+                                          // to null and never leave the baseline ambiguous.
   updatedAt:             string  // ISO 8601; cache-bust signal
 }
 ```
+
+`rollout` is the config-level **baseline**: it decides only traffic that matches no Targeting Rule. A
+matched rule wins outright and honours its own `percentageRollout`. Its `salt` is minted server-side
+once, on the first write that sets a non-null `rollout`, and is then carried verbatim through every
+rewrite of this blob — including every percentage change — so bucket membership stays stable (see
+`PercentageRollout` in `leaf-schemas-flag.md`).
 
 `experimentId` is written by the control plane whenever an Experiment begins or stops controlling this
 Flag in this Environment (the same write that invalidates this key). It is read atomically with the rest

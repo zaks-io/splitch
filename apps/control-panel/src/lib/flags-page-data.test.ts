@@ -121,6 +121,7 @@ function devConfig(): FlagConfigGetOutput {
         percentageRollout: { percentage: 25, salt: "dev" },
       },
     ],
+    rollout: null,
   };
 }
 
@@ -132,5 +133,6 @@ function prodConfig(): FlagConfigGetOutput {
     enabled: false,
     availableVariantNames: ["disabled"],
     targetingRules: [],
+    rollout: null,
   };
 }

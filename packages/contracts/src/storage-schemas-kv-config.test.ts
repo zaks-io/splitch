@@ -31,6 +31,7 @@ const validFlagConfig = {
   variants: validVariants,
   availableVariantNames: ["control", "treatment"],
   targetingRules: [validTargetingRule],
+  rollout: null,
   updatedAt: "2024-01-01T00:00:00Z",
 };
 

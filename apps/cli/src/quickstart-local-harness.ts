@@ -1,4 +1,4 @@
-import { appScope, createRepository, type Repository } from "@splitch/db";
+import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { Miniflare } from "miniflare";
@@ -159,6 +159,20 @@ export async function findFlagByKey(
     defaultVariantId: flag.defaultVariantId,
     variants: variants.map((variant) => ({ name: variant.name })),
   };
+}
+
+export async function readConfigRollout(
+  harness: QuickstartHarness,
+  flagId: string,
+  environmentId: string,
+): Promise<{ percentage: number; salt: string } | null> {
+  const config = await harness.repo.flags.getFlagConfig(
+    envScope(harness.appId, environmentId),
+    flagId,
+  );
+  return config?.rollout
+    ? (JSON.parse(config.rollout) as { percentage: number; salt: string })
+    : null;
 }
 
 export function storedHarnessCredential(harness: QuickstartHarness) {

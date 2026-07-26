@@ -13,6 +13,7 @@ export interface ParsedGlobalFlags {
   readonly variants?: string;
   readonly fromEnvironmentId?: string;
   readonly enabled?: boolean;
+  readonly rollout?: number | null;
 }
 
 export interface ParsedInvocation {
@@ -114,7 +115,21 @@ function toParsedFlags(flags: Record<string, string | boolean>): ParsedGlobalFla
     variants: stringFlag(flags.variants),
     fromEnvironmentId: stringFlag(flags.fromEnvironmentId),
     enabled: parseEnabledFlag(flags.enabled),
+    rollout: parseRolloutFlag(flags.rollout),
   };
+}
+
+// `--rollout` moves the share of live traffic in the baseline rollout, so a
+// silent coerce (NaN, "" -> 0) would quietly roll it back to nobody. Accept only
+// a number in 0-100 or the literal "none" to clear it; anything else is loud.
+function parseRolloutFlag(value: string | boolean | undefined): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === "none") return null;
+  const percentage = typeof value === "string" ? Number(value) : Number.NaN;
+  if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
+    throw new Error(`splitch: --rollout must be a number 0-100 or "none", got "${String(value)}"`);
+  }
+  return percentage;
 }
 
 // `--enabled` inverts a Flag's state, so a silent coerce of anything-but-"true"

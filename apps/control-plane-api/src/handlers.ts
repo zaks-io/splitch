@@ -197,6 +197,9 @@ function flagConfigPatchInput(
     ...(payload.availableVariantNames !== undefined
       ? { availableVariantNames: payload.availableVariantNames as string[] }
       : {}),
+    ...(payload.rollout !== undefined
+      ? { rollout: payload.rollout as { percentage: number } | null }
+      : {}),
   };
 }
 

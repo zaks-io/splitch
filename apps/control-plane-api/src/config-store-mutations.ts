@@ -1,6 +1,7 @@
-import type { TargetingRule, Variant } from "@splitch/contracts";
+import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { envScope, type EnvScope } from "@splitch/db";
 import { randomHex } from "./credential-cache";
+import { mintSalt } from "./flag-config-rollout";
 import {
   buildSnapshotFromD1,
   json,
@@ -16,6 +17,14 @@ import {
   type ReplaceTargetingRulesInput,
   type Snapshot,
 } from "./config-store-shared";
+
+interface PreparedPromotion {
+  availableVariantNames: string[];
+  enabled: boolean;
+  targetingRules: TargetingRule[];
+  /** `undefined` = the baseline was not selected, so leave the target's alone. */
+  rollout: PercentageRollout | null | undefined;
+}
 
 export async function replaceTargetingRules(
   deps: ConfigStoreDeps,
@@ -92,10 +101,7 @@ function preparePromotion(
   source: Snapshot,
   target: Snapshot,
 ):
-  | {
-      ok: true;
-      value: { availableVariantNames: string[]; enabled: boolean; targetingRules: TargetingRule[] };
-    }
+  | { ok: true; value: PreparedPromotion }
   | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] } {
   const selectedAvailability = input.select.availability;
   const missingSelectedVariants = missingAvailableVariants(
@@ -110,21 +116,8 @@ function preparePromotion(
     };
   }
 
-  const availableVariantNames =
-    selectedAvailability === undefined
-      ? target.flag.availableVariantNames
-      : copySelectedAvailability(
-          target.flag.availableVariantNames,
-          source.flag.availableVariantNames,
-          selectedAvailability,
-          target.flag.variants,
-        );
-  const selectedTargetingRules = input.select.targeting
-    ? promotedTargetingRules(source.flag.targetingRules)
-    : target.flag.targetingRules;
-  const targetingRules = input.select.rollout
-    ? promotedRollouts(source.flag.targetingRules, selectedTargetingRules)
-    : selectedTargetingRules;
+  const availableVariantNames = promotedAvailability(selectedAvailability, source, target);
+  const targetingRules = promotedRules(input, source, target);
   const missingRuleVariants = missingRuleVariantNames(
     targetingRules,
     target.flag.variants,
@@ -135,7 +128,70 @@ function preparePromotion(
   }
   return {
     ok: true,
-    value: { availableVariantNames, enabled: source.flag.enabled, targetingRules },
+    value: {
+      availableVariantNames,
+      enabled: source.flag.enabled,
+      targetingRules,
+      rollout: input.select.rollout
+        ? promotedBaselineRollout(source.flag.rollout, target.flag.rollout)
+        : undefined,
+    },
+  };
+}
+
+function promotedAvailability(
+  selectedAvailability: string[] | undefined,
+  source: Snapshot,
+  target: Snapshot,
+): string[] {
+  if (selectedAvailability === undefined) return target.flag.availableVariantNames;
+  return copySelectedAvailability(
+    target.flag.availableVariantNames,
+    source.flag.availableVariantNames,
+    selectedAvailability,
+    target.flag.variants,
+  );
+}
+
+function promotedRules(
+  input: PromoteFlagConfigInput,
+  source: Snapshot,
+  target: Snapshot,
+): TargetingRule[] {
+  const selected = input.select.targeting
+    ? promotedTargetingRules(source.flag.targetingRules)
+    : target.flag.targetingRules;
+  return input.select.rollout ? promotedRollouts(source.flag.targetingRules, selected) : selected;
+}
+
+/**
+ * Promotion moves the source's baseline PERCENTAGE, never its salt: the target
+ * Environment's cohort is its own, and adopting the source salt would reshuffle
+ * every bucketed Entity in the target. The target keeps its salt if it already
+ * has one and mints a fresh one only when it had no baseline at all.
+ */
+function promotedBaselineRollout(
+  source: PercentageRollout | null,
+  target: PercentageRollout | null,
+): PercentageRollout | null {
+  if (source === null) return null;
+  return { percentage: source.percentage, salt: target?.salt ?? mintSalt() };
+}
+
+function promotionConfigPatch(
+  input: PromoteFlagConfigInput,
+  prepared: PreparedPromotion,
+  now: Date,
+) {
+  return {
+    ...(input.select.availability !== undefined
+      ? { availableVariantNames: json(prepared.availableVariantNames) }
+      : {}),
+    ...(input.select.enabled ? { enabled: prepared.enabled } : {}),
+    ...(prepared.rollout !== undefined
+      ? { rollout: prepared.rollout === null ? null : json(prepared.rollout) }
+      : {}),
+    updatedAt: now.toISOString(),
   };
 }
 
@@ -143,16 +199,10 @@ async function commitPromotion(
   deps: ConfigStoreDeps,
   input: PromoteFlagConfigInput,
   targetScope: EnvScope,
-  prepared: { availableVariantNames: string[]; enabled: boolean; targetingRules: TargetingRule[] },
+  prepared: PreparedPromotion,
 ): Promise<FlagConfigWriteResult> {
   const now = deps.now?.() ?? new Date();
-  const configPatch = {
-    ...(input.select.availability !== undefined
-      ? { availableVariantNames: json(prepared.availableVariantNames) }
-      : {}),
-    ...(input.select.enabled ? { enabled: prepared.enabled } : {}),
-    updatedAt: now.toISOString(),
-  };
+  const configPatch = promotionConfigPatch(input, prepared, now);
   if (input.select.targeting || input.select.rollout) {
     const replaced = await deps.repo.flags.replaceTargetingRules(
       targetScope,

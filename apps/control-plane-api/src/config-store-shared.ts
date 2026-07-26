@@ -8,12 +8,14 @@ import {
   type DeltaNudge,
   type ExperimentConfigKV,
   type FlagConfigKV,
+  type PercentageRollout,
   type RunConfigKV,
   type TargetingRule,
   type Variant,
 } from "@splitch/contracts";
 import { appScope, type EnvScope, type Repository } from "@splitch/db";
 import { parseFlagConfigEnvelope, writeSnapshot } from "./config-store-kv";
+import { parseStoredRollout } from "./flag-config-rollout";
 
 export interface FlagConfigResult {
   flagId: string;
@@ -22,6 +24,7 @@ export interface FlagConfigResult {
   enabled: boolean;
   availableVariantNames: string[];
   targetingRules: TargetingRule[];
+  rollout: PercentageRollout | null;
 }
 
 export interface PatchFlagConfigInput {
@@ -30,6 +33,8 @@ export interface PatchFlagConfigInput {
   flagId: string;
   enabled?: boolean;
   availableVariantNames?: string[];
+  /** Percentage only; the salt is the store's to mint and preserve. */
+  rollout?: { percentage: number } | null;
 }
 
 export interface ReplaceTargetingRulesInput {
@@ -161,6 +166,7 @@ async function buildSnapshot(
       variants,
       availableVariantNames: JSON.parse(config.availableVariantNames) as string[],
       targetingRules,
+      rollout: parseStoredRollout(config.rollout),
       updatedAt: config.updatedAt,
     }),
     experiment: experimentConfig(scope, experiment),
@@ -195,6 +201,7 @@ export function responseFromSnapshot(snapshot: Snapshot): FlagConfigResult {
     enabled: snapshot.flag.enabled,
     availableVariantNames: snapshot.flag.availableVariantNames,
     targetingRules: snapshot.flag.targetingRules,
+    rollout: snapshot.flag.rollout,
   };
 }
 
