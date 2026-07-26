@@ -1,7 +1,7 @@
 import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
 import { envScope, type EnvScope } from "@splitch/db";
 import { randomHex } from "./credential-cache";
-import { mintSalt } from "./flag-config-rollout";
+import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
 import {
   buildSnapshotFromD1,
   json,
@@ -131,7 +131,14 @@ function preparePromotion(
   const rollout = input.select.rollout
     ? promotedBaselineRollout(source.flag.rollout, target.flag.rollout)
     : undefined;
-  if (rolloutIsAmbiguous(rollout, availableVariantNames, target)) {
+  // Checked against the state this Promotion LANDS. `select.availability` alone
+  // can strand the target's existing baseline, so an unselected `rollout` still
+  // has to be judged against the availability that is about to replace it.
+  const landedRollout = rollout === undefined ? target.flag.rollout : rollout;
+  const defaultVariant = target.flag.variants.find(
+    (variant) => variant.id === target.flag.defaultVariantId,
+  );
+  if (baselineIsUnresolvable(landedRollout, availableVariantNames, defaultVariant?.name)) {
     return { ok: false, reason: "ROLLOUT_AMBIGUOUS", availableVariantNames };
   }
 
@@ -144,25 +151,6 @@ function preparePromotion(
       rollout,
     },
   };
-}
-
-/**
- * Same rule as a direct write: a baseline rolls traffic away from the Default
- * Variant into the one other available Variant, so the TARGET Environment's
- * post-promotion availability has to leave exactly one candidate. Availability
- * and the baseline can promote in the same call, so this checks the availability
- * that is about to land, not the target's current one.
- */
-function rolloutIsAmbiguous(
-  rollout: PercentageRollout | null | undefined,
-  availableVariantNames: string[],
-  target: Snapshot,
-): boolean {
-  if (rollout === undefined || rollout === null) return false;
-  const defaultVariant = target.flag.variants.find(
-    (variant) => variant.id === target.flag.defaultVariantId,
-  );
-  return availableVariantNames.filter((name) => name !== defaultVariant?.name).length !== 1;
 }
 
 function promotedAvailability(

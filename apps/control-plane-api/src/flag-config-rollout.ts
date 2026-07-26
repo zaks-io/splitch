@@ -38,6 +38,28 @@ export function mintSalt(): string {
 }
 
 /**
+ * Whether a Flag Configuration would be left with a baseline it cannot resolve.
+ *
+ * A baseline rolls traffic AWAY from the Default Variant and INTO the one other
+ * available Variant, so it needs exactly one non-Default Variant available. With
+ * zero or two-plus the destination is unknowable and evaluation throws
+ * (baseline-rollout.ts).
+ *
+ * This takes the RESULTING state, not the patch, because a Configuration can be
+ * stranded from either side: setting a baseline under an already-wide available
+ * set, or widening the available set under an already-set baseline. Checking only
+ * the field the caller happened to touch misses the other half.
+ */
+export function baselineIsUnresolvable(
+  rollout: PercentageRollout | { percentage: number } | null,
+  availableVariantNames: string[],
+  defaultVariantName: string | undefined,
+): boolean {
+  if (rollout === null) return false;
+  return availableVariantNames.filter((name) => name !== defaultVariantName).length !== 1;
+}
+
+/**
  * Parse a stored `rollout` JSON column. A malformed value is corrupt config, not
  * "no rollout", so it throws rather than degrading to null (ADR-0036).
  */

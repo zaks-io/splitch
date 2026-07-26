@@ -20,7 +20,7 @@ import {
   type ReplaceTargetingRulesInput,
   type Snapshot,
 } from "./config-store-shared";
-import { nextBaselineRollout } from "./flag-config-rollout";
+import { baselineIsUnresolvable, nextBaselineRollout } from "./flag-config-rollout";
 
 export type { ConfigStoreDeps } from "./config-store-shared";
 
@@ -169,33 +169,21 @@ async function writeFlagConfig(
     return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants: missingRuleVariants };
   }
 
+  // Both fields are checked against the state this write LANDS, not against the
+  // patch: widening availability strands an existing baseline just as surely as
+  // setting a baseline under an already-wide available set.
   const available = input.availableVariantNames ?? snapshot.flag.availableVariantNames;
+  const rollout = input.rollout === undefined ? snapshot.flag.rollout : input.rollout;
   const defaultVariant = snapshot.flag.variants.find(
     (variant) => variant.id === snapshot.flag.defaultVariantId,
   );
-  if (rolloutIsAmbiguous(input.rollout, available, defaultVariant?.name)) {
+  if (baselineIsUnresolvable(rollout, available, defaultVariant?.name)) {
     return { ok: false, reason: "ROLLOUT_AMBIGUOUS", availableVariantNames: available };
   }
 
   const commit = await commitFlagConfigPatch(deps, scope, input, snapshot);
   if (!commit) return { ok: false, reason: "FLAG_NOT_FOUND" };
   return writeSnapshotAndBroadcast(deps, scope, input.flagId, commit);
-}
-
-/**
- * A baseline rollout rolls traffic AWAY from the Default Variant and INTO the one
- * other available Variant, so it needs exactly one non-Default Variant available.
- * With two or more, which one is being rolled into is unknowable, and evaluation
- * would have to guess. Reject the write instead: the operator finds out at the
- * keystroke that set it, not from production traffic erroring later (ADR-0036).
- */
-function rolloutIsAmbiguous(
-  patch: { percentage: number } | null | undefined,
-  availableVariantNames: string[],
-  defaultVariant: string | undefined,
-): boolean {
-  if (patch === undefined || patch === null) return false;
-  return availableVariantNames.filter((name) => name !== defaultVariant).length !== 1;
 }
 
 async function commitFlagConfigPatch(

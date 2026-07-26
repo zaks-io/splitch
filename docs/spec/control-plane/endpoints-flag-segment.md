@@ -138,11 +138,13 @@ Returns: the updated target Flag Configuration + a diff summary `{ before, after
   regardless of skin (ADR-0023/0028). See
   [../frontend/screen-inventory.md](../frontend/screen-inventory.md) for the diff UX.
 - **Ambiguous-baseline check:** a non-null baseline rolls traffic away from the Default Variant into the
-  one other available Variant, so it requires the target's post-Promotion available set to hold exactly
-  one non-Default Variant. Otherwise the destination is unknowable and the request is **rejected** with
-  `VALIDATION_ERROR` on `rollout`, listing the available Variants. The check runs against the
-  availability this same call is landing (`select.availability` applied), not the target's current set.
-  The same rule gates a direct `PATCH .../config` that sets `rollout`.
+  one other available Variant, so it requires the available set to hold exactly one non-Default Variant.
+  Otherwise the destination is unknowable and the request is **rejected** with `VALIDATION_ERROR` on
+  `rollout`, listing the available Variants. The check runs against the **resulting** Configuration, so
+  it fires in both directions: promoting a baseline into a wide target, and promoting `availability`
+  that would strand the target's existing baseline (even when `select.rollout` is absent). The same
+  rule gates a direct `PATCH .../config` from either side. Clearing the baseline is always permitted,
+  including in the same write that widens availability.
 
 ## Segment endpoints
 

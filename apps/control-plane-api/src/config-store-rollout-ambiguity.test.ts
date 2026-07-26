@@ -44,6 +44,14 @@ async function storedRollout(): Promise<unknown> {
   return config?.rollout ?? null;
 }
 
+async function storedAvailability(): Promise<string[]> {
+  const config = await h.repo.flags.getFlagConfig(
+    envScope(ids.appId, ids.environmentId),
+    ids.flagId,
+  );
+  return JSON.parse(config?.availableVariantNames ?? "[]") as string[];
+}
+
 describe("baseline rollout ambiguity gate", () => {
   it("rejects a baseline when two non-Default Variants are available", async () => {
     await addThirdVariant();
@@ -96,6 +104,56 @@ describe("baseline rollout ambiguity gate", () => {
 
     expect(res.status).toBe(200);
     expect(await storedRollout()).toBeNull();
+  });
+
+  it("rejects WIDENING availability out from under an existing baseline", async () => {
+    // The other direction of the same stranding: the caller never mentions
+    // `rollout`, but the write would leave the stored baseline unresolvable.
+    await patchFlagConfig(h, { rollout: { percentage: 25 } });
+    await addThirdVariant();
+
+    const res = await patchFlagConfig(h, {
+      availableVariantNames: ["control", "treatment", "holdback"],
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [{ path: ["rollout"] }] },
+    });
+    expect(await storedAvailability()).toEqual(["control", "treatment"]);
+  });
+
+  it("allows widening availability once the baseline is cleared in the same write", async () => {
+    await patchFlagConfig(h, { rollout: { percentage: 25 } });
+    await addThirdVariant();
+
+    const res = await patchFlagConfig(h, {
+      availableVariantNames: ["control", "treatment", "holdback"],
+      rollout: null,
+    });
+
+    expect(res.status).toBe(200);
+    expect(await storedRollout()).toBeNull();
+    expect(await storedAvailability()).toEqual(["control", "treatment", "holdback"]);
+  });
+
+  it("rejects PROMOTING availability that strands the target's existing baseline", async () => {
+    // `select.rollout` is NOT set, so the baseline is not moving — but the
+    // availability landing in the same call would leave it unresolvable.
+    await patchFlagConfig(h, { rollout: { percentage: 25 } });
+    await addThirdVariant();
+    await h.repo.flags.updateFlagConfig(envScope(ids.appId, ids.devEnvironmentId), ids.flagId, {
+      availableVariantNames: JSON.stringify(["control", "treatment", "holdback"]),
+    });
+
+    const res = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { availability: ["holdback"] },
+    });
+
+    expect(res.status).toBe(400);
+    expect(await storedAvailability()).toEqual(["control", "treatment"]);
   });
 
   it("rejects PROMOTING a baseline into an ambiguous target", async () => {

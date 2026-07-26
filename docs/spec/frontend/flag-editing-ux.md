@@ -34,11 +34,15 @@ Because the baseline resolves against exactly two Variants (the Default, and the
 _into_), it requires a Configuration whose `availableVariantNames` names exactly one non-Default
 Variant. Anything else is ambiguous and fails loud rather than guessing a target (ADR-0036).
 
-That is enforced at **write** time, not at evaluation time: a `PATCH .../config` (or a Promotion) that
-would leave a non-null baseline alongside zero or two-plus non-Default available Variants is rejected
-with `VALIDATION_ERROR` on `rollout`, naming the available Variants. The operator finds out at the
-keystroke that caused it instead of from production traffic later. Clearing the baseline (`rollout:
-null`) is always allowed, so an ambiguous Configuration is never wedged.
+That is enforced at **write** time, not at evaluation time, and against the state the write **lands**
+rather than the fields the caller happened to touch. A Configuration can be stranded from either side:
+setting a baseline under an already-wide available set, or widening the available set out from under an
+existing baseline. Both are rejected with `VALIDATION_ERROR` on `rollout`, naming the available
+Variants. The operator finds out at the keystroke that caused it instead of from production traffic
+later.
+
+Clearing the baseline (`rollout: null`) is always allowed, and widening availability in the same write
+that clears the baseline succeeds, so an ambiguous Configuration is never wedged.
 
 ## Production-change confirmation (resolved)
 
