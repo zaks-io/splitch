@@ -125,7 +125,9 @@ function toParsedFlags(flags: Record<string, string | boolean>): ParsedGlobalFla
 function parseRolloutFlag(value: string | boolean | undefined): number | null | undefined {
   if (value === undefined) return undefined;
   if (value === "none") return null;
-  const percentage = typeof value === "string" ? Number(value) : Number.NaN;
+  // `Number("")` and `Number(" ")` are both 0, so a blank value would silently
+  // become a 0% rollout instead of a usage error.
+  const percentage = typeof value === "string" && value.trim() !== "" ? Number(value) : Number.NaN;
   if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
     throw new Error(`splitch: --rollout must be a number 0-100 or "none", got "${String(value)}"`);
   }

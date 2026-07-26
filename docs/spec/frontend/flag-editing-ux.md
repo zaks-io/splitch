@@ -31,8 +31,14 @@ A baseline change is a rollout **value** change, so it falls under the Environme
 an explicit confirmation like any other rollout edit.
 
 Because the baseline resolves against exactly two Variants (the Default, and the one Variant it rolls
-_into_), it requires a Configuration whose `availableVariantNames` names exactly one non-Default
-Variant. Anything else is ambiguous and fails loud rather than guessing a target (ADR-0036).
+_into_), it requires exactly one non-Default candidate. Anything else is ambiguous and fails loud
+rather than guessing a target (ADR-0036).
+
+Candidates come from `availableVariantNames`, except when that set is **empty** — an empty set means
+the Configuration was never narrowed (it is initialized empty), not that zero Variants are servable,
+so candidates fall back to the Flag's Variant catalog. That is what lets the one-call rollout work on
+a freshly created Flag. The write gate and the evaluator apply this identically; if they disagreed, an
+accepted write would fail at evaluation time instead.
 
 That is enforced at **write** time, not at evaluation time, and against the state the write **lands**
 rather than the fields the caller happened to touch. A Configuration can be stranded from either side:

@@ -156,7 +156,8 @@ allocation, and statistical results all belong to an Experiment Run.
 
 An Exposure is a first-touch fact for an Entity in an **Experiment Run**. It carries the Experiment,
 Run, Variant, and Targeting Key identity used by analysis. A plain Flag evaluation has no Run to own
-that fact, so it returns the Default Variant and records no Exposure.
+that fact, so it records no Exposure. It still resolves normally: Targeting Rules first, then the
+config-level baseline rollout from step 8, then the Default Variant.
 
 Create the smallest useful Experiment draft around the Flag, then Start its first Run. Metrics may be
 empty for this integration checkpoint; Exposure collection does not require statistical-result work.
@@ -195,9 +196,10 @@ else render(d.value);
 ```
 
 For a successful fresh assignment under a live Experiment Run, `evaluate` fires an Exposure (ADR-0004);
-`peekVariant`/`verify` do not. Disabled Flags, Flags without a controlling Experiment, and Experiments
-without a live Run return the Default Variant and record no Exposure. Holdovers replay their prior
-Variant without recording a new Exposure. Defaults and the full status→result mapping are in
+`peekVariant`/`verify` do not. A **disabled** Flag returns the Default Variant outright. Flags without
+a controlling Experiment and Experiments without a live Run still resolve their Targeting Rules and
+baseline rollout; only the Exposure is skipped. Holdovers replay their prior Variant without recording
+a new Exposure. Defaults and the full status→result mapping are in
 [sdk/public-evaluate-endpoint.md](sdk/public-evaluate-endpoint.md#sdk-initialization-defaults).
 
 **The loop closes here.** Deploy, call `evaluate()` with a real user, and the dashboard's empty

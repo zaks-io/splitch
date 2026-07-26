@@ -125,6 +125,15 @@ describe("PercentageRolloutSchema", () => {
   it("rejects missing salt", () => {
     expect(PercentageRolloutSchema.safeParse({ percentage: 50 }).success).toBe(false);
   });
+
+  it("rejects unknown keys rather than stripping them", () => {
+    // A stored rollout with an extra key came from a writer we do not know about.
+    // Stripping it would carry a shape we never validated into evaluation (ADR-0036).
+    expect(
+      PercentageRolloutSchema.safeParse({ percentage: 50, salt: "s", variantName: "treatment" })
+        .success,
+    ).toBe(false);
+  });
 });
 
 describe("SegmentSchema", () => {

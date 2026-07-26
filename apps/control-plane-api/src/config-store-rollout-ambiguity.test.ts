@@ -88,6 +88,32 @@ describe("baseline rollout ambiguity gate", () => {
     expect(await storedRollout()).toBeNull();
   });
 
+  it("accepts a baseline on a never-narrowed Configuration (empty availability)", async () => {
+    // SPL-164 initializes availability empty. That is "nobody narrowed this yet",
+    // not "zero Variants servable", so the one-call quickstart rollout must work
+    // on a freshly created Flag whose catalog has one non-Default Variant.
+    await h.repo.flags.updateFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId, {
+      availableVariantNames: JSON.stringify([]),
+    });
+
+    const res = await patchFlagConfig(h, { rollout: { percentage: 10 } });
+
+    expect(res.status).toBe(200);
+    expect(await storedRollout()).not.toBeNull();
+  });
+
+  it("still rejects a baseline when the empty-availability CATALOG is ambiguous", async () => {
+    await addThirdVariant();
+    await h.repo.flags.updateFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId, {
+      availableVariantNames: JSON.stringify([]),
+    });
+
+    const res = await patchFlagConfig(h, { rollout: { percentage: 10 } });
+
+    expect(res.status).toBe(400);
+    expect(await storedRollout()).toBeNull();
+  });
+
   it("accepts a baseline with exactly one non-Default Variant available", async () => {
     const res = await patchFlagConfig(h, { rollout: { percentage: 10 } });
 

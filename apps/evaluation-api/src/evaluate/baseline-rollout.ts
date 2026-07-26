@@ -45,17 +45,28 @@ export function unmatchedResult(
 
 /**
  * The Variant the baseline rolls traffic INTO. The Default Variant is what the
- * rollout rolls AWAY from, so the target is the one other available Variant.
- * Anything but exactly two available Variants is ambiguous, and guessing would
- * silently roll traffic into an arbitrary Variant, so it throws (ADR-0036).
+ * rollout rolls AWAY from, so the target is the one other candidate.
+ *
+ * An EMPTY available set means the Configuration was never narrowed (SPL-164
+ * initializes it that way), not that zero Variants are servable, so candidates
+ * fall back to the Flag's catalog. This mirrors the control-plane write gate
+ * (flag-config-rollout.ts) exactly — if the two disagreed, a write the gate
+ * accepted would blow up here at evaluation time.
+ *
+ * Two-plus candidates is genuinely ambiguous, and guessing would silently roll
+ * traffic into an arbitrary Variant, so it throws (ADR-0036).
  */
 function rolloutVariantName(flag: FlagConfig): string {
-  const candidates = flag.availableVariantNames.filter((name) => name !== flag.defaultVariant);
+  const scope =
+    flag.availableVariantNames.length > 0
+      ? flag.availableVariantNames
+      : flag.variants.map((variant) => variant.name);
+  const candidates = scope.filter((name) => name !== flag.defaultVariant);
   const target = candidates[0];
   if (candidates.length !== 1 || target === undefined) {
     throw new EvaluatePathError(
       `FlagConfig ${flag.appId}/${flag.environmentId}/${flag.flagKey}: a baseline rollout needs ` +
-        `exactly one non-Default available Variant, found ${candidates.length}`,
+        `exactly one non-Default Variant to roll into, found ${candidates.length}`,
     );
   }
   return target;

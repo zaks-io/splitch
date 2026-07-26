@@ -177,7 +177,14 @@ async function writeFlagConfig(
   const defaultVariant = snapshot.flag.variants.find(
     (variant) => variant.id === snapshot.flag.defaultVariantId,
   );
-  if (baselineIsUnresolvable(rollout, available, defaultVariant?.name)) {
+  if (
+    baselineIsUnresolvable(
+      rollout,
+      available,
+      defaultVariant?.name,
+      snapshot.flag.variants.map((variant) => variant.name),
+    )
+  ) {
     return { ok: false, reason: "ROLLOUT_AMBIGUOUS", availableVariantNames: available };
   }
 

@@ -38,12 +38,30 @@ export function mintSalt(): string {
 }
 
 /**
+ * The Variants a baseline could roll traffic INTO.
+ *
+ * A baseline rolls AWAY from the Default Variant, so the candidates are the
+ * non-Default entries of the available set. An EMPTY available set is not a
+ * narrowing to zero Variants — it is a Configuration nobody has narrowed yet
+ * (SPL-164 initializes it empty), so the candidates fall back to the Flag's
+ * catalog. Treating "uninitialized" as "ambiguous" would reject the baseline on
+ * every freshly created Flag, which is exactly the one-call path the quickstart
+ * promises.
+ */
+function baselineCandidates(
+  availableVariantNames: string[],
+  catalogVariantNames: string[],
+  defaultVariantName: string | undefined,
+): string[] {
+  const scope = availableVariantNames.length > 0 ? availableVariantNames : catalogVariantNames;
+  return scope.filter((name) => name !== defaultVariantName);
+}
+
+/**
  * Whether a Flag Configuration would be left with a baseline it cannot resolve.
  *
- * A baseline rolls traffic AWAY from the Default Variant and INTO the one other
- * available Variant, so it needs exactly one non-Default Variant available. With
- * zero or two-plus the destination is unknowable and evaluation throws
- * (baseline-rollout.ts).
+ * A baseline needs exactly one candidate to roll into. With two-plus the
+ * destination is unknowable and evaluation throws (baseline-rollout.ts).
  *
  * This takes the RESULTING state, not the patch, because a Configuration can be
  * stranded from either side: setting a baseline under an already-wide available
@@ -54,9 +72,12 @@ export function baselineIsUnresolvable(
   rollout: PercentageRollout | { percentage: number } | null,
   availableVariantNames: string[],
   defaultVariantName: string | undefined,
+  catalogVariantNames: string[],
 ): boolean {
   if (rollout === null) return false;
-  return availableVariantNames.filter((name) => name !== defaultVariantName).length !== 1;
+  return (
+    baselineCandidates(availableVariantNames, catalogVariantNames, defaultVariantName).length !== 1
+  );
 }
 
 /**

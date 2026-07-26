@@ -138,7 +138,14 @@ function preparePromotion(
   const defaultVariant = target.flag.variants.find(
     (variant) => variant.id === target.flag.defaultVariantId,
   );
-  if (baselineIsUnresolvable(landedRollout, availableVariantNames, defaultVariant?.name)) {
+  if (
+    baselineIsUnresolvable(
+      landedRollout,
+      availableVariantNames,
+      defaultVariant?.name,
+      target.flag.variants.map((variant) => variant.name),
+    )
+  ) {
     return { ok: false, reason: "ROLLOUT_AMBIGUOUS", availableVariantNames };
   }
 
