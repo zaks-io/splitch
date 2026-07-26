@@ -234,7 +234,11 @@ async function commitPromotion(
 ): Promise<FlagConfigWriteResult> {
   const now = deps.now?.() ?? new Date();
   const configPatch = promotionConfigPatch(input, prepared, now);
-  if (input.select.targeting || input.select.rollout) {
+  // Only `select.targeting` moves rules. Since SPL-170 `select.rollout` means the
+  // config-level baseline, which lives on flag_configs — routing it through
+  // replaceTargetingRules (a DELETE + re-INSERT) would re-stamp `createdAt` on
+  // every rule the caller never touched, destroying their creation history.
+  if (input.select.targeting) {
     const replaced = await deps.repo.flags.replaceTargetingRules(
       targetScope,
       input.flagId,

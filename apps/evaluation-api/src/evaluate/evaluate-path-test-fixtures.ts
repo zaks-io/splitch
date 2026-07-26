@@ -32,6 +32,11 @@ export function baseInput(overrides: Partial<EvaluatePathInput> = {}): EvaluateP
 }
 
 export function flagConfig(overrides: Partial<FlagConfig> = {}): FlagConfig {
+  // Availability derives from the catalog actually in play. Hardcoding the
+  // default catalog's names would leave a test that overrides `variants` with a
+  // stale available set naming Variants its catalog no longer has, which
+  // baseline resolution reads as real candidates.
+  const catalog = overrides.variants ?? variants;
   return {
     flagKey: FLAG_KEY,
     appId: APP_ID,
@@ -39,8 +44,8 @@ export function flagConfig(overrides: Partial<FlagConfig> = {}): FlagConfig {
     experimentId: EXPERIMENT_ID,
     enabled: true,
     defaultVariant: "control",
-    variants,
-    availableVariantNames: variants.map((variant) => variant.name),
+    variants: catalog,
+    availableVariantNames: catalog.map((variant) => variant.name),
     targetingRules: [],
     rollout: null,
     ...overrides,

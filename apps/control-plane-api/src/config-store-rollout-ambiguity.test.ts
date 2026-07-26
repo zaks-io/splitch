@@ -73,6 +73,12 @@ describe("baseline rollout ambiguity gate", () => {
     const res = await patchFlagConfig(h, { rollout: { percentage: 10 } });
 
     expect(res.status).toBe(400);
+    // Pin the REASON, not just the status: a regression that trips a different
+    // 400 (VARIANT_NOT_AVAILABLE, say) would otherwise read as a pass.
+    expect(await res.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [{ path: ["rollout"] }] },
+    });
     expect(await storedRollout()).toBeNull();
   });
 
@@ -231,6 +237,10 @@ describe("baseline rollout ambiguity gate", () => {
     });
 
     expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: { issues: [{ path: ["rollout"] }] },
+    });
     expect(await storedRollout()).toBeNull();
   });
 });

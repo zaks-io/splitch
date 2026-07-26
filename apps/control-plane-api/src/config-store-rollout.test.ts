@@ -154,8 +154,12 @@ describe("baseline rollout under Promotion", () => {
   });
 
   it("leaves the target baseline untouched when `rollout` is not selected", async () => {
-    await patchFlagConfig(h, { rollout: { percentage: 5 } });
+    const setup = await patchFlagConfig(h, { rollout: { percentage: 5 } });
+    expect(setup.status).toBe(200);
     const before = await storedRollout();
+    // Without this, a failed setup leaves `before` null and the final equality
+    // passes vacuously, proving nothing about preservation.
+    expect(before).not.toBeNull();
 
     const res = await promoteFlagConfig(h, {
       fromEnvironmentId: ids.devEnvironmentId,
