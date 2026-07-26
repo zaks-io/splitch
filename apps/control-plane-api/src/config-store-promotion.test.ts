@@ -71,7 +71,15 @@ describe("flag configuration Promotion routes", () => {
     expect(h.nudges).toEqual([]);
   });
 
-  it("promotes rollout without replacing target Targeting Rule fields", async () => {
+  /**
+   * `select.rollout` moves the config-level baseline and NOTHING else. It used to
+   * also graft each source rule's percentage onto the target rule sharing its
+   * `priority`, which is a sort key rather than an identity: here Dev's rule is
+   * `plan == pro -> treatment @ 25%` and Prod's is `country == US -> control`,
+   * unrelated rules that merely both sit at priority 0. Prod's US rule must keep
+   * its own (absent) percentage.
+   */
+  it("promotes the baseline without touching target Targeting Rules", async () => {
     await h.repo.flags.targetingRules.insert(envScope(ids.appId, ids.environmentId), {
       id: "rule_checkout_prod_control",
       appId: ids.appId,
@@ -91,7 +99,10 @@ describe("flag configuration Promotion routes", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const body = (await res.json()) as {
+      config: { version: number; targetingRules: { percentageRollout?: unknown }[] };
+    };
+    expect(body).toMatchObject({
       config: {
         version: 2,
         targetingRules: [
@@ -99,30 +110,11 @@ describe("flag configuration Promotion routes", () => {
             id: "rule_checkout_prod_control",
             variantId: ids.controlVariantId,
             conditions: [{ attribute: "country", operator: "eq", value: "US" }],
-            percentageRollout: { percentage: 25, salt: "dev-rollout" },
           },
         ],
       },
-      diff: {
-        before: {
-          targetingRules: [
-            expect.objectContaining({
-              id: "rule_checkout_prod_control",
-              variantId: ids.controlVariantId,
-              conditions: [{ attribute: "country", operator: "eq", value: "US" }],
-            }),
-          ],
-        },
-        after: {
-          targetingRules: [
-            expect.objectContaining({
-              id: "rule_checkout_prod_control",
-              percentageRollout: { percentage: 25, salt: "dev-rollout" },
-            }),
-          ],
-        },
-      },
     });
+    expect(body.config.targetingRules[0]?.percentageRollout).toBeUndefined();
     expect(h.events.slice(0, 2)).toEqual(["d1-before-kv:false", "kv:flag"]);
     expect(h.events.at(-1)).toBe("broadcast");
   });

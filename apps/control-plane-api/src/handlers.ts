@@ -213,7 +213,32 @@ function renderFlagConfigWriteResult(
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
   }
+  if (result.reason === "ROLLOUT_AMBIGUOUS") {
+    return rolloutAmbiguous(result.availableVariantNames, requestId);
+  }
   return flagConfigNotFound(requestId);
+}
+
+function rolloutAmbiguous(availableVariantNames: string[], requestId: string): Response {
+  return renderError(
+    {
+      code: "VALIDATION_ERROR",
+      message:
+        "a baseline rollout needs exactly one non-Default available Variant to roll traffic into",
+      details: {
+        issues: [
+          {
+            path: ["rollout"],
+            message:
+              `available Variants are [${availableVariantNames.join(", ")}]; narrow ` +
+              "availableVariantNames to the Default Variant plus exactly one other, or use a " +
+              "Targeting Rule with its own percentageRollout instead",
+          },
+        ],
+      },
+    },
+    { requestId },
+  );
 }
 
 function renderPromotionResult(
@@ -225,6 +250,9 @@ function renderPromotionResult(
   if (result.ok) return Response.json({ config: result.config, diff: result.diff });
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
+  }
+  if (result.reason === "ROLLOUT_AMBIGUOUS") {
+    return rolloutAmbiguous(result.availableVariantNames, requestId);
   }
   return flagConfigNotFound(requestId);
 }

@@ -34,6 +34,12 @@ Because the baseline resolves against exactly two Variants (the Default, and the
 _into_), it requires a Configuration whose `availableVariantNames` names exactly one non-Default
 Variant. Anything else is ambiguous and fails loud rather than guessing a target (ADR-0036).
 
+That is enforced at **write** time, not at evaluation time: a `PATCH .../config` (or a Promotion) that
+would leave a non-null baseline alongside zero or two-plus non-Default available Variants is rejected
+with `VALIDATION_ERROR` on `rollout`, naming the available Variants. The operator finds out at the
+keystroke that caused it instead of from production traffic later. Clearing the baseline (`rollout:
+null`) is always allowed, so an ambiguous Configuration is never wedged.
+
 ## Production-change confirmation (resolved)
 
 A production-affecting flag edit must be **intentional**, and that gate is **not flag-specific** — it

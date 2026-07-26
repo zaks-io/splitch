@@ -105,7 +105,7 @@ only if it is being promoted, so absence means "leave the target's value untouch
   select: {
     availability?: string[],           // Variant names whose source availability to copy (per-Variant act)
     targeting?: true,                   // promote the whole ordered targeting-rule list (atomic; never per-rule)
-    rollout?: true,                     // promote the rollout
+    rollout?: true,                     // promote the config-level baseline rollout (percentage only)
     enabled?: true                      // promote the enabled state
   },
   confirm?: boolean                     // required when the target Policy gates any selected act at confirm
@@ -115,6 +115,16 @@ only if it is being promoted, so absence means "leave the target's value untouch
 The two named UX presets are just shapes of `select`: **"whole config"** ticks every field-group
 (`availability` = the source's full available set, `targeting`, `rollout`, `enabled`); **"one Variant's
 availability"** sends `{ availability: ["variant_name"] }`. There is no separate `scope` enum.
+
+**`rollout` and `targeting` are disjoint.** `select.rollout` moves the config-level baseline and
+nothing else. A Targeting Rule's own `percentage_rollout` is part of that rule and moves only under
+`select.targeting`, which moves each rule whole (conditions and percentage together). The two never
+overlap: a rule's percentage is the split of that one rule's matched traffic and is meaningless apart
+from its conditions, and rules have no cross-Environment identity to match on anyway (`priority` is a
+sort key, and source and target rule lists routinely differ — that is what Promotion is for).
+
+The baseline moves as a **percentage only**: the target keeps its own salt, or mints a fresh one if it
+had no baseline. Adopting the source's salt would reshuffle every already-bucketed Entity in the target.
 
 Returns: the updated target Flag Configuration + a diff summary `{ before, after }`.
 
@@ -127,6 +137,12 @@ Returns: the updated target Flag Configuration + a diff summary `{ before, after
   availability (`select.availability`), but never auto-applies it silently and the Worker blocks the submit
   regardless of skin (ADR-0023/0028). See
   [../frontend/screen-inventory.md](../frontend/screen-inventory.md) for the diff UX.
+- **Ambiguous-baseline check:** a non-null baseline rolls traffic away from the Default Variant into the
+  one other available Variant, so it requires the target's post-Promotion available set to hold exactly
+  one non-Default Variant. Otherwise the destination is unknowable and the request is **rejected** with
+  `VALIDATION_ERROR` on `rollout`, listing the available Variants. The check runs against the
+  availability this same call is landing (`select.availability` applied), not the target's current set.
+  The same rule gates a direct `PATCH .../config` that sets `rollout`.
 
 ## Segment endpoints
 

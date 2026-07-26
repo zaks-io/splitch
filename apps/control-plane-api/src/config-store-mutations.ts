@@ -102,7 +102,8 @@ function preparePromotion(
   target: Snapshot,
 ):
   | { ok: true; value: PreparedPromotion }
-  | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] } {
+  | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] }
+  | { ok: false; reason: "ROLLOUT_AMBIGUOUS"; availableVariantNames: string[] } {
   const selectedAvailability = input.select.availability;
   const missingSelectedVariants = missingAvailableVariants(
     selectedAvailability,
@@ -126,17 +127,42 @@ function preparePromotion(
   if (missingRuleVariants.length > 0) {
     return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants: missingRuleVariants };
   }
+
+  const rollout = input.select.rollout
+    ? promotedBaselineRollout(source.flag.rollout, target.flag.rollout)
+    : undefined;
+  if (rolloutIsAmbiguous(rollout, availableVariantNames, target)) {
+    return { ok: false, reason: "ROLLOUT_AMBIGUOUS", availableVariantNames };
+  }
+
   return {
     ok: true,
     value: {
       availableVariantNames,
       enabled: source.flag.enabled,
       targetingRules,
-      rollout: input.select.rollout
-        ? promotedBaselineRollout(source.flag.rollout, target.flag.rollout)
-        : undefined,
+      rollout,
     },
   };
+}
+
+/**
+ * Same rule as a direct write: a baseline rolls traffic away from the Default
+ * Variant into the one other available Variant, so the TARGET Environment's
+ * post-promotion availability has to leave exactly one candidate. Availability
+ * and the baseline can promote in the same call, so this checks the availability
+ * that is about to land, not the target's current one.
+ */
+function rolloutIsAmbiguous(
+  rollout: PercentageRollout | null | undefined,
+  availableVariantNames: string[],
+  target: Snapshot,
+): boolean {
+  if (rollout === undefined || rollout === null) return false;
+  const defaultVariant = target.flag.variants.find(
+    (variant) => variant.id === target.flag.defaultVariantId,
+  );
+  return availableVariantNames.filter((name) => name !== defaultVariant?.name).length !== 1;
 }
 
 function promotedAvailability(
@@ -153,15 +179,25 @@ function promotedAvailability(
   );
 }
 
+/**
+ * Targeting Rules move only under `select.targeting`, and they move WHOLE:
+ * conditions and `percentageRollout` together, because a percentage is the split
+ * of one rule's matched traffic and means nothing apart from that rule.
+ *
+ * `select.rollout` therefore means exactly one thing — the config-level baseline.
+ * It used to ALSO graft each source rule's percentage onto the target rule with
+ * the same `priority`, but `priority` is a sort key, not an identity: Dev and
+ * Prod rule lists are routinely out of sync (that is what promotion is for), so
+ * that matched unrelated rules and silently wrote the wrong percentage onto them.
+ */
 function promotedRules(
   input: PromoteFlagConfigInput,
   source: Snapshot,
   target: Snapshot,
 ): TargetingRule[] {
-  const selected = input.select.targeting
+  return input.select.targeting
     ? promotedTargetingRules(source.flag.targetingRules)
     : target.flag.targetingRules;
-  return input.select.rollout ? promotedRollouts(source.flag.targetingRules, selected) : selected;
 }
 
 /**
@@ -243,17 +279,4 @@ function promotedTargetingRules(rules: TargetingRule[]): TargetingRule[] {
     ...rule,
     id: `rule_${randomHex(12)}`,
   }));
-}
-
-function promotedRollouts(
-  sourceRules: TargetingRule[],
-  targetRules: TargetingRule[],
-): TargetingRule[] {
-  const rolloutsByPriority = new Map(
-    sourceRules.map((rule) => [rule.priority, rule.percentageRollout ?? null]),
-  );
-  return targetRules.map((rule) => {
-    if (!rolloutsByPriority.has(rule.priority)) return rule;
-    return { ...rule, percentageRollout: rolloutsByPriority.get(rule.priority) ?? null };
-  });
 }
