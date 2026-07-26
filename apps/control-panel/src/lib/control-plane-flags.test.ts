@@ -4,7 +4,7 @@ import {
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { describe, expect, it, vi } from "vitest";
 import { createControlPanelFlagsClient } from "./control-plane-apps";
-import { booleanFlagInput } from "./create-flag-model";
+import { booleanPresetDraft, flagCreateInput } from "./create-flag-model";
 
 const TOKEN_HASH = "b".repeat(64);
 const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
@@ -91,7 +91,9 @@ describe("Control Panel Flags transport", () => {
       { nowSeconds: () => 1_800_000_000, nonce: () => "nonce_1234567890abcdef" },
     );
 
-    const result = await flags.create(booleanFlagInput("app_checkout", "new-checkout"));
+    const result = await flags.create(
+      flagCreateInput("app_checkout", { ...booleanPresetDraft(), key: "new-checkout" }),
+    );
     const request = capturedRequest;
 
     expect(result).toMatchObject({ ok: true, data: { key: "new-checkout" } });

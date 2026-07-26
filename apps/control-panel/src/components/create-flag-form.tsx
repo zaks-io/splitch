@@ -1,5 +1,4 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
-import { Badge } from "@splitch/ui/components/badge";
 import { Button } from "@splitch/ui/components/button";
 import {
   DialogDescription,
@@ -11,7 +10,20 @@ import { Input } from "@splitch/ui/components/input";
 import { type FormEvent, useState } from "react";
 import { type MutationErrorSurface, mutationErrorSurface } from "#lib/api";
 import { createControlPanelFlag } from "#lib/control-plane-flag-functions";
-import { BOOLEAN_FLAG_VARIANTS, booleanFlagInput, flagFieldError } from "#lib/create-flag-model";
+import {
+  booleanPresetDraft,
+  draftIssues,
+  emptyVariantDraft,
+  flagFieldError,
+  issueFor,
+  moveVariant,
+  removeVariant,
+  switchValueType,
+  typeSwitchClearsValues,
+  VARIANT_VALUE_TYPES,
+  type VariantValueType,
+} from "#lib/create-flag-model";
+import { VariantRowEditor } from "./variant-row-editor";
 
 export function CreateFlagForm({
   appId,
@@ -22,27 +34,41 @@ export function CreateFlagForm({
   environmentId: string;
   onCreated: (key: string) => void;
 }) {
-  const [key, setKey] = useState("");
-  const [requiredError, setRequiredError] = useState<string>();
+  const [draft, setDraft] = useState(booleanPresetDraft);
+  const [submitted, setSubmitted] = useState(false);
   const [mutationError, setMutationError] = useState<MutationErrorSurface | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const keyError = requiredError ?? flagFieldError(mutationError, "key");
+
+  const issues = draftIssues(draft);
+  const shown = submitted ? issues : [];
+  const keyError = issueFor(shown, "key") ?? flagFieldError(mutationError, "key");
+  const defaultError = issueFor(shown, "defaultIndex");
+
+  function edit(next: typeof draft) {
+    setDraft(next);
+    setMutationError(null);
+  }
+
+  function changeValueType(valueType: VariantValueType) {
+    if (
+      typeSwitchClearsValues(draft.variants, valueType) &&
+      // Values that cannot survive the switch are discarded, so confirm first.
+      !window.confirm(`Switching to ${valueType} clears the Variant values you entered. Continue?`)
+    ) {
+      return;
+    }
+    edit(switchValueType(draft, valueType));
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const input = booleanFlagInput(appId, key);
-    if (!input.key) {
-      setRequiredError("Enter a Flag key.");
-      return;
-    }
+    setSubmitted(true);
+    if (issues.length > 0) return;
 
-    setRequiredError(undefined);
     setMutationError(null);
     setIsSubmitting(true);
     try {
-      const result = await createControlPanelFlag({
-        data: { appId: input.appId, environmentId, key: input.key },
-      });
+      const result = await createControlPanelFlag({ data: { appId, environmentId, draft } });
       if (result.ok) onCreated(result.data.key);
       else setMutationError(mutationErrorSurface(result));
     } catch {
@@ -61,7 +87,7 @@ export function CreateFlagForm({
       <DialogHeader>
         <DialogTitle>Create Flag</DialogTitle>
         <DialogDescription>
-          Start with a boolean toggle. You can expand its Variant catalog later.
+          A Flag is a named set of Variants. Start with the on/off preset or define your own.
         </DialogDescription>
       </DialogHeader>
 
@@ -75,13 +101,9 @@ export function CreateFlagForm({
           autoComplete="off"
           id="flag-key"
           name="key"
-          onChange={(event) => {
-            setKey(event.target.value);
-            setRequiredError(undefined);
-            setMutationError(null);
-          }}
+          onChange={(event) => edit({ ...draft, key: event.target.value })}
           placeholder="new-checkout"
-          value={key}
+          value={draft.key}
         />
         <p
           className={keyError ? "text-destructive text-xs" : "text-muted-foreground text-xs"}
@@ -91,30 +113,70 @@ export function CreateFlagForm({
         </p>
       </div>
 
-      <section className="grid gap-2" aria-labelledby="variant-catalog-title">
-        <div>
-          <h3 className="font-medium text-sm" id="variant-catalog-title">
-            Variant catalog
-          </h3>
-          <p className="text-muted-foreground text-xs">
-            Prefilled: disabled is the Default Variant; enabled is true.
-          </p>
-        </div>
-        <div className="divide-y rounded-lg border border-border" data-testid="boolean-catalog">
-          {BOOLEAN_FLAG_VARIANTS.map((variant) => (
-            <div
-              className="flex items-center justify-between gap-3 px-3 py-2.5"
-              data-variant-name={variant.name}
-              key={variant.name}
-            >
-              <div className="grid gap-0.5">
-                <span className="font-medium text-sm">{variant.name}</span>
-                <code className="text-muted-foreground text-xs">{String(variant.value)}</code>
-              </div>
-              {variant.isDefault ? <Badge variant="secondary">Default</Badge> : null}
-            </div>
+      <div className="grid gap-2">
+        <label className="font-medium text-sm" htmlFor="flag-value-type">
+          Variant value type
+        </label>
+        <select
+          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+          id="flag-value-type"
+          onChange={(event) => changeValueType(event.target.value as VariantValueType)}
+          value={draft.valueType}
+        >
+          {VARIANT_VALUE_TYPES.map((valueType) => (
+            <option key={valueType} value={valueType}>
+              {valueType}
+            </option>
+          ))}
+        </select>
+        <p className="text-muted-foreground text-xs">
+          Every Variant in this Flag carries a {draft.valueType} value.
+        </p>
+      </div>
+
+      <section aria-labelledby="variant-catalog-title" className="grid gap-2">
+        <h3 className="font-medium text-sm" id="variant-catalog-title">
+          Variant catalog
+        </h3>
+        <div className="divide-y rounded-lg border border-border" data-testid="variant-catalog">
+          {draft.variants.map((variant, index) => (
+            <VariantRowEditor
+              canRemove={draft.variants.length > 1}
+              index={index}
+              isDefault={index === draft.defaultIndex}
+              isFirst={index === 0}
+              isLast={index === draft.variants.length - 1}
+              issues={shown}
+              // Rows are positional and names are still being typed, so the
+              // index is the only stable identity available here.
+              // biome-ignore lint/suspicious/noArrayIndexKey: positional rows
+              key={index}
+              onChange={(patch) =>
+                edit({
+                  ...draft,
+                  variants: draft.variants.map((row, position) =>
+                    position === index ? { ...row, ...patch } : row,
+                  ),
+                })
+              }
+              onMakeDefault={() => edit({ ...draft, defaultIndex: index })}
+              onMove={(to) => edit(moveVariant(draft, index, to))}
+              onRemove={() => edit(removeVariant(draft, index))}
+              valueType={draft.valueType}
+              variant={variant}
+            />
           ))}
         </div>
+        {defaultError ? <p className="text-destructive text-xs">{defaultError}</p> : null}
+        <Button
+          className="justify-self-start"
+          onClick={() => edit({ ...draft, variants: [...draft.variants, emptyVariantDraft()] })}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Add Variant
+        </Button>
       </section>
 
       {mutationError && !keyError ? (

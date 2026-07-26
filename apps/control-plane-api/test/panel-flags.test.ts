@@ -1,39 +1,29 @@
 import { env } from "cloudflare:workers";
-import {
-  CONTROL_PANEL_DELEGATION_HEADER,
-  type ControlPanelOperation,
-  issueControlPanelDelegation,
-  parseControlPanelOperation,
-} from "@splitch/control-plane-sdk/control-panel-identity";
+import type { ControlPanelOperation } from "@splitch/control-plane-sdk/control-panel-identity";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
-import worker, { SignedControlPanelEntrypoint } from "../src/index.js";
+import worker, { type SignedControlPanelEntrypoint } from "../src/index.js";
+import {
+  panelEntrypoint,
+  panelFlagsIds,
+  panelTestEnv,
+  seedAppMembership,
+  seedPanelFlags,
+  signedPanelRequest,
+  testCtx,
+} from "./panel-flags-harness.js";
 
-const ORIGIN = "https://cp.splitch.test";
-const ORG_ID = "org_panel_flags_e2e";
-const APP_ID = "app_panel_flags_e2e";
-const OTHER_APP_ID = "app_panel_flags_other_e2e";
-const ENV_ID = "env_panel_flags_e2e";
-const OTHER_ENV_ID = "env_panel_flags_other_e2e";
-const FLAG_ID = "flag_panel_flags_e2e";
-const USER_ID = "user_panel_flags_e2e";
-const NOW = "2026-07-19T00:00:00.000Z";
-const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
+const ids = panelFlagsIds("e2e");
+const { appId: APP_ID, otherAppId: OTHER_APP_ID, envId: ENV_ID } = ids;
+const { otherEnvId: OTHER_ENV_ID, flagId: FLAG_ID, userId: USER_ID } = ids;
 
 let testEnv: ControlPlaneApiEnv;
 let entrypoint: SignedControlPanelEntrypoint;
 
 beforeAll(async () => {
-  await seed();
-  testEnv = {
-    ...env,
-    CONTROL_PLANE_ORIGIN: ORIGIN,
-    SPLITCH_PLATFORM_TARGET: "production",
-    AUTH_JWKS_URI: "https://auth.splitch.test/.well-known/jwks.json",
-    CONTROL_PANEL_DELEGATION_SECRET: DELEGATION_SECRET,
-    CONTROL_PLANE_ACTOR_RATE_LIMITER: { limit: async () => ({ success: true }) },
-  } as ControlPlaneApiEnv;
-  entrypoint = new SignedControlPanelEntrypoint(testCtx, testEnv);
+  await seedPanelFlags(ids);
+  testEnv = panelTestEnv();
+  entrypoint = panelEntrypoint(testEnv);
 });
 
 afterAll(() => vi.unstubAllGlobals());
@@ -92,7 +82,7 @@ describe("SignedControlPanelEntrypoint Flags operations", () => {
     const removed = await panelRequest("GET", `/apps/${APP_ID}/flags`);
     expect(removed.status).toBe(403);
     expect(await removed.json()).toMatchObject({ code: "FORBIDDEN" });
-    await seedAppMembership();
+    await seedAppMembership(ids);
 
     const crossApp = await panelRequest(
       "GET",
@@ -213,7 +203,7 @@ async function publicRequest(method: string, path: string): Promise<Response> {
   return Promise.resolve(worker.fetch(await request(method, path), testEnv, testCtx));
 }
 
-async function request(
+function request(
   method: string,
   path: string,
   body?: unknown,
@@ -222,103 +212,14 @@ async function request(
   expiresInSeconds = 30,
   delegatedBody = body,
 ): Promise<Request> {
-  const headers = new Headers({
-    "x-splitch-panel-environment": ENV_ID,
-    ...(body ? { "content-type": "application/json" } : {}),
-  });
-  const expectedOperation = parseControlPanelOperation(method, path, ENV_ID);
-  if (expectedOperation) {
-    const nowSeconds = Math.floor(Date.now() / 1000);
-    const signedRequest = new Request(`${ORIGIN}${path}`, {
-      method,
-      headers,
-      body: delegatedBody ? JSON.stringify(delegatedBody) : undefined,
-    });
-    headers.set(
-      CONTROL_PANEL_DELEGATION_HEADER,
-      await issueControlPanelDelegation(
-        signedRequest,
-        delegatedOperation ?? expectedOperation,
-        actorId,
-        DELEGATION_SECRET,
-        {
-          nowSeconds: expiresInSeconds < 0 ? nowSeconds - 30 : nowSeconds,
-          sessionExpiresAt: nowSeconds + expiresInSeconds,
-        },
-      ),
-    );
-  }
-  return new Request(`${ORIGIN}${path}`, {
+  return signedPanelRequest(
+    ids,
     method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-}
-
-const testCtx = {
-  waitUntil() {},
-  passThroughOnException() {},
-} as unknown as ExecutionContext;
-
-async function seed(): Promise<void> {
-  await env.DB.batch([
-    env.DB.prepare(
-      "INSERT INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
-    ).bind(ORG_ID, "Panel Flags", "free", NOW, NOW),
-    env.DB.prepare(
-      "INSERT INTO apps (id, organization_id, name, key, created_at, updated_at) VALUES (?,?,?,?,?,?)",
-    ).bind(APP_ID, ORG_ID, "Panel Flags", "panel-flags", NOW, NOW),
-    env.DB.prepare(
-      "INSERT INTO apps (id, organization_id, name, key, created_at, updated_at) VALUES (?,?,?,?,?,?)",
-    ).bind(OTHER_APP_ID, ORG_ID, "Other App", "other-app", NOW, NOW),
-    env.DB.prepare(
-      "INSERT INTO environments (id, app_id, key, name, created_at, updated_at) VALUES (?,?,?,?,?,?)",
-    ).bind(ENV_ID, APP_ID, "dev", "Development", NOW, NOW),
-    env.DB.prepare(
-      "INSERT INTO environments (id, app_id, key, name, created_at, updated_at) VALUES (?,?,?,?,?,?)",
-    ).bind(OTHER_ENV_ID, OTHER_APP_ID, "dev", "Development", NOW, NOW),
-    env.DB.prepare(
-      "INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES (?,?,?,?)",
-    ).bind(ORG_ID, USER_ID, "owner", NOW),
-    env.DB.prepare(
-      "INSERT INTO flags (id, app_id, key, name, schema, default_variant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
-    ).bind(
-      FLAG_ID,
-      APP_ID,
-      "checkout-refresh",
-      "Checkout Refresh",
-      '{"type":"boolean"}',
-      "var_disabled_panel",
-      NOW,
-      NOW,
-    ),
-    env.DB.prepare(
-      "INSERT INTO variants (id, flag_id, name, value, created_at) VALUES (?,?,?,?,?)",
-    ).bind("var_disabled_panel", FLAG_ID, "disabled", "false", NOW),
-    env.DB.prepare(
-      "INSERT INTO variants (id, flag_id, name, value, created_at) VALUES (?,?,?,?,?)",
-    ).bind("var_enabled_panel", FLAG_ID, "enabled", "true", NOW),
-    env.DB.prepare(
-      "INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, available_variant_names, default_variant_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-    ).bind(
-      "config_panel_flags",
-      APP_ID,
-      ENV_ID,
-      FLAG_ID,
-      1,
-      '["disabled","enabled"]',
-      "var_disabled_panel",
-      NOW,
-      NOW,
-    ),
-  ]);
-  await seedAppMembership();
-}
-
-async function seedAppMembership(): Promise<void> {
-  await env.DB.prepare(
-    "INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)",
-  )
-    .bind(APP_ID, USER_ID, "owner", NOW)
-    .run();
+    path,
+    body,
+    delegatedOperation,
+    actorId,
+    expiresInSeconds,
+    delegatedBody,
+  );
 }
