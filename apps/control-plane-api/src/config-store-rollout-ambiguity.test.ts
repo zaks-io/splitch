@@ -84,11 +84,14 @@ describe("baseline rollout ambiguity gate", () => {
 
   it("allows widening under a live baseline while it stays unambiguous", async () => {
     // The gate tests the RESULTING candidate count, not the direction of the
-    // edit: going from Default-only to Default-plus-one widens availability but
-    // leaves exactly one candidate, so the baseline still resolves.
-    await patchFlagConfig(h, { availableVariantNames: ["control"] });
-    await patchFlagConfig(h, { availableVariantNames: ["control", "treatment"] });
-    await patchFlagConfig(h, { rollout: { percentage: 25 } });
+    // edit: adding the Default Variant widens availability but still leaves
+    // exactly one candidate, so the baseline keeps resolving.
+    //
+    // The baseline must be established BEFORE the widening, or the final PATCH
+    // is a no-op re-send of the availability already stored and never exercises
+    // widening under a live baseline at all.
+    await patchFlagConfig(h, { availableVariantNames: ["treatment"] });
+    expect((await patchFlagConfig(h, { rollout: { percentage: 25 } })).status).toBe(200);
 
     const res = await patchFlagConfig(h, { availableVariantNames: ["control", "treatment"] });
 
@@ -144,7 +147,12 @@ describe("baseline rollout ambiguity gate", () => {
   it("still allows CLEARING a baseline while availability is ambiguous", async () => {
     await patchFlagConfig(h, { rollout: { percentage: 10 } });
     await addThirdVariant();
-    await patchFlagConfig(h, { availableVariantNames: ["control", "treatment", "holdback"] });
+    // Seed the ambiguous state BELOW the API: the equivalent PATCH is rejected
+    // by the gate under test, so going through it would leave availability
+    // resolvable and this would clear a baseline that was never stranded.
+    await h.repo.flags.updateFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId, {
+      availableVariantNames: JSON.stringify(["control", "treatment", "holdback"]),
+    });
 
     const res = await patchFlagConfig(h, { rollout: null });
 

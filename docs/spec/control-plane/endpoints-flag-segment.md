@@ -74,14 +74,26 @@ with `childType: "experiment"`.
 ### `GET /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
 
 Returns: the Flag's Configuration in this Environment:
-`{ flag_id, environment_id, enabled, available_variant_names: string[], targeting_rules: TargetingRule[] }`.
+`{ flag_id, environment_id, enabled, available_variant_names: string[], targeting_rules: TargetingRule[],
+rollout: { percentage: number, salt: string } | null }`.
+
+`rollout` is the config-level **baseline** and is `null` when no baseline is set. The `salt` is
+returned for transparency and diffing; it is server-owned and cannot be written (see PATCH).
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
 
-Body: `{ enabled?: boolean, available_variant_names?: string[] }`.
+Body: `{ enabled?: boolean, available_variant_names?: string[], rollout?: { percentage: number } | null }`.
 `available_variant_names` must be a subset of the Flag's catalog (ADR-0028). Subject to this
 Environment's Policy (ADR-0029): the "Variant availability" and "enabled state" change types may
 require a Confirmation. **Turning `enabled` off is never gated** (kill-switch exemption).
+
+`rollout` takes a **percentage only** — a caller-supplied `salt` is rejected. The salt IS the bucket
+assignment, so the server mints it once when the baseline is first established and carries it through
+every later percentage change; letting a caller set it would silently reshuffle who is in the rollout.
+`rollout: null` clears the baseline (and drops that cohort); omitting the field leaves it untouched.
+A baseline change is a rollout **value** change, so it falls under the `targeting_rollout_value`
+Policy gate. Rejected with `VALIDATION_ERROR` on `rollout` when the resulting state has anything other
+than exactly one non-Default candidate to roll into (see the ambiguity rule below).
 Returns: updated Flag Configuration.
 
 ### `PUT /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/targeting-rules`
