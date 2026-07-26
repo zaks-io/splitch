@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { accountRoutes } from "./routes/routes-account";
 import { credentialRoutes } from "./routes/routes-credentials";
@@ -9,13 +10,33 @@ import { flagRoutes } from "./routes/routes-flags";
  * tuple element to infer input/output). Indices silently change meaning under a
  * route reorder, so these tests pin the selected operationIds BY NAME: reorder a
  * route file and the failure names exactly which operation moved.
+ *
+ * The indices are read out of the source rather than copied here. A copy would
+ * only pin the route files: editing which routes the SDK app picks would leave
+ * this test green while the exposed surface changed underneath it.
  */
+const clientAppSource = readFileSync(
+  new URL("./control-plane-client-app.ts", import.meta.url),
+  "utf8",
+);
 
-const FLAGS_SDK_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
-const EXPERIMENTS_SDK_INDICES = [0, 1, 2, 3, 4, 5] as const;
-const APPS_SDK_INDICES = [8, 9, 10, 11, 12] as const;
-const ENVIRONMENTS_SDK_INDICES = [13, 14, 15, 16, 17] as const;
-const CREDENTIALS_SDK_INDICES = [0, 1, 2, 3, 4, 5] as const;
+/** Indices of the `<name>SdkRoutes` tuple as it is written in the source. */
+function sdkIndices(tupleName: string): number[] {
+  const tuple = new RegExp(`const ${tupleName} = \\[([\\s\\S]*?)\\] as const;`).exec(
+    clientAppSource,
+  );
+  if (!tuple?.[1]) throw new Error(`control-plane-client-app.ts: no ${tupleName} tuple`);
+
+  const indices = [...tuple[1].matchAll(/Routes\[(\d+)\]/g)].map((match) => Number(match[1]));
+  if (indices.length === 0) throw new Error(`control-plane-client-app.ts: ${tupleName} is empty`);
+  return indices;
+}
+
+const FLAGS_SDK_INDICES = sdkIndices("flagsSdkRoutes");
+const EXPERIMENTS_SDK_INDICES = sdkIndices("experimentsSdkRoutes");
+const APPS_SDK_INDICES = sdkIndices("appsSdkRoutes");
+const ENVIRONMENTS_SDK_INDICES = sdkIndices("environmentsSdkRoutes");
+const CREDENTIALS_SDK_INDICES = sdkIndices("credentialsSdkRoutes");
 
 function operationIdsAt(
   routes: readonly { operationId: string }[],
@@ -82,6 +103,20 @@ describe("control plane SDK route selection", () => {
       "api_keys_create",
       "api_keys_revoke",
     ]);
+  });
+
+  it("reads the indices the SDK app actually selects", () => {
+    // Proves the coupling: these come from the source, so dropping a route from
+    // the SDK app changes them here and fails the by-name assertions above.
+    expect(FLAGS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(EXPERIMENTS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(APPS_SDK_INDICES).toEqual([8, 9, 10, 11, 12]);
+    expect(ENVIRONMENTS_SDK_INDICES).toEqual([13, 14, 15, 16, 17]);
+    expect(CREDENTIALS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it("fails loudly when the SDK app tuple cannot be found", () => {
+    expect(() => sdkIndices("notASdkRoutesTuple")).toThrow("no notASdkRoutesTuple tuple");
   });
 
   it("fails loudly when a route file is reordered", () => {

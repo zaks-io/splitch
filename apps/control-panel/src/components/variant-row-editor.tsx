@@ -32,6 +32,8 @@ export function VariantRowEditor({
 }) {
   const nameError = issueFor(issues, `variants.${index}.name`);
   const valueError = issueFor(issues, `variants.${index}.value`);
+  /** An unnamed row still needs a distinct accessible name for its controls. */
+  const variantLabel = variant.name || `Variant ${index + 1}`;
 
   return (
     <div
@@ -73,6 +75,9 @@ export function VariantRowEditor({
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-1.5 text-sm" htmlFor={`variant-default-${index}`}>
           <input
+            // Every radio in the group reads as "Default" otherwise, so a
+            // screen reader cannot tell which Variant it selects.
+            aria-label={`Make ${variantLabel} the Default`}
             checked={isDefault}
             id={`variant-default-${index}`}
             name="default-variant"
@@ -82,7 +87,7 @@ export function VariantRowEditor({
           Default
         </label>
         <Button
-          aria-label={`Move ${variant.name || `Variant ${index + 1}`} up`}
+          aria-label={`Move ${variantLabel} up`}
           disabled={isFirst}
           onClick={() => onMove(index - 1)}
           size="sm"
@@ -92,7 +97,7 @@ export function VariantRowEditor({
           Up
         </Button>
         <Button
-          aria-label={`Move ${variant.name || `Variant ${index + 1}`} down`}
+          aria-label={`Move ${variantLabel} down`}
           disabled={isLast}
           onClick={() => onMove(index + 1)}
           size="sm"
@@ -102,7 +107,7 @@ export function VariantRowEditor({
           Down
         </Button>
         <Button
-          aria-label={`Remove ${variant.name || `Variant ${index + 1}`}`}
+          aria-label={`Remove ${variantLabel}`}
           disabled={!canRemove}
           onClick={onRemove}
           size="sm"

@@ -88,9 +88,9 @@ test.describe("per-Environment Flags", () => {
     const catalog = dialog.getByTestId("variant-catalog");
 
     await dialog.getByLabel("Flag key").fill(flagKey);
-    // Switching away from boolean clears the preset values, since "false"/"true"
-    // cannot survive as strings the operator meant to write.
-    page.once("dialog", (confirm) => confirm.accept());
+    // No confirm here: "false"/"true" are valid strings, so the switch preserves
+    // them and the fills below just overwrite. Only a switch to number or object
+    // discards values and prompts.
     await dialog.getByLabel("Variant value type").selectOption("string");
 
     await catalog.locator("#variant-name-0").fill("control");

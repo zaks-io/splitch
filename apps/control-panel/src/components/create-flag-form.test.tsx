@@ -79,6 +79,15 @@ describe("Create Flag form", () => {
     expect(isDisabled(renderRow({ canRemove: true }))).toBe(false);
   });
 
+  it("names every per-Variant control after its Variant", () => {
+    // The radios share one group, so a bare "Default" label would leave a
+    // screen-reader user unable to tell which Variant a radio selects.
+    expect(renderRow()).toContain('aria-label="Make control the Default"');
+    expect(renderRow({ variant: { name: "", value: "", description: "" } })).toContain(
+      'aria-label="Make Variant 1 the Default"',
+    );
+  });
+
   it("renders a row's inline validation message next to the row", () => {
     const html = renderRow({
       index: 1,
