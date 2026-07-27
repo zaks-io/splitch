@@ -98,6 +98,7 @@ function repository(): Repository {
         id: "org_1",
         isProvisional: false,
         name: "Acme",
+        slug: "acme",
         plan: "free",
         updatedAt: "2026-07-05T12:00:00.000Z",
       }),

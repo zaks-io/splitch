@@ -1,8 +1,11 @@
+import { type AuthDoor, AuthDoorSchema } from "@splitch/contracts";
 import type { AuthResolver } from "@splitch/worker-runtime";
 
 interface VerifiedToken {
   sub: string;
   scopes: string[];
+  /** `auth_door`. An unrecognized/missing claim reads as the least-privileged door. */
+  authDoor: AuthDoor;
 }
 
 interface JwtHeader {
@@ -68,6 +71,7 @@ export function makeControlPlaneAuthResolver(deps: {
         orgId: soleId(idsInScopes(verified.scopes, ORG_SCOPE)),
         appId: soleId(idsInScopes(verified.scopes, APP_SCOPE)),
         environmentId: null,
+        authDoor: verified.authDoor,
       },
     };
   };
@@ -262,6 +266,7 @@ function actorFromClaims(
   return {
     sub: payload.sub,
     scopes: Array.isArray(payload.scopes) ? payload.scopes.filter(isString) : [],
+    authDoor: AuthDoorSchema.safeParse(payload.auth_door).data ?? "anonymous",
   };
 }
 

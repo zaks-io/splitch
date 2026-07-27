@@ -47,6 +47,7 @@ export function principal(overrides: Partial<Principal> = {}): Principal {
     orgId: null,
     appId: null,
     environmentId: null,
+    authDoor: "id_jag",
     ...overrides,
   };
 }

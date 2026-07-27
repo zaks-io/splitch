@@ -1,7 +1,14 @@
+import { type AuthDoor, AuthDoorSchema } from "@splitch/contracts";
+
 export interface McpAccessTokenActor {
   subject: string;
   scopes: string[];
-  authDoor?: string;
+  /**
+   * Which door minted the token. Defaults to the LEAST-privileged door when the
+   * claim is missing or unrecognized: an unidentifiable token must not be
+   * treated as identified downstream.
+   */
+  authDoor: AuthDoor;
   demoExpiresAt?: string;
 }
 
@@ -93,24 +100,29 @@ function actorFromClaims(
   ) {
     return null;
   }
+  // `null` here is a forged door/demo-expiry pairing, not a missing optional
+  // field: reject the token rather than fall back to a default door.
+  const transport = transportFromClaims(claims);
+  if (!transport) return null;
   return {
     subject: claims.sub,
     scopes: claims.scopes as string[],
-    ...(transportFromClaims(claims) ?? {}),
+    ...transport,
   };
 }
 
+/** Returns null ONLY for a claim combination no real door mints (a forgery). */
 function transportFromClaims(
   claims: Record<string, unknown>,
 ): Pick<McpAccessTokenActor, "authDoor" | "demoExpiresAt"> | null {
-  const authDoor = claims.auth_door;
-  if (authDoor !== "anonymous" && authDoor !== "id_jag" && authDoor !== "device_flow") {
-    return null;
-  }
+  const parsed = AuthDoorSchema.safeParse(claims.auth_door);
+  const authDoor = parsed.success ? parsed.data : "anonymous";
   const demoExpiresAt =
     typeof claims.demo_expires_at === "string" && claims.demo_expires_at.length > 0
       ? claims.demo_expires_at
       : undefined;
+  // Only the anonymous door issues demo-expiring tokens; the pairing is a forgery
+  // signal, so reject rather than pick one field to believe.
   if (authDoor !== "anonymous" && demoExpiresAt) return null;
   return {
     authDoor,

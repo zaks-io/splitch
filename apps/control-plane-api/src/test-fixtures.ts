@@ -11,7 +11,10 @@ import { Miniflare } from "miniflare";
  */
 
 const SCHEMA = [
-  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, claim_acquired_at TEXT, claim_acquisition_token TEXT, claim_acquisition_key_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, claim_acquired_at TEXT, claim_acquisition_token TEXT, claim_acquisition_key_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  // The index is the slug-collision check `organizations_create` relies on, so a
+  // fixture without it would report success on a duplicate the real DB rejects.
+  `CREATE UNIQUE INDEX organizations_slug_unique ON organizations (slug)`,
   `CREATE TABLE org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
   `CREATE TABLE apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX apps_org_key_unique ON apps (organization_id, key)`,
@@ -69,6 +72,8 @@ export async function makeLocalBindings(): Promise<LocalBindings> {
 export interface SeedRow {
   orgId: string;
   orgName: string;
+  /** Defaults to `orgId`; set it only when the test asserts on the handle. */
+  orgSlug?: string;
   appId: string;
   appName: string;
   appKey: string;
@@ -80,9 +85,11 @@ const NOW = "2026-06-29T00:00:00.000Z";
 export async function seedOrgApp(d1: D1Database, row: SeedRow): Promise<void> {
   await d1
     .prepare(
-      "INSERT INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
+      "INSERT INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?,?,?,?,?,?)",
     )
-    .bind(row.orgId, row.orgName, "free", NOW, NOW)
+    // Defaults to the id, exactly like migration 0014's backfill: unique without
+    // needing every caller to invent a handle it does not care about.
+    .bind(row.orgId, row.orgName, row.orgSlug ?? row.orgId, "free", NOW, NOW)
     .run();
   await d1
     .prepare(

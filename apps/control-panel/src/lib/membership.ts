@@ -28,7 +28,9 @@ export async function buildSessionPrincipal(
       throw new Error("Organization membership references a missing Organization");
     }
 
-    const orgSlug = organizationSlug(org.name, org.id);
+    // The persisted handle, not a derived one: it is unique by index, so a
+    // duplicate here means the DB invariant broke and must not be papered over.
+    const orgSlug = org.slug;
     if (orgSlugs.has(orgSlug)) {
       throw new Error("duplicate organization URL handle for authenticated user");
     }
@@ -102,23 +104,6 @@ export function createEnvironmentResolver(repo: Repository): EnvironmentResolver
       }));
     },
   };
-}
-
-/**
- * Current D1 Organizations have no persisted URL handle. Until the schema grows
- * one, session materialization derives the handle from the Organization name;
- * renames intentionally invalidate stale URLs, and collisions fail loud above.
- */
-export function organizationSlug(name: string, orgId: string): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-  return slug || orgId;
 }
 
 function orgRole(role: string): OrgRole {

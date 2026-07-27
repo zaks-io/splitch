@@ -3,7 +3,9 @@ import type {
   CreateAppRequestSchema,
   CreateAppResponseSchema,
   CreateCredentialResponseSchema,
+  CreateOrganizationRequestSchema,
   ListCredentialsResponseSchema,
+  OrganizationResponseSchema,
   PatchAppRequestSchema,
 } from "./resource-envelopes-account";
 import { AppSchema, type ClientKeySchema, EnvironmentSchema } from "./leaf-schemas-runtime";
@@ -111,6 +113,10 @@ export type FlagsPromoteOutput = z.infer<typeof PromoteResponseSchema>;
 const AppListResponseSchema = z.object({ items: z.array(AppSchema) });
 const EnvironmentListResponseSchema = z.object({ items: z.array(EnvironmentSchema) });
 
+// No path params: the Org does not exist yet, so the body is the whole input.
+export type OrganizationsCreateInput = z.infer<typeof CreateOrganizationRequestSchema>;
+export type OrganizationsCreateOutput = z.infer<typeof OrganizationResponseSchema>;
+
 export type AppsCreateInput = z.infer<typeof OrgAppsParams> &
   z.infer<typeof CreateAppRequestSchema>;
 export type AppsCreateOutput = z.infer<typeof CreateAppResponseSchema>;
@@ -164,6 +170,8 @@ export type ApiKeysRevokeOutput = z.infer<typeof ApiKeyRevokeResponseSchema>;
  * is one entry rather than three parallel edits.
  */
 export interface RouteTypeMap {
+  organizations_create: { input: OrganizationsCreateInput; output: OrganizationsCreateOutput };
+
   apps_list: { input: AppsListInput; output: AppsListOutput };
   apps_create: { input: AppsCreateInput; output: AppsCreateOutput };
   apps_get: { input: AppsGetInput; output: AppsGetOutput };

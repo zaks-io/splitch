@@ -111,6 +111,9 @@ function requestAuthResolver(env: AnalysisApiEnv, authority: AnalysisRequestAuth
         orgId: null,
         appId: identity.appId,
         environmentId: identity.environmentId,
+        // Internal service-to-service identity minted by the control-plane
+        // Worker, not by an auth door.
+        authDoor: null,
       },
     });
   }

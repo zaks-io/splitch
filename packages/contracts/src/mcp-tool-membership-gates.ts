@@ -29,6 +29,9 @@ const APP_OWNER: RouteMembershipGate = { axis: "app", minimumRole: "owner" };
 
 const MCP_TOOL_MEMBERSHIP_GATES = {
   organizations_list: TOKEN,
+  // No Org exists yet to hold a role in, so there is no org axis to gate on. The
+  // handler applies the real gate: a provisional principal may not create one.
+  organizations_create: TOKEN,
   organizations_get: ORG_MEMBER,
   organizations_update: ORG_OWNER,
   organizations_delete: ORG_OWNER,

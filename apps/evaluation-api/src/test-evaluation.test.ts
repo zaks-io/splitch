@@ -33,6 +33,7 @@ function principal(appId: string): Principal {
     orgId: null,
     appId,
     environmentId: null,
+    authDoor: "id_jag",
   };
 }
 

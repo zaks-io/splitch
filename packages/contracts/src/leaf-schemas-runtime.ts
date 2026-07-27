@@ -10,6 +10,7 @@ import {
   type ResolutionReason,
 } from "./leaves/resolution-reason";
 import { VariantValueSchema } from "./leaves/variant-value";
+import { OrganizationSlugSchema } from "./organization-slug";
 
 export {
   ResolutionDetailsSchema,
@@ -103,6 +104,8 @@ export type OrgPlan = z.infer<typeof OrgPlanSchema>;
 export const OrganizationSchema = z.object({
   id: z.string(),
   name: z.string(),
+  /** URL handle the Control Panel routes on; unique across all Organizations. */
+  slug: OrganizationSlugSchema,
   plan: OrgPlanSchema,
   createdAt: z.string(),
   updatedAt: z.string(),

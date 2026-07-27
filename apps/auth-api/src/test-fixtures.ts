@@ -92,7 +92,8 @@ export async function signIdJag(
 const SCHEMA = [
   `CREATE TABLE trusted_idps (idp_id TEXT PRIMARY KEY NOT NULL, org_id TEXT, issuer TEXT NOT NULL, jwks_uri TEXT NOT NULL, client_ids TEXT NOT NULL, enabled INTEGER DEFAULT 1 NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE UNIQUE INDEX trusted_idps_org_issuer_unique ON trusted_idps (org_id, issuer)`,
-  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, claim_acquired_at TEXT, claim_acquisition_token TEXT, claim_acquisition_key_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, claim_acquired_at TEXT, claim_acquisition_token TEXT, claim_acquisition_key_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE UNIQUE INDEX organizations_slug_unique ON organizations (slug)`,
   `CREATE TABLE org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
   `CREATE TABLE apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX apps_org_key_unique ON apps (organization_id, key)`,

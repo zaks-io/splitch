@@ -33,6 +33,8 @@ describe("Control Panel Flags principal", () => {
         orgId: "org_1",
         appId: "app_1",
         environmentId: null,
+        // A Panel session only exists behind a completed WorkOS sign-in.
+        authDoor: "id_jag",
       },
     });
     expect(authorizeApp).toHaveBeenCalledWith("user_1", "app_1", "env_1");

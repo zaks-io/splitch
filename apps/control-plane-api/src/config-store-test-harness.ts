@@ -1,8 +1,6 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { type DeltaNudge, type EnvironmentPolicy, flagConfigKey } from "@splitch/contracts";
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
+import { migrationStatements } from "@splitch/db/test-d1";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { Miniflare } from "miniflare";
@@ -197,25 +195,7 @@ function recordingKv(kv: KVNamespace, repo: Repository, events: string[]): KVNam
 }
 
 async function applyMigrations(d1: D1Database): Promise<void> {
-  const migrationsDir = join(
-    dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "..",
-    "..",
-    "packages",
-    "db",
-    "migrations",
-  );
-  const sql = readdirSync(migrationsDir)
-    .filter((file) => file.endsWith(".sql"))
-    .sort()
-    .map((file) => readFileSync(join(migrationsDir, file), "utf8"))
-    .join("\n");
-  for (const statement of sql
-    .split(/-->\s*statement-breakpoint/)
-    .flatMap((chunk) => chunk.split(";"))
-    .map((statement) => statement.trim())
-    .filter(Boolean)) {
-    await d1.exec(statement.replace(/\n/g, " "));
+  for (const statement of migrationStatements()) {
+    await d1.exec(statement);
   }
 }

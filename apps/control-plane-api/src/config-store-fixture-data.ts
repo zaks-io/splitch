@@ -26,11 +26,16 @@ export async function seedConfigGraph(d1: D1Database): Promise<void> {
   const aScope = appScope(ids.appId);
   const eScope = envScope(ids.appId, ids.environmentId);
   await repo.identity.createOrganization({
-    id: ids.orgId,
-    name: "Config Org",
-    plan: "free",
+    organization: {
+      id: ids.orgId,
+      name: "Config Org",
+      slug: "config-org",
+      plan: "free",
+      createdAt: NOW,
+      updatedAt: NOW,
+    },
+    ownerUserId: "user_config_owner",
     createdAt: NOW,
-    updatedAt: NOW,
   });
   await repo.identity.createApp({
     id: ids.appId,

@@ -1,6 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { migrationStatements } from "@splitch/db/test-d1";
 import { Miniflare } from "miniflare";
 
 export interface MigratedLocalBindings {
@@ -31,25 +29,7 @@ export async function makeMigratedLocalBindings(): Promise<MigratedLocalBindings
 }
 
 async function applyMigrations(d1: D1Database): Promise<void> {
-  const migrationsDir = join(
-    dirname(fileURLToPath(import.meta.url)),
-    "..",
-    "..",
-    "..",
-    "packages",
-    "db",
-    "migrations",
-  );
-  const sql = readdirSync(migrationsDir)
-    .filter((file) => file.endsWith(".sql"))
-    .sort()
-    .map((file) => readFileSync(join(migrationsDir, file), "utf8"))
-    .join("\n");
-  for (const statement of sql
-    .split(/-->\s*statement-breakpoint/)
-    .flatMap((chunk) => chunk.split(";"))
-    .map((statement) => statement.trim())
-    .filter(Boolean)) {
-    await d1.exec(statement.replace(/\n/g, " "));
+  for (const statement of migrationStatements()) {
+    await d1.exec(statement);
   }
 }

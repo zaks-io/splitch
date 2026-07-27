@@ -1,4 +1,4 @@
-import type { RouteOwner } from "./route-contract";
+import { type AuthDoor, AuthDoorSchema, type RouteOwner } from "./route-contract";
 import { getRoute } from "./route-registry";
 
 export const MCP_DELEGATION_HEADER = "x-splitch-mcp-delegation";
@@ -10,6 +10,13 @@ const MIN_SECRET_LENGTH = 32;
 export interface McpDelegationActor {
   subject: string;
   scopes: readonly string[];
+  /**
+   * Which door minted the MCP access token this delegation stands in for. It is
+   * signed with the rest of the credential so the downstream Worker learns that
+   * a caller is provisional; without it, an anonymous MCP session would reach
+   * door-gated routes indistinguishable from an identified one.
+   */
+  authDoor: AuthDoor;
 }
 
 export interface McpDelegationReplayGuard {
@@ -23,6 +30,7 @@ interface McpDelegationCredential {
   operationId: string;
   subject: string;
   scopes: string[];
+  authDoor: AuthDoor;
   method: string;
   target: string;
   bodySha256: string;
@@ -51,6 +59,7 @@ export async function createMcpDelegationHeader(options: {
     operationId: options.operationId,
     subject: options.actor.subject,
     scopes: [...options.actor.scopes],
+    authDoor: options.actor.authDoor,
     method: options.request.method,
     target: requestTarget(options.request),
     bodySha256: await requestBodySha256(options.request),
@@ -105,7 +114,14 @@ export async function parseMcpDelegation(options: {
   if (!(await options.replayGuard.claim(credential.jti, credential.expiresAt, nowSeconds))) {
     return null;
   }
-  return { subject: credential.subject, scopes: credential.scopes };
+  // Fail CLOSED on an unrecognized door: an old or tampered credential reads as
+  // provisional (least privilege), never as identified.
+  const authDoor = AuthDoorSchema.safeParse(credential.authDoor);
+  return {
+    subject: credential.subject,
+    scopes: credential.scopes,
+    authDoor: authDoor.success ? authDoor.data : "anonymous",
+  };
 }
 
 function routePathMatches(routePath: string, requestPath: string): boolean {

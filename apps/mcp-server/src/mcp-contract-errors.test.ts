@@ -100,8 +100,12 @@ async function callTool(
       async verify() {
         const principal = principalFor(authorization);
         return principal.ok
-          ? { subject: principal.principal.id, scopes: [...principal.principal.scopes] }
-          : { subject: "invalid-test-actor", scopes: [] };
+          ? {
+              subject: principal.principal.id,
+              scopes: [...principal.principal.scopes],
+              authDoor: "id_jag" as const,
+            }
+          : { subject: "invalid-test-actor", scopes: [], authDoor: "id_jag" as const };
       },
     },
     revocations: allowMcpRevocations(),

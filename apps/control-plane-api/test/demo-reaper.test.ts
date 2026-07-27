@@ -70,14 +70,15 @@ async function seedDemoOrg(orgId: string, options: DemoOrgOptions): Promise<Seed
   await env.DB.prepare(
     `
       INSERT INTO organizations (
-        id, name, plan, is_provisional, demo_expires_at, created_at, updated_at
+        id, name, slug, plan, is_provisional, demo_expires_at, created_at, updated_at
       )
-      VALUES (?, ?, 'free', ?, ?, ?, ?)
+      VALUES (?, ?, ?, 'free', ?, ?, ?, ?)
     `,
   )
     .bind(
       orgId,
       `${orgId} name`,
+      orgId,
       options.provisional ? 1 : 0,
       options.demoExpiresAt,
       NOW_ISO,

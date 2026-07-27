@@ -110,9 +110,9 @@ async function seedOrgApp(d1: D1Database, row: typeof ORG): Promise<void> {
   const now = new Date(NOW_MS).toISOString();
   await d1
     .prepare(
-      "INSERT OR IGNORE INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
+      "INSERT OR IGNORE INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?,?,?,?,?,?)",
     )
-    .bind(row.orgId, row.orgName, "free", now, now)
+    .bind(row.orgId, row.orgName, row.orgId, "free", now, now)
     .run();
   await d1
     .prepare(

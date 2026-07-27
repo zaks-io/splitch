@@ -18,6 +18,7 @@ import { getRoute, operationIds, routeRegistry } from "./route-registry";
 const CANONICAL_OPERATION_IDS = [
   // Organizations + members
   "organizations_list",
+  "organizations_create",
   "organizations_get",
   "organizations_update",
   "organizations_delete",

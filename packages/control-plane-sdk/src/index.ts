@@ -12,8 +12,10 @@ import {
   createEnvironmentsHcClient,
   createExperimentsHcClient,
   createFlagsHcClient,
+  createOrgsHcClient,
   resolveControlPlaneUrl,
 } from "./hc-client";
+import { createOrgsClient, type OrgsClient } from "./orgs-client";
 
 export interface ControlPlaneSdkOptions {
   readonly baseUrl: string;
@@ -28,6 +30,7 @@ export interface ControlPlaneSdkOptions {
  */
 export interface ControlPlaneSdk {
   health(): Promise<HealthResponse>;
+  readonly orgs: OrgsClient;
   readonly apps: AppsClient;
   readonly environments: EnvironmentsClient;
   readonly credentials: CredentialsClient;
@@ -47,6 +50,7 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
   const appsHcClient = createAppsHcClient(hcOptions);
   const environmentsHcClient = createEnvironmentsHcClient(hcOptions);
   const credentialsHcClient = createCredentialsHcClient(hcOptions);
+  const orgsHcClient = createOrgsHcClient(hcOptions);
 
   return {
     async health() {
@@ -58,6 +62,7 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
 
       return HealthResponseSchema.parse(await response.json());
     },
+    orgs: createOrgsClient(hcOptions, orgsHcClient),
     apps: createAppsClient(hcOptions, appsHcClient),
     environments: createEnvironmentsClient(hcOptions, environmentsHcClient),
     credentials: createCredentialsClient(hcOptions, credentialsHcClient),
@@ -73,6 +78,8 @@ export type {
   FlagConfigGetOutput,
   FlagConfigUpdateInput,
   FlagConfigUpdateOutput,
+  OrganizationsCreateInput,
+  OrganizationsCreateOutput,
   RouteFlatInput,
   RouteInput,
   RouteOutput,
@@ -82,6 +89,7 @@ export type { CredentialsClient } from "./credentials-client";
 export type { EnvironmentsClient } from "./environments-client";
 export type { ExperimentsClient } from "./experiments-client";
 export type { FlagsClient } from "./flags-client";
+export type { OrgsClient } from "./orgs-client";
 export type {
   ControlPlaneOperationOptions,
   ControlPlaneOperationResult,

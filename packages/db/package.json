@@ -8,6 +8,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./test-d1": {
+      "types": "./src/repo/test-d1.ts",
+      "default": "./src/repo/test-d1.ts"
     }
   },
   "files": [

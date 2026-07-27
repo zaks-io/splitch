@@ -32,11 +32,15 @@ Two path prefixes, by the App/Environment split:
 `environment_id` is the canonical ID in the path (slugs are URL-presentation only — API paths carry
 IDs). Environment-level writes are subject to the Environment Policy (ADR-0029).
 
+`POST /orgs` sits above both prefixes: the tenant does not exist yet, so there is no `org_id` to scope
+against and the co-scope guard never fires. Authorization there is the handler's alone — see
+[endpoints-org-app.md](endpoints-org-app.md#organization-endpoints).
+
 ## Resource groups
 
 | file                                                                 | endpoints                                                                                                                |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| [endpoints-org-app.md](endpoints-org-app.md)                         | Organization + member management; App CRUD; **Environment CRUD**                                                         |
+| [endpoints-org-app.md](endpoints-org-app.md)                         | Organization **create** + member management; App CRUD; **Environment CRUD**                                              |
 | [endpoints-flag-segment.md](endpoints-flag-segment.md)               | Flag **definition** (App-level) + **Flag Configuration** (per-Env) + **Promotion**; Segment CRUD                         |
 | [endpoints-experiment-run.md](endpoints-experiment-run.md)           | Experiment draft/**start** lifecycle; Experiment Run reads + end (per-Env)                                               |
 | [endpoints-metric.md](endpoints-metric.md)                           | Metric CRUD (binomial, count, revenue, ratio, guardrail)                                                                 |

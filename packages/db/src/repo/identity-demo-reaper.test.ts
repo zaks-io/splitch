@@ -70,7 +70,8 @@ function demoIds(suffix: string): DemoIds {
 function identityRows(ids: DemoIds, provisional: boolean, demoExpiresAt: string): SqlRow[] {
   return [
     [
-      "INSERT INTO organizations (id, name, plan, is_provisional, demo_expires_at, created_at, updated_at) VALUES (?, ?, 'free', ?, ?, ?, ?)",
+      "INSERT INTO organizations (id, name, slug, plan, is_provisional, demo_expires_at, created_at, updated_at) VALUES (?, ?, ?, 'free', ?, ?, ?, ?)",
+      ids.orgId,
       ids.orgId,
       ids.orgId,
       provisional ? 1 : 0,

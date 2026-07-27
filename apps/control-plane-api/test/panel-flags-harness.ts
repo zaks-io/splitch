@@ -119,8 +119,10 @@ export async function seedPanelFlags(ids: PanelFlagsIds): Promise<void> {
   const disabledVariantId = `var_disabled_${ids.suffix}`;
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
-    ).bind(ids.orgId, "Panel Flags", "free", NOW, NOW),
+      "INSERT INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+      // Slug from the id, not the display name: the harness seeds several Orgs
+      // and a constant "panel-flags" would collide on the unique index.
+    ).bind(ids.orgId, "Panel Flags", ids.orgId, "free", NOW, NOW),
     env.DB.prepare(
       "INSERT INTO apps (id, organization_id, name, key, created_at, updated_at) VALUES (?,?,?,?,?,?)",
     ).bind(ids.appId, ids.orgId, "Panel Flags", `panel-flags-${ids.suffix}`, NOW, NOW),

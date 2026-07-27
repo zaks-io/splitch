@@ -170,7 +170,7 @@ async function callTool(
       return jsonRpcResult(id, toolResult({ message: input.message }, { isError: true }));
     }
     const result = await sdk.callOperationById(call.name, input.value, {
-      delegation: { subject: actor.subject, scopes: actor.scopes },
+      delegation: { subject: actor.subject, scopes: actor.scopes, authDoor: actor.authDoor },
     });
     return jsonRpcResult(
       id,
@@ -190,10 +190,9 @@ function authIssuer(configured: string | undefined, platformTarget: string | und
   throw new Error(`mcp-server: AUTH_API_ORIGIN is required for ${target}`);
 }
 
-function sessionTransportFromActor(actor: McpAccessTokenActor): McpSessionTransport | undefined {
-  if (!actor.authDoor && !actor.demoExpiresAt) return undefined;
+function sessionTransportFromActor(actor: McpAccessTokenActor): McpSessionTransport {
   return {
-    ...(actor.authDoor ? { authDoor: actor.authDoor } : {}),
+    authDoor: actor.authDoor,
     ...(actor.demoExpiresAt ? { demoExpiresAt: actor.demoExpiresAt } : {}),
   };
 }

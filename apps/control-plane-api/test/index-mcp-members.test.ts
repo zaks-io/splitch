@@ -113,9 +113,9 @@ async function seedOrgApp(d1: D1Database): Promise<void> {
   const now = new Date(Date.UTC(2026, 6, 1, 12, 0, 0)).toISOString();
   await d1
     .prepare(
-      "INSERT OR IGNORE INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
+      "INSERT OR IGNORE INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?,?,?,?,?,?)",
     )
-    .bind(ORG.orgId, "Index Members", "free", now, now)
+    .bind(ORG.orgId, "Index Members", ORG.orgId, "free", now, now)
     .run();
   await d1
     .prepare(

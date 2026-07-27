@@ -1,4 +1,5 @@
 import {
+  type McpDelegationActor,
   type McpDelegationReplayGuard,
   parseMcpDelegation,
   type RouteOwner,
@@ -15,18 +16,20 @@ export function makeMcpDelegationAuthResolver(options: {
   return async (request) => {
     const actor = await parseMcpDelegation({ request, ...options });
     if (!actor) return { ok: false, reason: "UNAUTHORIZED" };
-    return { ok: true, principal: principalFromActor(actor.subject, actor.scopes) };
+    return { ok: true, principal: principalFromActor(actor) };
   };
 }
 
-function principalFromActor(subject: string, scopes: readonly string[]): Principal {
+function principalFromActor(actor: McpDelegationActor): Principal {
+  const scopes = actor.scopes;
   return {
     kind: "control-plane-token",
-    id: subject,
+    id: actor.subject,
     scopes,
     orgId: soleId(idsInScopes(scopes, ORG_SCOPE)),
     appId: soleId(idsInScopes(scopes, APP_SCOPE)),
     environmentId: null,
+    authDoor: actor.authDoor,
   };
 }
 

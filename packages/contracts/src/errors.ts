@@ -25,6 +25,9 @@ export const errorCodes = [
   "VARIANT_NOT_AVAILABLE",
   "RESOURCE_NOT_EMPTY",
 
+  // Uniqueness
+  "SLUG_CONFLICT",
+
   // Not found
   "EXPERIMENT_NOT_FOUND",
   "RUN_NOT_FOUND",
@@ -76,6 +79,7 @@ export const recommendedActions = [
   "ADD_VARIANT_TO_ENV",
   "RETRY_AFTER",
   "RETRY_WITH_CONFIRMATION",
+  "CHOOSE_DIFFERENT_SLUG",
 ] as const;
 
 export const RecommendedActionSchema = z.enum(recommendedActions);
@@ -201,6 +205,18 @@ const errorMembers = [
       childType: z.string(),
       childCount: z.number(),
       attemptedOp: z.string(),
+    }),
+  ),
+
+  // The slug is a GLOBAL handle, so a conflict can name a resource the caller
+  // cannot see. `conflictingSlug` echoes only what the caller already sent; no
+  // id, name, or owner of the winning resource is disclosed (ADR-0018).
+  member(
+    "SLUG_CONFLICT",
+    z.object({
+      resourceType: z.literal("organization"),
+      conflictingSlug: z.string(),
+      recommendedAction: RecommendedActionSchema,
     }),
   ),
 

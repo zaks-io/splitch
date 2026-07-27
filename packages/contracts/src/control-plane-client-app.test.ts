@@ -110,8 +110,8 @@ describe("control plane SDK route selection", () => {
     // the SDK app changes them here and fails the by-name assertions above.
     expect(FLAGS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     expect(EXPERIMENTS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);
-    expect(APPS_SDK_INDICES).toEqual([8, 9, 10, 11, 12]);
-    expect(ENVIRONMENTS_SDK_INDICES).toEqual([13, 14, 15, 16, 17]);
+    expect(APPS_SDK_INDICES).toEqual([9, 10, 11, 12, 13]);
+    expect(ENVIRONMENTS_SDK_INDICES).toEqual([14, 15, 16, 17, 18]);
     expect(CREDENTIALS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);
   });
 

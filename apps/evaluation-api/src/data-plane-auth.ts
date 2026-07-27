@@ -203,5 +203,8 @@ function principalFromCredential(hash: string, credential: CredentialCache): Pri
     orgId: credential.organizationId,
     appId: credential.appId,
     environmentId: credential.environmentId,
+    // Client Keys and API Keys are not minted by an auth door; they are never
+    // provisional, so this is null rather than a stand-in value.
+    authDoor: null,
   };
 }

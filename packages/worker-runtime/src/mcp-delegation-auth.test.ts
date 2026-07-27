@@ -20,7 +20,25 @@ describe("MCP delegation auth resolver", () => {
         orgId: "org_one",
         appId: "app_one",
         environmentId: null,
+        // Carried through from the signed credential: a door that did not survive
+        // delegation would leave the Worker unable to tell a provisional caller
+        // from an identified one.
+        authDoor: "id_jag",
       },
+    });
+  });
+
+  it("carries the anonymous door through delegation without upgrading it", async () => {
+    // The provisional gates key on this door, so delegation silently promoting
+    // `anonymous` to an identified value would let an unclaimed principal reach
+    // operations (e.g. organizations_create) it must never reach.
+    const request = await delegatedRequest(
+      "https://worker.internal/apps/app_one/flags",
+      "anonymous",
+    );
+    await expect(resolver("control-plane-api")(request)).resolves.toMatchObject({
+      ok: true,
+      principal: { authDoor: "anonymous" },
     });
   });
 
@@ -49,7 +67,10 @@ describe("MCP delegation auth resolver", () => {
   });
 });
 
-async function delegatedRequest(url: string): Promise<Request> {
+async function delegatedRequest(
+  url: string,
+  authDoor: "id_jag" | "anonymous" = "id_jag",
+): Promise<Request> {
   const request = new Request(url);
   request.headers.set(
     MCP_DELEGATION_HEADER,
@@ -58,6 +79,7 @@ async function delegatedRequest(url: string): Promise<Request> {
       actor: {
         subject: "user_one",
         scopes: ["org:org_one:owner", "app:app_one:admin"],
+        authDoor,
       },
       request,
       secret: SECRET,

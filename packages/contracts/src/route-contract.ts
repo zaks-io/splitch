@@ -40,6 +40,22 @@ export const authKinds = [
 export const AuthKindSchema = z.enum(authKinds);
 export type AuthKind = z.infer<typeof AuthKindSchema>;
 
+/**
+ * Which door minted the credential, carried as the `auth_door` claim.
+ *
+ * `anonymous` is the provisional door: nobody has proven an identity, so the
+ * principal is unclaimed. Authorization that must distinguish "authenticated"
+ * from "merely reachable" branches on this, not on scopes (a provisional
+ * principal holds real Org scopes for its own demo workspace).
+ */
+export const authDoors = ["id_jag", "anonymous", "device_flow", "client_credentials"] as const;
+export const AuthDoorSchema = z.enum(authDoors);
+export type AuthDoor = z.infer<typeof AuthDoorSchema>;
+
+export function isProvisionalAuthDoor(door: AuthDoor | null): boolean {
+  return door === "anonymous";
+}
+
 /** Rate-limit class selected by the route, applied before scope checks. */
 export const rateLimitClasses = [
   "none",

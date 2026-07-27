@@ -183,9 +183,9 @@ function authFetch(request: Request): Promise<Response> {
 async function seedMemberships(): Promise<void> {
   await local.d1
     .prepare(
-      "INSERT INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
+      "INSERT INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?,?,?,?,?,?)",
     )
-    .bind(SELECTED_ORG, "Selected Org", "free", NOW_ISO, NOW_ISO)
+    .bind(SELECTED_ORG, "Selected Org", SELECTED_ORG, "free", NOW_ISO, NOW_ISO)
     .run();
   await local.d1
     .prepare("INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES (?,?,?,?)")
