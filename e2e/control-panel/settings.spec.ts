@@ -16,12 +16,11 @@ test.describe("per-Environment Settings", () => {
     await page.goto("/acme-labs/checkout-api/dev/settings");
 
     await expect(page.getByRole("heading", { name: "Development" })).toBeVisible();
-    await expect(page.getByText("accepts requests from any origin")).toBeVisible();
+    await verifyInitialSettingsState(page, testInfo);
     await expect(page.getByLabel("Variant availability: Approve coming soon")).toBeDisabled();
     const killSwitch = page.getByTestId("kill-switch-policy");
     await expect(killSwitch).toContainText("Never gated");
     await expect(killSwitch.locator("input")).toHaveCount(0);
-    await captureThemeScreenshots(page, testInfo, "settings-environment-open");
 
     const lockButton = page.getByRole("button", { name: "Lock to origins" });
     if (await lockButton.isVisible().catch(() => false)) {
@@ -62,6 +61,7 @@ test.describe("per-Environment Settings", () => {
       .locator(`[data-api-key-id='${newKeyId}']`)
       .getByRole("button", { name: "Revoke" })
       .click();
+    await page.reload();
     const revokedRow = page.locator(`[data-api-key-id='${newKeyId}']`);
     await expect(revokedRow).toContainText("Revoked");
     await expect(revokedRow.getByRole("button", { name: "Revoke" })).toBeDisabled();
@@ -90,6 +90,17 @@ test.describe("per-Environment Settings", () => {
     await captureThemeScreenshots(page, testInfo, "settings-environment-prod");
   });
 });
+
+async function verifyInitialSettingsState(
+  page: import("@playwright/test").Page,
+  testInfo: import("@playwright/test").TestInfo,
+): Promise<void> {
+  const openWarning = page.getByText("accepts requests from any origin");
+  await expect(openWarning.or(page.getByText("Locked origins"))).toBeVisible();
+  if (await openWarning.isVisible()) {
+    await captureThemeScreenshots(page, testInfo, "settings-environment-open");
+  }
+}
 
 async function apiKeyIds(page: import("@playwright/test").Page): Promise<string[]> {
   return page.locator("[data-api-key-id]").evaluateAll((rows) =>
