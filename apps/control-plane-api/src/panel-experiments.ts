@@ -1,8 +1,10 @@
 import {
+  guardrailBreached,
   type PanelExperimentHealth,
   type PanelExperimentListItem,
   parseScopedAnalysisResults,
   scopedAnalysisResultsRequest,
+  srmFiring,
 } from "@splitch/control-plane-sdk/panel-experiments";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
@@ -148,11 +150,8 @@ async function runningHealth(
     significanceReached: results.arm_results.some(
       (result) => result.is_significant && result.in_bh_family && result.decision_valid,
     ),
-    srmFiring:
-      results.srm.srm_is_mismatch ||
-      results.srm.activated_srm_mismatch === true ||
-      results.health.activation_balance_mismatch === true,
-    guardrailBreached: results.guardrail_results.some((result) => result.is_breached === true),
+    srmFiring: srmFiring(results),
+    guardrailBreached: guardrailBreached(results),
   };
 }
 

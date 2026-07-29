@@ -76,6 +76,7 @@ ErrorCode =
 
   // Analysis-state signals
   | 'MULTIPLE_VARIANT_CONFLICT'   // Entity bucketed to __multiple__; results untrusted
+  | 'ATTENTION_FANOUT_LIMIT_EXCEEDED' // Attention rollup spans too many running Experiments to read whole
 
   // System
   | 'RATE_LIMITED'

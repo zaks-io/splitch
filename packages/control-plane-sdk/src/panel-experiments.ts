@@ -90,6 +90,23 @@ export function createPanelExperimentsClient(options: { fetch: typeof fetch; bas
   };
 }
 
+/**
+ * Single source for what "this Run needs attention" means. The Experiment list and
+ * the Environment attention rollup MUST agree: a divergence here silently hides
+ * attention on one surface while showing it on the other.
+ */
+export function srmFiring(results: StatsOutput): boolean {
+  return (
+    results.srm.srm_is_mismatch ||
+    results.srm.activated_srm_mismatch === true ||
+    results.health.activation_balance_mismatch === true
+  );
+}
+
+export function guardrailBreached(results: StatsOutput): boolean {
+  return results.guardrail_results.some((result) => result.is_breached === true);
+}
+
 export function scopedAnalysisResultsRequest(identity: ScopedAnalysisIdentity): Request {
   return new Request(
     `https://analysis.internal/apps/${encodeURIComponent(identity.appId)}/envs/${encodeURIComponent(identity.environmentId)}/experiments/${encodeURIComponent(identity.experimentId)}/results`,

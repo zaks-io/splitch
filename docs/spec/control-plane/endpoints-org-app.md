@@ -99,7 +99,14 @@ Returns the minimal Environment-explicit SRM and Guardrail attention contract fo
 Only current running Experiments contribute. `no_data` is distinct from a measured `clear` result;
 neither state may carry an SRM or Guardrail failure flag. An Environment with any firing SRM or
 breached Guardrail is `attention`, with the exact reason boolean set. Analysis read failures return
-`SERVICE_UNAVAILABLE` rather than silently clearing attention.
+`SERVICE_UNAVAILABLE` rather than silently clearing attention. SRM attention uses the same predicate
+as the Experiment list health signal, so the two surfaces cannot disagree about whether a Run is
+firing.
+
+The rollup issues one Analysis read per running Experiment per Environment, bounded to 8 in flight
+per request across all Environments. Past 200 total reads the call is refused whole with
+`ATTENTION_FANOUT_LIMIT_EXCEEDED` (`{ appId, limit, runningExperiments, environments }`) and no
+Analysis read is issued: a truncated rollup would render as `clear` for the Environments it dropped.
 
 Auth: live Organization and App member. The Worker rejects a token bound to another App or stale
 membership before any analysis read. Control Panel callers use the configured signed binding-only

@@ -55,6 +55,7 @@ export const errorCodes = [
 
   // Analysis-state signals
   "MULTIPLE_VARIANT_CONFLICT",
+  "ATTENTION_FANOUT_LIMIT_EXCEEDED",
 
   // System
   "RATE_LIMITED",
@@ -266,6 +267,15 @@ const errorMembers = [
       runId: z.string(),
       idType: z.string(),
       targetingKeyHash: z.string(),
+    }),
+  ),
+  member(
+    "ATTENTION_FANOUT_LIMIT_EXCEEDED",
+    z.object({
+      appId: z.string(),
+      limit: z.number(),
+      runningExperiments: z.number(),
+      environments: z.number(),
     }),
   ),
 
