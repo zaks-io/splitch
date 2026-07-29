@@ -1,4 +1,4 @@
-import { migrationStatements } from "@splitch/db/test-d1";
+import { applySchema, migrationStatements } from "@splitch/db/test-d1";
 import { Miniflare } from "miniflare";
 
 export interface MigratedLocalBindings {
@@ -24,12 +24,6 @@ export async function makeMigratedLocalBindings(): Promise<MigratedLocalBindings
   const kv = (await mf.getKVNamespace("SESSION_STORE")) as unknown as KVNamespace;
   const credentialKv = (await mf.getKVNamespace("CREDENTIAL_STORE")) as unknown as KVNamespace;
   const configKv = (await mf.getKVNamespace("CONFIG_STORE")) as unknown as KVNamespace;
-  await applyMigrations(d1);
+  await applySchema(d1, migrationStatements());
   return { d1, kv, credentialKv, configKv, dispose: () => mf.dispose() };
-}
-
-async function applyMigrations(d1: D1Database): Promise<void> {
-  for (const statement of migrationStatements()) {
-    await d1.exec(statement);
-  }
 }

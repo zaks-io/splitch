@@ -63,9 +63,10 @@ export async function makeLocalBindings(): Promise<LocalBindings> {
   const d1 = (await mf.getD1Database("DB")) as unknown as D1Database;
   const kv = (await mf.getKVNamespace("SESSION_STORE")) as unknown as KVNamespace;
   const credentialKv = (await mf.getKVNamespace("CREDENTIAL_STORE")) as unknown as KVNamespace;
-  for (const statement of SCHEMA) {
-    await d1.exec(statement);
-  }
+  // One batch, not a loop of `exec`: Miniflare's D1 is a real workerd process
+  // over loopback and each `exec` burns an ephemeral port that lands in
+  // TIME_WAIT, which is how this suite used to exhaust the port range.
+  await d1.batch(SCHEMA.map((statement) => d1.prepare(statement)));
   return { d1, kv, credentialKv, dispose: () => mf.dispose() };
 }
 

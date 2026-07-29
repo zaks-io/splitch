@@ -1,6 +1,6 @@
 import { type DeltaNudge, type EnvironmentPolicy, flagConfigKey } from "@splitch/contracts";
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
-import { migrationStatements } from "@splitch/db/test-d1";
+import { applySchema, migrationStatements } from "@splitch/db/test-d1";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { Miniflare } from "miniflare";
@@ -43,7 +43,7 @@ export async function makeHarness(): Promise<Harness> {
   const d1 = (await mf.getD1Database("DB")) as unknown as D1Database;
   const kv = (await mf.getKVNamespace("CONFIG_STORE")) as unknown as KVNamespace;
   const sessions = (await mf.getKVNamespace("SESSION_STORE")) as unknown as KVNamespace;
-  await applyMigrations(d1);
+  await applySchema(d1, migrationStatements());
   await seedConfigGraph(d1);
   await seedAppMember(d1, { appId: ids.appId, userId: USER_ID, role: "owner" });
 
@@ -192,10 +192,4 @@ function recordingKv(kv: KVNamespace, repo: Repository, events: string[]): KVNam
       };
     },
   }) as KVNamespace;
-}
-
-async function applyMigrations(d1: D1Database): Promise<void> {
-  for (const statement of migrationStatements()) {
-    await d1.exec(statement);
-  }
 }
