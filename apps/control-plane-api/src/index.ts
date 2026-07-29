@@ -28,7 +28,12 @@ import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { makePanelDelegationReplayStore } from "./panel-identity-replay";
 import { makePanelSessionAccess } from "./panel-session-access";
+<<<<<<< HEAD
 import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
+=======
+import { panelExperimentsList } from "./panel-experiments";
+import { panelSettingsRead } from "./panel-settings";
+>>>>>>> 5bcadec (feat(control-panel): add environment settings (SPL-115))
 import { rateLimiterForTarget } from "./rate-limit";
 import { makePanelSessionStore, makeSessionStore } from "./session-store";
 
@@ -210,13 +215,14 @@ async function handleRequest(
           ),
         })
       : panelAuthResolver;
-  const panelExperiments = await handleSignedPanelExperiments(
+  const panelResponse = await handleSignedControlPanelRequest(
     request,
     env,
     panelProtocol,
     authResolver,
+    repo,
   );
-  if (panelExperiments) return panelExperiments;
+  if (panelResponse) return panelResponse;
   const app = createApp({
     authResolver,
     rateLimiter: rateLimiterForTarget(
@@ -236,6 +242,42 @@ async function handleRequest(
   });
 
   return app.fetch(request, env);
+}
+
+async function handleSignedControlPanelRequest(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  protocol: PanelProtocol,
+  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
+  repo: ReturnType<typeof createRepository>,
+): Promise<Response | null> {
+  return (
+    (await handleSignedPanelExperiments(request, env, protocol, authResolver)) ??
+    handleSignedPanelSettings(request, env, protocol, authResolver, repo)
+  );
+}
+
+async function handleSignedPanelSettings(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  protocol: PanelProtocol,
+  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
+  repo: ReturnType<typeof createRepository>,
+): Promise<Response | null> {
+  if (protocol !== "signed") return null;
+  const operation = parseControlPanelBindingOperation(request);
+  if (operation?.id !== "settings_get") return null;
+  const auth = await authResolver(request);
+  if (!auth.ok) return unauthorized();
+  return panelSettingsRead(
+    {
+      repo,
+      credentialStore: env.CREDENTIAL_STORE,
+      credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
+    },
+    operation,
+    auth.principal,
+  );
 }
 
 async function handleSignedPanelExperiments(

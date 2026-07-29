@@ -142,11 +142,11 @@ INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, create
   ('app_checkout_e2e', 'org_acme_e2e', 'Checkout API', 'checkout-api', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('app_billing_e2e', 'org_acme_e2e', 'Billing API', 'billing-api', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('app_agent_e2e', 'org_orbit_e2e', 'Agent Console', 'agent-console', '${createdAt}', '${createdAt}', 'user_local_e2e');
-INSERT INTO environments (id, app_id, key, name, created_at, updated_at, created_by) VALUES
-  ('env_checkout_dev_e2e', 'app_checkout_e2e', 'dev', 'Development', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_checkout_prod_e2e', 'app_checkout_e2e', 'prod', 'Production', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_billing_prod_e2e', 'app_billing_e2e', 'prod', 'Production', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_agent_prod_e2e', 'app_agent_e2e', 'prod', 'Production', '${createdAt}', '${createdAt}', 'user_local_e2e');
+INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at, created_by) VALUES
+  ('env_checkout_dev_e2e', 'app_checkout_e2e', 'dev', 'Development', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_checkout_prod_e2e', 'app_checkout_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_billing_prod_e2e', 'app_billing_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_agent_prod_e2e', 'app_agent_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e');
 INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES
   ('org_acme_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('org_orbit_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
