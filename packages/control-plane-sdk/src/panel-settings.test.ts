@@ -28,7 +28,7 @@ const settings = {
   apiKeys: [
     {
       keyId: "ak_1",
-      keyHashPrefix: "012345abcdef",
+      keyHashPrefix: "aaaaaaaaaaaa",
       scopes: ["data-plane:evaluate", "data-plane:write"],
       createdAt: "2026-07-29T00:00:00.000Z",
       revokedAt: null,
@@ -45,7 +45,7 @@ describe("panel settings binding transport", () => {
 
     await expect(client.read({ appId: "app_1", environmentId: "env_1" })).resolves.toMatchObject({
       ok: true,
-      data: { apiKeys: [{ keyHashPrefix: "012345abcdef" }] },
+      data: { apiKeys: [{ keyHashPrefix: "aaaaaaaaaaaa" }] },
     });
     expect(String(fetcher.mock.calls[0]?.[0])).toBe(
       "https://control-plane.internal/control-panel/apps/app_1/envs/env_1/settings",

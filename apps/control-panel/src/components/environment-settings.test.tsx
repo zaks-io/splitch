@@ -18,7 +18,7 @@ describe("EnvironmentSettings", () => {
 
     expect(html).toContain("accepts requests from any origin");
     expect(html).toContain("Lock to origins");
-    expect(html).toContain("sha256:012345abcdef");
+    expect(html).toContain("sha256:aaaaaaaaaaaa");
     expect(html).not.toContain("sk_not_returned");
     expect(html).toContain("Variant availability");
     expect(html).toContain("Start an Experiment Run");
@@ -57,7 +57,7 @@ const settings: PanelEnvironmentSettings = {
   apiKeys: [
     {
       keyId: "ak_server",
-      keyHashPrefix: "012345abcdef",
+      keyHashPrefix: "aaaaaaaaaaaa",
       scopes: ["data-plane:evaluate", "data-plane:write"],
       createdAt: "2026-07-29T00:00:00.000Z",
       revokedAt: null,
