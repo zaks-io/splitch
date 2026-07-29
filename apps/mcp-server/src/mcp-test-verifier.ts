@@ -19,6 +19,7 @@ export function staticMcpTokenVerifier(
   actor: McpAccessTokenActor = {
     subject: "user_local_test",
     scopes: ["app:app_local:admin"],
+    authDoor: "id_jag",
   },
 ): McpAccessTokenVerifier {
   return {

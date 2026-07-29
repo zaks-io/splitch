@@ -8,9 +8,29 @@ shared conventions are described in [control-plane-endpoint-inventory.md](contro
 
 ## Organization endpoints
 
+The Organization envelope is `{ id, name, slug, plan, created_at, updated_at }` for every endpoint
+below. It is a whitelist: `sso_enabled`, the Stripe ids, the claim-ceremony columns, and the
+provisional-reaper columns (`is_provisional`, `demo_expires_at`) stay in D1 and never reach the wire.
+
+### `POST /orgs`
+
+Body: `{ name: string, slug?: string }`
+Returns: `201` + the Organization envelope.
+Auth: any authenticated **non-provisional** principal. The caller becomes the Org `owner`, written in
+the same transaction as the Org itself — an Organization with no owner is unreachable, because every
+other Org route authorizes through live membership.
+
+`slug` is derived from `name` when omitted. It is unique across all Organizations; a collision returns
+`409 SLUG_CONFLICT` with `details.recommendedAction: "CHOOSE_DIFFERENT_SLUG"`.
+
+A **provisional** (anonymous, unclaimed) principal is rejected with `403 FORBIDDEN`. It reached the
+control plane through an unauthenticated `POST /register`, so allowing it here would make unbounded
+Organization creation an unauthenticated operation. Its one demo Organization is the limit until the
+claim ceremony (`POST /api/auth/claim/start`) yields an identified principal.
+
 ### `GET /orgs/{org_id}`
 
-Returns: `{ org_id, name, plan, sso_enabled, is_provisional, demo_expires_at?, created_at }`
+Returns: the Organization envelope.
 Auth: any member of the Org.
 
 ### `PATCH /orgs/{org_id}`

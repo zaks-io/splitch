@@ -1,5 +1,6 @@
 import type { Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
+import { organizationResponse } from "./org-response";
 import { organizationIdsInScopes } from "./scope-binding";
 
 export function makeListOrganizationsHandler(repo: Repository) {
@@ -17,17 +18,5 @@ export function makeListOrganizationsHandler(repo: Repository) {
     );
 
     return Response.json({ items: items.filter((org) => org !== null) });
-  };
-}
-
-function organizationResponse(
-  org: NonNullable<Awaited<ReturnType<Repository["identity"]["getOrg"]>>>,
-) {
-  return {
-    id: org.id,
-    name: org.name,
-    plan: org.plan,
-    createdAt: org.createdAt,
-    updatedAt: org.updatedAt,
   };
 }

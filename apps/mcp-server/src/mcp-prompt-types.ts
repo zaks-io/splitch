@@ -118,6 +118,9 @@ export const RECOVERY_OPERATION_IDS: Readonly<Record<RecommendedAction, readonly
   ADD_VARIANT_TO_ENV: ["flags_promote"],
   RETRY_AFTER: [],
   RETRY_WITH_CONFIRMATION: [],
+  // Retrying the same create is the whole remediation; the caller only has to
+  // change the slug it sends, so there is no intermediate tool to call.
+  CHOOSE_DIFFERENT_SLUG: [],
 };
 
 const PROMPT_DESCRIPTION_BY_NAME = new Map(

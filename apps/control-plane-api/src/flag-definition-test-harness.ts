@@ -9,7 +9,8 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { makeSessionStore } from "./session-store";
-import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
+import type { LocalBindings } from "./test-fixtures";
+import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "./test-seeds";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
@@ -32,8 +33,24 @@ export interface FlagDefinitionHarness {
   bindings: LocalBindings;
 }
 
-export async function makeFlagDefinitionHarness(): Promise<FlagDefinitionHarness> {
-  const bindings = await makeLocalBindings();
+/**
+ * Build the Flag-definition harness over whichever bindings the caller supplies.
+ *
+ * The factory is a parameter because this harness runs in two runtimes: Node
+ * passes the Miniflare-backed `makeLocalBindings`, the Workers pool passes
+ * `makePoolBindings`. Taking it as an argument is what keeps this module free of
+ * any Miniflare import, which it must be to load inside workerd at all (Miniflare
+ * pulls in `node:process` via chalk).
+ *
+ * The graph is reset first because the pool isolates storage per test FILE, not
+ * per test, and every consumer re-creates the same fixed-key App: without the
+ * wipe the second test in a file trips `apps_org_key_unique`.
+ */
+export async function makeFlagDefinitionHarness(
+  makeBindings: () => Promise<LocalBindings>,
+): Promise<FlagDefinitionHarness> {
+  const bindings = await makeBindings();
+  await resetOrganizationGraph(bindings.d1);
   await seedOrgApp(bindings.d1, ORG);
   await seedOrgMember(bindings.d1, {
     orgId: ORG.orgId,

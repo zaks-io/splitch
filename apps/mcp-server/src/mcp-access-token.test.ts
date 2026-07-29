@@ -38,9 +38,15 @@ describe("MCP access-token verifier", () => {
       scopes: ["app:app_local:admin"],
     };
 
+    // No `auth_door` claim, so the door resolves fail-closed to the
+    // least-privileged one rather than being treated as identified.
     await expect(
       verifier.verify(`Bearer ${await sign(validClaims)}`, AUDIENCE, NOW),
-    ).resolves.toEqual({ subject: "user_mcp", scopes: ["app:app_local:admin"] });
+    ).resolves.toEqual({
+      subject: "user_mcp",
+      scopes: ["app:app_local:admin"],
+      authDoor: "anonymous",
+    });
 
     await expect(
       verifier.verify(

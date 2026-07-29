@@ -18,6 +18,18 @@ describe("cli command parity", () => {
     expect(findCommand(matched)?.operationId).toBe("apps_create");
   });
 
+  it("derives orgs create from the route registry (SPL-171)", () => {
+    const keys = new Set(CLI_COMMANDS.map((command) => command.path.join("\0")));
+    const parsed = parseInvocation(["orgs", "create", "--json", "--name", "Acme Inc"]);
+    const matched = longestMatchingCommandPath(parsed.commandPath, keys);
+
+    const command = findCommand(matched);
+    expect(command?.operationId).toBe("organizations_create");
+    // No :orgId and no :appId in the path, so the CLI must not demand either.
+    expect(command?.needsApp).toBe(false);
+    expect(command?.needsEnvironment).toBe(false);
+  });
+
   it("parses flags create into the flags_create command", () => {
     const keys = new Set(CLI_COMMANDS.map((command) => command.path.join("\0")));
     const parsed = parseInvocation([

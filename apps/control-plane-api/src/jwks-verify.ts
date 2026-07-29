@@ -1,3 +1,5 @@
+import { type AuthDoor, AuthDoorSchema } from "@splitch/contracts";
+
 /**
  * Control-plane JWT verification against a JWKS (RS256, Web Crypto).
  *
@@ -20,6 +22,12 @@ interface VerifiedToken {
   sub: string;
   /** Granted scopes (`app:{appId}:{role}` / `org:{orgId}:{role}`). */
   scopes: string[];
+  /**
+   * Which door minted the token, from `auth_door`. An unrecognized or missing
+   * claim resolves to `"anonymous"`, the LEAST-privileged door: a token that
+   * cannot prove which door it came through must not be treated as identified.
+   */
+  authDoor: AuthDoor;
 }
 
 interface JwtHeader {
@@ -162,7 +170,14 @@ function actorFromClaims(
   return {
     sub: payload.sub,
     scopes: Array.isArray(payload.scopes) ? (payload.scopes as string[]) : [],
+    authDoor: authDoorFromClaim(payload.auth_door),
   };
+}
+
+/** Fail CLOSED: anything but a recognized door reads as the provisional one. */
+function authDoorFromClaim(claim: unknown): AuthDoor {
+  const parsed = AuthDoorSchema.safeParse(claim);
+  return parsed.success ? parsed.data : "anonymous";
 }
 
 /**

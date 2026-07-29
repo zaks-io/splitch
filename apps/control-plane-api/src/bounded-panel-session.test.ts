@@ -22,6 +22,8 @@ describe("bounded predecessor Panel session protocol", () => {
         orgId: "org_1",
         appId: null,
         environmentId: null,
+        // A Panel session only exists behind a completed WorkOS sign-in.
+        authDoor: "id_jag",
       },
     });
     expect(loadPanelSessionActor).toHaveBeenCalledWith(TOKEN_HASH, NOW);

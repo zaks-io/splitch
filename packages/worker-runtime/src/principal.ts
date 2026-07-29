@@ -1,4 +1,4 @@
-import type { AuthKind, ErrorResponse } from "@splitch/contracts";
+import type { AuthDoor, AuthKind, ErrorResponse } from "@splitch/contracts";
 
 /**
  * The resolved caller. Produced by a Worker-provided AuthResolver, consumed by
@@ -23,6 +23,13 @@ export interface Principal {
   orgId: string | null;
   appId: string | null;
   environmentId: string | null;
+  /**
+   * Which door minted this credential, when the auth kind carries one. `null`
+   * for kinds with no door concept (public, Client Key, API Key) — those are
+   * never provisional, so a handler asking "is this principal provisional?"
+   * gets `false` rather than a guess.
+   */
+  authDoor: AuthDoor | null;
 }
 
 /**
@@ -50,4 +57,5 @@ export const PUBLIC_PRINCIPAL: Principal = {
   orgId: null,
   appId: null,
   environmentId: null,
+  authDoor: null,
 };

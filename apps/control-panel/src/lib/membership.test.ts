@@ -1,6 +1,6 @@
 import type { Repository } from "@splitch/db";
 import { describe, expect, it } from "vitest";
-import { buildSessionPrincipal, organizationSlug, rehydrateLegacySession } from "./membership";
+import { buildSessionPrincipal, rehydrateLegacySession } from "./membership";
 import type { StoredSession } from "./session";
 
 describe("session membership materialization", () => {
@@ -82,14 +82,6 @@ describe("session membership materialization", () => {
   });
 });
 
-describe("organizationSlug", () => {
-  it("normalizes names for URL scope matching and changes on rename", () => {
-    expect(organizationSlug(" Àcme, Inc. ", "org_1")).toBe("acme-inc");
-    expect(organizationSlug("Acme Renamed", "org_1")).toBe("acme-renamed");
-    expect(organizationSlug("   ", "org_1")).toBe("org_1");
-  });
-});
-
 function repository(
   options: { duplicateOrgSlug?: boolean; orgMissing?: boolean } = {},
 ): Repository {
@@ -118,6 +110,10 @@ function repository(
           id: orgId,
           isProvisional: false,
           name: "Acme Inc",
+          // Fixed handle, so the two-Org `duplicateOrgSlug` case collides. The
+          // unique index makes that impossible in real D1; forcing it proves the
+          // loader still fails loud if the invariant ever breaks.
+          slug: "acme-inc",
           plan: "free",
           updatedAt: "2026-07-05T12:00:00.000Z",
         };

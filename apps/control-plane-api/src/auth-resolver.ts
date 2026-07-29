@@ -1,3 +1,4 @@
+import type { AuthDoor } from "@splitch/contracts";
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,
@@ -42,6 +43,18 @@ import type { PanelSessionStore, SessionStore } from "./session-store";
 
 const BEARER_PREFIX = "Bearer ";
 export const PANEL_SESSION_HEADER = "x-splitch-panel-session";
+
+/**
+ * A Control Panel session is only ever minted after a completed WorkOS sign-in
+ * (`completeAuthKitCallback`), which is the `id_jag` door. So this is a fact
+ * about the path, not a default.
+ *
+ * Note this says nothing about whether the session's ORG is provisional — a
+ * signed-in User can be looking at an unclaimed Organization, and the session
+ * carries `isProvisional` for exactly that case. The door records how the
+ * PRINCIPAL authenticated, which is what the provisional gates key on.
+ */
+const PANEL_AUTH_DOOR: AuthDoor = "id_jag";
 
 export interface ControlPlaneAuthDeps {
   verifier: JwksVerifier;
@@ -126,6 +139,7 @@ async function resolveBearerPrincipal(
       orgId: binding.orgId,
       appId: binding.appId,
       environmentId: binding.environmentId,
+      authDoor: verified.authDoor,
     },
   };
 }
@@ -180,6 +194,7 @@ async function resolvePanelPrincipal(
         orgId: operation.orgId,
         appId: null,
         environmentId: null,
+        authDoor: PANEL_AUTH_DOOR,
       },
     };
   }
@@ -193,6 +208,7 @@ async function resolvePanelPrincipal(
         orgId: null,
         appId: null,
         environmentId: null,
+        authDoor: PANEL_AUTH_DOOR,
       },
     };
   }
@@ -222,6 +238,7 @@ async function resolveBoundedPanelSessionPrincipal(
       orgId: operation.orgId,
       appId: null,
       environmentId: null,
+      authDoor: PANEL_AUTH_DOOR,
     },
   };
 }
@@ -257,6 +274,7 @@ async function resolvePanelFlagsPrincipal(
       orgId: access.orgId,
       appId: access.appId,
       environmentId: null,
+      authDoor: PANEL_AUTH_DOOR,
     },
   };
 }

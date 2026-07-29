@@ -92,6 +92,17 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
     expect(usage?.outputSchema).toBe(schema);
   });
 
+  it("derives the Organization create tool with a body-only input (SPL-171)", () => {
+    const create = tools.find((tool) => tool.name === "organizations_create");
+    const shape = objectShape(create?.inputSchema);
+
+    expect(create).toBeDefined();
+    expect(shape).toHaveProperty("name");
+    expect(shape).toHaveProperty("slug");
+    // The Org does not exist yet, so an orgId input would be meaningless.
+    expect(shape).not.toHaveProperty("orgId");
+  });
+
   it("derives exactly one tool per control-plane route", () => {
     const controlPlaneIds = routeRegistry.filter(isMcpToolRoute).map((route) => route.operationId);
     expect([...toolNames].sort()).toEqual([...controlPlaneIds].sort());

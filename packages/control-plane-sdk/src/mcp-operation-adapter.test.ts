@@ -71,6 +71,7 @@ describe("mcp operation adapter", () => {
         delegation: {
           subject: "user_mcp",
           scopes: ["app:app_local:admin", "app:app_unrelated:owner", "org:org_unrelated:owner"],
+          authDoor: "id_jag",
         },
       },
     );
@@ -80,6 +81,7 @@ describe("mcp operation adapter", () => {
     await expect(delegatedActor(forwardedRequest, "control-plane-api")).resolves.toEqual({
       subject: "user_mcp",
       scopes: ["app:app_local:admin"],
+      authDoor: "id_jag",
     });
   });
 
@@ -101,6 +103,7 @@ describe("mcp operation adapter", () => {
         delegation: {
           subject: "user_mcp",
           scopes: ["org:org_selected:owner", "org:org_unrelated:admin", "app:app_unrelated:owner"],
+          authDoor: "id_jag",
         },
       },
     );
@@ -108,6 +111,7 @@ describe("mcp operation adapter", () => {
     await expect(delegatedActor(forwardedRequest, "control-plane-api")).resolves.toEqual({
       subject: "user_mcp",
       scopes: ["org:org_selected:owner"],
+      authDoor: "id_jag",
     });
   });
 });

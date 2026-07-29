@@ -1,14 +1,15 @@
 import {
+  type ExperimentConfigKV,
   ExperimentConfigKVSchema,
   experimentConfigKey,
   kvEnvelope,
+  type RunConfigKV,
   RunConfigKVSchema,
   runConfigKey,
-  type ExperimentConfigKV,
-  type RunConfigKV,
 } from "@splitch/contracts";
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
-import { makeConfigStore, type ConfigStoreWriter } from "./config-store";
+import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
+import type { ConfigStoreAccess } from "./config-store-do";
 import {
   appToken,
   createDefaultApp,
@@ -19,7 +20,7 @@ import {
   NOW_ISO,
   request,
 } from "./flag-definition-test-harness";
-import type { ConfigStoreAccess } from "./config-store-do";
+import type { LocalBindings } from "./test-fixtures";
 
 export type ExperimentRunHarness = {
   h: FlagDefinitionHarness;
@@ -45,10 +46,13 @@ export type SyncFailureControl = {
 const ExperimentConfigEnvelope = kvEnvelope(ExperimentConfigKVSchema);
 const RunConfigEnvelope = kvEnvelope(RunConfigKVSchema);
 
-export async function makeExperimentRunHarness(options?: {
-  syncFailures?: SyncFailureControl;
-}): Promise<ExperimentRunHarness> {
-  const h = await makeFlagDefinitionHarness();
+export async function makeExperimentRunHarness(
+  makeBindings: () => Promise<LocalBindings>,
+  options?: {
+    syncFailures?: SyncFailureControl;
+  },
+): Promise<ExperimentRunHarness> {
+  const h = await makeFlagDefinitionHarness(makeBindings);
   const repo = createRepository(h.bindings.d1);
   h.app = makeAppForRepo(h, repo, configStoreAccess(repo, h.bindings.kv, options?.syncFailures));
   return { h, repo };

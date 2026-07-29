@@ -39,9 +39,9 @@ let repo: ReturnType<typeof createRepository>;
 async function insertRoots(d1: D1Database, t: typeof TA): Promise<void> {
   await d1
     .prepare(
-      "INSERT INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
+      "INSERT INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?,?,?,?,?,?)",
     )
-    .bind(t.orgId, `org ${t.orgId}`, "free", NOW, NOW)
+    .bind(t.orgId, `org ${t.orgId}`, t.orgId, "free", NOW, NOW)
     .run();
   await d1
     .prepare(

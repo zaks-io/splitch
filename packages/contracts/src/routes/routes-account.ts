@@ -1,22 +1,16 @@
 import { z } from "@hono/zod-openapi";
-import { AppSchema, EnvironmentSchema, UserSchema } from "../leaf-schemas-runtime";
+import { UserSchema } from "../leaf-schemas-runtime";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
-  CreateAppRequestSchema,
-  CreateAppResponseSchema,
+  CreateOrganizationRequestSchema,
   OrganizationResponseSchema,
-  PatchAppRequestSchema,
   PatchOrganizationRequestSchema,
 } from "../resource-envelopes-account";
+import { appEnvironmentRoutes } from "./routes-app-environment";
 import {
   AddMemberRequestSchema,
-  AppParams,
-  CreateEnvironmentRequestSchema,
-  EnvParams,
-  OrgAppsParams,
   OrgMemberParams,
   OrgParams,
-  PatchEnvironmentRequestSchema,
   UpdateMemberRequestSchema,
 } from "./route-shapes";
 
@@ -31,13 +25,11 @@ const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
 const OrgListResponse = z.object({ items: z.array(OrganizationResponseSchema) });
-const AppListResponse = z.object({ items: z.array(AppSchema) });
-const EnvListResponse = z.object({ items: z.array(EnvironmentSchema) });
 const MemberListResponse = z.object({ items: z.array(UserSchema) });
 const MemberResponse = UserSchema;
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
-export const accountRoutes = [
+const organizationRoutes = [
   defineApiRoute({
     operationId: "organizations_list",
     owner: OWNER,
@@ -49,6 +41,28 @@ export const accountRoutes = [
     rateLimit: RATE,
     idempotency: "none",
     errors: [],
+  }),
+  // Collection path is `/orgs`, matching every other Organization route. The
+  // creating principal becomes `owner` in the same transaction, so this is the
+  // one Organization route with no `:orgId` to co-scope against: authorization
+  // is the handler's job (a provisional principal must not mint Organizations).
+  defineApiRoute({
+    operationId: "organizations_create",
+    owner: OWNER,
+    method: "POST",
+    path: "/orgs",
+    summary: "Create an organization; the calling principal becomes its owner.",
+    request: { body: CreateOrganizationRequestSchema },
+    response: OrganizationResponseSchema,
+    auth: AUTH,
+    rateLimit: RATE,
+    // "none" until replay semantics exist. Declaring "optional" would expose an
+    // `Idempotency-Key` header through every derived client and the OpenAPI
+    // document while the handler ignores it, so a retry after a lost response
+    // would answer SLUG_CONFLICT instead of replaying the original success:
+    // a guarantee advertised but not kept.
+    idempotency: "none",
+    errors: ["VALIDATION_ERROR", "FORBIDDEN", "SLUG_CONFLICT"],
   }),
   defineApiRoute({
     operationId: "organizations_get",
@@ -152,140 +166,14 @@ export const accountRoutes = [
     idempotency: "none",
     errors: ["ORGANIZATION_NOT_FOUND", "USER_NOT_FOUND", "FORBIDDEN", "LAST_OWNER_REQUIRED"],
   }),
-  defineApiRoute({
-    operationId: "apps_list",
-    owner: OWNER,
-    method: "GET",
-    path: "/orgs/:orgId/apps",
-    summary: "List the Apps in an organization.",
-    request: { params: OrgAppsParams },
-    response: AppListResponse,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN"],
-  }),
-  defineApiRoute({
-    operationId: "apps_create",
-    owner: OWNER,
-    method: "POST",
-    path: "/orgs/:orgId/apps",
-    summary: "Create an App (provisions dev + prod Environments and Client Keys).",
-    request: { params: OrgAppsParams, body: CreateAppRequestSchema },
-    response: CreateAppResponseSchema,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "optional",
-    errors: ["ORGANIZATION_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
-  }),
-  defineApiRoute({
-    operationId: "apps_get",
-    owner: OWNER,
-    method: "GET",
-    path: "/apps/:appId",
-    summary: "Get one App.",
-    request: { params: AppParams },
-    response: AppSchema,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN"],
-  }),
-  defineApiRoute({
-    operationId: "apps_update",
-    owner: OWNER,
-    method: "PATCH",
-    path: "/apps/:appId",
-    summary: "Rename an App.",
-    request: { params: AppParams, body: PatchAppRequestSchema },
-    response: AppSchema,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
-  }),
-  defineApiRoute({
-    operationId: "apps_delete",
-    owner: OWNER,
-    method: "DELETE",
-    path: "/apps/:appId",
-    summary: "Delete an App (blocked while any Experiment is running).",
-    request: { params: AppParams },
-    response: DeletedResponse,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING", "RESOURCE_NOT_EMPTY"],
-  }),
-  defineApiRoute({
-    operationId: "environments_list",
-    owner: OWNER,
-    method: "GET",
-    path: "/apps/:appId/envs",
-    summary: "List an App's Environments.",
-    request: { params: AppParams },
-    response: EnvListResponse,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN"],
-  }),
-  defineApiRoute({
-    operationId: "environments_create",
-    owner: OWNER,
-    method: "POST",
-    path: "/apps/:appId/envs",
-    summary: "Create an Environment (auto-provisions its Client Key).",
-    request: { params: AppParams, body: CreateEnvironmentRequestSchema },
-    response: EnvironmentSchema,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
-  }),
-  defineApiRoute({
-    operationId: "environments_get",
-    owner: OWNER,
-    method: "GET",
-    path: "/apps/:appId/envs/:environmentId",
-    summary: "Get one Environment (includes its inline Policy).",
-    request: { params: EnvParams },
-    response: EnvironmentSchema,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN"],
-  }),
-  defineApiRoute({
-    operationId: "environments_update",
-    owner: OWNER,
-    method: "PATCH",
-    path: "/apps/:appId/envs/:environmentId",
-    summary: "Rename an Environment or edit its Policy.",
-    request: { params: EnvParams, body: PatchEnvironmentRequestSchema },
-    response: EnvironmentSchema,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
-  }),
-  defineApiRoute({
-    operationId: "environments_delete",
-    owner: OWNER,
-    method: "DELETE",
-    path: "/apps/:appId/envs/:environmentId",
-    summary: "Delete an Environment (blocked if running or last Environment).",
-    request: { params: EnvParams },
-    response: DeletedResponse,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: [
-      "APP_NOT_FOUND",
-      "FORBIDDEN",
-      "EXPERIMENT_RUNNING",
-      "LAST_ENVIRONMENT_REQUIRED",
-      "RESOURCE_NOT_EMPTY",
-    ],
-  }),
+] as const satisfies readonly ApiRouteContract[];
+
+/**
+ * Still the single list every derived surface (MCP tools, CLI, SDK, OpenAPI)
+ * reads. The App/Environment half lives in its own file for size only; splitting
+ * the EXPORT would have silently dropped those routes from every surface.
+ */
+export const accountRoutes = [
+  ...organizationRoutes,
+  ...appEnvironmentRoutes,
 ] as const satisfies readonly ApiRouteContract[];

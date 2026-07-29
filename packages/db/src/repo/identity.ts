@@ -9,6 +9,7 @@ import {
 } from "../schema/index";
 import type { Db } from "./client";
 import { makeDemoReaper } from "./identity-demo-reaper";
+import { makeCreateOrganization } from "./organization-create";
 import type { TenantScope } from "./scope";
 import { scopedTable } from "./scoped-table";
 
@@ -38,6 +39,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
   const appMembershipsTable = scopedTable(db, appMemberships);
   const orgMutations = makeOrgMutations(db);
   const demoReaper = makeDemoReaper(db, d1);
+  const createOrganization = makeCreateOrganization(db, d1);
 
   return {
     environments: environmentsTable,
@@ -127,16 +129,12 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
     // Environment, by contrast, IS app-scoped, so it is written through the
     // scope-bound `environments` table above, never here.
 
-    async createOrganization(
-      values: typeof organizations.$inferInsert,
-    ): Promise<typeof organizations.$inferSelect> {
-      const rows = await db.insert(organizations).values(values).returning();
-      const inserted = rows[0];
-      if (!inserted) {
-        throw new Error("createOrganization: no row returned");
-      }
-      return inserted;
-    },
+    /**
+     * Creates the Org AND its owner membership atomically. There is deliberately
+     * no way to create one without the other: an Org with no owner is
+     * unreachable, since every Org route authorizes through live membership.
+     */
+    createOrganization,
 
     async createOrgMembership(
       values: typeof orgMemberships.$inferInsert,

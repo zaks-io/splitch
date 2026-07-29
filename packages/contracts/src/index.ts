@@ -14,9 +14,12 @@ export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } fr
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped resource envelope API
 export * from "./resource-envelopes";
 export {
+  AuthDoorSchema,
+  authDoors,
   AuthKindSchema,
   authKinds,
   defineRoute,
+  isProvisionalAuthDoor,
   HttpMethodSchema,
   httpMethods,
   IdempotencyModeSchema,
@@ -27,6 +30,7 @@ export {
   routeOwners,
 } from "./route-contract";
 export type {
+  AuthDoor,
   AuthKind,
   HttpMethod,
   IdempotencyMode,
@@ -218,6 +222,14 @@ export type {
   UserRole,
   VariantValue,
 } from "./leaf-schemas-runtime";
+export {
+  deriveOrganizationSlug,
+  isReservedOrganizationSlug,
+  ORGANIZATION_SLUG_MAX_LENGTH,
+  ORGANIZATION_SLUG_MIN_LENGTH,
+  OrganizationSlugSchema,
+  RESERVED_ORGANIZATION_SLUGS,
+} from "./organization-slug";
 export {
   apiKeyCacheKey,
   assignmentKey,

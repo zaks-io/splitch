@@ -79,21 +79,27 @@ export async function registerAnonymous(
 
   // (4) provisional Org. is_provisional=1 ⇒ demo_expires_at NOT NULL (invariant).
   const orgId = shortId("org");
-  await deps.repo.identity.createOrganization({
-    id: orgId,
-    name: "Provisional workspace",
-    plan: "free",
-    isProvisional: true,
-    demoExpiresAt,
+  // The slug is the Org id: a provisional Organization has no user-chosen name to
+  // derive from, and every one of them would otherwise slugify identically.
+  // The claim ceremony is where a real handle gets picked.
+  const created = await deps.repo.identity.createOrganization({
+    organization: {
+      id: orgId,
+      name: "Provisional workspace",
+      slug: orgId,
+      plan: "free",
+      isProvisional: true,
+      demoExpiresAt,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    },
+    ownerUserId: userId,
     createdAt: nowIso,
-    updatedAt: nowIso,
   });
-  await deps.repo.identity.createOrgMembership({
-    orgId,
-    userId,
-    role: "owner",
-    createdAt: nowIso,
-  });
+  if (!created.ok) {
+    // `orgId` is freshly minted, so this cannot be a real handle collision.
+    throw new Error(`registerAnonymous: provisional Org slug collided on ${orgId}`);
+  }
 
   // (5) provisional App under the Org, + its default Environments (per-App).
   const appId = shortId("app");

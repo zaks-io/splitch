@@ -1,9 +1,9 @@
 import {
   apiKeyCacheKey,
-  clientKeyCacheKey,
   CredentialCacheKVSchema,
-  kvEnvelope,
+  clientKeyCacheKey,
   type ErrorResponse,
+  kvEnvelope,
 } from "@splitch/contracts";
 import { createRepository, envScope } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
@@ -14,7 +14,8 @@ import { sha256Hex, writeApiKeyCache } from "./credential-cache";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { makeSessionStore } from "./session-store";
-import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
+import type { LocalBindings } from "./test-fixtures";
+import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "./test-seeds";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
@@ -40,8 +41,15 @@ interface Harness {
 
 export let h: Harness;
 
-export async function setup(): Promise<void> {
-  const bindings = await makeLocalBindings();
+/**
+ * The bindings factory is a parameter so this fixture stays free of any Miniflare
+ * import: it must be, to load inside workerd under the Workers pool. The graph is
+ * reset first because the pool isolates storage per test FILE, not per test, and
+ * these suites re-seed the same fixed IDs.
+ */
+export async function setup(makeBindings: () => Promise<LocalBindings>): Promise<void> {
+  const bindings = await makeBindings();
+  await resetOrganizationGraph(bindings.d1);
   await seedOrgApp(bindings.d1, ORG);
   await seedOrgMember(bindings.d1, {
     orgId: ORG.orgId,

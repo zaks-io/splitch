@@ -11,7 +11,10 @@ import { Miniflare } from "miniflare";
  */
 
 const SCHEMA = [
-  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, claim_acquired_at TEXT, claim_acquisition_token TEXT, claim_acquisition_key_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, claim_acquired_at TEXT, claim_acquisition_token TEXT, claim_acquisition_key_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  // The index is the slug-collision check `organizations_create` relies on, so a
+  // fixture without it would report success on a duplicate the real DB rejects.
+  `CREATE UNIQUE INDEX organizations_slug_unique ON organizations (slug)`,
   `CREATE TABLE org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
   `CREATE TABLE apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX apps_org_key_unique ON apps (organization_id, key)`,
@@ -60,88 +63,9 @@ export async function makeLocalBindings(): Promise<LocalBindings> {
   const d1 = (await mf.getD1Database("DB")) as unknown as D1Database;
   const kv = (await mf.getKVNamespace("SESSION_STORE")) as unknown as KVNamespace;
   const credentialKv = (await mf.getKVNamespace("CREDENTIAL_STORE")) as unknown as KVNamespace;
-  for (const statement of SCHEMA) {
-    await d1.exec(statement);
-  }
+  // One batch, not a loop of `exec`: Miniflare's D1 is a real workerd process
+  // over loopback and each `exec` burns an ephemeral port that lands in
+  // TIME_WAIT, which is how this suite used to exhaust the port range.
+  await d1.batch(SCHEMA.map((statement) => d1.prepare(statement)));
   return { d1, kv, credentialKv, dispose: () => mf.dispose() };
-}
-
-export interface SeedRow {
-  orgId: string;
-  orgName: string;
-  appId: string;
-  appName: string;
-  appKey: string;
-}
-
-const NOW = "2026-06-29T00:00:00.000Z";
-
-/** Insert one Org + its App (the roots are above the App tenant boundary). */
-export async function seedOrgApp(d1: D1Database, row: SeedRow): Promise<void> {
-  await d1
-    .prepare(
-      "INSERT INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
-    )
-    .bind(row.orgId, row.orgName, "free", NOW, NOW)
-    .run();
-  await d1
-    .prepare(
-      "INSERT INTO apps (id, organization_id, name, key, created_at, updated_at) VALUES (?,?,?,?,?,?)",
-    )
-    .bind(row.appId, row.orgId, row.appName, row.appKey, NOW, NOW)
-    .run();
-}
-
-export interface SeedOrgMember {
-  orgId: string;
-  userId: string;
-  role: "owner" | "admin" | "member";
-  createdAt?: string;
-}
-
-export async function seedOrgMember(d1: D1Database, row: SeedOrgMember): Promise<void> {
-  await d1
-    .prepare("INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES (?,?,?,?)")
-    .bind(row.orgId, row.userId, row.role, row.createdAt ?? NOW)
-    .run();
-}
-
-export interface SeedAppMember {
-  appId: string;
-  userId: string;
-  role: "owner" | "admin" | "member";
-  createdAt?: string;
-}
-
-export async function seedAppMember(d1: D1Database, row: SeedAppMember): Promise<void> {
-  await d1
-    .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
-    .bind(row.appId, row.userId, row.role, row.createdAt ?? NOW)
-    .run();
-}
-
-export interface SeedEnvironment {
-  appId: string;
-  environmentId: string;
-  key: string;
-  name?: string;
-  policy?: string;
-}
-
-export async function seedEnvironment(d1: D1Database, row: SeedEnvironment): Promise<void> {
-  await d1
-    .prepare(
-      "INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
-    )
-    .bind(
-      row.environmentId,
-      row.appId,
-      row.key,
-      row.name ?? row.key,
-      row.policy ??
-        '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}',
-      NOW,
-      NOW,
-    )
-    .run();
 }

@@ -7,6 +7,7 @@ import {
   EnvironmentSchema,
   OrganizationSchema,
 } from "./leaf-schemas-runtime";
+import { OrganizationSlugSchema } from "./organization-slug";
 
 /**
  * Create/patch/response wire envelopes for the account-tier resources: Metric,
@@ -116,6 +117,26 @@ export const PatchOrganizationRequestSchema = z
   })
   .strict();
 export type PatchOrganizationRequest = z.infer<typeof PatchOrganizationRequestSchema>;
+
+/**
+ * Explicit Organization creation (SPL-171).
+ *
+ * `slug` is optional and derived from `name` when absent. It is NOT defaulted
+ * here: derivation can fail (a name that slugifies to nothing, or onto a
+ * reserved handle), and a Zod default would have to invent a value to stay
+ * total. The handler derives it so that failure is a structured 400 naming
+ * `slug` as the fix.
+ *
+ * `plan` is absent by design: a caller must not be able to self-assign a paid
+ * plan at creation. New Organizations start on the schema default.
+ */
+export const CreateOrganizationRequestSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    slug: OrganizationSlugSchema.optional(),
+  })
+  .strict();
+export type CreateOrganizationRequest = z.infer<typeof CreateOrganizationRequestSchema>;
 
 export const OrganizationResponseSchema = OrganizationSchema;
 export type OrganizationResponse = z.infer<typeof OrganizationResponseSchema>;

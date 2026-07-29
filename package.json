@@ -10,6 +10,7 @@
     "clean": "turbo run clean && rm -rf node_modules .turbo coverage",
     "depcruise": "dependency-cruiser --config .dependency-cruiser.cjs \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
     "d1:migrate:local": "node scripts/check-d1-local.mjs",
+    "d1:migrate:populated": "node scripts/check-d1-populated.mjs",
     "dev": "turbo run dev --parallel",
     "dev:api": "turbo run dev --parallel --filter=@splitch/analysis-api --filter=@splitch/auth-api --filter=@splitch/control-plane-api --filter=@splitch/evaluation-api --filter=@splitch/event-ingest-api --filter=@splitch/mcp-server",
     "duplicates": "jscpd --config .jscpd.json --exit-code --no-tips --no-colors apps packages scripts",
@@ -78,7 +79,7 @@
     "typecheck": "turbo run typecheck",
     "verify:ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm spec:lint && pnpm check:cli-mcp-parity && pnpm test:scripts && pnpm test && pnpm stats:golden && pnpm stats:property && pnpm build",
     "verify:commit": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:staged",
-    "verify:push": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:range && pnpm tinybird:local && pnpm d1:migrate:local"
+    "verify:push": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:range && pnpm tinybird:local && pnpm d1:migrate:local && pnpm d1:migrate:populated"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",

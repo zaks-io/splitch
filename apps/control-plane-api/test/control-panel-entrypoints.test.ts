@@ -227,9 +227,9 @@ async function storeBasePanelSession(
 async function seedOrgApp(): Promise<void> {
   const now = new Date(NOW_MS).toISOString();
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
+    "INSERT OR IGNORE INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?,?,?,?,?,?)",
   )
-    .bind(ORG.orgId, ORG.orgName, "free", now, now)
+    .bind(ORG.orgId, ORG.orgName, ORG.orgId, "free", now, now)
     .run();
   await env.DB.prepare(
     "INSERT OR IGNORE INTO apps (id, organization_id, name, key, created_at, updated_at) VALUES (?,?,?,?,?,?)",

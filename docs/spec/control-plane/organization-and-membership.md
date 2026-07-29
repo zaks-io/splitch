@@ -17,6 +17,7 @@ authenticated principal can touch lives here, not in WorkOS org claims.
 | ------------------------ | ------- | -------- | --------------------------------------------------------------------- |
 | `org_id`                 | TEXT PK | yes      | WorkOS Organization ID (wos prefix); stable across all ops            |
 | `name`                   | TEXT    | yes      | Display name                                                          |
+| `slug`                   | TEXT    | yes      | URL handle the Control Panel routes on; UNIQUE across all Orgs        |
 | `plan`                   | TEXT    | yes      | `free` \| `pro` \| `enterprise`; defaults to `free`                   |
 | `stripe_customer_id`     | TEXT    | no       | Null until billing seam is wired; seam exists, integration deferred   |
 | `stripe_subscription_id` | TEXT    | no       | Same — billing seam shape, live integration deferred                  |
@@ -31,6 +32,22 @@ authenticated principal can touch lives here, not in WorkOS org claims.
 - `is_provisional = 1` implies `demo_expires_at IS NOT NULL`
 - Reaper checks `is_provisional = 1 AND demo_expires_at < now()` (see [auth-doors.md](auth-doors.md))
 - `plan` defaults to `free`; billing seam owns transitions
+- `slug` is unique by index (`organizations_slug_unique`), never by a preceding read: a read-then-write
+  check is racy, so the index is the arbiter and its violation is what surfaces as `SLUG_CONFLICT`
+- Every Organization has at least one `owner` membership from the instant it exists
+
+### Creating an Organization
+
+`POST /orgs` writes the `organizations` row and the creator's `owner` row in **one `d1.batch`** (D1 has
+no `transaction()`). These two rows are one fact: every Org route authorizes through live membership,
+so an Org with no owner is invisible to its own creator and to everyone else, permanently. A failure
+between the two writes would leak exactly that, so both commit or neither does.
+
+Authorization is the handler's alone — the path has no `{org_id}`, so the co-scope guard never fires.
+Any authenticated non-provisional principal may create. A **provisional** principal may not: it came
+through the anonymous door, where the token was minted by an unauthenticated `POST /register`, and
+allowing it would make unbounded tenant creation an unauthenticated operation. The `auth_door` claim
+carries this, and it parses **fail-closed** — a missing or unrecognized door reads as `anonymous`.
 
 ## App
 

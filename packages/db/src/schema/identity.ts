@@ -21,27 +21,39 @@ const DEFAULT_ENVIRONMENT_POLICY = JSON.stringify({
   startExperimentRun: "allow",
 });
 
-export const organizations = sqliteTable("organizations", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  plan: text("plan").notNull().default("free"),
-  // Billing seam: shape exists, live Stripe integration deferred. Nullable.
-  stripeCustomerId: text("stripe_customer_id"),
-  stripeSubscriptionId: text("stripe_subscription_id"),
-  // 0|1. Enterprise SSO wired via WorkOS.
-  ssoEnabled: integer("sso_enabled", { mode: "boolean" }).notNull().default(false),
-  // Provisional-org reaper: true while created by the anon door, not yet claimed.
-  // is_provisional = 1 implies demo_expires_at IS NOT NULL (enforced in the seam).
-  isProvisional: integer("is_provisional", { mode: "boolean" }).notNull().default(false),
-  demoExpiresAt: text("demo_expires_at"),
-  // Set only by the atomic Door B transfer acquisition batch.
-  claimAcquiredAt: text("claim_acquired_at"),
-  claimAcquisitionToken: text("claim_acquisition_token"),
-  // Cleared on completion; identifies same-key losers while the batch is in flight.
-  claimAcquisitionKeyHash: text("claim_acquisition_key_hash"),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
+export const organizations = sqliteTable(
+  "organizations",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    // URL handle. Persisted rather than derived from `name`: the Panel routes on
+    // it (`/:orgSlug/...`), so deriving meant a rename silently broke every live
+    // URL and two same-named Orgs collided at session materialization.
+    slug: text("slug").notNull(),
+    plan: text("plan").notNull().default("free"),
+    // Billing seam: shape exists, live Stripe integration deferred. Nullable.
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    // 0|1. Enterprise SSO wired via WorkOS.
+    ssoEnabled: integer("sso_enabled", { mode: "boolean" }).notNull().default(false),
+    // Provisional-org reaper: true while created by the anon door, not yet claimed.
+    // is_provisional = 1 implies demo_expires_at IS NOT NULL (enforced in the seam).
+    isProvisional: integer("is_provisional", { mode: "boolean" }).notNull().default(false),
+    demoExpiresAt: text("demo_expires_at"),
+    // Set only by the atomic Door B transfer acquisition batch.
+    claimAcquiredAt: text("claim_acquired_at"),
+    claimAcquisitionToken: text("claim_acquisition_token"),
+    // Cleared on completion; identifies same-key losers while the batch is in flight.
+    claimAcquisitionKeyHash: text("claim_acquisition_key_hash"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  // Global, not per-Org: the slug is the Panel's URL handle and must resolve to
+  // exactly one Organization. This index IS the collision check the create path
+  // relies on — a losing INSERT fails here rather than being pre-checked in a
+  // read that another request could race.
+  (t) => [uniqueIndex("organizations_slug_unique").on(t.slug)],
+);
 
 export const orgMemberships = sqliteTable(
   "org_memberships",

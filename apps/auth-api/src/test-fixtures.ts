@@ -92,7 +92,8 @@ export async function signIdJag(
 const SCHEMA = [
   `CREATE TABLE trusted_idps (idp_id TEXT PRIMARY KEY NOT NULL, org_id TEXT, issuer TEXT NOT NULL, jwks_uri TEXT NOT NULL, client_ids TEXT NOT NULL, enabled INTEGER DEFAULT 1 NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE UNIQUE INDEX trusted_idps_org_issuer_unique ON trusted_idps (org_id, issuer)`,
-  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, claim_acquired_at TEXT, claim_acquisition_token TEXT, claim_acquisition_key_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE TABLE organizations (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL, plan TEXT DEFAULT 'free' NOT NULL, stripe_customer_id TEXT, stripe_subscription_id TEXT, sso_enabled INTEGER DEFAULT 0 NOT NULL, is_provisional INTEGER DEFAULT 0 NOT NULL, demo_expires_at TEXT, claim_acquired_at TEXT, claim_acquisition_token TEXT, claim_acquisition_key_hash TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+  `CREATE UNIQUE INDEX organizations_slug_unique ON organizations (slug)`,
   `CREATE TABLE org_memberships (org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (org_id, user_id))`,
   `CREATE TABLE apps (id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL, name TEXT NOT NULL, key TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, created_by TEXT)`,
   `CREATE UNIQUE INDEX apps_org_key_unique ON apps (organization_id, key)`,
@@ -123,9 +124,10 @@ export async function makeLocalBindings(): Promise<LocalBindings> {
   const d1 = (await mf.getD1Database("DB")) as unknown as D1Database;
   const kv = (await mf.getKVNamespace("JTI_CACHE")) as unknown as KVNamespace;
   const sessionKv = (await mf.getKVNamespace("SESSION_STORE")) as unknown as KVNamespace;
-  for (const statement of SCHEMA) {
-    await d1.exec(statement);
-  }
+  // One batch, not a loop of `exec`: Miniflare's D1 is a real workerd process
+  // over loopback and each `exec` burns an ephemeral port that lands in
+  // TIME_WAIT, which is how this suite used to exhaust the port range.
+  await d1.batch(SCHEMA.map((statement) => d1.prepare(statement)));
   return { d1, kv, sessionKv, dispose: () => mf.dispose() };
 }
 

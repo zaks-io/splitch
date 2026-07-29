@@ -69,9 +69,9 @@ export function buildSeedSql(now, ids = SMOKE_IDS) {
   });
 
   return `
-INSERT INTO organizations (id, name, plan, created_at, updated_at)
-VALUES ('${ids.org}', 'Shared Preview Smoke', 'free', '${now}', '${now}')
-ON CONFLICT(id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at;
+INSERT INTO organizations (id, name, slug, plan, created_at, updated_at)
+VALUES ('${ids.org}', 'Shared Preview Smoke', '${ids.org}', 'free', '${now}', '${now}')
+ON CONFLICT(id) DO UPDATE SET name = excluded.name, slug = excluded.slug, updated_at = excluded.updated_at;
 
 INSERT INTO org_memberships (org_id, user_id, role, created_at)
 VALUES ('${ids.org}', '${ids.user}', 'owner', '${now}')

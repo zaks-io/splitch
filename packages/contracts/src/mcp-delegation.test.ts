@@ -14,13 +14,15 @@ describe("MCP delegated credential", () => {
     const request = new Request("https://control-plane.internal/apps/app_one/flags?limit=10");
     const credential = await createMcpDelegationHeader({
       operationId: "flags_list",
-      actor: { subject: "user_one", scopes: ["app:app_one:admin"] },
+      actor: { subject: "user_one", scopes: ["app:app_one:admin"], authDoor: "id_jag" },
       request,
       secret: SECRET,
       nowSeconds: 100,
       jti: "delegation-id-one",
     });
 
+    // The door round-trips through the signed credential: it is covered by the
+    // HMAC, so a tampered one fails the signature rather than downgrading.
     await expect(
       parseMcpDelegation({
         request: withCredential(request, credential),
@@ -29,7 +31,11 @@ describe("MCP delegated credential", () => {
         replayGuard: memoryReplayGuard(),
         nowSeconds: 100,
       }),
-    ).resolves.toEqual({ subject: "user_one", scopes: ["app:app_one:admin"] });
+    ).resolves.toEqual({
+      subject: "user_one",
+      scopes: ["app:app_one:admin"],
+      authDoor: "id_jag",
+    });
 
     for (const changedRequest of [
       new Request("https://control-plane.internal/apps/app_two/flags?limit=10"),
@@ -57,7 +63,7 @@ describe("MCP delegated credential rejection", () => {
     const request = new Request("https://control-plane.internal/apps/app_one/flags");
     const credential = await createMcpDelegationHeader({
       operationId: "flags_list",
-      actor: { subject: "user_one", scopes: ["app:app_one:admin"] },
+      actor: { subject: "user_one", scopes: ["app:app_one:admin"], authDoor: "id_jag" },
       request,
       secret: SECRET,
       nowSeconds: 100,
@@ -104,6 +110,7 @@ describe("MCP delegated credential rejection", () => {
     await expect(parseMcpDelegation(options)).resolves.toEqual({
       subject: "user_one",
       scopes: ["app:app_one:admin"],
+      authDoor: "id_jag",
     });
     await expect(parseMcpDelegation(options)).resolves.toBeNull();
 
@@ -141,7 +148,7 @@ describe("MCP delegated credential rejection", () => {
     });
     const credential = await createMcpDelegationHeader({
       operationId: "flags_update",
-      actor: { subject: "user_one", scopes: ["app:app_one:admin"] },
+      actor: { subject: "user_one", scopes: ["app:app_one:admin"], authDoor: "id_jag" },
       request,
       secret: SECRET,
       nowSeconds: 100,
@@ -168,7 +175,7 @@ describe("MCP delegated credential rejection", () => {
     const request = new Request("https://control-plane.internal/apps/app_one/experiments");
     const credential = await createMcpDelegationHeader({
       operationId: "flags_list",
-      actor: { subject: "user_one", scopes: ["app:app_one:admin"] },
+      actor: { subject: "user_one", scopes: ["app:app_one:admin"], authDoor: "id_jag" },
       request,
       secret: SECRET,
       nowSeconds: 100,

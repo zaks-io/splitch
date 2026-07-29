@@ -4,7 +4,9 @@ import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { objectBody, pathParam } from "./handler-input";
 import { ORG_ADMIN_ROLES, ORG_MEMBER_ROLES, ORG_OWNER_ROLES, requireOrgRole } from "./org-authz";
+import { makeCreateOrganizationHandler } from "./org-create-handler";
 import { makeListOrganizationsHandler } from "./org-list-handler";
+import { organizationResponse } from "./org-response";
 
 export interface MemberProfile {
   email: string;
@@ -29,6 +31,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
 
   return {
     listOrganizations: makeListOrganizationsHandler(deps.repo),
+    createOrganization: makeCreateOrganizationHandler(deps),
 
     async getOrg({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
       const orgId = pathParam(input, "orgId");
@@ -37,7 +40,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
 
       const org = await deps.repo.identity.getOrg(orgId);
       if (!org) return organizationNotFound(requestId);
-      return Response.json(orgResponse(org));
+      return Response.json(organizationResponse(org));
     },
 
     async updateOrg({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
@@ -54,7 +57,7 @@ export function makeOrgHandlers(deps: OrgHandlerDeps) {
 
       const org = await deps.repo.identity.updateOrg(orgId, values);
       if (!org) return organizationNotFound(requestId);
-      return Response.json(orgResponse(org));
+      return Response.json(organizationResponse(org));
     },
 
     async listMembers({ input, request, principal, requestId }: HandlerArgs<unknown>) {
@@ -187,16 +190,6 @@ async function existingMember(
   if (!current) return userNotFound(requestId);
 
   return current;
-}
-
-function orgResponse(org: NonNullable<Awaited<ReturnType<Repository["identity"]["getOrg"]>>>) {
-  return {
-    id: org.id,
-    name: org.name,
-    plan: org.plan,
-    createdAt: org.createdAt,
-    updatedAt: org.updatedAt,
-  };
 }
 
 async function memberResponse(

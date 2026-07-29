@@ -12,7 +12,7 @@ serves this file verbatim, so an agent never needs the docs site to onboard (mcp
 ## The shape of it
 
 ```
-authenticate → pick an Org → create an App (dev+prod Envs auto-provisioned)
+authenticate → pick or create an Org → create an App (dev+prod Envs auto-provisioned)
             → select the dev Environment → get a Client Key → create a Flag
             → VERIFY (one round-trip) → create an Experiment → Start its Run
             → wire the SDK → first real Exposure
@@ -40,7 +40,7 @@ context`) shows exactly what your token can do.
 > expires. `splitch://active-context` surfaces `demo_expires_at` so an agent can see the deadline and
 > prompt the human to claim.
 
-## 2. Pick an Organization
+## 2. Pick or create an Organization
 
 An agent landing cold has no Org ID. Discover the Organizations your token can reach first:
 
@@ -49,7 +49,21 @@ splitch orgs list           # CLI
 organizations_list          # MCP tool
 ```
 
-Pick one; its `orgId` feeds the next step.
+If the list is empty, or the work belongs in a new tenant, create one:
+
+```
+splitch orgs create --name "My Org"     # CLI
+organizations_create { name }            # MCP tool
+```
+
+You become its `owner` on create. `slug` is derived from `name` unless you pass one; it is unique
+across all Organizations, so a taken handle returns `409 SLUG_CONFLICT` and you pick another.
+
+> **The anonymous door cannot create Organizations.** A provisional token already holds one demo
+> Organization, and minting more would make Organization creation an unauthenticated operation. Claim
+> it first (step 1); creating is available the moment the principal is identified.
+
+Either way, the resulting `orgId` feeds the next step.
 
 ## 3. Create an App
 

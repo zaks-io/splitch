@@ -26,6 +26,12 @@ export default defineConfig({
         replacement: new URL("../../packages/control-plane-sdk/src/index.ts", import.meta.url)
           .pathname,
       },
+      // Ordered before the bare "@splitch/db" entry: aliases match by prefix, so
+      // the broader one would rewrite the subpath into `index.ts/test-d1`.
+      {
+        find: "@splitch/db/test-d1",
+        replacement: new URL("../../packages/db/src/repo/test-d1.ts", import.meta.url).pathname,
+      },
       {
         find: "@splitch/db",
         replacement: new URL("../../packages/db/src/index.ts", import.meta.url).pathname,

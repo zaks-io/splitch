@@ -223,6 +223,7 @@ async function mcp(
     tokenVerifier: staticMcpTokenVerifier({
       subject: "user_local_test",
       scopes: ["app:app_local:admin"],
+      authDoor: "id_jag",
     }),
     revocations: allowMcpRevocations(),
     controlPlaneDelegationSecret: TEST_MCP_DELEGATION_SECRET,

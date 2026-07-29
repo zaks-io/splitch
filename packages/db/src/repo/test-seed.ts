@@ -50,9 +50,11 @@ function ids(p: string): Tenant {
 async function insertRoots(d1: D1Database, t: Tenant): Promise<void> {
   await d1
     .prepare(
-      "INSERT INTO organizations (id, name, plan, created_at, updated_at) VALUES (?,?,?,?,?)",
+      "INSERT INTO organizations (id, name, slug, plan, created_at, updated_at) VALUES (?,?,?,?,?,?)",
     )
-    .bind(t.orgId, `org ${t.orgId}`, "free", NOW, NOW)
+    // Slug defaults to the id, exactly like migration 0014's backfill: unique per
+    // tenant without these tests having to invent a handle they never assert on.
+    .bind(t.orgId, `org ${t.orgId}`, t.orgId, "free", NOW, NOW)
     .run();
   await d1
     .prepare(

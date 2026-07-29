@@ -56,20 +56,24 @@ const experimentsSdkRoutes = [
   experimentRoutes[5],
 ] as const;
 
+// Only `organizations_create` (SPL-171). The rest of the Organization surface
+// reaches the Panel through its own binding path, not this SDK.
+const organizationsSdkRoutes = [accountRoutes[1]] as const;
+
 const appsSdkRoutes = [
-  accountRoutes[8],
   accountRoutes[9],
   accountRoutes[10],
   accountRoutes[11],
   accountRoutes[12],
+  accountRoutes[13],
 ] as const;
 
 const environmentsSdkRoutes = [
-  accountRoutes[13],
   accountRoutes[14],
   accountRoutes[15],
   accountRoutes[16],
   accountRoutes[17],
+  accountRoutes[18],
 ] as const;
 
 const credentialsSdkRoutes = [
@@ -105,6 +109,10 @@ const experimentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: experimentsSdkRoutes[5].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[5]) },
 ] as const);
 
+const organizationsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
+  { route: organizationsSdkRoutes[0].openapi, handler: emitOnlyHandler(organizationsSdkRoutes[0]) },
+] as const);
+
 const appsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: appsSdkRoutes[0].openapi, handler: emitOnlyHandler(appsSdkRoutes[0]) },
   { route: appsSdkRoutes[1].openapi, handler: emitOnlyHandler(appsSdkRoutes[1]) },
@@ -136,6 +144,9 @@ export type FlagsControlPlaneClientApp = typeof flagsControlPlaneClientApp;
 /** `hc<ExperimentsControlPlaneClientApp>()` — experiment route group client type. */
 export type ExperimentsControlPlaneClientApp = typeof experimentsControlPlaneClientApp;
 
+/** `hc<OrganizationsControlPlaneClientApp>()` — Organization route group client type. */
+export type OrganizationsControlPlaneClientApp = typeof organizationsControlPlaneClientApp;
+
 /** `hc<AppsControlPlaneClientApp>()` — App route group client type. */
 export type AppsControlPlaneClientApp = typeof appsControlPlaneClientApp;
 
@@ -149,6 +160,7 @@ export type CredentialsControlPlaneClientApp = typeof credentialsControlPlaneCli
 export type ControlPlaneClientApp =
   | FlagsControlPlaneClientApp
   | ExperimentsControlPlaneClientApp
+  | OrganizationsControlPlaneClientApp
   | AppsControlPlaneClientApp
   | EnvironmentsControlPlaneClientApp
   | CredentialsControlPlaneClientApp;

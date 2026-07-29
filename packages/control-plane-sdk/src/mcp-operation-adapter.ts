@@ -79,6 +79,9 @@ function scopedDelegationActor(
   ].filter((target): target is string => target !== null);
   return {
     subject: actor.subject,
+    // Narrowed to the route's target, but the door is NOT narrowable: it says
+    // who the caller is, not what they may reach.
+    authDoor: actor.authDoor,
     scopes:
       targets.length === 0
         ? actor.scopes

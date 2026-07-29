@@ -32,6 +32,10 @@ export default defineConfig(async () => {
       alias: {
         "@splitch/contracts": new URL("../../packages/contracts/src/index.ts", import.meta.url)
           .pathname,
+        // Ordered before the bare "@splitch/db" alias: that one is a prefix match
+        // and would otherwise rewrite the subpath into `index.ts/test-d1`.
+        "@splitch/db/test-d1": new URL("../../packages/db/src/repo/test-d1.ts", import.meta.url)
+          .pathname,
         "@splitch/db": new URL("../../packages/db/src/index.ts", import.meta.url).pathname,
         "@splitch/worker-runtime": new URL(
           "../../packages/worker-runtime/src/index.ts",

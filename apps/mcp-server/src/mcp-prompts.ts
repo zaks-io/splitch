@@ -11,10 +11,10 @@ import {
   diagnoseSetupPlan,
   endARunPlan,
   onboardNewAppPlan,
-  recoverFromErrorPlan,
   runAnExperimentPlan,
   shipAFlagPlan,
 } from "./mcp-prompt-plans";
+import { recoverFromErrorPlan } from "./mcp-prompt-recovery";
 import {
   type McpPromptDefinition,
   type McpPromptPlan,
