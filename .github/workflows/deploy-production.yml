@@ -216,11 +216,24 @@ jobs:
           curl -fsSL https://tinybird.co | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Deploy production
-        run: pnpm deploy:production
+      - name: Deploy Tinybird
+        id: tinybird
+        run: pnpm tinybird:deploy:production
+
+      - name: Apply D1 migrations
+        id: d1
+        run: pnpm d1:migrate:production
+
+      - name: Deploy Cloudflare Workers
+        id: workers
+        run: pnpm deploy:cloudflare:production
 
       - name: Summary
         if: always()
+        env:
+          TINYBIRD_OUTCOME: ${{ steps.tinybird.outcome }}
+          D1_OUTCOME: ${{ steps.d1.outcome }}
+          WORKERS_OUTCOME: ${{ steps.workers.outcome }}
         run: |
           {
             echo "## Production deploy"
@@ -228,9 +241,9 @@ jobs:
             echo "- Ref: \`$(git rev-parse HEAD)\`"
             echo "- Release ID: \`$SENTRY_RELEASE\`"
             echo "- Trigger: \`${{ github.event_name }}\`"
-            echo "- Tinybird: \`pnpm tinybird:deploy:production\`"
-            echo "- D1: \`pnpm d1:migrate:production\`"
-            echo "- Workers: \`pnpm deploy:cloudflare:production\`"
+            echo "- Tinybird: \`$TINYBIRD_OUTCOME\`"
+            echo "- D1: \`$D1_OUTCOME\`"
+            echo "- Workers: \`$WORKERS_OUTCOME\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   release:

@@ -21,8 +21,7 @@ if (isHostedWranglerEnv(cloudflareEnv) && !commandEnv.SPLITCH_DEPLOYED_COMMIT_SH
   commandEnv.SPLITCH_DEPLOYED_COMMIT_SHA = commitSha();
 }
 
-run("pnpm", ["build"], { env: commandEnv });
-validateGeneratedHostedConfig(cloudflareEnv);
+validateGeneratedConfig(cloudflareEnv);
 run("node", [deployScript, ...deployArgs], { env: commandEnv });
 
 function extractCloudflareEnv(args) {
@@ -94,24 +93,43 @@ function commitSha() {
   return sha;
 }
 
-function validateGeneratedHostedConfig(cloudflareEnv) {
-  if (!isHostedWranglerEnv(cloudflareEnv)) {
-    return;
-  }
-
+function validateGeneratedConfig(cloudflareEnv) {
   const configPath = join(process.cwd(), "dist/server/wrangler.json");
   if (!existsSync(configPath)) {
-    fail(`missing generated Wrangler config at ${configPath} for ${cloudflareEnv}`);
+    fail(
+      `missing prebuilt Wrangler config at ${configPath}; run this deploy through its Turborepo task`,
+    );
   }
 
   try {
     const config = parseWranglerConfigFile(configPath);
-    assertNoPlaceholderHostedBindings(
-      config,
-      `generated Wrangler config dist/server/wrangler.json for ${cloudflareEnv}`,
-    );
+    if (isHostedWranglerEnv(cloudflareEnv)) {
+      assertGeneratedConfigTarget(config, cloudflareEnv);
+      assertNoPlaceholderHostedBindings(
+        config,
+        `generated Wrangler config dist/server/wrangler.json for ${cloudflareEnv}`,
+      );
+    }
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
+  }
+}
+
+function assertGeneratedConfigTarget(config, cloudflareEnv) {
+  const sourceConfig = parseWranglerConfigFile(join(process.cwd(), "wrangler.jsonc"));
+  const expectedConfig = sourceConfig.env?.[cloudflareEnv];
+  const expectedName = expectedConfig?.name ?? sourceConfig.name;
+  const expectedPlatformTarget = expectedConfig?.vars?.SPLITCH_PLATFORM_TARGET;
+  const actualPlatformTarget = config.vars?.SPLITCH_PLATFORM_TARGET;
+
+  if (
+    expectedPlatformTarget !== cloudflareEnv ||
+    actualPlatformTarget !== expectedPlatformTarget ||
+    config.name !== expectedName
+  ) {
+    fail(
+      `prebuilt Wrangler config does not match ${cloudflareEnv}: expected name=${expectedName} SPLITCH_PLATFORM_TARGET=${expectedPlatformTarget}, received name=${config.name} SPLITCH_PLATFORM_TARGET=${actualPlatformTarget}`,
+    );
   }
 }
 
