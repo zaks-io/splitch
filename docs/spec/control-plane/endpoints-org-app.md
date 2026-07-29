@@ -25,8 +25,8 @@ other Org route authorizes through live membership.
 
 A **provisional** (anonymous, unclaimed) principal is rejected with `403 FORBIDDEN`. It reached the
 control plane through an unauthenticated `POST /register`, so allowing it here would make unbounded
-tenant creation an unauthenticated operation. Its one demo workspace is the limit until the claim
-ceremony (`POST /api/auth/claim/start`) converts it into a real account.
+Organization creation an unauthenticated operation. Its one demo Organization is the limit until the
+claim ceremony (`POST /api/auth/claim/start`) yields an identified principal.
 
 ### `GET /orgs/{org_id}`
 

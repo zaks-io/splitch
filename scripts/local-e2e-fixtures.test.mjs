@@ -33,6 +33,33 @@ test("local full-stack principals are explicit and unambiguous", () => {
   assert.match(LOCAL_E2E_D1_SEED, /'app_checkout_e2e', 'user_local_member_e2e', 'member'/);
 });
 
+// The Panel routes on the Organization slug, so a seeded slug that disagrees with
+// the contract sends every `/:orgSlug/...` Playwright navigation to a 404 that
+// looks like an application bug. The seed once carried an `-e2e` suffix the
+// contract and the session blobs did not.
+test("seeded Organization slugs match the contract the Panel routes on", () => {
+  const organizationsInsert = LOCAL_E2E_D1_SEED.match(/INSERT INTO organizations[^;]*;/)?.[0];
+  assert.ok(organizationsInsert, "the seed must insert Organizations");
+  const seeded = [...organizationsInsert.matchAll(/\('(org_\w+)', '[^']*', '([^']*)'/g)].map(
+    ([, id, slug]) => ({ id, slug }),
+  );
+  assert.deepEqual(seeded, [
+    { id: "org_acme_e2e", slug: "acme-labs" },
+    { id: "org_orbit_e2e", slug: "orbit-tools" },
+  ]);
+
+  const contract = LOCAL_E2E_FIXTURE_CONTRACT.organization;
+  assert.equal(seeded.find(({ id }) => id === contract.id)?.slug, contract.slug);
+
+  // The session blobs carry the slug the Panel resolves scope from; a mismatch
+  // there is the same navigation failure by a different route.
+  for (const session of [localE2eSession(expiresAt), localE2eMemberSession(expiresAt)]) {
+    for (const org of session.orgs) {
+      assert.equal(seeded.find(({ id }) => id === org.orgId)?.slug, org.orgSlug);
+    }
+  }
+});
+
 test("fixture App has explicit Environments and Run-scoped Experiment health states", () => {
   const environments = LOCAL_E2E_FIXTURE_CONTRACT.app.environments;
   assert.deepEqual(

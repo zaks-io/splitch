@@ -60,8 +60,8 @@ You become its `owner` on create. `slug` is derived from `name` unless you pass 
 across all Organizations, so a taken handle returns `409 SLUG_CONFLICT` and you pick another.
 
 > **The anonymous door cannot create Organizations.** A provisional token already holds one demo
-> workspace, and minting more would make tenant creation an unauthenticated operation. Claim the
-> workspace first (step 1); creating is available the moment it becomes a real account.
+> Organization, and minting more would make Organization creation an unauthenticated operation. Claim
+> it first (step 1); creating is available the moment the principal is identified.
 
 Either way, the resulting `orgId` feeds the next step.
 

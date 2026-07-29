@@ -233,6 +233,9 @@
     "d1:migrate:local": {
       "cache": false
     },
+    "d1:migrate:populated": {
+      "cache": false
+    },
     "migrate": {
       "cache": false,
       "passThroughEnv": ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]

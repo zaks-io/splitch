@@ -16,19 +16,19 @@ import { organizationResponse } from "./org-response";
  * This is the one Organization route with no `:orgId` path param, so the guard's
  * co-scope check never fires and authorization is entirely this handler's job.
  * There is nothing to check membership against yet — the Org does not exist —
- * so the only question is whether this principal is allowed to become a tenant
- * owner at all.
+ * so the only question is whether this principal is allowed to become an
+ * Organization owner at all.
  *
  * A PROVISIONAL principal is not. It came through the anonymous door: nobody
  * proved an identity, and the token was minted by an unauthenticated
- * `POST /register`. Letting it create Orgs would make unbounded tenant creation
- * an unauthenticated operation.
+ * `POST /register`. Letting it create Organizations would make unbounded
+ * Organization creation an unauthenticated operation.
  *
  * The gate is on the TOKEN's door, not on `org.isProvisional`. Someone who has
- * proved an identity may create Orgs even while a workspace of theirs is still
+ * proved an identity may create Organizations even while one of theirs is still
  * unclaimed — identity is the thing being demanded here, not claim state. So the
  * ceremony named in the rejection is the way to acquire an identified token, not
- * a cleanup chore attached to the old workspace.
+ * a cleanup chore attached to the old Organization.
  */
 
 interface OrgCreateDeps {
@@ -88,7 +88,7 @@ function provisionalRejection(principal: Principal, requestId: string): Response
     {
       code: "FORBIDDEN",
       message:
-        "a provisional (unclaimed) workspace cannot create organizations; complete the claim ceremony at POST /api/auth/claim/start to convert it into a real account first",
+        "a provisional (anonymous) principal cannot create Organizations; complete the claim ceremony at POST /api/auth/claim/start to obtain an identified principal first",
       details: {},
     },
     { requestId },

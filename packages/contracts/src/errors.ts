@@ -216,7 +216,9 @@ const errorMembers = [
     z.object({
       resourceType: z.literal("organization"),
       conflictingSlug: z.string(),
-      recommendedAction: RecommendedActionSchema,
+      // A slug collision has exactly one remedy. The open enum would let an
+      // unrelated action typecheck here and send a caller somewhere useless.
+      recommendedAction: z.literal("CHOOSE_DIFFERENT_SLUG"),
     }),
   ),
 

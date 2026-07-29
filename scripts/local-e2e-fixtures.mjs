@@ -133,8 +133,8 @@ export function localE2eMemberSession(expiresAt = Math.floor(Date.now() / 1000) 
 
 export const LOCAL_E2E_D1_SEED = `
 INSERT INTO organizations (id, name, slug, plan, is_provisional, created_at, updated_at) VALUES
-  ('org_acme_e2e', 'Acme Labs', 'acme-labs-e2e', 'free', 0, '${createdAt}', '${createdAt}'),
-  ('org_orbit_e2e', 'Orbit Tools', 'orbit-tools-e2e', 'free', 0, '${createdAt}', '${createdAt}');
+  ('org_acme_e2e', 'Acme Labs', 'acme-labs', 'free', 0, '${createdAt}', '${createdAt}'),
+  ('org_orbit_e2e', 'Orbit Tools', 'orbit-tools', 'free', 0, '${createdAt}', '${createdAt}');
 INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, created_by) VALUES
   ('app_checkout_e2e', 'org_acme_e2e', 'Checkout API', 'checkout-api', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('app_billing_e2e', 'org_acme_e2e', 'Billing API', 'billing-api', '${createdAt}', '${createdAt}', 'user_local_e2e'),

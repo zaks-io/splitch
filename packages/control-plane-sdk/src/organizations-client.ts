@@ -4,9 +4,9 @@ import type {
 } from "@splitch/contracts/route-types";
 import {
   type ControlPlaneHcOptions,
-  createOrgsHcClient,
+  createOrganizationsHcClient,
   hcRequestOptions,
-  type OrgsHcClient,
+  type OrganizationsHcClient,
   withAuthorization,
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
@@ -19,18 +19,18 @@ import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "
  * to bind against, so it cannot go through the Panel's binding-delegation path
  * like the rest of the Organization surface does.
  */
-export interface OrgsClient {
+export interface OrganizationsClient {
   create(
     input: OrganizationsCreateInput,
     options?: ControlPlaneOperationOptions,
   ): Promise<ControlPlaneOperationResult<OrganizationsCreateOutput>>;
 }
 
-export function createOrgsClient(
+export function createOrganizationsClient(
   hcOptions: ControlPlaneHcOptions,
-  client?: OrgsHcClient,
-): OrgsClient {
-  const hcClient = client ?? createOrgsHcClient(hcOptions);
+  client?: OrganizationsHcClient,
+): OrganizationsClient {
+  const hcClient = client ?? createOrganizationsHcClient(hcOptions);
 
   return {
     create: (input, callOptions) =>

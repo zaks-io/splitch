@@ -1,7 +1,7 @@
 import { parseMcpDelegation } from "@splitch/contracts";
 import { afterEach, describe, expect, it } from "vitest";
+import { actor, NOW_SECONDS } from "./mcp-oauth-prm-actor";
 import {
-  actor,
   bootAuthApi,
   bootControlPlaneApi,
   bootServer,
@@ -10,7 +10,6 @@ import {
   type JsonRpcSuccess,
   mcp,
   memorySessionStore,
-  NOW_SECONDS,
   request,
   type SeenDownstream,
   type SeenRequest,

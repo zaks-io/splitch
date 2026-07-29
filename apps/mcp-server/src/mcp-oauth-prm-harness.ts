@@ -8,6 +8,7 @@ import type {
   McpSessionStore,
   McpSessionTransport,
 } from "./mcp-session-context";
+import { actor, NOW_SECONDS } from "./mcp-oauth-prm-actor";
 import { actorClaims, signAccessToken } from "./mcp-oauth-prm-jwt";
 import { McpSessionNotFoundError } from "./mcp-session-store";
 import {
@@ -25,8 +26,6 @@ import {
 
 const service = "splitch-mcp-server";
 
-export const NOW_SECONDS = 1_800_000_000;
-
 export const flagPage = {
   items: [
     {
@@ -40,14 +39,6 @@ export const flagPage = {
       updatedAt: "2026-07-18T00:00:00.000Z",
     },
   ],
-};
-
-// `actorClaims` mints no `auth_door`, so the verifier resolves the door
-// fail-closed to `anonymous` and the delegation carries that downstream.
-export const actor = {
-  subject: "user_mcp",
-  scopes: ["app:app_local:admin"],
-  authDoor: "anonymous" as const,
 };
 
 let cleanupServers: Array<() => Promise<void>> = [];
@@ -74,7 +65,10 @@ export interface SeenRequest {
 
 export interface SeenDownstream extends SeenRequest {
   authorization: string | null;
-  delegation: { subject: string; scopes: readonly string[] } | null;
+  // `authDoor` is recorded, not just `subject`/`scopes`: it is the claim the
+  // Organization-creation gate keys on, so a delegation that silently upgraded
+  // the door would be a privilege escalation no other assertion here would see.
+  delegation: { subject: string; scopes: readonly string[]; authDoor: string } | null;
 }
 
 export async function request(
@@ -211,7 +205,8 @@ export async function bootControlPlaneApi(seen: SeenDownstream[]): Promise<strin
       request.url !== "/apps/app_local/flags" ||
       authorization !== null ||
       delegation?.subject !== actor.subject ||
-      delegation.scopes.join(" ") !== actor.scopes.join(" ")
+      delegation.scopes.join(" ") !== actor.scopes.join(" ") ||
+      delegation.authDoor !== actor.authDoor
     ) {
       writeJson(response, 401, { code: "UNAUTHORIZED", message: "UNAUTHORIZED", details: {} });
       return;

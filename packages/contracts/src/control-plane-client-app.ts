@@ -58,7 +58,7 @@ const experimentsSdkRoutes = [
 
 // Only `organizations_create` (SPL-171). The rest of the Organization surface
 // reaches the Panel through its own binding path, not this SDK.
-const orgsSdkRoutes = [accountRoutes[1]] as const;
+const organizationsSdkRoutes = [accountRoutes[1]] as const;
 
 const appsSdkRoutes = [
   accountRoutes[9],
@@ -109,8 +109,8 @@ const experimentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: experimentsSdkRoutes[5].openapi, handler: emitOnlyHandler(experimentsSdkRoutes[5]) },
 ] as const);
 
-const orgsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
-  { route: orgsSdkRoutes[0].openapi, handler: emitOnlyHandler(orgsSdkRoutes[0]) },
+const organizationsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
+  { route: organizationsSdkRoutes[0].openapi, handler: emitOnlyHandler(organizationsSdkRoutes[0]) },
 ] as const);
 
 const appsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
@@ -144,8 +144,8 @@ export type FlagsControlPlaneClientApp = typeof flagsControlPlaneClientApp;
 /** `hc<ExperimentsControlPlaneClientApp>()` — experiment route group client type. */
 export type ExperimentsControlPlaneClientApp = typeof experimentsControlPlaneClientApp;
 
-/** `hc<OrgsControlPlaneClientApp>()` — Organization route group client type. */
-export type OrgsControlPlaneClientApp = typeof orgsControlPlaneClientApp;
+/** `hc<OrganizationsControlPlaneClientApp>()` — Organization route group client type. */
+export type OrganizationsControlPlaneClientApp = typeof organizationsControlPlaneClientApp;
 
 /** `hc<AppsControlPlaneClientApp>()` — App route group client type. */
 export type AppsControlPlaneClientApp = typeof appsControlPlaneClientApp;
@@ -160,7 +160,7 @@ export type CredentialsControlPlaneClientApp = typeof credentialsControlPlaneCli
 export type ControlPlaneClientApp =
   | FlagsControlPlaneClientApp
   | ExperimentsControlPlaneClientApp
-  | OrgsControlPlaneClientApp
+  | OrganizationsControlPlaneClientApp
   | AppsControlPlaneClientApp
   | EnvironmentsControlPlaneClientApp
   | CredentialsControlPlaneClientApp;

@@ -16,6 +16,16 @@
 -- "Provisional workspace" (auth-api/src/register.ts) — slugifying that in SQL
 -- would produce one collision per row for no benefit. Slug derivation from a name
 -- belongs in the create path, where it can be validated and retried, not in DDL.
+--
+-- `apps`, `org_memberships`, and `privacy_requests` all point at `organizations`,
+-- so `DROP TABLE` fails outright once a single child row exists. Deferring the
+-- check lets the drop and rename land as one unit. The explicit OFF before the
+-- final statement is what makes this safe: deferred constraints are verified at
+-- COMMIT, and turning enforcement back on inside the transaction forces that
+-- verification while the renamed table is in scope, so a genuinely orphaned row
+-- still aborts the migration instead of committing a corrupt graph.
+PRAGMA defer_foreign_keys = ON;
+--> statement-breakpoint
 ALTER TABLE `organizations` ADD `slug` text;
 --> statement-breakpoint
 UPDATE `organizations` SET `slug` = `id` WHERE `slug` IS NULL;
@@ -53,3 +63,5 @@ DROP TABLE `organizations`;
 ALTER TABLE `organizations_next` RENAME TO `organizations`;
 --> statement-breakpoint
 CREATE UNIQUE INDEX `organizations_slug_unique` ON `organizations` (`slug`);
+--> statement-breakpoint
+PRAGMA defer_foreign_keys = OFF;

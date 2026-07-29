@@ -32,7 +32,7 @@ Two path prefixes, by the App/Environment split:
 `environment_id` is the canonical ID in the path (slugs are URL-presentation only — API paths carry
 IDs). Environment-level writes are subject to the Environment Policy (ADR-0029).
 
-`POST /orgs` sits above both prefixes: the tenant does not exist yet, so there is no `org_id` to scope
+`POST /orgs` sits above both prefixes: the Organization does not exist yet, so there is no `org_id` to scope
 against and the co-scope guard never fires. Authorization there is the handler's alone — see
 [endpoints-org-app.md](endpoints-org-app.md#organization-endpoints).
 

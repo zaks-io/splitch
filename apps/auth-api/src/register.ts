@@ -79,7 +79,7 @@ export async function registerAnonymous(
 
   // (4) provisional Org. is_provisional=1 ⇒ demo_expires_at NOT NULL (invariant).
   const orgId = shortId("org");
-  // The slug is the Org id: a provisional workspace has no user-chosen name to
+  // The slug is the Org id: a provisional Organization has no user-chosen name to
   // derive from, and every one of them would otherwise slugify identically.
   // The claim ceremony is where a real handle gets picked.
   const created = await deps.repo.identity.createOrganization({

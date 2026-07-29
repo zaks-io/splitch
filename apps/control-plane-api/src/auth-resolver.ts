@@ -1,8 +1,8 @@
+import type { AuthDoor } from "@splitch/contracts";
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
   verifyControlPanelDelegation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
-import type { AuthDoor } from "@splitch/contracts";
 import type { AuthResolver } from "@splitch/worker-runtime";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import type { JwksVerifier } from "./jwks-verify";
@@ -50,7 +50,7 @@ export const PANEL_SESSION_HEADER = "x-splitch-panel-session";
  * about the path, not a default.
  *
  * Note this says nothing about whether the session's ORG is provisional — a
- * signed-in user can be looking at an unclaimed workspace, and the session
+ * signed-in User can be looking at an unclaimed Organization, and the session
  * carries `isProvisional` for exactly that case. The door records how the
  * PRINCIPAL authenticated, which is what the provisional gates key on.
  */

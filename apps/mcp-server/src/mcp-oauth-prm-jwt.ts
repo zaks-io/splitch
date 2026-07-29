@@ -1,4 +1,4 @@
-import { NOW_SECONDS, actor } from "./mcp-oauth-prm-harness";
+import { NOW_SECONDS, actor } from "./mcp-oauth-prm-actor";
 
 /**
  * JWT minting for the MCP OAuth tests: the stub auth-api signs with these, and

@@ -4,7 +4,7 @@ import type {
   EnvironmentsControlPlaneClientApp,
   ExperimentsControlPlaneClientApp,
   FlagsControlPlaneClientApp,
-  OrgsControlPlaneClientApp,
+  OrganizationsControlPlaneClientApp,
 } from "@splitch/contracts/client-app";
 import { hc } from "hono/client";
 import type { ControlPlaneOperationOptions } from "./operation-result";
@@ -22,7 +22,7 @@ export type FlagsHcClient = ReturnType<typeof createFlagsHcClient>;
 export type ExperimentsHcClient = ReturnType<typeof createExperimentsHcClient>;
 
 /** Hono `hc` client over the Organization emit-only app type. */
-export type OrgsHcClient = ReturnType<typeof createOrgsHcClient>;
+export type OrganizationsHcClient = ReturnType<typeof createOrganizationsHcClient>;
 
 /** Hono `hc` client over the App emit-only app type. */
 export type AppsHcClient = ReturnType<typeof createAppsHcClient>;
@@ -51,10 +51,10 @@ export function createCredentialsHcClient(options: ControlPlaneHcOptions) {
   });
 }
 
-export function createOrgsHcClient(options: ControlPlaneHcOptions) {
+export function createOrganizationsHcClient(options: ControlPlaneHcOptions) {
   const headers = options.authorization ? { authorization: options.authorization } : undefined;
 
-  return hc<OrgsControlPlaneClientApp>(options.baseUrl, {
+  return hc<OrganizationsControlPlaneClientApp>(options.baseUrl, {
     fetch: options.fetch,
     ...(headers ? { headers } : {}),
   });

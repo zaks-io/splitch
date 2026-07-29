@@ -45,7 +45,7 @@ const organizationRoutes = [
   // Collection path is `/orgs`, matching every other Organization route. The
   // creating principal becomes `owner` in the same transaction, so this is the
   // one Organization route with no `:orgId` to co-scope against: authorization
-  // is the handler's job (a provisional principal must not mint tenants).
+  // is the handler's job (a provisional principal must not mint Organizations).
   defineApiRoute({
     operationId: "organizations_create",
     owner: OWNER,
@@ -56,7 +56,12 @@ const organizationRoutes = [
     response: OrganizationResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "optional",
+    // "none" until replay semantics exist. Declaring "optional" would expose an
+    // `Idempotency-Key` header through every derived client and the OpenAPI
+    // document while the handler ignores it, so a retry after a lost response
+    // would answer SLUG_CONFLICT instead of replaying the original success:
+    // a guarantee advertised but not kept.
+    idempotency: "none",
     errors: ["VALIDATION_ERROR", "FORBIDDEN", "SLUG_CONFLICT"],
   }),
   defineApiRoute({
