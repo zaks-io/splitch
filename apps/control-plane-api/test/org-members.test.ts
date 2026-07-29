@@ -4,14 +4,15 @@ import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import { hc } from "hono/client";
 import type { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { createApp } from "./app";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
-import { makeSessionStore } from "./session-store";
-import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
-import { seedOrgApp, seedOrgMember } from "./test-seeds";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { createApp } from "../src/app";
+import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
+import { makeJwksVerifier } from "../src/jwks-verify";
+import { makeSessionStore } from "../src/session-store";
+import type { LocalBindings } from "../src/test-fixtures";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
+import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);
@@ -82,10 +83,21 @@ const nowSeconds = () => Math.floor(NOW_MS / 1000);
 
 let h: Harness;
 
-beforeEach(async () => {
+// The Workers pool isolates storage per FILE, not per test (isolatedStorage was
+// dropped in the Vitest 4 migration -- workers-sdk#12889). The Organizations
+// themselves are seeded once, since re-inserting them would trip the slug unique
+// index; the memberships are rebuilt per test because this suite mutates them
+// (it renames the Org, adds/removes members, and grants roles) and each test
+// expects the same starting roster.
+beforeAll(async () => {
   const bindings = await makeLocalBindings();
   await seedOrgApp(bindings.d1, PRIMARY);
   await seedOrgApp(bindings.d1, SOLO);
+});
+
+beforeEach(async () => {
+  const bindings = await makeLocalBindings();
+  await bindings.d1.prepare("DELETE FROM org_memberships").run();
   await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: OWNER, role: "owner" });
   await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: ADMIN, role: "admin" });
   await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: MEMBER, role: "member" });

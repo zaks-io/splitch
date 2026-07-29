@@ -2,14 +2,15 @@ import type { ErrorResponse } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { createApp } from "./app";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
-import { makeSessionStore } from "./session-store";
-import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
-import { seedOrgApp, seedOrgMember } from "./test-seeds";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { createApp } from "../src/app";
+import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
+import { makeJwksVerifier } from "../src/jwks-verify";
+import { makeSessionStore } from "../src/session-store";
+import type { LocalBindings } from "../src/test-fixtures";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
+import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);
@@ -36,7 +37,11 @@ const nowSeconds = () => Math.floor(NOW_MS / 1000);
 
 let h: Harness;
 
-beforeEach(async () => {
+// The Workers pool isolates storage per FILE, not per test (isolatedStorage was
+// dropped in the Vitest 4 migration -- workers-sdk#12889), so the fixed-ID seed
+// rows go in once here. Every test asserts a 403, so the live membership state
+// these tests read is never mutated.
+beforeAll(async () => {
   const bindings = await makeLocalBindings();
   await seedOrgApp(bindings.d1, ORG);
   await seedOrgMember(bindings.d1, {
@@ -49,7 +54,10 @@ beforeEach(async () => {
     userId: DOWNGRADED_MEMBER,
     role: "member",
   });
+});
 
+beforeEach(async () => {
+  const bindings = await makeLocalBindings();
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
     fetchJwks: async () => signer.jwks,

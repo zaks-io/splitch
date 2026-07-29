@@ -6,15 +6,16 @@ import {
 import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
-import type { PanelDelegationReplayStore } from "./panel-identity-replay";
-import { makeSessionStore } from "./session-store";
-import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
-import { seedOrgApp, seedOrgMember } from "./test-seeds";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../src/app";
+import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { makeFixtureSigner } from "../src/fixture-signer";
+import { makeJwksVerifier } from "../src/jwks-verify";
+import type { PanelDelegationReplayStore } from "../src/panel-identity-replay";
+import { makeSessionStore } from "../src/session-store";
+import type { LocalBindings } from "../src/test-fixtures";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
+import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 18, 22, 0, 0);
@@ -44,14 +45,22 @@ let app: Hono;
 let publicApp: Hono;
 let bindings: LocalBindings;
 
+// The Workers pool isolates storage per FILE, not per test (isolatedStorage was
+// dropped in the Vitest 4 migration -- workers-sdk#12889), so the fixed-ID seed
+// rows go in once here. The Orgs and their memberships are read-only roots: the
+// tests that do create an App already use a distinct key each, so their writes
+// do not collide across the shared file store.
+beforeAll(async () => {
+  const seed = await makeLocalBindings();
+  await seedOrgApp(seed.d1, PRIMARY);
+  await seedOrgApp(seed.d1, SECONDARY);
+  await seedOrgMember(seed.d1, { orgId: PRIMARY.orgId, userId: OWNER, role: "owner" });
+  await seedOrgMember(seed.d1, { orgId: PRIMARY.orgId, userId: ADMIN, role: "admin" });
+  await seedOrgMember(seed.d1, { orgId: PRIMARY.orgId, userId: MEMBER, role: "member" });
+});
+
 beforeEach(async () => {
   bindings = await makeLocalBindings();
-  await seedOrgApp(bindings.d1, PRIMARY);
-  await seedOrgApp(bindings.d1, SECONDARY);
-  await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: OWNER, role: "owner" });
-  await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: ADMIN, role: "admin" });
-  await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: MEMBER, role: "member" });
-
   const signer = await makeFixtureSigner();
   const authDeps = {
     verifier: makeJwksVerifier({
