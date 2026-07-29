@@ -27,6 +27,10 @@ export const queryKeys = {
   app: {
     root,
   },
+  environment: {
+    settings: (appId: string, environmentId: string) =>
+      [...entityPrefix(appId, environmentId, "environment"), "settings"] as const,
+  },
   experiment: {
     prefix: (appId: string, environmentId: string) =>
       [...entityPrefix(appId, environmentId, "experiment")] as const,
