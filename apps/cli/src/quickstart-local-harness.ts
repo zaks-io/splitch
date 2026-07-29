@@ -3,8 +3,8 @@ import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { Miniflare } from "miniflare";
 import {
-  makeConfigStore,
   type ConfigStoreWriter,
+  makeConfigStore,
 } from "../../control-plane-api/src/config-store.js";
 import type { ConfigStoreAccess } from "../../control-plane-api/src/config-store-do.js";
 import type { FixtureSigner } from "../../control-plane-api/src/fixture-signer.js";
@@ -17,8 +17,9 @@ import {
   NOW_ISO,
   orgToken,
 } from "../../control-plane-api/src/flag-definition-test-harness.js";
-import { StaticSaltStore } from "../../evaluation-api/src/assignment/assignment-store-test-fixtures.js";
+import { makeLocalBindings } from "../../control-plane-api/src/test-fixtures.js";
 import { createApp as createEvaluationApp } from "../../evaluation-api/src/app.js";
+import { StaticSaltStore } from "../../evaluation-api/src/assignment/assignment-store-test-fixtures.js";
 import { makeDataPlaneAuthResolver } from "../../evaluation-api/src/data-plane-auth.js";
 import { RecordingAssignmentStore } from "../../evaluation-api/src/evaluate/evaluate-path-test-fixtures.js";
 import { KvProvider } from "../../evaluation-api/src/provider/kv-provider.js";
@@ -54,7 +55,10 @@ export interface QuickstartHarness {
 }
 
 export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
-  const flagHarness = await makeFlagDefinitionHarness();
+  // This harness still runs on Node under its own Miniflare instance (it needs a
+  // second KV namespace for Flag Configuration), so it passes the Node bindings
+  // factory. Control-plane suites pass the Workers-pool one instead.
+  const flagHarness = await makeFlagDefinitionHarness(makeLocalBindings);
   const configKvBinding = await createConfigKvNamespace();
   const configKv = configKvBinding.kv;
   const repo = createRepository(flagHarness.bindings.d1);
