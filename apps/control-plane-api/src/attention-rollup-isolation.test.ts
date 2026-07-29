@@ -2,6 +2,7 @@ import { SCOPED_SERVICE_IDENTITY_HEADER } from "@splitch/control-plane-sdk/panel
 import { describe, expect, it, vi } from "vitest";
 import { type AnalysisResultsReader, createAnalysisResultsReader } from "./attention-rollup";
 import {
+  ATTENTION_TEST_TIMEOUT,
   authFor,
   type EnvironmentAttentionItem,
   harness,
@@ -17,7 +18,7 @@ import { ids, NOW } from "./config-store-fixture-data";
 
 setupAttentionRollupFixture();
 
-describe("attention rollup tenant isolation", () => {
+describe("attention rollup tenant isolation", { timeout: ATTENTION_TEST_TIMEOUT }, () => {
   it("never surfaces another Organization's Environments or reads its analysis", async () => {
     // A second tenant with its own Organization, App, Environment and running
     // Experiment, seeded with attention so any leak flips a flag rather than
@@ -135,7 +136,7 @@ describe("attention rollup tenant isolation", () => {
   });
 });
 
-describe("Analysis results boundary", () => {
+describe("Analysis results boundary", { timeout: ATTENTION_TEST_TIMEOUT }, () => {
   it("uses a least-privilege scoped identity over the service binding", async () => {
     const fetcher = {
       fetch: vi.fn(async (_request: Request) => Response.json(statsOutput({ srm: true }))),

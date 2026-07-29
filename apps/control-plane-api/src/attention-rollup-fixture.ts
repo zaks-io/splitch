@@ -13,6 +13,13 @@ export const DEV_EXPERIMENT_ID = "exp_attention_dev";
 export const QA_ENVIRONMENT_ID = "env_qa";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 
+/**
+ * Every test here boots a real local harness (Miniflare + D1 migrations) in
+ * beforeEach, and the fan-out cases seed hundreds of rows through it. That costs
+ * well over the 5s vitest default on a loaded CI runner.
+ */
+export const ATTENTION_TEST_TIMEOUT = 60_000;
+
 let bindings: LocalBindings;
 
 /** The App under test: two seeded Environments plus QA, one running Run in dev. */

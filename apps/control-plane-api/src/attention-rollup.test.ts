@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AnalysisResultsReader } from "./attention-rollup";
 import { ANALYSIS_READ_CONCURRENCY, ANALYSIS_READ_LIMIT } from "./attention-rollup";
 import {
+  ATTENTION_TEST_TIMEOUT,
   authFor,
   DEV_EXPERIMENT_ID,
   type EnvironmentAttentionItem,
@@ -18,7 +19,7 @@ import { ids } from "./config-store-fixture-data";
 
 setupAttentionRollupFixture();
 
-describe("GET /apps/:appId/attention-rollup", () => {
+describe("GET /apps/:appId/attention-rollup", { timeout: ATTENTION_TEST_TIMEOUT }, () => {
   it("marks only the Environment whose current results carry SRM/Guardrail attention", async () => {
     const calls: Array<{ appId: string; environmentId: string; experimentId: string }> = [];
     const analysisResults: AnalysisResultsReader = {
@@ -163,7 +164,7 @@ describe("GET /apps/:appId/attention-rollup", () => {
   });
 });
 
-describe("attention rollup Analysis fan-out bounds", () => {
+describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_TIMEOUT }, () => {
   it("refuses the whole rollup past the Analysis read limit instead of truncating", async () => {
     const repo = repository();
     // Two running Experiments already exist (dev + prod), so the limit is crossed.
