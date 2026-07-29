@@ -1,25 +1,26 @@
 import { liveRunKey } from "@splitch/contracts";
-import { envScope, type EnvScope } from "@splitch/db";
+import { type EnvScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { errorBody, NOW_ISO } from "./flag-definition-test-harness";
 import {
   createExperimentDraft,
+  type ExperimentRunHarness,
   endRun,
   experimentFixture,
-  type ExperimentRunHarness,
   kvJson,
   makeExperimentRunHarness,
   patchExperiment,
   readEvaluationExperiment,
   readIngestLiveRun,
-  startExperiment,
   type StartResponse,
-} from "./experiment-run-test-fixture";
+  startExperiment,
+} from "../src/experiment-run-test-fixture";
+import { errorBody, NOW_ISO } from "../src/flag-definition-test-harness";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 let ctx: ExperimentRunHarness;
 
 beforeEach(async () => {
-  ctx = await makeExperimentRunHarness();
+  ctx = await makeExperimentRunHarness(makeLocalBindings);
 });
 
 afterEach(async () => ctx.h.bindings.dispose());
@@ -64,7 +65,7 @@ describe("Experiment Run Start atomicity", () => {
   it("repairs KV from D1 when retrying Start after sync failure", async () => {
     await ctx.h.bindings.dispose();
     const syncFailures = { remaining: 1 };
-    ctx = await makeExperimentRunHarness({ syncFailures });
+    ctx = await makeExperimentRunHarness(makeLocalBindings, { syncFailures });
     const fx = await experimentFixture(ctx);
     const experiment = await createExperimentDraft(ctx, fx, {
       key: "retry-repair-start",
@@ -197,7 +198,7 @@ describe("Experiment Run End atomicity", () => {
   it("repairs KV from D1 when retrying End after sync failure", async () => {
     await ctx.h.bindings.dispose();
     const syncFailures = { remaining: 0 };
-    ctx = await makeExperimentRunHarness({ syncFailures });
+    ctx = await makeExperimentRunHarness(makeLocalBindings, { syncFailures });
     const fx = await experimentFixture(ctx);
     const experiment = await createExperimentDraft(ctx, fx, {
       key: "retry-repair-end",

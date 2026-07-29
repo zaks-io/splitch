@@ -2,13 +2,15 @@ import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import { createRepository, envScope } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
-import { makeSessionStore } from "./session-store";
-import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../src/app";
+import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
+import { makeJwksVerifier } from "../src/jwks-verify";
+import { makeSessionStore } from "../src/session-store";
+import type { LocalBindings } from "../src/test-fixtures";
+import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
@@ -33,7 +35,12 @@ interface Harness {
 
 let h: Harness;
 
-beforeEach(async () => {
+// The Workers pool isolates storage per FILE, not per test (isolatedStorage was
+// dropped in the Vitest 4 migration -- workers-sdk#12889), so re-seeding the
+// same Organization in `beforeEach` trips the slug unique index on the second
+// test. The Org and its owner are read-only roots here: every test creates its
+// own App through the API, so seeding them once per file is equivalent.
+beforeAll(async () => {
   const bindings = await makeLocalBindings();
   await seedOrgApp(bindings.d1, ORG);
   await seedOrgMember(bindings.d1, {
@@ -41,7 +48,10 @@ beforeEach(async () => {
     userId: OWNER,
     role: "owner",
   });
+});
 
+beforeEach(async () => {
+  const bindings = await makeLocalBindings();
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
     fetchJwks: async () => signer.jwks,
@@ -136,14 +146,16 @@ describe("control-plane App and Environment CRUD", () => {
   });
 
   it("round-trips App and Environment CRUD plus prod Policy patch", async () => {
-    const created = await createDefaultApp();
+    // A distinct key per test: storage is shared across the file, so reusing
+    // "checkout" would collide with the App the previous test created.
+    const created = await createDefaultApp("checkout-crud");
     const ownerJwt = await appToken(created.app.id, "owner");
     const prod = created.environments.find((env) => env.key === "prod");
     expect(prod).toBeDefined();
 
     const getApp = await request("GET", `/apps/${created.app.id}`, ownerJwt);
     expect(getApp.status).toBe(200);
-    expect(await getApp.json()).toMatchObject({ id: created.app.id, key: "checkout" });
+    expect(await getApp.json()).toMatchObject({ id: created.app.id, key: "checkout-crud" });
 
     const patchApp = await request("PATCH", `/apps/${created.app.id}`, ownerJwt, {
       name: "Checkout Renamed",

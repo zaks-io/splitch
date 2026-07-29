@@ -2,13 +2,15 @@ import type { ErrorResponse } from "@splitch/contracts";
 import { appScope, createRepository, envScope } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
-import { makeSessionStore } from "./session-store";
-import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../src/app";
+import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
+import { makeJwksVerifier } from "../src/jwks-verify";
+import { makeSessionStore } from "../src/session-store";
+import type { LocalBindings } from "../src/test-fixtures";
+import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
@@ -33,7 +35,11 @@ interface Harness {
 
 let h: Harness;
 
-beforeEach(async () => {
+// The Workers pool isolates storage per FILE, not per test (isolatedStorage was
+// dropped in the Vitest 4 migration -- workers-sdk#12889), so the fixed-ID seed
+// rows are inserted once here instead of in `beforeEach`, which would trip the
+// slug unique index on the second test. Each test still gets its own harness.
+beforeAll(async () => {
   const bindings = await makeLocalBindings();
   await seedOrgApp(bindings.d1, ORG);
   await seedOrgMember(bindings.d1, {
@@ -41,6 +47,10 @@ beforeEach(async () => {
     userId: OWNER,
     role: "owner",
   });
+});
+
+beforeEach(async () => {
+  const bindings = await makeLocalBindings();
 
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
@@ -114,12 +124,24 @@ async function seedRunningExperiment(appId: string, environmentId: string, suffi
   const scope = envScope(appId, environmentId);
   const experimentId = `exp_delete_guard_${suffix}`;
   const runId = `run_delete_guard_${suffix}`;
+  const flagId = `flag_delete_guard_${suffix}`;
+  // `experiments.flag_id` is a real foreign key into `flags`. The Node harness's
+  // hand-written schema declares no foreign keys at all, so this row used to
+  // insert against a flag that never existed; the migrated schema rejects it.
+  await repo.flags.flags.insert(appScope(appId), {
+    id: flagId,
+    appId,
+    key: `delete-guard-${suffix}`,
+    name: "Delete guard",
+    createdAt: NOW_ISO,
+    updatedAt: NOW_ISO,
+  });
   await repo.experiments.experiments.insert(scope, {
     id: experimentId,
     appId,
     environmentId,
     key: `delete-guard-${suffix}`,
-    flagId: `flag_delete_guard_${suffix}`,
+    flagId,
     name: "Delete guard",
     status: "running",
     targetingKeyField: "userId",

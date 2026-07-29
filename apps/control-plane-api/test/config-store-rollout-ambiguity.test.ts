@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   type Harness,
   ids,
-  makeHarness,
   NOW,
   patchFlagConfig,
   promoteFlagConfig,
-} from "./config-store-test-harness";
+} from "../src/config-store-harness-core";
+import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
 /**
  * A baseline rollout rolls traffic away from the Default Variant and INTO the one

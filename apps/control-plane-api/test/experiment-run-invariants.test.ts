@@ -1,23 +1,24 @@
 import { flagConfigKey, liveRunKey } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { errorBody, NOW_ISO, request } from "./flag-definition-test-harness";
 import {
   createExperimentDraft,
+  type ExperimentRunHarness,
   endRun,
   experimentFixture,
-  type ExperimentRunHarness,
   kvJson,
   makeExperimentRunHarness,
   readEvaluationExperiment,
   type StartResponse,
   startExperiment,
-} from "./experiment-run-test-fixture";
+} from "../src/experiment-run-test-fixture";
+import { errorBody, NOW_ISO, request } from "../src/flag-definition-test-harness";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 let ctx: ExperimentRunHarness;
 
 beforeEach(async () => {
-  ctx = await makeExperimentRunHarness();
+  ctx = await makeExperimentRunHarness(makeLocalBindings);
 });
 
 afterEach(async () => ctx.h.bindings.dispose());

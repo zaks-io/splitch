@@ -1,19 +1,15 @@
 import { createRepository, envScope, type Repository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
-import { makeSessionStore } from "./session-store";
-import {
-  type LocalBindings,
-  makeLocalBindings,
-  seedAppMember,
-  seedEnvironment,
-  seedOrgApp,
-} from "./test-fixtures";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../src/app";
+import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
+import { makeJwksVerifier } from "../src/jwks-verify";
+import { makeSessionStore } from "../src/session-store";
+import type { LocalBindings } from "../src/test-fixtures";
+import { seedAppMember, seedEnvironment, seedOrgApp } from "../src/test-seeds";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
@@ -37,11 +33,19 @@ interface Harness {
 
 let h: Harness;
 
-beforeEach(async () => {
+// The Workers pool isolates storage per FILE, not per test (isolatedStorage was
+// dropped in the Vitest 4 migration -- workers-sdk#12889), so the fixed-ID seed
+// rows are inserted once here instead of in `beforeEach`, which would trip the
+// slug unique index on the second test. Each test still gets its own harness.
+beforeAll(async () => {
   const bindings = await makeLocalBindings();
   await seedOrgApp(bindings.d1, APP);
   await seedAppMember(bindings.d1, { appId: APP.appId, userId: ADMIN, role: "admin" });
   await seedEnvironment(bindings.d1, { appId: APP.appId, ...ENV });
+});
+
+beforeEach(async () => {
+  const bindings = await makeLocalBindings();
   const signer = await makeFixtureSigner();
   h = { app: makeApp(bindings, signer), signer, bindings };
 });

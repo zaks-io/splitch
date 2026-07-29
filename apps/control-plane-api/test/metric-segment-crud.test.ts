@@ -4,18 +4,20 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   appToken,
   createDefaultApp,
+  createFlag,
   errorBody,
   type FlagDefinitionHarness,
   makeFlagDefinitionHarness,
   NOW_ISO,
   request,
-} from "./flag-definition-test-harness";
-import { seedOrgApp } from "./test-fixtures";
+} from "../src/flag-definition-test-harness";
+import { seedOrgApp } from "../src/test-seeds";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 let h: FlagDefinitionHarness;
 
 beforeEach(async () => {
-  h = await makeFlagDefinitionHarness();
+  h = await makeFlagDefinitionHarness(makeLocalBindings);
 });
 
 afterEach(async () => h.bindings.dispose());
@@ -156,7 +158,10 @@ describe("control-plane Metric and Segment invariants", () => {
       eventName: "signed_up",
     });
     const segment = await createSegment(appId, jwt);
-    await seedRunningExperiment(appId, prod?.id ?? "", metric.id, segment.id);
+    // A real Flag row: the Experiment's flag_id is a live foreign key, and the
+    // old invented id only passed because the Node fixture schema had no FKs.
+    const flag = await createFlag(h, appId, jwt);
+    await seedRunningExperiment(appId, prod?.id ?? "", metric.id, segment.id, flag.id);
 
     const patchMetric = await request(h, "PATCH", `/apps/${appId}/metrics/${metric.id}`, jwt, {
       name: "Renamed while running",
@@ -236,6 +241,7 @@ async function seedRunningExperiment(
   environmentId: string,
   metricId: string,
   segmentId: string,
+  flagId: string,
 ): Promise<void> {
   const repo = createRepository(h.bindings.d1);
   const scope = envScope(appId, environmentId);
@@ -244,7 +250,7 @@ async function seedRunningExperiment(
     appId,
     environmentId,
     key: "metric-segment-guard",
-    flagId: "flag_metric_segment_guard",
+    flagId,
     name: "Metric Segment Guard",
     status: "running",
     targetingKeyField: "userId",

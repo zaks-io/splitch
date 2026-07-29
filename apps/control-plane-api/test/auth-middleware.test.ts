@@ -2,15 +2,17 @@ import type { ErrorResponse } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { controlPlaneRegistrar, createApp } from "./app";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
-import { controlPlaneRoute, withRequiredScopes } from "./routes";
-import { appAdminScope } from "./scope-binding";
-import { makeSessionStore, revocationKey } from "./session-store";
-import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { controlPlaneRegistrar, createApp } from "../src/app";
+import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
+import { makeJwksVerifier } from "../src/jwks-verify";
+import { controlPlaneRoute, withRequiredScopes } from "../src/routes";
+import { appAdminScope } from "../src/scope-binding";
+import { makeSessionStore, revocationKey } from "../src/session-store";
+import type { LocalBindings } from "../src/test-fixtures";
+import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 /**
  * End-to-end auth-middleware proofs against the REAL mounted Worker: the
@@ -19,7 +21,7 @@ import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from
  * We assert the rejection REASON and the held-vs-required detail, not a weaker
  * status-only check.
  *
- * Distinct, realistic per-tenant fixtures (no identical seeds across tenants or
+ * Distinct, realistic per-Organization fixtures (no identical seeds across Organizations or
  * roles): a "payments" App where Alice is admin, an "analytics" App where Bob is
  * a member, and an org-level token (Carol) bound to no App.
  */
@@ -63,12 +65,19 @@ const allowLimiter: RateLimiter = () => ({ limited: false });
 
 let h: Harness;
 
-beforeEach(async () => {
+// The Workers pool isolates storage per FILE, not per test (isolatedStorage was
+// dropped in the Vitest 4 migration -- workers-sdk#12889), so the fixed-ID seed
+// rows go in once here. Every test asserts a 401/403 refusal, so none of them
+// mutate the Apps or membership these tests authorize against.
+beforeAll(async () => {
   const bindings = await makeLocalBindings();
   await seedOrgApp(bindings.d1, PAYMENTS);
   await seedOrgApp(bindings.d1, ANALYTICS);
   await seedOrgMember(bindings.d1, { orgId: PAYMENTS.orgId, userId: CAROL, role: "member" });
+});
 
+beforeEach(async () => {
+  const bindings = await makeLocalBindings();
   const signer = await makeFixtureSigner();
   const verifier = makeJwksVerifier({
     fetchJwks: async () => signer.jwks,

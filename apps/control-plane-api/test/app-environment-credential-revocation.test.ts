@@ -13,9 +13,10 @@ import {
   request,
   setup,
   teardown,
-} from "./app-environment-credential-revocation.fixtures";
+} from "../src/app-environment-credential-revocation.fixtures";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
-beforeEach(setup);
+beforeEach(() => setup(makeLocalBindings));
 afterEach(teardown);
 
 describe("control-plane parent delete credential revocation", () => {

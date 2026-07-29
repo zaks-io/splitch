@@ -1,21 +1,18 @@
 import { type DeltaNudge, type EnvironmentPolicy, flagConfigKey } from "@splitch/contracts";
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
-import { migrationStatements } from "@splitch/db/test-d1";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
-import { Miniflare } from "miniflare";
 import { createApp } from "./app";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
-import { ids, NOW, NOW_MS, seedConfigGraph } from "./config-store-fixture-data";
+import { ids, NOW, NOW_MS } from "./config-store-fixture-data";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { appAdminScope } from "./scope-binding";
 import { makeSessionStore } from "./session-store";
-import { seedAppMember } from "./test-fixtures";
 
 const AUDIENCE = "https://cp.splitch.test";
-const USER_ID = "user_config_admin";
+export const USER_ID = "user_config_admin";
 
 export { ids, NOW, NOW_MS };
 
@@ -33,20 +30,20 @@ export interface Harness {
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
 
-export async function makeHarness(): Promise<Harness> {
-  const mf = new Miniflare({
-    modules: true,
-    script: "export default {};",
-    d1Databases: { DB: ":memory:" },
-    kvNamespaces: { SESSION_STORE: "sessions", CONFIG_STORE: "config" },
-  });
-  const d1 = (await mf.getD1Database("DB")) as unknown as D1Database;
-  const kv = (await mf.getKVNamespace("CONFIG_STORE")) as unknown as KVNamespace;
-  const sessions = (await mf.getKVNamespace("SESSION_STORE")) as unknown as KVNamespace;
-  await applyMigrations(d1);
-  await seedConfigGraph(d1);
-  await seedAppMember(d1, { appId: ids.appId, userId: USER_ID, role: "owner" });
-
+/**
+ * Wire an already-seeded set of bindings into the Harness the tests drive.
+ *
+ * Split out so the Workers-pool harness can reuse it: everything below this
+ * point is runtime-agnostic, and only the seeding above differs between a
+ * Miniflare instance and workerd's in-process bindings.
+ */
+export async function buildHarness(bindings: {
+  d1: D1Database;
+  kv: KVNamespace;
+  sessions: KVNamespace;
+  dispose: () => Promise<void>;
+}): Promise<Harness> {
+  const { d1, kv, sessions } = bindings;
   const repo = createRepository(d1);
   const signer = await makeFixtureSigner();
   const nudges: DeltaNudge[] = [];
@@ -66,7 +63,7 @@ export async function makeHarness(): Promise<Harness> {
   });
 
   const app = makeAuthedApp({ repo, signer, sessions }, store);
-  return { app, d1, kv, repo, signer, nudges, warnings, events, dispose: () => mf.dispose() };
+  return { app, d1, kv, repo, signer, nudges, warnings, events, dispose: bindings.dispose };
 }
 
 export function makeAuthedApp(
@@ -178,7 +175,13 @@ export async function kvJson(kv: KVNamespace, key: string): Promise<unknown> {
 function recordingKv(kv: KVNamespace, repo: Repository, events: string[]): KVNamespace {
   return new Proxy(kv, {
     get(target, prop) {
-      if (prop !== "put") return Reflect.get(target, prop);
+      if (prop !== "put") {
+        // Bound to the target: workerd's real KVNamespace is a host object whose
+        // methods reject a foreign `this`, so handing back the bare function
+        // would make every non-`put` call through this proxy throw.
+        const value = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      }
       return async (key: string, value: string, ...rest: unknown[]) => {
         if (key === flagConfigKey(ids.appId, ids.environmentId, ids.flagKey)) {
           const row = await repo.flags.getFlagConfig(
@@ -192,10 +195,4 @@ function recordingKv(kv: KVNamespace, repo: Repository, events: string[]): KVNam
       };
     },
   }) as KVNamespace;
-}
-
-async function applyMigrations(d1: D1Database): Promise<void> {
-  for (const statement of migrationStatements()) {
-    await d1.exec(statement);
-  }
 }
