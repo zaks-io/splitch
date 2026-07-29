@@ -114,9 +114,9 @@ describe("credential cache schema-v1 backfill", () => {
     expect(cacheEnvelope.parse(JSON.parse(raw as string)).data.revoked).toBe(true);
   });
 
-  it("does not reopen a Client Key allowlist after a concurrent restriction", async () => {
+  it("does not reopen a Client Key allowlist after a restriction has serialized", async () => {
     const writes = new Map<string, string>();
-    const writer = new SerialWriter(writes);
+    const writer = new AuthoritativeSerialWriter(writes);
     const stale = {
       keyId: "ck_restrict",
       appId: "app_a",
@@ -128,19 +128,25 @@ describe("credential cache schema-v1 backfill", () => {
       revokedAt: null,
     };
 
-    await Promise.all([
+    // The restriction is authoritative in D1 first; the backfill then carries the
+    // pre-restriction (open) allowlist and must be rejected rather than land.
+    // Asserted through the writer's authority check, not through write ordering:
+    // two concurrent writes race on crypto.subtle.digest, so which one lands last
+    // is not something this test can control.
+    writer.originAllowlist = ["https://app.example"];
+    await writeClientKeyCache(
+      { credentialCacheWriter: writerAccess(writer) },
+      { ...stale, originAllowlist: '["https://app.example"]' },
+      false,
+      "org_a",
+      true,
+    );
+    await expect(
       backfillCredentialCaches(
         { credentialCacheWriter: writerAccess(writer) },
         { clientKeys: [stale], apiKeys: [] },
       ),
-      writeClientKeyCache(
-        { credentialCacheWriter: writerAccess(writer) },
-        { ...stale, originAllowlist: '["https://app.example"]' },
-        false,
-        "org_a",
-        true,
-      ),
-    ]);
+    ).rejects.toThrow("Client Key restrictions are stale");
 
     const raw = writes.get(clientKeyCacheKey(await sha256Hex(stale.keyMaterial)));
     expect(cacheEnvelope.parse(JSON.parse(raw as string)).data.originAllowlist).toEqual([
@@ -198,13 +204,20 @@ class SerialWriter implements CredentialCacheWriter {
   }
 }
 
+/** Mirrors the CredentialCacheWriterDurableObject authority checks. */
 class AuthoritativeSerialWriter extends SerialWriter {
   revoked = false;
+  originAllowlist: string[] | null = null;
 
   override async put(write: Parameters<CredentialCacheWriter["put"]>[0]): Promise<void> {
     const candidate = cacheEnvelope.parse(JSON.parse(write.value)).data;
     if (candidate.revoked !== this.revoked) {
       throw new Error("credential cache write rejected: revocation state is stale");
+    }
+    const candidateAllowlist =
+      candidate.kind === "client_key" ? (candidate.originAllowlist ?? null) : null;
+    if (JSON.stringify(candidateAllowlist) !== JSON.stringify(this.originAllowlist)) {
+      throw new Error("credential cache write rejected: Client Key restrictions are stale");
     }
     await super.put(write);
   }
