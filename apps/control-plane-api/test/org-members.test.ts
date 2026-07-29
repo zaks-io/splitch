@@ -1,171 +1,28 @@
-import type { ErrorResponse } from "@splitch/contracts";
 import { deriveMcpTools, getRoute } from "@splitch/contracts";
-import { createRepository } from "@splitch/db";
-import type { RateLimiter } from "@splitch/worker-runtime";
-import { hc } from "hono/client";
-import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
-import { createApp } from "../src/app";
-import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
-import { makeJwksVerifier } from "../src/jwks-verify";
-import { makeSessionStore } from "../src/session-store";
-import type { LocalBindings } from "../src/test-fixtures";
-import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
-import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import {
+  ADMIN,
+  bodyOf,
+  client,
+  MEMBER,
+  memberResourceRoute,
+  memberRoute,
+  NEW_MEMBER,
+  NOW_ISO,
+  OWNER,
+  orgRoute,
+  PRIMARY,
+  SOLO,
+  SOLO_OWNER,
+  seedOrgs,
+  setup,
+  teardown,
+  token,
+} from "./org-members-harness";
 
-const AUDIENCE = "https://cp.splitch.test";
-const NOW_MS = Date.UTC(2026, 6, 1, 12, 0, 0);
-const NOW_ISO = new Date(NOW_MS).toISOString();
-const PRIMARY = {
-  orgId: "org_ledger_128d",
-  orgName: "Ledger",
-  appId: "app_ledger_128d",
-  appName: "Ledger App",
-  appKey: "ledger",
-};
-const SOLO = {
-  orgId: "org_solo_884f",
-  orgName: "Solo",
-  appId: "app_solo_884f",
-  appName: "Solo App",
-  appKey: "solo",
-};
-const OWNER = "user_owner_d3a1";
-const ADMIN = "user_admin_948f";
-const MEMBER = "user_member_438c";
-const NEW_MEMBER = "user_new_529e";
-const SOLO_OWNER = "user_solo_owner_0f8a";
-
-const PROFILE_EMAILS = new Map([
-  [OWNER, "owner@example.test"],
-  [ADMIN, "admin@example.test"],
-  [MEMBER, "member@example.test"],
-  [NEW_MEMBER, "new@example.test"],
-  [SOLO_OWNER, "solo@example.test"],
-]);
-
-interface Harness {
-  app: Hono;
-  signer: FixtureSigner;
-  bindings: LocalBindings;
-}
-
-interface OrgRouteClient {
-  orgs: { [orgParam: `:${string}`]: OrgScopedClient };
-}
-
-interface OrgScopedClient {
-  $get(args: { param: { orgId: string } }): Promise<Response>;
-  $patch(args: { param: { orgId: string }; json: Record<string, unknown> }): Promise<Response>;
-  members: MemberCollectionClient;
-}
-
-interface MemberCollectionClient {
-  $get(args: { param: { orgId: string } }): Promise<Response>;
-  $post(args: {
-    param: { orgId: string };
-    json: { userId: string; role: "owner" | "admin" | "member" };
-  }): Promise<Response>;
-  [userParam: `:${string}`]: MemberResourceClient;
-}
-
-interface MemberResourceClient {
-  $patch(args: {
-    param: { orgId: string; userId: string };
-    json: { role: "owner" | "admin" | "member" };
-  }): Promise<Response>;
-  $delete(args: { param: { orgId: string; userId: string } }): Promise<Response>;
-}
-
-const allowLimiter: RateLimiter = () => ({ limited: false });
-const nowSeconds = () => Math.floor(NOW_MS / 1000);
-
-let h: Harness;
-
-// The Workers pool isolates storage per FILE, not per test (isolatedStorage was
-// dropped in the Vitest 4 migration -- workers-sdk#12889). The Organizations
-// themselves are seeded once, since re-inserting them would trip the slug unique
-// index; the memberships are rebuilt per test because this suite mutates them
-// (it renames the Org, adds/removes members, and grants roles) and each test
-// expects the same starting roster.
-beforeAll(async () => {
-  const bindings = await makeLocalBindings();
-  await seedOrgApp(bindings.d1, PRIMARY);
-  await seedOrgApp(bindings.d1, SOLO);
-});
-
-beforeEach(async () => {
-  const bindings = await makeLocalBindings();
-  await bindings.d1.prepare("DELETE FROM org_memberships").run();
-  await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: OWNER, role: "owner" });
-  await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: ADMIN, role: "admin" });
-  await seedOrgMember(bindings.d1, { orgId: PRIMARY.orgId, userId: MEMBER, role: "member" });
-  await seedOrgMember(bindings.d1, { orgId: SOLO.orgId, userId: SOLO_OWNER, role: "owner" });
-
-  const signer = await makeFixtureSigner();
-  const verifier = makeJwksVerifier({
-    fetchJwks: async () => signer.jwks,
-    controlPlaneAudience: AUDIENCE,
-  });
-  const app = createApp({
-    authResolver: makeControlPlaneAuthResolver({
-      verifier,
-      sessions: makeSessionStore(bindings.kv),
-      now: () => NOW_MS,
-    }),
-    rateLimiter: allowLimiter,
-    repo: createRepository(bindings.d1),
-    memberProfileResolver: ({ userId }) => {
-      const email = PROFILE_EMAILS.get(userId);
-      return email ? { email } : null;
-    },
-    nowIso: () => NOW_ISO,
-  });
-
-  h = { app, signer, bindings };
-});
-
-afterEach(async () => h.bindings.dispose());
-
-async function bodyOf(res: Response): Promise<ErrorResponse> {
-  return (await res.json()) as ErrorResponse;
-}
-
-function token(userId: string, orgId: string, role: "owner" | "admin" | "member"): Promise<string> {
-  return h.signer.sign({
-    sub: userId,
-    iss: "https://auth.splitch.test",
-    aud: AUDIENCE,
-    iat: nowSeconds(),
-    exp: nowSeconds() + 3600,
-    scopes: [`org:${orgId}:${role}`],
-  });
-}
-
-function client(jwt: string) {
-  const fetchImpl: typeof fetch = async (input, init) => h.app.fetch(new Request(input, init));
-  return hc<typeof h.app>(AUDIENCE, {
-    fetch: fetchImpl,
-    headers: { authorization: `Bearer ${jwt}` },
-  }) as unknown as OrgRouteClient;
-}
-
-function orgRoute(api: OrgRouteClient): OrgScopedClient {
-  const route = api.orgs[":orgId"];
-  if (!route) throw new Error("hc client did not expose /orgs/:orgId");
-  return route;
-}
-
-function memberRoute(api: OrgRouteClient): MemberCollectionClient {
-  return orgRoute(api).members;
-}
-
-function memberResourceRoute(api: OrgRouteClient): MemberResourceClient {
-  const route = memberRoute(api)[":userId"];
-  if (!route) throw new Error("hc client did not expose /orgs/:orgId/members/:userId");
-  return route;
-}
+beforeAll(seedOrgs);
+beforeEach(setup);
+afterEach(teardown);
 
 describe("control-plane org/member endpoints", () => {
   it("round-trips Org patch and member CRUD through the mounted Worker", async () => {

@@ -7,6 +7,40 @@
  * from the harness that constructs a Miniflare instance.
  */
 
+/**
+ * Every table a control-plane test can write, ordered children-before-parents so
+ * the deletes respect the real foreign keys.
+ */
+const RESET_TABLES = [
+  "api_keys",
+  "client_keys",
+  "runs",
+  "experiments",
+  "metrics",
+  "segments",
+  "targeting_rules",
+  "flag_configs",
+  "variants",
+  "flags",
+  "environments",
+  "app_memberships",
+  "apps",
+  "org_memberships",
+  "organizations",
+];
+
+/**
+ * Truncate the tenant graph so a test starts from an empty D1.
+ *
+ * The Workers pool isolates storage per test FILE rather than per test
+ * (isolatedStorage was dropped in the Vitest 4 migration, workers-sdk#12889),
+ * so suites that re-seed fixed IDs have to clear them first or trip a unique
+ * index. Sent as one `batch`, so the reset costs a single round-trip.
+ */
+export async function resetTenantGraph(d1: D1Database): Promise<void> {
+  await d1.batch(RESET_TABLES.map((table) => d1.prepare(`DELETE FROM ${table}`)));
+}
+
 export interface SeedRow {
   orgId: string;
   orgName: string;

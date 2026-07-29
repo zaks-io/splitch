@@ -23,3 +23,18 @@ export async function makePoolBindings(): Promise<LocalBindings> {
     dispose: async () => {},
   };
 }
+
+export interface PoolBindingsWithConfig extends LocalBindings {
+  configKv: KVNamespace;
+}
+
+/**
+ * The same bindings plus the Flag-Configuration KV, for suites that assert on
+ * what the config store wrote. Under Miniflare this needed a second fixture with
+ * its own instance and its own hand-written schema; here it is one more binding
+ * off the same `env`, and the D1 behind it is the real migration set rather than
+ * a hand-maintained copy.
+ */
+export async function makePoolBindingsWithConfig(): Promise<PoolBindingsWithConfig> {
+  return { ...(await makePoolBindings()), configKv: env.CONFIG_STORE };
+}

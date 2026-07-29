@@ -3,19 +3,21 @@ import { createRepository } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "./app";
-import { makeControlPlaneAuthResolver } from "./auth-resolver";
-import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
-import { makeJwksVerifier } from "./jwks-verify";
-import { makeSessionStore } from "./session-store";
-import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
+import { createApp } from "../src/app";
+import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
+import { makeJwksVerifier } from "../src/jwks-verify";
+import { makeSessionStore } from "../src/session-store";
+import type { LocalBindings } from "../src/test-fixtures";
+import { resetTenantGraph, seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 /**
  * `organizations_create` route proofs (SPL-171).
  *
  * The route has no `:orgId`, so the guard's co-scope check never fires and every
  * authorization decision is the handler's. That makes the negative cases the
- * point of this file: a provisional principal must not be able to mint tenants,
+ * point of this file: a provisional principal must not be able to mint Organizations,
  * and one principal's Org must stay invisible to an unrelated one.
  */
 
@@ -59,6 +61,9 @@ let h: Harness;
 
 beforeEach(async () => {
   const bindings = await makeLocalBindings();
+  // The pool isolates storage per test FILE, not per test, and these fixed-ID
+  // Orgs are re-seeded each time, so the graph is cleared first.
+  await resetTenantGraph(bindings.d1);
   for (const actor of [ALICE, MALLORY]) {
     await seedOrgApp(bindings.d1, actor);
     await seedOrgMember(bindings.d1, {
@@ -227,7 +232,7 @@ describe("organizations_create", () => {
     });
     const res = await request("/orgs", jwt, {
       method: "POST",
-      body: JSON.stringify({ name: "Unbounded Tenant" }),
+      body: JSON.stringify({ name: "Unbounded Organization" }),
     });
 
     expect(res.status).toBe(403);

@@ -10,12 +10,13 @@ import {
   makeFlagDefinitionHarness,
   NOW_ISO,
   request,
-} from "./flag-definition-test-harness";
+} from "../src/flag-definition-test-harness";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 let h: FlagDefinitionHarness;
 
 beforeEach(async () => {
-  h = await makeFlagDefinitionHarness();
+  h = await makeFlagDefinitionHarness(makeLocalBindings);
 });
 
 afterEach(async () => h.bindings.dispose());

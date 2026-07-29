@@ -1,5 +1,5 @@
-import { env } from "cloudflare:workers";
 import { evictDurableObject, runDurableObjectAlarm } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { createRepository } from "@splitch/db";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { authorizeLiveUpdateUpgrade } from "../../control-panel/src/lib/live-update-authorization.js";

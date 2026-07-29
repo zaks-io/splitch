@@ -11,8 +11,8 @@ import { controlPlaneRoute, withRequiredScopes } from "../src/routes";
 import { appAdminScope } from "../src/scope-binding";
 import { makeSessionStore, revocationKey } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
-import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 import { seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 /**
  * End-to-end auth-middleware proofs against the REAL mounted Worker: the
