@@ -6,7 +6,7 @@ import {
 } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { makeConfigStore } from "./config-store";
+import { makeConfigStore } from "../src/config-store";
 import {
   authedPatch,
   faultingCommitRepo,
@@ -14,7 +14,6 @@ import {
   ids,
   kvJson,
   makeAuthedApp,
-  makeHarness,
   NOW,
   NOW_MS,
   patchFlagConfig,
@@ -22,7 +21,8 @@ import {
   replaceTargetingRules,
   setProdPolicy,
   token,
-} from "./config-store-test-harness";
+} from "../src/config-store-harness-core";
+import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
 let h: Harness;
 

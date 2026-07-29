@@ -5,11 +5,11 @@ import {
   type Harness,
   ids,
   kvJson,
-  makeHarness,
   patchFlagConfig,
   promoteFlagConfig,
   setProdPolicy,
-} from "./config-store-test-harness";
+} from "../src/config-store-harness-core";
+import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
 let h: Harness;
 
