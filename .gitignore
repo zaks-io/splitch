@@ -14,6 +14,7 @@ reports/mutation/
 playwright-report/
 test-results/
 .sdk-release-artifacts/
-.claude/
+.claude/*
+!.claude/skills/
 .codex/
 agent/

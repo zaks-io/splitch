@@ -266,10 +266,12 @@ real package API boundary.
 - Issue-assigned agents: Linear team `Splitch` exists; discover assignable agents
   live from Linear at dispatch time (do not hardcode). `remote-cursor` env label
   and `zaks-io/splitch` repo-route label are set up.
-- Claude: this repo has no Claude Code integration yet. Adapters created this
-  setup: `AGENTS.md` (workflow pointer) and `CLAUDE.md` (`@AGENTS.md` import).
+- Claude: repo-local integration uses `AGENTS.md` as the workflow pointer and
+  `CLAUDE.md` as its `@AGENTS.md` import.
 - Claude Code source of truth: `AGENTS.md`, imported by `CLAUDE.md`.
-- Claude Code symlinks: none required (no `.claude` skill paths to link).
+- Claude Code skill registration: tracked `.claude/skills/ziw-*` relative
+  symlinks point to the generated `.agents/skills/ziw-*` source tree so every
+  Git worktree registers the same skills without duplicating their content.
 - Workflow skill distribution: project skills, committed generated copies from
   `zaks-io/skills`.
 - Workflow skill lockfile: `skills-lock.json`.
