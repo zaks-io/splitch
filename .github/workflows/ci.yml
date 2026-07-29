@@ -17,6 +17,7 @@ concurrency:
 jobs:
   control-panel-e2e:
     name: Control Panel E2E
+    if: github.event_name != 'pull_request'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 15
     env:
