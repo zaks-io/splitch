@@ -18,13 +18,15 @@ export function useMetricForm({
   environmentId,
   metric,
   metrics,
+  onDeleted,
   onSaved,
 }: {
   appId: string;
   environmentId: string;
   metric?: Metric;
   metrics: Metric[];
-  onSaved: () => void | Promise<void>;
+  onDeleted: (metricId: string) => void | Promise<void>;
+  onSaved: (metric: Metric) => void | Promise<void>;
 }) {
   const [draft, setDraft] = useState<MetricDraft>(() =>
     metric ? metricDraft(metric) : emptyMetricDraft(),
@@ -54,7 +56,7 @@ export function useMetricForm({
           draft,
         },
       });
-      if (result.ok) await onSaved();
+      if (result.ok) await onSaved(result.data);
       else setMutationError(mutationErrorSurface(result));
     } catch {
       setMutationError(transportError("save"));
@@ -71,7 +73,7 @@ export function useMetricForm({
       const result = await deleteControlPanelMetric({
         data: { appId, environmentId, metricId: metric.id },
       });
-      if (result.ok) await onSaved();
+      if (result.ok) await onDeleted(metric.id);
       else setMutationError(mutationErrorSurface(result));
     } catch {
       setMutationError(transportError("delete"));

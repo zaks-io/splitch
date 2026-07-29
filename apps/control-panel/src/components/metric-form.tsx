@@ -13,11 +13,26 @@ type MetricFormProps = {
   environmentId: string;
   metric?: Metric;
   metrics: Metric[];
-  onSaved: () => void | Promise<void>;
+  onDeleted: (metricId: string) => void | Promise<void>;
+  onSaved: (metric: Metric) => void | Promise<void>;
 };
 
-export function MetricForm({ appId, environmentId, metric, metrics, onSaved }: MetricFormProps) {
-  const form = useMetricForm({ appId, environmentId, metric, metrics, onSaved });
+export function MetricForm({
+  appId,
+  environmentId,
+  metric,
+  metrics,
+  onDeleted,
+  onSaved,
+}: MetricFormProps) {
+  const form = useMetricForm({
+    appId,
+    environmentId,
+    metric,
+    metrics,
+    onDeleted,
+    onSaved,
+  });
   const { busyAction, denominatorMetrics, draft, edit, mutationError, remove, shown, submit } =
     form;
 

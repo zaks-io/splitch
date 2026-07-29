@@ -14,10 +14,14 @@ export function MetricsTable({
   appId,
   environmentId,
   metrics,
+  onDeleted,
+  onSaved,
 }: {
   appId: string;
   environmentId: string;
   metrics: Metric[];
+  onDeleted: (metricId: string) => void | Promise<void>;
+  onSaved: (metric: Metric) => void | Promise<void>;
 }) {
   const names = new Map(metrics.map((metric) => [metric.id, metric.name]));
   return (
@@ -58,6 +62,8 @@ export function MetricsTable({
                   environmentId={environmentId}
                   metric={metric}
                   metrics={metrics}
+                  onDeleted={onDeleted}
+                  onSaved={onSaved}
                 />
               </TableCell>
             </TableRow>

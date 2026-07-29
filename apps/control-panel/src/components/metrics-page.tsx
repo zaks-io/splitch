@@ -1,5 +1,6 @@
 import type { Metric } from "@splitch/contracts";
 import { EmptyState } from "@splitch/ui/state/empty-state";
+import { useEffect, useState } from "react";
 import { MetricEditorDialog } from "./metric-editor-dialog";
 import { MetricsTable } from "./metrics-table";
 
@@ -12,6 +13,18 @@ export function MetricsPage({
   environmentId: string;
   metrics: Metric[];
 }) {
+  const [visibleMetrics, setVisibleMetrics] = useState(metrics);
+
+  useEffect(() => setVisibleMetrics(metrics), [metrics]);
+
+  function saveMetric(metric: Metric) {
+    setVisibleMetrics((current) => upsertMetric(current, metric));
+  }
+
+  function deleteMetric(metricId: string) {
+    setVisibleMetrics((current) => removeMetric(current, metricId));
+  }
+
   return (
     <section aria-labelledby="metrics-title" className="grid gap-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -27,17 +40,35 @@ export function MetricsPage({
             Experiment.
           </p>
         </div>
-        {metrics.length > 0 ? (
-          <MetricEditorDialog appId={appId} environmentId={environmentId} metrics={metrics} />
+        {visibleMetrics.length > 0 ? (
+          <MetricEditorDialog
+            appId={appId}
+            environmentId={environmentId}
+            metrics={visibleMetrics}
+            onDeleted={deleteMetric}
+            onSaved={saveMetric}
+          />
         ) : null}
       </header>
 
-      {metrics.length > 0 ? (
-        <MetricsTable appId={appId} environmentId={environmentId} metrics={metrics} />
+      {visibleMetrics.length > 0 ? (
+        <MetricsTable
+          appId={appId}
+          environmentId={environmentId}
+          metrics={visibleMetrics}
+          onDeleted={deleteMetric}
+          onSaved={saveMetric}
+        />
       ) : (
         <EmptyState
           action={
-            <MetricEditorDialog appId={appId} environmentId={environmentId} metrics={metrics} />
+            <MetricEditorDialog
+              appId={appId}
+              environmentId={environmentId}
+              metrics={visibleMetrics}
+              onDeleted={deleteMetric}
+              onSaved={saveMetric}
+            />
           }
           description="A Metric combines an event fact with a Binomial, Count, Revenue, or Ratio aggregation."
           secondaryAction={
@@ -50,4 +81,13 @@ export function MetricsPage({
       )}
     </section>
   );
+}
+
+export function upsertMetric(metrics: readonly Metric[], metric: Metric): Metric[] {
+  if (!metrics.some(({ id }) => id === metric.id)) return [...metrics, metric];
+  return metrics.map((candidate) => (candidate.id === metric.id ? metric : candidate));
+}
+
+export function removeMetric(metrics: readonly Metric[], metricId: string): Metric[] {
+  return metrics.filter(({ id }) => id !== metricId);
 }

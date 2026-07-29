@@ -1,8 +1,7 @@
 import type { Metric } from "@splitch/contracts";
 import { Button } from "@splitch/ui/components/button";
 import { Dialog, DialogContent, DialogTrigger } from "@splitch/ui/components/dialog";
-import { useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MetricForm } from "./metric-form";
 
 export function MetricEditorDialog({
@@ -10,23 +9,35 @@ export function MetricEditorDialog({
   environmentId,
   metric,
   metrics,
+  onDeleted,
+  onSaved,
 }: {
   appId: string;
   environmentId: string;
   metric?: Metric;
   metrics: Metric[];
+  onDeleted: (metricId: string) => void | Promise<void>;
+  onSaved: (metric: Metric) => void | Promise<void>;
 }) {
-  const router = useRouter();
+  const [hydrated, setHydrated] = useState(false);
   const [open, setOpen] = useState(false);
 
-  async function saved() {
+  useEffect(() => setHydrated(true), []);
+
+  async function saved(savedMetric: Metric) {
     setOpen(false);
-    await router.invalidate();
+    await onSaved(savedMetric);
+  }
+
+  async function deleted(metricId: string) {
+    setOpen(false);
+    await onDeleted(metricId);
   }
 
   return (
     <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger
+        disabled={!hydrated}
         render={
           <Button size={metric ? "sm" : "default"} variant={metric ? "outline" : "default"} />
         }
@@ -39,6 +50,7 @@ export function MetricEditorDialog({
           environmentId={environmentId}
           metric={metric}
           metrics={metrics}
+          onDeleted={deleted}
           onSaved={saved}
         />
       </DialogContent>
