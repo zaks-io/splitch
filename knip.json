@@ -5,7 +5,7 @@
   "stryker": {
     "config": ["stryker.base.json", "packages/*/stryker.config.json"]
   },
-  "ignore": [".agents/**"],
+  "ignore": [".agents/**", ".claude/**"],
   "workspaces": {
     ".": {
       "entry": [
