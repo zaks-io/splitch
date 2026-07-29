@@ -90,19 +90,30 @@ UNIQUE constraint: `(experiment_id, run_number)` — run numbers are dense and u
 
 ### `metrics`
 
-| Column                  | Type        | Constraints                              |
-| ----------------------- | ----------- | ---------------------------------------- |
-| `id`                    | text        | PK                                       |
-| `app_id`                | text        | FK → apps, not null                      |
-| `key`                   | text        | not null, unique per `(app_id)`          |
-| `name`                  | text        | not null                                 |
-| `description`           | text        | nullable                                 |
-| `kind`                  | text        | not null                                 |
-| `event_name`            | text        | not null                                 |
-| `event_value_field`     | text        | nullable                                 |
-| `denominator_metric_id` | text        | nullable, FK → metrics (same app)        |
-| `created_at`            | timestamptz | not null                                 |
-| `created_by`            | text        | WorkOS user ID or deleted-user tombstone |
+| Column                  | Type        | Constraints                                                            |
+| ----------------------- | ----------- | ---------------------------------------------------------------------- |
+| `id`                    | text        | PK                                                                     |
+| `app_id`                | text        | FK → apps, not null                                                    |
+| `key`                   | text        | not null, unique per `(app_id)`                                        |
+| `name`                  | text        | not null                                                               |
+| `description`           | text        | nullable                                                               |
+| `kind`                  | text        | not null                                                               |
+| `event_definition_id`   | text        | nullable, FK → event_definitions (same app); required except for ratio |
+| `event_field_name`      | text        | nullable; declared numeric field, required for count/revenue           |
+| `numerator_metric_id`   | text        | nullable, FK → metrics (same app); ratio only                          |
+| `denominator_metric_id` | text        | nullable, FK → metrics (same app); ratio only                          |
+| `conversion_window_ms`  | integer     | nullable; inherits Experiment default when null                        |
+| `winsorize`             | boolean     | not null                                                               |
+| `winsorize_pct`         | real        | not null                                                               |
+| `created_at`            | timestamptz | not null                                                               |
+| `updated_at`            | timestamptz | not null                                                               |
+| `created_by`            | text        | WorkOS user ID or deleted-user tombstone                               |
+| `updated_by`            | text        | WorkOS user ID or deleted-user tombstone                               |
+
+The Worker resolves `event_field_name` against the Event Definition's current published version and
+records only a named top-level field, never a JSON path or expression. Binomial Metrics reference the
+Event Definition and leave `event_field_name` null. Ratio Metrics reference two non-Ratio Metrics and
+leave the direct Event Definition fields null.
 
 ### `client_keys`
 

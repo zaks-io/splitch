@@ -35,6 +35,9 @@ event-level rows** — that loses the covariance term for Ratio delta-method var
 
 | Field                | Type      | Required | Meaning                                                                      |
 | -------------------- | --------- | -------- | ---------------------------------------------------------------------------- |
+| `app_id`             | `string`  | yes      | Same App as the deduped Exposure and Run                                     |
+| `environment_id`     | `string`  | yes      | Same Environment as the deduped Exposure and Run                             |
+| `id_type`            | `string`  | yes      | Must equal the Run's `targeting_key_type`                                    |
 | `targeting_key_hash` | `string`  | yes      | Matches the deduped Exposure row                                             |
 | `run_id`             | `string`  | yes      | Same Run scope                                                               |
 | `metric_id`          | `string`  | yes      | References Metric definition                                                 |
@@ -48,6 +51,11 @@ The `num_value` / `denom_value` pair for Ratio Metrics is the **hard input-contr
 arrive as a per-Entity pair so the delta-method covariance term is computable — unrecoverable after
 independent aggregation. Rows with `denom_value = 0` are retained; dropping them would change the
 randomized population and can bias denominator-sensitive Metrics.
+
+The pipeline derives these values from the separate `metric_events` datasource. A Metric Event joins
+only on matching `app_id`, `environment_id`, `id_type`, and `targeting_key_hash`, and only when
+`id_type = Run.targeting_key_type`. Metric Events never create denominator rows: the pipeline
+left-joins values onto the complete first-touch Exposure population.
 
 For locked non-Ratio decision-family or Guardrail Metrics, `metric_values` may be sparse at the
 beginning of a Run. If no row has arrived for a locked Metric yet, the engine still evaluates that

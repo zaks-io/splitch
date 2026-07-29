@@ -1,8 +1,9 @@
-# Leaf schemas: EvaluationContext, Exposure, and identity/credential leaves
+# Leaf schemas: runtime events and identity/credential leaves
 
-Canonical field lists for the runtime/identity glossary nouns: EvaluationContext, Exposure event, and
-the Organization/App/User/credential block. Every noun is ONE Zod schema in `@splitch/contracts`;
-request, response, and storage shapes compose these leaves and never redefine them.
+Canonical field lists for the runtime/identity glossary nouns: EvaluationContext, Exposure,
+Event Definition, Metric Event, and the Organization/App/User/credential block. Every noun is ONE
+Zod schema in `@splitch/contracts`; request, response, and storage shapes compose these leaves and
+never redefine them.
 
 Any field addition here propagates to every envelope automatically.
 
@@ -46,6 +47,107 @@ the wire `dedup_key` is always satisfiable.
 
 First-touch identity: the tuple `(appId, environmentId, experimentId, runId, idType, targetingKeyHash)`
 resolved by `MIN(serverReceivedAt)` — the earliest wins. Distinct from the wire `dedup_key` above.
+
+---
+
+## Event Definition
+
+An Event Definition is App-level and shared by every Environment. `name` is the developer-facing
+`eventName` used by `sdk.track(...)` and is unique within the App.
+
+| Field                       | Type                | Required | Meaning                                                             |
+| --------------------------- | ------------------- | -------- | ------------------------------------------------------------------- |
+| `id`                        | `string`            | yes      | Stable ID (`evtdef_<ulid>`)                                         |
+| `appId`                     | `string`            | yes      | Owning App                                                          |
+| `name`                      | `string`            | yes      | Stable event name, unique within the App                            |
+| `displayName`               | `string`            | yes      | Human-readable label                                                |
+| `description`               | `string`            | no       | —                                                                   |
+| `currentPublishedVersionId` | `string \| null`    | yes      | Version the Event Ingest Worker resolves; null before first publish |
+| `createdAt`                 | `string` (ISO 8601) | yes      | —                                                                   |
+| `updatedAt`                 | `string` (ISO 8601) | yes      | Metadata update timestamp                                           |
+
+## Event Definition Version
+
+Creating a version atomically publishes it and advances `currentPublishedVersionId`. A published
+version is immutable and cannot be patched or deleted independently. A breaking contract change
+creates a new version; accepted rows retain the exact version that validated them.
+
+| Field               | Type                     | Required | Meaning                                                         |
+| ------------------- | ------------------------ | -------- | --------------------------------------------------------------- |
+| `id`                | `string`                 | yes      | Stable ID (`evtver_<ulid>`)                                     |
+| `appId`             | `string`                 | yes      | Owning App; must match the Event Definition                     |
+| `eventDefinitionId` | `string`                 | yes      | Parent Event Definition                                         |
+| `version`           | positive integer         | yes      | Dense, server-assigned ordinal within the Event Definition      |
+| `entityType`        | `string`                 | yes      | Required inbound `idType`; the Entity type this event describes |
+| `fields`            | `EventFieldDefinition[]` | yes      | Named typed fact fields; names unique                           |
+| `dimensions`        | `DimensionDefinition[]`  | yes      | Declared slice fields; names unique and disjoint from `fields`  |
+| `schemaHash`        | `string` (sha256)        | yes      | Hash of the canonical fields/dimensions/entityType contract     |
+| `publishedAt`       | `string` (ISO 8601)      | yes      | Server timestamp                                                |
+| `publishedBy`       | `string`                 | yes      | WorkOS user ID or deleted-user tombstone                        |
+
+`EventFieldDefinition`:
+
+| Field        | Type                                          | Required | Meaning                                                            |
+| ------------ | --------------------------------------------- | -------- | ------------------------------------------------------------------ |
+| `name`       | `string`                                      | yes      | Stable top-level name referenced by Metrics                        |
+| `type`       | `'boolean' \| 'string' \| 'number' \| 'json'` | yes      | Accepted value family                                              |
+| `required`   | `boolean`                                     | yes      | Whether every event must carry the field                           |
+| `jsonSchema` | closed JSON Schema                            | cond.    | Required only when `type = 'json'`; root and nested objects closed |
+
+`DimensionDefinition`:
+
+| Field      | Type                                | Required | Meaning                                              |
+| ---------- | ----------------------------------- | -------- | ---------------------------------------------------- |
+| `name`     | `string`                            | yes      | Stable top-level Dimension name                      |
+| `type`     | `'boolean' \| 'string' \| 'number'` | yes      | Scalar only; JSON Dimensions are not supported in V1 |
+| `required` | `boolean`                           | yes      | Whether every event must carry the Dimension         |
+
+JSON is accepted only for a field declared as `type = 'json'`. Its `jsonSchema` must set
+`additionalProperties: false` for every object node, including nested objects. Schemaless JSON,
+unknown field names, unknown Dimensions, unknown nested keys, and undeclared Entity Profile fields
+fail before any write.
+
+---
+
+## Metric Event track request
+
+The strict wire input for `POST /api/sdk/events`:
+
+| Field          | Type                                                       | Required | Meaning                                                        |
+| -------------- | ---------------------------------------------------------- | -------- | -------------------------------------------------------------- |
+| `eventName`    | `string`                                                   | yes      | App-level Event Definition name                                |
+| `targetingKey` | `string`                                                   | yes      | Raw Entity identifier; used in memory and never stored         |
+| `idType`       | `string`                                                   | yes      | Must equal the current Event Definition Version's `entityType` |
+| `eventId`      | `string`                                                   | yes      | Caller-stable logical fact/retry identity                      |
+| `fields`       | `Record<string, boolean \| string \| number \| JsonValue>` | yes      | Complete fact payload; validated against declared fields       |
+| `dimensions`   | `Record<string, boolean \| string \| number>`              | yes      | Complete Dimension payload; validated against declarations     |
+
+The object is strict. It has no App, Environment, hash, Entity Profile, Event Definition ID, or
+version selector. `JsonValue` is accepted only after the named field's closed JSON Schema validates
+the complete value.
+
+## Accepted Metric Event row
+
+The Event Ingest Worker constructs this shape only after the complete request validates:
+
+| Field                      | Type                                          | Required | Meaning                                              |
+| -------------------------- | --------------------------------------------- | -------- | ---------------------------------------------------- |
+| `dedupKey`                 | `string` (sha256)                             | yes      | Idempotency key over App, Environment, and `eventId` |
+| `eventId`                  | `string`                                      | yes      | Caller-stable logical fact ID                        |
+| `appId`                    | `string`                                      | yes      | Injected from authenticated credential               |
+| `environmentId`            | `string`                                      | yes      | Injected from authenticated credential               |
+| `eventDefinitionId`        | `string`                                      | yes      | Resolved by `eventName` within the App               |
+| `eventDefinitionVersionId` | `string`                                      | yes      | Current immutable version that accepted the row      |
+| `eventName`                | `string`                                      | yes      | Denormalized stable definition name                  |
+| `idType`                   | `string`                                      | yes      | Validated Entity type                                |
+| `targetingKeyHash`         | `string`                                      | yes      | App-salt HMAC; raw Targeting Key is never persisted  |
+| `fields`                   | `Record<string, JsonValue>`                   | yes      | Validated values serialized canonically              |
+| `dimensions`               | `Record<string, boolean \| string \| number>` | yes      | Validated scalar Dimensions                          |
+| `serverReceivedAt`         | `string` (ISO 8601)                           | yes      | Canonical Metric event time                          |
+| `ingestTs`                 | `string` (ISO 8601)                           | yes      | Append watermark                                     |
+
+The authoritative delivery, idempotency, validation, and response contract is
+[metric-event-contract.md](../pipeline/metric-event-contract.md).
 
 ---
 
@@ -139,7 +241,9 @@ a D1 storage table.
 ### ClientKey
 
 Client Keys are public publishable values. The control plane may retrieve and return
-`keyMaterial` because it is safe to embed in client code.
+`keyMaterial` because it is safe to embed in client code. A Client Key can evaluate and can append
+validated Metric Events through the write-only `track` route; it cannot read event or configuration
+data.
 
 | Field             | Type                        | Required | Meaning                                                                                                                                                                                          |
 | ----------------- | --------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

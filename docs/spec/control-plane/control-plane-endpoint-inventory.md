@@ -23,8 +23,8 @@ Canonical contract (cursor TTL, `total` semantics, limit cap) in
 Two path prefixes, by the App/Environment split:
 
 - **App-level** `/apps/{app_id}/…` — definition/identity shared across Environments: Org/App/member
-  CRUD, Environment CRUD, **Flag definition** (key, schema, Variant catalog), Metric definitions,
-  Segments.
+  CRUD, Environment CRUD, **Flag definition** (key, schema, Variant catalog), Event Definitions and
+  immutable published versions, Metric definitions, Segments.
 - **Environment-level** `/apps/{app_id}/envs/{environment_id}/…` — live config + runtime artifacts:
   **Flag Configuration** (available Variants, targeting, rollout, enabled state), SDK credentials,
   Experiments, Experiment Runs, **Promotion**, test-eval, analytics reads.
@@ -43,7 +43,7 @@ against and the co-scope guard never fires. Authorization there is the handler's
 | [endpoints-org-app.md](endpoints-org-app.md)                         | Organization **create** + member management; App CRUD; **Environment CRUD**                                              |
 | [endpoints-flag-segment.md](endpoints-flag-segment.md)               | Flag **definition** (App-level) + **Flag Configuration** (per-Env) + **Promotion**; Segment CRUD                         |
 | [endpoints-experiment-run.md](endpoints-experiment-run.md)           | Experiment draft/**start** lifecycle; Experiment Run reads + end (per-Env)                                               |
-| [endpoints-metric.md](endpoints-metric.md)                           | Metric CRUD (binomial, count, revenue, ratio, guardrail)                                                                 |
+| [endpoints-metric.md](endpoints-metric.md)                           | Event Definition/version authoring + typed-field Metric CRUD (binomial, count, revenue, ratio, guardrail)                |
 | [endpoints-credentials.md](endpoints-credentials.md)                 | Client Key + API Key management (per-Env)                                                                                |
 | [endpoints-test-eval-analytics.md](endpoints-test-eval-analytics.md) | Dry-run test-evaluation (Evaluation Worker), analytics proxy reads (Analysis Worker), OpenAPI schema discovery (per-Env) |
 | [endpoints-privacy-data.md](endpoints-privacy-data.md)               | Privacy requests, export jobs, delete jobs, and Entity data subject requests                                             |

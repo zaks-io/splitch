@@ -1,7 +1,7 @@
-# Request/response envelopes: Metric, App, Org, and Credential endpoints
+# Request/response envelopes: Event Definition, Metric, App, Org, and Credential endpoints
 
-Wire shapes for Metric, App/Org, and SDK credential control-plane endpoints, including API Key
-once-only surfacing and public Client Key retrieval.
+Wire shapes for Event Definition, Metric, App/Org, and SDK credential control-plane endpoints,
+including immutable version creation, API Key once-only surfacing, and public Client Key retrieval.
 
 Envelopes compose leaf schemas from [leaf-schemas-runtime.md](./leaf-schemas-runtime.md) and
 [leaf-schemas-experiment.md](./leaf-schemas-experiment.md). They are **distinct** — never fused. Shared
@@ -10,35 +10,71 @@ conventions live in [request-response-envelopes-conventions.md](./request-respon
 
 ---
 
+## Event Definition endpoints
+
+### CreateEventDefinitionRequest
+
+| Field         | Required | Notes                                  |
+| ------------- | -------- | -------------------------------------- |
+| `appId`       | yes      | —                                      |
+| `name`        | yes      | Stable SDK `eventName`; unique per App |
+| `displayName` | yes      | —                                      |
+| `description` | no       | —                                      |
+
+### CreateEventDefinitionVersionRequest
+
+| Field               | Required | Notes                                                       |
+| ------------------- | -------- | ----------------------------------------------------------- |
+| `appId`             | yes      | —                                                           |
+| `eventDefinitionId` | yes      | Must belong to `appId`                                      |
+| `entityType`        | yes      | Required inbound Metric Event `idType`                      |
+| `fields`            | yes      | `EventFieldDefinition[]`; JSON fields require closed schema |
+| `dimensions`        | yes      | `DimensionDefinition[]`; scalar only                        |
+
+The Worker assigns the version and stamps publication metadata. No request can supply
+`version`, `schemaHash`, `publishedAt`, or `publishedBy`.
+
+---
+
 ## Metric endpoints
 
 ### CreateMetricRequest
 
-| Field             | Required | Notes                                                    |
-| ----------------- | -------- | -------------------------------------------------------- |
-| `appId`           | yes      | —                                                        |
-| `name`            | yes      | —                                                        |
-| `key`             | yes      | Unique per App                                           |
-| `kind`            | yes      | `'binomial' \| 'count' \| 'revenue' \| 'ratio'`          |
-| `eventName`       | yes      | —                                                        |
-| `eventValueField` | no       | Required for `count`/`revenue`; validated by Worker      |
-| `denominator`     | no       | Required for `ratio`; `{ metricId }` must be in same App |
-| `description`     | no       | —                                                        |
+| Field                | Required | Notes                                               |
+| -------------------- | -------- | --------------------------------------------------- |
+| `appId`              | yes      | —                                                   |
+| `name`               | yes      | —                                                   |
+| `key`                | yes      | Unique per App                                      |
+| `kind`               | yes      | `'binomial' \| 'count' \| 'revenue' \| 'ratio'`     |
+| `eventDefinitionId`  | cond.    | Required except for ratio; same App                 |
+| `eventFieldName`     | cond.    | Declared top-level number field; count/revenue only |
+| `numerator`          | cond.    | Ratio only; `{ metricId }`, same App, non-Ratio     |
+| `denominator`        | cond.    | Ratio only; `{ metricId }`, same App, non-Ratio     |
+| `conversionWindowMs` | no       | Null/absent inherits Experiment default             |
+| `winsorize`          | no       | Type-specific default                               |
+| `winsorizePct`       | no       | Default 99.9                                        |
+| `description`        | no       | —                                                   |
 
 ### PatchMetricRequest
 
 All fields optional. No Run-frozen check — Metric patches are measurement edits that recompute over
 the existing Run (ADR-0003). Never returns `RUN_FROZEN`.
 
-| Field             | Required |
-| ----------------- | -------- |
-| `name`            | no       |
-| `key`             | no       |
-| `kind`            | no       |
-| `eventName`       | no       |
-| `eventValueField` | no       |
-| `denominator`     | no       |
-| `description`     | no       |
+| Field                | Required |
+| -------------------- | -------- |
+| `name`               | no       |
+| `key`                | no       |
+| `eventDefinitionId`  | no       |
+| `eventFieldName`     | no       |
+| `numerator`          | no       |
+| `denominator`        | no       |
+| `conversionWindowMs` | no       |
+| `winsorize`          | no       |
+| `winsorizePct`       | no       |
+| `description`        | no       |
+
+`kind` is immutable. The Worker validates the complete post-patch object, so a partial patch cannot
+leave an invalid combination. No field accepts a JSON path or expression.
 
 ---
 

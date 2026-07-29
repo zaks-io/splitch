@@ -87,25 +87,35 @@ a finished Run still reflects exactly the population it actually randomized. Thi
 
 ## Metric
 
-| Field             | Type                | Required | Meaning                                                           |
-| ----------------- | ------------------- | -------- | ----------------------------------------------------------------- |
-| `id`              | `string`            | yes      | Stable UUID                                                       |
-| `appId`           | `string`            | yes      | Owning App                                                        |
-| `key`             | `string`            | yes      | Unique per App                                                    |
-| `name`            | `string`            | yes      | —                                                                 |
-| `description`     | `string`            | no       | —                                                                 |
-| `kind`            | `MetricKind`        | yes      | Aggregation shape                                                 |
-| `eventName`       | `string`            | yes      | Tinybird event key to match                                       |
-| `eventValueField` | `string \| null`    | no       | Required for `count` / `revenue`; field path inside event payload |
-| `denominator`     | `MetricRef \| null` | no       | Required for `ratio`; must be in same App                         |
-| `createdAt`       | `string` (ISO 8601) | yes      | —                                                                 |
+| Field                | Type                | Required | Meaning                                                     |
+| -------------------- | ------------------- | -------- | ----------------------------------------------------------- |
+| `id`                 | `string`            | yes      | Stable UUID                                                 |
+| `appId`              | `string`            | yes      | Owning App                                                  |
+| `key`                | `string`            | yes      | Unique per App                                              |
+| `name`               | `string`            | yes      | —                                                           |
+| `description`        | `string`            | no       | —                                                           |
+| `kind`               | `MetricKind`        | yes      | Aggregation shape                                           |
+| `eventDefinitionId`  | `string \| null`    | cond.    | Required for non-Ratio Metrics; App-level Event Definition  |
+| `eventFieldName`     | `string \| null`    | cond.    | Declared top-level number field; required for count/revenue |
+| `numerator`          | `MetricRef \| null` | cond.    | Required for ratio; non-Ratio Metric in same App            |
+| `denominator`        | `MetricRef \| null` | cond.    | Required for ratio; non-Ratio Metric in same App            |
+| `conversionWindowMs` | `number \| null`    | no       | Per-Metric override; null inherits Experiment default       |
+| `winsorize`          | `boolean`           | yes      | False for binomial; defaults true for additive Metrics      |
+| `winsorizePct`       | `number`            | yes      | Default 99.9; ignored when winsorize is false               |
+| `createdAt`          | `string` (ISO 8601) | yes      | —                                                           |
+| `updatedAt`          | `string` (ISO 8601) | yes      | —                                                           |
 
 `MetricKind` enum: `'binomial' | 'count' | 'revenue' | 'ratio'`
 
-- `binomial` — 1/0 per Entity; aggregation = proportion.
-- `count` — sum of `eventValueField` per Entity.
-- `revenue` — sum of `eventValueField` per Entity; reported as the mean across Entities.
+- `binomial` — 1/0 per Entity with at least one matching Metric Event; no value field.
+- `count` — sum of the declared numeric `eventFieldName` per Entity.
+- `revenue` — sum of the declared numeric `eventFieldName` per Entity; reported as the mean across
+  Entities.
 - `ratio` — `numerator Metric / denominator Metric` per Entity (delta-method variance).
+
+Metrics never store an event-name string, expression, or nested JSON path. The Worker resolves
+`eventDefinitionId` in the same App and validates `eventFieldName` against the current published
+Event Definition Version. Historical Metric Event rows carry their accepting version.
 
 ## Sources
 

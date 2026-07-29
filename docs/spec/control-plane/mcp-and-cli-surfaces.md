@@ -131,6 +131,11 @@ splitch envs create [--app <app_id>] --name <name>  # [ctx]
 splitch flags list [--app <app_id>]                 # [ctx]
 splitch flags create [--app <app_id>] --key <key> ...                       # [ctx] App-level definition
 splitch flags promote [--app <app_id>] [--env <environment_id>] <flag_id>   # [ctx] move Flag Configuration into an Env (ADR-0028)
+splitch event-definitions list [--app <app_id>]                              # [ctx] App-level
+splitch event-definitions create [--app <app_id>] --name <event_name> ...    # [ctx]
+splitch event-definitions versions create [--app <app_id>] <event_definition_id> --schema <file> # [ctx] immutable publish
+splitch metrics list [--app <app_id>]                                        # [ctx]
+splitch metrics create [--app <app_id>] --event-definition <id> [--field <name>] ... # [ctx]
 splitch env-policy get [--app <app_id>] [--env <environment_id>]            # [ctx]
 splitch env-policy set [--app <app_id>] [--env <environment_id>] ...        # [ctx] per-change-type confirm gates (ADR-0029)
 splitch experiments create [--app <app_id>] [--env <environment_id>] ...    # [ctx]
@@ -143,7 +148,9 @@ splitch api-keys create [--app <app_id>] [--env <environment_id>]           # [c
 splitch api-keys revoke [--app <app_id>] [--env <environment_id>] <key_id>  # [ctx]
 ```
 
-One command per endpoint. No composite multi-step commands unless agent ergonomics demand them.
+One command per endpoint. The SDK's `track()` data-plane call is not a control-plane CLI/MCP command;
+the CLI/MCP surfaces author and discover Event Definitions and Metrics but do not impersonate an SDK
+event producer. No composite multi-step commands unless agent ergonomics demand them.
 Experiments, Experiment Runs, and SDK credentials are per-Environment (ADR-0027), so their commands
 need an Environment (from `[ctx]` or `--env`); Flag definition, Environment CRUD, and policy reads
 are App/Env scoped accordingly. Environment-level writes that the Environment Policy gates may

@@ -28,6 +28,8 @@ otherwise:
 - `assignment`
 - `experimentRun` / `runId`
 - `exposure`
+- `eventDefinition` / `eventDefinitionVersion`
+- `metricEvent`
 - `metric`
 - `dimension`
 - `segment`
@@ -48,6 +50,8 @@ otherwise:
 - Use Client Key for public SDK credential contracts.
 - Use API Key for secret server-side SDK credential contracts.
 - Use Flag Configuration for per-Environment editable flag state.
+- Use Event Definition for the App-level schema and Event Definition Version for the immutable
+  published schema stamped onto each accepted Metric Event.
 
 ## IDs and slugs
 

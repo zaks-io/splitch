@@ -1,6 +1,6 @@
 # Edge abuse controls are a Cloudflare-enforced product contract
 
-**Status:** accepted
+**Status:** accepted; the Client Key capability clause is superseded by ADR-0040
 
 Splitch's code is public, so its security posture cannot rely on obscurity. The public data-plane
 surfaces (evaluate, peek, anonymous registration) and the secret-key revocation path are the highest
@@ -41,8 +41,10 @@ variant each gets, and reconstructs the rollout/allocation without polluting ana
 Peek therefore requires an **API Key** (trusted server runtime), not a Client Key. The legitimate peek
 use cases (server-side pre-computation, below-the-fold decisions made server-side) are predominantly
 server-side already. Client-side below-the-fold deferral is served by firing `evaluate` when the element
-scrolls into view, not by a silent client peek. The public Client Key keeps exactly one capability:
-`evaluate`, whose successful fresh assignment under a live Experiment Run always leaves an Exposure.
+scrolls into view, not by a silent client peek. For Variant resolution, the public Client Key keeps
+exactly one capability: `evaluate`, whose successful fresh assignment under a live Experiment Run
+always leaves an Exposure. ADR-0040 later adds strictly write-only public event-ingest capabilities;
+they return no allocation or configuration and do not weaken this read boundary.
 Disabled, no-Experiment, no-live-Run, holdover, and error branches reveal no live allocation and leave
 no new Exposure.
 
@@ -90,9 +92,9 @@ evaluate surface.
 
 ## Consequences
 
-- The public Client Key's only capability is Exposure-bearing `evaluate`. Peek, reasons, config, rule
-  sets, and salt are all off the public path (reasons/config already lived behind the control-plane
-  token per ADR-0018/0026; peek now joins the server-side surface).
+- The public Client Key's only Variant-resolution capability is Exposure-bearing `evaluate`. Peek,
+  reasons, config, rule sets, and salt are all off the public path. ADR-0040 later adds strictly
+  write-only public event ingest without adding another read capability.
 - A Client Key is auto-provisioned per Environment and usable immediately (open), so onboarding needs no
   credential step. The trade is that an open key can exist unattended; the open-state surfacing
   (banner + `is_origin_open` + one-click lock) is therefore part of the contract, not optional polish —

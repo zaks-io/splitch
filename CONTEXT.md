@@ -83,6 +83,13 @@ lifecycle verbs. Do not use "publish" for Runs.
 **Exposure**: the event that an Entity actually encountered its assigned Variant. Analysis counts
 Exposures, not Assignments. See [`apps/event-ingest-api/CONTEXT.md`](./apps/event-ingest-api/CONTEXT.md).
 
+**Event Definition**: an App-level schema for one named Metric Event. Its immutable published
+versions are shared across Environments. The Event Ingest Worker resolves the current published
+version; callers never select one.
+
+**Metric Event**: an App/Environment/Entity fact submitted with `track()`. It supplies Metric values
+but never becomes the Exposure denominator.
+
 **Metric**: a fact plus an aggregation. Experiments move or guard Metrics. See
 [`apps/analysis-api/CONTEXT.md`](./apps/analysis-api/CONTEXT.md).
 
@@ -107,6 +114,9 @@ value after creation.
 - Assignment is pure. Exposure is the recorded event and analysis denominator.
 - Experiment Runs freeze assignment config. Assignment edits open a new Run; measurement edits
   recompute over the existing Run.
+- Event Definitions are App-level. Each accepted Metric Event is stamped with one immutable
+  published Event Definition Version.
+- Metric Events carry explicit Entity identity. The raw Targeting Key is never stored.
 - Metrics are computed over first-touch unique Entities per Run. SRM uses the same denominator.
 
 ## Reserved language
@@ -119,6 +129,7 @@ value after creation.
 - Use **Promote** for deployment across Environments.
 - Use **Start** and **End** for Experiment Run lifecycle.
 - Do not use **publish** for either Promotion or Experiment Run lifecycle.
+- Use **publish** only for immutable Event Definition Versions.
 - Use **Client Key** for public client-side credentials and **API Key** for secret server-side
   credentials.
 - Slugs exist only for human and agent-readable URLs. IDs are canonical in code, data, and APIs.

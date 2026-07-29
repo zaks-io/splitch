@@ -1,6 +1,9 @@
-# Physical Tinybird datasources — raw log, deduped snapshot, retention
+# Physical Tinybird datasources — experiment facts, Metric Events, and retention
 
-Pins the Tinybird datasource shapes: the raw append-only log, the deduped first-touch snapshot, and the raw-log retention TTL. The dedup/serving/MV layer that derives from these lives in [physical-dedup-pipes.md](./physical-dedup-pipes.md). ADR-0024 lambda architecture; ADR-0017 Tinybird as analytics system of record.
+Pins the Tinybird datasource shapes: the Exposure/Activation raw log, the deduped first-touch
+snapshot, the separate Metric Event log, and retention. The dedup/serving/MV layer that derives from
+Exposure facts lives in [physical-dedup-pipes.md](./physical-dedup-pipes.md). ADR-0024 lambda
+architecture; ADR-0017 Tinybird as analytics system of record.
 
 ## Raw events datasource (`raw_events`)
 
@@ -64,11 +67,45 @@ SCHEMA:
 
 This is the Copy Pipe target. **Only deduped first-touch rows live here** — one row per `(app_id, environment_id, experiment_id, run_id, targeting_key_hash)` (`environment_id`, `experiment_id`, and `id_type` are run-implied carry-through columns; the dedup determinant is `(targeting_key_hash, run_id)`). Rollup MVs hang off this datasource, never off `raw_events`. The Copy Pipe, serving UNION, and MVs that populate and read this datasource are specified in [physical-dedup-pipes.md](./physical-dedup-pipes.md).
 
-## Raw log retention TTL
+## Metric Events datasource (`metric_events`)
+
+```text
+datasource: metric_events
+ENGINE: MergeTree
+ENGINE_PARTITION_KEY: toYYYYMM(server_received_at)
+ENGINE_SORTING_KEY: app_id, environment_id, event_definition_id, server_received_at, id_type, targeting_key_hash
+
+SCHEMA:
+  dedup_key                  String
+  event_id                   String
+  app_id                     String
+  environment_id             String
+  event_definition_id        String
+  event_definition_version_id String
+  event_name                 String
+  id_type                    LowCardinality(String)
+  targeting_key_hash         String
+  fields                     String
+  dimensions                 String
+  server_received_at         DateTime64(3)
+  ingest_ts                  DateTime64(3)
+
+DEDUP_KEY: dedup_key
+```
+
+`fields` and `dimensions` are canonical JSON objects that already passed the immutable accepting
+version. Analysis reads values through the Event Definition Version's declared named types, never
+through caller-authored JSON paths. This datasource has no Experiment, Run, or Variant column:
+those are joined from the first-touch Exposure set only when Entity scope is compatible.
+
+## Event-log retention TTL
 
 ```
 -- Applied to raw_events datasource
 TTL: server_ts + INTERVAL {retention_days} DAY  -- default: 90 days
+
+-- Applied independently to metric_events datasource
+TTL: server_received_at + INTERVAL {retention_days} DAY  -- default: 90 days
 
 -- Rationale: snapshot is the analysis source; raw log only needed for replay window
 -- (re-run dedup when rules change) and for the real-time tail
@@ -76,6 +113,11 @@ TTL: server_ts + INTERVAL {retention_days} DAY  -- default: 90 days
 ```
 
 Once the snapshot is authoritative (Copy Pipe running), the raw log's role is tail + replay. 90 days is the default; it is a policy dial, not a correctness one — longer retention enables older re-runs. Retention must exceed the maximum promised analysis replay window; otherwise old measurement edits cannot be recomputed from raw truth.
+
+Metric Event rows have no deduped snapshot substitute, so their retention must cover the longest
+promised Conversion Window and replay window. A deployment must reject a configuration whose
+retention is shorter than either promise. Event Definition Version metadata remains available for at
+least as long as any row stamped with it.
 
 ## Sources
 

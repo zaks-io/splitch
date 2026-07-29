@@ -118,7 +118,8 @@ deploying, and missing secrets or replay bindings fail closed.
 
 **Evaluation Worker** owns resolution:
 
-- Public SDK evaluate endpoint (Client Key or API Key); peek endpoint (API Key only, ADR-0034)
+- Public SDK evaluate and Metric Event track endpoints (Client Key or API Key); peek endpoint
+  (API Key only, ADR-0034)
 - Control-plane dry-run test-evaluation using the control-plane bearer token
 - Provider and Assignment Store read orchestration
 - No config writes, no analytics reads, and no direct result calculation

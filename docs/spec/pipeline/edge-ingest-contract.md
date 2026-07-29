@@ -1,9 +1,15 @@
-# Event ingest contract: Evaluation Worker to raw log
+# Event ingest contract: edge Workers to append-only logs
 
 Evaluation Worker instances produce Exposure events and hand them to the Event Ingest Worker for
 append-only delivery to `raw_events` in Tinybird. This contract governs the delivery guarantees,
 idempotency, timestamp handling, and the interaction with the Assignment Store write on apparent
 first-touch.
+
+The Event Ingest Worker also accepts SDK Metric Events through `POST /api/sdk/events` and appends
+them to the separate `metric_events` datasource. Its strict request, identity, Event Definition
+version, idempotency, and no-write contract is
+[metric-event-contract.md](./metric-event-contract.md). Metric Events do not use the Exposure
+first-touch or Assignment Store paths below.
 
 ## Delivery guarantee
 
@@ -89,6 +95,10 @@ call in a non-blocking context (`ctx.waitUntil`). The request carries:
 
 - JSON body: one Exposure row per request (or batched as newline-delimited JSON)
 - Authorization: Tinybird ingest token (secret, bound to the Worker via secret binding, never client-visible)
+
+Metric Event rows use the same server-side Tinybird transport but target
+`/v0/events?name=metric_events`. The public SDK never receives a Tinybird token and never writes
+directly to Tinybird.
 
 ## Non-exposing paths
 

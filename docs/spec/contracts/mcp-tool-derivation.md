@@ -154,6 +154,18 @@ Targeting Rule CRUD is intentionally not exposed until there is a separate endpo
 | `metrics_update` | PATCH  | `/apps/:appId/metrics/:metricId` |
 | `metrics_delete` | DELETE | `/apps/:appId/metrics/:metricId` |
 
+### Event Definitions
+
+| Tool                               | Method | Path                                                                    |
+| ---------------------------------- | ------ | ----------------------------------------------------------------------- |
+| `event_definitions_list`           | GET    | `/apps/:appId/event-definitions`                                        |
+| `event_definitions_create`         | POST   | `/apps/:appId/event-definitions`                                        |
+| `event_definitions_get`            | GET    | `/apps/:appId/event-definitions/:eventDefinitionId`                     |
+| `event_definitions_update`         | PATCH  | `/apps/:appId/event-definitions/:eventDefinitionId`                     |
+| `event_definition_versions_list`   | GET    | `/apps/:appId/event-definitions/:eventDefinitionId/versions`            |
+| `event_definition_versions_create` | POST   | `/apps/:appId/event-definitions/:eventDefinitionId/versions`            |
+| `event_definition_versions_get`    | GET    | `/apps/:appId/event-definitions/:eventDefinitionId/versions/:versionId` |
+
 ### SDK credentials (per-Environment, ADR-0027)
 
 | Tool                | Method | Path                                                      | Note                                 |
@@ -175,8 +187,9 @@ Input: `TestEvaluationRequest` body. Output: `TestEvaluationResponse`.
 Auth: control-plane token (not Client Key). Writes nothing; zero Exposures. (ADR-0026.)
 
 `flags_test_eval` is the agent's verify step — the control-plane, full-reason tier. Data-plane
-`POST /api/sdk/evaluate`, `POST /api/sdk/peek` (ADR-0034), and `POST /api/sdk/verify` (ADR-0037)
-are **not** MCP tools: they are data-plane endpoints called by SDK clients with an SDK credential.
+`POST /api/sdk/evaluate`, `POST /api/sdk/peek` (ADR-0034), `POST /api/sdk/verify` (ADR-0037), and
+`POST /api/sdk/events` are **not** MCP tools: they are data-plane endpoints called by SDK clients
+with an SDK credential.
 The verify endpoint is surfaced in the CLI as `splitch flags verify` for developers testing with
 the credential their code holds.
 

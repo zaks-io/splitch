@@ -103,10 +103,11 @@ Avoid: using it as the client-side SDK credential.
 
 **Client Key**:
 The public, non-secret identifier a client-side SDK presents. Safe to embed in shipped client code.
-It grants exactly one capability: evaluate Flags for its App in its Environment for the request's
-Targeting Key. It cannot read full flag config or Targeting Rules, write, mint keys, or reach another
-App. Abuse is bounded at the edge by controls such as origin/referrer allow-listing and rate limiting,
-not by hiding the value. Control-plane surfaces may retrieve and share it freely.
+It can evaluate Flags and submit strictly validated, write-only Metric Events for its App and
+Environment. It cannot read full flag config, Targeting Rules, Event Definitions, Metric Events,
+mint keys, or reach another App. Abuse is bounded at the edge by controls such as origin/referrer
+allow-listing and rate limiting, not by hiding the value. Control-plane surfaces may retrieve and
+share it freely.
 
 Avoid: treating it as secret; using it for server-side full access.
 

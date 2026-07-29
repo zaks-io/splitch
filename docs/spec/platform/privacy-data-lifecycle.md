@@ -12,14 +12,14 @@ days.
 
 ## Privacy roles
 
-| Data class              | Examples                                                                               | Role                                                       | Durable stores                             |
-| ----------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------ |
-| Control-plane User data | WorkOS user ID, email in WorkOS, memberships, sessions, device-flow tokens             | Splitch-controlled                                         | WorkOS, D1 IDs, KV sessions, keychain/CLI  |
-| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata   | Customer-controlled                                        | D1, KV config cache, per-App DO            |
-| Entity data             | Targeting Key, idType, Exposures, Activations, Assignment Store holdovers, Metric rows | Customer-controlled; Splitch is processor/service provider | Tinybird, KV, Assignment Store DO          |
-| Audit/security data     | control-plane mutation audit, auth door, actor ID, request logs                        | shared legal/security record                               | Tinybird audit log, D1 privacy request log |
-| Observability data      | errors, traces, structured logs                                                        | Splitch-controlled operations data                         | Sentry, Axiom, Cloudflare logs             |
-| Billing data            | plan, Stripe customer/subscription IDs, invoices                                       | Splitch-controlled billing data                            | D1, Stripe when enabled                    |
+| Data class              | Examples                                                                                 | Role                                                       | Durable stores                             |
+| ----------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------ |
+| Control-plane User data | WorkOS user ID, email in WorkOS, memberships, sessions, device-flow tokens               | Splitch-controlled                                         | WorkOS, D1 IDs, KV sessions, keychain/CLI  |
+| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata     | Customer-controlled                                        | D1, KV config cache, per-App DO            |
+| Entity data             | Targeting Key, idType, Exposures, Activations, Metric Events, Assignment Store holdovers | Customer-controlled; Splitch is processor/service provider | Tinybird, KV, Assignment Store DO          |
+| Audit/security data     | control-plane mutation audit, auth door, actor ID, request logs                          | shared legal/security record                               | Tinybird audit log, D1 privacy request log |
+| Observability data      | errors, traces, structured logs                                                          | Splitch-controlled operations data                         | Sentry, Axiom, Cloudflare logs             |
+| Billing data            | plan, Stripe customer/subscription IDs, invoices                                         | Splitch-controlled billing data                            | D1, Stripe when enabled                    |
 
 ## Entity privacy identity
 
@@ -36,7 +36,8 @@ Rules:
 - New Entity rows use the latest salt version. Historical rows keep their original hash version.
 - Entity export/delete computes one `targeting_key_hash` per active salt version and operates on all
   matches. Old salt versions are kept until every row using that version has expired or been purged.
-- The raw Targeting Key is used in memory for `assign()` and Condition matching, then discarded.
+- The raw Targeting Key is used in memory for `assign()`, Condition matching, or Metric Event HMAC
+  derivation, then discarded.
 - KV keys, DO names, Tinybird rows, Axiom fields, Sentry payloads, and audit details never contain the
   raw Targeting Key or raw Evaluation Context attributes.
 - Data subject requests take `{ app_id, id_type, targetingKey }`; the Control Plane API Worker computes
@@ -69,12 +70,12 @@ Keep it for at least 24 months or the contractually configured audit period, whi
 
 Exports are asynchronous jobs with a signed, expiring download URL. Raw secrets are never exported.
 
-| Export              | Included                                                                                             | Excluded                                       |
-| ------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| User export         | WorkOS profile, org/app memberships, sessions, issued tokens metadata, audit entries where actor     | API Key raw values, other users' data          |
-| Organization export | Org, Apps, Environments, config, credential metadata, members, audit log, billing metadata           | raw API Key values, processor-internal secrets |
-| App export          | Flag/Experiment/Metric/Segment config, Runs, results, credential metadata, audit rows                | other Apps in the Org                          |
-| Entity export       | rows matching `targeting_key_hash` in Assignment Store, raw events, deduped snapshots, result inputs | raw Targeting Rules for non-admin requesters   |
+| Export              | Included                                                                                                            | Excluded                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| User export         | WorkOS profile, org/app memberships, sessions, issued tokens metadata, audit entries where actor                    | API Key raw values, other users' data          |
+| Organization export | Org, Apps, Environments, config, credential metadata, members, audit log, billing metadata                          | raw API Key values, processor-internal secrets |
+| App export          | Flag/Experiment/Event Definition/Metric/Segment config, Runs, results, credential metadata, audit rows              | other Apps in the Org                          |
+| Entity export       | rows matching `targeting_key_hash` in Assignment Store, raw events, Metric Events, deduped snapshots, result inputs | raw Targeting Rules for non-admin requesters   |
 
 Entity exports are scoped by App and idType. They include the categories, sources, purposes, and
 processors for the data, not only the physical rows.
@@ -107,7 +108,7 @@ Every delete job must record per-store status for:
 - D1: Organization/App/config/membership/credential metadata/privacy ledgers.
 - KV: sessions, credential caches, config cache, liveRun keys, Assignment Store read keys.
 - Durable Objects: per-App live-update state and Assignment Store writer rows.
-- Tinybird: raw events, deduped exposures, rollups, audit reads.
+- Tinybird: raw events, Metric Events, deduped exposures, rollups, audit reads.
 - Sentry/Axiom/Cloudflare logs: no raw Entity data by design; request deletion from processor if a
   scrubber regression captured personal data.
 - Stripe, when enabled: customer/subscription/invoice lifecycle by billing policy.
@@ -140,6 +141,13 @@ Minimum required coverage:
 - Deletion tests proving `entity_deletions` excludes analysis before physical purge finishes.
 - Export tests proving raw API Key values, processor secrets, and other tenants' data are absent.
 - Backup/restore tests proving privacy tombstones replay before serving traffic or analytics.
+
+## Metric Event retention
+
+The `metric_events` datasource has a default 90-day retention, matching the Exposure replay window.
+Every configured Conversion Window and promised analysis replay window must fit inside retention.
+Event Definition and Metric metadata may outlive physical Metric Event rows, but immutable version
+records remain while any retained row references them.
 
 The governing ADR is
 [0032](../../adr/0032-privacy-data-lifecycle-is-an-enforced-product-contract.md).

@@ -14,8 +14,10 @@ handling.
 
 **Client Key**:
 The public, non-secret identifier a client-side SDK presents. It is safe to embed in shipped client
-code. It evaluates Flags for exactly one App in exactly one Environment. It cannot read full flag
-config, Targeting Rules, salts, write data, mint keys, or reach another App.
+code. It evaluates Flags and submits Metric Events for exactly one App in exactly one Environment.
+Its only write capability is `track()`: a strictly validated, write-only append that reveals no
+Event Definition or configuration. It cannot read full flag config, Targeting Rules, salts, Metric
+Events, mint keys, or reach another App.
 
 Abuse is bounded at the edge by controls such as origin/referrer allow-listing and rate limiting, not
 by hiding the value.
@@ -70,6 +72,12 @@ fires Exposure. A separate peek accessor resolves without exposing.
 **Test evaluation / dry-run**:
 A non-exposing evaluation path used for debugging and verification. It records no Exposure.
 
+**Track**:
+The stateless Metric Event accessor:
+`track(eventName, { targetingKey, idType, eventId, fields, dimensions })`. Every call carries
+explicit Entity identity and a caller-stable retry ID. There is no `identify()` state and callers
+cannot select an Event Definition Version.
+
 ## SDK behavior rules
 
 - Public clients do remote Evaluation. They do not receive Targeting Rules or local rule-evaluation
@@ -81,6 +89,8 @@ A non-exposing evaluation path used for debugging and verification. It records n
 - The SDK seen-set is a hot-path optimization only. Pipeline dedup is authoritative.
 - Reading through the exposing accessor fires Exposure.
 - Peeking must be explicit and loudly named.
+- Tracking is write-only, strict, and fail-loud. Unknown fields, Dimensions, nested JSON keys, or
+  Entity profile properties write nothing.
 - Evaluation is **fail-loud**: a failure-fallback to the Default Variant always carries
   `reason: ERROR` + `errorCode` and a loud log/hook, never a silent default (ADR-0036). A
   disabled / no-config / no-match flag is a normal `DEFAULT`/`DISABLED`, not an error.

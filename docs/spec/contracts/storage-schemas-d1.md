@@ -1,7 +1,7 @@
-# Storage schemas: D1 identity and flag tables
+# Storage schemas: D1 identity and App-level definition tables
 
-D1 column shapes for identity references and flag-side tables (Drizzle-migrated; structurally trusted,
-not Zod-re-parsed). Experiment-side tables are in
+D1 column shapes for identity references, Flag definitions, and Event Definitions
+(Drizzle-migrated; structurally trusted, not Zod-re-parsed). Experiment-side tables are in
 [storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md).
 
 Storage shapes carry internals (timestamps, audit, immutability markers) that wire shapes must not
@@ -105,6 +105,46 @@ CONFIGURATION (enabled state, available Variant subset, targeting, rollout) live
 | `created_by`         | text        | WorkOS user ID or deleted-user tombstone                             |
 | `updated_by`         | text        | WorkOS user ID or deleted-user tombstone                             |
 | `version`            | integer     | not null, default 1; optimistic-lock counter                         |
+
+### `event_definitions` (App-level)
+
+Event Definitions are shared by every Environment in one App. The stable `name` is the
+developer-facing `eventName`. The client names it but cannot choose a version.
+
+| Column                         | Type        | Constraints                              |
+| ------------------------------ | ----------- | ---------------------------------------- |
+| `id`                           | text        | PK                                       |
+| `app_id`                       | text        | FK → apps, not null                      |
+| `name`                         | text        | not null, unique per `(app_id)`          |
+| `display_name`                 | text        | not null                                 |
+| `description`                  | text        | nullable                                 |
+| `current_published_version_id` | text        | nullable, FK → event_definition_versions |
+| `created_at`                   | timestamptz | not null                                 |
+| `updated_at`                   | timestamptz | not null                                 |
+| `created_by`                   | text        | WorkOS user ID or deleted-user tombstone |
+| `updated_by`                   | text        | WorkOS user ID or deleted-user tombstone |
+
+### `event_definition_versions` (immutable after creation)
+
+Creating a version and advancing `current_published_version_id` is one D1 transaction. There is no
+UPDATE or independent DELETE path for a published version. App deletion removes definitions and
+versions only after the normal App data purge has removed dependent Metric Event rows.
+
+| Column                | Type        | Constraints                                                    |
+| --------------------- | ----------- | -------------------------------------------------------------- |
+| `id`                  | text        | PK                                                             |
+| `app_id`              | text        | FK → apps, not null                                            |
+| `event_definition_id` | text        | FK → event_definitions, not null                               |
+| `version`             | integer     | not null, positive, unique per `(event_definition_id)`         |
+| `entity_type`         | text        | not null; required `id_type` for accepted Metric Events        |
+| `fields`              | text        | not null; JSON `EventFieldDefinition[]`                        |
+| `dimensions`          | text        | not null; JSON `DimensionDefinition[]`                         |
+| `schema_hash`         | text        | not null; SHA-256 of canonical Entity/field/Dimension contract |
+| `published_at`        | timestamptz | not null; also the immutable creation timestamp                |
+| `published_by`        | text        | WorkOS user ID or deleted-user tombstone                       |
+
+UNIQUE constraints: `(event_definition_id, version)` and `(event_definition_id, schema_hash)`.
+Every repository query carries `app_id` first even when it also has `event_definition_id`.
 
 ### `flag_configs` (CONFIGURATION — per-Environment)
 
