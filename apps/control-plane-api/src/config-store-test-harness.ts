@@ -12,7 +12,7 @@ import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { appAdminScope } from "./scope-binding";
 import { makeSessionStore } from "./session-store";
-import { seedAppMember } from "./test-fixtures";
+import { seedAppMember } from "./test-seeds";
 
 const AUDIENCE = "https://cp.splitch.test";
 const USER_ID = "user_config_admin";

@@ -23,7 +23,7 @@ import {
   request,
 } from "./flag-definition-test-harness";
 import { type MigratedLocalBindings, makeMigratedLocalBindings } from "./migration-test-fixtures";
-import { seedOrgApp, seedOrgMember } from "./test-fixtures";
+import { seedOrgApp, seedOrgMember } from "./test-seeds";
 
 export const LIFECYCLE_ORG = {
   orgId: "org_flag_config_lifecycle",

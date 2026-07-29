@@ -10,7 +10,7 @@ import {
   NOW_ISO,
   request,
 } from "./flag-definition-test-harness";
-import { seedOrgApp } from "./test-fixtures";
+import { seedOrgApp } from "./test-seeds";
 
 let h: FlagDefinitionHarness;
 

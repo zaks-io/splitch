@@ -10,7 +10,8 @@ import { makeJwksVerifier } from "./jwks-verify";
 import { controlPlaneRoute, withRequiredScopes } from "./routes";
 import { appAdminScope } from "./scope-binding";
 import { makeSessionStore, revocationKey } from "./session-store";
-import { type LocalBindings, makeLocalBindings, seedOrgApp, seedOrgMember } from "./test-fixtures";
+import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
+import { seedOrgApp, seedOrgMember } from "./test-seeds";
 
 /**
  * End-to-end auth-middleware proofs against the REAL mounted Worker: the

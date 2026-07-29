@@ -15,13 +15,8 @@ import { sha256Hex } from "./credential-cache";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { makeSessionStore } from "./session-store";
-import {
-  type LocalBindings,
-  makeLocalBindings,
-  seedAppMember,
-  seedEnvironment,
-  seedOrgApp,
-} from "./test-fixtures";
+import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
+import { seedAppMember, seedEnvironment, seedOrgApp } from "./test-seeds";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
