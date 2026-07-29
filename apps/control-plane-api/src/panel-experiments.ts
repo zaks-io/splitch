@@ -6,7 +6,8 @@ import {
 } from "@splitch/control-plane-sdk/panel-experiments";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
-import { experimentResponse } from "./experiment-model";
+import { experimentNotFound } from "./experiment-errors";
+import { experimentResponse, jsonObject } from "./experiment-model";
 
 interface PanelExperimentsDeps {
   repo: Repository;
@@ -19,21 +20,17 @@ interface PanelExperimentsInput {
   environmentId: string;
 }
 
+interface PanelExperimentDetailInput extends PanelExperimentsInput {
+  experimentId: string;
+}
+
 export async function panelExperimentsList(
   deps: PanelExperimentsDeps,
   input: PanelExperimentsInput,
 ): Promise<Response> {
   const requestId = crypto.randomUUID();
-  const app = await deps.repo.identity.getApp(input.appId);
-  if (!app) return notFound("App not found", requestId);
-
-  const [orgMembership, appMembership, environment] = await Promise.all([
-    deps.repo.identity.getOrgMembership(app.organizationId, input.actorId),
-    deps.repo.identity.getAppMembership(appScope(input.appId), input.actorId),
-    deps.repo.identity.getEnvironment(appScope(input.appId), input.environmentId),
-  ]);
-  if (!orgMembership || !appMembership) return forbidden(requestId);
-  if (!environment) return notFound("Environment not found", requestId);
+  const accessError = await panelAccessError(deps.repo, input, requestId);
+  if (accessError) return accessError;
 
   const scope = envScope(input.appId, input.environmentId);
   const [experimentRows, flagRows] = await Promise.all([
@@ -57,6 +54,73 @@ export async function panelExperimentsList(
     }),
   );
   return Response.json({ items });
+}
+
+export async function panelExperimentDetail(
+  deps: Pick<PanelExperimentsDeps, "repo">,
+  input: PanelExperimentDetailInput,
+): Promise<Response> {
+  const requestId = crypto.randomUUID();
+  const accessError = await panelAccessError(deps.repo, input, requestId);
+  if (accessError) return accessError;
+
+  const scope = envScope(input.appId, input.environmentId);
+  const [row, flagRows, runRows] = await Promise.all([
+    deps.repo.experiments.getExperiment(scope, input.experimentId),
+    deps.repo.flags.flags.findMany(appScope(input.appId)),
+    deps.repo.experiments.listRunsForExperiment(scope, input.experimentId),
+  ]);
+  if (!row) return experimentNotFound(requestId);
+  const flagName = flagRows.find((flag) => flag.id === row.flagId)?.name;
+  if (!flagName) throw new Error(`Experiment ${row.id} references a missing Flag`);
+
+  return Response.json({
+    experiment: {
+      id: row.id,
+      name: row.name,
+      status: row.status,
+      flagId: row.flagId,
+      liveRunId: row.liveRunId,
+    },
+    flag: { id: row.flagId, name: flagName },
+    runs: runRows
+      .sort((left, right) => right.runNumber - left.runNumber)
+      .map((run) => ({
+        id: run.id,
+        experimentId: run.experimentId,
+        environmentId: run.environmentId,
+        runNumber: run.runNumber,
+        status: run.status,
+        targetingKey: run.targetingKeyField,
+        targetingKeyType: run.targetingKeyType,
+        salt: run.salt,
+        allocation: jsonObject<Record<string, number>>(run.allocation) ?? {},
+        variantsJson: run.variantSet,
+        targetingRulesJson: run.targetingRules,
+        configHash: run.configHash,
+        startedAt: run.startedAt,
+        endedAt: run.endedAt,
+        startReason: run.startReason,
+        endReason: run.endReason,
+        createdAt: run.createdAt,
+      })),
+  });
+}
+
+async function panelAccessError(
+  repo: Repository,
+  input: PanelExperimentsInput,
+  requestId: string,
+): Promise<Response | null> {
+  const app = await repo.identity.getApp(input.appId);
+  if (!app) return notFound("App not found", requestId);
+  const [orgMembership, appMembership, environment] = await Promise.all([
+    repo.identity.getOrgMembership(app.organizationId, input.actorId),
+    repo.identity.getAppMembership(appScope(input.appId), input.actorId),
+    repo.identity.getEnvironment(appScope(input.appId), input.environmentId),
+  ]);
+  if (!orgMembership || !appMembership) return forbidden(requestId);
+  return environment ? null : notFound("Environment not found", requestId);
 }
 
 async function runningHealth(

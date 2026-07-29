@@ -70,10 +70,13 @@ const checkoutVariants = [
   { id: "variant_checkout_treatment_e2e", name: "treatment", value: true },
 ];
 const checkoutAllocation = { control: 50, treatment: 50 };
+const checkoutExpandedAllocation = { control: 70, treatment: 30 };
 const checkoutTargetingRules = [];
 const devRunSalt = "local-e2e-dev";
+const devPreviousRunSalt = "local-e2e-dev-previous";
 const prodRunSalt = "local-e2e-prod";
-const devRunHash = runConfigHash(devRunSalt);
+const devRunHash = runConfigHash(devRunSalt, checkoutExpandedAllocation);
+const devPreviousRunHash = runConfigHash(devPreviousRunSalt);
 const prodRunHash = runConfigHash(prodRunSalt);
 const significanceRunSalt = "local-e2e-significance";
 const guardrailRunSalt = "local-e2e-guardrail";
@@ -185,11 +188,14 @@ INSERT INTO experiments (id, app_id, environment_id, key, flag_id, name, status,
   ('experiment_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'checkout-copy-prod', 'flag_checkout_e2e', 'Checkout Copy Prod', 'running', 'targetingKey', 'user', 'variant_checkout_control_e2e', '[]', '[]', '[]', 'run_checkout_prod_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('experiment_agent_e2e', 'app_agent_e2e', 'env_agent_prod_e2e', 'routing-model', 'flag_agent_e2e', 'Routing Model', 'draft', 'targetingKey', 'user', NULL, '[]', '[]', '[]', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e');
 INSERT INTO runs (id, app_id, environment_id, experiment_id, run_number, status, targeting_key_field, targeting_key_type, salt, allocation, variant_set, targeting_rules, confidence_level, decision_family, guardrail_decisions, config_hash, started_at, created_at, created_by) VALUES
-  ('run_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_dev_e2e', 1, 'running', 'targetingKey', 'user', '${devRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[]', '[]', '${devRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('run_checkout_dev_previous_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_dev_e2e', 1, 'ended', 'targetingKey', 'user', '${devPreviousRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[]', '[]', '${devPreviousRunHash}', '2026-07-16T00:00:00.000Z', '2026-07-16T00:00:00.000Z', 'user_local_e2e'),
+  ('run_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_dev_e2e', 2, 'running', 'targetingKey', 'user', '${devRunSalt}', '${JSON.stringify(checkoutExpandedAllocation)}', '${JSON.stringify(checkoutVariants)}', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[]', '[]', '${devRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('run_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'experiment_checkout_prod_e2e', 1, 'running', 'targetingKey', 'user', '${prodRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[]', '[]', '${prodRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('run_checkout_significance_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_significance_e2e', 1, 'running', 'targetingKey', 'user', '${significanceRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[{"metric_id":"checkout-conversion","variant":"treatment"}]', '[]', '${significanceRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('run_checkout_guardrail_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_guardrail_e2e', 1, 'running', 'targetingKey', 'user', '${guardrailRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[]', '[{"metric_id":"checkout-reliability","variant":"treatment","downside_threshold":-10,"guardrail_locked_at_run_start":true,"threshold_locked_at_run_start":true}]', '${guardrailRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('run_checkout_ended_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_ended_e2e', 1, 'ended', 'targetingKey', 'user', '${endedRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[]', '[]', '${endedRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e');
+UPDATE runs SET ended_at = '2026-07-17T12:00:00.000Z', end_reason = 'Prepared a larger treatment allocation' WHERE id = 'run_checkout_dev_previous_e2e';
+UPDATE runs SET start_reason = 'Increase treatment traffic' WHERE id = 'run_checkout_dev_e2e';
 `;
 
 function analysisInput(environmentId, experimentId, runId, counts, options = {}) {
@@ -244,10 +250,10 @@ function analysisInput(environmentId, experimentId, runId, counts, options = {})
   };
 }
 
-function runConfigHash(salt) {
+function runConfigHash(salt, allocation = checkoutAllocation) {
   const config = {
     salt,
-    allocation: checkoutAllocation,
+    allocation,
     variantSet: checkoutVariants,
     targetingRules: checkoutTargetingRules,
   };

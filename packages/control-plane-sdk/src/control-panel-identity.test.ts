@@ -136,6 +136,9 @@ describe("Control Panel delegation", () => {
     expect(parseControlPanelOperation("POST", "/control-panel/experiments/list")).toEqual({
       id: "experiments_list",
     });
+    expect(parseControlPanelOperation("POST", "/control-panel/experiments/detail")).toEqual({
+      id: "experiments_detail",
+    });
     expect(parseControlPanelOperation("GET", "/apps/app_1/flags", "env_1")).toEqual({
       id: "flags_list",
       appId: "app_1",
