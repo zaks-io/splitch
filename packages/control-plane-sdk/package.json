@@ -20,6 +20,10 @@
     "./panel-experiments": {
       "types": "./src/panel-experiments.ts",
       "default": "./src/panel-experiments.ts"
+    },
+    "./panel-metrics": {
+      "types": "./src/panel-metrics.ts",
+      "default": "./src/panel-metrics.ts"
     }
   },
   "files": [
