@@ -122,6 +122,7 @@ function devConfig(): FlagConfigGetOutput {
       },
     ],
     rollout: null,
+    experiment: null,
   };
 }
 
@@ -134,5 +135,6 @@ function prodConfig(): FlagConfigGetOutput {
     availableVariantNames: ["disabled"],
     targetingRules: [],
     rollout: null,
+    experiment: null,
   };
 }

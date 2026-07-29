@@ -6,6 +6,8 @@ import { z } from "zod";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelFlagsClient } from "./control-plane-apps";
 import { draftIssues, FlagDraftSchema, flagCreateInput } from "./create-flag-model";
+import { type FlagDetailNotFound, isFlagDetailNotFound, readFlagDetail } from "./flag-detail-data";
+import { type FlagDetailView, flagDetailView } from "./flag-detail-view";
 import { type FlagsPageData, readFlagsPage } from "./flags-page-data";
 import { loadSessionFromRequest } from "./session";
 
@@ -25,6 +27,30 @@ export const loadControlPanelFlags = createServerFn({ method: "GET" })
     if (!authorized.ok) return authorized.result;
     return readFlagsPage(authorized.flags, data);
   });
+
+/**
+ * Reads BOTH grains of the Flag detail screen in the Worker and hands the panel one
+ * already-resolved view model, so the browser never merges App-level definition
+ * with per-Environment Configuration itself. The derivation runs here, not in the
+ * component, which is also why only primitives cross the wire.
+ */
+export const loadControlPanelFlagDetail = createServerFn({ method: "GET" })
+  .validator((data: FlagsPageScope & { env: string; flagKey: string }) => data)
+  .handler(
+    async ({ data }): Promise<ControlPlaneOperationResult<FlagDetailView | FlagDetailNotFound>> => {
+      const authorized = await authorizedFlagsClient(data.environmentId);
+      if (!authorized.ok) return authorized.result;
+      const detail = await readFlagDetail(authorized.flags, data, data.flagKey);
+      if (!detail.ok) return detail;
+      return {
+        ok: true,
+        status: detail.status,
+        data: isFlagDetailNotFound(detail.data)
+          ? detail.data
+          : flagDetailView(detail.data, data.env),
+      };
+    },
+  );
 
 export const createControlPanelFlag = createServerFn({ method: "POST" })
   // Parsed, not cast: an unauthenticated caller can reach this, and a malformed
