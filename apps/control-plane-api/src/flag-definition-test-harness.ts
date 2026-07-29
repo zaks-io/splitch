@@ -10,7 +10,7 @@ import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { makeSessionStore } from "./session-store";
 import type { LocalBindings } from "./test-fixtures";
-import { resetTenantGraph, seedOrgApp, seedOrgMember } from "./test-seeds";
+import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "./test-seeds";
 
 const AUDIENCE = "https://cp.splitch.test";
 const NOW_MS = Date.UTC(2026, 6, 2, 12, 0, 0);
@@ -50,7 +50,7 @@ export async function makeFlagDefinitionHarness(
   makeBindings: () => Promise<LocalBindings>,
 ): Promise<FlagDefinitionHarness> {
   const bindings = await makeBindings();
-  await resetTenantGraph(bindings.d1);
+  await resetOrganizationGraph(bindings.d1);
   await seedOrgApp(bindings.d1, ORG);
   await seedOrgMember(bindings.d1, {
     orgId: ORG.orgId,

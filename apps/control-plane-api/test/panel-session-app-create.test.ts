@@ -47,7 +47,7 @@ let bindings: LocalBindings;
 
 // The Workers pool isolates storage per FILE, not per test (isolatedStorage was
 // dropped in the Vitest 4 migration -- workers-sdk#12889), so the fixed-ID seed
-// rows go in once here. The Orgs and their memberships are read-only roots: the
+// rows go in once here. The Organizations and their memberships are read-only roots: the
 // tests that do create an App already use a distinct key each, so their writes
 // do not collide across the shared file store.
 beforeAll(async () => {

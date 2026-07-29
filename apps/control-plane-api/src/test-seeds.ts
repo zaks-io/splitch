@@ -30,14 +30,14 @@ const RESET_TABLES = [
 ];
 
 /**
- * Truncate the tenant graph so a test starts from an empty D1.
+ * Truncate the Organization graph so a test starts from an empty D1.
  *
  * The Workers pool isolates storage per test FILE rather than per test
  * (isolatedStorage was dropped in the Vitest 4 migration, workers-sdk#12889),
  * so suites that re-seed fixed IDs have to clear them first or trip a unique
  * index. Sent as one `batch`, so the reset costs a single round-trip.
  */
-export async function resetTenantGraph(d1: D1Database): Promise<void> {
+export async function resetOrganizationGraph(d1: D1Database): Promise<void> {
   await d1.batch(RESET_TABLES.map((table) => d1.prepare(`DELETE FROM ${table}`)));
 }
 
@@ -53,7 +53,7 @@ export interface SeedRow {
 
 const NOW = "2026-06-29T00:00:00.000Z";
 
-/** Insert one Org + its App (the roots are above the App tenant boundary). */
+/** Insert one Organization + its App (the roots are above the App isolation boundary). */
 export async function seedOrgApp(d1: D1Database, row: SeedRow): Promise<void> {
   await d1
     .prepare(

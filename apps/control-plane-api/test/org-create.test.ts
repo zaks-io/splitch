@@ -9,7 +9,7 @@ import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
 import type { LocalBindings } from "../src/test-fixtures";
-import { resetTenantGraph, seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 /**
@@ -62,8 +62,8 @@ let h: Harness;
 beforeEach(async () => {
   const bindings = await makeLocalBindings();
   // The pool isolates storage per test FILE, not per test, and these fixed-ID
-  // Orgs are re-seeded each time, so the graph is cleared first.
-  await resetTenantGraph(bindings.d1);
+  // Organizations are re-seeded each time, so the graph is cleared first.
+  await resetOrganizationGraph(bindings.d1);
   for (const actor of [ALICE, MALLORY]) {
     await seedOrgApp(bindings.d1, actor);
     await seedOrgMember(bindings.d1, {

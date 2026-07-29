@@ -21,7 +21,7 @@ import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
  * We assert the rejection REASON and the held-vs-required detail, not a weaker
  * status-only check.
  *
- * Distinct, realistic per-tenant fixtures (no identical seeds across tenants or
+ * Distinct, realistic per-Organization fixtures (no identical seeds across Organizations or
  * roles): a "payments" App where Alice is admin, an "analytics" App where Bob is
  * a member, and an org-level token (Carol) bound to no App.
  */

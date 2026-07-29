@@ -8,7 +8,7 @@ import {
   NOW_ISO,
   request,
 } from "../src/flag-definition-test-harness";
-import { resetTenantGraph, seedOrgApp, seedOrgMember } from "../src/test-seeds";
+import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "../src/test-seeds";
 import { makePoolBindingsWithConfig, type PoolBindingsWithConfig } from "./pool-bindings";
 
 export const LIFECYCLE_ORG = {
@@ -25,14 +25,14 @@ export interface LifecycleHarness extends FlagDefinitionHarness {
 }
 
 /**
- * Mount the control plane over the pool bindings with a fresh tenant graph.
+ * Mount the control plane over the pool bindings with a fresh Organization graph.
  *
  * The graph is reset because the pool isolates storage per test FILE, not per
  * test, and every consumer re-creates the same fixed-key App.
  */
 export async function setup(): Promise<LifecycleHarness> {
   const bindings = await makePoolBindingsWithConfig();
-  await resetTenantGraph(bindings.d1);
+  await resetOrganizationGraph(bindings.d1);
   await seedOrgApp(bindings.d1, LIFECYCLE_ORG);
   await seedOrgMember(bindings.d1, {
     orgId: LIFECYCLE_ORG.orgId,
