@@ -52,7 +52,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Control Panel E2E
-        run: pnpm --filter @splitch/control-panel test:e2e
+        run: pnpm turbo run test:e2e --filter=@splitch/control-panel
 
       - name: Upload screenshot artifacts
         if: always()
