@@ -348,7 +348,7 @@ describe("flag configuration and promotion routes", () => {
         gate: "variant_availability",
         environmentId: ids.environmentId,
         attemptedOp: "PATCH_FLAG_CONFIG",
-        recommendedAction: "RETRY_WITH_CONFIRMATION",
+        recommendedAction: "REVIEW_APPROVAL_REQUEST",
       },
     });
     expect(h.nudges).toEqual([]);

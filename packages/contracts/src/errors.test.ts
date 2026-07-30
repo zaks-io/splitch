@@ -98,7 +98,7 @@ describe("HTTP status map", () => {
           gate: "enabled_state",
           environmentId: "env_prod",
           attemptedOp: "flag_config_update",
-          recommendedAction: "RETRY_WITH_CONFIRMATION",
+          recommendedAction: "REVIEW_APPROVAL_REQUEST",
         },
       }).success,
     ).toBe(true);

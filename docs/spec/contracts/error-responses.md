@@ -93,7 +93,7 @@ ErrorCode =
 
 During the contracts-first transition, deprecated `CONFIRMATION_REQUIRED` remains emitted only by
 the legacy `flag-config-policy` runtime path until SPL-150 replaces it with the Approval runtime and
-removes the code, status mapping, and `RETRY_WITH_CONFIRMATION` details token.
+removes the code, status mapping, and `REVIEW_APPROVAL_REQUEST` details token.
 
 ---
 

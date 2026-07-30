@@ -65,7 +65,7 @@ describe("flag configuration Promotion routes", () => {
         gate: "enabled_state",
         environmentId: ids.environmentId,
         attemptedOp: "PROMOTE_FLAG_CONFIG",
-        recommendedAction: "RETRY_WITH_CONFIRMATION",
+        recommendedAction: "REVIEW_APPROVAL_REQUEST",
       },
     });
     expect(h.nudges).toEqual([]);

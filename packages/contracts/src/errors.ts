@@ -232,7 +232,7 @@ const errorMembers = [
       gate: PolicyChangeTypeSchema,
       environmentId: z.string(),
       attemptedOp: z.string(),
-      recommendedAction: z.literal("RETRY_WITH_CONFIRMATION"),
+      recommendedAction: z.literal("REVIEW_APPROVAL_REQUEST"),
     }),
   ),
   member(
