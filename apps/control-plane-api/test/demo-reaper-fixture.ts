@@ -107,7 +107,7 @@ export async function seedAppChildren(
     .run();
   await d1
     .prepare(
-      "INSERT INTO runs (id, app_id, environment_id, experiment_id, run_number, targeting_key_field, targeting_key_type, salt, allocation, variant_set, targeting_rules, confidence_level, decision_family, guardrail_decisions, config_hash, started_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO runs (id, app_id, environment_id, experiment_id, run_number, targeting_key_field, targeting_key_type, salt, allocation, variant_set, control_variant_id, targeting_rules, confidence_level, decision_family, guardrail_decisions, config_hash, started_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(
       `${appId}_run`,
@@ -120,6 +120,7 @@ export async function seedAppChildren(
       `${appId}-salt`,
       '{"control":100}',
       '[{"id":"control","name":"control","value":"off"}]',
+      "control",
       "[]",
       0.95,
       "[]",

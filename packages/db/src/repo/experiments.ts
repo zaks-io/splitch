@@ -18,6 +18,12 @@ import { scopedTable } from "./scoped-table";
 export function makeExperimentRepo(db: Db, d1: D1Database) {
   const experimentsTable = scopedTable(db, experiments);
   const runsTable = scopedTable(db, runs);
+  const runsWithoutUpdate = {
+    findMany: runsTable.findMany,
+    findOne: runsTable.findOne,
+    insert: runsTable.insert,
+    remove: runsTable.remove,
+  };
   const metricsTable = scopedTable(db, metrics);
   const startRun = makeStartRun(d1, experimentsTable, runsTable);
   const endRun = makeEndRun(d1, experimentsTable, runsTable);
@@ -29,7 +35,9 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
 
   return {
     experiments: experimentsTable,
-    runs: runsTable,
+    // Run snapshots are insert-once. Lifecycle transitions use the narrow
+    // methods below; callers cannot reach a generic snapshot UPDATE path.
+    runs: runsWithoutUpdate,
     metrics: metricsTable,
 
     getExperiment(scope: EnvScope, experimentId: string) {

@@ -120,6 +120,7 @@ async function seedTenant(repo: ReturnType<typeof createRepository>, t: Tenant):
     salt: `salt_${t.runId}`,
     allocation: '{"control":100}',
     variantSet: "[]",
+    controlVariantId: t.variantId,
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: "[]",

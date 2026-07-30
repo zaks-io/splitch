@@ -214,6 +214,7 @@ export async function seedRunningFlagExperiment(
     salt: `salt_${suffix}`,
     allocation: JSON.stringify({ control: 100 }),
     variantSet: "[]",
+    controlVariantId: `variant_control_${suffix}`,
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: "[]",

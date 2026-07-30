@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { appScope, createRepository, envScope } from "../index";
+import { createLocalD1 } from "./test-d1";
 
 /**
  * Type-level proof that "missing app_id" / "wrong scope" is UNCOMPILABLE.
@@ -54,10 +55,37 @@ function _rawClientIsUnreachable(): void {
   void repo.flags.flags.select;
 }
 
+function _runSnapshotUpdateIsUnreachable(): void {
+  const repo = createRepository(d1);
+  const scope = envScope("app_1", "env_1");
+
+  // @ts-expect-error — Run snapshots expose read + insert only, never generic UPDATE.
+  void repo.experiments.runs.update(scope, { controlVariantId: "variant_other" });
+
+  void repo.experiments.updateRunStatus(scope, "run_1", {
+    status: "ended",
+    endedAt: "2026-07-30T00:00:00.000Z",
+    // @ts-expect-error — the narrow lifecycle method cannot mutate frozen snapshot fields.
+    controlVariantId: "variant_other",
+  });
+}
+
 describe("scope is required by type (compile-time proof)", () => {
   it("the type-level proofs are present and compiled", () => {
     expect(typeof _appScopeIsRequired).toBe("function");
     expect(typeof _perEnvScopeRejectsAppOnlyScope).toBe("function");
     expect(typeof _rawClientIsUnreachable).toBe("function");
+    expect(typeof _runSnapshotUpdateIsUnreachable).toBe("function");
+  });
+
+  it("does not expose a runtime Run snapshot update escape hatch", async () => {
+    const local = await createLocalD1();
+    try {
+      const repo = createRepository(local.d1);
+      expect(repo.experiments.runs).not.toHaveProperty("update");
+      expect(repo.experiments).toHaveProperty("updateRunStatus");
+    } finally {
+      await local.dispose();
+    }
   });
 });

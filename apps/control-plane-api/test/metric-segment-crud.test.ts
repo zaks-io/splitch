@@ -274,6 +274,7 @@ async function seedRunningExperiment(
     salt: "salt_metric_segment_guard",
     allocation: JSON.stringify({ control: 100 }),
     variantSet: "[]",
+    controlVariantId: "variant_control_metric_segment_guard",
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: JSON.stringify([{ metricId }]),

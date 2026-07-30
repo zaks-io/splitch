@@ -164,6 +164,7 @@ async function seedRunningExperiment(appId: string, environmentId: string, suffi
     salt: `salt_delete_guard_${suffix}`,
     allocation: JSON.stringify({ control: 100 }),
     variantSet: "[]",
+    controlVariantId: `variant_control_delete_guard_${suffix}`,
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: "[]",
