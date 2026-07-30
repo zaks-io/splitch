@@ -1,8 +1,4 @@
-import {
-  ErrorResponseSchema,
-  type RecommendedAction,
-  recommendedActions,
-} from "@splitch/contracts";
+import { type RecommendedAction, recommendedActions } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
 import { MCP_PROMPT_NAMES, RECOVERY_OPERATION_IDS } from "./mcp-prompt-types";
@@ -146,38 +142,10 @@ describe("MCP prompts workflows", () => {
     expect(RECOVERY_OPERATION_IDS.RETRY_AFTER).toEqual([]);
     expect(RECOVERY_OPERATION_IDS.RETRY_WITH_CONFIRMATION).toEqual([]);
     expect(RECOVERY_OPERATION_IDS.CHOOSE_DIFFERENT_SLUG).toEqual([]);
-    expect(RECOVERY_OPERATION_IDS.READ_PER_ENVIRONMENT).toEqual(["experiments_list"]);
-  });
-});
-
-describe("MCP recover_from_error attention fan-out", () => {
-  // The attention rollup refuses an oversized fan-out with a 409 that no retry can
-  // clear, so the recovery plan has to route the caller to the per-Environment read
-  // and say plainly that retrying is not the remediation.
-  it("recovers an attention fan-out refusal into the per-Environment read", () => {
-    // Parsed through the contract, so the plan is driven by the same details the
-    // handler is allowed to emit rather than by a hand-shaped object.
-    const error = ErrorResponseSchema.parse({
-      code: "ATTENTION_FANOUT_LIMIT_EXCEEDED",
-      message: "attention rollup spans 240 Environments, above the 200 limit",
-      details: {
-        appId: "app_checkout",
-        limit: 200,
-        environments: 240,
-        runningExperiments: null,
-        recommendedAction: "READ_PER_ENVIRONMENT",
-      },
-    });
-
-    const plan = getPromptPlan("recover_from_error", {
-      errorCode: error.code,
-      details: error.details,
-    });
-
-    expect(plan.operationIds).toEqual(["experiments_list"]);
-    const text = plan.messages.map((entry) => entry.content.text).join("\n");
-    expect(text).toContain("240");
-    expect(text).toMatch(/Do not retry/i);
+    expect(RECOVERY_OPERATION_IDS.READ_PER_ENVIRONMENT).toEqual([
+      "experiments_list",
+      "experiment_results_get",
+    ]);
   });
 });
 

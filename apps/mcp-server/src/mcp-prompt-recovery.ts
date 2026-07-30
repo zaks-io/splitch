@@ -142,11 +142,16 @@ function recoverySteps(
       return [
         toolMessage(
           "experiments_list",
-          `List Experiments one Environment at a time (${environments} Environments); each entry carries the same SRM and Guardrail health as the App-wide rollup.`,
+          `List Experiments one Environment at a time (${environments} Environments) to enumerate the running Experiments in each; the Experiment record itself carries no SRM or Guardrail health.`,
+        ),
+        message("assistant", "For every running Experiment returned above, fetch its health next."),
+        toolMessage(
+          "experiment_results_get",
+          "Get the Experiment's StatsOutput (srm, guardrail_results) — this is the operation that actually carries SRM and Guardrail health, not experiments_list.",
         ),
         message(
           "assistant",
-          "Do not retry the App-wide rollup: the refusal is a fan-out budget, not a transient failure, and only a smaller App shape changes it.",
+          "Do not retry the App-wide rollup: the refusal is a fan-out budget, not a transient failure, and only a smaller App shape (or this per-Environment, per-Experiment walk) changes it.",
         ),
       ];
     }

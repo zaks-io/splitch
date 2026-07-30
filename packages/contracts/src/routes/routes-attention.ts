@@ -19,6 +19,7 @@ export const attentionRoutes = [
       "FORBIDDEN",
       "SERVICE_UNAVAILABLE",
       "ATTENTION_FANOUT_LIMIT_EXCEEDED",
+      "INTERNAL_SERVER_ERROR",
     ],
   }),
 ] as const satisfies readonly ApiRouteContract[];

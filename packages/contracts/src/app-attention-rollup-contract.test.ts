@@ -60,9 +60,23 @@ describe("App attention rollup contract", () => {
   // assertion on the generated document could pass today. That generator gap is
   // pre-existing and platform-wide, and is tracked separately; when it is closed,
   // extend this test to assert the emitted 409 response as well.
-  it("declares every error the attention rollup can return in its route metadata", () => {
-    expect(getRoute("app_attention_rollup_get")?.errors).toEqual(
-      expect.arrayContaining(["ATTENTION_FANOUT_LIMIT_EXCEEDED"]),
-    );
+  //
+  // Set EQUALITY, not containment: this is the full set of codes
+  // makeAttentionRollupHandler can emit (attention-rollup.ts +
+  // attention-rollup-errors.ts) -- appNotFound, forbidden,
+  // fanoutLimitExceeded, analysisUnavailable, and experimentIntegrityFault
+  // (the ExperimentIntegrityError path, a genuine INTERNAL_SERVER_ERROR).
+  // A future refusal added to the handler without a matching route.errors
+  // entry must fail this test, not just an added-code check.
+  it("declares exactly the errors the attention rollup can return in its route metadata", () => {
+    const declared = new Set(getRoute("app_attention_rollup_get")?.errors);
+    const emittedByHandler = new Set([
+      "APP_NOT_FOUND",
+      "FORBIDDEN",
+      "SERVICE_UNAVAILABLE",
+      "ATTENTION_FANOUT_LIMIT_EXCEEDED",
+      "INTERNAL_SERVER_ERROR",
+    ]);
+    expect(declared).toEqual(emittedByHandler);
   });
 });
