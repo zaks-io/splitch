@@ -72,32 +72,49 @@ describe("parityHint", () => {
  * string in a component that imports `parityHint` one file over. This closes
  * that hole from the other direction — a rendered command literal is the defect,
  * wherever it appears.
+ *
+ * `<code[^>]*>` and not `<code>`: a styled tag is the common case in this app, so
+ * a bare-tag matcher misses every real offender while its own self-check passes.
+ * The patterns live in one place and the self-checks run through the same
+ * function the scan does, so a self-check cannot certify a matcher the scan is
+ * not actually using.
  */
+const COMMAND_LITERAL_PATTERNS = [
+  // <code className="…">splitch flags create</code>
+  /<code[^>]*>\s*splitch\s+[a-z]/g,
+  // "splitch flags create" / `splitch flags create`
+  /["'`]splitch\s+[a-z][a-z-]*\s/g,
+] as const;
+
+function commandLiterals(text: string): string[] {
+  const source = stripComments(text);
+  return COMMAND_LITERAL_PATTERNS.flatMap((pattern) =>
+    [...source.matchAll(pattern)].map((match) => match[0]),
+  );
+}
+
 describe("no hand-typed CLI commands in rendered output", () => {
   it.each(
     panelSources().map(({ file, text }) => [file, text] as const),
   )("%s derives every command it renders", (file, text) => {
-    const source = stripComments(text);
-    const literals = [
-      // <code>splitch flags create</code>
-      ...source.matchAll(/<code>\s*splitch\s+[a-z]/g),
-      // "splitch flags create" / `splitch flags create`
-      ...source.matchAll(/["'`]splitch\s+[a-z][a-z-]*\s/g),
-    ].map((match) => match[0]);
+    const literals = commandLiterals(text);
 
     expect(KNOWN_HARDCODED_COMMANDS.has(file) ? [] : literals).toEqual([]);
   });
 
   it("still flags a command literal when one is present", () => {
-    const offending = "<p>Run <code>splitch client-key get</code></p>";
-    expect([...stripComments(offending).matchAll(/<code>\s*splitch\s+[a-z]/g)]).toHaveLength(1);
+    expect(commandLiterals("<p>Run <code>splitch client-key get</code></p>")).toHaveLength(1);
+  });
+
+  it("flags a command inside a styled <code> tag", () => {
+    const offending =
+      '<code className="rounded bg-muted px-2">\n  splitch experiments create\n</code>';
+    expect(commandLiterals(offending)).toHaveLength(1);
   });
 
   it("does not flag prose or doc comments that mention splitch", () => {
     const benign = "/** `splitch flags verify` */\n<p>splitch never pools data across Runs</p>";
-    const source = stripComments(benign);
-    expect([...source.matchAll(/<code>\s*splitch\s+[a-z]/g)]).toHaveLength(0);
-    expect([...source.matchAll(/["'`]splitch\s+[a-z][a-z-]*\s/g)]).toHaveLength(0);
+    expect(commandLiterals(benign)).toHaveLength(0);
   });
 });
 
