@@ -25,6 +25,14 @@ export const ANALYSIS_READ_CONCURRENCY = 8;
  */
 export const ANALYSIS_READ_LIMIT = 200;
 
+/**
+ * Hard ceiling on Environments planned for one rollup. Planning costs one D1 read
+ * per Environment, so this has to be checked before planning starts: an App with
+ * thousands of Environments would otherwise exhaust the subrequest budget mid-plan
+ * and surface as an untyped 500 instead of this refusal.
+ */
+export const ENVIRONMENT_FANOUT_LIMIT = 200;
+
 interface AnalysisResultsScope {
   appId: string;
   environmentId: string;
@@ -58,19 +66,50 @@ export function makeAttentionRollupHandler(deps: AttentionRollupDeps) {
     if (denial) return denial;
 
     try {
-      const plans = await planRollup(deps, appId);
-      const runningExperiments = plans.reduce((total, plan) => total + plan.reads.length, 0);
-      if (runningExperiments > ANALYSIS_READ_LIMIT) {
-        return fanoutLimitExceeded(appId, runningExperiments, plans.length, requestId);
-      }
-
-      const items = await rollupPlans(deps, plans, principal.id);
-      return Response.json({ appId, items });
+      return await rollupResponse(deps, appId, principal.id, requestId);
     } catch (cause) {
       if (cause instanceof AnalysisResultsUnavailableError) return analysisUnavailable(requestId);
       throw cause;
     }
   };
+}
+
+/**
+ * Both fan-out budgets are checked before the work they bound: the Environment
+ * count before the per-Environment planning reads, and the planned Analysis reads
+ * before any of them are issued. Neither is truncated, because a partial rollup
+ * renders as "clear" for the Environments it dropped.
+ */
+async function rollupResponse(
+  deps: AttentionRollupDeps,
+  appId: string,
+  actorId: string,
+  requestId: string,
+): Promise<Response> {
+  const environments = await deps.repo.identity.listEnvironments(appScope(appId));
+  if (environments.length > ENVIRONMENT_FANOUT_LIMIT) {
+    return fanoutLimitExceeded(
+      { appId, limit: ENVIRONMENT_FANOUT_LIMIT, environments: environments.length },
+      requestId,
+    );
+  }
+
+  const plans = await planRollup(deps, appId, environments);
+  const runningExperiments = plans.reduce((total, plan) => total + plan.reads.length, 0);
+  if (runningExperiments > ANALYSIS_READ_LIMIT) {
+    return fanoutLimitExceeded(
+      {
+        appId,
+        limit: ANALYSIS_READ_LIMIT,
+        environments: plans.length,
+        runningExperiments,
+      },
+      requestId,
+    );
+  }
+
+  const items = await rollupPlans(deps, plans, actorId);
+  return Response.json({ appId, items });
 }
 
 interface EnvironmentPlan {
@@ -101,8 +140,11 @@ async function denyUnlessAppMember(
 }
 
 /** Resolves the whole App's Analysis read plan without issuing any of the reads. */
-async function planRollup(deps: AttentionRollupDeps, appId: string): Promise<EnvironmentPlan[]> {
-  const environments = await deps.repo.identity.listEnvironments(appScope(appId));
+async function planRollup(
+  deps: AttentionRollupDeps,
+  appId: string,
+  environments: readonly { id: string }[],
+): Promise<EnvironmentPlan[]> {
   return mapWithConcurrency(environments, ANALYSIS_READ_CONCURRENCY, (environment) =>
     planEnvironment(deps, appId, environment.id),
   );
@@ -262,17 +304,24 @@ class AnalysisResultsUnavailableError extends Error {
   }
 }
 
+/**
+ * `runningExperiments` is null when the Environment count alone was already over
+ * budget: planning never ran, so no honest count of running Experiments exists.
+ */
 function fanoutLimitExceeded(
-  appId: string,
-  runningExperiments: number,
-  environments: number,
+  details: { appId: string; limit: number; environments: number; runningExperiments?: number },
   requestId: string,
 ): Response {
+  const runningExperiments = details.runningExperiments ?? null;
+  const over =
+    runningExperiments === null
+      ? `${details.environments} Environments`
+      : `${runningExperiments} running Experiments`;
   return renderError(
     {
       code: "ATTENTION_FANOUT_LIMIT_EXCEEDED",
-      message: `attention rollup spans ${runningExperiments} running Experiments, above the ${ANALYSIS_READ_LIMIT} read limit`,
-      details: { appId, limit: ANALYSIS_READ_LIMIT, runningExperiments, environments },
+      message: `attention rollup spans ${over}, above the ${details.limit} limit; read attention per Environment instead`,
+      details: { ...details, runningExperiments },
     },
     { requestId },
   );

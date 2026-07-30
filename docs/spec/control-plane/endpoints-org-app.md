@@ -103,10 +103,28 @@ breached Guardrail is `attention`, with the exact reason boolean set. Analysis r
 as the Experiment list health signal, so the two surfaces cannot disagree about whether a Run is
 firing.
 
+An Environment whose running Experiments have no Analysis results at all is `no_data`. An
+Environment that mixes readable and unreadable results reports on the results it has, so a
+partially-snapshotted Environment with no firing signal reads `clear` rather than `no_data`. This is
+deliberate: `attention` must never be missed, and per-Run detail belongs to the Experiment list, not
+to a per-Environment rollup. `no_data` therefore means "nothing measurable here", not "everything
+here was measured".
+
 The rollup issues one Analysis read per running Experiment per Environment, bounded to 8 in flight
-per request across all Environments. Past 200 total reads the call is refused whole with
-`ATTENTION_FANOUT_LIMIT_EXCEEDED` (`{ appId, limit, runningExperiments, environments }`) and no
-Analysis read is issued: a truncated rollup would render as `clear` for the Environments it dropped.
+per request across all Environments. Two budgets are enforced, each before the work it bounds, and
+neither truncates, because a truncated rollup would render as `clear` for the Environments it
+dropped:
+
+- More than 200 Environments: refused before planning, since planning costs one read per
+  Environment. Reported with `runningExperiments: null`, because no plan ran.
+- More than 200 planned Analysis reads: refused before any read is issued.
+
+Both refusals are `ATTENTION_FANOUT_LIMIT_EXCEEDED`
+(`{ appId, limit, environments, runningExperiments: number | null }`) with status `409`. The status
+is deliberate and is not retryable: `429`/`503` would promise that waiting helps, and a polling
+agent would then retry forever against a condition that only an App-shape change can resolve. The
+details name the budget and the observed counts so the caller can see exactly what was exceeded;
+the remediation is to read attention per Environment through the Experiment list instead.
 
 Auth: live Organization and App member. The Worker rejects a token bound to another App or stale
 membership before any analysis read. Control Panel callers use the configured signed binding-only

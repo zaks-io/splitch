@@ -274,8 +274,9 @@ const errorMembers = [
     z.object({
       appId: z.string(),
       limit: z.number(),
-      runningExperiments: z.number(),
       environments: z.number(),
+      // null when the Environment count alone was over budget, so no plan ran.
+      runningExperiments: z.number().nullable(),
     }),
   ),
 

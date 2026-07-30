@@ -51,4 +51,13 @@ describe("App attention rollup contract", () => {
       idempotency: "none",
     });
   });
+
+  // The handler can refuse an oversized fan-out, so the contract has to advertise
+  // it: OpenAPI and the MCP tool surface are derived from this list, and a caller
+  // that never sees the code cannot handle the refusal.
+  it("advertises every error the attention rollup can return", () => {
+    expect(getRoute("app_attention_rollup_get")?.errors).toEqual(
+      expect.arrayContaining(["ATTENTION_FANOUT_LIMIT_EXCEEDED"]),
+    );
+  });
 });

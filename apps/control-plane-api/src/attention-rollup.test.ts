@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AnalysisResultsReader } from "./attention-rollup";
-import { ANALYSIS_READ_CONCURRENCY, ANALYSIS_READ_LIMIT } from "./attention-rollup";
+import {
+  ANALYSIS_READ_CONCURRENCY,
+  ANALYSIS_READ_LIMIT,
+  ENVIRONMENT_FANOUT_LIMIT,
+} from "./attention-rollup";
 import {
   ATTENTION_TEST_TIMEOUT,
   authFor,
@@ -10,6 +14,7 @@ import {
   itemFor,
   QA_ENVIRONMENT_ID,
   repository,
+  seedEnvironments,
   seedRunningExperiments,
   setupAttentionRollupFixture,
   statsOutput,
@@ -165,10 +170,26 @@ describe("GET /apps/:appId/attention-rollup", { timeout: ATTENTION_TEST_TIMEOUT 
 });
 
 describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_TIMEOUT }, () => {
-  it("refuses the whole rollup past the Analysis read limit instead of truncating", async () => {
+  // Exercised at the exact boundary. `> LIMIT` and `>= LIMIT` disagree only on
+  // the limit itself, so testing 202-vs-refused would pass for either.
+  it("allows a rollup of exactly the Analysis read limit", async () => {
     const repo = repository();
-    // Two running Experiments already exist (dev + prod), so the limit is crossed.
-    await seedRunningExperiments(repo, QA_ENVIRONMENT_ID, ANALYSIS_READ_LIMIT);
+    // Two running Experiments already exist (dev + prod), so seed LIMIT - 2.
+    await seedRunningExperiments(repo, QA_ENVIRONMENT_ID, ANALYSIS_READ_LIMIT - 2);
+    const read = vi.fn<AnalysisResultsReader["read"]>().mockResolvedValue(statsOutput());
+    const app = harness({ read }, authFor(ids.appId, USER_ID));
+
+    const response = await app.request(`/apps/${ids.appId}/attention-rollup`, {
+      headers: { authorization: "Bearer valid" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(read).toHaveBeenCalledTimes(ANALYSIS_READ_LIMIT);
+  });
+
+  it("refuses one read past the Analysis read limit instead of truncating", async () => {
+    const repo = repository();
+    await seedRunningExperiments(repo, QA_ENVIRONMENT_ID, ANALYSIS_READ_LIMIT - 1);
     const read = vi.fn<AnalysisResultsReader["read"]>();
     const app = harness({ read }, authFor(ids.appId, USER_ID));
 
@@ -182,7 +203,30 @@ describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_T
       details: {
         appId: ids.appId,
         limit: ANALYSIS_READ_LIMIT,
-        runningExperiments: ANALYSIS_READ_LIMIT + 2,
+        runningExperiments: ANALYSIS_READ_LIMIT + 1,
+      },
+    });
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("refuses before planning when the Environment count alone is over budget", async () => {
+    const repo = repository();
+    await seedEnvironments(repo, ENVIRONMENT_FANOUT_LIMIT);
+    const read = vi.fn<AnalysisResultsReader["read"]>();
+    const app = harness({ read }, authFor(ids.appId, USER_ID));
+
+    const response = await app.request(`/apps/${ids.appId}/attention-rollup`, {
+      headers: { authorization: "Bearer valid" },
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "ATTENTION_FANOUT_LIMIT_EXCEEDED",
+      details: {
+        appId: ids.appId,
+        limit: ENVIRONMENT_FANOUT_LIMIT,
+        // Planning never ran, so there is no honest running-Experiment count.
+        runningExperiments: null,
       },
     });
     expect(read).not.toHaveBeenCalled();
@@ -209,11 +253,10 @@ describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_T
     });
 
     expect(response.status).toBe(200);
-    expect(peak).toBeGreaterThan(1);
-    expect(peak).toBeLessThanOrEqual(ANALYSIS_READ_CONCURRENCY);
-    // Pinned against the configured value as well: asserting only
-    // `peak <= ANALYSIS_READ_CONCURRENCY` passes vacuously if the constant is
-    // raised, which is the fan-out this bound exists to prevent.
-    expect(ANALYSIS_READ_CONCURRENCY).toBeLessThanOrEqual(16);
+    // Pinned exactly, in both directions: asserting only
+    // `peak <= ANALYSIS_READ_CONCURRENCY` passes vacuously for any raised
+    // constant, and a pool that never fills would satisfy an upper bound alone.
+    expect(ANALYSIS_READ_CONCURRENCY).toBe(8);
+    expect(peak).toBe(ANALYSIS_READ_CONCURRENCY);
   });
 });

@@ -14,6 +14,11 @@ export const attentionRoutes = [
     auth: "control-plane-token",
     rateLimit: "control-plane-actor",
     idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "SERVICE_UNAVAILABLE"],
+    errors: [
+      "APP_NOT_FOUND",
+      "FORBIDDEN",
+      "SERVICE_UNAVAILABLE",
+      "ATTENTION_FANOUT_LIMIT_EXCEEDED",
+    ],
   }),
 ] as const satisfies readonly ApiRouteContract[];

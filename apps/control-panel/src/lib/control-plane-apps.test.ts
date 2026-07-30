@@ -107,6 +107,27 @@ describe("Control Panel Apps transport", () => {
     });
   });
 
+  // The SDK exposes a per-call `authorization` option and this transport copies
+  // every inbound header onto the binding request. The entrypoint refuses bearer
+  // material, but only after it has crossed the binding, so the refusal has to
+  // happen here: the fetcher must never see the credential at all.
+  it("refuses caller-supplied bearer material before it crosses the binding", async () => {
+    const fetcher = vi.fn(async () => Response.json(createdApp()));
+    const apps = createControlPanelAppsClient(
+      { fetch: fetcher } as unknown as Fetcher,
+      ACTOR,
+      DELEGATION_SECRET,
+    );
+
+    await expect(
+      apps.getAttentionRollup(
+        { appId: "app_checkout" },
+        { authorization: "Bearer sk_live_stolen_token" },
+      ),
+    ).rejects.toThrow("must not carry authorization material");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("preserves typed Worker refusals for the server function caller", async () => {
     const apps = createControlPanelAppsClient(
       {

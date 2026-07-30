@@ -113,6 +113,20 @@ export async function seedRunningExperiments(
   }
 }
 
+/** Environments with no Experiments, to exercise the pre-planning Environment budget. */
+export async function seedEnvironments(repo: Repository, count: number): Promise<void> {
+  for (let index = 0; index < count; index += 1) {
+    await repo.identity.environments.insert(appScope(ids.appId), {
+      id: `env_bulk_${index}`,
+      appId: ids.appId,
+      key: `bulk-${index}`,
+      name: `Bulk ${index}`,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+  }
+}
+
 /** A fully separate tenant: its own Organization, App, Environment and running Run. */
 export async function seedOtherTenant(repo: Repository) {
   const orgId = "org_other_tenant";
