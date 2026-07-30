@@ -25,9 +25,10 @@ export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
   // conversions) with these "more realistic" counts, but 300/1500 vs
   // 315/1500 never actually clears the 95% significance bar under the real
   // Stats Engine (verified: is_significant: false, p=1) — it shipped anyway
-  // because Control Panel E2E is skipped on pull requests. 375 is the
-  // smallest bump off the #200 numbers that is verified significant under
-  // the real Stats Engine (p ~= 0.026).
+  // because Control Panel E2E is skipped on pull requests. 370 clears the bar
+  // (verified: is_significant: true, p ~= 0.0479) but sits on a knife edge
+  // against the 0.05 threshold; 375 was chosen for a defensible margin
+  // instead (verified: p ~= 0.026).
   analysisInput(
     "env_checkout_dev_e2e",
     "experiment_checkout_significance_e2e",
