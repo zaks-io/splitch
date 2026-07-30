@@ -52,9 +52,29 @@ function assertDirectNpmPack() {
   }
 }
 
+// npm publish runs a manifest fixer that npm pack does not; it can silently
+// drop fields it dislikes (npm 11.13 removed a "./"-prefixed bin). Fail loud
+// if the publish path would ship anything other than the checked manifest.
+function assertPublishKeepsManifest(stagingDir) {
+  const { stdout, stderr, status, error } = spawnSync("npm", ["publish", "--dry-run"], {
+    cwd: stagingDir,
+    encoding: "utf8",
+    env: { ...process.env, npm_config_cache: join(stagingDir, ".npm-cache") },
+  });
+  if (error) throw error;
+  if (status !== 0) {
+    throw new Error(stderr || stdout || `npm publish --dry-run failed with exit code ${status}`);
+  }
+  const output = `${stdout}\n${stderr}`;
+  if (/auto-corrected|errors corrected|was invalid/i.test(output)) {
+    throw new Error(`npm publish would rewrite the release manifest:\n${output}`);
+  }
+}
+
 const staging = createPackStagingDir(packageRoot);
 try {
   assertDryRunListing(packStagingDir(staging, { dryRun: true }));
+  assertPublishKeepsManifest(staging);
 } finally {
   rmSync(staging, { recursive: true, force: true });
 }

@@ -140,10 +140,10 @@ export function assertReleaseTarballContents({ listing, manifestText, cliJs }) {
   if (
     JSON.stringify(manifest.bin) !==
     JSON.stringify({
-      splitch: "./dist/cli.js",
+      splitch: "dist/cli.js",
     })
   ) {
-    throw new Error(`release manifest bin must point splitch at ./dist/cli.js`);
+    throw new Error(`release manifest bin must point splitch at dist/cli.js`);
   }
 }
 
