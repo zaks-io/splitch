@@ -85,7 +85,7 @@ test("removes the deploy secrets file when wrangler deploy fails", () => {
   assert.equal(existsSync(call.secretsFile), false);
 });
 
-test("uploads validated Sentry source maps before the live Worker deploy", () => {
+test("uploads validated Sentry source maps without waiting for server processing", () => {
   const fixture = createFixture();
 
   const result = runDeploy(fixture, ["--env", "production"], {
@@ -103,34 +103,33 @@ test("uploads validated Sentry source maps before the live Worker deploy", () =>
       ["exec", "wrangler", "deploy"],
       ["exec", "sentry-cli", "releases"],
       ["exec", "sentry-cli", "sourcemaps"],
-      ["exec", "wrangler", "deploy"],
     ],
   );
-  assert.equal(calls[0].args.includes("--dry-run"), true);
   assert.equal(calls[2].args.includes("--validate"), true);
   assert.equal(calls[2].args.includes("--wait"), false);
   assert.equal(calls[2].args.includes("--wait-for"), false);
-  assert.equal(calls[3].args.includes("--dry-run"), false);
 });
 
-test("does not deploy the live Worker when Sentry processing reports the prior timeout", () => {
+test("keeps the deploy green and emits an annotation when Sentry reports the prior timeout", () => {
   const fixture = createFixture();
 
   const result = runDeploy(fixture, ["--env", "production"], {
     SENTRY_AUTH_TOKEN: "fake-auth-token",
     SENTRY_ORG: "fake-org",
     SENTRY_PROJECT: "fake-project",
+    CI: "true",
     SPLITCH_FAKE_SENTRY_UPLOAD_EXIT: "1",
   });
 
-  assert.equal(result.status, 1);
+  assert.equal(result.status, 0, result.stderr);
   assert.match(result.stderr, /Failed to process files in 60s/);
+  assert.match(result.stderr, /::warning title=Sentry source map upload failed::/);
 
   const wranglerDeploys = readCalls(fixture.callsPath).filter(
     (call) => call.args[1] === "wrangler" && call.args[2] === "deploy",
   );
   assert.equal(wranglerDeploys.length, 1);
-  assert.equal(wranglerDeploys[0].args.includes("--dry-run"), true);
+  assert.equal(wranglerDeploys[0].args.includes("--dry-run"), false);
 });
 
 test("fails before wrangler deploy when CI requires a missing Worker secret", () => {

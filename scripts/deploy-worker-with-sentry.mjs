@@ -9,6 +9,7 @@ import {
   isHostedWranglerEnv,
   requireHostedWranglerEnvTarget,
 } from "./lib/hosted-bindings.mjs";
+import { uploadSentrySourceMaps } from "./lib/sentry-source-map-upload.mjs";
 import { parseWranglerConfigFile } from "./lib/wrangler-config.mjs";
 
 const OUT_DIR = ".wrangler/sentry";
@@ -39,8 +40,6 @@ if (!isDryRun && REQUIRE_SENTRY_ENV && missingSentryEnv.length > 0) {
   fail(`missing Sentry source map upload env: ${missingSentryEnv.join(", ")}`);
 }
 
-if (!isDryRun) prepareSentrySourceMaps(release, missingSentryEnv, wranglerArgs);
-
 const workerSecrets = isDryRun ? undefined : writeWorkerSecretsFile(cloudflareEnv);
 if (workerSecrets) {
   wranglerArgs.push("--secrets-file", workerSecrets.path);
@@ -61,52 +60,11 @@ if (isDryRun) {
   process.exit(0);
 }
 
-function prepareSentrySourceMaps(releaseName, missing, deployArgs) {
-  if (missing.length > 0) {
-    console.warn(
-      `deploy-worker-with-sentry: missing Sentry source map upload env: ${missing.join(
-        ", ",
-      )}; skipping Sentry upload`,
-    );
-    return;
-  }
-
-  // Upload first so a required Sentry failure cannot happen after production changes.
-  run("pnpm", [...deployArgs, "--dry-run"]);
-  ensureSentryRelease(releaseName);
-  run("pnpm", [
-    "exec",
-    "sentry-cli",
-    "sourcemaps",
-    "upload",
-    "--org",
-    process.env.SENTRY_ORG,
-    "--project",
-    process.env.SENTRY_PROJECT,
-    "--release",
-    releaseName,
-    "--strip-common-prefix",
-    "--validate",
-    OUT_DIR,
-  ]);
-}
-
-function ensureSentryRelease(releaseName) {
-  const projectArgs = ["--org", process.env.SENTRY_ORG, "--project", process.env.SENTRY_PROJECT];
-  const existingRelease = spawnSync(
-    "pnpm",
-    ["exec", "sentry-cli", "releases", "info", ...projectArgs, "--quiet", releaseName],
-    {
-      stdio: "ignore",
-    },
-  );
-
-  if (existingRelease.status === 0) {
-    return;
-  }
-
-  run("pnpm", ["exec", "sentry-cli", "releases", "new", ...projectArgs, releaseName]);
-}
+uploadSentrySourceMaps({
+  releaseName: release,
+  missingEnv: missingSentryEnv,
+  outDir: OUT_DIR,
+});
 
 function missingSentryUploadEnv() {
   return ["SENTRY_AUTH_TOKEN", "SENTRY_ORG", "SENTRY_PROJECT"].filter((name) => !process.env[name]);
@@ -277,13 +235,6 @@ function validateHostedEnvBindings(config, envName) {
     }
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
-  }
-}
-
-function run(command, commandArgs) {
-  const status = runForStatus(command, commandArgs);
-  if (status !== 0) {
-    process.exit(status);
   }
 }
 
