@@ -47,6 +47,7 @@ export const errorCodes = [
   "PRIVACY_CONFIRMATION_REQUIRED",
   // Deprecated: emitted by the legacy flag-config-policy runtime path and removed by SPL-150 when the Approval runtime replaces it.
   "CONFIRMATION_REQUIRED",
+
   "APPROVAL_REVIEW_FORBIDDEN",
 
   // Approval Request / Review

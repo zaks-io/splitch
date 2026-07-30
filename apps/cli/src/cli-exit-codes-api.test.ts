@@ -56,7 +56,9 @@ describe("api command exit codes", () => {
     );
     expect(code).toBe(EXIT_OK);
   });
+});
 
+describe("approval command exit codes", () => {
   it("flags promote --confirm returns 0 on success", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
@@ -86,7 +88,11 @@ describe("api command exit codes", () => {
     );
     expect(code).toBe(EXIT_OK);
     const promote = transport.requests.find((request) => request.url.includes("/promote"));
-    expect(promote?.body).toMatchObject({ confirm: true, fromEnvironmentId: "env_source" });
+    expect(promote?.body).toMatchObject({
+      review: { action: "approve_and_apply" },
+      idempotency_key: expect.stringMatching(/^cli_/),
+      fromEnvironmentId: "env_source",
+    });
   });
 
   it("flag-config update --confirm returns 0 on success", async () => {
@@ -118,7 +124,11 @@ describe("api command exit codes", () => {
     );
     expect(code).toBe(EXIT_OK);
     const patch = transport.requests.find((request) => request.method === "PATCH");
-    expect(patch?.body).toMatchObject({ confirm: true, enabled: true });
+    expect(patch?.body).toMatchObject({
+      review: { action: "approve_and_apply" },
+      idempotency_key: expect.stringMatching(/^cli_/),
+      enabled: true,
+    });
   });
 
   it("experiments start --confirm returns 0 on success", async () => {
@@ -138,9 +148,14 @@ describe("api command exit codes", () => {
     );
     expect(code).toBe(EXIT_OK);
     const start = transport.requests.find((request) => request.url.includes("/start"));
-    expect(start?.body).toMatchObject({ confirm: true });
+    expect(start?.body).toMatchObject({
+      review: { action: "approve_and_apply" },
+      idempotency_key: expect.stringMatching(/^cli_/),
+    });
   });
+});
 
+describe("remaining API command exit codes", () => {
   it("flags test-eval returns 0 on success", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);

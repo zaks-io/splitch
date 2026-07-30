@@ -125,7 +125,10 @@ describe("baseline rollout on Flag Configuration", () => {
     });
     expect(await storedRollout()).toBeNull();
 
-    const confirmed = await patchFlagConfig(h, { rollout: { percentage: 10 }, confirm: true });
+    const confirmed = await patchFlagConfig(h, {
+      rollout: { percentage: 10 },
+      review: { action: "approve_and_apply" },
+    });
     expect(confirmed.status).toBe(200);
   });
 });

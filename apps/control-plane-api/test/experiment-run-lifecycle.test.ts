@@ -16,6 +16,7 @@ import {
   patchExperiment,
   readEvaluationExperiment,
   readIngestLiveRun,
+  startExperiment,
   type StartResponse,
 } from "../src/experiment-run-test-fixture";
 import { errorBody, NOW_ISO, request } from "../src/flag-definition-test-harness";
@@ -50,12 +51,7 @@ describe("control-plane Experiment Run lifecycle", () => {
       ).status,
     ).toBe(200);
 
-    const start = await request(
-      ctx.h,
-      "POST",
-      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experiment.id}/start`,
-      fx.jwt,
-    );
+    const start = await startExperiment(ctx, fx, experiment.id);
     expect(start.status).toBe(200);
     const started = (await start.json()) as StartResponse;
     expect(started.previousRunId).toBeNull();
@@ -89,12 +85,7 @@ describe("control-plane Experiment Run lifecycle", () => {
       runId: started.run.id,
     });
 
-    const unchangedStart = await request(
-      ctx.h,
-      "POST",
-      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experiment.id}/start`,
-      fx.jwt,
-    );
+    const unchangedStart = await startExperiment(ctx, fx, experiment.id);
     expect(unchangedStart.status).toBe(409);
     expect((await errorBody(unchangedStart)).code).toBe("EXPERIMENT_NO_DRAFT");
 
@@ -123,13 +114,9 @@ describe("control-plane Experiment Run lifecycle", () => {
       ).status,
     ).toBe(200);
 
-    const secondStart = await request(
-      ctx.h,
-      "POST",
-      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experiment.id}/start`,
-      fx.jwt,
-      { reason: "next run" },
-    );
+    const secondStart = await startExperiment(ctx, fx, experiment.id, {
+      reason: "next run",
+    });
     expect(secondStart.status).toBe(200);
     const second = (await secondStart.json()) as StartResponse;
     expect(second.previousRunId).toBeNull();
@@ -186,12 +173,7 @@ describe("control-plane Experiment Run start-time validation", () => {
     // The Segment vanishes after the draft staged it (raced delete, cleanup, …).
     await ctx.repo.flags.removeSegment(appScope(fx.appId), fx.segmentId);
 
-    const start = await request(
-      ctx.h,
-      "POST",
-      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experiment.id}/start`,
-      fx.jwt,
-    );
+    const start = await startExperiment(ctx, fx, experiment.id);
 
     // Must reject rather than freeze a Run with no Segment rule.
     expect(start.status).toBe(404);

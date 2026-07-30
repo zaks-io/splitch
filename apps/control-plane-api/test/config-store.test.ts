@@ -109,8 +109,15 @@ describe("config store write path", () => {
       `/apps/${ids.appId}/envs/${ids.environmentId}/flags/${ids.flagId}/config`,
       {
         method: "PATCH",
-        headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json" },
-        body: JSON.stringify({ enabled: true }),
+        headers: {
+          authorization: `Bearer ${jwt}`,
+          "content-type": "application/json",
+          "idempotency-key": "idem_owner_config_update",
+        },
+        body: JSON.stringify({
+          enabled: true,
+          idempotency_key: "idem_owner_config_update",
+        }),
       },
     );
     expect(res.status).toBe(200);
@@ -122,8 +129,15 @@ describe("config store write path", () => {
       `/apps/${ids.appId}/envs/${ids.environmentId}/flags/${ids.flagId}/config`,
       {
         method: "PATCH",
-        headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json" },
-        body: JSON.stringify({ enabled: true }),
+        headers: {
+          authorization: `Bearer ${jwt}`,
+          "content-type": "application/json",
+          "idempotency-key": "idem_member_config_update",
+        },
+        body: JSON.stringify({
+          enabled: true,
+          idempotency_key: "idem_member_config_update",
+        }),
       },
     );
 
@@ -279,8 +293,9 @@ describe("config store variant catalog resync", () => {
 });
 
 describe("flag configuration and promotion routes", () => {
-  it("replaces Targeting Rules through the config-store write path", async () => {
-    const res = await replaceTargetingRules(h, {
+  it("uses the canonical review field for a Policy-gated Targeting Rules replacement", async () => {
+    await setProdPolicy(h, confirmPolicy);
+    const body = {
       targetingRules: [
         {
           id: "rule_prod_treatment",
@@ -290,10 +305,25 @@ describe("flag configuration and promotion routes", () => {
           variantId: ids.treatmentVariantId,
         },
       ],
+    };
+
+    const blocked = await replaceTargetingRules(h, body);
+    expect(blocked.status).toBe(409);
+    expect(await blocked.json()).toMatchObject({
+      code: "CONFIRMATION_REQUIRED",
+      details: { attemptedOp: "PUT_TARGETING_RULES" },
     });
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const legacyConfirm = await replaceTargetingRules(h, { ...body, confirm: true });
+    expect(legacyConfirm.status).toBe(400);
+    expect(await legacyConfirm.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+
+    const approved = await replaceTargetingRules(h, {
+      ...body,
+      review: { action: "approve_and_apply" },
+    });
+    expect(approved.status).toBe(200);
+    expect(await approved.json()).toMatchObject({
       version: 2,
       targetingRules: [
         expect.objectContaining({
@@ -306,7 +336,7 @@ describe("flag configuration and promotion routes", () => {
     expect(h.events.at(-1)).toBe("broadcast");
   });
 
-  it("returns CONFIRMATION_REQUIRED for a Policy-gated PATCH without confirm", async () => {
+  it("returns CONFIRMATION_REQUIRED for a Policy-gated PATCH without review", async () => {
     await setProdPolicy(h, confirmPolicy);
 
     const res = await patchFlagConfig(h, { availableVariantNames: ["control"] });
@@ -327,7 +357,14 @@ describe("flag configuration and promotion routes", () => {
   it("accepts enabled-off as an ungated kill switch", async () => {
     await setProdPolicy(h, confirmPolicy);
 
-    const enable = await patchFlagConfig(h, { enabled: true, confirm: true });
+    const legacyConfirm = await patchFlagConfig(h, { enabled: true, confirm: true });
+    expect(legacyConfirm.status).toBe(400);
+    expect(await legacyConfirm.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+
+    const enable = await patchFlagConfig(h, {
+      enabled: true,
+      review: { action: "approve_and_apply" },
+    });
     expect(enable.status).toBe(200);
 
     const disable = await patchFlagConfig(h, { enabled: false });

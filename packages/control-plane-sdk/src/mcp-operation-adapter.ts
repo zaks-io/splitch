@@ -14,14 +14,6 @@ import {
   parseControlPlaneResponse,
 } from "./operation-result";
 
-const LEGACY_APPROVAL_RUNTIME_OPERATIONS = new Set([
-  "flag_variants_update",
-  "flag_config_update",
-  "flag_targeting_rules_replace",
-  "flags_promote",
-  "experiments_start",
-]);
-
 export interface McpOperationAdapterOptions extends ControlPlaneHcOptions {
   delegationSecret?: string;
 }
@@ -184,9 +176,7 @@ function bodyForRoute(route: ApiRouteContract, input: unknown): unknown {
     return stripped.data;
   }
 
-  // Deprecated SPL-150 bridge. Legacy CLI inputs still carry `confirm` and no
-  // Approval idempotency key while the shared MCP schema exposes the final form.
-  return LEGACY_APPROVAL_RUNTIME_OPERATIONS.has(route.operationId) ? withoutRouteFields : input;
+  return input;
 }
 
 type SafeParseResult = { success: true; data: unknown } | { success: false };

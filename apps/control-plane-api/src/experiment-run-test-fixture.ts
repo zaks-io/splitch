@@ -136,12 +136,14 @@ export async function startExperiment(
   ctx: ExperimentRunHarness,
   fx: Fixture,
   experimentId: string,
+  body: Record<string, unknown> = {},
 ) {
   return request(
     ctx.h,
     "POST",
     `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experimentId}/start`,
     fx.jwt,
+    { idempotency_key: `idem_start_${experimentId}`, ...body },
   );
 }
 

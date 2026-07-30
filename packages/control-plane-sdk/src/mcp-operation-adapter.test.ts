@@ -62,7 +62,7 @@ describe("mcp operation adapter", () => {
     );
   });
 
-  it("bridges legacy Approval requests and responses until SPL-150", async () => {
+  it("normalizes a legacy Approval response without rewriting the canonical request", async () => {
     let forwardedRequest: Request | undefined;
     const adapter = createMcpOperationAdapter({
       baseUrl: "https://control-plane.test",
@@ -77,10 +77,15 @@ describe("mcp operation adapter", () => {
       environmentId: "env_local",
       flagId: "flag_checkout",
       enabled: true,
-      confirm: true,
+      review: { action: "approve_and_apply" },
+      idempotency_key: "config-update-legacy-response",
     });
 
-    await expect(forwardedRequest?.json()).resolves.toEqual({ enabled: true, confirm: true });
+    await expect(forwardedRequest?.json()).resolves.toEqual({
+      enabled: true,
+      review: { action: "approve_and_apply" },
+      idempotency_key: "config-update-legacy-response",
+    });
     expect(result).toEqual({
       ok: true,
       status: 200,

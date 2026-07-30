@@ -69,6 +69,21 @@ describe("flag configuration Promotion routes", () => {
       },
     });
     expect(h.nudges).toEqual([]);
+
+    const legacyConfirm = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { enabled: true },
+      confirm: true,
+    });
+    expect(legacyConfirm.status).toBe(400);
+    expect(await legacyConfirm.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+
+    const approved = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { enabled: true },
+      review: { action: "approve_and_apply" },
+    });
+    expect(approved.status).toBe(200);
   });
 
   /**

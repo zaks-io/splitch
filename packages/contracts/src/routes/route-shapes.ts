@@ -464,19 +464,21 @@ export const FlagConfigMutationResponseSchema = z
 // Promotion (ADR-0028) — explicit ticked field-groups; absence = leave untouched.
 // ---------------------------------------------------------------------------
 
-export const PromoteRequestSchema = z.object({
-  fromEnvironmentId: z.string(),
-  select: z
-    .object({
-      availability: z.array(z.string()).optional(),
-      targeting: z.literal(true).optional(),
-      rollout: z.literal(true).optional(),
-      enabled: z.literal(true).optional(),
-    })
-    .strict(),
-  review: InlineApproveAndApplyReviewSchema.optional(),
-  idempotency_key: z.string().min(1),
-});
+export const PromoteRequestSchema = z
+  .object({
+    fromEnvironmentId: z.string(),
+    select: z
+      .object({
+        availability: z.array(z.string()).optional(),
+        targeting: z.literal(true).optional(),
+        rollout: z.literal(true).optional(),
+        enabled: z.literal(true).optional(),
+      })
+      .strict(),
+    review: InlineApproveAndApplyReviewSchema.optional(),
+    idempotency_key: z.string().min(1),
+  })
+  .strict();
 
 export const PromoteResponseSchema = z.object({
   config: FlagConfigResponseSchema,
