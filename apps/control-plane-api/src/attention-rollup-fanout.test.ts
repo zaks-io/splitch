@@ -74,6 +74,35 @@ describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_T
     expect(read).not.toHaveBeenCalled();
   });
 
+  // The materializing per-Environment read is itself bounded (to
+  // `ANALYSIS_READ_LIMIT + 1` rows), so once an Environment holds more running
+  // Experiments than that bound, `reads.length` for that Environment is a
+  // floor, not a total. The reported `runningExperiments` must still be the
+  // true count: 210 seeded in QA plus the 2 the fixture seeds elsewhere, not
+  // 201 (the bounded read's own cap) plus 2.
+  it("reports the true running-Experiment count, never the bounded read's page size", async () => {
+    const repo = repository();
+    await seedRunningExperiments(repo, QA_ENVIRONMENT_ID, 210);
+    const read = vi.fn<AnalysisResultsReader["read"]>();
+    const app = harness({ read }, authFor(ids.appId, USER_ID));
+
+    const response = await app.request(`/apps/${ids.appId}/attention-rollup`, {
+      headers: { authorization: "Bearer valid" },
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "ATTENTION_FANOUT_LIMIT_EXCEEDED",
+      details: {
+        appId: ids.appId,
+        limit: 200,
+        runningExperiments: 212,
+        recommendedAction: "READ_PER_ENVIRONMENT",
+      },
+    });
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it("refuses before planning when the Environment count alone is over budget", async () => {
     const repo = repository();
     // 200 bulk Environments on top of the three the fixture seeds: 203 > 200.

@@ -95,7 +95,12 @@ async function rollupResponse(
   }
 
   const plans = await planRollup(deps, appId, environments);
-  const runningExperiments = plans.reduce((total, plan) => total + plan.reads.length, 0);
+  // The true total, from a COUNT per Environment, not `plan.reads.length`. The
+  // materializing read below is itself bounded (to avoid unbounded row
+  // materialization in one Environment), so its length is a floor once an
+  // Environment holds more running Experiments than that bound; reporting that
+  // floor as the total would be exactly the disguised-default ADR-0036 forbids.
+  const runningExperiments = plans.reduce((total, plan) => total + plan.runningTotal, 0);
   if (runningExperiments > ANALYSIS_READ_LIMIT) {
     return fanoutLimitExceeded(
       {
@@ -117,6 +122,8 @@ async function rollupResponse(
 
 interface EnvironmentPlan {
   environmentId: string;
+  /** The true running-Experiment count for this Environment, from `COUNT`. */
+  runningTotal: number;
   reads: AnalysisResultsScope[];
 }
 
@@ -153,17 +160,30 @@ async function planRollup(
   );
 }
 
-/** Resolves which Analysis reads an Environment needs, without issuing any of them. */
+/**
+ * Resolves which Analysis reads an Environment needs, without issuing any of
+ * them, plus the Environment's true running-Experiment count.
+ *
+ * The count and the materializing read are separate queries on purpose: the
+ * count is never truncated, so it stays a true total even though the read
+ * that builds `reads` is bounded to `ANALYSIS_READ_LIMIT + 1` (one row past the
+ * whole-rollup budget is enough to build every read this Environment could
+ * still contribute once the budget check below passes; more than that would
+ * be discarded work).
+ */
 async function planEnvironment(
   deps: AttentionRollupDeps,
   appId: string,
   environmentId: string,
 ): Promise<EnvironmentPlan> {
-  const experiments = await deps.repo.experiments.listRunningExperiments(
-    envScope(appId, environmentId),
-  );
+  const scope = envScope(appId, environmentId);
+  const [runningTotal, experiments] = await Promise.all([
+    deps.repo.experiments.countRunningExperiments(scope),
+    deps.repo.experiments.listRunningExperiments(scope, { limit: ANALYSIS_READ_LIMIT + 1 }),
+  ]);
   return {
     environmentId,
+    runningTotal,
     reads: experiments.map((experiment) => {
       if (!experiment.liveRunId) throw new ExperimentIntegrityError(experiment.id);
       return { appId, environmentId, experimentId: experiment.id, runId: experiment.liveRunId };

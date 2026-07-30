@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { appMemberships, apps, organizations, orgMemberships } from "../schema/index";
 import type { Db } from "./client";
+import { idBatches } from "./id-batches";
 
 /**
  * The two reads that materialize a sign-in session.
@@ -53,20 +54,40 @@ export function makeSessionReads(db: Db) {
 
     /**
      * The User's App memberships joined to their Apps, restricted to the given
-     * Organizations. One query covering every Organization at once, replacing a
+     * Organizations. One query PER BATCH of Organizations, replacing a
      * `listAppsForOrg` + per-App `getAppMembership` loop that was quadratic in
      * (Organizations x Apps).
+     *
+     * Batched because D1 caps bound parameters per statement; see `idBatches`.
+     * `orgIds` is caller-supplied with no length cap of its own here — today the
+     * only caller trims to `SESSION_ORG_LIMIT` (50), comfortably under a single
+     * batch, but that cap lives in `apps/control-panel`, a layer away from this
+     * query. Batching removes the coupling instead of documenting it, so raising
+     * that constant, or a future caller skipping it, degrades to more queries
+     * rather than a `too many SQL variables` 500.
      */
-    listAppMembershipsWithAppForUser(userId: string, orgIds: readonly string[]) {
+    async listAppMembershipsWithAppForUser(userId: string, orgIds: readonly string[]) {
       if (orgIds.length === 0) {
-        return Promise.resolve([]);
+        return [];
       }
-      return db
-        .select({ role: appMemberships.role, app: apps })
-        .from(appMemberships)
-        .innerJoin(apps, eq(apps.id, appMemberships.appId))
-        .where(and(eq(appMemberships.userId, userId), inArray(apps.organizationId, [...orgIds])))
-        .orderBy(apps.createdAt, apps.id);
+      const pages = await Promise.all(
+        idBatches(orgIds).map((batch) =>
+          db
+            .select({ role: appMemberships.role, app: apps })
+            .from(appMemberships)
+            .innerJoin(apps, eq(apps.id, appMemberships.appId))
+            .where(and(eq(appMemberships.userId, userId), inArray(apps.organizationId, [...batch])))
+            .orderBy(apps.createdAt, apps.id),
+        ),
+      );
+      // Each batch is sorted on its own; merging batches requires re-sorting so
+      // the whole-set order the caller relies on holds regardless of batch count.
+      return pages
+        .flat()
+        .sort(
+          (a, b) =>
+            a.app.createdAt.localeCompare(b.app.createdAt) || a.app.id.localeCompare(b.app.id),
+        );
     },
   };
 }
