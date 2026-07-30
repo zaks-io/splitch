@@ -128,13 +128,14 @@ describe("Experiment Run Start atomicity", () => {
     ).toBe(200);
 
     const live = await startOk(fx, experiment.id);
-    await ctx.repo.experiments.updateExperiment(scope, experiment.id, {
+    const restagedDraft = {
       draftAllocation: JSON.stringify({ control: 50, treatment: 50 }),
       draftSalt: "duplicate-salt",
       draftTargetingRules: null,
       draftSegmentIds: null,
       updatedAt: NOW_ISO,
-    });
+    };
+    await ctx.repo.experiments.updateExperiment(scope, experiment.id, restagedDraft, live.run.id);
 
     const failedStart = await startExperiment(ctx, fx, experiment.id);
     expect(failedStart.status).toBe(500);

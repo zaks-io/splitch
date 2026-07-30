@@ -224,10 +224,19 @@ function experimentPatchFromBody(
   applyPatchField(patch, body, "guardrailMetrics", "guardrailMetrics", json);
   applyPatchField(patch, body, "conversionWindowMs", "conversionWindowMs");
   applyPatchField(patch, body, "dimensions", "dimensions", json);
-  // Structurally unreachable while a Run is running: these have no draft column,
-  // so validateExperimentPatch already rejected any real change. Skipping them
-  // makes "a running Run never rewrites its own assignment identity" an
-  // invariant of the patch builder rather than a property of its caller.
+  // These have no draft column, so the running Run's published ExperimentConfig
+  // reads them straight off the live row. `runningRun` is what the caller's read
+  // showed, and that read is already stale here — this skip is therefore a
+  // property of the caller, not an invariant of the patch builder, and on its
+  // own it would still let a PATCH decided against a draft Experiment land on a
+  // row a Run has since frozen.
+  //
+  // What actually closes that window is the compare-and-set in
+  // `updateExperiment`: the write only lands while the Experiment's live Run id
+  // is still the one the guard ruled against, so a Run that Starts in between
+  // takes the write out and the whole decision is replayed. Skipping the fields
+  // here and the compare-and-set there are two halves of one guarantee —
+  // ADR-0014's frozen assignment snapshot — and neither holds alone.
   if (!runningRun) {
     applyPatchField(patch, body, "flagId", "flagId");
     applyPatchField(patch, body, "targetingKey", "targetingKeyField");

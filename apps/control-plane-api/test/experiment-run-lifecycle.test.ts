@@ -55,10 +55,12 @@ describe("control-plane Experiment Run lifecycle", () => {
       fx.jwt,
     );
     expect(ended.status).toBe(200);
-    await ctx.repo.experiments.updateExperiment(scope, experiment.id, {
-      defaultVariantId: treatmentId,
-      updatedAt: NOW_ISO,
-    });
+    await ctx.repo.experiments.updateExperiment(
+      scope,
+      experiment.id,
+      { defaultVariantId: treatmentId, updatedAt: NOW_ISO },
+      null,
+    );
 
     expect(await ctx.repo.experiments.getExperiment(scope, experiment.id)).toMatchObject({
       defaultVariantId: treatmentId,
@@ -77,10 +79,12 @@ describe("control-plane Experiment Run lifecycle", () => {
     });
     const scope = envScope(fx.appId, fx.environmentId);
     const missingControlId = "variant_missing_from_frozen_set";
-    await ctx.repo.experiments.updateExperiment(scope, experiment.id, {
-      defaultVariantId: missingControlId,
-      updatedAt: NOW_ISO,
-    });
+    await ctx.repo.experiments.updateExperiment(
+      scope,
+      experiment.id,
+      { defaultVariantId: missingControlId, updatedAt: NOW_ISO },
+      null,
+    );
 
     const start = await startExperiment(ctx, fx, experiment.id);
 

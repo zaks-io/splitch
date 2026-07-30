@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  type ControlPanelOperation,
-  parseControlPanelOperation,
-} from "./control-panel-operation";
+import { type ControlPanelOperation, parseControlPanelOperation } from "./control-panel-operation";
 import { isControlPanelOperation, sameOperation } from "./control-panel-operation-guards";
 
 /**
@@ -24,10 +21,23 @@ interface Route {
   environmentId?: string;
 }
 
+/**
+ * `Extract<ControlPanelOperation, { id: Id }>` is wrong here: several members
+ * declare `id` as a union of literals, and such a member is not assignable to
+ * `{ id: OneOfThem }`, so Extract silently yields `never` and every row for
+ * those ids becomes unwritable. Narrowing the discriminant on a distributive
+ * type parameter keeps all of them reachable.
+ */
+type NarrowById<Members, Id> = Members extends { id: infer Ids }
+  ? Id extends Ids
+    ? Omit<Members, "id"> & { id: Id }
+    : never
+  : never;
+
 type OperationCoverage = {
   [Id in ControlPanelOperation["id"]]: {
     route: Route;
-    operation: Extract<ControlPanelOperation, { id: Id }>;
+    operation: NarrowById<ControlPanelOperation, Id>;
   };
 };
 
@@ -144,10 +154,13 @@ function scopeKeys(operation: ControlPanelOperation): string[] {
 }
 
 describe("control-panel operation wiring", () => {
-  it.each(COVERAGE)("%s has a parser that yields exactly its claim", (_id, { route, operation }) => {
-    expect(
-      parseControlPanelOperation(route.method, route.pathname, route.environmentId),
-    ).toEqual(operation);
+  it.each(COVERAGE)("%s has a parser that yields exactly its claim", (_id, {
+    route,
+    operation,
+  }) => {
+    expect(parseControlPanelOperation(route.method, route.pathname, route.environmentId)).toEqual(
+      operation,
+    );
   });
 
   it.each(COVERAGE)("%s has a predicate that accepts its claim", (_id, { operation }) => {

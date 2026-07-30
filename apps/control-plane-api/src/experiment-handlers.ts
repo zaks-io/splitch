@@ -1,16 +1,9 @@
-import { type EnvScope, envScope, type Repository } from "@splitch/db";
+import { type EnvScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
-import type { ConfigStoreAccess } from "./config-store-do";
 import { randomHex } from "./credential-cache";
+import { experimentNotFound } from "./experiment-errors";
 import {
-  configStoreUnavailable,
-  experimentAlreadyRunningForFlag,
-  experimentNoDraft,
-  experimentNotFound,
-} from "./experiment-errors";
-import {
-  blockingRunningExperimentForStart,
   draftPatch,
   type ExperimentDeps,
   environmentExists,
@@ -18,12 +11,10 @@ import {
   nullableString,
   requireWritableEnvironment,
   runningRunForExperiment,
-  syncExperimentConfigFromD1,
 } from "./experiment-handler-shared";
-import { type ExperimentRow, experimentResponse, json, runResponse } from "./experiment-model";
+import { experimentResponse, json } from "./experiment-model";
 import { makeRunHandlers } from "./experiment-run-handlers";
-import { prepareStart } from "./experiment-start";
-import { validateStartRequest } from "./experiment-start-request";
+import { startExperiment } from "./experiment-start-handler";
 import {
   loadUpdateContext,
   prepareUpdatePatch,
@@ -106,13 +97,44 @@ async function getExperiment(
   return Response.json(experimentResponse(experiment));
 }
 
+/**
+ * A PATCH is decided against a read of the Experiment and then written, and a
+ * Run can Start in between. `updateExperiment` compare-and-sets on the live Run
+ * id, so a write decided under stale Run state simply does not land — at which
+ * point the only correct move is to replay the decision against the new state.
+ * Bounded, because a caller must never be able to spin here.
+ */
+const MAX_UPDATE_ATTEMPTS = 3;
+
 async function updateExperiment(
   deps: ExperimentDeps,
   args: HandlerArgs<unknown>,
 ): Promise<Response> {
   const scope = envScope(pathParam(args.input, "appId"), pathParam(args.input, "environmentId"));
   const body = objectBody(args.input);
+  for (let attempt = 0; attempt < MAX_UPDATE_ATTEMPTS; attempt += 1) {
+    const response = await attemptExperimentUpdate(deps, scope, body, args);
+    if (response) return response;
+  }
+  // Losing the compare-and-set this many times in a row is not contention, it is
+  // an Experiment whose Run state is being rewritten in a loop. Fail loud.
+  throw new Error(
+    `updateExperiment: live-Run compare-and-set lost ${MAX_UPDATE_ATTEMPTS} times in a row`,
+  );
+}
 
+/**
+ * One read-guard-write attempt. `null` means the compare-and-set found no row:
+ * the Experiment's live Run is no longer the one the guard ruled against (a Run
+ * started or ended), or the Experiment was deleted. Both are resolved by the
+ * next attempt's fresh read, which either re-guards or 404s.
+ */
+async function attemptExperimentUpdate(
+  deps: ExperimentDeps,
+  scope: EnvScope,
+  body: Record<string, unknown>,
+  args: HandlerArgs<unknown>,
+): Promise<Response | null> {
   const context = await loadUpdateContext(deps, scope, args);
   if (!context.ok) return context.response;
 
@@ -136,9 +158,9 @@ async function updateExperiment(
     scope,
     context.experiment.id,
     patch.value,
+    context.experiment.liveRunId,
   );
-  if (!updated) return experimentNotFound(args.requestId);
-  return Response.json(experimentResponse(updated));
+  return updated ? Response.json(experimentResponse(updated)) : null;
 }
 
 async function deleteExperiment(
@@ -160,118 +182,4 @@ async function deleteExperiment(
   }
   await deps.repo.experiments.removeExperiment(scope, experiment.id);
   return Response.json({ deleted: true });
-}
-
-async function startExperiment(
-  deps: ExperimentDeps,
-  args: HandlerArgs<unknown>,
-): Promise<Response> {
-  const configStore = deps.configStore;
-  if (!configStore) return configStoreUnavailable(args.requestId);
-  const scope = envScope(pathParam(args.input, "appId"), pathParam(args.input, "environmentId"));
-  const experiment = await experimentFromPath(deps, args.input);
-  if (!experiment) return experimentNotFound(args.requestId);
-  const startContext = await validateStartRequest(deps, args, scope, experiment);
-  if (!startContext.ok) return startContext.response;
-
-  const prepared = await prepareStartOrReplaySync(
-    deps.repo,
-    configStore,
-    scope,
-    experiment,
-    args.requestId,
-  );
-  if (!prepared.ok) return prepared.response;
-
-  const now = nowIso(deps);
-  const committed = await deps.repo.experiments.startRun(scope, {
-    experimentId: experiment.id,
-    flagId: experiment.flagId,
-    expectedDraft: {
-      draftAllocation: experiment.draftAllocation,
-      draftSalt: experiment.draftSalt,
-      draftTargetingRules: experiment.draftTargetingRules,
-      draftSegmentIds: experiment.draftSegmentIds,
-      defaultVariantId: prepared.value.controlVariantId,
-      liveRunId: experiment.liveRunId,
-    },
-    run: {
-      id: `run_${randomHex(12)}`,
-      targetingKeyField: experiment.targetingKeyField,
-      targetingKeyType: experiment.targetingKeyType,
-      activationMetricId: experiment.activationMetricId,
-      salt: prepared.value.salt,
-      allocation: json(prepared.value.allocation),
-      variantSet: json(prepared.value.variantSet),
-      targetingRules: json(prepared.value.targetingRules),
-      confidenceLevel: experiment.confidenceLevel,
-      decisionFamily: json(prepared.value.decisionFamily),
-      guardrailDecisions: json(prepared.value.guardrailDecisions),
-      configHash: prepared.value.configHash,
-      startedAt: now,
-      startReason: startContext.body.reason as string | undefined,
-      createdAt: now,
-      createdBy: args.principal.id,
-    },
-    endedAt: now,
-    updatedAt: now,
-    updatedBy: args.principal.id,
-  });
-  if (!committed.ok) {
-    if (committed.reason === "experiment_not_found") return experimentNotFound(args.requestId);
-    const staleBlocker = await blockingRunningExperimentForStart(deps.repo, scope, experiment);
-    if (staleBlocker) {
-      return experimentAlreadyRunningForFlag(
-        staleBlocker.experimentId,
-        staleBlocker.runId,
-        args.requestId,
-      );
-    }
-    return staleStartResponse(deps.repo, configStore, scope, experiment, args.requestId);
-  }
-
-  await syncExperimentConfigFromD1(configStore, scope, experiment.id);
-
-  return Response.json({
-    experimentId: experiment.id,
-    run: runResponse(committed.run),
-    previousRunId: committed.previous?.id ?? null,
-  });
-}
-
-async function prepareStartOrReplaySync(
-  repo: Repository,
-  configStore: ConfigStoreAccess,
-  scope: EnvScope,
-  experiment: ExperimentRow,
-  requestId: string,
-): ReturnType<typeof prepareStart> {
-  if (experiment.draftAllocation !== null) return prepareStart(repo, scope, experiment, requestId);
-  return {
-    ok: false,
-    response: await staleStartResponse(repo, configStore, scope, experiment, requestId),
-  };
-}
-
-async function staleStartResponse(
-  repo: Repository,
-  configStore: ConfigStoreAccess,
-  scope: EnvScope,
-  experiment: ExperimentRow,
-  requestId: string,
-): Promise<Response> {
-  const currentRunId = await replayStartedExperimentSync(repo, configStore, scope, experiment.id);
-  return experimentNoDraft(experiment.id, currentRunId ?? experiment.liveRunId, requestId);
-}
-
-async function replayStartedExperimentSync(
-  repo: Repository,
-  configStore: ConfigStoreAccess,
-  scope: EnvScope,
-  experimentId: string,
-): Promise<string | null> {
-  const current = await repo.experiments.getExperiment(scope, experimentId);
-  if (current?.status !== "running" || !current.liveRunId) return null;
-  await syncExperimentConfigFromD1(configStore, scope, experimentId);
-  return current.liveRunId;
 }

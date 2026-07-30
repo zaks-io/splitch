@@ -1,3 +1,4 @@
+import { parsePanelExperimentDetailOutput } from "@splitch/control-plane-sdk/panel-experiments";
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -176,11 +177,12 @@ describe("stageForNextRun never mutates the live Experiment row", () => {
     });
     expect(response.status).toBe(200);
 
-    // The Panel's own parser is asserted on this field in
-    // packages/control-plane-sdk/src/panel-experiments.test.ts; this end asserts
-    // the Worker actually emits it.
-    const body = (await response.json()) as { experiment: { draftSegmentIds: string[] } };
-    expect(body.experiment.draftSegmentIds).toEqual([fx.segmentId]);
+    // Asserting the raw JSON here would prove only that the Worker emits *a*
+    // field; it would still pass if the Panel's parser dropped it. Running the
+    // real parser over the real response closes the round trip.
+    const parsed = parsePanelExperimentDetailOutput(await response.json());
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.experiment.draftSegmentIds).toEqual([fx.segmentId]);
   });
 
   // The handler used to read the running Run a second time to decide how to
