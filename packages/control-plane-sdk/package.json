@@ -25,6 +25,10 @@
       "types": "./src/panel-metrics.ts",
       "default": "./src/panel-metrics.ts"
     },
+    "./panel-overview": {
+      "types": "./src/panel-overview.ts",
+      "default": "./src/panel-overview.ts"
+    },
     "./panel-settings": {
       "types": "./src/panel-settings.ts",
       "default": "./src/panel-settings.ts"

@@ -36,7 +36,29 @@ export const LOCAL_E2E_FIXTURE_CONTRACT = Object.freeze({
   },
 });
 
+/**
+ * The Environments the App Overview is proven against, one per attention state.
+ * Each state gets its own Environment and its own Flag Configuration rows, so a
+ * card that reads another state's rows shows up as the wrong card rather than as
+ * a coincidentally matching one.
+ */
+export const LOCAL_E2E_OVERVIEW_STATES = Object.freeze({
+  experimentsUnavailable: { environmentKey: "dev", environmentId: "env_checkout_dev_e2e" },
+  flagChanges: {
+    environmentKey: "overview-changes",
+    environmentId: "env_checkout_overview_e2e",
+    recentFlagKey: "new-checkout",
+    staleFlagKey: "checkout-srm",
+  },
+  calm: { environmentKey: "calm", environmentId: "env_checkout_calm_e2e" },
+});
+
 const createdAt = "2026-07-18T00:00:00.000Z";
+// The Overview's recently-changed window is relative to now, so the Flag
+// Configuration that must land inside it needs a relative timestamp; a frozen
+// one silently ages out of the window and the fixture stops proving anything.
+const recentlyChangedAt = new Date(Date.now() - 2 * 60 * 60 * 1_000).toISOString();
+const staleChangedAt = "2026-06-01T00:00:00.000Z";
 const checkoutVariants = [
   { id: "variant_checkout_control_e2e", name: "control", value: false },
   { id: "variant_checkout_treatment_e2e", name: "treatment", value: true },
@@ -141,6 +163,8 @@ INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, create
 INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at, created_by) VALUES
   ('env_checkout_dev_e2e', 'app_checkout_e2e', 'dev', 'Development', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_checkout_settings_retry_e2e', 'app_checkout_e2e', 'settings-retry', 'Settings Retry', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_checkout_overview_e2e', 'app_checkout_e2e', 'overview-changes', 'Overview Changes', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"confirm","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_checkout_calm_e2e', 'app_checkout_e2e', 'calm', 'Overview Calm', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_checkout_prod_e2e', 'app_checkout_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_billing_prod_e2e', 'app_billing_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_agent_prod_e2e', 'app_agent_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e');
@@ -180,7 +204,9 @@ INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, availabl
   ('config_guardrail_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_guardrail_e2e', 1, '["control","treatment"]', 'variant_guardrail_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_draft_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_draft_e2e', 1, '["control"]', 'variant_draft_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_ended_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_ended_e2e', 1, '["control"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}'),
-  ('config_srm_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'flag_checkout_srm_e2e', 1, '["control","treatment"]', 'variant_srm_control_e2e', '${createdAt}', '${createdAt}');
+  ('config_srm_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'flag_checkout_srm_e2e', 1, '["control","treatment"]', 'variant_srm_control_e2e', '${createdAt}', '${createdAt}'),
+  ('config_checkout_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_e2e', 1, '["control","treatment"]', 'variant_checkout_control_e2e', '${createdAt}', '${recentlyChangedAt}'),
+  ('config_srm_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_srm_e2e', 0, '["control"]', 'variant_srm_control_e2e', '${createdAt}', '${staleChangedAt}');
 INSERT INTO metrics (id, app_id, key, name, kind, event_name, created_at, created_by) VALUES
   ('checkout-conversion', 'app_checkout_e2e', 'checkout-conversion', 'Checkout conversion', 'binomial', 'checkout_completed', '${createdAt}', 'user_local_e2e'),
   ('checkout-reliability', 'app_checkout_e2e', 'checkout-reliability', 'Checkout reliability', 'binomial', 'checkout_succeeded', '${createdAt}', 'user_local_e2e');

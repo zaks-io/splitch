@@ -1,11 +1,10 @@
 import { Badge } from "@splitch/ui/components/badge";
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { LiveUpdatesClient } from "#components/live-updates-client";
-import { AppShellSwitchers } from "#components/app-shell-switcher";
-import type { ScopedLoaderContext } from "#lib/loader-context";
-import { scopedHref } from "#lib/app-shell-navigation";
 import type { QueryClient } from "@tanstack/react-query";
+import { Link, Outlet } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { AppShellSwitchers } from "#components/app-shell-switcher";
+import { LiveUpdatesClient } from "#components/live-updates-client";
+import type { ScopedLoaderContext } from "#lib/loader-context";
 
 type AppShellProps = {
   context: ScopedLoaderContext;
@@ -23,9 +22,6 @@ const sections = [
 
 export function AppShell({ context, queryClient }: AppShellProps) {
   const [isHydrated, setIsHydrated] = useState(false);
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const rootHref = scopedHref(context.scope);
-  const isOverview = pathname === rootHref || pathname === `${rootHref}/`;
   useEffect(() => setIsHydrated(true), []);
 
   return (
@@ -85,46 +81,9 @@ export function AppShell({ context, queryClient }: AppShellProps) {
         </aside>
 
         <main className="min-w-0 bg-background p-5 sm:p-7">
-          {isOverview ? <OverviewStub context={context} /> : <Outlet />}
+          <Outlet />
         </main>
       </div>
     </div>
-  );
-}
-
-function OverviewStub({ context }: { context: ScopedLoaderContext }) {
-  return (
-    <section className="grid gap-8" aria-labelledby="overview-title">
-      <div className="grid gap-2">
-        <p className="font-mono text-muted-foreground text-xs uppercase tracking-[0.16em]">
-          {context.scope.env} Environment
-        </p>
-        <h1 className="font-semibold text-3xl text-foreground tracking-tight" id="overview-title">
-          Overview
-        </h1>
-        <p className="max-w-2xl text-muted-foreground text-sm leading-6">
-          This App shell is ready. Attention cards and Environment health arrive in the dedicated
-          Overview slice.
-        </p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {[
-          "Experiments needing a decision",
-          "Experiment health",
-          "Recent Flag Configuration",
-          "Environment at a glance",
-        ].map((title) => (
-          <article
-            className="grid min-h-28 content-between rounded-lg border border-dashed border-border bg-muted/20 p-4"
-            key={title}
-          >
-            <h2 className="font-medium text-foreground text-sm">{title}</h2>
-            <p className="text-muted-foreground text-xs">
-              Overview data is not wired in this slice.
-            </p>
-          </article>
-        ))}
-      </div>
-    </section>
   );
 }

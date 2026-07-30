@@ -19,6 +19,7 @@ import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as OrgSlugClaimRouteImport } from './routes/$orgSlug.claim'
 import { Route as ClaimConsentAttemptIdRouteImport } from './routes/claim.consent.$attemptId'
 import { Route as OrgSlugAppSlugEnvRouteImport } from './routes/$orgSlug.$appSlug.$env'
+import { Route as OrgSlugAppSlugEnvIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.index'
 import { Route as OrgSlugAppSlugEnvSettingsRouteImport } from './routes/$orgSlug.$appSlug.$env.settings'
 import { Route as OrgSlugAppSlugEnvSegmentsRouteImport } from './routes/$orgSlug.$appSlug.$env.segments'
 import { Route as OrgSlugAppSlugEnvMetricsRouteImport } from './routes/$orgSlug.$appSlug.$env.metrics'
@@ -84,6 +85,11 @@ const OrgSlugAppSlugEnvRoute = OrgSlugAppSlugEnvRouteImport.update({
   id: '/$orgSlug/$appSlug/$env',
   path: '/$orgSlug/$appSlug/$env',
   getParentRoute: () => rootRouteImport,
+} as any)
+const OrgSlugAppSlugEnvIndexRoute = OrgSlugAppSlugEnvIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => OrgSlugAppSlugEnvRoute,
 } as any)
 const OrgSlugAppSlugEnvSettingsRoute =
   OrgSlugAppSlugEnvSettingsRouteImport.update({
@@ -194,6 +200,7 @@ export interface FileRoutesByFullPath {
   '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
   '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
+  '/$orgSlug/$appSlug/$env/': typeof OrgSlugAppSlugEnvIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRouteWithChildren
   '/$orgSlug/$appSlug/$env/flags/$flagKey': typeof OrgSlugAppSlugEnvFlagsFlagKeyRoute
   '/$orgSlug/$appSlug/$env/experiments/': typeof OrgSlugAppSlugEnvExperimentsIndexRoute
@@ -215,11 +222,11 @@ export interface FileRoutesByTo {
   '/auth/login': typeof AuthLoginRoute
   '/auth/logout': typeof AuthLogoutRoute
   '/$orgSlug': typeof OrgSlugIndexRoute
-  '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvRouteWithChildren
   '/claim/consent/$attemptId': typeof ClaimConsentAttemptIdRoute
   '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
   '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
+  '/$orgSlug/$appSlug/$env': typeof OrgSlugAppSlugEnvIndexRoute
   '/$orgSlug/$appSlug/$env/flags/$flagKey': typeof OrgSlugAppSlugEnvFlagsFlagKeyRoute
   '/$orgSlug/$appSlug/$env/experiments': typeof OrgSlugAppSlugEnvExperimentsIndexRoute
   '/$orgSlug/$appSlug/$env/flags': typeof OrgSlugAppSlugEnvFlagsIndexRoute
@@ -246,6 +253,7 @@ export interface FileRoutesById {
   '/$orgSlug/$appSlug/$env/metrics': typeof OrgSlugAppSlugEnvMetricsRoute
   '/$orgSlug/$appSlug/$env/segments': typeof OrgSlugAppSlugEnvSegmentsRoute
   '/$orgSlug/$appSlug/$env/settings': typeof OrgSlugAppSlugEnvSettingsRoute
+  '/$orgSlug/$appSlug/$env/': typeof OrgSlugAppSlugEnvIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRouteWithChildren
   '/$orgSlug/$appSlug/$env/flags/$flagKey': typeof OrgSlugAppSlugEnvFlagsFlagKeyRoute
   '/$orgSlug/$appSlug/$env/experiments/': typeof OrgSlugAppSlugEnvExperimentsIndexRoute
@@ -275,6 +283,7 @@ export interface FileRouteTypes {
     | '/$orgSlug/$appSlug/$env/metrics'
     | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
+    | '/$orgSlug/$appSlug/$env/'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId'
     | '/$orgSlug/$appSlug/$env/flags/$flagKey'
     | '/$orgSlug/$appSlug/$env/experiments/'
@@ -296,11 +305,11 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/auth/logout'
     | '/$orgSlug'
-    | '/$orgSlug/$appSlug/$env'
     | '/claim/consent/$attemptId'
     | '/$orgSlug/$appSlug/$env/metrics'
     | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
+    | '/$orgSlug/$appSlug/$env'
     | '/$orgSlug/$appSlug/$env/flags/$flagKey'
     | '/$orgSlug/$appSlug/$env/experiments'
     | '/$orgSlug/$appSlug/$env/flags'
@@ -326,6 +335,7 @@ export interface FileRouteTypes {
     | '/$orgSlug/$appSlug/$env/metrics'
     | '/$orgSlug/$appSlug/$env/segments'
     | '/$orgSlug/$appSlug/$env/settings'
+    | '/$orgSlug/$appSlug/$env/'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId'
     | '/$orgSlug/$appSlug/$env/flags/$flagKey'
     | '/$orgSlug/$appSlug/$env/experiments/'
@@ -423,6 +433,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$orgSlug/$appSlug/$env'
       preLoaderRoute: typeof OrgSlugAppSlugEnvRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/$orgSlug/$appSlug/$env/': {
+      id: '/$orgSlug/$appSlug/$env/'
+      path: '/'
+      fullPath: '/$orgSlug/$appSlug/$env/'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvIndexRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
     }
     '/$orgSlug/$appSlug/$env/settings': {
       id: '/$orgSlug/$appSlug/$env/settings'
@@ -600,6 +617,7 @@ interface OrgSlugAppSlugEnvRouteChildren {
   OrgSlugAppSlugEnvMetricsRoute: typeof OrgSlugAppSlugEnvMetricsRoute
   OrgSlugAppSlugEnvSegmentsRoute: typeof OrgSlugAppSlugEnvSegmentsRoute
   OrgSlugAppSlugEnvSettingsRoute: typeof OrgSlugAppSlugEnvSettingsRoute
+  OrgSlugAppSlugEnvIndexRoute: typeof OrgSlugAppSlugEnvIndexRoute
   OrgSlugAppSlugEnvFlagsFlagKeyRoute: typeof OrgSlugAppSlugEnvFlagsFlagKeyRoute
   OrgSlugAppSlugEnvFlagsIndexRoute: typeof OrgSlugAppSlugEnvFlagsIndexRoute
 }
@@ -610,6 +628,7 @@ const OrgSlugAppSlugEnvRouteChildren: OrgSlugAppSlugEnvRouteChildren = {
   OrgSlugAppSlugEnvMetricsRoute: OrgSlugAppSlugEnvMetricsRoute,
   OrgSlugAppSlugEnvSegmentsRoute: OrgSlugAppSlugEnvSegmentsRoute,
   OrgSlugAppSlugEnvSettingsRoute: OrgSlugAppSlugEnvSettingsRoute,
+  OrgSlugAppSlugEnvIndexRoute: OrgSlugAppSlugEnvIndexRoute,
   OrgSlugAppSlugEnvFlagsFlagKeyRoute: OrgSlugAppSlugEnvFlagsFlagKeyRoute,
   OrgSlugAppSlugEnvFlagsIndexRoute: OrgSlugAppSlugEnvFlagsIndexRoute,
 }
