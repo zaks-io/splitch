@@ -21,13 +21,14 @@ import {
   createOrganizationEffect,
   type CreateOrganizationFailure,
 } from "#lib/create-organization-outcome";
+import type { StaleSession } from "#lib/stale-session";
 
 export function CreateOrganizationForm({
   onCreated,
   onStaleSession,
 }: {
   onCreated: (orgSlug: string) => void;
-  onStaleSession: (orgSlug: string) => void;
+  onStaleSession: (stale: StaleSession) => void;
 }) {
   const [draft, setDraft] = useState<CreateOrganizationDraft>(emptyOrganizationDraft);
   const [slugEdited, setSlugEdited] = useState(false);
@@ -47,8 +48,9 @@ export function CreateOrganizationForm({
 
   function settle(effect: CreateOrganizationEffect) {
     if (effect.kind === "created") onCreated(effect.orgSlug);
-    else if (effect.kind === "session-stale") onStaleSession(effect.orgSlug);
-    else setFailure(effect.failure);
+    else if (effect.kind === "session-stale") {
+      onStaleSession({ slug: effect.orgSlug, reason: effect.reason, remedy: effect.remedy });
+    } else setFailure(effect.failure);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {

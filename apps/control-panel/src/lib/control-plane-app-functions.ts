@@ -1,14 +1,13 @@
 import { env as workerEnv } from "cloudflare:workers";
-import type { AppsCreateOutput, ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelAppsClient } from "./control-plane-apps";
+import { type CreateControlPanelAppResult, settleAfterCreate } from "./create-app-outcome";
+import { markPendingResyncBestEffort } from "./pending-resync";
 import { loadSessionFromRequest } from "./session";
 import { resyncSessionMemberships } from "./session-resync";
-
-export type CreateControlPanelAppResult = ControlPlaneOperationResult<AppsCreateOutput>;
 
 /**
  * The Org comes from the URL scope, so the request carries only what the operator
@@ -27,7 +26,7 @@ export const createControlPanelApp = createServerFn({ method: "POST" })
   .handler(async ({ data: parsed }): Promise<CreateControlPanelAppResult> => {
     if (!parsed.success) {
       return {
-        ok: false,
+        outcome: "refused",
         status: 400,
         error: {
           code: "VALIDATION_ERROR",
@@ -46,7 +45,7 @@ export const createControlPanelApp = createServerFn({ method: "POST" })
     const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
     if (!loaded.ok) {
       return {
-        ok: false,
+        outcome: "refused",
         status: 401,
         error: { code: "UNAUTHORIZED", message: "authentication required", details: {} },
       };
@@ -59,8 +58,31 @@ export const createControlPanelApp = createServerFn({ method: "POST" })
       bindings.CONTROL_PANEL_DELEGATION_SECRET,
     ).create({ orgId, organizationId: orgId, name, key });
 
-    if (result.ok) {
-      await resyncSessionMemberships(bindings, loaded.tokenHash, loaded.session);
+    if (!result.ok) {
+      return { outcome: "refused", status: result.status, error: result.error };
     }
-    return result;
+
+    // The App exists in the Control Plane at this point. A resync failure below
+    // must never be reported through the same path as a failed create (SPL-203):
+    // that told the operator to retry a mutation that already succeeded, and the
+    // retry could only fail again on `apps_org_key_unique`.
+    const settled = await settleAfterCreate(result.data.app.key, async () => {
+      await resyncSessionMemberships(bindings, loaded.tokenHash, loaded.session);
+    });
+    if (settled.outcome === "created-session-stale") {
+      // Written outside the session object so a reload before the next
+      // successful resync still knows this App exists (SPL-203 review:
+      // otherwise the notice — and the fact the create-again retry is
+      // impossible — disappears the moment the page reloads). Best-effort:
+      // this write must never be able to convert the App create above, which
+      // already succeeded, into a reported failure (SPL-203 review round 2).
+      await markPendingResyncBestEffort(bindings.SESSION_STORE, loaded.tokenHash, {
+        resource: "app",
+        orgId,
+        slug: settled.appSlug,
+        reason: settled.reason,
+        remedy: settled.remedy,
+      });
+    }
+    return settled;
   });

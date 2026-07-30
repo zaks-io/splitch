@@ -1,4 +1,5 @@
 import type { EnvironmentAttentionRollup } from "@splitch/contracts";
+import type { ResyncRemedy } from "./resync-remedy";
 import type { OrgRole } from "./session";
 
 export interface OrgAppListEnvironment {
@@ -24,6 +25,18 @@ export interface OrgAppListApp {
   readonly attention: AppAttention;
 }
 
+/**
+ * A resync failure recorded after a create that already succeeded (SPL-203),
+ * scoped to this Organization and read fresh on every server render so it
+ * survives a reload — unlike `create-app-dialog.tsx`'s local state, which only
+ * bridges the moment between submit and the next server read.
+ */
+export interface PendingAppResync {
+  readonly appSlug: string;
+  readonly reason: string;
+  readonly remedy: ResyncRemedy;
+}
+
 export interface OrgAppListView {
   readonly orgId: string;
   readonly orgSlug: string;
@@ -31,6 +44,7 @@ export interface OrgAppListView {
   readonly isProvisional: boolean;
   readonly demoExpiresAt: string | null;
   readonly apps: readonly OrgAppListApp[];
+  readonly pendingAppResync: PendingAppResync | null;
 }
 
 export type EnvironmentAttentionState =

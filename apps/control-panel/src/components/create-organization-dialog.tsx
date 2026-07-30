@@ -2,6 +2,7 @@ import { Button } from "@splitch/ui/components/button";
 import { Dialog, DialogContent, DialogTrigger } from "@splitch/ui/components/dialog";
 import { useState } from "react";
 import { CreateOrganizationForm } from "#components/create-organization-form";
+import type { StaleSession } from "#lib/stale-session";
 
 /**
  * The one Create Organization path. Any signed-in User may take it: there is no
@@ -17,7 +18,7 @@ export function CreateOrganizationDialog({
 }: {
   label?: string;
   onCreated: (orgSlug: string) => void;
-  onStaleSession: (orgSlug: string) => void;
+  onStaleSession: (stale: StaleSession) => void;
   variant?: "default" | "outline";
 }) {
   const [open, setOpen] = useState(false);
@@ -33,9 +34,9 @@ export function CreateOrganizationDialog({
             setOpen(false);
             onCreated(orgSlug);
           }}
-          onStaleSession={(orgSlug) => {
+          onStaleSession={(stale) => {
             setOpen(false);
-            onStaleSession(orgSlug);
+            onStaleSession(stale);
           }}
         />
       </DialogContent>

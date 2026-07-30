@@ -8,7 +8,7 @@ import {
 } from "@splitch/ui/components/dialog";
 import { Input } from "@splitch/ui/components/input";
 import { type FormEvent, useState } from "react";
-import { type MutationErrorSurface, mutationErrorSurface } from "#lib/api";
+import type { MutationErrorSurface } from "#lib/api";
 import { createControlPanelApp } from "#lib/control-plane-app-functions";
 import {
   appIssueFor,
@@ -17,12 +17,16 @@ import {
   emptyAppDraft,
   suggestAppKey,
 } from "#lib/create-app-model";
+import { type CreateAppEffect, createAppEffect } from "#lib/create-app-outcome";
+import type { StaleSession } from "#lib/stale-session";
 
 export function CreateAppForm({
   onCreated,
+  onStaleSession,
   orgId,
 }: {
   onCreated: (appSlug: string) => void;
+  onStaleSession: (stale: StaleSession) => void;
   orgId: string;
 }) {
   const [draft, setDraft] = useState<CreateAppDraft>(emptyAppDraft);
@@ -41,6 +45,17 @@ export function CreateAppForm({
     setMutationError(null);
   }
 
+  // The middle branch is load-bearing (SPL-203): an App that was created but
+  // whose session resync failed is NOT a failure, and must never render the
+  // create-failure copy below. Only `createAppEffect`'s "failed" branch — which
+  // an ok create can never produce — reaches `setMutationError`.
+  function settle(effect: CreateAppEffect) {
+    if (effect.kind === "created") onCreated(effect.appSlug);
+    else if (effect.kind === "session-stale") {
+      onStaleSession({ slug: effect.appSlug, reason: effect.reason, remedy: effect.remedy });
+    } else setMutationError(effect.failure);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitted(true);
@@ -49,17 +64,15 @@ export function CreateAppForm({
     setMutationError(null);
     setIsSubmitting(true);
     try {
-      const result = await createControlPanelApp({
-        data: { orgId, name: draft.name.trim(), key: draft.key.trim() },
-      });
-      if (result.ok) onCreated(result.data.app.key);
-      else setMutationError(mutationErrorSurface(result));
-    } catch {
-      setMutationError({
-        kind: "form",
-        message: "The Control Plane could not create this App. Try again.",
-        fields: [],
-      });
+      settle(
+        createAppEffect(
+          await createControlPanelApp({
+            data: { orgId, name: draft.name.trim(), key: draft.key.trim() },
+          }),
+        ),
+      );
+    } catch (cause) {
+      settle(createAppEffect(cause));
     } finally {
       setIsSubmitting(false);
     }

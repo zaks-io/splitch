@@ -4,7 +4,11 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelOrganizationsClient } from "./control-plane-apps";
-import type { CreateControlPanelOrganizationResult } from "./create-organization-outcome";
+import {
+  type CreateControlPanelOrganizationResult,
+  settleAfterCreate,
+} from "./create-organization-outcome";
+import { markPendingResyncBestEffort } from "./pending-resync";
 import { loadSessionFromRequest } from "./session";
 import { resyncSessionMemberships } from "./session-resync";
 
@@ -59,15 +63,24 @@ export const createControlPanelOrganization = createServerFn({ method: "POST" })
       return { outcome: "refused", status: result.status, error: result.error };
     }
 
+    // The Organization exists in the Control Plane at this point. A resync
+    // failure below must never be reported through the same path as a failed
+    // create (SPL-203): that told the operator to retry a mutation that
+    // already succeeded, and the retry could only fail again on the handle.
     const orgSlug = result.data.slug;
-    try {
+    const settled = await settleAfterCreate(orgSlug, async () => {
       await resyncSessionMemberships(bindings, loaded.tokenHash, loaded.session);
-    } catch (cause) {
-      return { outcome: "created-session-stale", orgSlug, reason: describe(cause) };
+    });
+    if (settled.outcome === "created-session-stale") {
+      // Best-effort: this write must never be able to convert the
+      // Organization create above, which already succeeded, into a reported
+      // failure (SPL-203 review round 2).
+      await markPendingResyncBestEffort(bindings.SESSION_STORE, loaded.tokenHash, {
+        resource: "organization",
+        slug: settled.orgSlug,
+        reason: settled.reason,
+        remedy: settled.remedy,
+      });
     }
-    return { outcome: "created", orgSlug };
+    return settled;
   });
-
-function describe(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
