@@ -136,6 +136,20 @@ function recoverySteps(
         ),
       ];
     }
+    case "READ_PER_ENVIRONMENT": {
+      const environments =
+        typeof details.environments === "number" ? details.environments : "<environments>";
+      return [
+        toolMessage(
+          "experiments_list",
+          `List Experiments one Environment at a time (${environments} Environments); each entry carries the same SRM and Guardrail health as the App-wide rollup.`,
+        ),
+        message(
+          "assistant",
+          "Do not retry the App-wide rollup: the refusal is a fan-out budget, not a transient failure, and only a smaller App shape changes it.",
+        ),
+      ];
+    }
   }
 }
 

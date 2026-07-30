@@ -17,6 +17,7 @@ import {
   seedEnvironments,
   seedRunningExperiments,
   setupAttentionRollupFixture,
+  spyOnPlanningReads,
   statsOutput,
   USER_ID,
 } from "./attention-rollup-fixture";
@@ -170,12 +171,20 @@ describe("GET /apps/:appId/attention-rollup", { timeout: ATTENTION_TEST_TIMEOUT 
 });
 
 describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_TIMEOUT }, () => {
+  // Both budgets are pinned to literals here, not derived from the imported
+  // constants: setup and expectation computed from the same constant move
+  // together, so raising production to 201 would leave the pair green.
+  it("pins both fan-out budgets to their documented values", () => {
+    expect(ANALYSIS_READ_LIMIT).toBe(200);
+    expect(ENVIRONMENT_FANOUT_LIMIT).toBe(200);
+  });
+
   // Exercised at the exact boundary. `> LIMIT` and `>= LIMIT` disagree only on
   // the limit itself, so testing 202-vs-refused would pass for either.
-  it("allows a rollup of exactly the Analysis read limit", async () => {
+  it("allows a rollup of exactly 200 Analysis reads", async () => {
     const repo = repository();
-    // Two running Experiments already exist (dev + prod), so seed LIMIT - 2.
-    await seedRunningExperiments(repo, QA_ENVIRONMENT_ID, ANALYSIS_READ_LIMIT - 2);
+    // Two running Experiments already exist (dev + prod), so seed 198.
+    await seedRunningExperiments(repo, QA_ENVIRONMENT_ID, 198);
     const read = vi.fn<AnalysisResultsReader["read"]>().mockResolvedValue(statsOutput());
     const app = harness({ read }, authFor(ids.appId, USER_ID));
 
@@ -184,12 +193,12 @@ describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_T
     });
 
     expect(response.status).toBe(200);
-    expect(read).toHaveBeenCalledTimes(ANALYSIS_READ_LIMIT);
+    expect(read).toHaveBeenCalledTimes(200);
   });
 
-  it("refuses one read past the Analysis read limit instead of truncating", async () => {
+  it("refuses the 201st Analysis read instead of truncating", async () => {
     const repo = repository();
-    await seedRunningExperiments(repo, QA_ENVIRONMENT_ID, ANALYSIS_READ_LIMIT - 1);
+    await seedRunningExperiments(repo, QA_ENVIRONMENT_ID, 199);
     const read = vi.fn<AnalysisResultsReader["read"]>();
     const app = harness({ read }, authFor(ids.appId, USER_ID));
 
@@ -202,8 +211,9 @@ describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_T
       code: "ATTENTION_FANOUT_LIMIT_EXCEEDED",
       details: {
         appId: ids.appId,
-        limit: ANALYSIS_READ_LIMIT,
-        runningExperiments: ANALYSIS_READ_LIMIT + 1,
+        limit: 200,
+        runningExperiments: 201,
+        recommendedAction: "READ_PER_ENVIRONMENT",
       },
     });
     expect(read).not.toHaveBeenCalled();
@@ -211,9 +221,11 @@ describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_T
 
   it("refuses before planning when the Environment count alone is over budget", async () => {
     const repo = repository();
-    await seedEnvironments(repo, ENVIRONMENT_FANOUT_LIMIT);
+    // 200 bulk Environments on top of the three the fixture seeds: 203 > 200.
+    await seedEnvironments(repo, 200);
     const read = vi.fn<AnalysisResultsReader["read"]>();
-    const app = harness({ read }, authFor(ids.appId, USER_ID));
+    const { spied, listRunningExperiments } = spyOnPlanningReads(repo);
+    const app = harness({ read }, authFor(ids.appId, USER_ID), spied);
 
     const response = await app.request(`/apps/${ids.appId}/attention-rollup`, {
       headers: { authorization: "Bearer valid" },
@@ -224,12 +236,17 @@ describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_T
       code: "ATTENTION_FANOUT_LIMIT_EXCEEDED",
       details: {
         appId: ids.appId,
-        limit: ENVIRONMENT_FANOUT_LIMIT,
+        limit: 200,
         // Planning never ran, so there is no honest running-Experiment count.
         runningExperiments: null,
+        recommendedAction: "READ_PER_ENVIRONMENT",
       },
     });
     expect(read).not.toHaveBeenCalled();
+    // The point of this budget is that it fires BEFORE the per-Environment D1
+    // fan-out it exists to prevent; observing Analysis reads alone cannot tell
+    // the difference between refusing early and refusing after 203 D1 reads.
+    expect(listRunningExperiments).not.toHaveBeenCalled();
   });
 
   it("bounds how many Analysis reads are in flight at once", async () => {

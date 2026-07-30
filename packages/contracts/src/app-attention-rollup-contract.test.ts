@@ -52,10 +52,15 @@ describe("App attention rollup contract", () => {
     });
   });
 
-  // The handler can refuse an oversized fan-out, so the contract has to advertise
-  // it: OpenAPI and the MCP tool surface are derived from this list, and a caller
-  // that never sees the code cannot handle the refusal.
-  it("advertises every error the attention rollup can return", () => {
+  // The handler can refuse an oversized fan-out, so the route metadata has to
+  // declare the code: it is the single list every derived surface reads from.
+  //
+  // This asserts the metadata, NOT emitted OpenAPI. openapi-route.ts emits only
+  // the 200 response and never consumes `route.errors` for ANY route, so no
+  // assertion on the generated document could pass today. That generator gap is
+  // pre-existing and platform-wide, and is tracked separately; when it is closed,
+  // extend this test to assert the emitted 409 response as well.
+  it("declares every error the attention rollup can return in its route metadata", () => {
     expect(getRoute("app_attention_rollup_get")?.errors).toEqual(
       expect.arrayContaining(["ATTENTION_FANOUT_LIMIT_EXCEEDED"]),
     );

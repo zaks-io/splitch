@@ -106,6 +106,7 @@ EDIT_DRAFT_THEN_START      → apply a draft change → experiments_start
 ADD_VARIANT_TO_ENV         → flags_promote (or variant promotion) → retry the original op
 RETRY_AFTER                → wait details.retryAfterMs → retry
 RETRY_WITH_CONFIRMATION    → resend the same call with confirm: true (Environment Policy gate, ADR-0029)
+READ_PER_ENVIRONMENT       → experiments_list per Environment (App-wide attention rollup over fan-out budget; do not retry)
 ```
 
 The token is the contract; the prompt is the convenience. An agent that already knows the token

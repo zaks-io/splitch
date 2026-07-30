@@ -120,11 +120,13 @@ dropped:
 - More than 200 planned Analysis reads: refused before any read is issued.
 
 Both refusals are `ATTENTION_FANOUT_LIMIT_EXCEEDED`
-(`{ appId, limit, environments, runningExperiments: number | null }`) with status `409`. The status
+(`{ appId, limit, environments, runningExperiments: number | null, recommendedAction:
+"READ_PER_ENVIRONMENT" }`) with status `409`. The status
 is deliberate and is not retryable: `429`/`503` would promise that waiting helps, and a polling
 agent would then retry forever against a condition that only an App-shape change can resolve. The
 details name the budget and the observed counts so the caller can see exactly what was exceeded;
-the remediation is to read attention per Environment through the Experiment list instead.
+the remediation is to read attention per Environment through the Experiment list instead, which is
+what `recommendedAction: "READ_PER_ENVIRONMENT"` names for the `recover_from_error` MCP prompt.
 
 Auth: live Organization and App member. The Worker rejects a token bound to another App or stale
 membership before any analysis read. Control Panel callers use the configured signed binding-only

@@ -81,6 +81,7 @@ export const recommendedActions = [
   "RETRY_AFTER",
   "RETRY_WITH_CONFIRMATION",
   "CHOOSE_DIFFERENT_SLUG",
+  "READ_PER_ENVIRONMENT",
 ] as const;
 
 export const RecommendedActionSchema = z.enum(recommendedActions);
@@ -277,6 +278,7 @@ const errorMembers = [
       environments: z.number(),
       // null when the Environment count alone was over budget, so no plan ran.
       runningExperiments: z.number().nullable(),
+      recommendedAction: z.literal("READ_PER_ENVIRONMENT"),
     }),
   ),
 

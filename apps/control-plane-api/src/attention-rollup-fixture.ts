@@ -1,7 +1,7 @@
 import type { StatsOutput } from "@splitch/contracts";
 import { appScope, createRepository, envScope, type Repository } from "@splitch/db";
 import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
-import { afterEach, beforeEach } from "vitest";
+import { afterEach, beforeEach, type Mock, vi } from "vitest";
 import { createApp } from "./app";
 import type { AnalysisResultsReader } from "./attention-rollup";
 import { ids, NOW, seedConfigGraph } from "./config-store-fixture-data";
@@ -197,13 +197,28 @@ export async function seedOtherTenant(repo: Repository) {
   return { orgId, appId, environmentId };
 }
 
-export function harness(analysisResults: AnalysisResultsReader, authResolver: AuthResolver) {
-  return createApp({
-    authResolver,
-    rateLimiter: allowLimiter,
-    repo: createRepository(bindings.d1),
-    analysisResults,
-  });
+/** `repo` is injectable so a test can spy on which D1 reads the handler issues. */
+export function harness(
+  analysisResults: AnalysisResultsReader,
+  authResolver: AuthResolver,
+  repo: Repository = createRepository(bindings.d1),
+) {
+  return createApp({ authResolver, rateLimiter: allowLimiter, repo, analysisResults });
+}
+
+/** Counts the per-Environment planning read, which must not run once a budget refuses. */
+export function spyOnPlanningReads(repo: Repository): {
+  spied: Repository;
+  listRunningExperiments: Mock<Repository["experiments"]["listRunningExperiments"]>;
+} {
+  const listRunningExperiments = vi.fn(
+    repo.experiments.listRunningExperiments.bind(repo.experiments),
+  );
+  const spied: Repository = {
+    ...repo,
+    experiments: { ...repo.experiments, listRunningExperiments },
+  };
+  return { spied, listRunningExperiments };
 }
 
 export function authFor(appId: string, userId: string): AuthResolver {

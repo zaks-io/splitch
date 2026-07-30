@@ -321,7 +321,7 @@ function fanoutLimitExceeded(
     {
       code: "ATTENTION_FANOUT_LIMIT_EXCEEDED",
       message: `attention rollup spans ${over}, above the ${details.limit} limit; read attention per Environment instead`,
-      details: { ...details, runningExperiments },
+      details: { ...details, runningExperiments, recommendedAction: "READ_PER_ENVIRONMENT" },
     },
     { requestId },
   );

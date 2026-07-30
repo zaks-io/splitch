@@ -121,6 +121,9 @@ export const RECOVERY_OPERATION_IDS: Readonly<Record<RecommendedAction, readonly
   // Retrying the same create is the whole remediation; the caller only has to
   // change the slug it sends, so there is no intermediate tool to call.
   CHOOSE_DIFFERENT_SLUG: [],
+  // The App-wide read is over budget and no retry fixes that, so the caller drops
+  // to the per-Environment list, which carries the same SRM/Guardrail signal.
+  READ_PER_ENVIRONMENT: ["experiments_list"],
 };
 
 const PROMPT_DESCRIPTION_BY_NAME = new Map(
