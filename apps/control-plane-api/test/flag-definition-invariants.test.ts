@@ -254,6 +254,7 @@ async function seedRunningVariantRun(
     salt: "salt_variant_update_guard",
     allocation: JSON.stringify({ control: 50, treatment: 50 }),
     variantSet: JSON.stringify([variant]),
+    controlVariantId: variant.id,
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: "[]",

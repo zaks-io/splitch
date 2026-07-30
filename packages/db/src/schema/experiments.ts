@@ -102,6 +102,8 @@ export const runs = sqliteTable(
     // JSON { [variantName]: number }, keyed by Variant name. immutable.
     allocation: text("allocation").notNull(),
     variantSet: text("variant_set").notNull(), // JSON. immutable
+    // Control Variant identity frozen from the Experiment at Start. immutable.
+    controlVariantId: text("control_variant_id").notNull(),
     // JSON TargetingRule[] resolved snapshot frozen at Start ([] = all eligible).
     targetingRules: text("targeting_rules").notNull(), // immutable
     confidenceLevel: real("confidence_level").notNull(), // locked at Start

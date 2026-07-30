@@ -95,6 +95,7 @@ export async function panelExperimentDetail(
         targetingKeyType: run.targetingKeyType,
         salt: run.salt,
         allocation: jsonObject<Record<string, number>>(run.allocation) ?? {},
+        controlVariantId: run.controlVariantId,
         variantsJson: run.variantSet,
         targetingRulesJson: run.targetingRules,
         configHash: run.configHash,

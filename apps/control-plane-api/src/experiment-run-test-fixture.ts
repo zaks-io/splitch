@@ -225,6 +225,7 @@ export async function insertSyntheticNewerRun(
     salt: "synthetic-salt",
     allocation: JSON.stringify({ control: 100 }),
     variantSet: JSON.stringify([{ id: fx.flag.defaultVariantId, name: "control", value: false }]),
+    controlVariantId: fx.flag.defaultVariantId,
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: "[]",

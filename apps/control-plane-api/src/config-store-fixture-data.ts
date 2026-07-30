@@ -161,6 +161,7 @@ async function insertRun(repo: Repository, runId: string, runNumber: number, sta
     salt: `salt_${runId}`,
     allocation: JSON.stringify({ control: 50, treatment: 50 }),
     variantSet: JSON.stringify(variants),
+    controlVariantId: ids.controlVariantId,
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: "[]",

@@ -16,6 +16,7 @@ import {
   patchExperiment,
   readEvaluationExperiment,
   readIngestLiveRun,
+  startExperiment,
   type StartResponse,
 } from "../src/experiment-run-test-fixture";
 import { errorBody, NOW_ISO, request } from "../src/flag-definition-test-harness";
@@ -30,6 +31,67 @@ beforeEach(async () => {
 afterEach(async () => ctx.h.bindings.dispose());
 
 describe("control-plane Experiment Run lifecycle", () => {
+  it("keeps a started Run's Control identity after the Experiment default changes", async () => {
+    const fx = await experimentFixture(ctx);
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "frozen-control",
+      allocation: { control: 50, treatment: 50 },
+      salt: "frozen-control-salt",
+    });
+    const started = (await (await startExperiment(ctx, fx, experiment.id)).json()) as StartResponse;
+    const scope = envScope(fx.appId, fx.environmentId);
+    const originalControlId = fx.flag.defaultVariantId;
+    const treatmentId = fx.flag.variants.find((variant) => variant.name === "treatment")?.id;
+    expect(treatmentId).toBeDefined();
+    expect(treatmentId).not.toBe(originalControlId);
+    expect(await ctx.repo.experiments.getRun(scope, started.run.id)).toMatchObject({
+      controlVariantId: originalControlId,
+    });
+
+    const ended = await request(
+      ctx.h,
+      "POST",
+      `/apps/${fx.appId}/envs/${fx.environmentId}/runs/${started.run.id}/end`,
+      fx.jwt,
+    );
+    expect(ended.status).toBe(200);
+    await ctx.repo.experiments.updateExperiment(scope, experiment.id, {
+      defaultVariantId: treatmentId,
+      updatedAt: NOW_ISO,
+    });
+
+    expect(await ctx.repo.experiments.getExperiment(scope, experiment.id)).toMatchObject({
+      defaultVariantId: treatmentId,
+    });
+    expect(await ctx.repo.experiments.getRun(scope, started.run.id)).toMatchObject({
+      controlVariantId: originalControlId,
+    });
+  });
+
+  it("rejects Start when the Control is absent from the frozen Variant set", async () => {
+    const fx = await experimentFixture(ctx);
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key: "missing-frozen-control",
+      allocation: { control: 50, treatment: 50 },
+      salt: "missing-frozen-control-salt",
+    });
+    const scope = envScope(fx.appId, fx.environmentId);
+    const missingControlId = "variant_missing_from_frozen_set";
+    await ctx.repo.experiments.updateExperiment(scope, experiment.id, {
+      defaultVariantId: missingControlId,
+      updatedAt: NOW_ISO,
+    });
+
+    const start = await startExperiment(ctx, fx, experiment.id);
+
+    expect(start.status).toBe(409);
+    expect(await errorBody(start)).toMatchObject({
+      code: "VARIANT_NOT_AVAILABLE",
+      details: { missingVariants: [missingControlId] },
+    });
+    expect(await ctx.repo.experiments.listRunsForExperiment(scope, experiment.id)).toEqual([]);
+  });
+
   it("round-trips draft -> Start -> End and writes explicit live_run KV", async () => {
     const fx = await experimentFixture(ctx);
     const experiment = await createExperimentDraft(ctx, fx, {

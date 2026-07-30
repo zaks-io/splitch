@@ -102,6 +102,7 @@ describe("panel Experiments composite read", () => {
           id: RUN_ID,
           runNumber: 2,
           allocation: { control: 70, treatment: 30 },
+          controlVariantId: "variant_control",
           variantsJson: JSON.stringify([
             { id: "variant_control", name: "control", value: false },
             { id: "variant_treatment", name: "treatment", value: true },
@@ -210,6 +211,7 @@ function runRow(runNumber: 1 | 2) {
     allocation: JSON.stringify(
       latest ? { control: 70, treatment: 30 } : { control: 50, treatment: 50 },
     ),
+    controlVariantId: "variant_control",
     variantSet: JSON.stringify([
       { id: "variant_control", name: "control", value: false },
       { id: "variant_treatment", name: "treatment", value: true },

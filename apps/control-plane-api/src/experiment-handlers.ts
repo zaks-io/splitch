@@ -188,6 +188,7 @@ async function startExperiment(
       draftSalt: experiment.draftSalt,
       draftTargetingRules: experiment.draftTargetingRules,
       draftSegmentIds: experiment.draftSegmentIds,
+      defaultVariantId: prepared.value.controlVariantId,
       liveRunId: experiment.liveRunId,
     },
     run: {

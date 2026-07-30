@@ -50,12 +50,18 @@ The `draft_*` columns are the **staging area for the next Run** (run-state-machi
 accumulate on the draft; Start is the single reset point"). Assignment-affecting PATCHes write here;
 `activation_metric_id` is also part of the draft set (a change to it is an assignment edit). At Start the
 Worker resolves `draft_segment_ids` to concrete rules, merges them with `draft_targeting_rules`, and
-copies the frozen assignment config (`allocation`, `salt`, `targeting_rules`, `variant_set`) into a new
-`runs` row. The draft columns are nullable because a freshly created Experiment has no staged Run yet.
+copies the frozen assignment config (`allocation`, `salt`, `targeting_rules`, `variant_set`) and the
+current `default_variant_id` as `control_variant_id` into a new `runs` row. The draft columns are
+nullable because a freshly created Experiment has no staged Run yet.
 
 ### `runs`
 
 Immutable assignment config columns are marked; Drizzle migrations must not add UPDATE paths for them.
+
+For pre-existing Runs, the `control_variant_id` migration uses the Experiment's current
+`default_variant_id` as the best-available backfill. It cannot reconstruct a historical Control that
+was not previously stored. New Runs copy and validate the Control against their frozen Variant set
+at Start.
 
 | Column                | Type        | Constraints                                                                                              |
 | --------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
@@ -70,6 +76,7 @@ Immutable assignment config columns are marked; Drizzle migrations must not add 
 | `salt`                | text        | not null; **immutable**                                                                                  |
 | `allocation`          | text        | not null (JSON `{ [variantName]: number }`, keyed by Variant name); **immutable**                        |
 | `variant_set`         | text        | not null (JSON); **immutable**                                                                           |
+| `control_variant_id`  | text        | not null; Control identity copied from the Experiment at Start; **immutable**                            |
 | `targeting_rules`     | text        | not null (JSON `TargetingRule[]`; `[]` = all eligible); resolved snapshot frozen at Start; **immutable** |
 | `confidence_level`    | real        | not null; locked at Run Start                                                                            |
 | `horizon`             | text        | not null, default `'sequential'`; locked at Run Start                                                    |
