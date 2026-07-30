@@ -81,18 +81,22 @@ test.describe("Control Panel local full-stack harness", () => {
         return { environmentId: environment.id, result: await response.json() };
       }),
     );
+    // The analysis-api /results read answers with an AnalysisResultsEnvelope
+    // (run_id, control_variant, stats), not a bare StatsOutput (#200): srm
+    // lives under `.stats`, alongside the run_id provenance the envelope now
+    // carries.
     expect(
       analysisResults
-        .filter(({ result }) => result.srm.srm_is_mismatch)
+        .filter(({ result }) => result.stats.srm.srm_is_mismatch)
         .map(({ environmentId }) => environmentId),
     ).toEqual(["env_checkout_prod_e2e"]);
     expect(
-      analysisResults.find(({ environmentId }) => environmentId.endsWith("dev_e2e"))?.result.srm
-        .srm_p_value,
+      analysisResults.find(({ environmentId }) => environmentId.endsWith("dev_e2e"))?.result.stats
+        .srm.srm_p_value,
     ).toBe(1);
     expect(
-      analysisResults.find(({ environmentId }) => environmentId.endsWith("prod_e2e"))?.result.srm
-        .srm_p_value,
+      analysisResults.find(({ environmentId }) => environmentId.endsWith("prod_e2e"))?.result.stats
+        .srm.srm_p_value,
     ).toBeCloseTo(0.00005699411623331831, 15);
 
     await context.clearCookies();

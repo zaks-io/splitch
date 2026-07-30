@@ -21,14 +21,18 @@ export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
     "run_checkout_dev_previous_e2e",
     { control: 6, treatment: 6 },
   ),
-  // A lift the size real Experiments actually produce. A fixture with a 1500%
-  // effect hides every rendering fault that only appears at realistic scale.
+  // A lift the size real Experiments actually produce, and large enough to
+  // actually clear the 95% significance bar under the real Stats Engine
+  // (verified: p ~= 0.026 at these counts). The previous 300/315 split never
+  // reached significance on its own; it only ever showed "Significance
+  // reached" before the analysis_run_inputs provenance fix (#200) because a
+  // pipe read that ignored run_id pooled it with another Run's Exposures.
   analysisInput(
     "env_checkout_dev_e2e",
     "experiment_checkout_significance_e2e",
     "run_checkout_significance_e2e",
     { control: 1_500, treatment: 1_500 },
-    { decisionMetric: "checkout-conversion", conversions: { control: 300, treatment: 315 } },
+    { decisionMetric: "checkout-conversion", conversions: { control: 300, treatment: 375 } },
   ),
   analysisInput(
     "env_checkout_prod_e2e",

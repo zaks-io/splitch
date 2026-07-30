@@ -29,9 +29,21 @@ test.describe("Control Panel Experiments", () => {
     await expect(page.getByText("Running", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Ended", { exact: true })).toBeVisible();
     await expect(page.getByText("New Checkout", { exact: true })).toBeVisible();
-    await expect(page.getByText("Collecting data", { exact: true })).toBeVisible();
-    await expect(page.getByText("Significance reached", { exact: true })).toBeVisible();
-    await expect(page.getByText("Guardrail breached", { exact: true })).toBeVisible();
+
+    // Scope each health assertion to its own Run row: three Experiments are
+    // "running" in this Environment, and only one of them should show any
+    // given health. Asserting on `getByText` alone proves the text exists
+    // somewhere on the page, not which Run it belongs to.
+    const devRow = page.locator('[data-experiment-id="experiment_checkout_dev_e2e"]');
+    await expect(devRow.getByText("Collecting data", { exact: true })).toBeVisible();
+
+    const significanceRow = page.locator(
+      '[data-experiment-id="experiment_checkout_significance_e2e"]',
+    );
+    await expect(significanceRow.getByText("Significance reached", { exact: true })).toBeVisible();
+
+    const guardrailRow = page.locator('[data-experiment-id="experiment_checkout_guardrail_e2e"]');
+    await expect(guardrailRow.getByText("Guardrail breached", { exact: true })).toBeVisible();
 
     await captureThemeScreenshots(page, testInfo, "experiments-list");
 

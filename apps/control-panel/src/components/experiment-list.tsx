@@ -71,7 +71,7 @@ function ExperimentRow({
 }) {
   const detailHref = `${scopeHref}/experiments/${encodeURIComponent(experiment.id)}`;
   return (
-    <TableRow className="group">
+    <TableRow className="group" data-experiment-id={experiment.id}>
       <TableCell className="font-medium">
         <a
           className="text-foreground underline-offset-4 group-hover:text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
