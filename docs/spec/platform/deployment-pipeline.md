@@ -75,11 +75,18 @@ Required Turbo shape:
 - Provisioning, deploy, migration, preview cleanup, `wrangler`, and `tb deploy` tasks are `cache:
 false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secrets is never served
   from cache.
-- `globalEnv` and task-level `env` list every environment variable that changes build output, including
-  public app URLs and platform target names. Missing env declarations can produce preview/prod cache
-  cross-contamination.
+- `globalEnv` is limited to values that can change every task. Runtime Worker bindings and secrets do
+  not invalidate TypeScript-only builds. Target-specific variables live only on the Vite build tasks
+  that consume them; missing declarations can produce preview/prod cache cross-contamination.
+- Runtime `SENTRY_DSN` is passed only to non-cacheable deploy tasks. The Control Panel client build
+  uses the committed Wrangler DSN unless `VITE_SENTRY_DSN` explicitly overrides it, so an
+  environment-scoped runtime secret cannot split otherwise identical build hashes.
 - CI sets `TURBO_TOKEN`, `TURBO_TEAM`, and `TURBO_REMOTE_CACHE_SIGNATURE_KEY` for signed remote cache.
   Secrets used only by deploy/provision tasks are not part of cacheable task outputs.
+- After main verification succeeds, CI builds the production-target Control Panel and Marketing Vite
+  graphs with the exact production cache inputs. The warmer is not bound to the GitHub `production`
+  environment, because that would create a deployment record and corrupt the affected-deploy
+  baseline. TypeScript-only Worker builds reuse the target-independent artifacts produced by Verify.
 - Debugging starts with `turbo run <task> --dry-run=json` to inspect the task graph, inputs, outputs,
   and cache hits before changing workflow YAML.
 
@@ -87,7 +94,7 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 
 | Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                                                                                                                      |
 | ----------------------- | --------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks                                                                                                        |
+| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks, and a post-Verify main-only production Vite cache warmer                                              |
 | `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                                                                            |
 | `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: rebuild the Tinybird Branch, migrate and clear preview-only D1/KV state, reseed fixtures, run Copy Pipe on demand, and verify hosted smoke                                                                                    |
 | `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, successful CI verification for manual dispatches, affected-phase and Worker planning from the latest successful production deployment, conditional Tinybird/D1/Worker mutation, and Linear release sync |
@@ -355,6 +362,8 @@ same-SHA redeploy or drift repair.
 
 1. Verify successful `ci` evidence for the exact release SHA. Automatic runs use the successful
    `workflow_run` payload; manual runs query the `ci` workflow's successful `main` push runs.
+   Main CI has already warmed the signed production cache for target-specific Vite builds without
+   entering the GitHub `production` environment or creating a deployment record.
 2. Resolve the latest successful `production` deployment SHA, compute the exact changed path set, and
    stop when no production deploy input changed.
 3. Wait for GitHub `production` environment approval. Required reviewers and prevent-self-review should

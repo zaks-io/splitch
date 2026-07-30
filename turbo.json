@@ -1,15 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["biome.json", "tsconfig.base.json"],
-  "globalEnv": [
-    "CI",
-    "NODE_ENV",
-    "SPLITCH_PLATFORM_TARGET",
-    "AUTH_API_ORIGIN",
-    "AUTH_JWKS_URI",
-    "CONTROL_PLANE_ORIGIN",
-    "TINYBIRD_API_URL"
-  ],
+  "globalEnv": ["CI", "NODE_ENV"],
   "globalPassThroughEnv": [
     "GITHUB_RUN_ID",
     "SPLITCH_SMOKE_APP_ID",
@@ -27,14 +19,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
-      "inputs": ["$TURBO_DEFAULT$"],
-      "env": [
-        "SPLITCH_PLATFORM_TARGET",
-        "AUTH_API_ORIGIN",
-        "AUTH_JWKS_URI",
-        "CONTROL_PLANE_ORIGIN",
-        "TINYBIRD_API_URL"
-      ]
+      "inputs": ["$TURBO_DEFAULT$"]
     },
     "@splitch/control-panel#build": {
       "dependsOn": ["^build"],
@@ -42,13 +27,8 @@
       "inputs": ["$TURBO_DEFAULT$"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
-        "AUTH_API_ORIGIN",
-        "AUTH_JWKS_URI",
-        "CONTROL_PLANE_ORIGIN",
-        "TINYBIRD_API_URL",
         "CLOUDFLARE_ENV",
         "SPLITCH_GENERATED_WRANGLER_ENV",
-        "SENTRY_DSN",
         "SENTRY_RELEASE",
         "SENTRY_RELEASE_BASE",
         "VITE_SENTRY_DSN",
@@ -60,15 +40,7 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
       "inputs": ["$TURBO_DEFAULT$"],
-      "env": [
-        "SPLITCH_PLATFORM_TARGET",
-        "AUTH_API_ORIGIN",
-        "AUTH_JWKS_URI",
-        "CONTROL_PLANE_ORIGIN",
-        "TINYBIRD_API_URL",
-        "CLOUDFLARE_ENV",
-        "SPLITCH_GENERATED_WRANGLER_ENV"
-      ]
+      "env": ["CLOUDFLARE_ENV", "SPLITCH_GENERATED_WRANGLER_ENV"]
     },
     "@splitch/cli#test": {
       "dependsOn": ["^build"],

@@ -42,7 +42,7 @@ export default defineConfig(({ mode }) => ({
   ],
   define: {
     "import.meta.env.VITE_SENTRY_DSN": JSON.stringify(
-      process.env.VITE_SENTRY_DSN ?? process.env.SENTRY_DSN ?? wranglerConfig.vars.SENTRY_DSN ?? "",
+      process.env.VITE_SENTRY_DSN ?? wranglerConfig.vars.SENTRY_DSN ?? "",
     ),
     "import.meta.env.VITE_SENTRY_RELEASE": JSON.stringify(
       process.env.VITE_SENTRY_RELEASE ??
