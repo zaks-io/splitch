@@ -3,7 +3,7 @@ import { classifyOverviewExperiments } from "./overview-attention";
 import { overviewStats } from "./overview-test-fixtures";
 import { MULTIPLE_ASSIGNMENT_RATE_THRESHOLD } from "./overview-thresholds";
 
-const sequential = { horizon: "sequential", sampleSizeLocked: null };
+const sequential = { state: "read", horizon: "sequential", sampleSizeLocked: null } as const;
 
 describe("classifyOverviewExperiments", () => {
   it("flags a Run whose locked decision family reached significance", () => {
@@ -49,7 +49,15 @@ describe("classifyOverviewExperiments", () => {
     const stats = overviewStats({ deduped: { control: 1_200, treatment: 1_150 } });
     const reasonsFor = (horizon: string, sampleSizeLocked: number | null) =>
       classifyOverviewExperiments([
-        { id: "exp_h", name: "Horizon", runId: "run_h", horizon, sampleSizeLocked, stats },
+        {
+          state: "read",
+          id: "exp_h",
+          name: "Horizon",
+          runId: "run_h",
+          horizon,
+          sampleSizeLocked,
+          stats,
+        },
       ]).needingDecision.flatMap((experiment) => experiment.reasons);
 
     expect(reasonsFor("fixed", 2_350)).toEqual(["horizon_reached"]);
@@ -97,6 +105,16 @@ describe("classifyOverviewExperiments", () => {
       "multiple_assignment_quarantine",
     ]);
     expect(reasonsAt(MULTIPLE_ASSIGNMENT_RATE_THRESHOLD - 0.0001)).toEqual([]);
+  });
+
+  it("reports a Run with no Analysis result as no_data, never as clear", () => {
+    const { needingDecision, failing, noData } = classifyOverviewExperiments([
+      { state: "no_data", id: "exp_fresh", name: "Fresh", runId: "run_fresh" },
+    ]);
+
+    expect(needingDecision).toEqual([]);
+    expect(failing).toEqual([]);
+    expect(noData).toEqual([{ id: "exp_fresh", name: "Fresh", runId: "run_fresh" }]);
   });
 
   it("lists a Run that is both ready to decide and failing in both sections", () => {

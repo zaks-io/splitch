@@ -21,7 +21,7 @@ function render(overrides: Partial<AppOverviewResponse>): string {
   const overview: AppOverviewResponse = {
     appId: "app_checkout",
     environmentId: "env_prod",
-    experiments: { status: "ok", needingDecision: [], failing: [] },
+    experiments: { status: "ok", needingDecision: [], failing: [], noData: [] },
     flagConfiguration: { recentlyChanged: [], windowDays: 7 },
     environment: ENVIRONMENT,
     ...overrides,
@@ -38,7 +38,29 @@ function render(overrides: Partial<AppOverviewResponse>): string {
 
 describe("Overview page", () => {
   it("shows the calm state only when every section was read and is empty", () => {
-    expect(render({})).toContain("Nothing needs your attention");
+    const html = render({});
+
+    expect(html).toContain("Nothing needs your attention");
+    // The calm state still points at the next thing to make (screen-inventory.md).
+    expect(html).toContain(`href="${SCOPE_HREF}/flags"`);
+    expect(html).toContain("Create a Flag");
+    expect(html).toContain(`href="${SCOPE_HREF}/experiments"`);
+    expect(html).toContain("Create an Experiment");
+  });
+
+  it("never shows the calm state for a running Experiment with no Analysis result", () => {
+    const html = render({
+      experiments: {
+        status: "ok",
+        needingDecision: [],
+        failing: [],
+        noData: [{ id: "exp_fresh", name: "Fresh checkout", runId: "run_fresh" }],
+      },
+    });
+
+    expect(html).not.toContain("Nothing needs your attention");
+    expect(html).toContain("Experiments with no results yet");
+    expect(html).toContain("Fresh checkout");
   });
 
   it("never shows the calm state when a section could not be read", () => {
@@ -82,6 +104,7 @@ describe("Overview page", () => {
           },
         ],
         failing: [],
+        noData: [],
       },
     });
 
@@ -95,6 +118,7 @@ describe("Overview page", () => {
       experiments: {
         status: "ok",
         needingDecision: [],
+        noData: [],
         failing: [
           {
             id: "exp_search",
@@ -137,7 +161,10 @@ describe("Overview page", () => {
   it("renders the Environment policy posture per write", () => {
     const html = render({});
 
-    expect(html).toContain("Enable / disable a Flag");
+    // ADR-0029: the kill switch is never gated, so this row is about turning a
+    // Flag on. Labelling it "enable / disable" would misread as a gated kill switch.
+    expect(html).toContain("Enabled state (turn on)");
+    expect(html).not.toContain("Enable / disable a Flag");
     expect(html).toContain("Start an Experiment Run");
     expect(html).toContain(`href="${SCOPE_HREF}/settings"`);
   });

@@ -1,10 +1,11 @@
 import type { AppOverviewResponse } from "@splitch/contracts";
-import { EmptyState } from "@splitch/ui/state/empty-state";
 import { isCalmOverview } from "#lib/overview-view";
+import { OverviewCalmState } from "./overview-calm-state";
 import { OverviewDecisionCard } from "./overview-decision-card";
 import { OverviewEnvironmentCard } from "./overview-environment-card";
 import { OverviewFailureCard } from "./overview-failure-card";
 import { OverviewFlagChangesCard } from "./overview-flag-changes-card";
+import { OverviewNoDataCard } from "./overview-no-data-card";
 
 export function OverviewPage({
   env,
@@ -38,10 +39,7 @@ export function OverviewPage({
       <div className="grid gap-4 lg:grid-cols-2">
         {calm ? (
           <div className="lg:col-span-2" data-overview-state="calm">
-            <EmptyState
-              description="No Experiment is waiting on a decision, nothing is failing, and no Flag Configuration changed recently."
-              title="Nothing needs your attention"
-            />
+            <OverviewCalmState scopeHref={scopeHref} />
           </div>
         ) : (
           <>
@@ -60,6 +58,9 @@ export function OverviewPage({
               scopeHref={scopeHref}
               windowDays={overview.flagConfiguration.windowDays}
             />
+            {overview.experiments.status === "ok" && overview.experiments.noData.length > 0 ? (
+              <OverviewNoDataCard experiments={overview.experiments} scopeHref={scopeHref} />
+            ) : null}
           </>
         )}
         <OverviewEnvironmentCard

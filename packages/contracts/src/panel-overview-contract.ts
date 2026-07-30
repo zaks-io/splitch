@@ -57,6 +57,12 @@ export type OverviewFailingExperiment = z.infer<typeof OverviewFailingExperiment
  * `retryable` is carried on the wire rather than derived in each skin. A refusal
  * that tells an operator to retry something no retry can fix is its own failure
  * mode, so the Worker that knows which fault it hit is the one that decides.
+ *
+ * `noData` carries the running Experiments whose Analysis result is absent: the
+ * read succeeded and the answer is "not yet", which is neither attention nor a
+ * clean bill of health. It is the same `no_data` state the Environment attention
+ * rollup reports, and dropping those Experiments would let an unknown Run render
+ * as calm (ADR-0036).
  */
 export const OverviewExperimentsSchema = z.discriminatedUnion("status", [
   z
@@ -64,6 +70,7 @@ export const OverviewExperimentsSchema = z.discriminatedUnion("status", [
       status: z.literal("ok"),
       needingDecision: z.array(OverviewDecisionExperimentSchema),
       failing: z.array(OverviewFailingExperimentSchema),
+      noData: z.array(OverviewExperimentRefSchema),
     })
     .strict(),
   z

@@ -97,8 +97,22 @@ test.describe("App Overview", () => {
       "Nothing needs your attention",
     );
     await expect(page.locator("[data-overview-state='unavailable']")).toHaveCount(0);
+    // Calm still points at the next thing to make (screen-inventory.md).
+    const calm = page.locator("[data-overview-state='calm']");
+    await expect(calm.getByRole("link", { name: "Create a Flag" })).toHaveAttribute(
+      "href",
+      `${overviewHref(states.calm.environmentKey)}/flags`,
+    );
+    await expect(calm.getByRole("link", { name: "Create an Experiment" })).toHaveAttribute(
+      "href",
+      `${overviewHref(states.calm.environmentKey)}/experiments`,
+    );
     // The Environment card is policy posture, not attention, so it survives calm.
     await expect(page.locator("[data-overview-card='environment']")).toBeVisible();
+    // ADR-0029: the kill switch is never gated, so this row is about turning on.
+    await expect(
+      page.locator("[data-overview-card='environment'] [data-overview-policy='enabledState']"),
+    ).toContainText("Enabled state (turn on)");
     await expect(page.locator("[data-overview-card='decision']")).toHaveCount(0);
 
     await captureThemeScreenshots(page, testInfo, "app-overview-calm");

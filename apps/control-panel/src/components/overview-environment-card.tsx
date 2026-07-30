@@ -7,13 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@splitch/ui/components/card";
-
-const POLICY_LABELS: Array<{ key: keyof EnvironmentPolicy; label: string }> = [
-  { key: "enabledState", label: "Enable / disable a Flag" },
-  { key: "variantAvailability", label: "Change Variant availability" },
-  { key: "targetingRolloutValue", label: "Change targeting or rollout" },
-  { key: "startExperimentRun", label: "Start an Experiment Run" },
-];
+import { ENVIRONMENT_POLICY_LABELS } from "#lib/environment-policy-labels";
 
 export function OverviewEnvironmentCard({
   environmentKey,
@@ -36,15 +30,15 @@ export function OverviewEnvironmentCard({
       </CardHeader>
       <CardContent className="grid gap-2">
         <ul className="grid gap-2">
-          {POLICY_LABELS.map((entry) => (
+          {ENVIRONMENT_POLICY_LABELS.map(([key, label]) => (
             <li
               className="flex items-center justify-between gap-2 text-sm"
-              data-overview-policy={entry.key}
-              key={entry.key}
+              data-overview-policy={key}
+              key={key}
             >
-              <span className="text-muted-foreground">{entry.label}</span>
-              <Badge variant={policy[entry.key] === "confirm" ? "default" : "secondary"}>
-                {policy[entry.key] === "confirm" ? "Confirm" : "Allow"}
+              <span className="text-muted-foreground">{label}</span>
+              <Badge variant={policy[key] === "confirm" ? "default" : "secondary"}>
+                {policy[key] === "confirm" ? "Confirm" : "Allow"}
               </Badge>
             </li>
           ))}

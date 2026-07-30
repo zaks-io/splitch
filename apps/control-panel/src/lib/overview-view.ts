@@ -83,7 +83,8 @@ export function experimentsUnavailableCopy(
 /**
  * True only when every section was read successfully AND every one of them is
  * empty. An unavailable section can never produce the calm empty state, because
- * "nothing needs you" and "we could not look" are different answers.
+ * "nothing needs you" and "we could not look" are different answers — and neither
+ * can a running Experiment with no Analysis result, because "not yet" is a third.
  */
 export function isCalmOverview(input: {
   experiments: OverviewExperiments;
@@ -93,6 +94,7 @@ export function isCalmOverview(input: {
   return (
     input.experiments.needingDecision.length === 0 &&
     input.experiments.failing.length === 0 &&
+    input.experiments.noData.length === 0 &&
     input.recentlyChanged.length === 0
   );
 }

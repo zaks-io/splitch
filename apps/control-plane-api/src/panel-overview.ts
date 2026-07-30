@@ -112,7 +112,7 @@ async function readExperimentAttention(
   const readings = await mapWithConcurrency(
     running,
     OVERVIEW_ANALYSIS_READ_CONCURRENCY,
-    async (experiment): Promise<OverviewExperimentReading | null> => {
+    async (experiment): Promise<OverviewExperimentReading> => {
       if (!experiment.liveRunId) throw new ExperimentIntegrityError(experiment.id);
       const run = await deps.repo.experiments.getRun(scope, experiment.liveRunId);
       if (!run) throw new ExperimentIntegrityError(experiment.id);
@@ -125,26 +125,25 @@ async function readExperimentAttention(
         },
         input.actorId,
       );
-      return stats === null ? null : reading(experiment.id, experiment.name, run, stats);
+      const ref = { id: experiment.id, name: experiment.name, runId: run.id };
+      // An absent Analysis result is reported, never dropped: a running Run whose
+      // state nobody knows must not be subtracted from the counts the calm state
+      // is computed from (ADR-0036).
+      return stats === null ? { ...ref, state: "no_data" } : reading(ref, run, stats);
     },
   );
 
-  return {
-    status: "ok",
-    ...classifyOverviewExperiments(readings.filter((value) => value !== null)),
-  };
+  return { status: "ok", ...classifyOverviewExperiments(readings) };
 }
 
 function reading(
-  id: string,
-  name: string,
-  run: { id: string; horizon: string; sampleSizeLocked: number | null },
+  ref: { id: string; name: string; runId: string },
+  run: { horizon: string; sampleSizeLocked: number | null },
   stats: StatsOutput,
 ): OverviewExperimentReading {
   return {
-    id,
-    name,
-    runId: run.id,
+    ...ref,
+    state: "read",
     horizon: run.horizon,
     sampleSizeLocked: run.sampleSizeLocked,
     stats,
