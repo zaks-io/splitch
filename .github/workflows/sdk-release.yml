@@ -175,12 +175,25 @@ jobs:
         with:
           egress-policy: audit
 
+      # The sdk-v* tag ruleset restricts creation/update/deletion, and the
+      # standard Actions token cannot be a ruleset bypass actor. This dedicated
+      # App (contents:write only, installed on this repo) is the sole bypass
+      # actor; the step fails loudly if its credentials are absent.
+      - name: Mint SDK release App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.SDK_RELEASE_APP_ID }}
+          private-key: ${{ secrets.SDK_RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           ref: ${{ needs.validate.outputs.commit_sha }}
           persist-credentials: true
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Download release artifacts
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
@@ -190,7 +203,7 @@ jobs:
 
       - name: Create or update draft GitHub Release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_SHA: ${{ needs.validate.outputs.commit_sha }}
         run: |
           set -euo pipefail
