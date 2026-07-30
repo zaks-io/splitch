@@ -66,7 +66,7 @@ export class OrderedWriter extends AuthoritativeSerialWriter {
       candidate.kind === "client_key" && (candidate.originAllowlist ?? null) !== null;
     const isFirst = isRestriction === (this.first === "restriction");
     if (!isFirst) await this.firstLanded;
-    if (isRestriction) this.originAllowlist = ["https://app.example"];
+    if (isRestriction) this.originAllowlist = candidate.originAllowlist ?? null;
 
     try {
       await super.put(write);

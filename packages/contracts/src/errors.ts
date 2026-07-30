@@ -143,7 +143,7 @@ const errorMembers = [
       frozenFields: z.array(z.string()),
       currentRunId: z.string(),
       attemptedChange: z.string(),
-      recommendedAction: RecommendedActionSchema,
+      recommendedAction: z.literal("CREATE_NEW_RUN"),
     }),
   ),
   member(
@@ -152,7 +152,7 @@ const errorMembers = [
       lockedFields: z.array(z.string()),
       currentRunId: z.string(),
       attemptedChange: z.string(),
-      recommendedAction: RecommendedActionSchema,
+      recommendedAction: z.literal("CREATE_NEW_RUN"),
     }),
   ),
   member(
@@ -161,7 +161,7 @@ const errorMembers = [
       currentTargetingKey: z.string(),
       attemptedTargetingKey: z.string(),
       experimentId: z.string(),
-      recommendedAction: RecommendedActionSchema,
+      recommendedAction: z.literal("CREATE_NEW_RUN"),
     }),
   ),
   member(
@@ -170,7 +170,7 @@ const errorMembers = [
       runId: z.string(),
       currentState: z.enum(["draft", "ended"]),
       attemptedOp: z.string(),
-      recommendedAction: RecommendedActionSchema,
+      recommendedAction: z.literal("START_A_RUN"),
     }),
   ),
   member(
@@ -179,7 +179,7 @@ const errorMembers = [
       experimentId: z.string(),
       runningRunId: z.string(),
       attemptedOp: z.string(),
-      recommendedAction: RecommendedActionSchema,
+      recommendedAction: z.literal("END_RUNNING_RUN_FIRST"),
     }),
   ),
   member(
@@ -187,7 +187,7 @@ const errorMembers = [
     z.object({
       experimentId: z.string(),
       currentRunId: z.string().nullable(),
-      recommendedAction: RecommendedActionSchema,
+      recommendedAction: z.literal("EDIT_DRAFT_THEN_START"),
     }),
   ),
   member(
@@ -196,7 +196,7 @@ const errorMembers = [
       flagId: z.string(),
       environmentId: z.string(),
       missingVariants: z.array(z.string()),
-      recommendedAction: RecommendedActionSchema,
+      recommendedAction: z.literal("ADD_VARIANT_TO_ENV"),
     }),
   ),
   member(
@@ -274,10 +274,10 @@ const errorMembers = [
     "ATTENTION_FANOUT_LIMIT_EXCEEDED",
     z.object({
       appId: z.string(),
-      limit: z.number(),
-      environments: z.number(),
+      limit: z.number().int(),
+      environments: z.number().int(),
       // null when the Environment count alone was over budget, so no plan ran.
-      runningExperiments: z.number().nullable(),
+      runningExperiments: z.number().int().nullable(),
       recommendedAction: z.literal("READ_PER_ENVIRONMENT"),
     }),
   ),

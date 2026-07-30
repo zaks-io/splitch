@@ -28,17 +28,34 @@ interface FetcherLike {
   fetch(request: Request): Promise<Response>;
 }
 
-export function createAnalysisResultsReader(fetcher: FetcherLike): AnalysisResultsReader {
+/**
+ * Per-read bound on the Analysis service-binding fetch. Up to
+ * ANALYSIS_READ_LIMIT (200) of these run at ANALYSIS_READ_CONCURRENCY (8) for
+ * one rollup request; without this, one hung binding call would occupy a
+ * concurrency slot for the platform's full subrequest duration and this
+ * polled route would degrade to high tail latency instead of a fast,
+ * structured SERVICE_UNAVAILABLE. 10s matches the route's polling cadence
+ * (attention-rollup.ts is read repeatedly by agents/Panel, not once).
+ */
+const ANALYSIS_READ_TIMEOUT_MS = 10_000;
+
+export function createAnalysisResultsReader(
+  fetcher: FetcherLike,
+  timeoutMs: number = ANALYSIS_READ_TIMEOUT_MS,
+): AnalysisResultsReader {
   return {
     async read(scope, actorId) {
       let response: Response;
       try {
         response = await fetcher.fetch(
-          scopedAnalysisResultsRequest({
-            operation: "experiment_results_post",
-            actorId,
-            ...scope,
-          }),
+          new Request(
+            scopedAnalysisResultsRequest({
+              operation: "experiment_results_post",
+              actorId,
+              ...scope,
+            }),
+            { signal: AbortSignal.timeout(timeoutMs) },
+          ),
         );
       } catch (cause) {
         throw new AnalysisResultsUnavailableError(cause);
