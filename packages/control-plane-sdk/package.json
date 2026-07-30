@@ -24,6 +24,10 @@
     "./panel-metrics": {
       "types": "./src/panel-metrics.ts",
       "default": "./src/panel-metrics.ts"
+    },
+    "./panel-settings": {
+      "types": "./src/panel-settings.ts",
+      "default": "./src/panel-settings.ts"
     }
   },
   "files": [

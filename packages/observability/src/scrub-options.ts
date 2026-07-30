@@ -6,5 +6,10 @@ import type { ScrubOptions } from "@splitch/privacy";
  * splitch prefixes until a Worker overrides via `scrubOptions`.
  */
 export const OBSERVABILITY_SCRUB_OPTIONS: ScrubOptions = {
-  extraPatterns: [/tk-[a-z0-9-]+/gi, /spl_[a-z0-9_-]{16,}/gi],
+  extraPatterns: [
+    /tk-[a-z0-9-]+/gi,
+    /spl_[a-z0-9_-]{16,}/gi,
+    /sk_[a-f0-9]{64}/gi,
+    /pk_[a-f0-9]{64}/gi,
+  ],
 };

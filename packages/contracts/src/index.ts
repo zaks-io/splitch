@@ -1,5 +1,15 @@
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the contracts surface is intentionally aggregated here
 export { accessTokenRevocationKey, accessTokenRevocationTtl } from "./access-token-revocation";
+export {
+  ClientOriginSchema,
+  NormalizedOriginAllowlistSchema,
+  normalizeClientOrigins,
+  OriginAllowlistSchema,
+} from "./client-origin";
+export {
+  CONTROL_PANEL_DELEGATION_HEADER,
+  PANEL_API_KEY_SCOPES,
+} from "./control-panel-binding";
 export { errorStatusByCode, httpStatusForError } from "./error-status";
 export {
   ErrorCodeSchema,

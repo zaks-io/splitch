@@ -8,9 +8,9 @@ import {
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
 import {
+  McpDelegationReplayDurableObject,
   makeDurableMcpDelegationReplayGuard,
   makeMcpDelegationAuthResolver,
-  McpDelegationReplayDurableObject,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import { authJwksUri } from "./auth-jwks-config";
@@ -26,9 +26,10 @@ import type { ControlPlaneApiEnv } from "./env";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
+import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
 import { makePanelDelegationReplayStore } from "./panel-identity-replay";
 import { makePanelSessionAccess } from "./panel-session-access";
-import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
+import { panelSettingsRead } from "./panel-settings";
 import { rateLimiterForTarget } from "./rate-limit";
 import { makePanelSessionStore, makeSessionStore } from "./session-store";
 
@@ -210,13 +211,14 @@ async function handleRequest(
           ),
         })
       : panelAuthResolver;
-  const panelExperiments = await handleSignedPanelExperiments(
+  const panelResponse = await handleSignedControlPanelRequest(
     request,
     env,
     panelProtocol,
     authResolver,
+    repo,
   );
-  if (panelExperiments) return panelExperiments;
+  if (panelResponse) return panelResponse;
   const app = createApp({
     authResolver,
     rateLimiter: rateLimiterForTarget(
@@ -236,6 +238,44 @@ async function handleRequest(
   });
 
   return app.fetch(request, env);
+}
+
+async function handleSignedControlPanelRequest(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  protocol: PanelProtocol,
+  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
+  repo: ReturnType<typeof createRepository>,
+): Promise<Response | null> {
+  return (
+    (await handleSignedPanelExperiments(request, env, protocol, authResolver)) ??
+    handleSignedPanelSettings(request, env, protocol, authResolver, repo)
+  );
+}
+
+async function handleSignedPanelSettings(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  protocol: PanelProtocol,
+  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
+  repo: ReturnType<typeof createRepository>,
+): Promise<Response | null> {
+  // Keep this binding-only read narrow like handleSignedPanelExperiments; mutation
+  // routes still inherit the full createApp rate-limit and observability stack below.
+  if (protocol !== "signed") return null;
+  const operation = parseControlPanelBindingOperation(request);
+  if (operation?.id !== "settings_get") return null;
+  const auth = await authResolver(request);
+  if (!auth.ok) return unauthorized();
+  return panelSettingsRead(
+    {
+      repo,
+      credentialStore: env.CREDENTIAL_STORE,
+      credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
+    },
+    operation,
+    auth.principal,
+  );
 }
 
 async function handleSignedPanelExperiments(

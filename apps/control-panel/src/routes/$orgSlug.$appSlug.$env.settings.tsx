@@ -1,8 +1,12 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@splitch/ui/components/card";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
-import { createFileRoute } from "@tanstack/react-router";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { createFileRoute, getRouteApi } from "@tanstack/react-router";
+import { EnvironmentSettings } from "#components/environment-settings";
 import { reportRouteError } from "#lib/panel-observability";
+import { environmentSettingsQuery } from "#lib/settings-query";
+
+const appScopeRoute = getRouteApi("/$orgSlug/$appSlug/$env");
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/settings")({
   onError: ({ error }) => {
@@ -14,14 +18,12 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/settings")({
 });
 
 function SettingsSectionRoute() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Settings</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-muted-foreground text-sm">App and Environment settings surface.</p>
-      </CardContent>
-    </Card>
+  const { scope } = appScopeRoute.useLoaderData();
+  const { data } = useSuspenseQuery(
+    environmentSettingsQuery({
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+    }),
   );
+  return <EnvironmentSettings settings={data} />;
 }

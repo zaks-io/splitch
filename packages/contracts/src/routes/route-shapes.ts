@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { OriginAllowlistSchema } from "../client-origin";
 import {
   ConditionSchema,
   PercentageRolloutSchema,
@@ -188,7 +189,7 @@ export const PatchSegmentRequestSchema = z
 
 export const PatchClientKeyRequestSchema = z
   .object({
-    originAllowlist: z.array(z.string()).nullable().optional(),
+    originAllowlist: OriginAllowlistSchema.nullable().optional(),
     rateLimitRps: z.number().optional(),
   })
   .strict();

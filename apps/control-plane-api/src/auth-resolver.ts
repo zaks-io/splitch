@@ -213,7 +213,7 @@ async function resolvePanelPrincipal(
     };
   }
 
-  return resolvePanelAppPrincipal(operation, delegation.actorId, panelAccess);
+  return resolvePanelResourcePrincipal(operation, delegation.actorId, panelAccess);
 }
 
 async function resolveBoundedPanelSessionPrincipal(
@@ -243,7 +243,7 @@ async function resolveBoundedPanelSessionPrincipal(
   };
 }
 
-async function resolvePanelAppPrincipal(
+async function resolvePanelResourcePrincipal(
   operation: Exclude<
     ReturnType<typeof parseControlPanelBindingOperation>,
     { id: "apps_create" | "experiments_detail" | "experiments_list" } | null

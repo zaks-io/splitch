@@ -4,6 +4,7 @@ import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
+import { readOrProvisionClientKey } from "../src/client-key-provisioning";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
 import { makeSessionStore } from "../src/session-store";
@@ -21,6 +22,7 @@ const APP = {
   appKey: "client-key-race",
 };
 const ENV = { environmentId: "env_client_key_race_prod", key: "prod" };
+const SETTINGS_ENV = { environmentId: "env_client_key_settings_read", key: "settings-read" };
 const ADMIN = "user_client_key_race_admin";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
@@ -42,6 +44,7 @@ beforeAll(async () => {
   await seedOrgApp(bindings.d1, APP);
   await seedAppMember(bindings.d1, { appId: APP.appId, userId: ADMIN, role: "admin" });
   await seedEnvironment(bindings.d1, { appId: APP.appId, ...ENV });
+  await seedEnvironment(bindings.d1, { appId: APP.appId, ...SETTINGS_ENV });
 });
 
 beforeEach(async () => {
@@ -94,6 +97,28 @@ async function request(jwt: string): Promise<Response> {
 }
 
 describe("control-plane Client Key provisioning", () => {
+  it("writes the credential cache only when a Settings read creates the key", async () => {
+    const repo = createRepository(h.bindings.d1);
+    const writes: string[] = [];
+    const credentialStore = {
+      put: async (key: string) => {
+        writes.push(key);
+      },
+    } as unknown as KVNamespace;
+    const ctx = {
+      appId: APP.appId,
+      environmentId: SETTINGS_ENV.environmentId,
+      organizationId: APP.orgId,
+      scope: envScope(APP.appId, SETTINGS_ENV.environmentId),
+    };
+
+    const first = await readOrProvisionClientKey({ repo, credentialStore }, ctx);
+    const second = await readOrProvisionClientKey({ repo, credentialStore }, ctx);
+
+    expect(second.keyId).toBe(first.keyId);
+    expect(writes).toHaveLength(1);
+  });
+
   it("keeps lazy provisioning single-active under stale concurrent reads", async () => {
     const jwt = await token();
     const realRepo = createRepository(h.bindings.d1);
