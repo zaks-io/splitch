@@ -49,7 +49,8 @@ routes, DNS, or GitHub environment configuration.
   except `sdk-publish`. npm trusted publishing supports GitHub-hosted runners, not Blacksmith, so that
   release-published workflow uses `ubuntu-24.04` and must not receive an npm token.
 - Use larger Blacksmith Linux runners only for measured bottlenecks, for example large build or test
-  shards.
+  shards. The `ci` verify job is one: it fans the whole Turbo graph out on
+  `blacksmith-8vcpu-ubuntu-2404`.
 - Keep upstream cache actions such as `actions/cache` and `actions/setup-node`; Blacksmith redirects
   standard caches without workflow-specific cache forks.
 - Every repository that uses `runs-on: blacksmith-*` must have the Blacksmith GitHub App installed.

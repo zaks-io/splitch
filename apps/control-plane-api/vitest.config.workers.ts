@@ -44,6 +44,7 @@ export default defineConfig(async () => {
       },
     },
     test: {
+      name: "workers",
       include: ["test/**/*.{test,spec}.ts"],
       passWithNoTests: true,
       setupFiles: ["./test/apply-migrations.ts"],
