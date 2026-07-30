@@ -119,6 +119,23 @@ describe("control-plane Flag list read bound", () => {
     expect(listed.readTruncated).toBe(true);
   });
 
+  it("never materializes more Flags than one row past the ceiling", async () => {
+    const createdApp = await createDefaultApp(h);
+    await seedFlags(createdApp.app.id, FLAG_LIST_READ_LIMIT + 10);
+    const repo = createRepository(h.bindings.d1);
+    const listFlagPage = vi.fn(repo.flags.listFlagPage.bind(repo.flags));
+    const spied: Repository = { ...repo, flags: { ...repo.flags, listFlagPage } };
+
+    await listFlags(createdApp.app.id, spied);
+
+    // The wire response cannot see this: drop the `limit` from `listFlagPage`
+    // and `readTruncated`, `readLimit` and `items` are all byte-identical, only
+    // the cost changes. So the READ is asserted directly -- one row past the
+    // ceiling, never the 210 the App happens to hold.
+    const page = await listFlagPage.mock.results[0]?.value;
+    expect(page).toHaveLength(FLAG_LIST_READ_LIMIT + 1);
+  });
+
   it("resolves every Variant catalog in one read rather than one per Flag", async () => {
     const createdApp = await createDefaultApp(h);
     await seedFlags(createdApp.app.id, 25);

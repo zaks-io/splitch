@@ -103,10 +103,21 @@ export function makeFlagRepo(db: Db) {
       return pages.flat();
     },
 
-    /** App-scoped Segment fetch by a set of IDs (e.g. for a draft Run snapshot). */
-    listSegmentsByIds(scope: TenantScope, ids: readonly string[]) {
-      if (ids.length === 0) return Promise.resolve([] as (typeof segments.$inferSelect)[]);
-      return segmentsTable.findMany(scope, inArray(segments.id, [...ids]));
+    /**
+     * App-scoped Segment fetch by a set of IDs (e.g. for a draft Run snapshot).
+     *
+     * Batched because D1 caps bound parameters per statement; see `idBatches`.
+     * The ids come from `experiment.draft_segment_ids`, written from the request
+     * body against a schema with no length cap, so this set is caller-controlled
+     * and unbounded: unbatched, a draft carrying 100+ Segments made Start fail
+     * with `too many SQL variables` rather than start the Run.
+     */
+    async listSegmentsByIds(scope: TenantScope, ids: readonly string[]) {
+      if (ids.length === 0) return [] as (typeof segments.$inferSelect)[];
+      const pages = await Promise.all(
+        idBatches(ids).map((batch) => segmentsTable.findMany(scope, inArray(segments.id, batch))),
+      );
+      return pages.flat();
     },
 
     getSegment(scope: TenantScope, segmentId: string) {
