@@ -8,9 +8,18 @@ import {
   DialogTitle,
 } from "@splitch/ui/components/dialog";
 import { Spinner } from "@splitch/ui/components/spinner";
+import { startConfirmationCopy } from "#lib/experiment-run-draft-model";
 
+/**
+ * `runningRun` is the Run this Start would actually abandon, which is only ever
+ * a Run that is still running. It is deliberately NOT the Run the form
+ * pre-filled from: after an End, that is a Run that already stopped days ago,
+ * and asking an operator to confirm abandoning it warns about a consequence
+ * that has already happened. Warnings that are not true get dismissed reflexively,
+ * and this is the one dialog that must not be.
+ */
 export function ExperimentRunStartConfirmation({
-  baseRun,
+  runningRun,
   error,
   isStarting,
   nextRunNumber,
@@ -18,7 +27,7 @@ export function ExperimentRunStartConfirmation({
   onStart,
   segmentIds,
 }: {
-  baseRun: PanelExperimentRun | undefined;
+  runningRun: PanelExperimentRun | undefined;
   error: string | undefined;
   isStarting: boolean;
   nextRunNumber: number;
@@ -26,15 +35,7 @@ export function ExperimentRunStartConfirmation({
   onStart: () => void;
   segmentIds: string[];
 }) {
-  const title = baseRun
-    ? `Run ${baseRun.runNumber} will be abandoned`
-    : "A fresh sample will begin";
-  const description = baseRun
-    ? `Run ${baseRun.runNumber} stops accumulating and becomes a frozen archive. Run ${nextRunNumber} starts a fresh sample from zero. Runs are never pooled.`
-    : `Run ${nextRunNumber} starts a fresh sample from zero.`;
-  const action = baseRun
-    ? `Abandon Run ${baseRun.runNumber} and Start Run ${nextRunNumber}`
-    : `Start Run ${nextRunNumber}`;
+  const { action, description, title } = startConfirmationCopy(runningRun, nextRunNumber);
 
   return (
     <>

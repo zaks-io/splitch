@@ -86,16 +86,6 @@ export function json(value: unknown): string {
   return JSON.stringify(value);
 }
 
-export function equalAllocation(names: string[]): Record<string, number> {
-  if (names.length === 0) return {};
-  const base = Math.floor((100 / names.length) * 100) / 100;
-  const allocation = Object.fromEntries(names.map((name) => [name, base]));
-  const remainder = 100 - Object.values(allocation).reduce((sum, value) => sum + value, 0);
-  const last = names.at(-1);
-  if (last) allocation[last] = (allocation[last] ?? 0) + remainder;
-  return allocation;
-}
-
 export async function runConfigHash(input: {
   salt: string;
   allocation: Record<string, number>;

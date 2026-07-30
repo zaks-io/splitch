@@ -236,7 +236,8 @@ function experimentPatchFromBody(
   // is still the one the guard ruled against, so a Run that Starts in between
   // takes the write out and the whole decision is replayed. Skipping the fields
   // here and the compare-and-set there are two halves of one guarantee —
-  // ADR-0014's frozen assignment snapshot — and neither holds alone.
+  // ADR-0002's frozen assignment config, which ADR-0003 says only a new Run may
+  // change — and neither half holds alone.
   if (!runningRun) {
     applyPatchField(patch, body, "flagId", "flagId");
     applyPatchField(patch, body, "targetingKey", "targetingKeyField");

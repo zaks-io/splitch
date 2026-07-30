@@ -91,9 +91,10 @@ resolves Segments into concrete Targeting Rules and freezes those. The resolved 
 `targeting_rules` carries forward, so traffic is not silently widened; the references themselves
 have to be re-staged if the next Run should track a live Segment.
 
-`targeting_key_field` and `activation_metric_id` have no draft column of their own. While a Run is
-running they are rejected with `409 RUN_FROZEN` even under `stageForNextRun: true`; only
-`allocation`, `salt`, `targeting_rules`, and `segment_ids` can be staged.
+`flag_id`, `targeting_key_field`, `targeting_key_type`, and `activation_metric_id` have no draft
+column of their own. While a Run is running they are rejected with `409 RUN_FROZEN` even under
+`stageForNextRun: true`; the stageable set is exactly `allocation`, `salt`, `targeting_rules`, and
+`segment_ids`, and nothing else.
 
 **Measurement-config fields** (apply to live Run in place, no reset):
 

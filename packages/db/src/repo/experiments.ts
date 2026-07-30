@@ -57,7 +57,9 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
      * here; the UPDATE matches no row if a Run started or ended in between.
      *
      * Without it a PATCH decided while the Experiment was a draft could land on
-     * a row that a Run has since frozen, re-bucketing a live sample (ADR-0014).
+     * a row that a Run has since frozen, re-bucketing a live sample. ADR-0002
+     * makes that impossible by construction, and this is the write-path half of
+     * "by construction".
      * `expectedLiveRunId` is required, not optional, so no caller can skip the
      * check by forgetting it. A `null` result means either "no such Experiment"
      * or "lost the race" — the caller re-reads to tell them apart.

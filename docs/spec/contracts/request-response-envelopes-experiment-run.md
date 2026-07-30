@@ -59,7 +59,6 @@ Sorted by edit type. The Worker enforces the edit taxonomy (ADR-0003):
 - `flagId` — changing the controlled Flag
 - `allocation` — draft assignment allocation for the next Start
 - `salt` — draft assignment salt for the next Start
-- `variantSet` — draft assignment Variant set for the next Start
 - `targetingRules` — draft assignment inline rules for the next Start
 - `segmentIds` — draft assignment Segment ids for the next Start
 
@@ -109,7 +108,7 @@ with `VALIDATION_ERROR`; callers end a Run with `POST .../runs/{run_id}/end`.
 | `activationMetricId` | no       | assignment                       |
 | `allocation`         | no       | draft assignment                 |
 | `salt`               | no       | draft assignment                 |
-| `variantSet`         | no       | draft assignment                 |
+| `variantSet`         | no       | **not editable** — always `400`  |
 | `targetingRules`     | no       | draft assignment                 |
 | `segmentIds`         | no       | draft assignment                 |
 | `metrics`            | no       | measurement                      |
@@ -118,6 +117,14 @@ with `VALIDATION_ERROR`; callers end a Run with `POST .../runs/{run_id}/end`.
 | `dimensions`         | no       | measurement                      |
 | `confidenceLevel`    | no       | decision-locked                  |
 | `stageForNextRun`    | no       | explicit next-Run staging marker |
+
+`variantSet` is the one field the schema accepts and the Worker always rejects. A Run's Variant set
+is **derived** at Start from the Flag's Variant catalog and the staged allocation; the Experiment has
+no Variant-set column to write, so there is nothing a PATCH could mean. It stays in
+`PatchExperimentRequestSchema` on purpose: dropping it would make `.strict()` answer with a bare
+"unrecognized key", whereas keeping it lets the Worker answer with `VALIDATION_ERROR` pointing at
+`/flags/:flagId/variants` and at `allocation`. The rejection is unconditional — it does not depend on
+Run state, and `stageForNextRun: true` does not change it.
 
 On a running Run, assignment fields without `stageForNextRun: true` return `RUN_FROZEN`. The marker
 does not weaken Run immutability: it writes only the Experiment's draft staging fields. Start still

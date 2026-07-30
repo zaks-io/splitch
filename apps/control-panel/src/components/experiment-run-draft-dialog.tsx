@@ -27,6 +27,7 @@ import { useRouter } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { stageAndStartControlPanelExperimentRun } from "#lib/control-plane-experiment-functions";
 import {
+  allocationError,
   buildRunStartInput,
   initialRunDraft,
   targetingRulesError,
@@ -42,7 +43,11 @@ export function ExperimentRunDraftDialog({
   data: PanelExperimentDetailOutput;
   environmentId: string;
 }) {
-  const baseRun = data.runs.find((run) => run.status === "running") ?? data.runs[0];
+  // Two different questions, deliberately two different Runs: `runningRun` is
+  // what a Start would abandon (nothing, if none is running), while `baseRun` is
+  // only where the form pre-fills its assignment config from.
+  const runningRun = data.runs.find((run) => run.status === "running");
+  const baseRun = runningRun ?? data.runs[0];
   // The Control Plane assigns max(runNumber) + 1 across every Run. Deriving it
   // from `baseRun` would show a number the server will not assign whenever the
   // response is not ordered highest-first.
@@ -59,6 +64,7 @@ export function ExperimentRunDraftDialog({
           appId={appId}
           baseRun={baseRun}
           data={data}
+          runningRun={runningRun}
           environmentId={environmentId}
           nextRunNumber={nextRunNumber}
           onStarted={() => setOpen(false)}
@@ -75,6 +81,7 @@ function ExperimentRunDraftForm({
   environmentId,
   nextRunNumber,
   onStarted,
+  runningRun,
 }: {
   appId: string;
   baseRun: PanelExperimentRun | undefined;
@@ -82,9 +89,10 @@ function ExperimentRunDraftForm({
   environmentId: string;
   nextRunNumber: number;
   onStarted: () => void;
+  runningRun: PanelExperimentRun | undefined;
 }) {
   const router = useRouter();
-  const hasRunningRun = data.runs.some((run) => run.status === "running");
+  const hasRunningRun = runningRun !== undefined;
   const initial = initialRunDraft(data, baseRun);
   const [allocation, setAllocation] = useState(initial.allocation);
   const [targetingKey, setTargetingKey] = useState(initial.targetingKey);
@@ -97,17 +105,13 @@ function ExperimentRunDraftForm({
   const [step, setStep] = useState<"configure" | "confirm">("configure");
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string>();
-  const allocationTotal = Object.values(allocation).reduce((total, share) => total + share, 0);
-  const allocationError =
-    Math.abs(allocationTotal - 100) > 1e-6
-      ? `Allocation must total 100%. It currently totals ${allocationTotal}%.`
-      : null;
+  const allocationMessage = allocationError(allocation);
   const targetingError = targetingRulesError(targetingRules);
 
   function review(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(undefined);
-    if (draftIsInvalid(targetingKey, targetingKeyType, allocationError, targetingError)) return;
+    if (draftIsInvalid(targetingKey, targetingKeyType, allocationMessage, targetingError)) return;
     setStep("confirm");
   }
 
@@ -147,12 +151,12 @@ function ExperimentRunDraftForm({
   if (step === "confirm") {
     return (
       <ExperimentRunStartConfirmation
-        baseRun={baseRun}
         error={error}
         isStarting={isStarting}
         nextRunNumber={nextRunNumber}
         onBack={() => setStep("configure")}
         onStart={start}
+        runningRun={runningRun}
         segmentIds={data.experiment.draftSegmentIds}
       />
     );
@@ -173,10 +177,10 @@ function ExperimentRunDraftForm({
           <FieldDescription>Set a Variant to 0% to remove it from the next Run.</FieldDescription>
           <div className="grid gap-3 sm:grid-cols-2">
             {Object.entries(allocation).map(([variant, share]) => (
-              <Field data-invalid={Boolean(allocationError)} key={variant}>
+              <Field data-invalid={Boolean(allocationMessage)} key={variant}>
                 <FieldLabel htmlFor={`next-run-allocation-${variant}`}>{variant}</FieldLabel>
                 <Input
-                  aria-invalid={Boolean(allocationError)}
+                  aria-invalid={Boolean(allocationMessage)}
                   id={`next-run-allocation-${variant}`}
                   max={100}
                   min={0}
@@ -188,12 +192,12 @@ function ExperimentRunDraftForm({
                   }
                   step={1}
                   type="number"
-                  value={share}
+                  value={Number.isFinite(share) ? share : ""}
                 />
               </Field>
             ))}
           </div>
-          <FieldError>{allocationError}</FieldError>
+          <FieldError>{allocationMessage}</FieldError>
         </FieldSet>
         <FieldSet>
           <FieldLegend>Assignment identity</FieldLegend>
@@ -281,10 +285,10 @@ function ExperimentRunDraftForm({
 function draftIsInvalid(
   targetingKey: string,
   targetingKeyType: string,
-  allocationError: string | null,
+  allocationMessage: string | null,
   targetingError: string | null,
 ): boolean {
   return (
-    !targetingKey.trim() || !targetingKeyType.trim() || Boolean(allocationError || targetingError)
+    !targetingKey.trim() || !targetingKeyType.trim() || Boolean(allocationMessage || targetingError)
   );
 }

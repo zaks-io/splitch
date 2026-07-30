@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { LOCAL_E2E_RUN_CONFIG as run } from "./local-e2e-run-config.mjs";
 
 export const LOCAL_E2E_SESSION_TOKEN = `spl_${"101e2e".padEnd(64, "0")}`;
 export const LOCAL_E2E_SESSION_KEY = `session:${createHash("sha256")
@@ -69,51 +70,7 @@ const createdAt = "2026-07-18T00:00:00.000Z";
 // one silently ages out of the window and the fixture stops proving anything.
 const recentlyChangedAt = new Date(Date.now() - 2 * 60 * 60 * 1_000).toISOString();
 const staleChangedAt = "2026-06-01T00:00:00.000Z";
-const checkoutVariants = [
-  { id: "variant_checkout_control_e2e", name: "control", value: false },
-  { id: "variant_checkout_treatment_e2e", name: "treatment", value: true },
-];
-// A Run freezes its own Flag's Variants. Sharing one set across Flags would let a
-// Run point at a control Variant that its Experiment does not own.
-const significanceVariants = [
-  { id: "variant_significance_control_e2e", name: "control", value: false },
-  { id: "variant_significance_treatment_e2e", name: "treatment", value: true },
-];
-const guardrailVariants = [
-  { id: "variant_guardrail_control_e2e", name: "control", value: false },
-  { id: "variant_guardrail_treatment_e2e", name: "treatment", value: true },
-];
-const endedVariants = [
-  { id: "variant_ended_control_e2e", name: "control", value: false },
-  { id: "variant_ended_treatment_e2e", name: "treatment", value: true },
-];
-const srmVariants = [
-  { id: "variant_srm_control_e2e", name: "control", value: false },
-  { id: "variant_srm_treatment_e2e", name: "treatment", value: true },
-];
-const checkoutAllocation = { control: 50, treatment: 50 };
-const checkoutExpandedAllocation = { control: 70, treatment: 30 };
-const checkoutTargetingRules = [];
-const devRunSalt = "local-e2e-dev";
-const devPreviousRunSalt = "local-e2e-dev-previous";
-const prodRunSalt = "local-e2e-prod";
-const setupRunSalt = "local-e2e-setup";
-const devRunHash = runConfigHash(devRunSalt, checkoutExpandedAllocation);
-const devPreviousRunHash = runConfigHash(devPreviousRunSalt);
-const prodRunHash = runConfigHash(prodRunSalt);
-const setupRunHash = runConfigHash(setupRunSalt);
-const significanceRunSalt = "local-e2e-significance";
-const guardrailRunSalt = "local-e2e-guardrail";
-const endedRunSalt = "local-e2e-ended";
-const srmRunSalt = "local-e2e-srm";
-const significanceRunHash = runConfigHash(
-  significanceRunSalt,
-  checkoutAllocation,
-  significanceVariants,
-);
-const guardrailRunHash = runConfigHash(guardrailRunSalt, checkoutAllocation, guardrailVariants);
-const endedRunHash = runConfigHash(endedRunSalt, checkoutAllocation, endedVariants);
-const srmRunHash = runConfigHash(srmRunSalt, checkoutAllocation, srmVariants);
+const json = JSON.stringify;
 
 /**
  * One empty App per onboarding test. Flags are App-scoped, so a test that creates
@@ -270,14 +227,14 @@ INSERT INTO experiments (id, app_id, environment_id, key, flag_id, name, status,
   ('experiment_checkout_setup_e2e', 'app_checkout_e2e', 'env_checkout_setup_e2e', 'checkout-setup', 'flag_checkout_e2e', 'Checkout Setup Taxonomy', 'running', 'targetingKey', 'user', 'variant_checkout_control_e2e', '[{"metricId":"metric_setup_goal_e2e"},{"metricId":"metric_setup_secondary_e2e"}]', '[{"metricId":"metric_setup_guardrail_e2e"}]', '[]', 'run_checkout_setup_e2e', '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e'),
   ('experiment_agent_e2e', 'app_agent_e2e', 'env_agent_prod_e2e', 'routing-model', 'flag_agent_e2e', 'Routing Model', 'draft', 'targetingKey', 'user', NULL, '[]', '[]', '[]', NULL, '${createdAt}', '${createdAt}', 'user_local_e2e', 'user_local_e2e');
 INSERT INTO runs (id, app_id, environment_id, experiment_id, run_number, status, targeting_key_field, targeting_key_type, salt, allocation, variant_set, control_variant_id, targeting_rules, activation_metric_id, confidence_level, decision_family, guardrail_decisions, config_hash, started_at, created_at, created_by) VALUES
-  ('run_checkout_dev_previous_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_dev_e2e', 1, 'ended', 'targetingKey', 'user', '${devPreviousRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', 'variant_checkout_control_e2e', '${JSON.stringify(checkoutTargetingRules)}', NULL, 0.95, '[]', '[]', '${devPreviousRunHash}', '2026-07-16T00:00:00.000Z', '2026-07-16T00:00:00.000Z', 'user_local_e2e'),
-  ('run_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_dev_e2e', 2, 'running', 'targetingKey', 'user', '${devRunSalt}', '${JSON.stringify(checkoutExpandedAllocation)}', '${JSON.stringify(checkoutVariants)}', 'variant_checkout_control_e2e', '${JSON.stringify(checkoutTargetingRules)}', NULL, 0.95, '[]', '[]', '${devRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('run_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'experiment_checkout_prod_e2e', 1, 'running', 'targetingKey', 'user', '${prodRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', 'variant_checkout_control_e2e', '${JSON.stringify(checkoutTargetingRules)}', NULL, 0.95, '[]', '[]', '${prodRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('run_checkout_setup_e2e', 'app_checkout_e2e', 'env_checkout_setup_e2e', 'experiment_checkout_setup_e2e', 1, 'running', 'targetingKey', 'user', '${setupRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(checkoutVariants)}', 'variant_checkout_control_e2e', '${JSON.stringify(checkoutTargetingRules)}', NULL, 0.95, '[{"metricId":"metric_setup_goal_e2e"}]', '[{"metricId":"metric_setup_guardrail_e2e"}]', '${setupRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('run_checkout_significance_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_significance_e2e', 1, 'running', 'targetingKey', 'user', '${significanceRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(significanceVariants)}', 'variant_significance_control_e2e', '${JSON.stringify(checkoutTargetingRules)}', NULL, 0.95, '[{"metric_id":"checkout-conversion","variant":"treatment"}]', '[]', '${significanceRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('run_checkout_guardrail_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_guardrail_e2e', 1, 'running', 'targetingKey', 'user', '${guardrailRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(guardrailVariants)}', 'variant_guardrail_control_e2e', '${JSON.stringify(checkoutTargetingRules)}', NULL, 0.95, '[]', '[{"metric_id":"checkout-reliability","variant":"treatment","downside_threshold":-10,"guardrail_locked_at_run_start":true,"threshold_locked_at_run_start":true}]', '${guardrailRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('run_checkout_srm_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'experiment_checkout_srm_e2e', 1, 'running', 'targetingKey', 'user', '${srmRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(srmVariants)}', 'variant_srm_control_e2e', '${JSON.stringify(checkoutTargetingRules)}', NULL, 0.95, '[{"metric_id":"checkout-conversion","variant":"treatment"}]', '[]', '${srmRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('run_checkout_ended_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_ended_e2e', 1, 'ended', 'targetingKey', 'user', '${endedRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(endedVariants)}', 'variant_ended_control_e2e', '${JSON.stringify(checkoutTargetingRules)}', NULL, 0.95, '[]', '[]', '${endedRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e');
+  ('run_checkout_dev_previous_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_dev_e2e', 1, 'ended', 'targetingKey', 'user', '${run.salt.devPrevious}', '${json(run.allocation.checkout)}', '${json(run.variants.checkout)}', 'variant_checkout_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[]', '[]', '${run.hash.devPrevious}', '2026-07-16T00:00:00.000Z', '2026-07-16T00:00:00.000Z', 'user_local_e2e'),
+  ('run_checkout_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_dev_e2e', 2, 'running', 'targetingKey', 'user', '${run.salt.dev}', '${json(run.allocation.checkoutExpanded)}', '${json(run.variants.checkout)}', 'variant_checkout_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[]', '[]', '${run.hash.dev}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('run_checkout_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'experiment_checkout_prod_e2e', 1, 'running', 'targetingKey', 'user', '${run.salt.prod}', '${json(run.allocation.checkout)}', '${json(run.variants.checkout)}', 'variant_checkout_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[]', '[]', '${run.hash.prod}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('run_checkout_setup_e2e', 'app_checkout_e2e', 'env_checkout_setup_e2e', 'experiment_checkout_setup_e2e', 1, 'running', 'targetingKey', 'user', '${run.salt.setup}', '${json(run.allocation.checkout)}', '${json(run.variants.checkout)}', 'variant_checkout_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[{"metricId":"metric_setup_goal_e2e"}]', '[{"metricId":"metric_setup_guardrail_e2e"}]', '${run.hash.setup}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('run_checkout_significance_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_significance_e2e', 1, 'running', 'targetingKey', 'user', '${run.salt.significance}', '${json(run.allocation.checkout)}', '${json(run.variants.significance)}', 'variant_significance_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[{"metric_id":"checkout-conversion","variant":"treatment"}]', '[]', '${run.hash.significance}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('run_checkout_guardrail_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_guardrail_e2e', 1, 'running', 'targetingKey', 'user', '${run.salt.guardrail}', '${json(run.allocation.checkout)}', '${json(run.variants.guardrail)}', 'variant_guardrail_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[]', '[{"metric_id":"checkout-reliability","variant":"treatment","downside_threshold":-10,"guardrail_locked_at_run_start":true,"threshold_locked_at_run_start":true}]', '${run.hash.guardrail}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('run_checkout_srm_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'experiment_checkout_srm_e2e', 1, 'running', 'targetingKey', 'user', '${run.salt.srm}', '${json(run.allocation.checkout)}', '${json(run.variants.srm)}', 'variant_srm_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[{"metric_id":"checkout-conversion","variant":"treatment"}]', '[]', '${run.hash.srm}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('run_checkout_ended_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_ended_e2e', 1, 'ended', 'targetingKey', 'user', '${run.salt.ended}', '${json(run.allocation.checkout)}', '${json(run.variants.ended)}', 'variant_ended_control_e2e', '${json(run.targetingRules)}', NULL, 0.95, '[]', '[]', '${run.hash.ended}', '${createdAt}', '${createdAt}', 'user_local_e2e');
 UPDATE runs SET ended_at = '2026-07-17T12:00:00.000Z', end_reason = 'Prepared a larger treatment allocation' WHERE id = 'run_checkout_dev_previous_e2e';
 UPDATE runs SET start_reason = 'Increase treatment traffic' WHERE id = 'run_checkout_dev_e2e';
 UPDATE experiments SET description = 'A dedicated Setup-tab acceptance fixture', owner = 'growth', tags = '["checkout","setup"]', activation_metric_id = 'metric_setup_activation_e2e', conversion_window_ms = 86400000 WHERE id = 'experiment_checkout_setup_e2e';
@@ -307,24 +264,3 @@ ${onboardingApps
   .map((app) => `  ('${app.appId}', 'user_local_e2e', 'admin', '${createdAt}')`)
   .join(",\n")};
 `;
-
-function runConfigHash(salt, allocation = checkoutAllocation, variantSet = checkoutVariants) {
-  const config = {
-    salt,
-    allocation,
-    variantSet,
-    targetingRules: checkoutTargetingRules,
-  };
-  return `sha256:${createHash("sha256").update(stableStringify(config)).digest("hex")}`;
-}
-
-function stableStringify(value) {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value).sort(([left], [right]) => left.localeCompare(right));
-    return `{${entries
-      .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}

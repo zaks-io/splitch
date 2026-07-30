@@ -21,7 +21,9 @@ import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
  * (`targetingKey`, `targetingKeyType`, `flagId`, `activationMetricId`) are
  * writable. If a Run Starts before the write lands, those fields go onto a row
  * the new Run's published ExperimentConfig is already serving — re-bucketing a
- * live sample, which ADR-0014 forbids outright.
+ * live sample. ADR-0002 freezes a Run's assignment config for its whole life
+ * and ADR-0003 routes every assignment edit through a NEW Run, so there is no
+ * legal path by which a running Run's bucketing changes underneath it.
  *
  * Every test here Starts the Run from inside `beforeExperimentUpdate`, i.e.
  * strictly after the guard read and strictly before the write. Without that

@@ -79,6 +79,12 @@ export const PatchExperimentRequestSchema = z
     activationMetricId: z.string().nullable().optional(),
     allocation: DraftAllocationSchema.optional(),
     salt: z.string().optional(),
+    // Accepted structurally, ALWAYS rejected by the Worker with a 400. A Run's
+    // Variant set is derived at Start from the Flag's Variant catalog and the
+    // staged allocation, so the Experiment has no column for it. It stays in the
+    // schema only so the refusal can point at the Flag's Variant catalog instead
+    // of `.strict()` answering "unrecognized key" — see
+    // `variantSetNotPatchable` in the control-plane Worker.
     variantSet: z.array(VariantSchema).optional(),
     targetingRules: z.array(TargetingRuleSchema).optional(),
     segmentIds: z.array(z.string()).optional(),
