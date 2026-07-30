@@ -7,7 +7,7 @@ import {
   validationErrors,
 } from "./flag-definition-errors";
 import {
-  availableVariantReferenceCount,
+  explicitVariantReferenceCount,
   runningExperimentForVariant,
 } from "./flag-definition-guards";
 import {
@@ -145,7 +145,7 @@ export async function variantDeleteBlocker(
   }
 
   const envs = await deps.repo.identity.listEnvironments(loaded.scope);
-  const availableCount = await availableVariantReferenceCount(
+  const availableCount = await explicitVariantReferenceCount(
     deps.repo,
     loaded.appId,
     loaded.flag.id,

@@ -6,8 +6,9 @@ import {
   listFlags,
   updateFlag,
 } from "./flag-definition-flag-handlers";
-import { createVariant, deleteVariant, updateVariant } from "./flag-definition-variant-handlers";
 import type { FlagDefinitionDeps } from "./flag-definition-handler-utils";
+import { createVariant, deleteVariant } from "./flag-definition-variant-catalog";
+import { updateVariant } from "./flag-definition-variant-handlers";
 
 export function makeFlagDefinitionHandlers(deps: FlagDefinitionDeps) {
   return {

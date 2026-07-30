@@ -116,7 +116,9 @@ export const approvalOperations = [
   "flag_config_update",
   "flag_targeting_rules_replace",
   "flags_promote",
+  "flag_variants_create",
   "flag_variants_update",
+  "flag_variants_delete",
   "experiments_start",
 ] as const;
 export const ApprovalOperationSchema = z.enum(approvalOperations);

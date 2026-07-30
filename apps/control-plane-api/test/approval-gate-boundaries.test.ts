@@ -138,4 +138,22 @@ describe("an out-of-contract stored Environment Policy fails closed and diagnosa
     );
     expect(config?.version).toBe(1);
   });
+
+  it("names it on the gated mutation routes too, not only the Approval routes", async () => {
+    await h.d1
+      .prepare("UPDATE environments SET policy = ? WHERE id = ?")
+      .bind(JSON.stringify(outOfContractPolicy), ids.environmentId)
+      .run();
+
+    const patched = await patchConfig(h, "idem_c8", { availableVariantNames: ["control"] });
+    expect(patched.status).toBe(500);
+    expect(patched.code).toBe("INTERNAL_SERVER_ERROR");
+    expect(patched.message).toContain("stored Environment Policy is out of contract");
+
+    const config = await h.repo.flags.getFlagConfig(
+      envScope(ids.appId, ids.environmentId),
+      ids.flagId,
+    );
+    expect(config?.version).toBe(1);
+  });
 });

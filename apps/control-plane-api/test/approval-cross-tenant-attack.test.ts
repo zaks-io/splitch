@@ -31,11 +31,11 @@ describe("ATTACK: cross-Organization approval reads", () => {
     const jwt = await jwtFor(h, B.userId, [appAdminScope(B.appId)]);
 
     const single = await get(h, `/apps/${ids.appId}/approval-requests/${requestId}`, jwt);
-    expect(single.status).toBeGreaterThanOrEqual(400);
+    expect(single.status).toBe(403);
     expect(await single.text()).not.toContain(ids.configId);
 
     const list = await get(h, `/apps/${ids.appId}/approval-requests`, jwt);
-    expect(list.status).toBeGreaterThanOrEqual(400);
+    expect(list.status).toBe(403);
     expect(await list.text()).not.toContain(requestId);
   });
 
@@ -127,6 +127,35 @@ describe("ATTACK: cross-App approval writes", () => {
     });
   });
 
+  it("A9: a sibling App in the SAME Organization is still a hard boundary", async () => {
+    // Same Org, same owner, adjacent App: the case where an Org-level shortcut
+    // in the scoping seam would look harmless and read as authorized.
+    const requestId = await proposeA(h);
+    await seedAppMember(h.d1, { appId: ids.otherAppId, userId: USER_ID, role: "owner" });
+    const jwt = await jwtFor(h, USER_ID, [appAdminScope(ids.otherAppId)]);
+
+    const single = await get(h, `/apps/${ids.otherAppId}/approval-requests/${requestId}`, jwt);
+    expect(single.status).toBe(404);
+
+    const list = await get(h, `/apps/${ids.otherAppId}/approval-requests`, jwt);
+    expect(list.status).toBe(200);
+    expect(await list.json()).toMatchObject({ items: [], total: 0 });
+
+    const write = await reviewAs(
+      h,
+      ids.otherAppId,
+      requestId,
+      jwt,
+      "approve_and_apply",
+      "idem_a9_9271",
+    );
+    expect(write.status).toBe(404);
+    expect(await h.repo.approvals.getRequest(appScope(ids.appId), requestId)).toMatchObject({
+      status: "pending",
+    });
+    expect(await h.repo.approvals.latestReview(appScope(ids.appId), requestId)).toBeNull();
+  });
+
   it("A6: non-admin member cannot review, and nothing mutates", async () => {
     const requestId = await proposeA(h);
     const memberId = "user_lowpriv_9271";
@@ -142,7 +171,7 @@ describe("ATTACK: cross-App approval writes", () => {
       "approve_and_apply",
       "idem_a6_9271",
     );
-    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBe(403);
     expect(await h.repo.approvals.getRequest(appScope(ids.appId), requestId)).toMatchObject({
       status: "pending",
     });
@@ -170,7 +199,7 @@ describe("ATTACK: stale membership", () => {
       "approve_and_apply",
       "idem_a7_9271",
     );
-    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBe(403);
     expect(await h.repo.approvals.getRequest(appScope(ids.appId), requestId)).toMatchObject({
       status: "pending",
     });
@@ -180,7 +209,7 @@ describe("ATTACK: stale membership", () => {
     ).toMatchObject({ version: 1 });
 
     const read = await get(h, `/apps/${ids.appId}/approval-requests/${requestId}`, jwt);
-    expect(read.status).toBeGreaterThanOrEqual(400);
+    expect(read.status).toBe(403);
   });
 
   it("A8: demotion owner -> member between proposal and review blocks the apply", async () => {
@@ -199,7 +228,7 @@ describe("ATTACK: stale membership", () => {
       "approve_and_apply",
       "idem_a8_9271",
     );
-    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.status).toBe(403);
     expect(
       await h.repo.flags.getFlagConfig(envScope(ids.appId, ids.environmentId), ids.flagId),
     ).toMatchObject({ version: 1 });

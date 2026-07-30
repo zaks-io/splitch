@@ -4,10 +4,11 @@ import {
   type PolicyChangeType,
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
-import { renderError } from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { ConfigStoreWriter } from "./config-store";
 
 type PromotionSelect = Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0]["select"];
+type HandlerFn = (args: HandlerArgs<unknown>) => Promise<Response>;
 
 /**
  * A stored `environments.policy` that the Environment write API would reject.
@@ -37,7 +38,7 @@ class EnvironmentPolicyContractError extends Error {
  * as a named contract fault instead of an anonymous "unhandled runtime fault"
  * 500 that gives an operator nothing to act on (ADR-0036).
  */
-export async function diagnosableContractFaults(
+async function diagnosableContractFaults(
   requestId: string,
   body: () => Promise<Response>,
 ): Promise<Response> {
@@ -54,6 +55,22 @@ export async function diagnosableContractFaults(
       { requestId },
     );
   }
+}
+
+/**
+ * Wrap a whole handler table rather than individual call sites. Every gated
+ * mutation reads an Environment Policy, so per-call-site wrapping is guaranteed
+ * to drift: a route added later reads as covered while it still answers the
+ * anonymous "unhandled runtime fault" 500 the wrapper exists to eliminate.
+ */
+export function diagnosableHandlers<T extends Record<string, HandlerFn>>(handlers: T): T {
+  return Object.fromEntries(
+    Object.entries(handlers).map(([name, handler]) => [
+      name,
+      (args: HandlerArgs<unknown>) =>
+        diagnosableContractFaults(args.requestId, () => handler(args)),
+    ]),
+  ) as unknown as T;
 }
 
 export async function readEnvironmentPolicy(

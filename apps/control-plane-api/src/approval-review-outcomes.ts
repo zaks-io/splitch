@@ -1,7 +1,6 @@
 import {
   ApprovalPolicyContextSchema,
   type ApprovalRequest,
-  ApprovalTargetSchema,
   type ErrorCode,
   ErrorCodeSchema,
   ErrorDetailsSchema,
@@ -11,6 +10,7 @@ import type { Principal } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { approvalReviewId } from "./approval-canonical";
 import { approvalRequestProjection } from "./approval-model";
+import { rowTargetVersion } from "./approval-row-target";
 import type {
   ApprovalRequestRow,
   ApprovalResult,
@@ -18,7 +18,6 @@ import type {
   ApprovalServiceDeps,
   ReviewApprovalInput,
 } from "./approval-service-types";
-import { approvalTargetVersion } from "./approval-target";
 
 export async function materializeStale(
   deps: ApprovalServiceDeps,
@@ -148,19 +147,7 @@ async function staleReplay(
   requestId: string,
 ): Promise<ApprovalResult> {
   const contexts = ApprovalPolicyContextSchema.array().parse(JSON.parse(row.policyContexts));
-  const currentVersion = await approvalTargetVersion(
-    deps.repo,
-    row.appId,
-    {
-      type: ApprovalTargetSchema.parse({
-        type: row.targetType,
-        id: row.targetId,
-        version: row.targetVersion,
-      }).type,
-      id: row.targetId,
-    },
-    contexts,
-  );
+  const currentVersion = await rowTargetVersion(deps.repo, row, contexts, row.diff);
   return {
     ok: false,
     response: renderError(

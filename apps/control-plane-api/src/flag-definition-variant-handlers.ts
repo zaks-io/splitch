@@ -9,8 +9,6 @@ import {
   requiresReview,
   servableVariantEnvironments,
 } from "./approval-target";
-import { randomHex } from "./credential-cache";
-import { diagnosableContractFaults } from "./flag-config-policy";
 import { flagNotFound, variantNotFound } from "./flag-definition-errors";
 import {
   type FlagDefinitionDeps,
@@ -19,56 +17,14 @@ import {
 } from "./flag-definition-handler-utils";
 import { flagResponse } from "./flag-definition-model";
 import {
-  prepareCreateVariant,
   prepareUpdateVariant,
   type VariantPatch,
   type VariantRow,
-  variantDeleteBlocker,
 } from "./flag-definition-variant-prepare";
 import { objectBody, pathParam } from "./handler-input";
 
-export async function createVariant(
-  deps: FlagDefinitionDeps,
-  args: HandlerArgs<unknown>,
-): Promise<Response> {
-  const loaded = await loadWritableFlag(deps, args);
-  if (!loaded.ok) return loaded.response;
-
-  const body = objectBody(args.input);
-  const prepared = await prepareCreateVariant(deps, loaded.value, body, args.requestId);
-  if (!prepared.ok) return prepared.response;
-
-  const now = nowIso(deps);
-  const variant = await deps.repo.flags.addVariant(loaded.value.scope, loaded.value.flag.id, {
-    id: `var_${randomHex(12)}`,
-    name: body.name as string,
-    value: JSON.stringify(body.value),
-    ...(body.description ? { description: body.description as string } : {}),
-    createdAt: now,
-  });
-
-  const updatedFlag = body.isDefault
-    ? await deps.repo.flags.updateFlag(loaded.value.scope, loaded.value.flag.id, {
-        defaultVariantId: variant.id,
-        updatedAt: now,
-        updatedBy: args.principal.id,
-      })
-    : loaded.value.flag;
-  await resyncFlagSnapshots(deps, loaded.value.appId, loaded.value.flag.id);
-  return Response.json(
-    await flagResponse(deps.repo, loaded.value.appId, updatedFlag ?? loaded.value.flag),
-  );
-}
-
-export function updateVariant(
-  deps: FlagDefinitionDeps,
-  args: HandlerArgs<unknown>,
-): Promise<Response> {
-  return diagnosableContractFaults(args.requestId, () => updateVariantGated(deps, args));
-}
-
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validation and multi-Environment Approval contexts must be resolved before mutation
-async function updateVariantGated(
+export async function updateVariant(
   deps: FlagDefinitionDeps,
   args: HandlerArgs<unknown>,
 ): Promise<Response> {
@@ -199,7 +155,7 @@ function variantPatchGates(patch: VariantPatch): PolicyChangeType[] {
   return gates;
 }
 
-async function variantPolicyContexts(
+export async function variantPolicyContexts(
   repo: Repository,
   appId: string,
   flagId: string,
@@ -213,7 +169,7 @@ async function variantPolicyContexts(
   );
 }
 
-function variantProjection(flagId: string, variant: VariantRow): Record<string, unknown> {
+export function variantProjection(flagId: string, variant: VariantRow): Record<string, unknown> {
   return {
     flagId,
     name: variant.name,
@@ -228,35 +184,4 @@ function variantProposalInput(body: Record<string, unknown>): Record<string, unk
     ...(body.value !== undefined ? { value: body.value } : {}),
     ...(body.description !== undefined ? { description: body.description } : {}),
   };
-}
-
-export async function deleteVariant(
-  deps: FlagDefinitionDeps,
-  args: HandlerArgs<unknown>,
-): Promise<Response> {
-  const loaded = await loadWritableFlag(deps, args);
-  if (!loaded.ok) return loaded.response;
-
-  const variantName = pathParam(args.input, "variantName");
-  const variant = await deps.repo.flags.getVariantByName(
-    loaded.value.scope,
-    loaded.value.flag.id,
-    variantName,
-  );
-  if (!variant) return variantNotFound(args.requestId);
-
-  const blocked = await variantDeleteBlocker(
-    deps,
-    loaded.value,
-    variantName,
-    variant,
-    args.requestId,
-  );
-  if (blocked) return blocked;
-
-  await deps.repo.flags.removeVariant(loaded.value.scope, loaded.value.flag.id, variantName);
-  await resyncFlagSnapshots(deps, loaded.value.appId, loaded.value.flag.id);
-  const updated = await deps.repo.flags.getFlag(loaded.value.scope, loaded.value.flag.id);
-  if (!updated) return flagNotFound(args.requestId);
-  return Response.json(await flagResponse(deps.repo, loaded.value.appId, updated));
 }

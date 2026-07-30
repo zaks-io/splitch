@@ -15,6 +15,7 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
+import { diagnosableHandlers } from "./flag-config-policy";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
 import { makeHandlers } from "./handlers";
 import { mountLiveUpdateRoute } from "./live-updates";
@@ -68,33 +69,39 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: route mounting stays explicit so no operation can be silently omitted
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
-  const handlers = makeHandlers({
-    repo: deps.repo,
-    configStore: deps.configStore,
-    memberProfileResolver: deps.memberProfileResolver,
-    nowIso: deps.nowIso,
-  });
+  const handlers = diagnosableHandlers(
+    makeHandlers({
+      repo: deps.repo,
+      configStore: deps.configStore,
+      memberProfileResolver: deps.memberProfileResolver,
+      nowIso: deps.nowIso,
+    }),
+  );
   const credentialHandlers = makeCredentialHandlers({
     repo: deps.repo,
     credentialStore: deps.credentialStore,
     credentialCacheWriter: deps.credentialCacheWriter,
     nowIso: deps.nowIso,
   });
-  const flagDefinitionHandlers = makeFlagDefinitionHandlers({
-    repo: deps.repo,
-    configStore: deps.configStore,
-    logger: deps.logger,
-    nowIso: deps.nowIso,
-  });
+  const flagDefinitionHandlers = diagnosableHandlers(
+    makeFlagDefinitionHandlers({
+      repo: deps.repo,
+      configStore: deps.configStore,
+      logger: deps.logger,
+      nowIso: deps.nowIso,
+    }),
+  );
   const metricSegmentHandlers = makeMetricSegmentHandlers({
     repo: deps.repo,
     nowIso: deps.nowIso,
   });
-  const experimentHandlers = makeExperimentHandlers({
-    repo: deps.repo,
-    configStore: deps.configStore,
-    nowIso: deps.nowIso,
-  });
+  const experimentHandlers = diagnosableHandlers(
+    makeExperimentHandlers({
+      repo: deps.repo,
+      configStore: deps.configStore,
+      nowIso: deps.nowIso,
+    }),
+  );
   const appEnvironmentHandlers = makeAppEnvironmentHandlers({
     repo: deps.repo,
     credentialStore: deps.credentialStore,
@@ -103,15 +110,17 @@ export function createApp(deps: AppDeps): Hono {
     nowIso: deps.nowIso,
   });
   const registrar = controlPlaneRegistrar(deps);
-  const approvalHandlers = makeApprovalHandlers({
-    repo: deps.repo,
-    configStore: deps.configStore,
-    nowIso: deps.nowIso,
-    applyOther: makeOtherApprovalApplication({
+  const approvalHandlers = diagnosableHandlers(
+    makeApprovalHandlers({
       repo: deps.repo,
       configStore: deps.configStore,
+      nowIso: deps.nowIso,
+      applyOther: makeOtherApprovalApplication({
+        repo: deps.repo,
+        configStore: deps.configStore,
+      }),
     }),
-  });
+  );
 
   app.get("/.well-known/openapi.json", (c) => c.json(buildOpenApiDocument()));
 

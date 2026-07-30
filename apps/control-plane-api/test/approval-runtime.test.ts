@@ -9,7 +9,14 @@ import {
   setProdPolicy,
   USER_ID,
 } from "../src/config-store-harness-core";
-import { confirmPolicy, getApprovalRequests, proposeA, reviewRequest } from "./approval-harness";
+import {
+  confirmPolicy,
+  countApprovalReviews,
+  getApprovalRequests,
+  patchVariant,
+  proposeA,
+  reviewRequest,
+} from "./approval-harness";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -21,6 +28,20 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await h.dispose();
+});
+
+describe("a frozen Run outranks the Approval gate", () => {
+  it("answers RUN_FROZEN instead of opening a reviewable Request", async () => {
+    // Precedence matters: if the gate answered first, a `confirm` Environment
+    // would offer a Review that can never legally apply, and approving it would
+    // read as authorization to mutate a Variant a running Run has frozen.
+    const frozen = await patchVariant(h, "treatment", "idem_frozen", { value: "off" });
+    expect(frozen.status).toBe(409);
+    expect(frozen.code).toBe("RUN_FROZEN");
+    expect(frozen.approvalRequestId).toBeUndefined();
+    expect((await h.repo.approvals.listRequests(appScope(ids.appId))).length).toBe(0);
+    expect(await countApprovalReviews(h)).toBe(0);
+  });
 });
 
 describe("Approval Request runtime", () => {

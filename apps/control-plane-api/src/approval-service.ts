@@ -4,7 +4,6 @@ import {
   type ApprovalPolicyContext,
   ApprovalPolicyContextSchema,
   type ApprovalTarget,
-  ApprovalTargetSchema,
 } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
@@ -30,6 +29,7 @@ import {
   reviewForbidden,
   reviewRequired,
 } from "./approval-review-outcomes";
+import { rowTargetVersion } from "./approval-row-target";
 import type {
   ApprovalResult,
   ApprovalServiceDeps,
@@ -49,6 +49,8 @@ export interface CreateApprovalInput {
   idempotencyKey: string;
   inlineReview: boolean;
   requestId: string;
+  /** Set only when the target does not exist yet (a Variant create proposal). */
+  absentVariant?: { flagId: string; name: string };
 }
 
 type ReplayApprovalInput = Pick<
@@ -110,6 +112,7 @@ export async function createApproval(
     input.appId,
     input.target,
     input.policyContexts,
+    input.absentVariant ? { absentVariant: input.absentVariant } : undefined,
   );
   const diff = ApprovalDiffSchema.parse(approvalDiff(input.current, input.proposed));
   const requestHash = await proposalRequestHash(input);
@@ -223,19 +226,7 @@ export async function reviewApproval(
   const policyError = await validateReviewPolicy(deps, row.proposedBy, contexts, input);
   if (policyError) return policyError;
 
-  const currentVersion = await approvalTargetVersion(
-    deps.repo,
-    input.appId,
-    {
-      type: ApprovalTargetSchema.parse({
-        type: row.targetType,
-        id: row.targetId,
-        version: row.targetVersion,
-      }).type,
-      id: row.targetId,
-    },
-    contexts,
-  );
+  const currentVersion = await rowTargetVersion(deps.repo, row, contexts, row.diff);
   if (currentVersion !== row.targetVersion) {
     return materializeStale(deps, row, input, requestHash, currentVersion);
   }

@@ -30,6 +30,27 @@ export function environmentPolicyContexts(
     );
 }
 
+/**
+ * The single authority on "can this Environment serve this Variant". An EMPTY
+ * `available_variant_names` means the Configuration was never narrowed, not that
+ * nothing is servable, so the Flag's whole catalog is servable there — the same
+ * rule the evaluation path applies (evaluation-api baseline-rollout.ts). Every
+ * Approval gate that asks about servability must ask through here; a second,
+ * subtly different reading of the same column is what let a delete-then-recreate
+ * chain launder a gated Variant value change.
+ */
+function servesVariant(availableVariantNames: readonly string[], variantName: string): boolean {
+  return availableVariantNames.length === 0 || availableVariantNames.includes(variantName);
+}
+
+export interface ServableEnvironment {
+  environmentId: string;
+  configVersion: number;
+  /** As stored. Empty means every Variant is servable (baseline rollout rule). */
+  availableVariantNames: string[];
+  policy: EnvironmentPolicy;
+}
+
 export function requiresReview(contexts: readonly ApprovalPolicyContext[]): boolean {
   return contexts.some((context) => context.level !== "allow");
 }
@@ -45,24 +66,25 @@ export async function servableVariantEnvironments(
   appId: string,
   flagId: string,
   variantName: string,
-): Promise<Array<{ environmentId: string; configVersion: number; policy: EnvironmentPolicy }>> {
-  const servable: Array<{
-    environmentId: string;
-    configVersion: number;
-    policy: EnvironmentPolicy;
-  }> = [];
+): Promise<ServableEnvironment[]> {
+  const servable: ServableEnvironment[] = [];
   for (const environment of await repo.identity.listEnvironments(appScope(appId))) {
     const config = await repo.flags.getFlagConfig(envScope(appId, environment.id), flagId);
     if (!config) continue;
     const available = JSON.parse(config.availableVariantNames) as string[];
-    if (available.length > 0 && !available.includes(variantName)) continue;
+    if (!servesVariant(available, variantName)) continue;
     const policy = await readEnvironmentPolicy(repo, appId, environment.id);
     if (!policy) {
       throw new Error(
         `Environment ${environment.id} disappeared while resolving Approval Policy for ${appId}`,
       );
     }
-    servable.push({ environmentId: environment.id, configVersion: config.version, policy });
+    servable.push({
+      environmentId: environment.id,
+      configVersion: config.version,
+      availableVariantNames: available,
+      policy,
+    });
   }
   return servable.sort((left, right) => left.environmentId.localeCompare(right.environmentId));
 }
@@ -102,7 +124,7 @@ export async function currentPolicyProjection(
  * version change like any other, so the proposal renders and materializes
  * `stale` (terminal) instead of masquerading as a missing Approval Request.
  */
-function absentTargetVersion(target: Pick<ApprovalTarget, "type" | "id">) {
+export function absentTargetVersion(target: Pick<ApprovalTarget, "type" | "id">) {
   return canonicalHash({ absentTarget: { type: target.type, id: target.id } });
 }
 
@@ -123,6 +145,19 @@ export async function approvalTargetVersion(
   override?: {
     flagConfigVersion?: number;
     flagVersion?: number;
+    /**
+     * A rename rewrites `available_variant_names` and bumps `flag_configs.version`
+     * in exactly the Environments that name the Variant explicitly, so the
+     * resulting-version projection has to anticipate that bump per Environment.
+     */
+    renamedFrom?: string;
+    /**
+     * The Variant a proposal intends to CREATE. It has no row yet, so its target
+     * version is projected from the Environments that would serve it under the
+     * proposed name — otherwise a create proposal would hash to the same
+     * "target is absent" token no matter what the Policy did.
+     */
+    absentVariant?: { flagId: string; name: string };
     experiment?: Record<string, unknown>;
   },
 ): Promise<`sha256:${string}`> {
@@ -139,13 +174,20 @@ export async function approvalTargetVersion(
   }
 
   if (target.type === "flag_variant") {
-    const variant = await repo.flags.getVariantById(appScope(appId), target.id);
+    const variant =
+      (await repo.flags.getVariantById(appScope(appId), target.id)) ?? override?.absentVariant;
     if (!variant) return absentTargetVersion(target);
     const flag = await repo.flags.getFlag(appScope(appId), variant.flagId);
     if (!flag) return absentTargetVersion(target);
     return canonicalHash({
       flagVersion: override?.flagVersion ?? flag.version,
-      environmentVector: await variantEnvironmentVector(repo, appId, variant, contexts),
+      environmentVector: await variantEnvironmentVector(
+        repo,
+        appId,
+        variant,
+        contexts,
+        override?.renamedFrom,
+      ),
     });
   }
 
@@ -174,12 +216,16 @@ async function variantEnvironmentVector(
   appId: string,
   variant: { flagId: string; name: string },
   contexts: readonly ApprovalPolicyContext[],
+  renamedFrom?: string,
 ) {
   const changeTypes = [...new Set(contexts.flatMap((context) => context.changeTypes))].sort();
   const servable = await servableVariantEnvironments(repo, appId, variant.flagId, variant.name);
   return servable.map((environment) => ({
     environmentId: environment.environmentId,
-    configVersion: environment.configVersion,
+    configVersion:
+      renamedFrom !== undefined && environment.availableVariantNames.includes(renamedFrom)
+        ? environment.configVersion + 1
+        : environment.configVersion,
     levels: changeTypes.map((changeType) => ({
       changeType,
       level: policyLevel(environment.policy, changeType),

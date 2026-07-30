@@ -4,8 +4,9 @@ import {
   type ApprovalPolicyContext,
 } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
+import { absentVariantHint } from "./approval-row-target";
 import type { ApprovalRequestRow } from "./approval-service-types";
-import { approvalTargetVersion } from "./approval-target";
+import { absentTargetVersion, approvalTargetVersion } from "./approval-target";
 
 export async function resultingVersionFor(
   repo: Repository,
@@ -19,6 +20,14 @@ export async function resultingVersionFor(
   }
   if (operation === "flag_variants_update") {
     return nextVariantVersion(repo, row, contexts);
+  }
+  if (operation === "flag_variants_create") {
+    return createdVariantVersion(repo, row, contexts);
+  }
+  // A deleted Variant resolves to nothing, and "absent" is a version like any
+  // other — the same token a later proposal against the dead id would compute.
+  if (operation === "flag_variants_delete") {
+    return absentTargetVersion({ type: "flag_variant", id: row.targetId });
   }
   const experiment = await repo.experiments.getExperiment(
     envScope(row.appId, contexts[0]?.environmentId ?? ""),
@@ -71,11 +80,37 @@ async function nextVariantVersion(
 ) {
   const variant = await repo.flags.getVariantById(appScope(row.appId), row.targetId);
   const flag = variant ? await repo.flags.getFlag(appScope(row.appId), variant.flagId) : null;
-  return flag
-    ? approvalTargetVersion(repo, row.appId, { type: "flag_variant", id: row.targetId }, contexts, {
-        flagVersion: flag.version + 1,
-      })
-    : null;
+  if (!(variant && flag)) return null;
+  const proposedName = ApprovalDiffSchema.parse(JSON.parse(row.diff)).proposed.name;
+  const renamed = typeof proposedName === "string" && proposedName !== variant.name;
+  return approvalTargetVersion(
+    repo,
+    row.appId,
+    { type: "flag_variant", id: row.targetId },
+    contexts,
+    { flagVersion: flag.version + 1, ...(renamed ? { renamedFrom: variant.name } : {}) },
+  );
+}
+
+async function createdVariantVersion(
+  repo: Repository,
+  row: ApprovalRequestRow,
+  contexts: ApprovalPolicyContext[],
+) {
+  const hint = absentVariantHint(row.operation, row.diff);
+  if (!hint) return null;
+  const flag = await repo.flags.getFlag(appScope(row.appId), hint.absentVariant.flagId);
+  if (!flag) return null;
+  return approvalTargetVersion(
+    repo,
+    row.appId,
+    { type: "flag_variant", id: row.targetId },
+    contexts,
+    {
+      ...hint,
+      flagVersion: flag.version + 1,
+    },
+  );
 }
 
 function isFlagConfigurationOperation(operation: ApprovalOperation): boolean {

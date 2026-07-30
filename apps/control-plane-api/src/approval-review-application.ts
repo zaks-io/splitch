@@ -4,7 +4,6 @@ import {
   type ApprovalPolicyContext,
   ApprovalPolicyContextSchema,
   type ApprovalRequest,
-  ApprovalTargetSchema,
 } from "@splitch/contracts";
 import { type ApprovalCommit, appScope } from "@splitch/db";
 import { requireAppAdmin } from "./app-authz";
@@ -20,13 +19,14 @@ import {
   resolvedError,
   reviewForbidden,
 } from "./approval-review-outcomes";
+import { rowTargetVersion } from "./approval-row-target";
 import type {
   ApprovalRequestRow,
   ApprovalResult,
   ApprovalServiceDeps,
   ReviewApprovalInput,
 } from "./approval-service-types";
-import { approvalTargetVersion, currentPolicyProjection } from "./approval-target";
+import { currentPolicyProjection } from "./approval-target";
 import type { FlagConfigResult, FlagConfigWriteResult } from "./config-store-types";
 
 export async function prepareAndApplyApproval(
@@ -137,17 +137,7 @@ async function staleAfterLostApply(
       response: reviewForbidden(row.id, input.action, "SELF_REVIEW_NOT_ALLOWED", input.requestId),
     };
   }
-  const targetType = ApprovalTargetSchema.parse({
-    type: row.targetType,
-    id: row.targetId,
-    version: row.targetVersion,
-  }).type;
-  const currentVersion = await approvalTargetVersion(
-    deps.repo,
-    row.appId,
-    { type: targetType, id: row.targetId },
-    contexts,
-  );
+  const currentVersion = await rowTargetVersion(deps.repo, row, contexts, row.diff);
   if (currentVersion === row.targetVersion) {
     return recordApplicationFailure(
       deps,
@@ -242,7 +232,7 @@ function resultingResource(
   if (isFlagConfigurationOperation(operation)) {
     return { type: "flag_configuration", id: row.targetId };
   }
-  return operation === "flag_variants_update"
-    ? { type: "flag_variant", id: row.targetId }
-    : { type: "experiment_run", id: `run_${row.id.slice(4)}` };
+  return operation === "experiments_start"
+    ? { type: "experiment_run", id: `run_${row.id.slice(4)}` }
+    : { type: "flag_variant", id: row.targetId };
 }

@@ -21,6 +21,12 @@ export function makeOtherApprovalApplication(deps: ApprovalApplicationDeps) {
     if (request.operation === "flag_variants_update") {
       return applyVariant(deps, request, commit);
     }
+    if (request.operation === "flag_variants_create") {
+      return applyVariantCreate(deps, request, commit);
+    }
+    if (request.operation === "flag_variants_delete") {
+      return applyVariantDelete(deps, request, commit);
+    }
     if (request.operation === "experiments_start") {
       return applyExperimentStart(deps, request, commit);
     }
@@ -151,6 +157,54 @@ async function applyVariant(
       ok: false as const,
       error: { code: "VARIANT_NOT_FOUND" as const, details: {} },
     };
+  }
+  await resyncFlagSnapshots(deps, request.appId, variant.flagId);
+  return { ok: true as const };
+}
+
+async function applyVariantCreate(
+  deps: ApprovalApplicationDeps,
+  request: ApprovalRequest,
+  commit: ApprovalCommit,
+) {
+  const proposed = request.diff.proposed;
+  const flagId = requiredString(proposed.flagId, "flagId");
+  const created = await deps.repo.flags.addVariant(
+    appScope(request.appId),
+    flagId,
+    {
+      id: request.target.id,
+      name: requiredString(proposed.name, "name"),
+      value: JSON.stringify(proposed.value),
+      ...(typeof proposed.description === "string" ? { description: proposed.description } : {}),
+      createdAt: commit.reviewedAt,
+    },
+    { updatedAt: commit.reviewedAt, updatedBy: commit.reviewedBy, approval: commit },
+  );
+  if (!created) {
+    return { ok: false as const, error: { code: "INTERNAL_SERVER_ERROR" as const, details: {} } };
+  }
+  await resyncFlagSnapshots(deps, request.appId, flagId);
+  return { ok: true as const };
+}
+
+async function applyVariantDelete(
+  deps: ApprovalApplicationDeps,
+  request: ApprovalRequest,
+  commit: ApprovalCommit,
+) {
+  const variant = await deps.repo.flags.getVariantById(appScope(request.appId), request.target.id);
+  if (!variant) {
+    return { ok: false as const, error: { code: "VARIANT_NOT_FOUND" as const, details: {} } };
+  }
+  const removed = await deps.repo.flags.removeVariant(
+    appScope(request.appId),
+    variant.flagId,
+    variant.name,
+    { updatedAt: commit.reviewedAt, updatedBy: commit.reviewedBy, approval: commit },
+  );
+  if (removed === 0) {
+    return { ok: false as const, error: { code: "INTERNAL_SERVER_ERROR" as const, details: {} } };
   }
   await resyncFlagSnapshots(deps, request.appId, variant.flagId);
   return { ok: true as const };

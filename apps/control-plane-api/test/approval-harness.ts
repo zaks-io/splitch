@@ -34,6 +34,7 @@ export const NOW_APPROVAL = "2026-07-02T11:22:33.000Z";
 export interface PatchOutcome {
   status: number;
   code?: string;
+  message?: string;
   approvalRequestId?: string;
 }
 
@@ -60,13 +61,50 @@ export async function patchVariant(
     },
     body: JSON.stringify({ idempotency_key: key, ...body }),
   });
+  return outcome(response);
+}
+
+export async function createVariantRequest(
+  h: Harness,
+  key: string,
+  body: Record<string, unknown>,
+): Promise<PatchOutcome> {
+  const jwt = await token(h.signer);
+  const response = await h.app.request(`/apps/${ids.appId}/flags/${ids.flagId}/variants`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${jwt}`,
+      "content-type": "application/json",
+      "idempotency-key": key,
+    },
+    body: JSON.stringify({ appId: ids.appId, flagId: ids.flagId, idempotency_key: key, ...body }),
+  });
+  return outcome(response);
+}
+
+export async function deleteVariantRequest(
+  h: Harness,
+  name: string,
+  key: string,
+): Promise<PatchOutcome> {
+  const jwt = await token(h.signer);
+  const response = await h.app.request(`/apps/${ids.appId}/flags/${ids.flagId}/variants/${name}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${jwt}`, "idempotency-key": key },
+  });
+  return outcome(response);
+}
+
+async function outcome(response: Response): Promise<PatchOutcome> {
   const parsed = (await response.json()) as {
     code?: string;
+    message?: string;
     details?: { approvalRequestId?: string };
   };
   return {
     status: response.status,
     code: parsed.code,
+    message: parsed.message,
     approvalRequestId: parsed.details?.approvalRequestId,
   };
 }
@@ -89,15 +127,7 @@ export async function patchConfig(
       body: JSON.stringify({ idempotency_key: key, ...body }),
     },
   );
-  const parsed = (await response.json()) as {
-    code?: string;
-    details?: { approvalRequestId?: string };
-  };
-  return {
-    status: response.status,
-    code: parsed.code,
-    approvalRequestId: parsed.details?.approvalRequestId,
-  };
+  return outcome(response);
 }
 
 export async function reviewRequest(

@@ -6,6 +6,7 @@ import {
   clearFrozenRun,
   confirmPolicy,
   countApprovalReviews,
+  patchConfig,
   patchVariant,
   reviewRequest,
 } from "./approval-harness";
@@ -85,6 +86,27 @@ describe("a Variant rename is gated by variant_availability", () => {
     for (const envId of [ids.environmentId, ids.devEnvironmentId]) {
       expect(await availableNames(envId)).toEqual(["control", "renamed-c4b"]);
     }
+  });
+
+  it("makes a pending flag_configuration proposal stale, not a retry-forever failure", async () => {
+    // The rewrite is a write to flag_configs. Without the version bump the
+    // pending config proposal stayed `pending`, the optimistic version guard
+    // could not see the write, and the apply answered
+    // APPROVAL_APPLICATION_FAILED / RETRY_REVIEW — a retry that can never work.
+    const config = await patchConfig(h, "idem_c4d", { availableVariantNames: ["control"] });
+    expect(config.code).toBe("APPROVAL_REVIEW_REQUIRED");
+
+    const renamed = await patchVariant(h, "treatment", "idem_c4d2", { name: "renamed-c4d" });
+    expect((await reviewRequest(h, renamed.approvalRequestId as string, "idem_c4d2r")).status).toBe(
+      200,
+    );
+
+    const applied = await reviewRequest(h, config.approvalRequestId as string, "idem_c4dr");
+    expect(applied.status).toBeGreaterThanOrEqual(400);
+    expect(await applied.json()).toMatchObject({
+      code: "APPROVAL_REQUEST_STALE",
+      details: { recommendedAction: "REFRESH_AND_REPROPOSE" },
+    });
   });
 
   it("an ungated rename still rewrites available_variant_names", async () => {

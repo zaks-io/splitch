@@ -6,7 +6,6 @@ import { requireAppMember } from "./app-authz";
 import { approvalRequestProjection } from "./approval-model";
 import { reviewApproval } from "./approval-service";
 import type { ConfigStoreAccess } from "./config-store-do";
-import { diagnosableContractFaults } from "./flag-config-policy";
 import { objectBody, pathParam } from "./handler-input";
 
 interface ApprovalHandlerDeps {
@@ -35,21 +34,17 @@ export function makeApprovalHandlers(deps: ApprovalHandlerDeps) {
       const memberError = await requireAppMember(deps, appId, principal, requestId);
       if (memberError) return memberError;
       const query = queryInput(input);
-      return diagnosableContractFaults(requestId, () =>
-        listApprovalRequests(deps, appId, query, requestId),
-      );
+      return listApprovalRequests(deps, appId, query, requestId);
     },
 
     async get({ input, principal, requestId }: HandlerArgs<unknown>) {
       const appId = pathParam(input, "appId");
       const memberError = await requireAppMember(deps, appId, principal, requestId);
       if (memberError) return memberError;
-      return diagnosableContractFaults(requestId, async () => {
-        const row = await deps.repo.approvals.getRequest(appScope(appId), pathParam(input, "id"));
-        return row
-          ? Response.json(await approvalRequestProjection(deps.repo, row))
-          : approvalNotFound(requestId);
-      });
+      const row = await deps.repo.approvals.getRequest(appScope(appId), pathParam(input, "id"));
+      return row
+        ? Response.json(await approvalRequestProjection(deps.repo, row))
+        : approvalNotFound(requestId);
     },
 
     async review({ input, principal, requestId }: HandlerArgs<unknown>) {
@@ -57,18 +52,16 @@ export function makeApprovalHandlers(deps: ApprovalHandlerDeps) {
       const memberError = await requireAppMember(deps, appId, principal, requestId);
       if (memberError) return memberError;
       const body = objectBody(input);
-      return diagnosableContractFaults(requestId, async () => {
-        const reviewed = await reviewApproval(deps, {
-          appId,
-          approvalRequestId: pathParam(input, "id"),
-          action: body.action as "approve_and_apply" | "decline",
-          reason: typeof body.reason === "string" ? body.reason : null,
-          idempotencyKey: body.idempotency_key as string,
-          principal,
-          requestId,
-        });
-        return reviewed.ok ? Response.json(reviewed.approvalRequest) : reviewed.response;
+      const reviewed = await reviewApproval(deps, {
+        appId,
+        approvalRequestId: pathParam(input, "id"),
+        action: body.action as "approve_and_apply" | "decline",
+        reason: typeof body.reason === "string" ? body.reason : null,
+        idempotencyKey: body.idempotency_key as string,
+        principal,
+        requestId,
       });
+      return reviewed.ok ? Response.json(reviewed.approvalRequest) : reviewed.response;
     },
   };
 }

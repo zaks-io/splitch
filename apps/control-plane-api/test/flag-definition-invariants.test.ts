@@ -1,6 +1,7 @@
 import { createRepository, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  allowAllPolicies,
   appToken,
   baseFlag,
   createDefaultApp,
@@ -94,6 +95,7 @@ describe("control-plane Flag definition invariants", () => {
 
   it("adds and deletes catalog Variants while blocking Environment-available Variants", async () => {
     const createdApp = await createDefaultApp(h);
+    await allowAllPolicies(h, createdApp.app.id);
     const jwt = await appToken(h, createdApp.app.id);
     const flag = await createFlag(h, createdApp.app.id, jwt);
 
@@ -107,6 +109,7 @@ describe("control-plane Flag definition invariants", () => {
         flagId: flag.id,
         name: "beta",
         value: true,
+        idempotency_key: "idem_variant_add_beta",
       },
     );
     expect(add.status).toBe(200);
@@ -126,6 +129,8 @@ describe("control-plane Flag definition invariants", () => {
       "DELETE",
       `/apps/${createdApp.app.id}/flags/${flag.id}/variants/beta`,
       jwt,
+      undefined,
+      "idem_variant_delete_beta",
     );
     expect(blocked.status).toBe(409);
     expect((await errorBody(blocked)).code).toBe("RESOURCE_NOT_EMPTY");
