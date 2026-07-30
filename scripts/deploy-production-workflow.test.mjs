@@ -9,12 +9,15 @@ test("production deploy reuses successful CI instead of rerunning validation", (
   assert.ok(validateJob);
   assert.match(workflow, /actions: read/);
   assert.match(workflow, /deployments: read/);
-  assert.match(workflow, /github\.event\.workflow_run\.conclusion == 'success'/);
-  assert.match(workflow, /github\.event\.workflow_run\.head_sha/);
+  assert.doesNotMatch(workflow, /workflow_run:/);
+  assert.match(workflow, /SENTRY_RELEASE: \$\{\{ inputs\.release_sha \|\| github\.sha \}\}/);
+  assert.match(workflow, /CI_RUN_ID: \$\{\{ inputs\.ci_run_id \}\}/);
   assert.match(workflow, /force_full_deploy:/);
   assert.match(workflow, /SPLITCH_FORCE_FULL_DEPLOY:/);
-  assert.match(validateJob, /if: github\.event_name == 'workflow_dispatch'/);
   assert.match(validateJob, /actions\/workflows\/ci\.yml\/runs/);
+  assert.match(validateJob, /actions\/runs\/\$CI_RUN_ID/);
+  assert.match(validateJob, /run_sha.*RELEASE_SHA/);
+  assert.match(validateJob, /run_conclusion.*success/);
   assert.match(validateJob, /--data-urlencode "head_sha=\$RELEASE_SHA"/);
   assert.match(validateJob, /\.head_sha == \$sha/);
   assert.match(validateJob, /\.event == "push"/);
