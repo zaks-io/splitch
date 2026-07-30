@@ -41,7 +41,6 @@ const LEAF_PII_KEYS = [
   "token",
   "accesstoken",
   "refreshtoken",
-  "value",
   "targetingkey",
   "email",
   "phone",

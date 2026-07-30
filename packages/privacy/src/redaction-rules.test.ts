@@ -51,7 +51,6 @@ describe("redaction key policy", () => {
       "token",
       "accessToken",
       "refresh_token",
-      "value",
     ]) {
       expect(isLeafPiiKey(key)).toBe(true);
       expect(isPiiKey(key)).toBe(true);

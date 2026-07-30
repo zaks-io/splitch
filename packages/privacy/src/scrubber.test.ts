@@ -39,15 +39,15 @@ describe("scrubValue", () => {
     expect(out.a.b.targetingKey).toBe(REDACTED);
   });
 
-  it("redacts generic value and keyMaterial fields", () => {
+  it("redacts keyMaterial fields without hiding safe values", () => {
     const out = scrubValue({
       credential: {
-        value: "sk_secret",
+        value: "control",
         keyMaterial: "pk_secret",
       },
     }) as { credential: { value: unknown; keyMaterial: unknown } };
 
-    expect(out.credential.value).toBe(REDACTED);
+    expect(out.credential.value).toBe("control");
     expect(out.credential.keyMaterial).toBe(REDACTED);
   });
 

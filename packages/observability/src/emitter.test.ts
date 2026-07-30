@@ -65,4 +65,27 @@ describe("createScrubbedEmitter", () => {
     expect(emitted).not.toContain(apiKey);
     expect(emitted).not.toContain(clientKey);
   });
+
+  it("preserves an evaluated Variant value while scrubbing API Key material", () => {
+    const apiKey = `sk_${"a".repeat(64)}`;
+    const structuredLogEvents: Record<string, unknown>[][] = [];
+    const emitter = createScrubbedEmitter({
+      surface: "evaluation-api",
+      onStructuredLogEvents: (events) => structuredLogEvents.push(events),
+    });
+
+    emitter.log("info", "Flag evaluated", {
+      flagKey: "checkout-redesign",
+      value: "treatment",
+      reason: "TARGETING_MATCH",
+      credential: apiKey,
+    });
+
+    expect(structuredLogEvents[0]?.[0]).toMatchObject({
+      flagKey: "checkout-redesign",
+      value: "treatment",
+      reason: "TARGETING_MATCH",
+      credential: "[Redacted]",
+    });
+  });
 });
