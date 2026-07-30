@@ -19,14 +19,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
-      "inputs": ["$TURBO_DEFAULT$"],
-      "env": [
-        "SPLITCH_PLATFORM_TARGET",
-        "AUTH_API_ORIGIN",
-        "AUTH_JWKS_URI",
-        "CONTROL_PLANE_ORIGIN",
-        "TINYBIRD_API_URL"
-      ]
+      "inputs": ["$TURBO_DEFAULT$"]
     },
     "@splitch/control-panel#build": {
       "dependsOn": ["^build"],
