@@ -128,7 +128,16 @@ async function readExperimentAttention(
   input: PanelOverviewInput,
 ): Promise<OverviewExperiments> {
   const scope = envScope(input.appId, input.environmentId);
-  const running = await deps.repo.experiments.listRunningExperiments(scope);
+  // One row past the budget is all it takes to decide it, so the read that
+  // enforces the budget is itself bounded. Materializing every running
+  // Experiment and THEN counting pays exactly the cost the budget exists to
+  // refuse, which is the whole failure mode the ceiling was added for.
+  const running = await deps.repo.experiments.listRunningExperiments(scope, {
+    limit: OVERVIEW_ANALYSIS_READ_LIMIT + 1,
+  });
+  // `>` and not `>=`: the budget is what may be read, so landing exactly on it
+  // is allowed. Truncation is OBSERVED from the extra row, never inferred from a
+  // full page — at any limit those two are the same row count.
   if (running.length > OVERVIEW_ANALYSIS_READ_LIMIT) {
     return { status: "unavailable", reason: "read_budget_exceeded", retryable: false };
   }

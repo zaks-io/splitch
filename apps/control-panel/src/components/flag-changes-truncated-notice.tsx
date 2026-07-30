@@ -17,8 +17,21 @@ import { ParityNote } from "./parity-note";
  *
  * Either way the card is not the whole answer, and the remedy is deliberately
  * NOT "reload": neither bound is transient, so a refresh returns the same page
- * (ADR-0036). It IS the Flags screen, which reads the whole catalog and is one
- * click away. The sibling notice for Organizations names only the CLI and MCP
+ * (ADR-0036). It IS the Flags screen, which is one click away and reads several
+ * times as many Flags as this scan does (`FLAG_LIST_READ_LIMIT` sits well above
+ * `FLAG_CHANGE_READ_LIMIT` for exactly this reason).
+ *
+ * It is NOT a superset, and the wording must not imply one. This card pages
+ * Flag Configurations by `(updated_at DESC, id DESC)`; the Flags screen pages
+ * Flag DEFINITIONS by `(created_at DESC, id DESC)`. Different rows, different
+ * order. A Flag Configuration changed yesterday on a Flag created years ago can
+ * fall past BOTH ceilings, so "see every Flag" would send an operator to a
+ * screen that provably need not contain what they were sent for — the same
+ * disguised-complete-result this notice exists to prevent. The link therefore
+ * only says where it goes and claims nothing about what is there; the Flags
+ * screen reports its own bound when it binds.
+ *
+ * The sibling notice for Organizations names only the CLI and MCP
  * because a missing Organization is genuinely unreachable in the browser; a Flag
  * never is, so the reader's own skin is offered first and the parity hint
  * follows for the other two, derived from the shipped route registry rather than
@@ -55,7 +68,7 @@ export function FlagChangesTruncatedNotice({
           data-testid="flag-changes-truncated-link"
           href={`${scopeHref}/flags`}
         >
-          See every Flag and its current state
+          Open the Flags screen for this App
         </a>
         , or: <ParityNote hint={parityHint("flags_list")} />
       </AlertDescription>

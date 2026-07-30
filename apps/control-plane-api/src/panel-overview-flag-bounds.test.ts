@@ -69,6 +69,11 @@ describe("panelOverviewRead Flag Configuration read bound", () => {
       // truncation were never wired to the response (ADR-0036).
       expect(overviewBody.flagConfiguration.readTruncated).toBe(true);
       expect(overviewBody.flagConfiguration.readLimit).toBe(FLAG_CHANGE_READ_LIMIT);
+      // The count is capped BY the read bound, so it is a floor and it is exactly
+      // the limit. Nothing else pins that: if the count were taken after the
+      // display slice it would read 5, and the Panel renders "more than N" from
+      // this number.
+      expect(overviewBody.flagConfiguration.changedCount).toBe(FLAG_CHANGE_READ_LIMIT);
       // Newest first: the seeded Flag Configuration is stamped at NOW, ahead of
       // every bulk row, so truncation drops the OLDEST changes and not the newest.
       expect(overviewBody.flagConfiguration.recentlyChanged[0]?.flagKey).toBe(ids.flagKey);
@@ -84,6 +89,10 @@ describe("panelOverviewRead Flag Configuration read bound", () => {
       const overviewBody = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
 
       expect(overviewBody.flagConfiguration.readTruncated).toBe(false);
+      // A full page and a truncated one carry the same row count, so the count is
+      // pinned here too: this is the one seeding where `>` and `>=` disagree, and
+      // an off-by-one in either the scan or the count shows up as 49 or 51.
+      expect(overviewBody.flagConfiguration.changedCount).toBe(FLAG_CHANGE_READ_LIMIT);
     },
     ATTENTION_TEST_TIMEOUT,
   );

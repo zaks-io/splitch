@@ -1,5 +1,7 @@
 /**
- * Every tunable the App Overview classifies against, in one place.
+ * Every tunable the App Overview classifies against, in one place — plus the read
+ * bound of the ONE surface the Overview escalates to, because a ceiling and the
+ * ceiling it must sit above cannot be reasoned about from two different files.
  *
  * These are deliberately conservative first values, not tuned ones. Tuning is
  * deferred (SPL-109 ships the surface, not the calibration); when it happens it
@@ -44,6 +46,25 @@ export const FLAG_CHANGE_LIMIT = 5;
  * a separate question with its own ticket.
  */
 export const FLAG_CHANGE_READ_LIMIT = 50;
+
+/**
+ * Hard ceiling on Flag DEFINITION rows one Flag list read returns.
+ *
+ * Deliberately 4x `FLAG_CHANGE_READ_LIMIT`, and that ratio is the whole point.
+ * The Overview's truncation notice sends an operator here precisely because the
+ * Overview could not show them everything; a remedy that is no wider than the
+ * problem is an impossible remedy dressed as a fix (ADR-0036). Four times wider
+ * means following the advice actually buys a bigger view.
+ *
+ * Not larger than 200, because this ceiling is also the fan-out bound on the
+ * reader: the Control Panel issues one Flag Configuration read per row it
+ * renders, so a ceiling in the thousands would trade one unbounded read for a
+ * thousand bounded ones and land on the Worker subrequest limit instead. It
+ * matches the rollup's `ENVIRONMENT_FANOUT_LIMIT` / `ANALYSIS_READ_LIMIT` for the
+ * same reason those are 200: a single request's cost must not track how much
+ * data one App has accumulated.
+ */
+export const FLAG_LIST_READ_LIMIT = 200;
 
 /** Concurrent Analysis reads for one Overview request. */
 export const OVERVIEW_ANALYSIS_READ_CONCURRENCY = 8;

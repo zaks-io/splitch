@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index";
 import {
   appliedRequestUpdate,
@@ -9,6 +9,7 @@ import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
 import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
 import { type FlagInScope, makeVariantOps } from "./flag-variant-ops";
+import { idBatches } from "./id-batches";
 import type { TenantScope } from "./scope";
 import { envScope } from "./scope";
 import { scopedTable } from "./scoped-table";
@@ -63,25 +64,66 @@ export function makeFlagRepo(db: Db) {
 
     deleteFlagCascade: makeDeleteFlagCascade(db, flagInScope),
 
-    ...makeVariantOps(db, flagInScope),
+    ...makeVariantOps(db, flagsTable, flagInScope),
 
     ...makeFlagConfigOps(db, flagConfigsTable, targetingRulesTable),
+
+    /**
+     * One bounded page of the App's Flag catalog, newest first.
+     *
+     * Exists so the Flag list costs what it renders rather than what the App has
+     * accumulated. It is also the surface the Overview's truncation notice sends
+     * an operator to, so the App most likely to reach it is exactly the App whose
+     * catalog is large — an unbounded read here would move the problem, not fix it.
+     *
+     * Ordered by `(created_at DESC, id DESC)`. `created_at` is fixed-width
+     * ISO-8601 TEXT, so the lexicographic comparison SQLite applies IS the
+     * chronological one. `id` is the table's PRIMARY KEY, which makes the pair a
+     * TOTAL order: Flags created in one seeded or scripted batch share a
+     * `created_at`, and without the tiebreaker which of the tied rows the `LIMIT`
+     * dropped would vary between two otherwise identical reads.
+     *
+     * Ask for one row more than you intend to keep and you learn whether you
+     * truncated, rather than inferring it from a full page.
+     */
+    listFlagPage(scope: TenantScope, limit: number) {
+      return flagsTable.findMany(scope, undefined, {
+        limit,
+        orderBy: [desc(flags.createdAt), desc(flags.id)],
+      });
+    },
 
     /**
      * App-scoped Flag fetch by a set of IDs, for callers that already hold a
      * bounded set of `flag_id`s and only need to resolve them to keys and names.
      * Reading the App's whole Flag catalog to build that lookup makes the caller's
      * cost scale with the App instead of with its own bound.
+     *
+     * Batched because D1 caps bound parameters per statement; see `idBatches`.
      */
-    listFlagsByIds(scope: TenantScope, ids: readonly string[]) {
-      if (ids.length === 0) return Promise.resolve([] as (typeof flags.$inferSelect)[]);
-      return flagsTable.findMany(scope, inArray(flags.id, [...ids]));
+    async listFlagsByIds(scope: TenantScope, ids: readonly string[]) {
+      if (ids.length === 0) return [] as (typeof flags.$inferSelect)[];
+      const pages = await Promise.all(
+        idBatches(ids).map((batch) => flagsTable.findMany(scope, inArray(flags.id, [...batch]))),
+      );
+      return pages.flat();
     },
 
-    /** App-scoped Segment fetch by a set of IDs (e.g. for a draft Run snapshot). */
-    listSegmentsByIds(scope: TenantScope, ids: readonly string[]) {
-      if (ids.length === 0) return Promise.resolve([] as (typeof segments.$inferSelect)[]);
-      return segmentsTable.findMany(scope, inArray(segments.id, [...ids]));
+    /**
+     * App-scoped Segment fetch by a set of IDs (e.g. for a draft Run snapshot).
+     *
+     * Batched because D1 caps bound parameters per statement; see `idBatches`.
+     * The ids come from `experiment.draft_segment_ids`, written from the request
+     * body against a schema with no length cap, so this set is caller-controlled
+     * and unbounded: unbatched, a draft carrying 100+ Segments made Start fail
+     * with `too many SQL variables` rather than start the Run.
+     */
+    async listSegmentsByIds(scope: TenantScope, ids: readonly string[]) {
+      if (ids.length === 0) return [] as (typeof segments.$inferSelect)[];
+      const pages = await Promise.all(
+        idBatches(ids).map((batch) => segmentsTable.findMany(scope, inArray(segments.id, batch))),
+      );
+      return pages.flat();
     },
 
     getSegment(scope: TenantScope, segmentId: string) {

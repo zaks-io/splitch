@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { FlagsEmptyState } from "./flags-empty-state";
 import { FlagsTable } from "./flags-table";
+import { FlagsTruncatedNotice } from "./flags-truncated-notice";
 
 vi.mock("./create-flag-dialog", () => ({
   CreateFlagDialog: () => <button type="button">Create Flag</button>,
@@ -46,5 +47,16 @@ describe("Flags page", () => {
     expect(html).toContain("A Flag is a named toggle with Variants.");
     expect(html).toContain("splitch flags create");
     expect(html).toContain("flags_create");
+  });
+
+  it("says the table is a page of the catalog, without promising a remedy that does not exist", () => {
+    const html = renderToStaticMarkup(<FlagsTruncatedNotice readLimit={200} shownCount={200} />);
+
+    expect(html).toContain("More than 200 Flags in this App");
+    expect(html).toContain("The 200 below are the most recently created, not all of them.");
+    // This screen IS the wider view, and the CLI and MCP read the same bounded
+    // endpoint. Sending an operator anywhere would be an impossible remedy.
+    expect(html).not.toContain("Reload");
+    expect(html).not.toContain("splitch flags");
   });
 });

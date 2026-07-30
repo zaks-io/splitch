@@ -24,6 +24,7 @@ import {
   type CreateVariantInput,
   duplicateVariantNameIssue,
   exactlyOneDefaultIssue,
+  flagFrom,
   flagResponse,
   pathBodyMismatch,
   schemaFromBody,
@@ -31,7 +32,15 @@ import {
 } from "./flag-definition-model";
 import { schemaDefinitionIssues } from "./flag-definition-schema";
 import { objectBody, pathParam } from "./handler-input";
+import { FLAG_LIST_READ_LIMIT } from "./overview-thresholds";
 
+/**
+ * The App's Flag catalog: bounded, newest first, and honest about the bound.
+ *
+ * This is the screen the Overview's truncation notice sends an operator to, so
+ * it is the one list that must not answer "too much data to show you" with
+ * another read whose cost is the App's whole catalog plus a query per row.
+ */
 export async function listFlags(
   deps: FlagDefinitionDeps,
   { input, requestId }: HandlerArgs<unknown>,
@@ -39,9 +48,22 @@ export async function listFlags(
   const appId = pathParam(input, "appId");
   if (!(await deps.repo.identity.getApp(appId))) return appNotFound(requestId);
 
-  const rows = await deps.repo.flags.flags.findMany(appScope(appId));
-  const items = await Promise.all(rows.map((row) => flagResponse(deps.repo, appId, row)));
-  return Response.json({ items });
+  const scope = appScope(appId);
+  // One row past the ceiling, so truncation is OBSERVED rather than inferred
+  // from a full page — a page of exactly `readLimit` rows is what a complete
+  // catalog of that size also looks like.
+  const scanned = await deps.repo.flags.listFlagPage(scope, FLAG_LIST_READ_LIMIT + 1);
+  const readTruncated = scanned.length > FLAG_LIST_READ_LIMIT;
+  const rows = readTruncated ? scanned.slice(0, FLAG_LIST_READ_LIMIT) : scanned;
+  // ONE catalog read for the whole page. Resolving Variants per row made this
+  // list cost a D1 query per Flag, on exactly the App large enough to be sent
+  // here in the first place.
+  const catalogs = await deps.repo.flags.listVariantsForFlags(
+    scope,
+    rows.map((row) => row.id),
+  );
+  const items = rows.map((row) => flagFrom(row, catalogs.get(row.id) ?? []));
+  return Response.json({ items, readTruncated, readLimit: FLAG_LIST_READ_LIMIT });
 }
 
 export async function createFlag(

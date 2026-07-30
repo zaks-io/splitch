@@ -2,13 +2,13 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { parseMcpDelegation } from "@splitch/contracts";
 import { handleMcpServerRequest } from "./mcp-handler";
+import { actor, NOW_SECONDS } from "./mcp-oauth-prm-actor";
+import { actorClaims, signAccessToken } from "./mcp-oauth-prm-jwt";
 import type {
   McpSessionContext,
   McpSessionStore,
   McpSessionTransport,
 } from "./mcp-session-context";
-import { actor, NOW_SECONDS } from "./mcp-oauth-prm-actor";
-import { actorClaims, signAccessToken } from "./mcp-oauth-prm-jwt";
 import { McpSessionNotFoundError } from "./mcp-session-store";
 import {
   allowMcpRevocations,
@@ -23,22 +23,9 @@ import {
  * against.
  */
 
-const service = "splitch-mcp-server";
+import { flagPage } from "./mcp-flag-fixtures";
 
-export const flagPage = {
-  items: [
-    {
-      id: "flag_checkout",
-      appId: "app_local",
-      key: "checkout",
-      name: "Checkout",
-      variants: [{ id: "var_on", name: "on", value: true }],
-      defaultVariantId: "var_on",
-      createdAt: "2026-07-18T00:00:00.000Z",
-      updatedAt: "2026-07-18T00:00:00.000Z",
-    },
-  ],
-};
+const service = "splitch-mcp-server";
 
 let cleanupServers: Array<() => Promise<void>> = [];
 

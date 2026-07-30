@@ -1,9 +1,9 @@
+import type { Flag } from "@splitch/contracts";
 import type {
   ControlPlaneOperationResult,
   FlagConfigGetOutput,
   FlagsClient,
 } from "@splitch/control-plane-sdk";
-import type { Flag } from "@splitch/contracts";
 
 /**
  * The Flag detail screen's two grains, read from the Worker and paired HERE, in
@@ -27,14 +27,25 @@ export type FlagDetailData = {
   configuration: FlagConfigGetOutput | null;
 };
 
-export type FlagDetailNotFound = { code: "FLAG_NOT_FOUND" };
+/**
+ * No Flag with this key was reachable.
+ *
+ * `catalogTruncated` is the difference between "no such Flag" and "we did not
+ * look at every Flag". The key is resolved against a BOUNDED catalog read, so
+ * when that read hit its ceiling an absent key does not prove absence — and a
+ * screen that says "Flag not found" on that evidence is asserting something it
+ * did not establish (ADR-0036).
+ */
+export type FlagDetailNotFound = { code: "FLAG_NOT_FOUND"; catalogTruncated: boolean };
 
 /**
  * Resolve a Flag by its URL `key` and read its Configuration for one Environment.
  *
  * The key is the addressable identity (immutable after create), so the list read
  * that resolves key -> id is also the read that supplies the App-level definition
- * — no extra round trip to have both.
+ * — no extra round trip to have both. That list read is BOUNDED, so a key it did
+ * not contain is only proof of absence when the read was not truncated; the
+ * not-found outcome carries which of the two it is.
  *
  * A missing Configuration is a real state, not an error: a Flag created through
  * the guided flow has a definition in every Environment before anyone narrows its
@@ -51,7 +62,11 @@ export async function readFlagDetail(
 
   const definition = listed.data.items.find((flag) => flag.key === flagKey);
   if (!definition) {
-    return { ok: true, status: 200, data: { code: "FLAG_NOT_FOUND" } };
+    return {
+      ok: true,
+      status: 200,
+      data: { code: "FLAG_NOT_FOUND", catalogTruncated: listed.data.readTruncated },
+    };
   }
 
   const configuration = await flags.getConfig({ ...scope, flagId: definition.id });

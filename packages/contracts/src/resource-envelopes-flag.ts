@@ -79,6 +79,27 @@ export const FlagResponseSchema = FlagSchema;
 export type FlagResponse = z.infer<typeof FlagResponseSchema>;
 
 // ---------------------------------------------------------------------------
+// FlagListResponse
+//
+// The Flag catalog read is BOUNDED, and the bound rides on the wire.
+//
+// `readTruncated` says the App holds more Flags than `readLimit`, so `items` is
+// the newest page of the catalog and not the catalog. It is OBSERVED by the
+// Worker (one row past the ceiling), never inferred from `items.length` — at any
+// cap those two are indistinguishable, and a page rendered as a whole list is
+// the disguised-complete-result ADR-0036 forbids. `readLimit` travels with it so
+// a reader can state the ceiling without holding its own copy of a server
+// constant.
+// ---------------------------------------------------------------------------
+
+export const FlagListResponseSchema = z.object({
+  items: z.array(FlagResponseSchema),
+  readTruncated: z.boolean(),
+  readLimit: z.number().int().positive(),
+});
+export type FlagListResponse = z.infer<typeof FlagListResponseSchema>;
+
+// ---------------------------------------------------------------------------
 // CreateVariantRequest (Variant sub-resource)
 //
 // `flag_variants_create` is an Idempotency-Key route, so `idempotency_key` is

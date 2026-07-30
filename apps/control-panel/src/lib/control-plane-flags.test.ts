@@ -15,7 +15,7 @@ describe("Control Panel Flags transport", () => {
     const fetcher = vi.fn(async (request: Request) => {
       requests.push(request);
       return request.url.endsWith("/flags")
-        ? Response.json({ items: [createdFlag()] })
+        ? Response.json({ items: [createdFlag()], readTruncated: false, readLimit: 200 })
         : Response.json({
             flagId: "flag_checkout",
             environmentId: "env_dev",

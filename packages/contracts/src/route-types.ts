@@ -17,13 +17,14 @@ import {
   type StartRunRequestSchema,
   type StartRunResponseSchema,
 } from "./resource-envelopes-experiment";
-import {
-  type CreateFlagRequestSchema,
-  type CreateVariantRequestSchema,
-  type FlagMutationResponseSchema,
+import type {
+  CreateFlagRequestSchema,
+  CreateVariantRequestSchema,
+  FlagListResponseSchema,
+  FlagMutationResponseSchema,
   FlagResponseSchema,
-  type PatchFlagRequestSchema,
-  type PatchVariantRequestSchema,
+  PatchFlagRequestSchema,
+  PatchVariantRequestSchema,
 } from "./resource-envelopes-flag";
 import type {
   ApiKeyParams,
@@ -62,7 +63,6 @@ import { paginatedResponse } from "./wire-envelopes-core";
  * shapes in the SDK.
  */
 
-const FlagListResponseSchema = z.object({ items: z.array(FlagResponseSchema) });
 const ExperimentListResponseSchema = z.object({ items: z.array(ExperimentResponseSchema) });
 const ApprovalRequestListResponseSchema = paginatedResponse(ApprovalRequestSchema);
 const DeletedResponseSchema = z.object({ deleted: z.literal(true) });

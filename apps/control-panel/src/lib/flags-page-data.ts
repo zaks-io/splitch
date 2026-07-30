@@ -15,6 +15,14 @@ export type FlagsPageItem = {
 
 export type FlagsPageData = {
   items: FlagsPageItem[];
+  /**
+   * The Worker's catalog read hit its ceiling, so `items` is the newest page of
+   * this App's Flags and not all of them. Carried through rather than recomputed
+   * from `items.length`: only the read that issued it can tell a full page from a
+   * complete catalog of the same size (ADR-0036).
+   */
+  readTruncated: boolean;
+  readLimit: number;
 };
 
 export async function readFlagsPage(
@@ -43,6 +51,8 @@ export async function readFlagsPage(
     ok: true,
     status: 200,
     data: {
+      readTruncated: listed.data.readTruncated,
+      readLimit: listed.data.readLimit,
       items: listed.data.items.map((definition, index) => {
         const configuration = configurations[index];
         return {

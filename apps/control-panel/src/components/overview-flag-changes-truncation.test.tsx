@@ -34,6 +34,30 @@ describe("Overview Flag Configuration read bound", () => {
     expect(html).toContain(`href="${SCOPE_HREF}/flags"`);
   });
 
+  it("offers the Flags screen without promising it holds everything", () => {
+    const html = render({
+      flagConfiguration: {
+        windowDays: 7,
+        changedCount: 50,
+        readTruncated: true,
+        readLimit: 50,
+        recentlyChanged: ONE_CHANGE,
+      },
+    });
+
+    // The copy is PINNED, not just its presence. The Flags screen is bounded at
+    // `FLAG_LIST_READ_LIMIT` and pages Flag DEFINITIONS by `created_at`, while
+    // this card pages Flag CONFIGURATIONS by `updated_at`: wider, but not a
+    // superset. Copy promising "every Flag" would route an operator to a screen
+    // that need not contain the change they were sent for, which is the exact
+    // disguised-complete-result this notice exists to prevent (ADR-0036). Any
+    // future edit that re-adds a completeness claim has to fail here.
+    expect(html).toContain("Open the Flags screen for this App");
+    for (const claim of ["every Flag", "all Flags", "all of your Flags", "the whole catalog"]) {
+      expect(html).not.toContain(claim);
+    }
+  });
+
   it("never renders the calm state while the scan is truncated", () => {
     // Truncated means the list is KNOWN to be incomplete, so an empty one is not
     // evidence of quiet -- and calm would render the truncation notice away.

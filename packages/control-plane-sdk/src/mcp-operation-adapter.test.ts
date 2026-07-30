@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import { createMcpOperationAdapter } from "./mcp-operation-adapter";
 
 const flagPage = {
+  readTruncated: false,
+  readLimit: 200,
   items: [
     {
       id: "flag_checkout",

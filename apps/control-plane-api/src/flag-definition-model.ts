@@ -1,6 +1,6 @@
-import { FlagSchema, type Flag, type Variant } from "@splitch/contracts";
+import { type Flag, FlagSchema, type Variant } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
-import { validateJsonSchema, type ValidationIssue } from "./flag-definition-schema";
+import { type ValidationIssue, validateJsonSchema } from "./flag-definition-schema";
 
 type FlagRow = NonNullable<Awaited<ReturnType<Repository["flags"]["getFlag"]>>>;
 type VariantRow = Awaited<ReturnType<Repository["flags"]["listVariants"]>>[number];
@@ -13,7 +13,17 @@ export interface CreateVariantInput {
 }
 
 export async function flagResponse(repo: Repository, appId: string, flag: FlagRow): Promise<Flag> {
-  const variants = await repo.flags.listVariants(appScope(appId), flag.id);
+  return flagFrom(flag, await repo.flags.listVariants(appScope(appId), flag.id));
+}
+
+/**
+ * The wire Flag, from rows the caller already holds.
+ *
+ * Split from `flagResponse` so a LIST can read every Variant catalog in one
+ * query and still produce identical items: the single-Flag path keeps its own
+ * read, and neither path gets its own copy of the mapping.
+ */
+export function flagFrom(flag: FlagRow, variants: readonly VariantRow[]): Flag {
   return FlagSchema.parse({
     id: flag.id,
     appId: flag.appId,

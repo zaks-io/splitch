@@ -3,6 +3,7 @@ import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   CreateFlagRequestSchema,
   CreateVariantRequestSchema,
+  FlagListResponseSchema,
   FlagMutationResponseSchema,
   FlagResponseSchema,
   PatchFlagRequestSchema,
@@ -32,7 +33,6 @@ const OWNER = "control-plane-api" as const;
 const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
-const FlagListResponse = z.object({ items: z.array(FlagResponseSchema) });
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 const APPROVAL_WRITE_ERRORS = [
   "APPROVAL_REVIEW_REQUIRED",
@@ -49,9 +49,9 @@ export const flagRoutes = [
     owner: OWNER,
     method: "GET",
     path: "/apps/:appId/flags",
-    summary: "List Flag definitions in an App.",
+    summary: "List Flag definitions in an App (bounded; reports its own truncation).",
     request: { params: AppParams },
-    response: FlagListResponse,
+    response: FlagListResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
