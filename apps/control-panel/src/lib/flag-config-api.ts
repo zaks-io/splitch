@@ -3,6 +3,7 @@ import type {
   ControlPlaneOperationResult,
   FlagConfigGetOutput,
   FlagConfigUpdateInput,
+  FlagConfigUpdateOutput,
   FlagsClient,
 } from "@splitch/control-plane-sdk";
 import type { AppEnvironmentScope } from "./query-keys";
@@ -28,6 +29,12 @@ export function createFlagConfigApi(
 ): FlagConfigApi {
   return {
     read: (scope, flagId) => flags.getConfig({ ...scope, flagId }, options),
-    update: (scope, flagId, patch) => flags.updateConfig({ ...scope, flagId, ...patch }, options),
+    update: async (scope, flagId, patch) => {
+      const result: ControlPlaneOperationResult<FlagConfigUpdateOutput> = await flags.updateConfig(
+        { ...scope, flagId, ...patch },
+        options,
+      );
+      return result.ok ? { ...result, data: result.data.config } : result;
+    },
   };
 }

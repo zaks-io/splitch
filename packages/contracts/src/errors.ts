@@ -49,6 +49,23 @@ export const policyChangeTypes = [
 export const PolicyChangeTypeSchema = z.enum(policyChangeTypes);
 export type PolicyChangeType = z.infer<typeof PolicyChangeTypeSchema>;
 
+const JsonScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const JsonScalarArraySchema = z.array(JsonScalarSchema);
+const FlatJsonObjectSchema = z.record(
+  z.string(),
+  z.union([JsonScalarSchema, JsonScalarArraySchema]),
+);
+
+export const ErrorDetailsSchema = z.record(
+  z.string(),
+  z.union([
+    JsonScalarSchema,
+    JsonScalarArraySchema,
+    FlatJsonObjectSchema,
+    z.array(FlatJsonObjectSchema),
+  ]),
+);
+
 const ApprovalPolicyContextDetailsSchema = z
   .object({
     environmentId: z.string(),
@@ -208,6 +225,16 @@ const errorMembers = [
     "PRIVACY_CONFIRMATION_REQUIRED",
     z.object({ confirmationRequired: z.literal(true), confirmationExpiresAt: z.string() }),
   ),
+  // Deprecated: emitted by the legacy flag-config-policy runtime path and removed by SPL-150 when the Approval runtime replaces it.
+  member(
+    "CONFIRMATION_REQUIRED",
+    z.object({
+      gate: PolicyChangeTypeSchema,
+      environmentId: z.string(),
+      attemptedOp: z.string(),
+      recommendedAction: z.literal("RETRY_WITH_CONFIRMATION"),
+    }),
+  ),
   member(
     "APPROVAL_REVIEW_FORBIDDEN",
     z.object({
@@ -249,7 +276,7 @@ const errorMembers = [
       reviewId: ApprovalReviewIdSchema,
       applicationError: z.object({
         code: ErrorCodeSchema,
-        details: z.record(z.string(), z.unknown()),
+        details: ErrorDetailsSchema,
       }),
       recommendedAction: z.literal("RETRY_REVIEW"),
     }),

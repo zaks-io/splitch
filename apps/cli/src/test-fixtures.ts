@@ -145,6 +145,7 @@ export const flagConfigResponse = {
 export const promoteResponse = {
   config: flagConfigResponse,
   diff: { before: flagConfigResponse, after: flagConfigResponse },
+  approvalRequest: null,
 };
 
 export const startRunResponse = {
@@ -168,6 +169,7 @@ export const startRunResponse = {
     createdAt: timestamp,
   },
   previousRunId: null,
+  approvalRequest: null,
 };
 
 export const testEvalResponse = {

@@ -14,6 +14,14 @@ import {
   parseControlPlaneResponse,
 } from "./operation-result";
 
+const LEGACY_APPROVAL_RUNTIME_OPERATIONS = new Set([
+  "flag_variants_update",
+  "flag_config_update",
+  "flag_targeting_rules_replace",
+  "flags_promote",
+  "experiments_start",
+]);
+
 export interface McpOperationAdapterOptions extends ControlPlaneHcOptions {
   delegationSecret?: string;
 }
@@ -122,6 +130,10 @@ function buildRequest(
   if (body !== undefined) {
     headers.set("content-type", "application/json");
   }
+  const idempotencyKey = inputRecord(input).idempotency_key;
+  if (route.idempotency !== "none" && typeof idempotencyKey === "string") {
+    headers.set("idempotency-key", idempotencyKey);
+  }
 
   return new Request(url, {
     method: route.method,
@@ -168,7 +180,13 @@ function bodyForRoute(route: ApiRouteContract, input: unknown): unknown {
     ...objectSchemaKeys(route.openapi.request?.query),
   ]);
   const stripped = bodySchema.safeParse(withoutRouteFields);
-  return stripped.success ? stripped.data : input;
+  if (stripped.success) {
+    return stripped.data;
+  }
+
+  // Deprecated SPL-150 bridge. Legacy CLI inputs still carry `confirm` and no
+  // Approval idempotency key while the shared MCP schema exposes the final form.
+  return LEGACY_APPROVAL_RUNTIME_OPERATIONS.has(route.operationId) ? withoutRouteFields : input;
 }
 
 type SafeParseResult = { success: true; data: unknown } | { success: false };

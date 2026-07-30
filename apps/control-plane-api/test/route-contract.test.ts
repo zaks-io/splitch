@@ -36,6 +36,11 @@ const REQUESTER = "user_route_contract_requester";
 const OUTSIDER = "user_route_contract_outsider";
 const PRIVACY_REQUEST_ID = "privacy_request_route_contract";
 const allowLimiter: RateLimiter = () => ({ limited: false });
+const SPL_150_PENDING_ROUTES = new Set([
+  "GET /apps/:appId/approval-requests",
+  "GET /apps/:appId/approval-requests/:id",
+  "POST /apps/:appId/approval-requests/:id/reviews",
+]);
 
 interface Harness {
   app: Hono;
@@ -90,7 +95,7 @@ beforeEach(async () => {
 afterEach(async () => h.bindings.dispose());
 
 describe("control-plane route contract", () => {
-  it("mounts every Control Plane-owned registry route", () => {
+  it("mounts every implemented Control Plane route and pins the SPL-150 runtime gap", () => {
     const expected = routeRegistry
       .filter((route) => route.owner === "control-plane-api")
       .map((route) => `${route.method} ${route.path}`)
@@ -100,7 +105,10 @@ describe("control-plane route contract", () => {
       .filter((route) => expected.includes(route))
       .sort();
 
-    expect(mounted).toEqual(expected);
+    expect(mounted).toEqual(expected.filter((route) => !SPL_150_PENDING_ROUTES.has(route)));
+    expect(expected.filter((route) => !mounted.includes(route))).toEqual(
+      [...SPL_150_PENDING_ROUTES].sort(),
+    );
   });
 
   it("returns typed errors for protected organization and privacy routes", async () => {

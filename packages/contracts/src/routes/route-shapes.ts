@@ -2,7 +2,7 @@ import { z } from "@hono/zod-openapi";
 import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "../approval-identifiers";
 import { CanonicalJsonSha256Schema } from "../canonical-hash";
 import { OriginAllowlistSchema } from "../client-origin";
-import { ErrorCodeSchema, PolicyChangeTypeSchema } from "../errors";
+import { ErrorCodeSchema, ErrorDetailsSchema, PolicyChangeTypeSchema } from "../errors";
 import {
   ConditionSchema,
   PercentageRolloutSchema,
@@ -214,7 +214,7 @@ export const ApprovalApplicationResultSchema = z
 export const ApprovalReviewErrorSchema = z
   .object({
     code: ErrorCodeSchema,
-    details: z.record(z.string(), z.unknown()),
+    details: ErrorDetailsSchema,
   })
   .strict();
 

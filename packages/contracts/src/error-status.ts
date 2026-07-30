@@ -49,6 +49,8 @@ export const errorStatusByCode: Record<ErrorCode, number> = {
   LAST_OWNER_REQUIRED: 409,
   LAST_ENVIRONMENT_REQUIRED: 409,
   PRIVACY_CONFIRMATION_REQUIRED: 409,
+  // Deprecated: emitted by the legacy flag-config-policy runtime path and removed by SPL-150 when the Approval runtime replaces it.
+  CONFIRMATION_REQUIRED: 409,
   APPROVAL_REVIEW_REQUIRED: 409,
   APPROVAL_REQUEST_STALE: 409,
   APPROVAL_REQUEST_RESOLVED: 409,

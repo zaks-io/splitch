@@ -96,7 +96,7 @@ describe("api command exit codes", () => {
       {
         match: (request) => request.url.includes("/config") && request.method === "PATCH",
         status: 200,
-        body: flagConfigResponse,
+        body: { config: flagConfigResponse, approvalRequest: null },
       },
     ]);
 
