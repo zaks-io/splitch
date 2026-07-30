@@ -32,7 +32,12 @@ test.describe("Experiment Results tab", () => {
     await expect(page.getByRole("img", { name: /Relative lift with confidence/ })).toBeVisible();
     const srm = page.locator('[data-srm-tier="clean"]');
     await expect(srm.getByText("Balanced").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Conclude and promote winner" })).toBeEnabled();
+    // The gate allows the decision, and the control is still disabled: the
+    // conclude mutation ships in SPL-158, and a live-looking dead button would
+    // be a lie about what the Panel can do.
+    await expect(page.getByText(/No blocking check/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Conclude and promote winner" })).toBeDisabled();
+    await expect(page.getByText(/SPL-158/)).toBeVisible();
     await expect(page.getByText(/Enforced by control-plane-api/)).toBeVisible();
 
     await captureThemeScreenshots(page, testInfo, "experiment-results-clean");
@@ -80,6 +85,26 @@ test.describe("Experiment Results tab", () => {
     await expect(page.getByText("__multiple__ quarantine rate")).toBeVisible();
 
     await captureThemeScreenshots(page, testInfo, "experiment-results-gated");
+  });
+
+  // Guardrails deliberately do not gate. A breach beside an otherwise clean
+  // gate is the most misleading state this tab can reach, so it has to be named
+  // where the decision is made rather than only in the Guardrails tile.
+  test("names a breached Guardrail beside an otherwise allowed decision", async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await page.goto(
+      "/acme-labs/checkout-api/dev/experiments/experiment_checkout_guardrail_e2e/results",
+    );
+
+    await expect(page.getByTestId("ship-blocked")).toHaveCount(0);
+    const advisory = page.getByTestId("ship-guardrail-advisory");
+    await expect(advisory).toContainText("checkout-reliability");
+    await expect(advisory).toContainText("would ship a known regression");
+    await expect(page.getByText("breached").first()).toBeVisible();
+
+    await captureThemeScreenshots(page, testInfo, "experiment-results-guardrail-breach");
   });
 
   test("tells a draft Experiment there is nothing to measure yet", async ({ page }) => {

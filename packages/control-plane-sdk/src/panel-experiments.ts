@@ -1,5 +1,5 @@
-import type { StatsOutput } from "@splitch/contracts";
-import { StatsOutputSchema } from "@splitch/contracts";
+import type { AnalysisResultsEnvelope } from "@splitch/contracts";
+import { AnalysisResultsEnvelopeSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
 import {
@@ -132,11 +132,47 @@ export function scopedAnalysisResultsRequest(identity: ScopedAnalysisIdentity): 
   );
 }
 
-export async function parseScopedAnalysisResults(response: Response): Promise<StatsOutput> {
-  if (!response.ok) {
-    throw new Error(`scoped analysis read failed with HTTP ${response.status}`);
+/**
+ * A refusal from the Analysis Worker, carried as a type rather than a string.
+ *
+ * `retryable` is the load-bearing field. A permanent integrity refusal that a
+ * caller reports as "try again in 30s" teaches the caller to poll through a
+ * fault that polling cannot clear (ADR-0036).
+ */
+export class ScopedAnalysisError extends Error {
+  readonly status: number;
+  readonly retryable: boolean;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ScopedAnalysisError";
+    this.status = status;
+    // Only the codes that describe a temporary condition may be retried.
+    this.retryable = status === 429 || status === 503;
   }
-  return StatsOutputSchema.parse(await response.json());
+}
+
+export async function parseScopedAnalysisResults(
+  response: Response,
+  expectedRunId: string,
+): Promise<AnalysisResultsEnvelope> {
+  if (!response.ok) {
+    throw new ScopedAnalysisError(
+      response.status,
+      `scoped analysis read failed with HTTP ${response.status}`,
+    );
+  }
+  const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+  // Numbers from one Run rendered under another Run's heading is the exact
+  // failure the no-pooling guarantee exists to prevent, and no amount of
+  // retrying turns it into the right Run.
+  if (envelope.run_id !== expectedRunId) {
+    throw new ScopedAnalysisError(
+      500,
+      `scoped analysis answered for Run ${envelope.run_id}, not Run ${expectedRunId}`,
+    );
+  }
+  return envelope;
 }
 
 export function parseScopedAnalysisIdentity(value: string | null): ScopedAnalysisIdentity | null {

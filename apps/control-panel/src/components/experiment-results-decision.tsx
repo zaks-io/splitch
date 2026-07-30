@@ -1,4 +1,4 @@
-import type { ExperimentDecisionGate } from "@splitch/contracts";
+import type { ExperimentDecisionGate, GuardrailResult } from "@splitch/contracts";
 import { Button } from "@splitch/ui/components/button";
 
 /**
@@ -13,9 +13,11 @@ import { Button } from "@splitch/ui/components/button";
 
 export function ExperimentResultsDecision({
   gate,
+  guardrails,
   runStatus,
 }: {
   gate: ExperimentDecisionGate;
+  guardrails: readonly GuardrailResult[];
   runStatus: "running" | "ended";
 }) {
   const blocking = gate.checks.filter((check) => check.status === "fail");
@@ -29,16 +31,12 @@ export function ExperimentResultsDecision({
           <h3 className="font-semibold text-base text-foreground" id="results-decision-heading">
             Ship decision
           </h3>
-          <p className="mt-1 max-w-prose text-muted-foreground text-sm">
-            {gate.shipAllowed
-              ? "Every readiness check passed. Concluding this Run is allowed."
-              : "Concluding this Run is blocked until the failing checks below clear."}
-          </p>
+          <GateSummary gate={gate} />
         </div>
-        <Button disabled={!gate.shipAllowed} type="button">
-          Conclude and promote winner
-        </Button>
+        <ConcludeAction shipAllowed={gate.shipAllowed} />
       </div>
+
+      <GuardrailAdvisory guardrails={guardrails} />
 
       {gate.shipAllowed ? null : (
         <div
@@ -82,12 +80,67 @@ export function ExperimentResultsDecision({
   );
 }
 
+/**
+ * "Every readiness check passed" claims a pass for checks that only reported
+ * not-applicable. Count what was actually assessed.
+ */
+function GateSummary({ gate }: { gate: ExperimentDecisionGate }) {
+  const passed = gate.checks.filter((check) => check.status === "pass").length;
+  const noun = gate.checks.length === 1 ? "check" : "checks";
+  return (
+    <p className="mt-1 max-w-prose text-muted-foreground text-sm">
+      {gate.shipAllowed
+        ? `No blocking check. ${passed} of ${gate.checks.length} readiness ${noun} passed, and the rest do not apply to this Run.`
+        : "Concluding this Run is blocked until the failing checks below clear."}
+    </p>
+  );
+}
+
+/**
+ * Always disabled. The conclude/promote mutation does not exist yet (SPL-158),
+ * and an enabled control that silently does nothing is a lie about what the
+ * Panel can do (ADR-0036).
+ */
+function ConcludeAction({ shipAllowed }: { shipAllowed: boolean }) {
+  return (
+    <div className="grid justify-items-end gap-1">
+      <Button disabled type="button">
+        Conclude and promote winner
+      </Button>
+      <p className="text-muted-foreground text-xs">
+        {shipAllowed
+          ? "Not wired up yet: concluding a Run ships in SPL-158."
+          : "Blocked by the checks below, and not wired up yet (SPL-158)."}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Guardrails deliberately do not gate, so a breach can sit beside a clean gate.
+ * Naming it here is the difference between a decision and an accident.
+ */
+function GuardrailAdvisory({ guardrails }: { guardrails: readonly GuardrailResult[] }) {
+  const breached = guardrails.filter((guardrail) => guardrail.is_breached === true);
+  if (breached.length === 0) return null;
+  return (
+    <p
+      className="mt-4 rounded-md border border-warning/40 bg-warning-muted p-3 text-sm text-warning-foreground"
+      data-testid="ship-guardrail-advisory"
+    >
+      {breached.length} Guardrail {breached.length === 1 ? "Metric is" : "Metrics are"} breached on
+      this Run: {breached.map((guardrail) => guardrail.metric_id).join(", ")}. A Guardrail breach
+      does not block the gate, so this decision would ship a known regression.
+    </p>
+  );
+}
+
 function CheckMark({ status }: { status: "pass" | "fail" | "not_applicable" }) {
   const label = status === "pass" ? "Passed" : status === "fail" ? "Failed" : "Not applicable";
   const glyph = status === "pass" ? "✓" : status === "fail" ? "✕" : "–";
   const tone =
     status === "pass"
-      ? "text-arm-treatment-foreground"
+      ? "text-success"
       : status === "fail"
         ? "text-destructive"
         : "text-muted-foreground";

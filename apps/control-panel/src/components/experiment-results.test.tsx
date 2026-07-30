@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { ExperimentResults, ExperimentResultsEmpty } from "./experiment-results";
 import {
+  breachedGuardrailStats,
+  modestLiftStats,
   resultsFixture,
   srmFiringStats,
   statsFixture,
@@ -19,8 +21,78 @@ describe("ExperimentResults", () => {
     expect(html).toContain("+6.4%");
     expect(html).toContain("[+1.9, +11.2]");
     expect(html).toContain("<svg");
-    expect(html).toContain("Every readiness check passed");
+    expect(html).toContain("No blocking check");
     expect(html).not.toContain('data-testid="ship-blocked"');
+  });
+
+  // "Every readiness check passed" claims a pass for checks that only reported
+  // not-applicable. The count has to match what was actually assessed.
+  it("counts the checks that passed instead of claiming they all did", () => {
+    const results = resultsFixture(statsFixture());
+    const passed = results.gate.checks.filter((check) => check.status === "pass").length;
+    const html = renderToStaticMarkup(<ExperimentResults results={results} />);
+
+    expect(passed).toBeLessThan(results.gate.checks.length);
+    expect(html).toContain(`${passed} of ${results.gate.checks.length} readiness checks passed`);
+    expect(html).not.toContain("Every readiness check passed");
+  });
+
+  it("renders a realistic single-digit lift without collapsing its interval", () => {
+    const html = renderToStaticMarkup(
+      <ExperimentResults results={resultsFixture(modestLiftStats())} />,
+    );
+
+    expect(html).toContain("+2.4%");
+    expect(html).toContain("[+0.6, +4.2]");
+    expect(html).toContain("0.0092");
+  });
+
+  // 0.0499 and 0.0501 fall on opposite sides of a conventional alpha and must
+  // never print as the same number.
+  it("keeps p-values distinguishable across a decision boundary", () => {
+    const base = statsFixture();
+    const [arm] = base.arm_results;
+    if (!arm) throw new Error("fixture must produce an arm");
+    const render = (pValue: number) =>
+      renderToStaticMarkup(
+        <ExperimentResults
+          results={resultsFixture({ ...base, arm_results: [{ ...arm, p_value: pValue }] })}
+        />,
+      );
+
+    expect(render(0.0499)).toContain("0.0499");
+    expect(render(0.0501)).toContain("0.0501");
+  });
+
+  // ADR-0014: the interval a reader sees must be the interval the call was made
+  // on. When they disagree, saying so beats picking the flattering one.
+  it("refuses to call a result significant when the interval shown spans zero", () => {
+    const base = statsFixture();
+    const [arm] = base.arm_results;
+    if (!arm) throw new Error("fixture must produce an arm");
+    const html = renderToStaticMarkup(
+      <ExperimentResults
+        results={resultsFixture({
+          ...base,
+          arm_results: [{ ...arm, ci_lower: -2036.6, ci_upper: 5036.6, is_significant: true }],
+        })}
+      />,
+    );
+
+    expect(html).toContain("Significance disputed");
+    expect(html).not.toContain(">Significant<");
+  });
+
+  // Guardrails deliberately do not gate, which makes a breach beside an
+  // otherwise clean gate the most misleading state the tab can reach.
+  it("names a breached Guardrail in the ship decision without blocking on it", () => {
+    const results = resultsFixture(breachedGuardrailStats());
+    const html = renderToStaticMarkup(<ExperimentResults results={results} />);
+
+    expect(results.gate.shipAllowed).toBe(true);
+    expect(html).toContain('data-testid="ship-guardrail-advisory"');
+    expect(html).toContain("checkout_latency_p95");
+    expect(html).toContain("would ship a known regression");
   });
 
   // The Worker reports no lift for the baseline arm. Drawn as an interval that
@@ -54,10 +126,19 @@ describe("ExperimentResults", () => {
     expect(svg).toContain("0% by definition");
     expect(svg).toContain("baseline, 0% lift by definition");
     expect(svg).not.toContain("−∞");
-    // The table still reports the arm's own unestimated interval verbatim.
-    expect(html).toContain("[−∞, +∞]");
+    // The table agrees with the plot: the baseline is an anchor, not a result
+    // with an infinitely wide interval and a p-value of 1.
+    expect(html).toContain("baseline, by definition");
+    expect(html).not.toContain("[−∞, +∞]");
   });
 
+  it("tells a Run-less Experiment there is nothing to measure", () => {
+    const html = renderToStaticMarkup(<ExperimentResultsEmpty />);
+    expect(html).toContain("no Run yet");
+  });
+});
+
+describe("ExperimentResults warning states", () => {
   it("never hides the numbers behind a firing SRM warning", () => {
     const html = renderToStaticMarkup(
       <ExperimentResults results={resultsFixture(srmFiringStats())} />,
@@ -112,20 +193,45 @@ describe("ExperimentResults", () => {
       gate: {
         shipAllowed: true,
         blockedBy: [],
-        checks: [],
+        checks: [
+          {
+            id: "exposure_srm",
+            status: "pass",
+            title: "Exposure split matches allocation",
+            detail: "Chi-square p = 0.62.",
+          },
+          {
+            id: "activated_srm",
+            status: "not_applicable",
+            title: "Activated-population SRM",
+            detail: "This Experiment has no activation gate.",
+          },
+        ],
         enforcedBy: "control-plane-api",
       },
     });
     const html = renderToStaticMarkup(<ExperimentResults results={results} />);
 
-    expect(html).toContain("Every readiness check passed");
+    expect(html).toContain("No blocking check");
+    expect(html).toContain("1 of 2 readiness checks passed");
     expect(html).not.toContain('data-testid="ship-blocked"');
-    expect(html).not.toMatch(/<button[^>]*\sdisabled=""/);
   });
 
-  it("tells a Run-less Experiment there is nothing to measure", () => {
-    const html = renderToStaticMarkup(<ExperimentResultsEmpty />);
-    expect(html).toContain("no Run yet");
+  /**
+   * The conclude/promote mutation does not exist yet (SPL-158). An enabled
+   * primary action that silently does nothing is a lie about what the Panel
+   * can do, so the control stays disabled and says why.
+   */
+  it("never offers a live conclude action while the mutation is unbuilt", () => {
+    for (const stats of [statsFixture(), srmFiringStats(), breachedGuardrailStats()]) {
+      const html = renderToStaticMarkup(<ExperimentResults results={resultsFixture(stats)} />);
+      const buttons = html.match(/<button[\s\S]*?<\/button>/g) ?? [];
+
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0]).toContain("Conclude and promote winner");
+      expect(buttons[0]).toMatch(/\sdisabled=""/);
+      expect(html).toContain("SPL-158");
+    }
   });
 });
 

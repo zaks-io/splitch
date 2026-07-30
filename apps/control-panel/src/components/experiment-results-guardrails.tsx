@@ -58,9 +58,9 @@ export function ExperimentResultsGuardrails({
                   {breachLabel(guardrail)}
                 </span>
               </span>
-              {guardrail.breach_reason ? (
-                <p className="basis-full text-destructive text-xs">{guardrail.breach_reason}</p>
-              ) : null}
+              {/* breach_reason restates the same two numbers as the line above
+                  it, at raw float precision. The formatted pair is the honest
+                  rendering of the same fact, so the string is not repeated. */}
             </li>
           ))}
         </ul>
@@ -68,13 +68,15 @@ export function ExperimentResultsGuardrails({
 
       <dl className="mt-4 grid gap-3 border-border border-t pt-3 sm:grid-cols-3">
         <Stat
-          hint="Targeting keys seen in more than one Variant. These are quarantined and excluded from the analysis."
+          hint={`Targeting keys seen in more than one Variant. These are quarantined and excluded from the analysis. Tolerance is ${(MULTIPLE_RATE_TOLERANCE * 100).toFixed(0)}%.`}
           label="__multiple__ quarantine rate"
+          tone={health.multiple_rate > MULTIPLE_RATE_TOLERANCE ? "warn" : "ok"}
           value={`${(health.multiple_rate * 100).toFixed(2)}% · ${health.multiple_count.toLocaleString("en-US")} keys`}
         />
         <Stat
           hint="Share of exposed keys that reached the activation Metric."
           label="Activation rates"
+          tone="neutral"
           value={
             health.activation_rates
               ? Object.entries(health.activation_rates)
@@ -83,21 +85,53 @@ export function ExperimentResultsGuardrails({
               : "no activation Metric"
           }
         />
+        {/* "Sufficient" would claim a power calculation this number cannot
+            support. The engine raised a warning or it did not. */}
         <Stat
-          hint="Raised when an arm is too small for the configured decision rule."
+          hint="The engine raises this when an arm is below the minimum Entity count. Its absence is not a power calculation."
           label="Sample size"
-          value={health.low_n_warning ? "low n warning" : "sufficient"}
+          tone={health.low_n_warning ? "warn" : "ok"}
+          value={health.low_n_warning ? "low-n warning raised" : "no low-n warning"}
         />
       </dl>
     </section>
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint: string }) {
+/** docs/spec/stats/srm-and-health.md: above this share, quarantine is loud. */
+const MULTIPLE_RATE_TOLERANCE = 0.01;
+
+type StatTone = "neutral" | "ok" | "warn";
+
+const STAT_TONE: Record<StatTone, { glyph: string; label: string; className: string }> = {
+  neutral: { glyph: "·", label: "", className: "text-foreground" },
+  ok: { glyph: "✓", label: "Within tolerance", className: "text-success" },
+  warn: { glyph: "!", label: "Outside tolerance", className: "text-warning-foreground" },
+};
+
+function Stat({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone: StatTone;
+}) {
+  const { glyph, label: toneLabel, className } = STAT_TONE[tone];
   return (
     <div className="grid gap-0.5">
       <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="font-mono text-foreground text-sm">{value}</dd>
+      <dd className={`flex items-baseline gap-1.5 font-mono text-sm ${className}`}>
+        {toneLabel ? (
+          <span aria-label={toneLabel} role="img">
+            {glyph}
+          </span>
+        ) : null}
+        <span>{value}</span>
+      </dd>
       <dd className="text-muted-foreground text-xs">{hint}</dd>
     </div>
   );

@@ -142,7 +142,7 @@ export async function panelExperimentResults(
       );
   if (!run) return runNotFound(requestId);
 
-  const stats = await parseScopedAnalysisResults(
+  const results = await parseScopedAnalysisResults(
     await deps.analysis.fetch(
       scopedAnalysisResultsRequest({
         operation: "experiment_results_post",
@@ -153,30 +153,23 @@ export async function panelExperimentResults(
         runId: run.id,
       }),
     ),
+    run.id,
   );
 
+  // The baseline comes from the Run's frozen inputs, echoed by the Analysis
+  // Worker. Resolving it from the Experiment's current default Variant would
+  // relabel a historical Run's arms whenever that default was later changed.
+  const stats = results.stats;
   const output: PanelExperimentResultsOutput = {
     runId: run.id,
     runNumber: run.runNumber,
     runStatus: run.status === "ended" ? "ended" : "running",
-    controlVariant: controlVariantName(run.variantSet, experiment.defaultVariantId, run.id),
+    controlVariant: results.control_variant,
     stats,
     srm: experimentSrmDiagnostics(stats),
     gate: evaluateExperimentDecisionGate(stats),
   };
   return Response.json(output);
-}
-
-/** The Run's frozen baseline Variant. Every reported lift is measured against it. */
-function controlVariantName(
-  variantSetJson: string,
-  defaultVariantId: string | null,
-  runId: string,
-): string {
-  const variants = jsonArray<{ id: string; name: string }>(variantSetJson);
-  const control = variants.find((variant) => variant.id === defaultVariantId);
-  if (!control) throw new Error(`Run ${runId} has no Variant matching its default Variant`);
-  return control.name;
 }
 
 async function panelAccessError(
@@ -215,16 +208,18 @@ async function runningHealth(
         runId: experiment.liveRunId,
       }),
     ),
+    experiment.liveRunId,
   );
+  const stats = results.stats;
   return {
-    significanceReached: results.arm_results.some(
+    significanceReached: stats.arm_results.some(
       (result) => result.is_significant && result.in_bh_family && result.decision_valid,
     ),
     srmFiring:
-      results.srm.srm_is_mismatch ||
-      results.srm.activated_srm_mismatch === true ||
-      results.health.activation_balance_mismatch === true,
-    guardrailBreached: results.guardrail_results.some((result) => result.is_breached === true),
+      stats.srm.srm_is_mismatch ||
+      stats.srm.activated_srm_mismatch === true ||
+      stats.health.activation_balance_mismatch === true,
+    guardrailBreached: stats.guardrail_results.some((result) => result.is_breached === true),
   };
 }
 

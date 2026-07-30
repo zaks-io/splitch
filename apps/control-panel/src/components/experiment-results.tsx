@@ -42,7 +42,10 @@ export function ExperimentResults({ results }: { results: PanelExperimentResults
         />
       </div>
 
-      <ExperimentResultsMetricsTable results={results.stats.arm_results} />
+      <ExperimentResultsMetricsTable
+        controlVariant={results.controlVariant}
+        results={results.stats.arm_results}
+      />
 
       <div className="grid gap-6 xl:grid-cols-2">
         <ExperimentResultsSrm srm={results.srm} stats={results.stats} />
@@ -52,7 +55,11 @@ export function ExperimentResults({ results }: { results: PanelExperimentResults
         />
       </div>
 
-      <ExperimentResultsDecision gate={results.gate} runStatus={results.runStatus} />
+      <ExperimentResultsDecision
+        gate={results.gate}
+        guardrails={results.stats.guardrail_results}
+        runStatus={results.runStatus}
+      />
     </section>
   );
 }

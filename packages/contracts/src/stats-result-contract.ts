@@ -153,6 +153,23 @@ export const StatsOutputSchema = z
   .strict();
 export type StatsOutput = z.infer<typeof StatsOutputSchema>;
 
+/**
+ * What the Analysis Worker answers a /results read with.
+ *
+ * `run_id` and `control_variant` are echoed from the Run's frozen inputs rather
+ * than left for the caller to look up. A caller that re-derived the baseline
+ * from current Experiment configuration would mislabel a historical Run's arms
+ * the moment that configuration changed (ADR-0002, ADR-0003).
+ */
+export const AnalysisResultsEnvelopeSchema = z
+  .object({
+    run_id: z.string().min(1),
+    control_variant: z.string().min(1),
+    stats: StatsOutputSchema,
+  })
+  .strict();
+export type AnalysisResultsEnvelope = z.infer<typeof AnalysisResultsEnvelopeSchema>;
+
 export interface StatsEngine {
   analyze(input: StatsInput): Promise<StatsOutput>;
 }

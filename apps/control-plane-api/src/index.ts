@@ -25,6 +25,7 @@ import {
 import type { ControlPlaneApiEnv } from "./env";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
+import { panelAnalysisFailureResponse } from "./panel-analysis-failure";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
 import { makePanelDelegationReplayStore } from "./panel-identity-replay";
@@ -131,15 +132,8 @@ async function handlePanelExperimentsRequest(
       { repo: createRepository(env.DB), analysis: env.ANALYSIS_API },
       { actorId, ...input },
     );
-  } catch {
-    return Response.json(
-      {
-        code: "SERVICE_UNAVAILABLE",
-        message: "Experiment data is unavailable",
-        details: { retryAfterMs: 30_000 },
-      },
-      { status: 503 },
-    );
+  } catch (cause) {
+    return panelAnalysisFailureResponse(cause);
   }
 }
 

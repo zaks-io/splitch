@@ -1,4 +1,14 @@
 import { z } from "zod";
+import {
+  activatedSrmCheck,
+  activationBalanceCheck,
+  decisionValidCheck,
+  engineStatusCheck,
+  exposureSrmCheck,
+  SRM_CAUTION_P,
+  SRM_MISMATCH_P,
+  underpoweredCheck,
+} from "./experiment-decision-gate-checks";
 import type { StatsOutput } from "./stats-result-contract";
 
 /**
@@ -13,11 +23,6 @@ import type { StatsOutput } from "./stats-result-contract";
  * enforced contract back into an advisory one.
  */
 
-/** SRM chi-square hard threshold (docs/spec/stats/srm-and-health.md). */
-const SRM_MISMATCH_P = 0.001;
-/** Statsig-style caution band: noisy enough to watch, not to condemn. */
-const SRM_CAUTION_P = 0.01;
-
 export const srmTiers = ["clean", "possible_imbalance", "confirmed"] as const;
 export const SrmTierSchema = z.enum(srmTiers);
 
@@ -25,13 +30,24 @@ export const decisionGateCheckIds = [
   "exposure_srm",
   "activated_srm",
   "activation_balance",
+  "engine_status",
   "underpowered",
   "decision_valid_result",
 ] as const;
 export const DecisionGateCheckIdSchema = z.enum(decisionGateCheckIds);
 
 export const SrmDeviationSchema = z
-  .object({ variant: z.string(), observed: z.number(), expected: z.number() })
+  .object({
+    variant: z.string(),
+    observed: z.number(),
+    expected: z.number(),
+    /**
+     * Observed minus expected, computed here so every surface reports the same
+     * number. A skin that subtracted the two itself would be doing arithmetic
+     * on a diagnostic, which is exactly what the Worker is authoritative for.
+     */
+    delta: z.number(),
+  })
   .strict();
 
 export const SrmSignalSchema = z
@@ -123,9 +139,10 @@ export function experimentSrmDiagnostics(stats: StatsOutput): ExperimentSrmDiagn
 export function evaluateExperimentDecisionGate(stats: StatsOutput): ExperimentDecisionGate {
   const srm = experimentSrmDiagnostics(stats);
   const checks: DecisionGateCheck[] = [
-    exposureSrmCheck(srm.exposure),
-    activatedSrmCheck(srm.activated),
-    activationBalanceCheck(srm.activationBalance),
+    exposureSrmCheck(srm.exposure, stats.srm.srm_is_mismatch),
+    activatedSrmCheck(srm.activated, stats.srm.activated_srm_mismatch),
+    activationBalanceCheck(srm.activationBalance, stats.health.activation_balance_mismatch),
+    engineStatusCheck(stats),
     underpoweredCheck(stats),
     decisionValidCheck(stats),
   ];
@@ -138,160 +155,20 @@ export function evaluateExperimentDecisionGate(stats: StatsOutput): ExperimentDe
   };
 }
 
-function exposureSrmCheck(signal: SrmSignal): DecisionGateCheck {
-  const p = formatP(signal.pValue);
-  if (signal.tier === "confirmed") {
-    return {
-      id: "exposure_srm",
-      status: "fail",
-      title: "Sample Ratio Mismatch is firing",
-      detail: `Exposures are split differently than allocated (chi-square p = ${p}). Assignment is untrustworthy, so no Variant can be called a winner. Diagnose the cause and start a new Run.`,
-    };
-  }
-  if (signal.tier === "possible_imbalance") {
-    return {
-      id: "exposure_srm",
-      status: "fail",
-      title: "Possible exposure imbalance",
-      detail: `Exposure split is in the SRM caution band (chi-square p = ${p}). This band often self-resolves, but a decision may not be made until it clears.`,
-    };
-  }
-  return {
-    id: "exposure_srm",
-    status: "pass",
-    title: "Exposure split matches allocation",
-    detail: `Chi-square p = ${p}, above the ${SRM_CAUTION_P} caution band.`,
-  };
-}
-
-function activatedSrmCheck(signal: SrmSignal | null): DecisionGateCheck {
-  if (!signal) {
-    return {
-      id: "activated_srm",
-      status: "not_applicable",
-      title: "Activated-population SRM",
-      detail: "This Experiment has no activation gate, so there is no activated population.",
-    };
-  }
-  const p = formatP(signal.pValue);
-  if (signal.tier === "clean") {
-    return {
-      id: "activated_srm",
-      status: "pass",
-      title: "Activated population is balanced",
-      detail: `Chi-square p = ${p} on activated Entities.`,
-    };
-  }
-  return {
-    id: "activated_srm",
-    status: "fail",
-    title:
-      signal.tier === "confirmed"
-        ? "Activated-population SRM is firing"
-        : "Possible activated-population imbalance",
-    detail: `The activated subpopulation is skewed (chi-square p = ${p}). This is the fingerprint of a Treatment-affected activation gate, and it biases the gated result even when the full exposure split looks clean.`,
-  };
-}
-
-function activationBalanceCheck(
-  balance: ExperimentSrmDiagnostics["activationBalance"],
-): DecisionGateCheck {
-  if (!balance) {
-    return {
-      id: "activation_balance",
-      status: "not_applicable",
-      title: "Per-arm activation rate",
-      detail: "This Experiment has no activation gate, so there is no activation rate to compare.",
-    };
-  }
-  const p = formatP(balance.pValue);
-  if (balance.tier === "clean") {
-    return {
-      id: "activation_balance",
-      status: "pass",
-      title: "Activation rates match across arms",
-      detail: `Chi-square p = ${p} on activated vs not-activated by arm.`,
-    };
-  }
-  return {
-    id: "activation_balance",
-    status: "fail",
-    title:
-      balance.tier === "confirmed"
-        ? "Per-arm activation rate differs"
-        : "Possible per-arm activation-rate gap",
-    detail: `Arms are activating at different rates (chi-square p = ${p}). The gap explains why the gated population is skewed and makes the gated result untrusted.`,
-  };
-}
-
-function underpoweredCheck(stats: StatsOutput): DecisionGateCheck {
-  const decisionValid = stats.arm_results.filter((result) => result.decision_valid);
-  const starved = decisionValid.filter(
-    (result) => result.status === "insufficient_n" || result.status === "insufficient_denominator",
-  );
-  // With nothing decision-valid to size, there is no evidence to pass on. Saying
-  // "large enough" here would be a claim about zero Metrics.
-  if (decisionValid.length === 0 && !stats.health.low_n_warning) {
-    return {
-      id: "underpowered",
-      status: "not_applicable",
-      title: "Sample size not assessed",
-      detail: "This Run has no decision-valid Metric result to size.",
-    };
-  }
-  if (starved.length === 0 && !stats.health.low_n_warning) {
-    return {
-      id: "underpowered",
-      status: "pass",
-      title: "Sample is large enough to decide",
-      detail: "Every decision-valid Metric has enough Entities to support a call.",
-    };
-  }
-  const named = starved.map((result) => `${result.metric_id} / ${result.variant}`);
-  return {
-    id: "underpowered",
-    status: "fail",
-    title: "Result is underpowered",
-    detail:
-      named.length > 0
-        ? `Not enough data to decide on ${named.join(", ")}. Let the Run collect more Exposures.`
-        : "At least one arm is below the minimum Entity count for a decision. Let the Run collect more Exposures.",
-  };
-}
-
-function decisionValidCheck(stats: StatsOutput): DecisionGateCheck {
-  const family = stats.arm_results.filter((result) => result.in_bh_family && result.decision_valid);
-  if (family.length > 0) {
-    return {
-      id: "decision_valid_result",
-      status: "pass",
-      title: "A locked decision family exists",
-      detail: `${family.length} FDR-corrected goal Metric ${family.length === 1 ? "result" : "results"} belong to the Run's locked decision spec.`,
-    };
-  }
-  return {
-    id: "decision_valid_result",
-    status: "fail",
-    title: "No decision-valid result",
-    detail:
-      "This Run has no FDR-corrected goal Metric in its locked decision family, so there is nothing a decision could be made on. Exploratory results cannot call an Experiment.",
-  };
-}
-
 function srmDeviations(
   observed: Record<string, number>,
   expected: Record<string, number>,
 ): SrmDeviation[] {
   return [...new Set([...Object.keys(observed), ...Object.keys(expected)])]
     .sort()
-    .map((variant) => ({
-      variant,
-      observed: observed[variant] ?? 0,
-      expected: expected[variant] ?? 0,
-    }));
-}
-
-function formatP(value: number | null): string {
-  if (value === null) return "unavailable";
-  return value < 0.0001 ? "<0.0001" : value.toPrecision(3);
+    .map((variant) => {
+      const observedCount = observed[variant] ?? 0;
+      const expectedCount = expected[variant] ?? 0;
+      return {
+        variant,
+        observed: observedCount,
+        expected: expectedCount,
+        delta: observedCount - expectedCount,
+      };
+    });
 }

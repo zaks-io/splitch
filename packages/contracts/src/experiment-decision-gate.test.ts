@@ -91,8 +91,8 @@ describe("srmTierFor", () => {
 describe("experimentSrmDiagnostics", () => {
   it("exposes observed-minus-expected per Variant for cause hunting", () => {
     expect(experimentSrmDiagnostics(stats()).exposure.deviations).toEqual([
-      { variant: "control", observed: 4_010, expected: 4_000 },
-      { variant: "treatment", observed: 3_990, expected: 4_000 },
+      { variant: "control", observed: 4_010, expected: 4_000, delta: 10 },
+      { variant: "treatment", observed: 3_990, expected: 4_000, delta: -10 },
     ]);
   });
 
@@ -143,20 +143,117 @@ describe("evaluateExperimentDecisionGate", () => {
     expect(check(gate, "exposure_srm").title).toBe("Sample Ratio Mismatch is firing");
   });
 
-  it("blocks on the caution band without calling it a confirmed mismatch", () => {
+  // The spec blocks a firing SRM. The caution band warns, and blocking on it
+  // would hold a stricter bar than the stats engine itself does.
+  it("warns on the caution band without blocking the decision", () => {
     const gate = evaluateExperimentDecisionGate(
-      stats({ srm: { ...stats().srm, srm_p_value: 0.004 } }),
+      stats({ srm: { ...stats().srm, srm_p_value: 0.004, srm_is_mismatch: false } }),
     );
-    expect(gate.shipAllowed).toBe(false);
-    expect(check(gate, "exposure_srm").title).toBe("Possible exposure imbalance");
+    expect(gate.shipAllowed).toBe(true);
+    expect(check(gate, "exposure_srm").status).toBe("pass");
+    expect(check(gate, "exposure_srm").detail).toContain("caution band");
   });
 
+  // The engine's verdict is the authority, not a threshold re-applied here.
+  it("blocks whenever the engine says SRM is firing, whatever the p-value reads", () => {
+    const gate = evaluateExperimentDecisionGate(
+      stats({ srm: { ...stats().srm, srm_p_value: 0.004, srm_is_mismatch: true } }),
+    );
+    expect(gate.blockedBy).toEqual(["exposure_srm"]);
+  });
+
+  it("does not block on either side of the caution boundary when the engine reports no mismatch", () => {
+    for (const srmP of [0.0011, 0.009, 0.011]) {
+      const gate = evaluateExperimentDecisionGate(
+        stats({ srm: { ...stats().srm, srm_p_value: srmP, srm_is_mismatch: false } }),
+      );
+      expect(gate.blockedBy).toEqual([]);
+    }
+  });
+
+  it("marks activation checks not applicable rather than passing them on no evidence", () => {
+    const gate = evaluateExperimentDecisionGate(stats());
+    expect(check(gate, "activated_srm").status).toBe("not_applicable");
+    expect(check(gate, "activation_balance").status).toBe("not_applicable");
+  });
+
+  it("never lets a Guardrail breach alone block the decision", () => {
+    const gate = evaluateExperimentDecisionGate(
+      stats({
+        guardrail_results: [
+          {
+            metric_id: "checkout-reliability",
+            variant: "treatment",
+            ci_lower: -28.4,
+            threshold: -10,
+            is_breached: true,
+            in_bh_family: false,
+            exploratory: false,
+            decision_valid: true,
+            breach_reason: "CI lower bound is below the locked downside threshold",
+          },
+        ],
+      }),
+    );
+    expect(gate.shipAllowed).toBe(true);
+  });
+});
+
+describe("evaluateExperimentDecisionGate readiness", () => {
   it("blocks and names the starved Metric when the result is underpowered", () => {
     const gate = evaluateExperimentDecisionGate(
       stats({ arm_results: [armResult({ status: "insufficient_n" })] }),
     );
     expect(gate.blockedBy).toEqual(["underpowered"]);
     expect(check(gate, "underpowered").detail).toContain("checkout-conversion / treatment");
+  });
+
+  /**
+   * The engine encodes a fixed-horizon Run below its locked sample size as
+   * `running`, not as a shortfall status (packages/stats metric-arm-results).
+   * A gate that only recognized the shortfall statuses would call this Run
+   * shippable while it is still collecting.
+   */
+  it("refuses a fixed-horizon Run that is still collecting, which the engine reports as running", () => {
+    const gate = evaluateExperimentDecisionGate(
+      stats({ arm_results: [armResult({ status: "running" })] }),
+    );
+    expect(gate.shipAllowed).toBe(false);
+    expect(gate.blockedBy).toEqual(["underpowered"]);
+    expect(check(gate, "underpowered").title).toBe("Run has not reached its locked sample size");
+  });
+
+  it("refuses an estimator error rather than reporting it as a sample-size problem", () => {
+    const gate = evaluateExperimentDecisionGate(
+      stats({ arm_results: [armResult({ status: "error" })] }),
+    );
+    expect(gate.shipAllowed).toBe(false);
+    expect(gate.blockedBy).toEqual(["engine_status"]);
+    expect(check(gate, "engine_status").detail).toContain("checkout-conversion / treatment");
+  });
+
+  it("refuses a starved denominator, which the engine reports separately from insufficient_n", () => {
+    const gate = evaluateExperimentDecisionGate(
+      stats({ arm_results: [armResult({ status: "insufficient_denominator" })] }),
+    );
+    expect(gate.blockedBy).toEqual(["underpowered"]);
+  });
+
+  // Every status the engine can emit must land somewhere explicit. Only the two
+  // decidable ones may ship; anything else is a refusal.
+  it("allows a decision on exactly the decidable engine statuses", () => {
+    const shippable = new Map<ArmResult["status"], boolean>([
+      ["ready", true],
+      ["stopped", true],
+      ["running", false],
+      ["insufficient_n", false],
+      ["insufficient_denominator", false],
+      ["error", false],
+    ]);
+    for (const [status, expected] of shippable) {
+      const gate = evaluateExperimentDecisionGate(stats({ arm_results: [armResult({ status })] }));
+      expect(gate.shipAllowed, `status ${status}`).toBe(expected);
+    }
   });
 
   it("blocks on a low-n warning even when no arm reports a starved status", () => {
@@ -208,32 +305,5 @@ describe("evaluateExperimentDecisionGate", () => {
       }),
     );
     expect(gate.blockedBy).toEqual(["exposure_srm", "underpowered"]);
-  });
-
-  it("marks activation checks not applicable rather than passing them on no evidence", () => {
-    const gate = evaluateExperimentDecisionGate(stats());
-    expect(check(gate, "activated_srm").status).toBe("not_applicable");
-    expect(check(gate, "activation_balance").status).toBe("not_applicable");
-  });
-
-  it("never lets a Guardrail breach alone block the decision", () => {
-    const gate = evaluateExperimentDecisionGate(
-      stats({
-        guardrail_results: [
-          {
-            metric_id: "checkout-reliability",
-            variant: "treatment",
-            ci_lower: -28.4,
-            threshold: -10,
-            is_breached: true,
-            in_bh_family: false,
-            exploratory: false,
-            decision_valid: true,
-            breach_reason: "CI lower bound is below the locked downside threshold",
-          },
-        ],
-      }),
-    );
-    expect(gate.shipAllowed).toBe(true);
   });
 });

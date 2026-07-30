@@ -98,6 +98,57 @@ export function underpoweredStats(): StatsOutput {
   };
 }
 
+/**
+ * Clean and shippable on every gate check, with a Guardrail Metric breached.
+ *
+ * This is the most misleading state the tab can reach: Guardrails deliberately
+ * do not gate, so the ship control sits beside a known regression.
+ */
+export function breachedGuardrailStats(): StatsOutput {
+  const base = statsFixture();
+  return {
+    ...base,
+    guardrail_results: [
+      {
+        metric_id: "checkout_latency_p95",
+        variant: "treatment",
+        ci_lower: -24.6,
+        threshold: -10,
+        is_breached: true,
+        in_bh_family: false,
+        exploratory: false,
+        decision_valid: true,
+        breach_reason: "CI lower bound is below the locked downside threshold",
+      },
+    ],
+  };
+}
+
+/**
+ * A realistic effect: single-digit lift, an interval that is narrow but real.
+ * A fixture with a 1500% lift hides rendering faults that only show at the
+ * scale anyone actually ships at.
+ */
+export function modestLiftStats(): StatsOutput {
+  const base = statsFixture();
+  const [arm] = base.arm_results;
+  if (!arm) throw new Error("statsFixture must produce one arm result");
+  return {
+    ...base,
+    arm_results: [
+      {
+        ...arm,
+        sample_size_n: 48_210,
+        point_estimate: 0.1863,
+        relative_lift_pct: 2.4,
+        ci_lower: 0.6,
+        ci_upper: 4.2,
+        p_value: 0.0092,
+      },
+    ],
+  };
+}
+
 /** Mirrors the Worker: gate and srm derived once, then transported as data. */
 export function resultsFixture(
   stats: StatsOutput,

@@ -83,10 +83,10 @@ export function ExperimentResultsCiPlot({
             ),
           )}
           <text
-            className="fill-muted-foreground font-mono text-[11px]"
+            className="fill-muted-foreground font-mono text-[12px]"
             textAnchor="middle"
             x={LABEL_WIDTH + PLOT_WIDTH / 2}
-            y={height - 4}
+            y={height - 5}
           >
             relative lift vs {controlVariant} (%)
           </text>
@@ -113,10 +113,10 @@ function Ticks({ domain, height }: { domain: CiPlotDomain; height: number }) {
               y2={height - AXIS_HEIGHT}
             />
             <text
-              className="fill-muted-foreground font-mono text-[10px]"
+              className="fill-muted-foreground font-mono text-[11px]"
               textAnchor="middle"
               x={x}
-              y={height - AXIS_HEIGHT + 14}
+              y={height - AXIS_HEIGHT + 16}
             >
               {tick}
             </text>

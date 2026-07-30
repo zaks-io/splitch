@@ -105,6 +105,7 @@ export type {
 export {
   ArmResultSchema,
   CupedAttributeSourceSchema,
+  AnalysisResultsEnvelopeSchema,
   cupedAttributeSources,
   CupedMethodSchema,
   cupedMethods,
@@ -121,6 +122,7 @@ export {
   VarianceTechniquesSchema,
 } from "./stats-result-contract";
 export type {
+  AnalysisResultsEnvelope,
   ArmResult,
   CupedAttributeSource,
   CupedMethod,

@@ -1,7 +1,7 @@
 import type { ArmResult } from "@splitch/contracts";
 import { type CiPlotDomain, ciBoundIsOpen, ciPlotX } from "#lib/ci-plot-scale";
 import { LABEL_WIDTH, PLOT_WIDTH, rowY, VALUE_X } from "./experiment-results-ci-plot-geometry";
-import { formatInterval, formatLift } from "./experiment-results-format";
+import { formatInterval, formatLift, significanceDisplay } from "./experiment-results-format";
 
 /**
  * One row of marks per arm. Colour encodes the arm's role and never its rank:
@@ -79,7 +79,10 @@ export function ArmRow({
     result.relative_lift_pct === null
       ? null
       : LABEL_WIDTH + ciPlotX(result.relative_lift_pct, domain, PLOT_WIDTH);
-  const decided = result.is_significant && result.in_bh_family && result.decision_valid;
+  // Filled only when the shown interval agrees with the engine's verdict. A
+  // filled dot on an interval that spans zero would assert a decision the
+  // picture contradicts (ADR-0014).
+  const decided = significanceDisplay(result) === "significant";
 
   return (
     <g>
@@ -95,10 +98,21 @@ export function ArmRow({
         y2={y}
       />
       {[
-        { bound: "lower", x: lowerX, open: openLower },
-        { bound: "upper", x: upperX, open: openUpper },
+        { bound: "lower" as const, x: lowerX, open: openLower },
+        { bound: "upper" as const, x: upperX, open: openUpper },
       ].map((cap) =>
-        cap.open ? null : (
+        cap.open ? (
+          // An open end is unbounded, not merely wide. The arrow says the
+          // interval runs off the plot rather than stopping at its edge.
+          <polyline
+            className="fill-none stroke-[color:var(--arm-treatment-foreground)]"
+            key={`cap-${cap.bound}`}
+            points={openArrowPoints(cap.x, y, cap.bound)}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+          />
+        ) : (
           <line
             className="stroke-[color:var(--arm-treatment-foreground)]"
             key={`cap-${cap.bound}`}
@@ -131,6 +145,14 @@ export function ArmRow({
       </text>
     </g>
   );
+}
+
+const ARROW_LENGTH = 7;
+
+function openArrowPoints(x: number, y: number, bound: "lower" | "upper"): string {
+  const tipDirection = bound === "lower" ? -1 : 1;
+  const backX = x - tipDirection * ARROW_LENGTH;
+  return `${backX},${y - 5} ${x},${y} ${backX},${y + 5}`;
 }
 
 function armSummary(result: ArmResult): string {

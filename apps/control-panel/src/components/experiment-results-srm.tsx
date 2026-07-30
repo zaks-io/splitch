@@ -1,4 +1,5 @@
 import type { ExperimentSrmDiagnostics, SrmSignal, StatsOutput } from "@splitch/contracts";
+import { formatPValue } from "./experiment-results-format";
 
 /**
  * Graduated Sample Ratio Mismatch reporting.
@@ -99,10 +100,11 @@ function DeviationTable({ signal }: { signal: SrmSignal }) {
                 {deviation.observed.toLocaleString("en-US")}
               </td>
               <td className="py-1.5 text-right font-mono text-muted-foreground">
-                {Math.round(deviation.expected).toLocaleString("en-US")}
+                {formatCount(deviation.expected)}
               </td>
+              {/* The Worker computes the delta; the Panel only prints it. */}
               <td className="py-1.5 text-right font-mono text-foreground">
-                {formatDelta(deviation.observed - deviation.expected)}
+                {formatDelta(deviation.delta)}
               </td>
             </tr>
           ))}
@@ -165,19 +167,24 @@ function tierCopy(tier: SrmSignal["tier"]): string {
 
 function surfaceFor(tier: SrmSignal["tier"]): string {
   if (tier === "confirmed") return "border-destructive/40 bg-destructive/5";
-  if (tier === "possible_imbalance") return "border-amber-500/40 bg-amber-500/5";
+  if (tier === "possible_imbalance") return "border-warning/40 bg-warning-muted";
   return "border-border bg-card";
 }
 
 function formatP(pValue: number | null): string {
-  if (pValue === null) return "n/a";
-  if (pValue < 0.0001) return "<0.0001";
-  return pValue.toPrecision(2);
+  return pValue === null ? "n/a" : formatPValue(pValue);
+}
+
+/** Keeps a fractional expected count visible instead of rounding it away. */
+function formatCount(value: number): string {
+  return Number.isInteger(value)
+    ? value.toLocaleString("en-US")
+    : value.toLocaleString("en-US", { maximumFractionDigits: 1 });
 }
 
 function formatDelta(value: number): string {
-  const rounded = Math.round(value);
-  return `${rounded > 0 ? "+" : ""}${rounded.toLocaleString("en-US")}`;
+  const shown = Number(value.toFixed(1));
+  return `${shown > 0 ? "+" : ""}${formatCount(shown)}`;
 }
 
 function countLine(counts: Record<string, number>): string {

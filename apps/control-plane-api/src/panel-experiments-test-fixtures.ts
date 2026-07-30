@@ -1,4 +1,4 @@
-import type { StatsOutput } from "@splitch/contracts";
+import type { AnalysisResultsEnvelope, StatsOutput } from "@splitch/contracts";
 
 export interface PanelExperimentIds {
   appId: string;
@@ -76,6 +76,19 @@ export function runRow(ids: PanelExperimentIds, runNumber: 1 | 2) {
     createdAt: latest ? "2026-07-19T00:00:00.000Z" : "2026-07-18T00:00:00.000Z",
     createdBy: ids.actorId,
   };
+}
+
+/**
+ * What the Analysis Worker actually answers with: the Run it analysed, the
+ * baseline that Run froze, and the numbers. Tests wrap through here so a caller
+ * that stopped checking provenance would break a test rather than pass one.
+ */
+export function analysisEnvelope(
+  runId: string,
+  stats: StatsOutput,
+  overrides: Partial<AnalysisResultsEnvelope> = {},
+): AnalysisResultsEnvelope {
+  return { run_id: runId, control_variant: "control", stats, ...overrides };
 }
 
 /** A clean, powered, decision-valid Run. Override one branch per failure case. */

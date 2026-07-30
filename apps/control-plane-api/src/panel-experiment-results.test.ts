@@ -2,10 +2,16 @@ import {
   parsePanelExperimentResultsOutput,
   SCOPED_SERVICE_IDENTITY_HEADER,
 } from "@splitch/control-plane-sdk/panel-experiments";
+import type { AnalysisResultsEnvelope, StatsOutput } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
 import { panelExperimentResults } from "./panel-experiments";
-import { experimentRow, runRow, statsOutput } from "./panel-experiments-test-fixtures";
+import {
+  analysisEnvelope,
+  experimentRow,
+  runRow,
+  statsOutput,
+} from "./panel-experiments-test-fixtures";
 
 const APP_ID = "app_panel_results";
 const ENVIRONMENT_ID = "env_panel_results";
@@ -48,8 +54,12 @@ function repository(overrides: Record<string, unknown> = {}): Repository {
   } as unknown as Repository;
 }
 
-function analysisReturning(stats: unknown) {
-  return vi.fn(async (_request: Request) => Response.json(stats));
+/** Echoes back the Run it was asked for, as the real Analysis Worker does. */
+function analysisReturning(stats: StatsOutput, envelope: Partial<AnalysisResultsEnvelope> = {}) {
+  return vi.fn(async (request: Request) => {
+    const { runId } = (await request.clone().json()) as { runId: string };
+    return Response.json(analysisEnvelope(runId, stats, envelope));
+  });
 }
 
 async function results(
@@ -120,6 +130,27 @@ describe("panel Experiment Results read", () => {
 
     expect(response.status).toBe(404);
     expect(analysis).not.toHaveBeenCalled();
+  });
+
+  // ADR-0002/0003: the baseline is whatever the Run froze. Re-deriving it from
+  // the Experiment's current default Variant would relabel a historical Run's
+  // arms the moment someone changed that default.
+  it("labels Control from the Run's frozen inputs, not current Experiment configuration", async () => {
+    const analysis = analysisReturning(statsOutput(), { control_variant: "legacy_checkout" });
+    const response = await results(analysis, { runId: PREVIOUS_RUN_ID });
+
+    expect(await response.json()).toMatchObject({ controlVariant: "legacy_checkout" });
+  });
+
+  it("refuses numbers the Analysis Worker attributes to a different Run", async () => {
+    const analysis = vi.fn(async () =>
+      Response.json(analysisEnvelope("run_somewhere_else", statsOutput())),
+    );
+
+    await expect(results(analysis)).rejects.toMatchObject({
+      name: "ScopedAnalysisError",
+      retryable: false,
+    });
   });
 
   it("emits a payload the Panel contract accepts", async () => {

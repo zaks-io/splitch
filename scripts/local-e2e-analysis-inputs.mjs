@@ -21,12 +21,14 @@ export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
     "run_checkout_dev_previous_e2e",
     { control: 6, treatment: 6 },
   ),
+  // A lift the size real Experiments actually produce. A fixture with a 1500%
+  // effect hides every rendering fault that only appears at realistic scale.
   analysisInput(
     "env_checkout_dev_e2e",
     "experiment_checkout_significance_e2e",
     "run_checkout_significance_e2e",
-    { control: 100, treatment: 100 },
-    { decisionMetric: "checkout-conversion", conversions: { control: 5, treatment: 80 } },
+    { control: 1_500, treatment: 1_500 },
+    { decisionMetric: "checkout-conversion", conversions: { control: 300, treatment: 315 } },
   ),
   analysisInput(
     "env_checkout_prod_e2e",
@@ -35,14 +37,19 @@ export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
     { control: 140, treatment: 60 },
     { decisionMetric: "checkout-conversion", conversions: { control: 20, treatment: 12 } },
   ),
+  // Clean and decidable on every gate check, with a Guardrail Metric breached.
+  // Guardrails deliberately do not gate, so this is the state where the ship
+  // control sits next to a known regression.
   analysisInput(
     "env_checkout_dev_e2e",
     "experiment_checkout_guardrail_e2e",
     "run_checkout_guardrail_e2e",
-    { control: 100, treatment: 100 },
+    { control: 1_500, treatment: 1_500 },
     {
+      decisionMetric: "checkout-conversion",
+      conversions: { control: 300, treatment: 318 },
       guardrailMetric: "checkout-reliability",
-      conversions: { control: 80, treatment: 10 },
+      guardrailConversions: { control: 1_350, treatment: 900 },
     },
   ),
 ]);
@@ -62,7 +69,10 @@ function analysisInput(environmentId, experimentId, runId, counts, options = {})
         },
       ]
     : [];
-  const metricId = options.decisionMetric ?? options.guardrailMetric;
+  const metricSeries = [
+    { metricId: options.decisionMetric, conversions: options.conversions },
+    { metricId: options.guardrailMetric, conversions: options.guardrailConversions },
+  ].filter((series) => series.metricId !== undefined && series.conversions !== undefined);
   return {
     appId: "app_checkout_e2e",
     environmentId,
@@ -84,17 +94,17 @@ function analysisInput(environmentId, experimentId, runId, counts, options = {})
         dimension_values: "{}",
       })),
     ),
-    metricValues: metricId
-      ? Object.entries(options.conversions ?? {}).flatMap(([variant, count]) =>
-          Array.from({ length: count }, (_, index) => ({
-            targeting_key_hash: `${environmentId}-${variant}-${index}`,
-            run_id: runId,
-            metric_id: metricId,
-            metric_type: "binomial",
-            value: 1,
-            in_window: 1,
-          })),
-        )
-      : [],
+    metricValues: metricSeries.flatMap((series) =>
+      Object.entries(series.conversions).flatMap(([variant, count]) =>
+        Array.from({ length: count }, (_, index) => ({
+          targeting_key_hash: `${environmentId}-${variant}-${index}`,
+          run_id: runId,
+          metric_id: series.metricId,
+          metric_type: "binomial",
+          value: 1,
+          in_window: 1,
+        })),
+      ),
+    ),
   };
 }

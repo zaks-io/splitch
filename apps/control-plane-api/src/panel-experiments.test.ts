@@ -1,8 +1,14 @@
 import { SCOPED_SERVICE_IDENTITY_HEADER } from "@splitch/control-plane-sdk/panel-experiments";
+import type { StatsOutput } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
 import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
-import { experimentRow, type PanelExperimentIds, runRow } from "./panel-experiments-test-fixtures";
+import {
+  analysisEnvelope,
+  experimentRow,
+  type PanelExperimentIds,
+  runRow,
+} from "./panel-experiments-test-fixtures";
 
 const APP_ID = "app_panel_list";
 const ENVIRONMENT_ID = "env_panel_list";
@@ -23,7 +29,9 @@ const ids: PanelExperimentIds = {
 
 describe("panel Experiments composite read", () => {
   it("rechecks live scope and requests health for the exact live Run", async () => {
-    const analysis = vi.fn(async (_request: Request) => Response.json(statsOutput()));
+    const analysis = vi.fn(async (_request: Request) =>
+      Response.json(analysisEnvelope(RUN_ID, statsOutput() as StatsOutput)),
+    );
     const response = await panelExperimentsList(
       { repo: repository(), analysis: { fetch: analysis } as unknown as Fetcher },
       { actorId: ACTOR_ID, appId: APP_ID, environmentId: ENVIRONMENT_ID },
