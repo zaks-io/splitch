@@ -30,6 +30,17 @@ test("production deploy reuses successful CI instead of rerunning validation", (
   assert.doesNotMatch(validateJob, /Check Turbo remote cache inputs/);
 });
 
+test("production deploy is gated on a fresh successful nightly E2E run", () => {
+  assert.ok(validateJob);
+  assert.match(validateJob, /name: Verify recent E2E success/);
+  assert.match(validateJob, /actions\/workflows\/e2e\.yml\/runs/);
+  assert.match(validateJob, /"branch=main"/);
+  assert.match(validateJob, /"status=completed"/);
+  assert.match(validateJob, /conclusion" != "success"/);
+  assert.match(validateJob, /E2E_MAX_AGE_SECONDS: "172800"/);
+  assert.match(validateJob, /age_seconds.*-gt.*E2E_MAX_AGE_SECONDS/);
+});
+
 test("production deploy plans from the latest successful environment deployment", () => {
   assert.match(validateJob, /name: Plan production deploy/);
   assert.match(validateJob, /id: plan/);

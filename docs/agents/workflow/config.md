@@ -34,8 +34,9 @@ in this config; refresh them from Linear during each workflow run.
 - GitHub read-only checks: `gh repo view`, `gh workflow list`, `gh pr list`,
   `gh pr checks`, `gh run list`, and environment/branch-protection API reads.
 - Configured hosted PR check names: `Verify`, `Spec Lint`, and
-  `Stats Simulation Smoke` from the `ci` workflow. `Control Panel E2E` runs on
-  pushes to `main` and manual dispatches, not pull requests. Secret scanning is
+  `Stats Simulation Smoke` from the `ci` workflow. `Control Panel E2E` runs
+  nightly in the standalone `e2e` workflow (plus manual dispatch), not in `ci`;
+  its latest completed run gates `deploy-production`. Secret scanning is
   a step inside `Verify`; the standalone `gitleaks` workflow was removed. See
   `Pull Requests`.
 - Critical unknowns: friction-intake fields remain unverified. Branch protection
@@ -63,7 +64,8 @@ in this config; refresh them from Linear during each workflow run.
   (`format:check`, `lint`, `typecheck`, `knip`, `spec:lint`, `test:scripts`,
   `test`, `stats:golden`, `stats:property`, `build`) and then `pnpm secrets:range`.
 - Separate hosted checks: `Control Panel E2E` runs the local full-stack
-  Playwright harness on pushes to `main` and manual dispatches. On pull requests,
+  Playwright harness nightly in the `e2e` workflow and on manual dispatch; a
+  red or stale (>48h) latest run blocks `deploy-production`. On pull requests,
   `Spec Lint` runs `pnpm spec:lint`, and `Stats Simulation Smoke` runs package
   `stats:simulation -- --mode=smoke`.
 - Gate parity gap: `pnpm verify:push` runs `tinybird:local` and
@@ -357,9 +359,9 @@ real package API boundary.
   `pre-push` runs `pnpm verify:push`.
 - PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
   Blacksmith plus separate `Spec Lint` and `Stats Simulation Smoke` jobs.
-  `Control Panel E2E` runs after merge on pushes to `main` and on manual
-  dispatches. See the gate parity gap above for Tinybird Local and D1 local
-  validators.
+  `Control Panel E2E` runs nightly in the `e2e` workflow and on manual
+  dispatch; production deploys are gated on its latest completed run. See the
+  gate parity gap above for Tinybird Local and D1 local validators.
 - Shared Preview / Production: workflows are wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
   resources plus one Tinybird Branch. Production starts automatically after
@@ -402,7 +404,8 @@ real package API boundary.
       in `Pull Requests`.
 - [x] Hosted PR check names configured: `Verify`, `Spec Lint`, and
       `Stats Simulation Smoke`; secret scanning is a step inside `Verify`.
-      `Control Panel E2E` is limited to pushes to `main` and manual dispatches.
+      `Control Panel E2E` is limited to the nightly `e2e` workflow and manual
+      dispatches.
       See `Pull Requests`.
 - [x] Tinybird datasource project files exist under `infra/tinybird`.
       `pnpm tinybird:local` validates datasource contracts and builds against

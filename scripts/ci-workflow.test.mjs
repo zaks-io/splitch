@@ -51,3 +51,8 @@ test("successful main CI dispatches one exact production release", () => {
   assert.match(productionDispatch, /actions\/workflows\/deploy-production\.yml\/dispatches/);
   assert.doesNotMatch(workflow, /workflow_run:/);
 });
+
+test("the E2E harness stays out of the per-push hot path", () => {
+  assert.doesNotMatch(workflow, /control-panel-e2e/);
+  assert.doesNotMatch(workflow, /playwright/i);
+});
