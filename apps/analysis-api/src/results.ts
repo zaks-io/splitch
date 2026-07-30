@@ -1,12 +1,30 @@
 import {
+  AnalysisResultsEnvelopeSchema,
   type ErrorResponse,
   type StatsEngine,
+  type StatsInput,
   StatsInputSchema,
   StatsOutputSchema,
-  type StatsInput,
 } from "@splitch/contracts";
 import { StatsEngine as DefaultStatsEngine } from "@splitch/stats";
-import { renderError, type HandlerArgs } from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
+import {
+  AnalysisIsolationError,
+  AnalysisProvenanceError,
+  ResultsForbiddenError,
+  ResultsNotFoundError,
+} from "./results-errors";
+import {
+  booleanField,
+  compact,
+  jsonField,
+  optionalNumber,
+  optionalObject,
+  optionalString,
+  requiredPrincipalContext,
+  rowObject,
+  stringField,
+} from "./results-row-fields";
 import { scopedPipeParams, TinybirdReadError, type TinybirdReadTransport } from "./tinybird";
 
 const RUN_INPUTS_PIPE = "analysis_run_inputs";
@@ -35,7 +53,13 @@ export function makeResultsHandler(deps: ResultsDeps) {
       const scope = resultsScope(input, principal.appId, principal.environmentId);
       const statsInput = await readStatsInputFromTinybird(deps.tinybird, scope);
       const output = await statsEngine.analyze(statsInput);
-      return Response.json(StatsOutputSchema.parse(output));
+      return Response.json(
+        AnalysisResultsEnvelopeSchema.parse({
+          run_id: statsInput.run_id,
+          control_variant: statsInput.control_variant,
+          stats: StatsOutputSchema.parse(output),
+        }),
+      );
     } catch (cause) {
       return renderError(errorFor(cause), { requestId });
     }
@@ -55,6 +79,15 @@ export async function readStatsInputFromTinybird(
     );
   }
   const run = materializeRunInput(runInput);
+  // Every downstream read is keyed on the Run the inputs pipe returned. If that
+  // is not the Run the caller asked for, the response would carry one Run's
+  // Exposures under another Run's identity, and no pooling guarantee upstream
+  // could detect it. Refuse instead of mislabelling.
+  if (scope.runId !== undefined && run.run_id !== scope.runId) {
+    throw new AnalysisProvenanceError(
+      `analysis_run_inputs returned Run ${run.run_id} for requested Run ${scope.runId}`,
+    );
+  }
   const params = scopedPipeParams({ ...scope, runId: run.run_id });
 
   const [exposureRows, metricRows, prePeriodRows, activationRows] = await Promise.all([
@@ -180,6 +213,16 @@ function errorFor(cause: unknown): ErrorResponse {
       details: { retryAfterMs: 30_000 },
     };
   }
+  // A Run-provenance mismatch is a permanent integrity failure, not a blip.
+  // Reporting it as retryable would invite a client to poll until a mislabelled
+  // answer looked like a transient hiccup that had cleared.
+  if (cause instanceof AnalysisProvenanceError) {
+    return {
+      code: "INTERNAL_SERVER_ERROR",
+      message: "analysis run provenance mismatch",
+      details: {},
+    };
+  }
   if (cause instanceof AnalysisIsolationError) {
     return {
       code: "INTERNAL_SERVER_ERROR",
@@ -188,83 +231,6 @@ function errorFor(cause: unknown): ErrorResponse {
     };
   }
   return { code: "INTERNAL_SERVER_ERROR", message: "analysis failed", details: {} };
-}
-
-class ResultsNotFoundError extends Error {
-  constructor(readonly code: "EXPERIMENT_NOT_FOUND" | "RUN_NOT_FOUND") {
-    super(code === "RUN_NOT_FOUND" ? "Experiment Run not found" : "Experiment not found");
-    this.name = "ResultsNotFoundError";
-  }
-}
-
-class ResultsForbiddenError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ResultsForbiddenError";
-  }
-}
-
-class AnalysisIsolationError extends Error {
-  constructor() {
-    super("Tinybird returned a row outside the requested App/Environment scope");
-    this.name = "AnalysisIsolationError";
-  }
-}
-
-function rowObject(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("analysis-api: expected object");
-  }
-  return value as Record<string, unknown>;
-}
-
-function optionalObject(value: unknown): Record<string, unknown> {
-  return value === undefined ? {} : rowObject(value);
-}
-
-function stringField(source: Record<string, unknown>, key: string): string {
-  const value = source[key];
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`analysis-api: missing ${key}`);
-  }
-  return value;
-}
-
-function requiredPrincipalContext(value: string | null): string {
-  if (value === null || value.trim().length === 0) {
-    throw new ResultsForbiddenError("credential is not scoped to this app");
-  }
-  return value;
-}
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function optionalNumber(value: unknown): number | undefined {
-  return typeof value === "number" ? value : undefined;
-}
-
-function booleanField(source: Record<string, unknown>, key: string): boolean {
-  const value = source[key];
-  if (value === true || value === false) return value;
-  if (value === 1) return true;
-  if (value === 0) return false;
-  throw new Error(`analysis-api: missing ${key}`);
-}
-
-function jsonField(source: Record<string, unknown>, key: string): unknown {
-  const value = source[key];
-  if (typeof value !== "string") {
-    return value;
-  }
-  return JSON.parse(value) as unknown;
-}
-
-function compact<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter((entry) => entry[1] !== undefined),
-  ) as Partial<T>;
 }
 
 export type { ResultsDeps, ResultsScope };

@@ -13,6 +13,8 @@ import {
   TableRow,
 } from "@splitch/ui/components/table";
 import { EmptyState } from "@splitch/ui/state/empty-state";
+import { parityHint } from "#lib/parity-hints";
+import { ParityNote } from "./parity-note";
 
 type ExperimentListProps = {
   items: PanelExperimentListItem[];
@@ -31,11 +33,7 @@ export function ExperimentList({ items, scopeHref }: ExperimentListProps) {
             a draft, then Start its first Run when the setup is ready.
           </>
         }
-        secondaryAction={
-          <code className="rounded bg-muted px-2 py-1 font-mono text-muted-foreground text-xs">
-            splitch experiments create
-          </code>
-        }
+        secondaryAction={<ParityNote hint={parityHint("experiments_create")} />}
         title="Create your first Experiment"
       />
     );
@@ -71,7 +69,7 @@ function ExperimentRow({
 }) {
   const detailHref = `${scopeHref}/experiments/${encodeURIComponent(experiment.id)}`;
   return (
-    <TableRow className="group">
+    <TableRow className="group" data-experiment-id={experiment.id}>
       <TableCell className="font-medium">
         <a
           className="text-foreground underline-offset-4 group-hover:text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

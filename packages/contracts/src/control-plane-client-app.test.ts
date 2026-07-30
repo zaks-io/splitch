@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { accountRoutes } from "./routes/routes-account";
 import { approvalRoutes } from "./routes/routes-approvals";
+import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagRoutes } from "./routes/routes-flags";
@@ -22,20 +23,24 @@ const clientAppSource = readFileSync(
 );
 
 /** Indices of the `<name>SdkRoutes` tuple as it is written in the source. */
-function sdkIndices(tupleName: string): number[] {
+function sdkIndices(tupleName: string, routeGroup?: string): number[] {
   const tuple = new RegExp(`const ${tupleName} = \\[([\\s\\S]*?)\\] as const;`).exec(
     clientAppSource,
   );
   if (!tuple?.[1]) throw new Error(`control-plane-client-app.ts: no ${tupleName} tuple`);
 
-  const indices = [...tuple[1].matchAll(/Routes\[(\d+)\]/g)].map((match) => Number(match[1]));
+  const source = routeGroup ? `${routeGroup}Routes` : String.raw`\w+Routes`;
+  const indices = [...tuple[1].matchAll(new RegExp(`${source}\\[(\\d+)\\]`, "g"))].map((match) =>
+    Number(match[1]),
+  );
   if (indices.length === 0) throw new Error(`control-plane-client-app.ts: ${tupleName} is empty`);
   return indices;
 }
 
 const FLAGS_SDK_INDICES = sdkIndices("flagsSdkRoutes");
 const EXPERIMENTS_SDK_INDICES = sdkIndices("experimentsSdkRoutes");
-const APPS_SDK_INDICES = sdkIndices("appsSdkRoutes");
+const APPS_SDK_INDICES = sdkIndices("appsSdkRoutes", "account");
+const ATTENTION_SDK_INDICES = sdkIndices("appsSdkRoutes", "attention");
 const ENVIRONMENTS_SDK_INDICES = sdkIndices("environmentsSdkRoutes");
 const CREDENTIALS_SDK_INDICES = sdkIndices("credentialsSdkRoutes");
 const APPROVALS_SDK_INDICES = sdkIndices("approvalsSdkRoutes");
@@ -84,6 +89,9 @@ describe("control plane SDK route selection", () => {
       "apps_update",
       "apps_delete",
     ]);
+    expect(operationIdsAt(attentionRoutes, ATTENTION_SDK_INDICES)).toEqual([
+      "app_attention_rollup_get",
+    ]);
   });
 
   it("selects exactly the Environment operations the SDK exposes", () => {
@@ -121,6 +129,7 @@ describe("control plane SDK route selection", () => {
     expect(FLAGS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     expect(EXPERIMENTS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);
     expect(APPS_SDK_INDICES).toEqual([9, 10, 11, 12, 13]);
+    expect(ATTENTION_SDK_INDICES).toEqual([0]);
     expect(ENVIRONMENTS_SDK_INDICES).toEqual([14, 15, 16, 17, 18]);
     expect(CREDENTIALS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);
     expect(APPROVALS_SDK_INDICES).toEqual([0, 1, 2]);

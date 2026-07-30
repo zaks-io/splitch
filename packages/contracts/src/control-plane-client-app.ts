@@ -2,6 +2,7 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 import type { ApiRouteContract } from "./openapi-route";
 import { accountRoutes } from "./routes/routes-account";
 import { approvalRoutes } from "./routes/routes-approvals";
+import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagRoutes } from "./routes/routes-flags";
@@ -67,6 +68,7 @@ const appsSdkRoutes = [
   accountRoutes[11],
   accountRoutes[12],
   accountRoutes[13],
+  attentionRoutes[0],
 ] as const;
 
 const environmentsSdkRoutes = [
@@ -122,6 +124,7 @@ const appsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: appsSdkRoutes[2].openapi, handler: emitOnlyHandler(appsSdkRoutes[2]) },
   { route: appsSdkRoutes[3].openapi, handler: emitOnlyHandler(appsSdkRoutes[3]) },
   { route: appsSdkRoutes[4].openapi, handler: emitOnlyHandler(appsSdkRoutes[4]) },
+  { route: appsSdkRoutes[5].openapi, handler: emitOnlyHandler(appsSdkRoutes[5]) },
 ] as const);
 
 const environmentsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([

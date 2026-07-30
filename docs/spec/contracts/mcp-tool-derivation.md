@@ -53,13 +53,14 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 
 ### Apps
 
-| Tool          | Method | Path                |
-| ------------- | ------ | ------------------- |
-| `apps_list`   | GET    | `/orgs/:orgId/apps` |
-| `apps_create` | POST   | `/orgs/:orgId/apps` |
-| `apps_get`    | GET    | `/apps/:appId`      |
-| `apps_update` | PATCH  | `/apps/:appId`      |
-| `apps_delete` | DELETE | `/apps/:appId`      |
+| Tool                       | Method | Path                            |
+| -------------------------- | ------ | ------------------------------- |
+| `apps_list`                | GET    | `/orgs/:orgId/apps`             |
+| `apps_create`              | POST   | `/orgs/:orgId/apps`             |
+| `apps_get`                 | GET    | `/apps/:appId`                  |
+| `app_attention_rollup_get` | GET    | `/apps/:appId/attention-rollup` |
+| `apps_update`              | PATCH  | `/apps/:appId`                  |
+| `apps_delete`              | DELETE | `/apps/:appId`                  |
 
 ### Environments
 
@@ -245,6 +246,7 @@ naming the next step, so the agent's recovery branch is a token lookup, not pros
 - `APPROVAL_REVIEW_REQUIRED` → `details.approvalRequestId` + `recommendedAction: 'REVIEW_APPROVAL_REQUEST'`
 - `APPROVAL_REQUEST_STALE` → `details.currentTargetVersion` + `recommendedAction: 'REFRESH_AND_REPROPOSE'`
 - `APPROVAL_APPLICATION_FAILED` → `details.reviewId` + `recommendedAction: 'RETRY_REVIEW'`
+- `ATTENTION_FANOUT_LIMIT_EXCEEDED` → `details.limit` / `details.environments` + `recommendedAction: 'READ_PER_ENVIRONMENT'` (the App-wide rollup is over a fan-out budget; call `experiments_list` per Environment to find the running Experiments, then `experiment_results_get` on each for SRM/Guardrail health — `experiments_list` alone carries no health signal — and do **not** retry the rollup)
 
 No per-tool ad-hoc error shapes. (ADR-0025 "one canonical ErrorResponse".)
 

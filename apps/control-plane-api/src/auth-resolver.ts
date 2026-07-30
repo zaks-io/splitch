@@ -198,7 +198,11 @@ async function resolvePanelPrincipal(
       },
     };
   }
-  if (operation.id === "experiments_list" || operation.id === "experiments_detail") {
+  if (
+    operation.id === "experiments_list" ||
+    operation.id === "experiments_detail" ||
+    operation.id === "experiments_results"
+  ) {
     return {
       ok: true as const,
       principal: {
@@ -246,13 +250,14 @@ async function resolveBoundedPanelSessionPrincipal(
 async function resolvePanelResourcePrincipal(
   operation: Exclude<
     ReturnType<typeof parseControlPanelBindingOperation>,
-    { id: "apps_create" | "experiments_detail" | "experiments_list" } | null
+    { id: "apps_create" | "experiments_detail" | "experiments_list" | "experiments_results" } | null
   >,
   actorId: string,
   panelAccess?: PanelSessionAccess,
 ) {
   if (!panelAccess) return null;
-  const access = await panelAccess.authorizeApp(actorId, operation.appId, operation.environmentId);
+  const environmentId = "environmentId" in operation ? operation.environmentId : undefined;
+  const access = await panelAccess.authorizeApp(actorId, operation.appId, environmentId);
   if (!access) {
     return {
       ok: false as const,

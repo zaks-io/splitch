@@ -33,6 +33,13 @@ describe("mcp tool membership gates", () => {
     expect(scopeSatisfiesMembershipGate("app:app_local:owner", deleteGate[0] as string)).toBe(true);
   });
 
+  it("requires live App membership for the attention rollup", () => {
+    const gate = membershipGatePatterns(getRouteMembershipGate("app_attention_rollup_get"));
+    expect(gate).toEqual(["app:member"]);
+    expect(scopeSatisfiesMembershipGate("org:org_local:owner", gate[0] as string)).toBe(false);
+    expect(scopeSatisfiesMembershipGate("app:app_local:member", gate[0] as string)).toBe(true);
+  });
+
   it.each([
     ["flags_delete", "flag catalog deletes"],
     ["flag_variants_delete", "flag variant deletes"],

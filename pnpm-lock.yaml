@@ -160,6 +160,9 @@ importers:
       '@splitch/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@splitch/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@splitch/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -357,6 +360,9 @@ importers:
       hono:
         specifier: ^4.12.27
         version: 4.12.27
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/db:
     dependencies:

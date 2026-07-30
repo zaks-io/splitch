@@ -26,7 +26,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".output/**", "build/**"],
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
       "inputs": ["$TURBO_DEFAULT$"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
@@ -38,7 +38,7 @@
     },
     "@splitch/control-panel#build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".output/**", "build/**"],
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
       "inputs": ["$TURBO_DEFAULT$"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
@@ -58,7 +58,7 @@
     },
     "@splitch/marketing#build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".output/**", "build/**"],
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
       "inputs": ["$TURBO_DEFAULT$"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
@@ -69,6 +69,36 @@
         "CLOUDFLARE_ENV",
         "SPLITCH_GENERATED_WRANGLER_ENV"
       ]
+    },
+    "@splitch/cli#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/spec/quickstart.md",
+        "$TURBO_ROOT$/fixtures/external-dark-launch-product/**",
+        "$TURBO_ROOT$/scripts/dark-launch/**"
+      ],
+      "outputs": []
+    },
+    "@splitch/repo-lint#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/.github/workflows/sdk-*.yml",
+        "$TURBO_ROOT$/apps/*/package.json",
+        "$TURBO_ROOT$/packages/contracts/package.json",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/sdk/LICENSE.md",
+        "$TURBO_ROOT$/packages/sdk/package.json",
+        "$TURBO_ROOT$/packages/sdk/scripts/**",
+        "$TURBO_ROOT$/packages/sdk/src/**",
+        "!$TURBO_ROOT$/packages/sdk/src/generated/**",
+        "$TURBO_ROOT$/packages/sdk/tsconfig*.json",
+        "$TURBO_ROOT$/packages/sdk/tsup*.ts",
+        "$TURBO_ROOT$/packages/*/package.json",
+        "$TURBO_ROOT$/scripts/sdk-release/**"
+      ],
+      "outputs": []
     },
     "clean": {
       "cache": false
@@ -312,12 +342,12 @@
       "outputs": ["dist/**", "src/generated/**"]
     },
     "@splitch/sdk#typecheck": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["build"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/contracts/src/**"],
-      "outputs": ["src/generated/**"]
+      "outputs": []
     },
     "@splitch/sdk#test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["build"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/contracts/src/**"],
       "outputs": []
     }

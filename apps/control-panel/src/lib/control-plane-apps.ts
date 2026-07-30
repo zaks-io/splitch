@@ -61,6 +61,21 @@ export function createControlPanelFlagsClient(
   }).flags;
 }
 
+/**
+ * The signed delegation header is the only credential this binding accepts, and
+ * every inbound header is copied onto the outbound request. The SDK exposes a
+ * per-call `authorization` option, so caller-supplied bearer or cookie material
+ * can reach here; the entrypoint refuses it, but only once it has already crossed
+ * the binding. Refuse before dispatch instead.
+ */
+function refuseCallerCredentials(headers: Headers): void {
+  for (const header of ["authorization", "cookie"]) {
+    if (headers.has(header)) {
+      throw new Error(`control-panel binding request must not carry ${header} material`);
+    }
+  }
+}
+
 export function panelDelegationFetch(
   controlPlane: Fetcher,
   actor: ControlPanelActor,
@@ -71,6 +86,7 @@ export function panelDelegationFetch(
   return async (input, init) => {
     const request = input instanceof Request ? new Request(input, init) : new Request(input, init);
     const headers = new Headers(request.headers);
+    refuseCallerCredentials(headers);
     if (environmentId) headers.set(CONTROL_PANEL_ENVIRONMENT_HEADER, environmentId);
     const operation = parseControlPanelOperation(
       request.method,

@@ -1,10 +1,9 @@
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the contracts surface is intentionally aggregated here
 export { accessTokenRevocationKey, accessTokenRevocationTtl } from "./access-token-revocation";
 export type { ApprovalRequestId, ApprovalReviewId } from "./approval-identifiers";
-export {
-  ApprovalRequestIdSchema,
-  ApprovalReviewIdSchema,
-} from "./approval-identifiers";
+export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped CLI/MCP parity-skin API
+export * from "./barrels/parity-skins";
 export type { CanonicalJsonSha256 } from "./canonical-hash";
 export { CanonicalJsonSha256Schema } from "./canonical-hash";
 export {
@@ -28,6 +27,8 @@ export {
   RecommendedActionSchema,
   recommendedActions,
 } from "./errors";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
+export * from "./experiment-rigor";
 export type { HealthResponse, PlatformTarget } from "./health-response";
 export {
   createHealthResponse,
@@ -152,8 +153,6 @@ export {
   membershipRoles,
   scopeSatisfiesMembershipGate,
 } from "./mcp-tool-membership-gates";
-export type { McpProtocolToolDefinition, McpToolDefinition } from "./mcp-tools";
-export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
 export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
 export { defineApiRoute } from "./openapi-route";
@@ -166,6 +165,29 @@ export {
   OrganizationSlugSchema,
   RESERVED_ORGANIZATION_SLUGS,
 } from "./organization-slug";
+export type {
+  AppOverviewResponse,
+  OverviewDecisionExperiment,
+  OverviewDecisionReason,
+  OverviewExperiments,
+  OverviewExperimentsUnavailableReason,
+  OverviewFailingExperiment,
+  OverviewFailureReason,
+  OverviewFlagConfigChange,
+} from "./panel-overview-contract";
+export {
+  AppOverviewResponseSchema,
+  OverviewDecisionExperimentSchema,
+  OverviewDecisionReasonSchema,
+  OverviewExperimentsSchema,
+  OverviewExperimentsUnavailableReasonSchema,
+  OverviewFailingExperimentSchema,
+  OverviewFailureReasonSchema,
+  OverviewFlagConfigChangeSchema,
+  overviewDecisionReasons,
+  overviewExperimentsUnavailableReasons,
+  overviewFailureReasons,
+} from "./panel-overview-contract";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped resource envelope API
 export * from "./resource-envelopes";
 export type {
@@ -194,49 +216,45 @@ export {
   routeOwners,
 } from "./route-contract";
 export { getRoute, operationIds, routeRegistry } from "./route-registry";
-export type {
-  ApprovalApplicationResult,
-  ApprovalRequest,
-  ApprovalRequestListQuery,
-  ApprovalReview,
-  ApprovalReviewError,
-  ReviewApprovalRequest,
-} from "./routes/route-shapes-approval-request";
 export {
+  type ApprovalApplicationResult,
   ApprovalApplicationResultSchema,
+  type ApprovalRequest,
+  type ApprovalRequestListQuery,
   ApprovalRequestListQuerySchema,
   ApprovalRequestSchema,
+  type ApprovalReview,
+  type ApprovalReviewError,
   ApprovalReviewErrorSchema,
   ApprovalReviewSchema,
   InlineApproveAndApplyReviewSchema,
+  type ReviewApprovalRequest,
   ReviewApprovalRequestSchema,
 } from "./routes/route-shapes-approval-request";
-export type {
-  ApprovalActor,
-  ApprovalAppliedResourceType,
-  ApprovalDiff,
-  ApprovalDiffEntry,
-  ApprovalOperation,
-  ApprovalPolicyContext,
-  ApprovalRequestStatus,
-  ApprovalReviewAction,
-  ApprovalReviewOutcome,
-  ApprovalTarget,
-  ApprovalTargetType,
-  ApprovalTargetVersion,
-} from "./routes/route-shapes-approvals";
 export {
+  type ApprovalActor,
   ApprovalActorSchema,
+  type ApprovalAppliedResourceType,
   ApprovalAppliedResourceTypeSchema,
+  type ApprovalDiff,
+  type ApprovalDiffEntry,
   ApprovalDiffEntrySchema,
   ApprovalDiffSchema,
+  type ApprovalOperation,
   ApprovalOperationSchema,
+  type ApprovalPolicyContext,
   ApprovalPolicyContextSchema,
+  type ApprovalRequestStatus,
   ApprovalRequestStatusSchema,
+  type ApprovalReviewAction,
   ApprovalReviewActionSchema,
+  type ApprovalReviewOutcome,
   ApprovalReviewOutcomeSchema,
+  type ApprovalTarget,
   ApprovalTargetSchema,
+  type ApprovalTargetType,
   ApprovalTargetTypeSchema,
+  type ApprovalTargetVersion,
   ApprovalTargetVersionSchema,
   approvalAppliedResourceTypes,
   approvalOperations,
@@ -268,6 +286,7 @@ export {
   StatsInputSchema,
 } from "./stats-input-contract";
 export type {
+  AnalysisResultsEnvelope,
   ArmResult,
   CupedAttributeSource,
   CupedMethod,
@@ -283,6 +302,7 @@ export type {
   WinsorizeCap,
 } from "./stats-result-contract";
 export {
+  AnalysisResultsEnvelopeSchema,
   ArmResultSchema,
   CupedAttributeSourceSchema,
   CupedMethodSchema,

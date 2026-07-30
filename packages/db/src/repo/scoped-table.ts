@@ -1,5 +1,5 @@
 import type { SQL } from "drizzle-orm";
-import { getTableColumns, getTableName } from "drizzle-orm";
+import { count, getTableColumns, getTableName } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import type { Db } from "./client";
 import type { EnvScope, ScopeColumns, TenantScope } from "./scope";
@@ -36,12 +36,22 @@ type HasEnvColumn = { environmentId: SQLiteColumn };
  */
 type RequiredScope<T extends AppScopedTable> = T extends HasEnvColumn ? EnvScope : TenantScope;
 
+export interface ReadOptions {
+  limit?: number;
+}
+
 type Row<T extends SQLiteTable> = T["$inferSelect"];
 type Insert<T extends SQLiteTable> = T["$inferInsert"];
 
 export type ScopedTable<T extends AppScopedTable> = {
-  /** Rows in this scope matching the optional extra predicate. */
-  findMany(scope: RequiredScope<T>, extra?: SQL): Promise<Row<T>[]>;
+  /**
+   * Rows in this scope matching the optional extra predicate. `limit` bounds the
+   * rows materialized, for callers that only need to know whether a ceiling is
+   * exceeded and must not pay for the whole table to find out.
+   */
+  findMany(scope: RequiredScope<T>, extra?: SQL, options?: ReadOptions): Promise<Row<T>[]>;
+  /** How many rows are in this scope, without materializing any of them. */
+  countRows(scope: RequiredScope<T>, extra?: SQL): Promise<number>;
   /** First row in this scope matching the extra predicate, or null. */
   findOne(scope: RequiredScope<T>, extra?: SQL): Promise<Row<T> | null>;
   /**
@@ -104,11 +114,26 @@ export function scopedTable<T extends AppScopedTable>(db: Db, table: T): ScopedT
   const columns = scopeColumns(table);
 
   return {
-    async findMany(scope, extra) {
-      return db
+    async findMany(scope, extra, options) {
+      const query = db
         .select()
         .from(table as SQLiteTable)
-        .where(withScope(columns, scope, extra)) as Promise<Row<T>[]>;
+        .where(withScope(columns, scope, extra));
+      if (options?.limit === undefined) return query as Promise<Row<T>[]>;
+      if (!Number.isInteger(options.limit) || options.limit < 1) {
+        throw new Error(`findMany: limit must be a positive integer, got ${options.limit}`);
+      }
+      return query.limit(options.limit) as Promise<Row<T>[]>;
+    },
+
+    async countRows(scope, extra) {
+      const rows = (await db
+        .select({ total: count() })
+        .from(table as SQLiteTable)
+        .where(withScope(columns, scope, extra))) as { total: number }[];
+      const total = rows[0]?.total;
+      if (typeof total !== "number") throw new Error("countRows: COUNT returned no row");
+      return total;
     },
 
     async findOne(scope, extra) {

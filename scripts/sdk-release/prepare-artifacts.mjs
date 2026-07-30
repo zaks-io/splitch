@@ -20,11 +20,6 @@ export function ensureSdkBuilt(repoRoot) {
     stdio: "inherit",
     env: { ...process.env, CI: "true" },
   });
-  execFileSync("npx", ["tsup", "--config", "tsup.config.ts"], {
-    cwd: sdkRoot,
-    stdio: "inherit",
-    env: { ...process.env, CI: "true" },
-  });
 
   if (!existsSync(distIndex)) {
     throw new Error("packages/sdk/dist/index.js is missing after @splitch/sdk build");

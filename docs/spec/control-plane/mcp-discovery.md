@@ -108,6 +108,7 @@ RETRY_AFTER                → wait details.retryAfterMs → retry
 REVIEW_APPROVAL_REQUEST    → review details.approvalRequestId with the canonical Review action
 REFRESH_AND_REPROPOSE      → read current target state → retry the original mutation with a fresh idempotency key → Review as required
 RETRY_REVIEW               → retry the pending request with a new Review idempotency key
+READ_PER_ENVIRONMENT       → experiments_list per Environment (App-wide attention rollup over fan-out budget; do not retry)
 ```
 
 The token is the contract; the prompt is the convenience. An agent that already knows the token

@@ -6,12 +6,16 @@ import { createControlPanelApp } from "#lib/control-plane-app-functions";
 import { createControlPanelFlag, loadControlPanelFlags } from "#lib/control-plane-flag-functions";
 import { authorizeLiveUpdateUpgrade } from "#lib/live-update-authorization";
 import { handleLiveUpdateUpgrade } from "#lib/live-update-upgrade";
+import { loadOrgAppList } from "#lib/org-app-list-functions";
 import { setControlPanelSentryClient } from "#lib/panel-observability";
 
-// Keep server functions in the Worker graph so their handlers are deployed with the app.
+// Keep server functions in the Worker graph so their handlers are deployed with
+// the app. Being imported by a component is not enough: the client graph can
+// reference a server function without the Worker entry pulling its handler in.
 void createControlPanelApp;
 void createControlPanelFlag;
 void loadControlPanelFlags;
+void loadOrgAppList;
 
 type ControlPanelWorkerEnv = {
   DB: D1Database;

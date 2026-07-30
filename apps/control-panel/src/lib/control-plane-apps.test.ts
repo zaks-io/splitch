@@ -3,7 +3,7 @@ import {
   verifyControlPanelDelegation,
 } from "@splitch/control-plane-sdk/control-panel-identity";
 import { describe, expect, it, vi } from "vitest";
-import { createControlPanelAppsClient } from "./control-plane-apps";
+import { createControlPanelAppsClient, panelDelegationFetch } from "./control-plane-apps";
 
 const ACTOR = { actorId: "user_acme", sessionExpiresAt: 1_800_003_600 };
 const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
@@ -59,6 +59,101 @@ describe("Control Panel Apps transport", () => {
     expect(JSON.stringify(result)).not.toContain(TOKEN_HASH);
   });
 
+  it("reads attention through an App-scoped binding delegation without bearer material", async () => {
+    let capturedRequest: Request | undefined;
+    const apps = createControlPanelAppsClient(
+      {
+        fetch: async (request: Request) => {
+          capturedRequest = request;
+          return Response.json({
+            appId: "app_checkout",
+            items: [
+              {
+                environmentId: "env_prod",
+                state: "attention",
+                srm: true,
+                guardrail: false,
+              },
+            ],
+          });
+        },
+      } as unknown as Fetcher,
+      ACTOR,
+      DELEGATION_SECRET,
+      {
+        nowSeconds: () => 1_800_000_000,
+        nonce: () => "nonce_attention_123456",
+      },
+    );
+
+    const result = await apps.getAttentionRollup({ appId: "app_checkout" });
+    const request = capturedRequest;
+
+    expect(request?.headers.get("authorization")).toBeNull();
+    expect(request?.headers.get("cookie")).toBeNull();
+    const operation = { id: "app_attention_rollup_get", appId: "app_checkout" } as const;
+    await expect(
+      verifyControlPanelDelegation(
+        request?.headers.get(CONTROL_PANEL_DELEGATION_HEADER) ?? null,
+        request?.clone() as Request,
+        operation,
+        DELEGATION_SECRET,
+        1_800_000_000,
+      ),
+    ).resolves.toMatchObject({ operation, actorId: ACTOR.actorId });
+    expect(result).toMatchObject({
+      ok: true,
+      data: { appId: "app_checkout", items: [{ environmentId: "env_prod", srm: true }] },
+    });
+  });
+});
+
+// Both refusals live in the transport, before dispatch, so no caller credential
+// ever reaches the Control Plane binding.
+describe("Control Panel binding credential refusal", () => {
+  // The SDK exposes a per-call `authorization` option and this transport copies
+  // every inbound header onto the binding request. The entrypoint refuses bearer
+  // material, but only after it has crossed the binding, so the refusal has to
+  // happen here: the fetcher must never see the credential at all.
+  it("refuses caller-supplied bearer material before it crosses the binding", async () => {
+    const fetcher = vi.fn(async () => Response.json(createdApp()));
+    const apps = createControlPanelAppsClient(
+      { fetch: fetcher } as unknown as Fetcher,
+      ACTOR,
+      DELEGATION_SECRET,
+    );
+
+    await expect(
+      apps.getAttentionRollup(
+        { appId: "app_checkout" },
+        { authorization: "Bearer sk_live_stolen_token" },
+      ),
+    ).rejects.toThrow("must not carry authorization material");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  // Cookies are the panel session credential, so a Request built from an inbound
+  // browser request carries one; forwarding it would hand the Control Plane a
+  // second, unsigned way to name the caller. The SDK has no per-call cookie
+  // option, so this exercises the transport directly.
+  it("refuses caller-supplied cookie material before it crosses the binding", async () => {
+    const fetcher = vi.fn(async () => Response.json(createdApp()));
+    const dispatch = panelDelegationFetch(
+      { fetch: fetcher } as unknown as Fetcher,
+      ACTOR,
+      DELEGATION_SECRET,
+    );
+
+    await expect(
+      dispatch("https://control-plane.internal/apps/app_checkout/attention-rollup", {
+        headers: { cookie: "splitch_panel_session=stolen" },
+      }),
+    ).rejects.toThrow("must not carry cookie material");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("Control Panel Apps transport failures", () => {
   it("preserves typed Worker refusals for the server function caller", async () => {
     const apps = createControlPanelAppsClient(
       {

@@ -1,11 +1,10 @@
-import { deriveMcpTools, getRoute, type McpToolDefinition } from "@splitch/contracts";
-
-const RESOURCE_ALIASES: Record<string, string> = {
-  organizations: "orgs",
-  environments: "envs",
-};
-
-const COMPOUND_VERBS = ["test_eval"] as const;
+import {
+  CLI_PRESENTATION_ALIAS_PATHS,
+  cliCommandPath,
+  deriveMcpTools,
+  getRoute,
+  type McpToolDefinition,
+} from "@splitch/contracts";
 
 export interface CliCommandDefinition {
   /** Stable operation identity (MCP tool name for API commands). */
@@ -16,26 +15,6 @@ export interface CliCommandDefinition {
   readonly needsEnvironment: boolean;
   readonly supportsConfirm: boolean;
   readonly kind: "api" | "flags_verify" | "env_policy_get" | "env_policy_set";
-}
-
-function resourceToCliGroup(resource: string): string {
-  const parts = resource.split("_");
-  const aliased = parts.map((part) => RESOURCE_ALIASES[part] ?? part);
-  return aliased.join("-");
-}
-
-function operationIdToPath(operationId: string): readonly string[] {
-  for (const verb of COMPOUND_VERBS) {
-    const suffix = `_${verb}`;
-    if (operationId.endsWith(suffix)) {
-      const resource = operationId.slice(0, -suffix.length);
-      return [resourceToCliGroup(resource), verb.replaceAll("_", "-")];
-    }
-  }
-  const lastUnderscore = operationId.lastIndexOf("_");
-  const resource = operationId.slice(0, lastUnderscore);
-  const verb = operationId.slice(lastUnderscore + 1);
-  return [resourceToCliGroup(resource), verb];
 }
 
 function needsAppFromPath(path: string): boolean {
@@ -59,7 +38,7 @@ function supportsConfirm(operationId: string): boolean {
 function buildApiCommands(): CliCommandDefinition[] {
   return deriveMcpTools().map((tool: McpToolDefinition) => ({
     operationId: tool.name,
-    path: operationIdToPath(tool.name),
+    path: cliCommandPath(tool.name),
     needsApp: needsAppFromPath(getRoutePath(tool.name)),
     needsEnvironment: needsEnvironmentFromPath(getRoutePath(tool.name)),
     supportsConfirm: supportsConfirm(tool.name),
@@ -76,7 +55,7 @@ const API_COMMANDS = buildApiCommands();
 const PRESENTATION_ALIASES: readonly CliCommandDefinition[] = [
   {
     operationId: "environments_get",
-    path: ["env-policy", "get"],
+    path: CLI_PRESENTATION_ALIAS_PATHS.environments_get,
     needsApp: true,
     needsEnvironment: true,
     supportsConfirm: false,
@@ -84,7 +63,7 @@ const PRESENTATION_ALIASES: readonly CliCommandDefinition[] = [
   },
   {
     operationId: "environments_update",
-    path: ["env-policy", "set"],
+    path: CLI_PRESENTATION_ALIAS_PATHS.environments_update,
     needsApp: true,
     needsEnvironment: true,
     supportsConfirm: false,
@@ -92,7 +71,7 @@ const PRESENTATION_ALIASES: readonly CliCommandDefinition[] = [
   },
   {
     operationId: "sdk_verify",
-    path: ["flags", "verify"],
+    path: CLI_PRESENTATION_ALIAS_PATHS.sdk_verify,
     needsApp: true,
     needsEnvironment: true,
     supportsConfirm: false,

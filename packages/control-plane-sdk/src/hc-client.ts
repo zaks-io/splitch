@@ -72,7 +72,6 @@ export function createOrganizationsHcClient(options: ControlPlaneHcOptions) {
 
 export function createAppsHcClient(options: ControlPlaneHcOptions) {
   const headers = options.authorization ? { authorization: options.authorization } : undefined;
-
   return hc<AppsControlPlaneClientApp>(options.baseUrl, {
     fetch: options.fetch,
     ...(headers ? { headers } : {}),

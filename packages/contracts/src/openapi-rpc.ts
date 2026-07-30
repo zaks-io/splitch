@@ -2,6 +2,7 @@ import { OpenAPIHono, type RouteConfig } from "@hono/zod-openapi";
 import { accountRoutes } from "./routes/routes-account";
 import { analysisRoutes } from "./routes/routes-analysis";
 import { approvalRoutes } from "./routes/routes-approvals";
+import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { dataPlaneRoutes } from "./routes/routes-data-plane";
 import { experimentRoutes } from "./routes/routes-experiments";
@@ -39,6 +40,7 @@ function buildRpcAppFromRoutes<const T extends readonly { openapi: RouteConfig }
 
 const accountRpcApp = buildRpcAppFromRoutes(accountRoutes);
 const approvalRpcApp = buildRpcAppFromRoutes(approvalRoutes);
+const attentionRpcApp = buildRpcAppFromRoutes(attentionRoutes);
 const flagRpcApp = buildRpcAppFromRoutes(flagRoutes);
 const segmentRpcApp = buildRpcAppFromRoutes(segmentRoutes);
 const experimentRpcApp = buildRpcAppFromRoutes(experimentRoutes);
@@ -51,6 +53,7 @@ const dataPlaneRpcApp = buildRpcAppFromRoutes(dataPlaneRoutes);
 export const controlPlaneRpcApp = new OpenAPIHono()
   .route("/", accountRpcApp)
   .route("/", approvalRpcApp)
+  .route("/", attentionRpcApp)
   .route("/", flagRpcApp)
   .route("/", segmentRpcApp)
   .route("/", experimentRpcApp)

@@ -131,6 +131,25 @@ describe("POST /api/sdk/verify", () => {
     ]);
   });
 
+  // The Panel's "Test this Flag" button and `splitch flags verify` both land
+  // here, and the whole promise of that button is that clicking it cannot dirty
+  // an Experiment. Assignment Store silence alone does not prove that: an
+  // Exposure or a usage record would still reach Tinybird. Assert every write
+  // sink the evaluate path uses, so a future refactor that routes verify through
+  // the commit sink fails here rather than in production analysis.
+  it("writes no Exposure, no usage event, and no Assignment under either credential tier", async () => {
+    const { app, assignmentStore, exposureSink, evaluationUsageSink } = await makeSdkRouteHarness();
+
+    const client = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
+    const api = await app.request(PATH, sdkRouteInit(API_KEY));
+
+    expect(client.status).toBe(200);
+    expect(api.status).toBe(200);
+    expect(exposureSink.writes).toEqual([]);
+    expect(evaluationUsageSink.writes).toEqual([]);
+    expect(assignmentStore.putCalls).toEqual([]);
+  });
+
   it("rejects missing and revoked credentials before evaluation", async () => {
     const { app, assignmentStore } = await makeSdkRouteHarness();
 

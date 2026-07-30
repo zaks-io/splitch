@@ -79,6 +79,8 @@ export function createControlPlaneSdk(options: ControlPlaneSdkOptions): ControlP
 export type {
   AppsCreateInput,
   AppsCreateOutput,
+  AppAttentionRollupGetInput,
+  AppAttentionRollupGetOutput,
   FlagConfigGetInput,
   FlagConfigGetOutput,
   FlagConfigUpdateInput,
