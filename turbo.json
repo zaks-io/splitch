@@ -125,6 +125,11 @@
       "dependsOn": ["^build", "@splitch/mcp-server#generate"],
       "outputs": []
     },
+    "test:e2e": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["SPLITCH_PLATFORM_TARGET"]
+    },
     "stats:unit": {
       "dependsOn": ["^build"],
       "outputs": []
