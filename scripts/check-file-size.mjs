@@ -2,7 +2,8 @@
 // Pre-commit guard: keep source files small and single-purpose.
 //
 // The guard is a ratchet, not a snapshot. It compares each staged file against
-// the version in HEAD and fails only when THIS commit makes things worse:
+// the version it inherits (HEAD, or the largest version across both parents
+// during a merge) and fails only when THIS commit makes things worse:
 //
 //   - a file crosses the limit (it was at or under, now it is over), or
 //   - a file that was already over the limit grows further.
@@ -15,7 +16,7 @@
 // strong gate armed.
 
 import { execFileSync } from "node:child_process";
-import { statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 
 const MAX_LINES = 300;
 const EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".css"];
@@ -39,13 +40,41 @@ function stagedLines(file) {
   }
 }
 
-/** Lines in HEAD's version, or 0 when the file is new to this commit. */
-function committedLines(file) {
+/**
+ * Revisions this commit inherits from. Normally just HEAD, but during a merge
+ * HEAD is only the FIRST parent: every line the other parent grew since the
+ * merge base would read as growth this commit introduced, so the guard would
+ * reject a merge that authored none of it.
+ */
+function baselineRevisions() {
   try {
-    return countLines(git(["show", `HEAD:${file}`]));
+    const mergeHeadPath = git(["rev-parse", "--git-path", "MERGE_HEAD"]).trim();
+    // Octopus merges list one parent SHA per line.
+    const parents = readFileSync(mergeHeadPath, "utf8").split("\n").filter(Boolean);
+    return ["HEAD", ...parents];
+  } catch {
+    // No merge in progress.
+    return ["HEAD"];
+  }
+}
+
+const BASELINE_REVISIONS = baselineRevisions();
+
+function revisionLines(revision, file) {
+  try {
+    return countLines(git(["show", `${revision}:${file}`]));
   } catch {
     return 0;
   }
+}
+
+/**
+ * Lines already inherited: the largest version across every parent, or 0 when
+ * the file is new to this commit. A merge that exceeds neither parent grew
+ * nothing; a resolution that bloats a file past both still gets caught.
+ */
+function committedLines(file) {
+  return Math.max(...BASELINE_REVISIONS.map((revision) => revisionLines(revision, file)));
 }
 
 /**

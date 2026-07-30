@@ -109,6 +109,72 @@ test("allows a normal small file", (t) => {
   assert.equal(run(repo).status, 0);
 });
 
+test("allows a merge whose resolution matches the other parent's growth", (t) => {
+  const repo = newRepo(t);
+  commit(repo, "src/barrel.ts", source(320));
+  const main = currentBranch(repo);
+  branch(repo, "feature");
+  commit(repo, "src/barrel.ts", source(360));
+  checkout(repo, main);
+  commit(repo, "src/other.ts", source(10));
+  merge(repo, "feature");
+
+  assert.equal(run(repo).status, 0);
+});
+
+test("allows an octopus merge whose growth came from the third parent", (t) => {
+  const repo = newRepo(t);
+  commit(repo, "src/barrel.ts", source(320));
+  const main = currentBranch(repo);
+  branch(repo, "feature-a");
+  commit(repo, "src/a.ts", source(10));
+  checkout(repo, main);
+  branch(repo, "feature-b");
+  commit(repo, "src/barrel.ts", source(360));
+  checkout(repo, main);
+  commit(repo, "src/other.ts", source(10));
+  merge(repo, "feature-a", "feature-b");
+
+  assert.equal(run(repo).status, 0);
+});
+
+test("rejects a merge resolution larger than both parents", (t) => {
+  const repo = newRepo(t);
+  commit(repo, "src/barrel.ts", source(320));
+  const main = currentBranch(repo);
+  branch(repo, "feature");
+  commit(repo, "src/barrel.ts", source(360));
+  checkout(repo, main);
+  commit(repo, "src/barrel.ts", source(340));
+  merge(repo, "feature");
+  stage(repo, "src/barrel.ts", source(380));
+
+  const result = run(repo);
+
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /barrel\.ts — 380 lines \(already over 300 at 360 lines and growing\)/,
+  );
+});
+
+test("rejects a merge resolution that crosses the limit neither parent was over", (t) => {
+  const repo = newRepo(t);
+  commit(repo, "src/barrel.ts", source(250));
+  const main = currentBranch(repo);
+  branch(repo, "feature");
+  commit(repo, "src/barrel.ts", source(280));
+  checkout(repo, main);
+  commit(repo, "src/barrel.ts", source(260));
+  merge(repo, "feature");
+  stage(repo, "src/barrel.ts", source(301));
+
+  const result = run(repo);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /barrel\.ts — 301 lines \(crosses the 300-line limit\)/);
+});
+
 function newRepo(t) {
   const root = mkdtempSync(join(tmpdir(), "splitch-file-size-test-"));
   t.after(() => rmSync(root, { force: true, recursive: true }));
@@ -136,6 +202,26 @@ function move(repo, fromPath, toPath, contents) {
   execFileSync("git", ["mv", fromPath, toPath], { cwd: repo });
   writeFileSync(join(repo, toPath), contents);
   execFileSync("git", ["add", toPath], { cwd: repo });
+}
+
+function currentBranch(repo) {
+  return execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: repo,
+    encoding: "utf8",
+  }).trim();
+}
+
+function branch(repo, name) {
+  execFileSync("git", ["checkout", "--quiet", "-b", name], { cwd: repo });
+}
+
+function checkout(repo, name) {
+  execFileSync("git", ["checkout", "--quiet", name], { cwd: repo });
+}
+
+/** Start a real merge and stop before the commit, so MERGE_HEAD is live. */
+function merge(repo, ...refs) {
+  spawnSync("git", ["merge", "--quiet", "--no-commit", "--no-ff", ...refs], { cwd: repo });
 }
 
 function run(cwd) {
