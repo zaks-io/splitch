@@ -137,9 +137,9 @@ describe("Deploy workflow observability secrets", () => {
     expect(releaseJob).toContain("needs: deploy");
     expect(releaseJob).not.toContain("environment: production");
     expect(workflow.indexOf("Check release credentials")).toBeLessThan(
-      workflow.indexOf("Deploy production"),
+      workflow.indexOf("Deploy Production"),
     );
-    expect(workflow.indexOf("Deploy production")).toBeLessThan(
+    expect(workflow.indexOf("Deploy Production")).toBeLessThan(
       workflow.indexOf("Sync Linear release"),
     );
   });
