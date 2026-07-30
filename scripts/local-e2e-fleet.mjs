@@ -7,8 +7,10 @@ import { resolve } from "node:path";
 import {
   LOCAL_E2E_D1_SEED,
   LOCAL_E2E_MEMBER_SESSION_KEY,
+  LOCAL_E2E_NEWCOMER_SESSION_KEY,
   LOCAL_E2E_SESSION_KEY,
   localE2eMemberSession,
+  localE2eNewcomerSession,
   localE2eSession,
 } from "./local-e2e-fixtures.mjs";
 import { localBindings, localE2eWorkers } from "./local-e2e-fleet-config.mjs";
@@ -156,6 +158,20 @@ function seedLocalResources() {
     "put",
     LOCAL_E2E_MEMBER_SESSION_KEY,
     JSON.stringify(localE2eMemberSession()),
+    "--binding",
+    "SESSION_STORE",
+    "--local",
+    "--config",
+    "apps/control-panel/wrangler.jsonc",
+    "--persist-to",
+    persistPath,
+  ]);
+  runWrangler([
+    "kv",
+    "key",
+    "put",
+    LOCAL_E2E_NEWCOMER_SESSION_KEY,
+    JSON.stringify(localE2eNewcomerSession()),
     "--binding",
     "SESSION_STORE",
     "--local",

@@ -1,13 +1,12 @@
 import { env as workerEnv } from "cloudflare:workers";
 import type { AppsCreateOutput, ControlPlaneOperationResult } from "@splitch/control-plane-sdk";
-import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { type ControlPanelMutationBindings, controlPanelMutationBindings } from "./bindings";
+import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelAppsClient } from "./control-plane-apps";
-import { buildSessionPrincipal } from "./membership";
-import { loadSessionFromRequest, refreshSession, type StoredSession } from "./session";
+import { loadSessionFromRequest } from "./session";
+import { resyncSessionMemberships } from "./session-resync";
 
 export type CreateControlPanelAppResult = ControlPlaneOperationResult<AppsCreateOutput>;
 
@@ -65,28 +64,3 @@ export const createControlPanelApp = createServerFn({ method: "POST" })
     }
     return result;
   });
-
-/**
- * Creating an App also creates the App membership that authorizes reading it, and
- * the session's membership snapshot predates both. Without this the new App is
- * absent from the very list the operator just added it to — a success that reads
- * as a failure. Rebuilt from D1, which is the authority; every other session
- * field is carried through untouched.
- */
-async function resyncSessionMemberships(
-  bindings: ControlPanelMutationBindings,
-  tokenHash: string,
-  session: StoredSession,
-): Promise<void> {
-  if (!session.workosSessionId) {
-    throw new Error("control-panel session is missing its WorkOS session identifier");
-  }
-  const principal = await buildSessionPrincipal(createRepository(bindings.DB), {
-    userId: session.userId,
-    workosSessionId: session.workosSessionId,
-  });
-  await refreshSession(bindings.SESSION_STORE, tokenHash, {
-    ...session,
-    orgs: principal.orgs,
-  });
-}
