@@ -2,6 +2,7 @@ import {
   evaluateExperimentDecisionGate,
   experimentSignificanceDisplays,
   experimentSrmDiagnostics,
+  lockedFamilyMembers,
 } from "@splitch/contracts";
 import {
   type PanelExperimentHealth,
@@ -160,9 +161,11 @@ export async function panelExperimentResults(
     run.id,
   );
 
-  // The baseline comes from the Run's frozen inputs, echoed by the Analysis
-  // Worker. Resolving it from the Experiment's current default Variant would
-  // relabel a historical Run's arms whenever that default was later changed.
+  // The baseline is whatever the Analysis Worker computed against, echoed back
+  // rather than re-derived here, so the Panel and the numbers cannot disagree.
+  // It is not yet provenance: upstream still resolves it from the Experiment's
+  // current default Variant, so editing that default relabels a historical Run's
+  // arms. SPL-184 freezes it on the Run and this read then inherits the fix.
   const stats = results.stats;
   const output: PanelExperimentResultsOutput = {
     runId: run.id,
@@ -217,9 +220,10 @@ async function runningHealth(
   );
   const stats = results.stats;
   return {
-    significanceReached: stats.arm_results.some(
-      (result) => result.is_significant && result.in_bh_family && result.decision_valid,
-    ),
+    // The same family the gate reads, so list health cannot call a Run
+    // "Collecting data" while the gate is ready to ship it on a Primary
+    // Dimension slice.
+    significanceReached: lockedFamilyMembers(stats).some((member) => member.result.is_significant),
     srmFiring:
       stats.srm.srm_is_mismatch ||
       stats.srm.activated_srm_mismatch === true ||

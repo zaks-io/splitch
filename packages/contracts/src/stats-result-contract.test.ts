@@ -221,9 +221,10 @@ describe("StatsEngine", () => {
 /**
  * The /results routes are the seam every generated client infers from. When the
  * declared response was a bare StatsOutput, the Worker's `run_id` and
- * `control_variant` were emitted but invisible to callers, and a client could
- * only recover the baseline by re-deriving it from mutable Experiment
- * configuration, which is exactly the mislabelling ADR-0002/0003 forbid.
+ * `control_variant` were emitted but invisible to callers, so every client had
+ * to re-derive the baseline for itself and could disagree with the numbers it
+ * was labelling. Declaring them does not make `control_variant` frozen
+ * provenance; SPL-184 is what will.
  */
 describe("declared /results response contract", () => {
   const envelope = { run_id: "run_1", control_variant: "control", stats: statsOutput };

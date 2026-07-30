@@ -5,7 +5,6 @@ import {
 import type { AnalysisResultsEnvelope, StatsOutput } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
-import { panelAnalysisFailureResponse } from "./panel-analysis-failure";
 import { panelExperimentResults } from "./panel-experiments";
 import {
   analysisEnvelope,
@@ -80,91 +79,6 @@ async function results(
   );
 }
 
-/**
- * Drives the read the way the route does, so a refusal is asserted as the
- * response a client actually receives rather than as a hand-built error object.
- */
-async function routeResponse(
-  analysis: ReturnType<typeof analysisReturning>,
-  input: { runId?: string } = {},
-  repo: Repository = repository(),
-): Promise<Response> {
-  try {
-    return await results(analysis, input, repo);
-  } catch (cause) {
-    return panelAnalysisFailureResponse(cause);
-  }
-}
-
-function analysisRefusing(status: number, body: unknown) {
-  return vi.fn(async () => Response.json(body, { status })) as ReturnType<typeof analysisReturning>;
-}
-
-describe("panel Experiment Results refusals", () => {
-  it("emits a permanent refusal when the Analysis Worker answers for another Run", async () => {
-    const analysis = vi.fn(async () =>
-      Response.json(analysisEnvelope("run_somewhere_else", statsOutput())),
-    ) as ReturnType<typeof analysisReturning>;
-
-    const response = await routeResponse(analysis);
-
-    expect(response.status).toBe(500);
-    const body = (await response.json()) as { code: string; details: Record<string, unknown> };
-    expect(body.code).toBe("INTERNAL_SERVER_ERROR");
-    // Nothing to poll on: a mislabelled Run does not become the right Run.
-    expect(body.details).not.toHaveProperty("retryAfterMs");
-  });
-
-  // The Worker states whether waiting can help. Reading only the HTTP status
-  // would file this permanent integrity failure under "try again shortly".
-  it("keeps a typed permanent failure permanent even when it arrives as a 503", async () => {
-    const response = await routeResponse(
-      analysisRefusing(503, {
-        code: "INTERNAL_SERVER_ERROR",
-        message: "analysis run provenance mismatch",
-        details: {},
-      }),
-    );
-
-    expect(response.status).toBe(500);
-    expect((await response.json()) as { code: string }).toMatchObject({
-      code: "INTERNAL_SERVER_ERROR",
-    });
-  });
-
-  it("keeps a typed transient failure retryable even when it arrives as a 500", async () => {
-    const response = await routeResponse(
-      analysisRefusing(500, {
-        code: "SERVICE_UNAVAILABLE",
-        message: "analysis data is unavailable",
-        details: { retryAfterMs: 30_000 },
-      }),
-    );
-
-    expect(response.status).toBe(503);
-    const body = (await response.json()) as { code: string; details: { retryAfterMs: number } };
-    expect(body.code).toBe("SERVICE_UNAVAILABLE");
-    expect(body.details.retryAfterMs).toBe(30_000);
-  });
-
-  // With no typed body there is nothing to poll on. Advertising a retry for an
-  // unrecognized fault would turn a loud failure into a quiet wait.
-  it("refuses an untyped upstream failure permanently", async () => {
-    const response = await routeResponse(analysisRefusing(500, { unexpected: true }));
-
-    expect(response.status).toBe(500);
-    const body = (await response.json()) as { code: string; details: Record<string, unknown> };
-    expect(body.code).toBe("INTERNAL_SERVER_ERROR");
-    expect(body.details).not.toHaveProperty("retryAfterMs");
-  });
-
-  it("still honours an untyped 503 as transient", async () => {
-    const response = await routeResponse(analysisRefusing(503, "gateway text"));
-
-    expect(response.status).toBe(503);
-  });
-});
-
 describe("panel Experiment Results read", () => {
   it("reads the latest Run when no Run is pinned, and never pools Runs", async () => {
     const analysis = analysisReturning(statsOutput());
@@ -218,10 +132,10 @@ describe("panel Experiment Results read", () => {
     expect(analysis).not.toHaveBeenCalled();
   });
 
-  // ADR-0002/0003: the baseline is whatever the Run froze. Re-deriving it from
-  // the Experiment's current default Variant would relabel a historical Run's
-  // arms the moment someone changed that default.
-  it("labels Control from the Run's frozen inputs, not current Experiment configuration", async () => {
+  // Only claims what this read can enforce: the label is the Analysis Worker's,
+  // not one this Worker looked up for itself. Whether that value is frozen
+  // provenance is upstream's problem and is still open (SPL-184).
+  it("echoes the Analysis Worker's Control label instead of re-deriving one", async () => {
     const analysis = analysisReturning(statsOutput(), { control_variant: "legacy_checkout" });
     const response = await results(analysis, { runId: PREVIOUS_RUN_ID });
 

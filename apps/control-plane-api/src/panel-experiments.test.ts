@@ -66,6 +66,29 @@ describe("panel Experiments composite read", () => {
     });
   });
 
+  /**
+   * List health and the ship gate read the same decision family. If health only
+   * looked at `arm_results`, a Run whose decision lives in a Primary Dimension
+   * slice would render "Collecting data" while the gate was ready to ship it.
+   */
+  it.each([
+    ["primary", true],
+    ["secondary", false],
+  ] as const)("reads a significant %s Dimension slice as reached=%s", async (cls, reached) => {
+    const analysis = vi.fn(async (_request: Request) =>
+      Response.json(analysisEnvelope(RUN_ID, sliceOnlySignificance(cls) as StatsOutput)),
+    );
+
+    const response = await panelExperimentsList(
+      { repo: repository(), analysis: { fetch: analysis } as unknown as Fetcher },
+      { actorId: ACTOR_ID, appId: APP_ID, environmentId: ENVIRONMENT_ID },
+    );
+
+    expect(await response.json()).toMatchObject({
+      items: [{ health: { significanceReached: reached } }],
+    });
+  });
+
   it("refuses stale App membership before any downstream read", async () => {
     const analysis = vi.fn();
     const repo = repository({ appMembership: null });
@@ -247,5 +270,28 @@ function statsOutput() {
       deduped_counts: { control: 100, treatment: 10 },
       low_n_warning: false,
     },
+  };
+}
+
+/** Nothing significant at the top level; the only significant arm is in a slice. */
+function sliceOnlySignificance(dimensionClass: "primary" | "secondary") {
+  const base = statsOutput();
+  const [arm] = base.arm_results;
+  return {
+    ...base,
+    arm_results: [{ ...arm, is_significant: false, p_value: 0.4 }],
+    dimension_results: [
+      {
+        dimension_id: "country",
+        dimension_value: "US",
+        class: dimensionClass,
+        arm_results: [arm],
+        sample_size_n: 100,
+        low_n_warning: false,
+        in_bh_family: dimensionClass === "primary",
+        exploratory: dimensionClass !== "primary",
+        decision_valid: dimensionClass === "primary",
+      },
+    ],
   };
 }

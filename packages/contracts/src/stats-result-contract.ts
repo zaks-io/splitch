@@ -156,10 +156,14 @@ export type StatsOutput = z.infer<typeof StatsOutputSchema>;
 /**
  * What the Analysis Worker answers a /results read with.
  *
- * `run_id` and `control_variant` are echoed from the Run's frozen inputs rather
- * than left for the caller to look up. A caller that re-derived the baseline
- * from current Experiment configuration would mislabel a historical Run's arms
- * the moment that configuration changed (ADR-0002, ADR-0003).
+ * `run_id` and `control_variant` name the Run and the baseline the numbers were
+ * actually computed against, so a caller never has to look either up. That is
+ * the whole guarantee today: `control_variant` is resolved from the Experiment's
+ * current default Variant at read time, NOT from anything the Run froze, so a
+ * historical Run's arms can still be relabelled by an edit to that default.
+ * SPL-184 adds the immutable `runs.control_variant_id` this field should come
+ * from; until it lands, treat the value as current configuration, not
+ * provenance (ADR-0002, ADR-0003).
  */
 export const AnalysisResultsEnvelopeSchema = z
   .object({
