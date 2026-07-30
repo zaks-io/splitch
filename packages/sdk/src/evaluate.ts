@@ -4,24 +4,27 @@ import type { SeenSet } from "./seen-set";
 import type { AttributeValue, Transport, TransportFailure, TransportRequest } from "./transport";
 
 /**
- * Caller-facing evaluate options. `idType` defaults to `'user'` client-side (the
- * common case buckets on users); the wire request always carries the field.
+ * Context for the Exposure-bearing `evaluate` / `evaluateDetails` calls.
+ * `idType` defaults to `'user'` (the common case buckets on users).
  * `defaultValue` is the Default Variant returned on every ERROR and on a 200
- * no-match — the host app always renders something (CONTEXT.md: Default Variant).
+ * no-match, so the host app always renders something.
  *
- * `attributes` mirrors the contract's `EvaluationContext.attributes`: scalars or
- * arrays only (no nested objects), so a nested-object attribute is a COMPILE error
- * here rather than a runtime 400 (DataPlaneEvaluateRequestSchema).
+ * `attributes` allows scalars or arrays only, never a nested object; a nested
+ * object is a compile error here rather than a runtime 400.
  */
 export interface EvaluationContext {
   readonly targetingKey: string;
   readonly idType?: string;
   readonly attributes?: Readonly<Record<string, AttributeValue>>;
   readonly defaultValue?: VariantValue;
-  /** Caller-owned identity reused for every retry of this logical Evaluation. */
+  /**
+   * Caller-owned id for one logical Evaluation: generate once per evaluation
+   * and reuse it on every retry so the platform deduplicates the Exposure.
+   */
   readonly idempotencyKey: string;
 }
 
+/** Context for the non-Exposure calls `peekVariant` and `verify`. */
 export interface EvaluateContext {
   readonly targetingKey: string;
   readonly idType?: string;
@@ -32,9 +35,9 @@ export interface EvaluateContext {
 }
 
 /**
- * Loud-log sink. Defaults to `console`; injectable so tests can assert the loud
- * log fired on a failure-fallback (the "loud" half of fail-loud, ADR-0036) and
- * the DEBUG log fired on a seen-set hit (seen-set.md §"Debug logging requirement").
+ * Loud-log sink, defaulting to `console`. The SDK reports every
+ * failure-fallback through `error` (a failure is always observable, never a
+ * silent default) and Exposure-suppressing cache hits through `debug`.
  */
 export interface Logger {
   error(message: string, detail: unknown): void;

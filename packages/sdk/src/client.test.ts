@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createFetchTransport, createSplitchClient } from "./client";
+import { createSplitchClient } from "./client";
+import { createFetchTransport } from "./fetch-transport";
 import { FakeLogger, FakeTransport, httpError, ok, transportFailure } from "./test-fixtures";
 import type { Transport, TransportRequest } from "./transport";
 

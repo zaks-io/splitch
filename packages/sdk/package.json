@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "Public JavaScript/TypeScript SDK for splitch data-plane evaluation",
   "license": "Apache-2.0",
+  "homepage": "https://splitch.dev",
+  "keywords": [
+    "feature-flags",
+    "experiments",
+    "ab-testing",
+    "openfeature",
+    "edge",
+    "splitch"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/zaks-io/splitch.git",

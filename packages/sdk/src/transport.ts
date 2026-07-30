@@ -1,29 +1,26 @@
 import type { ErrorCode, ResolutionDetails, VariantValue } from "./generated/contract-surface.js";
 
 /**
- * Mirrors the contract's `EvaluationContext.attributes` value union
- * (leaf-schemas-runtime.ts `AttributeValueSchema`, not exported from contracts):
- * scalars or arrays only, never a nested object. Defining it here makes a
- * nested-object attribute a COMPILE error at the call site instead of a runtime
- * 400 VALIDATION_ERROR on the wire.
+ * Allowed evaluation-attribute values: scalars or arrays, never a nested
+ * object. Matching the wire contract at the type level makes a nested-object
+ * attribute a compile error at the call site instead of a runtime 400
+ * VALIDATION_ERROR.
  */
 export type AttributeValue = boolean | string | number | readonly unknown[];
 
 /**
- * The network seam the SDK accessors use. The real adapter is an HTTP `fetch`
- * call (see client.ts); tests substitute a fake that records each distinct path.
+ * The network seam behind the client. The default adapter is an HTTP `fetch`
+ * call against the splitch edge; substitute your own for tests.
  *
- * The transport returns a STRUCTURED outcome, never a raw Response: the SDK must
- * never inspect HTTP status or parse bodies itself (that branching lives in
- * resolution.ts). `status` is the HTTP status for an HTTP outcome, or `null` for
- * a transport-level failure (network error, timeout, body-parse failure) — both
- * of which the mapping table folds into `reason: ERROR`.
+ * A transport returns a STRUCTURED outcome, never a raw Response: the SDK core
+ * never inspects HTTP status or parses bodies itself. `status` is the HTTP
+ * status for an HTTP outcome, or `null` for a transport-level failure (network
+ * error, timeout, body-parse failure); both fold into `reason: ERROR`.
  *
- * `runId` rides ALONGSIDE the bare `{ variant }` wire body as non-revealing
- * operational metadata (a response header in the real adapter), not inside it:
- * the data-plane response schema stays the closed `{ variant }` shape (ADR-0018),
- * yet the seen-set key needs `runId` to reset at a Run boundary (seen-set.md).
- * `runId` is present only on a successful (`status: 200`) resolution.
+ * `runId` identifies the live experiment Run. It arrives as response metadata
+ * (a header in the real adapter), never inside the wire body, and is present
+ * only on a successful (`status: 200`) resolution; the client keys its
+ * Exposure-dedup cache on it so a Run boundary fires a fresh Exposure.
  */
 export interface TransportRequest {
   readonly flagKey: string;
