@@ -21,14 +21,20 @@ export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
     "run_checkout_dev_previous_e2e",
     { control: 6, treatment: 6 },
   ),
-  // A lift the size real Experiments actually produce. A fixture with a 1500%
-  // effect hides every rendering fault that only appears at realistic scale.
+  // #200 replaced this fixture's previously-obvious split (5/100 vs 80/100
+  // conversions) with these "more realistic" counts, but 300/1500 vs
+  // 315/1500 never actually clears the 95% significance bar under the real
+  // Stats Engine (verified: is_significant: false, p=1) — it shipped anyway
+  // because Control Panel E2E is skipped on pull requests. 370 clears the bar
+  // (verified: is_significant: true, p ~= 0.0479) but sits on a knife edge
+  // against the 0.05 threshold; 375 was chosen for a defensible margin
+  // instead (verified: p ~= 0.026).
   analysisInput(
     "env_checkout_dev_e2e",
     "experiment_checkout_significance_e2e",
     "run_checkout_significance_e2e",
     { control: 1_500, treatment: 1_500 },
-    { decisionMetric: "checkout-conversion", conversions: { control: 300, treatment: 315 } },
+    { decisionMetric: "checkout-conversion", conversions: { control: 300, treatment: 375 } },
   ),
   analysisInput(
     "env_checkout_prod_e2e",
