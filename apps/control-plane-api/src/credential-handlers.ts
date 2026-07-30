@@ -1,6 +1,9 @@
-import { type APIKey, normalizeClientOrigins } from "@splitch/contracts";
-import { CONTROL_PANEL_DELEGATION_HEADER } from "@splitch/control-plane-sdk/control-panel-identity";
-import { PANEL_API_KEY_SCOPES } from "@splitch/control-plane-sdk/panel-settings";
+import {
+  type APIKey,
+  CONTROL_PANEL_DELEGATION_HEADER,
+  normalizeClientOrigins,
+  PANEL_API_KEY_SCOPES,
+} from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";

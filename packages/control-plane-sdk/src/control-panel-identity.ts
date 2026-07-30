@@ -1,7 +1,9 @@
+import { CONTROL_PANEL_DELEGATION_HEADER } from "@splitch/contracts";
+
 const MAX_DELEGATION_LIFETIME_SECONDS = 30;
 const MIN_SECRET_BYTES = 32;
 
-export const CONTROL_PANEL_DELEGATION_HEADER = "x-splitch-panel-delegation";
+export { CONTROL_PANEL_DELEGATION_HEADER };
 export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 
 export type ControlPanelOperation =

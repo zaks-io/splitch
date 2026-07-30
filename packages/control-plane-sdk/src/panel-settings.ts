@@ -1,11 +1,11 @@
 import type { ClientKey, Environment, EnvironmentPolicy } from "@splitch/contracts";
-import { ClientKeySchema, EnvironmentSchema } from "@splitch/contracts";
+import { ClientKeySchema, EnvironmentSchema, PANEL_API_KEY_SCOPES } from "@splitch/contracts";
 import type { ApiKeysCreateOutput, ApiKeysRevokeOutput } from "@splitch/contracts/route-types";
 import { createControlPlaneSdk } from "./index";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
 
-export const PANEL_API_KEY_SCOPES = ["data-plane:evaluate", "data-plane:write"] as const;
+export { PANEL_API_KEY_SCOPES };
 
 export interface PanelSettingsScope {
   appId: string;
