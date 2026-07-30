@@ -181,10 +181,10 @@ function lintCliBin(packagePath, manifest) {
   if (
     JSON.stringify(manifest.bin) !==
     JSON.stringify({
-      splitch: "./dist/cli.js",
+      splitch: "dist/cli.js",
     })
   ) {
-    return [violation(packagePath, '@splitch/cli bin must be exactly {"splitch":"./dist/cli.js"}')];
+    return [violation(packagePath, '@splitch/cli bin must be exactly {"splitch":"dist/cli.js"}')];
   }
   return [];
 }

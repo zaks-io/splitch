@@ -13,7 +13,7 @@
     "node": ">=20"
   },
   "bin": {
-    "splitch": "./dist/cli.js"
+    "splitch": "dist/cli.js"
   },
   "exports": {
     ".": {
