@@ -26,7 +26,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".output/**", "build/**"],
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
       "inputs": ["$TURBO_DEFAULT$"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
@@ -38,7 +38,7 @@
     },
     "@splitch/control-panel#build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".output/**", "build/**"],
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
       "inputs": ["$TURBO_DEFAULT$"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
@@ -58,7 +58,7 @@
     },
     "@splitch/marketing#build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".output/**", "build/**"],
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
       "inputs": ["$TURBO_DEFAULT$"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
