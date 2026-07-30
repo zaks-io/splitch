@@ -87,6 +87,49 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "//#format:check": {
+      "cache": false
+    },
+    "//#spec:lint": {
+      "cache": false
+    },
+    "//#check:cli-mcp-parity": {
+      "cache": false
+    },
+    "//#test:scripts": {
+      "cache": false
+    },
+    "@splitch/control-panel#test:connect-snippet": {
+      "dependsOn": ["@splitch/sdk#build"],
+      "cache": false,
+      "outputs": []
+    },
+    "@splitch/mcp-server#generate": {
+      "inputs": [
+        "$TURBO_ROOT$/CONTEXT.md",
+        "$TURBO_ROOT$/docs/spec/quickstart.md",
+        "$TURBO_ROOT$/scripts/generate-mcp-resource-files.mjs"
+      ],
+      "outputs": ["src/mcp-resource-files.generated.ts"]
+    },
+    "@splitch/mcp-server#build": {
+      "dependsOn": ["^build", "@splitch/mcp-server#generate"],
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
+      "inputs": ["$TURBO_DEFAULT$"]
+    },
+    "@splitch/mcp-server#typecheck": {
+      "dependsOn": ["^build", "@splitch/mcp-server#generate"],
+      "outputs": []
+    },
+    "@splitch/mcp-server#test": {
+      "dependsOn": ["^build", "@splitch/mcp-server#generate"],
+      "outputs": []
+    },
+    "test:e2e": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["SPLITCH_PLATFORM_TARGET"]
+    },
     "stats:unit": {
       "dependsOn": ["^build"],
       "outputs": []

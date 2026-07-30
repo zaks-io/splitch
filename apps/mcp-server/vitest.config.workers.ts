@@ -21,6 +21,7 @@ export default defineConfig({
     },
   },
   test: {
+    name: "workers",
     include: ["test/**/*.{test,spec}.ts"],
     passWithNoTests: true,
   },

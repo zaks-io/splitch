@@ -1,8 +1,62 @@
-import {
-  isControlPanelSettingsOperation,
-  parseControlPanelSettingsOperation,
-} from "./control-panel-settings-operation";
-import type { ControlPanelOperation } from "./control-panel-identity";
+/**
+ * The operation vocabulary of the Control Panel binding protocol.
+ *
+ * Split out of `control-panel-identity.ts` so the delegation envelope (signing,
+ * expiry, replay, body digest) and the set of operations it may name are two
+ * modules instead of one 500-line file. Nothing about the protocol changed in
+ * the split.
+ *
+ * Most operations name the resource they act on, and the resolver derives the
+ * principal's authority from that name against live D1. Two families do not:
+ * the `experiments_*` reads and `organizations_create`. Neither has a resource
+ * to bind against at request time — the experiment list is filtered by the actor
+ * downstream, and an Organization that does not exist yet cannot be co-scoped.
+ * Those delegations therefore carry ONLY the actor, expiry, nonce, and body
+ * digest, and the Worker decides authorization on its own. That is the design,
+ * not a gap: see `organizations-client.ts`.
+ */
+
+export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
+
+export type ControlPanelOperation =
+  | { id: "apps_create"; orgId: string }
+  | { id: "app_attention_rollup_get"; appId: string }
+  | { id: "experiments_detail" }
+  | { id: "experiments_list" }
+  | { id: "experiments_results" }
+  | { id: "organizations_create" }
+  | {
+      id: "experiments_update" | "experiments_start";
+      appId: string;
+      environmentId: string;
+      experimentId: string;
+    }
+  | { id: "flags_list" | "flags_create"; appId: string; environmentId: string }
+  | { id: "flag_config_get"; appId: string; environmentId: string; flagId: string }
+  | {
+      id:
+        | "metrics_list"
+        | "metrics_create"
+        | "overview_get"
+        | "settings_get"
+        | "environment_update"
+        | "client_key_update"
+        | "api_keys_create";
+      appId: string;
+      environmentId: string;
+    }
+  | {
+      id: "metrics_get" | "metrics_update" | "metrics_delete";
+      appId: string;
+      environmentId: string;
+      metricId: string;
+    }
+  | {
+      id: "api_key_revoke";
+      appId: string;
+      environmentId: string;
+      keyId: string;
+    };
 
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
 const APP_ATTENTION_PATH = /^\/apps\/([^/]+)\/attention-rollup\/?$/;
@@ -11,6 +65,7 @@ const EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
 const EXPERIMENTS_PATH = "/control-panel/experiments/list";
 const EXPERIMENT_MUTATION_PATH =
   /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/([^/]+)(\/start)?\/?$/;
+const ORGANIZATIONS_PATH = /^\/orgs\/?$/;
 const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
 const METRICS_PATH = /^\/apps\/([^/]+)\/metrics\/?$/;
@@ -24,7 +79,12 @@ const METRIC_RESOURCE_METHODS = {
   PATCH: "metrics_update",
   DELETE: "metrics_delete",
 } as const;
-
+const OVERVIEW_PATH = /^\/control-panel\/apps\/([^/]+)\/envs\/([^/]+)\/overview\/?$/;
+const SETTINGS_PATH = /^\/control-panel\/apps\/([^/]+)\/envs\/([^/]+)\/settings\/?$/;
+const ENVIRONMENT_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/?$/;
+const CLIENT_KEY_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/client-key\/?$/;
+const API_KEYS_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/api-keys\/?$/;
+const API_KEY_REVOKE_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/api-keys\/([^/]+)\/revoke\/?$/;
 export function parseControlPanelOperation(
   method: string,
   pathname: string,
@@ -33,69 +93,32 @@ export function parseControlPanelOperation(
   return (
     parseAppsCreate(method, pathname) ??
     parseAppAttention(method, pathname) ??
+    parseOrganizationsCreate(method, pathname) ??
     parseExperimentsList(method, pathname) ??
     parseExperimentMutation(method, pathname) ??
     parseFlags(method, pathname, panelEnvironmentId) ??
     parseConfig(method, pathname) ??
-    parseControlPanelSettingsOperation(method, pathname) ??
+    parseEnvironmentSettings(method, pathname) ??
     parseMetrics(method, pathname, panelEnvironmentId)
   );
 }
 
-export function isControlPanelOperation(value: unknown): value is ControlPanelOperation {
-  if (!isRecord(value) || typeof value.id !== "string") return false;
-  if (value.id === "apps_create") return isAppCreateOperation(value);
-  if (value.id === "app_attention_rollup_get") return isAppAttentionOperation(value);
-  if (isExperimentReadOperationId(value.id)) return hasKeys(value, ["id"]);
-  if (isExperimentMutationOperationId(value.id)) return isExperimentMutationOperation(value);
-  if (value.id === "flag_config_get") return isFlagConfigOperation(value);
-  if (isControlPanelSettingsOperation(value)) return true;
-  if (isAppCollectionOperationId(value.id)) return isAppCollectionOperation(value);
-  if (isMetricResourceOperationId(value.id)) return isMetricResourceOperation(value);
-  return false;
-}
-
 /**
- * Every operation is a flat record of its id plus the exact resource ids that
- * scope it, and `isControlPanelOperation` rejects anything with a different key
- * set. So identity is structural equality: a per-variant comparison would have
- * to be extended by hand for each new operation, and the one that got forgotten
- * would silently compare as "same" on its unlisted scope field.
+ * `POST /orgs`. Ordered AFTER `parseAppsCreate` so the two `/orgs…` shapes can
+ * never be confused: `APPS_PATH` requires a trailing `/apps` segment and this
+ * one requires the collection root, so the patterns are disjoint by construction
+ * rather than by ordering luck.
  */
-export function sameControlPanelOperation(
-  left: ControlPanelOperation,
-  right: ControlPanelOperation,
-): boolean {
-  const claimed = left as Record<string, unknown>;
-  const presented = right as Record<string, unknown>;
-  const keys = Object.keys(claimed);
-  return (
-    keys.length === Object.keys(presented).length &&
-    keys.every((key) => claimed[key] === presented[key])
-  );
+function parseOrganizationsCreate(method: string, pathname: string): ControlPanelOperation | null {
+  return method === "POST" && ORGANIZATIONS_PATH.test(pathname)
+    ? { id: "organizations_create" }
+    : null;
 }
 
-function parseExperimentMutation(method: string, pathname: string): ControlPanelOperation | null {
-  const match = pathname.match(EXPERIMENT_MUTATION_PATH);
-  if (!match?.[1] || !match[2] || !match[3]) return null;
-  const appId = decodeSegment(match[1]);
-  const environmentId = decodeSegment(match[2]);
-  const experimentId = decodeSegment(match[3]);
-  const isStart = match[4] === "/start";
-  if (
-    !appId ||
-    !environmentId ||
-    !experimentId ||
-    (isStart ? method !== "POST" : method !== "PATCH")
-  ) {
-    return null;
-  }
-  return {
-    id: isStart ? "experiments_start" : "experiments_update",
-    appId,
-    environmentId,
-    experimentId,
-  };
+function parseAppAttention(method: string, pathname: string): ControlPanelOperation | null {
+  const match = pathname.match(APP_ATTENTION_PATH);
+  const appId = match?.[1] ? decodeSegment(match[1]) : null;
+  return method === "GET" && appId ? { id: "app_attention_rollup_get", appId } : null;
 }
 
 function parseExperimentsList(method: string, pathname: string): ControlPanelOperation | null {
@@ -106,16 +129,31 @@ function parseExperimentsList(method: string, pathname: string): ControlPanelOpe
   return null;
 }
 
+/**
+ * `PATCH /apps/:appId/envs/:envId/experiments/:experimentId` and its `/start`
+ * sibling. Unlike the `experiments_*` reads these DO name a resource, so the
+ * resolver binds the delegation to that exact Experiment.
+ */
+function parseExperimentMutation(method: string, pathname: string): ControlPanelOperation | null {
+  const match = pathname.match(EXPERIMENT_MUTATION_PATH);
+  if (!match?.[1] || !match[2] || !match[3]) return null;
+  const isStart = match[4] === "/start";
+  if (isStart ? method !== "POST" : method !== "PATCH") return null;
+  const [appId, environmentId, experimentId] = decodedSegments(match.slice(1, 4));
+  return appId && environmentId && experimentId
+    ? {
+        id: isStart ? "experiments_start" : "experiments_update",
+        appId,
+        environmentId,
+        experimentId,
+      }
+    : null;
+}
+
 function parseAppsCreate(method: string, pathname: string): ControlPanelOperation | null {
   const match = pathname.match(APPS_PATH);
   const orgId = match?.[1] ? decodeSegment(match[1]) : null;
   return method === "POST" && orgId ? { id: "apps_create", orgId } : null;
-}
-
-function parseAppAttention(method: string, pathname: string): ControlPanelOperation | null {
-  const match = pathname.match(APP_ATTENTION_PATH);
-  const appId = match?.[1] ? decodeSegment(match[1]) : null;
-  return method === "GET" && appId ? { id: "app_attention_rollup_get", appId } : null;
 }
 
 function parseFlags(
@@ -181,69 +219,47 @@ function decodeMatch(match: RegExpMatchArray | null, index: number): string | nu
   return match?.[index] ? decodeSegment(match[index]) : null;
 }
 
+function parseEnvironmentSettings(method: string, pathname: string): ControlPanelOperation | null {
+  return parseApiKeyRevoke(method, pathname) ?? parseScopedSettingsOperation(method, pathname);
+}
+
+function parseApiKeyRevoke(method: string, pathname: string): ControlPanelOperation | null {
+  if (method !== "POST") return null;
+  const revoke = pathname.match(API_KEY_REVOKE_PATH);
+  if (!revoke?.[1] || !revoke[2] || !revoke[3]) return null;
+  const [appId, environmentId, keyId] = decodedSegments(revoke.slice(1, 4));
+  return appId && environmentId && keyId
+    ? { id: "api_key_revoke", appId, environmentId, keyId }
+    : null;
+}
+
+function parseScopedSettingsOperation(
+  method: string,
+  pathname: string,
+): ControlPanelOperation | null {
+  for (const [pattern, expectedMethod, id] of [
+    [OVERVIEW_PATH, "GET", "overview_get"],
+    [SETTINGS_PATH, "GET", "settings_get"],
+    [ENVIRONMENT_PATH, "PATCH", "environment_update"],
+    [CLIENT_KEY_PATH, "PATCH", "client_key_update"],
+    [API_KEYS_PATH, "POST", "api_keys_create"],
+  ] as const) {
+    const match = pathname.match(pattern);
+    if (method !== expectedMethod || !match?.[1] || !match[2]) continue;
+    const [appId, environmentId] = decodedSegments(match.slice(1, 3));
+    return appId && environmentId ? { id, appId, environmentId } : null;
+  }
+  return null;
+}
+
+function decodedSegments(values: string[]): Array<string | null> {
+  return values.map(decodeSegment);
+}
+
 function decodeSegment(value: string): string | null {
   try {
     return decodeURIComponent(value);
   } catch {
     return null;
   }
-}
-
-function isAppCreateOperation(value: Record<string, unknown>): boolean {
-  if (!hasKeys(value, ["id", "orgId"])) return false;
-  return isNonEmptyString(value.orgId);
-}
-
-function isAppAttentionOperation(value: Record<string, unknown>): boolean {
-  return hasKeys(value, ["id", "appId"]) && isNonEmptyString(value.appId);
-}
-
-function isExperimentMutationOperation(value: Record<string, unknown>): boolean {
-  if (!hasKeys(value, ["id", "appId", "environmentId", "experimentId"])) return false;
-  return [value.appId, value.environmentId, value.experimentId].every(isNonEmptyString);
-}
-
-function isFlagConfigOperation(value: Record<string, unknown>): boolean {
-  if (!hasKeys(value, ["id", "appId", "environmentId", "flagId"])) return false;
-  return [value.appId, value.environmentId, value.flagId].every(isNonEmptyString);
-}
-
-function isAppCollectionOperation(value: Record<string, unknown>): boolean {
-  if (!hasKeys(value, ["id", "appId", "environmentId"])) return false;
-  return [value.appId, value.environmentId].every(isNonEmptyString);
-}
-
-function isMetricResourceOperation(value: Record<string, unknown>): boolean {
-  if (!hasKeys(value, ["id", "appId", "environmentId", "metricId"])) return false;
-  return [value.appId, value.environmentId, value.metricId].every(isNonEmptyString);
-}
-
-function isExperimentReadOperationId(id: string): boolean {
-  return id === "experiments_list" || id === "experiments_detail" || id === "experiments_results";
-}
-
-function isExperimentMutationOperationId(id: string): boolean {
-  return id === "experiments_update" || id === "experiments_start";
-}
-
-function isAppCollectionOperationId(id: string): boolean {
-  return (
-    id === "flags_list" || id === "flags_create" || id === "metrics_list" || id === "metrics_create"
-  );
-}
-
-function isMetricResourceOperationId(id: string): boolean {
-  return id === "metrics_get" || id === "metrics_update" || id === "metrics_delete";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasKeys(value: Record<string, unknown>, keys: string[]): boolean {
-  return Object.keys(value).length === keys.length && keys.every((key) => key in value);
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
 }

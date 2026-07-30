@@ -4,13 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node ../../scripts/generate-mcp-resource-files.mjs && tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
+    "generate": "node ../../scripts/generate-mcp-resource-files.mjs",
     "clean": "rm -rf dist coverage",
     "deploy": "node ../../scripts/deploy-worker-with-sentry.mjs",
     "deploy:dry-run": "node ../../scripts/deploy-worker-with-sentry.mjs --dry-run",
     "dev": "wrangler dev --local --port 8792 --show-interactive-dev-session=false",
     "lint": "biome lint src",
-    "test": "node ../../scripts/generate-mcp-resource-files.mjs && vitest run --passWithNoTests && vitest run --config vitest.config.workers.ts --passWithNoTests",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
   },

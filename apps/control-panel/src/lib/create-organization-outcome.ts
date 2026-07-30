@@ -1,0 +1,143 @@
+import type { ErrorResponse } from "@splitch/contracts";
+
+/**
+ * Three outcomes, not two.
+ *
+ * The Organization is either created or it is not, and refreshing the caller's
+ * session afterwards is a separate thing that can fail on its own. Folding a
+ * resync failure into "could not create" (SPL-203) tells the user to retry a
+ * mutation that already succeeded, which on the next attempt collides with the
+ * handle they just took. `created-session-stale` is loud about what happened and
+ * offers the action that actually works.
+ *
+ * It lives here rather than beside the server function so the browser half can
+ * import the shape without dragging `cloudflare:workers` in with it.
+ */
+export type CreateControlPanelOrganizationResult =
+  | { readonly outcome: "created"; readonly orgSlug: string }
+  | {
+      readonly outcome: "created-session-stale";
+      readonly orgSlug: string;
+      readonly reason: string;
+    }
+  | { readonly outcome: "refused"; readonly status: number; readonly error: ErrorResponse };
+
+export interface CreateOrganizationFailure {
+  readonly title: string;
+  /** The Worker's own words, never paraphrased. */
+  readonly message: string;
+  /** An action that can actually succeed from here (ADR-0036). */
+  readonly nextStep: string | null;
+  /** Set when the refusal is about the handle, so the field carries it too. */
+  readonly slugMessage: string | undefined;
+}
+
+type Refusal = Extract<CreateControlPanelOrganizationResult, { outcome: "refused" }>;
+
+/** What the form should do next. One decision table, so it can be read at once. */
+export type CreateOrganizationEffect =
+  | { readonly kind: "created"; readonly orgSlug: string }
+  | { readonly kind: "session-stale"; readonly orgSlug: string }
+  | { readonly kind: "failed"; readonly failure: CreateOrganizationFailure };
+
+/**
+ * Maps a settled call — including one that threw — onto the effect it deserves.
+ *
+ * The load-bearing line is the middle one: an Organization that was created but
+ * whose session could not be refreshed is NOT a failure, and must never be
+ * rendered as one (SPL-203). Anything this function cannot recognise is a
+ * failure, never a success, so a shape change fails loud rather than silently
+ * reporting a create that may not have happened.
+ */
+export function createOrganizationEffect(input: unknown): CreateOrganizationEffect {
+  if (isOutcome(input, "created")) return { kind: "created", orgSlug: input.orgSlug };
+  if (isOutcome(input, "created-session-stale")) {
+    return { kind: "session-stale", orgSlug: input.orgSlug };
+  }
+  return { kind: "failed", failure: createOrganizationFailure(input) };
+}
+
+function isOutcome<K extends CreateControlPanelOrganizationResult["outcome"]>(
+  input: unknown,
+  outcome: K,
+): input is Extract<CreateControlPanelOrganizationResult, { outcome: K }> {
+  if (typeof input !== "object" || input === null) return false;
+  const candidate = input as { outcome?: unknown; orgSlug?: unknown };
+  return candidate.outcome === outcome && typeof candidate.orgSlug === "string";
+}
+
+/**
+ * Every failure branch names what happened AND an action that can succeed.
+ * "Try again" is only ever offered where trying again could work: a taken handle
+ * is told to pick another, an expired session is told to sign in. Telling a user
+ * to retry something that can only fail the same way is the quiet version of a
+ * silent fallback.
+ */
+export function createOrganizationFailure(
+  input: CreateControlPanelOrganizationResult | unknown,
+): CreateOrganizationFailure {
+  const refusal = asRefusal(input);
+  if (!refusal) {
+    return {
+      title: "Organization not created",
+      message: "The Control Plane could not be reached, so nothing was created.",
+      nextStep: "Check your connection and create again.",
+      slugMessage: undefined,
+    };
+  }
+  return describeRefusal(refusal.status, refusal.error);
+}
+
+function describeRefusal(status: number, error: ErrorResponse): CreateOrganizationFailure {
+  if (error.code === "SLUG_CONFLICT") {
+    return {
+      title: "That URL handle is taken",
+      message: error.message,
+      nextStep: "Handles are unique across splitch. Pick a different one and create again.",
+      slugMessage: error.message,
+    };
+  }
+  if (status === 401) {
+    return {
+      title: "Your session has ended",
+      message: error.message,
+      nextStep: "Sign in again, then create the Organization.",
+      slugMessage: undefined,
+    };
+  }
+  if (status === 403) {
+    return {
+      title: "Not allowed to create an Organization",
+      message: error.message,
+      nextStep: null,
+      slugMessage: undefined,
+    };
+  }
+  if (status === 400 && error.code === "VALIDATION_ERROR") {
+    return {
+      title: "Organization not created",
+      message: error.message,
+      nextStep: "Correct the highlighted field and create again.",
+      slugMessage: slugIssue(error),
+    };
+  }
+  return {
+    title: "Organization not created",
+    message: error.message,
+    nextStep: "Nothing was created. Create again in a moment.",
+    slugMessage: undefined,
+  };
+}
+
+function slugIssue(error: ErrorResponse): string | undefined {
+  if (error.code !== "VALIDATION_ERROR") return undefined;
+  return error.details.issues.find((issue) => issue.path.includes("slug"))?.message;
+}
+
+function asRefusal(input: unknown): Refusal | null {
+  if (typeof input !== "object" || input === null) return null;
+  const candidate = input as Partial<Refusal>;
+  return candidate.outcome === "refused" && candidate.error && typeof candidate.status === "number"
+    ? (candidate as Refusal)
+    : null;
+}

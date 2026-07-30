@@ -8,6 +8,9 @@ vi.mock("@tanstack/react-router", () => ({
   useRouterState: () => "/",
 }));
 vi.mock("#lib/control-plane-app-functions", () => ({ createControlPanelApp: vi.fn() }));
+vi.mock("#lib/control-plane-organization-functions", () => ({
+  createControlPanelOrganization: vi.fn(),
+}));
 
 const { AppsEmptyState } = await import("./apps-empty-state");
 const { CreateAppDialog } = await import("./create-app-dialog");
@@ -148,9 +151,31 @@ describe("Organization chooser", () => {
     expect(html).not.toContain('href="/acme-labs/checkout-api"');
   });
 
-  it("says so when the user belongs to no Organization", () => {
-    expect(renderToStaticMarkup(<OrganizationChooser orgs={[]} />)).toContain(
-      "You are not a member of any Organization yet.",
+  // SPL-205: zero memberships used to render a sentence and nothing else, which
+  // made the first screen of the product a dead end.
+  it("offers the Create Organization path when the user belongs to no Organization", () => {
+    const html = renderToStaticMarkup(<OrganizationChooser orgs={[]} />);
+
+    expect(html).toContain("Create your first Organization");
+    expect(html).toContain('data-testid="create-organization"');
+  });
+
+  it("keeps a Create Organization path once the user already belongs to one", () => {
+    const html = renderToStaticMarkup(
+      <OrganizationChooser
+        orgs={[
+          {
+            orgId: "org_2",
+            orgSlug: "orbit-tools",
+            orgRole: "admin",
+            isProvisional: false,
+            demoExpiresAt: null,
+            apps: [],
+          },
+        ]}
+      />,
     );
+
+    expect(html).toContain('data-testid="create-organization"');
   });
 });

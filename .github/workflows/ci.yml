@@ -15,58 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  control-panel-e2e:
-    name: Control Panel E2E
-    if: github.event_name != 'pull_request'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 15
-    env:
-      SPLITCH_PLATFORM_TARGET: pr-ci
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.8.0 --activate
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.17.0
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run Control Panel E2E
-        run: pnpm --filter @splitch/control-panel test:e2e
-
-      - name: Upload screenshot artifacts
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: control-panel-e2e-artifacts
-          path: |
-            test-results/control-panel-e2e
-            playwright-report
-          if-no-files-found: error
-          retention-days: 14
-
   verify:
     name: Verify
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 20
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -134,129 +85,46 @@ jobs:
           SECRETS_RANGE_AFTER: ${{ github.sha }}
         run: pnpm secrets:range
 
-  warm-production-build-cache:
-    name: Warm Production Build Cache
-    needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 10
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
-      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
-      SPLITCH_PLATFORM_TARGET: production
-      CLOUDFLARE_ENV: production
-      SPLITCH_GENERATED_WRANGLER_ENV: production
-      SENTRY_RELEASE: ${{ github.sha }}
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.8.0 --activate
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.17.0
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
       - name: Require signed Turbo remote cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: node scripts/check-turbo-remote-cache-env.mjs --required
 
       - name: Build production-target Vite Workers
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          SPLITCH_PLATFORM_TARGET: production
+          CLOUDFLARE_ENV: production
+          SPLITCH_GENERATED_WRANGLER_ENV: production
+          SENTRY_RELEASE: ${{ github.sha }}
         run: pnpm turbo run build --filter=@splitch/control-panel --filter=@splitch/marketing
 
-  spec-lint:
-    name: Spec Lint
+  dispatch-production:
+    name: Dispatch Production
+    needs:
+      - verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 10
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
-      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
-      SPLITCH_PLATFORM_TARGET: pr-ci
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Setup pnpm
+      - name: Dispatch exact verified release
+        env:
+          CI_RUN_ID: ${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
-          corepack enable
-          corepack prepare pnpm@11.8.0 --activate
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.17.0
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Check Turbo remote cache inputs
-        run: node scripts/check-turbo-remote-cache-env.mjs
-
-      - name: Spec lint
-        run: pnpm spec:lint
-
-  stats-simulation-smoke:
-    name: Stats Simulation Smoke
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 10
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
-      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
-      SPLITCH_PLATFORM_TARGET: pr-ci
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.8.0 --activate
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.17.0
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Check Turbo remote cache inputs
-        run: node scripts/check-turbo-remote-cache-env.mjs
-
-      - name: Stats simulation smoke
-        run: pnpm --filter @splitch/stats run stats:simulation -- --mode=smoke
+          set -euo pipefail
+          body="$(jq -n \
+            --arg ref main \
+            --arg release_sha "$RELEASE_SHA" \
+            --arg ci_run_id "$CI_RUN_ID" \
+            '{ref: $ref, inputs: {release_sha: $release_sha, ci_run_id: $ci_run_id, force_full_deploy: false}}')"
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/deploy-production.yml/dispatches" \
+            --data "$body"
