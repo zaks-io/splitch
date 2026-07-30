@@ -60,10 +60,12 @@ describe("MCP recover_from_error attention fan-out", () => {
     expect(experimentSchema?.properties).not.toHaveProperty("srm");
     expect(experimentSchema?.properties).not.toHaveProperty("guardrail_results");
 
-    // experiment_results_get's 200 body is StatsOutput, which does.
+    // experiment_results_get's 200 body is the AnalysisResultsEnvelope, whose
+    // `stats` field is StatsOutput and carries the SRM/Guardrail health.
     const resultsSchema = resultsTool.outputSchema as unknown as JsonSchemaLike;
-    expect(resultsSchema.properties).toHaveProperty("srm");
-    expect(resultsSchema.properties).toHaveProperty("guardrail_results");
+    const statsSchema = resultsSchema.properties?.stats;
+    expect(statsSchema?.properties).toHaveProperty("srm");
+    expect(statsSchema?.properties).toHaveProperty("guardrail_results");
   });
 });
 
