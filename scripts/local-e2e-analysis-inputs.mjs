@@ -21,12 +21,13 @@ export const LOCAL_E2E_ANALYSIS_INPUTS = Object.freeze([
     "run_checkout_dev_previous_e2e",
     { control: 6, treatment: 6 },
   ),
-  // A lift the size real Experiments actually produce, and large enough to
-  // actually clear the 95% significance bar under the real Stats Engine
-  // (verified: p ~= 0.026 at these counts). The previous 300/315 split never
-  // reached significance on its own; it only ever showed "Significance
-  // reached" before the analysis_run_inputs provenance fix (#200) because a
-  // pipe read that ignored run_id pooled it with another Run's Exposures.
+  // #200 replaced this fixture's previously-obvious split (5/100 vs 80/100
+  // conversions) with these "more realistic" counts, but 300/1500 vs
+  // 315/1500 never actually clears the 95% significance bar under the real
+  // Stats Engine (verified: is_significant: false, p=1) — it shipped anyway
+  // because Control Panel E2E is skipped on pull requests. 375 is the
+  // smallest bump off the #200 numbers that is verified significant under
+  // the real Stats Engine (p ~= 0.026).
   analysisInput(
     "env_checkout_dev_e2e",
     "experiment_checkout_significance_e2e",
