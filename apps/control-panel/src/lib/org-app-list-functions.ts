@@ -7,7 +7,8 @@ import { createControlPanelAppsClient } from "./control-plane-apps";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
 import type { AppAttention, OrgAppListView, PendingAppResync } from "./org-app-list";
 import { readPendingResync } from "./pending-resync";
-import { loadSessionFromRequest } from "./session";
+import { loadSessionFromRequest, type StoredSession } from "./session";
+import { retryPendingResync } from "./session-resync";
 
 export type OrgAppListResult =
   | { kind: "ok"; view: OrgAppListView }
@@ -28,14 +29,25 @@ export const loadOrgAppList = createServerFn({ method: "GET" })
     if (!loaded.ok) return { kind: "unauthenticated" };
 
     const repo = createRepository(bindings.DB);
-    const session = await rehydrateLegacySession(
+    const rehydrated = await rehydrateLegacySession(
       repo,
       bindings.SESSION_STORE,
       loaded.tokenHash,
       loaded.session,
     );
-    const organization = session.orgs.find((org) => org.orgSlug === orgSlug);
-    if (!organization) return { kind: "forbidden" };
+    const organization0 = rehydrated.orgs.find((org) => org.orgSlug === orgSlug);
+    if (!organization0) return { kind: "forbidden" };
+
+    // The self-heal half of "Reload to check again" (SPL-203 review round 2,
+    // Blocker 2): a pending marker for THIS Organization's App means the last
+    // resync failed, so a reload actually re-attempts it instead of re-reading
+    // the identical stale principal forever.
+    const pendingBefore = await readPendingResync(bindings.SESSION_STORE, loaded.tokenHash, "app");
+    const session: StoredSession =
+      pendingBefore?.orgId === organization0.orgId
+        ? await retryPendingResync(bindings, loaded.tokenHash, rehydrated)
+        : rehydrated;
+    const organization = session.orgs.find((org) => org.orgSlug === orgSlug) ?? organization0;
 
     const resolver = createEnvironmentResolver(repo);
     const actor = { actorId: session.userId, sessionExpiresAt: loaded.session.expiresAt };
@@ -74,8 +86,8 @@ async function readPendingAppResync(
   tokenHash: string,
   orgId: string,
 ): Promise<PendingAppResync | null> {
-  const pending = await readPendingResync(kv, tokenHash);
-  if (pending?.resource !== "app" || pending.orgId !== orgId) return null;
+  const pending = await readPendingResync(kv, tokenHash, "app");
+  if (pending?.orgId !== orgId) return null;
   return { appSlug: pending.slug, reason: pending.reason, remedy: pending.remedy };
 }
 

@@ -8,7 +8,7 @@ import {
   type CreateControlPanelOrganizationResult,
   settleAfterCreate,
 } from "./create-organization-outcome";
-import { markPendingResync } from "./pending-resync";
+import { markPendingResyncBestEffort } from "./pending-resync";
 import { loadSessionFromRequest } from "./session";
 import { resyncSessionMemberships } from "./session-resync";
 
@@ -68,11 +68,14 @@ export const createControlPanelOrganization = createServerFn({ method: "POST" })
     // create (SPL-203): that told the operator to retry a mutation that
     // already succeeded, and the retry could only fail again on the handle.
     const orgSlug = result.data.slug;
-    const settled = await settleAfterCreate(orgSlug, () =>
-      resyncSessionMemberships(bindings, loaded.tokenHash, loaded.session),
-    );
+    const settled = await settleAfterCreate(orgSlug, async () => {
+      await resyncSessionMemberships(bindings, loaded.tokenHash, loaded.session);
+    });
     if (settled.outcome === "created-session-stale") {
-      await markPendingResync(bindings.SESSION_STORE, loaded.tokenHash, {
+      // Best-effort: this write must never be able to convert the
+      // Organization create above, which already succeeded, into a reported
+      // failure (SPL-203 review round 2).
+      await markPendingResyncBestEffort(bindings.SESSION_STORE, loaded.tokenHash, {
         resource: "organization",
         slug: settled.orgSlug,
         reason: settled.reason,

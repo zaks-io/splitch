@@ -2,6 +2,7 @@ import { applySchema, migrationStatements } from "@splitch/db/test-d1";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SESSION_ORG_LIMIT } from "./membership";
+import { markPendingResync, readPendingResync } from "./pending-resync";
 import {
   loadSessionFromCookieHeader,
   publicSession,
@@ -10,7 +11,7 @@ import {
   type StoredSession,
 } from "./session";
 import { tokenHash as hashOpaqueToken } from "./session-cookie";
-import { resyncSessionMemberships } from "./session-resync";
+import { resyncSessionMemberships, retryPendingResync } from "./session-resync";
 
 /**
  * Create-at-cap, proven on the value read back OUT of KV.
@@ -93,6 +94,49 @@ describe("session resync at the Organization cap", () => {
     expect(pub.orgsTruncated).toBe(false);
     expect(pub.orgs.map((org) => org.orgSlug)).toContain(orgSlug(0));
   }, 20_000);
+});
+
+describe("retryPendingResync", () => {
+  it("re-attempts the resync and clears the marker on success, so a reload actually self-heals", async () => {
+    await seedOrganizations(bindings.DB, 1);
+    await markPendingResync(bindings.SESSION_STORE, tokenHash, {
+      resource: "app",
+      orgId: "org_000",
+      slug: "checkout-api",
+      reason: "unknown App role in session materialization",
+      remedy: "retry",
+    });
+
+    const refreshed = await retryPendingResync(bindings, tokenHash, staleSession());
+
+    // This is the mutation target: comment out the real call inside
+    // `retryPendingResync` (leave only `return session`) and this assertion
+    // fails, because the App the User created is still absent from the
+    // returned principal.
+    expect(refreshed.orgs.map((org) => org.orgSlug)).toContain(orgSlug(0));
+    // "Reload to check again" is only honest if the marker actually clears —
+    // otherwise the notice would reappear forever despite the resync working.
+    expect(await readPendingResync(bindings.SESSION_STORE, tokenHash, "app")).toBeNull();
+  });
+
+  it("swallows a failed retry and leaves the marker pending, rather than throwing out of a read path", async () => {
+    await markPendingResync(bindings.SESSION_STORE, tokenHash, {
+      resource: "app",
+      orgId: "org_000",
+      slug: "checkout-api",
+      reason: "boom",
+      remedy: "retry",
+    });
+    const sessionWithoutWorkosId: StoredSession = { ...staleSession(), workosSessionId: undefined };
+
+    const result = await retryPendingResync(bindings, tokenHash, sessionWithoutWorkosId);
+
+    // This is the mutation target for removing the try/catch: without it,
+    // `retryPendingResync` would reject instead of resolving here, and a
+    // reload on the App list page would 500 instead of rendering the notice.
+    expect(result).toBe(sessionWithoutWorkosId);
+    expect(await readPendingResync(bindings.SESSION_STORE, tokenHash, "app")).not.toBeNull();
+  });
 });
 
 /** The pre-create snapshot: correct for the memberships that existed before. */

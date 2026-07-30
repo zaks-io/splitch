@@ -31,7 +31,7 @@ export async function resyncSessionMemberships(
   bindings: SessionResyncBindings,
   tokenHash: string,
   session: StoredSession,
-): Promise<void> {
+): Promise<StoredSession> {
   if (!session.workosSessionId) {
     throw new RemediableSessionError(
       "control-panel session is missing its WorkOS session identifier",
@@ -41,8 +41,38 @@ export async function resyncSessionMemberships(
     userId: session.userId,
     workosSessionId: session.workosSessionId,
   });
-  await refreshSession(bindings.SESSION_STORE, tokenHash, { ...session, ...principal });
+  const refreshed: StoredSession = { ...session, ...principal };
+  await refreshSession(bindings.SESSION_STORE, tokenHash, refreshed);
   // A resync that reaches here succeeded, so whatever earlier create left this
   // marker behind (SPL-203) is resolved: the fresh principal now holds it.
   await clearPendingResync(bindings.SESSION_STORE, tokenHash);
+  return refreshed;
+}
+
+/**
+ * The read-path half of "Reload to check again" (`stale-session-notice.tsx`):
+ * called from a loader that just found a pending marker, so the retry button
+ * is an honest promise instead of dead copy (SPL-203 review round 2,
+ * Blocker 2). `resyncSessionMemberships` has exactly two production callers
+ * before this one, both create handlers, and nothing on a normal page load
+ * ever re-attempted the resync — a reload re-read the identical stale
+ * principal forever, until the marker's TTL expired and the App or
+ * Organization vanished from view with no explanation at all.
+ *
+ * Swallows failure on purpose: a caller reached here because it is about to
+ * render the stale-session notice regardless, and a failed retry must not
+ * turn a read into a thrown error. The still-pending marker (unchanged, since
+ * `resyncSessionMemberships` only clears it on success) is what the caller
+ * re-reads to keep showing the notice honestly.
+ */
+export async function retryPendingResync(
+  bindings: SessionResyncBindings,
+  tokenHash: string,
+  session: StoredSession,
+): Promise<StoredSession> {
+  try {
+    return await resyncSessionMemberships(bindings, tokenHash, session);
+  } catch {
+    return session;
+  }
 }

@@ -10,10 +10,13 @@ import {
   type ScopeParams,
 } from "./loader-context";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
+import { readPendingResync } from "./pending-resync";
 import { loadSessionFromRequest, publicSession, type SessionPrincipal } from "./session";
+import { retryPendingResync } from "./session-resync";
+import type { StaleSession } from "./stale-session";
 
 export type CurrentSessionResult =
-  | { kind: "authenticated"; session: SessionPrincipal }
+  | { kind: "authenticated"; session: SessionPrincipal; pendingOrgResync: StaleSession | null }
   | { kind: "unauthenticated" };
 
 export type ScopedSessionResult =
@@ -33,13 +36,39 @@ export const loadCurrentSession = createServerFn({ method: "GET" }).handler(
       return { kind: "unauthenticated" };
     }
     const repo = createRepository(bindings.DB);
-    const session = await rehydrateLegacySession(
+    const rehydrated = await rehydrateLegacySession(
       repo,
       bindings.SESSION_STORE,
       loaded.tokenHash,
       loaded.session,
     );
-    return { kind: "authenticated", session: publicSession(session) };
+
+    // The self-heal half of "Reload to check again" (SPL-203 review round 2,
+    // Blocker 2), mirrored from `org-app-list-functions.ts`: a pending
+    // Organization marker means the last resync failed, so landing here again
+    // actually re-attempts it instead of re-reading the identical stale
+    // principal forever.
+    const pendingBefore = await readPendingResync(
+      bindings.SESSION_STORE,
+      loaded.tokenHash,
+      "organization",
+    );
+    const session = pendingBefore
+      ? await retryPendingResync(bindings, loaded.tokenHash, rehydrated)
+      : rehydrated;
+
+    const pendingAfter = await readPendingResync(
+      bindings.SESSION_STORE,
+      loaded.tokenHash,
+      "organization",
+    );
+    return {
+      kind: "authenticated",
+      session: publicSession(session),
+      pendingOrgResync: pendingAfter
+        ? { slug: pendingAfter.slug, reason: pendingAfter.reason, remedy: pendingAfter.remedy }
+        : null,
+    };
   },
 );
 

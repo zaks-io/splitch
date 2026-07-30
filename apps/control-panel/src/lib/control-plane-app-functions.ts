@@ -5,7 +5,7 @@ import { z } from "zod";
 import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelAppsClient } from "./control-plane-apps";
 import { type CreateControlPanelAppResult, settleAfterCreate } from "./create-app-outcome";
-import { markPendingResync } from "./pending-resync";
+import { markPendingResyncBestEffort } from "./pending-resync";
 import { loadSessionFromRequest } from "./session";
 import { resyncSessionMemberships } from "./session-resync";
 
@@ -66,15 +66,17 @@ export const createControlPanelApp = createServerFn({ method: "POST" })
     // must never be reported through the same path as a failed create (SPL-203):
     // that told the operator to retry a mutation that already succeeded, and the
     // retry could only fail again on `apps_org_key_unique`.
-    const settled = await settleAfterCreate(result.data.app.key, () =>
-      resyncSessionMemberships(bindings, loaded.tokenHash, loaded.session),
-    );
+    const settled = await settleAfterCreate(result.data.app.key, async () => {
+      await resyncSessionMemberships(bindings, loaded.tokenHash, loaded.session);
+    });
     if (settled.outcome === "created-session-stale") {
       // Written outside the session object so a reload before the next
       // successful resync still knows this App exists (SPL-203 review:
       // otherwise the notice — and the fact the create-again retry is
-      // impossible — disappears the moment the page reloads).
-      await markPendingResync(bindings.SESSION_STORE, loaded.tokenHash, {
+      // impossible — disappears the moment the page reloads). Best-effort:
+      // this write must never be able to convert the App create above, which
+      // already succeeded, into a reported failure (SPL-203 review round 2).
+      await markPendingResyncBestEffort(bindings.SESSION_STORE, loaded.tokenHash, {
         resource: "app",
         orgId,
         slug: settled.appSlug,

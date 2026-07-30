@@ -19,13 +19,25 @@ import type { StaleSession } from "#lib/stale-session";
  */
 export function OrganizationChooser({
   orgs,
+  pendingResync = null,
   truncated = false,
 }: {
   orgs: readonly OrgMembership[];
+  /**
+   * The durable, server-read half of the notice (SPL-203 review round 2): set
+   * when a create's resync failed and has not yet been resolved by a retry on
+   * a later load, so the notice survives navigation and a reload rather than
+   * disappearing the moment `staleOrg` below is reset.
+   */
+  pendingResync?: StaleSession | null;
   /** The snapshot is a prefix, not the whole set. Stated, never implied. */
   truncated?: boolean;
 }) {
   const [staleOrg, setStaleOrg] = useState<StaleSession | null>(null);
+  // The local state is fresher when both are set: it is written the instant a
+  // create settles, before this load's `pendingResync` could possibly know
+  // about it.
+  const notice = staleOrg ?? pendingResync;
   // Create Organization is server-driven and inert until hydration, so the
   // screen publishes when it is actually usable rather than leaving a
   // rendered-but-dead control (the same contract the Org and App shells publish).
@@ -44,12 +56,12 @@ export function OrganizationChooser({
       data-hydrated={isHydrated ? "true" : "false"}
       data-org-chooser="ready"
     >
-      {staleOrg ? (
+      {notice ? (
         <StaleSessionNotice
-          reason={staleOrg.reason}
-          remedy={staleOrg.remedy}
+          reason={notice.reason}
+          remedy={notice.remedy}
           resource="Organization"
-          slug={staleOrg.slug}
+          slug={notice.slug}
         />
       ) : null}
       {truncated ? <OrganizationsTruncatedNotice limit={orgs.length} /> : null}

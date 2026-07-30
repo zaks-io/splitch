@@ -3,20 +3,26 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { OrganizationChooser } from "#components/organization-chooser";
 import type { SessionPrincipal } from "#lib/session";
 import { loadCurrentSession } from "#lib/session-functions";
+import type { StaleSession } from "#lib/stale-session";
+
+export interface IndexLoaderData {
+  session: SessionPrincipal;
+  pendingOrgResync: StaleSession | null;
+}
 
 export const Route = createFileRoute("/")({
-  loader: async ({ location }): Promise<SessionPrincipal> => {
+  loader: async ({ location }): Promise<IndexLoaderData> => {
     const result = await loadCurrentSession();
     if (result.kind === "unauthenticated") {
       throw loginRedirect(location.href);
     }
-    return result.session;
+    return { session: result.session, pendingOrgResync: result.pendingOrgResync };
   },
   component: IndexRoute,
 });
 
 function IndexRoute() {
-  const session = Route.useLoaderData();
+  const { session, pendingOrgResync } = Route.useLoaderData();
 
   return (
     <main className="grid gap-6">
@@ -37,7 +43,11 @@ function IndexRoute() {
         </div>
       </header>
 
-      <OrganizationChooser orgs={session.orgs} truncated={session.orgsTruncated ?? false} />
+      <OrganizationChooser
+        orgs={session.orgs}
+        pendingResync={pendingOrgResync}
+        truncated={session.orgsTruncated ?? false}
+      />
     </main>
   );
 }
