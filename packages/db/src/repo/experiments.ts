@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index";
 import type { Db } from "./client";
 import type { EnvScope, TenantScope } from "./scope";
@@ -50,6 +50,20 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       return experimentsTable.findMany(scope);
     },
 
+    /**
+     * Compare-and-set on `liveRunId`, the same token `startRun` and `endRun`
+     * guard on. A caller reads the Experiment, decides which fields it may
+     * write against the Run that read showed, and then passes that Run id back
+     * here; the UPDATE matches no row if a Run started or ended in between.
+     *
+     * Without it a PATCH decided while the Experiment was a draft could land on
+     * a row that a Run has since frozen, re-bucketing a live sample. ADR-0002
+     * makes that impossible by construction, and this is the write-path half of
+     * "by construction".
+     * `expectedLiveRunId` is required, not optional, so no caller can skip the
+     * check by forgetting it. A `null` result means either "no such Experiment"
+     * or "lost the race" — the caller re-reads to tell them apart.
+     */
     updateExperiment(
       scope: EnvScope,
       experimentId: string,
@@ -61,6 +75,8 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
           | "name"
           | "description"
           | "hypothesis"
+          | "owner"
+          | "tags"
           | "status"
           | "targetingKeyField"
           | "targetingKeyType"
@@ -80,9 +96,10 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
           | "updatedBy"
         >
       >,
+      expectedLiveRunId: string | null,
     ): Promise<typeof experiments.$inferSelect | null> {
       return experimentsTable
-        .update(scope, patch, eq(experiments.id, experimentId))
+        .update(scope, patch, and(eq(experiments.id, experimentId), liveRunIdIs(expectedLiveRunId)))
         .then((rows) => rows[0] ?? null);
     },
 
@@ -169,6 +186,10 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       return metricsTable.remove(scope, eq(metrics.id, metricId));
     },
   };
+}
+
+function liveRunIdIs(expected: string | null) {
+  return expected === null ? isNull(experiments.liveRunId) : eq(experiments.liveRunId, expected);
 }
 
 function assertRunStatusUpdate(patch: Record<string, unknown>): void {

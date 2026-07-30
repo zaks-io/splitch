@@ -62,6 +62,40 @@ Returns: Experiment including `live_run_id` (null if no running Run), draft allo
 }
 ```
 
+While a Run is running, assignment fields require `stageForNextRun: true` in the PATCH body. The
+marker is the explicit distinction between configuring the next Run and attempting to mutate the
+live Run. Without it, the Worker returns `409 RUN_FROZEN`; with it, the edit accumulates into the
+single next-Run draft the Experiment holds. An omitted field keeps whatever that draft already
+holds, so a later staged PATCH never reverts an allocation, salt, Targeting Rule set, or Segment
+reference staged by an earlier one. Start remains the only operation that ends the current Run.
+
+What happens to a field the draft has **no** value for is not uniform, and the difference is
+material:
+
+| Staged field      | Draft empty at Start                                                            |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `allocation`      | Carried forward from the running Run's frozen allocation.                       |
+| `targeting_rules` | Carried forward from the running Run's frozen (already Segment-resolved) rules. |
+| `salt`            | **Not** carried forward. Start mints a fresh salt.                              |
+| `segment_ids`     | **Not** carried forward. Defaults to the empty list.                            |
+
+The salt row is the consequential one. A staged PATCH that does not set `salt` explicitly leaves
+the draft salt null, and Start then generates a new one — so **the next Run re-randomizes the
+entire sample**. Every subject may land in a different Variant than it did in the previous Run.
+That is deliberate: a new Run is a new bucketing boundary, so an allocation change cannot silently
+reshuffle only part of the audience. If the next Run must reuse the current Run's bucketing, send
+`salt` explicitly with the running Run's salt value (readable from the Run) in the staged PATCH.
+
+`segment_ids` does not carry forward because a Run stores no Segment references at all: Start
+resolves Segments into concrete Targeting Rules and freezes those. The resolved rules are what
+`targeting_rules` carries forward, so traffic is not silently widened; the references themselves
+have to be re-staged if the next Run should track a live Segment.
+
+`flag_id`, `targeting_key_field`, `targeting_key_type`, and `activation_metric_id` have no draft
+column of their own. While a Run is running they are rejected with `409 RUN_FROZEN` even under
+`stageForNextRun: true`; the stageable set is exactly `allocation`, `salt`, `targeting_rules`, and
+`segment_ids`, and nothing else.
+
 **Measurement-config fields** (apply to live Run in place, no reset):
 
 ```

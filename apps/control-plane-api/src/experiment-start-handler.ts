@@ -116,6 +116,7 @@ export async function startExperiment(
       id: `run_${randomHex(12)}`,
       targetingKeyField: experiment.targetingKeyField,
       targetingKeyType: experiment.targetingKeyType,
+      activationMetricId: experiment.activationMetricId,
       salt: prepared.value.salt,
       allocation: json(prepared.value.allocation),
       variantSet: json(prepared.value.variantSet),

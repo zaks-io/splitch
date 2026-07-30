@@ -1,4 +1,4 @@
-import { envScope } from "@splitch/db";
+import { type EnvScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
@@ -19,7 +19,7 @@ import {
   loadUpdateContext,
   prepareUpdatePatch,
   validateCreateExperiment,
-  validateRunningPatch,
+  validateExperimentPatch,
 } from "./experiment-update-plan";
 import { runningExperimentError } from "./flag-definition-errors";
 import { objectBody, pathParam } from "./handler-input";
@@ -97,35 +97,70 @@ async function getExperiment(
   return Response.json(experimentResponse(experiment));
 }
 
+/**
+ * A PATCH is decided against a read of the Experiment and then written, and a
+ * Run can Start in between. `updateExperiment` compare-and-sets on the live Run
+ * id, so a write decided under stale Run state simply does not land — at which
+ * point the only correct move is to replay the decision against the new state.
+ * Bounded, because a caller must never be able to spin here.
+ */
+const MAX_UPDATE_ATTEMPTS = 3;
+
 async function updateExperiment(
   deps: ExperimentDeps,
   args: HandlerArgs<unknown>,
 ): Promise<Response> {
   const scope = envScope(pathParam(args.input, "appId"), pathParam(args.input, "environmentId"));
   const body = objectBody(args.input);
+  for (let attempt = 0; attempt < MAX_UPDATE_ATTEMPTS; attempt += 1) {
+    const response = await attemptExperimentUpdate(deps, scope, body, args);
+    if (response) return response;
+  }
+  // Losing the compare-and-set this many times in a row is not contention, it is
+  // an Experiment whose Run state is being rewritten in a loop. Fail loud.
+  throw new Error(
+    `updateExperiment: live-Run compare-and-set lost ${MAX_UPDATE_ATTEMPTS} times in a row`,
+  );
+}
 
+/**
+ * One read-guard-write attempt. `null` means the compare-and-set found no row:
+ * the Experiment's live Run is no longer the one the guard ruled against (a Run
+ * started or ended), or the Experiment was deleted. Both are resolved by the
+ * next attempt's fresh read, which either re-guards or 404s.
+ */
+async function attemptExperimentUpdate(
+  deps: ExperimentDeps,
+  scope: EnvScope,
+  body: Record<string, unknown>,
+  args: HandlerArgs<unknown>,
+): Promise<Response | null> {
   const context = await loadUpdateContext(deps, scope, args);
   if (!context.ok) return context.response;
 
-  const guardError = await validateRunningPatch(
+  const guard = await validateExperimentPatch(
     deps,
     scope,
     context.experiment,
     body,
     args.requestId,
   );
-  if (guardError) return guardError;
+  if (guard.response) return guard.response;
 
-  const patch = await prepareUpdatePatch(deps, scope, context.experiment, body, args);
+  // The same Run the guard ruled on. A second read could return a different
+  // answer, and then the patch would be built under rules the guard never
+  // applied to it.
+  const runningRun = body.stageForNextRun === true ? guard.runningRun : null;
+  const patch = await prepareUpdatePatch(deps, scope, context.experiment, body, args, runningRun);
   if (!patch.ok) return patch.response;
 
   const updated = await deps.repo.experiments.updateExperiment(
     scope,
     context.experiment.id,
     patch.value,
+    context.experiment.liveRunId,
   );
-  if (!updated) return experimentNotFound(args.requestId);
-  return Response.json(experimentResponse(updated));
+  return updated ? Response.json(experimentResponse(updated)) : null;
 }
 
 async function deleteExperiment(

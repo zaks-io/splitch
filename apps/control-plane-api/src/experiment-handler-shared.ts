@@ -1,9 +1,9 @@
-import type { MetricRef, Variant } from "@splitch/contracts";
+import type { MetricRef } from "@splitch/contracts";
 import { appScope, type EnvScope, envScope, type Repository } from "@splitch/db";
 import { requireAppWrite } from "./app-authz";
 import { appNotFound } from "./app-environment-model";
 import type { ConfigStoreAccess } from "./config-store-do";
-import { type ExperimentRow, equalAllocation, json, type RunRow } from "./experiment-model";
+import { type ExperimentRow, json, type RunRow } from "./experiment-model";
 import { flagNotFound, validationError } from "./flag-definition-errors";
 import { pathParam } from "./handler-input";
 
@@ -51,18 +51,18 @@ export async function blockingRunningExperimentForStart(
   return { experimentId: blocker.id, runId: run?.id ?? blocker.liveRunId ?? "unknown" };
 }
 
+/**
+ * `variantSet` used to reach here and synthesize an equal split from the Variant
+ * names. It cannot any more: Create does not accept the field and Patch rejects
+ * it with a 400 before the patch is built, so the derived-allocation branch was
+ * dead code that only made the write path look like it had a second source of
+ * allocation truth. Allocation now comes from `allocation` or not at all.
+ */
 export function draftPatch(body: Record<string, unknown>) {
-  const variantNames = Array.isArray(body.variantSet)
-    ? (body.variantSet as Variant[]).map((variant) => variant.name)
-    : [];
-  const allocation =
-    body.allocation !== undefined
-      ? (body.allocation as Record<string, number>)
-      : variantNames.length > 0
-        ? equalAllocation(variantNames)
-        : undefined;
   return {
-    ...(allocation !== undefined ? { draftAllocation: json(allocation) } : {}),
+    ...(body.allocation !== undefined
+      ? { draftAllocation: json(body.allocation as Record<string, number>) }
+      : {}),
     ...(body.salt !== undefined ? { draftSalt: body.salt as string } : {}),
     ...(body.targetingRules !== undefined
       ? { draftTargetingRules: json(body.targetingRules) }
