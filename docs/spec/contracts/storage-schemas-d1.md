@@ -111,18 +111,18 @@ CONFIGURATION (enabled state, available Variant subset, targeting, rollout) live
 Event Definitions are shared by every Environment in one App. The stable `name` is the
 developer-facing `eventName`. The client names it but cannot choose a version.
 
-| Column                         | Type        | Constraints                              |
-| ------------------------------ | ----------- | ---------------------------------------- |
-| `id`                           | text        | PK                                       |
-| `app_id`                       | text        | FK → apps, not null                      |
-| `name`                         | text        | not null, unique per `(app_id)`          |
-| `display_name`                 | text        | not null                                 |
-| `description`                  | text        | nullable                                 |
-| `current_published_version_id` | text        | nullable, FK → event_definition_versions |
-| `created_at`                   | timestamptz | not null                                 |
-| `updated_at`                   | timestamptz | not null                                 |
-| `created_by`                   | text        | WorkOS user ID or deleted-user tombstone |
-| `updated_by`                   | text        | WorkOS user ID or deleted-user tombstone |
+| Column                         | Type        | Constraints                                                                           |
+| ------------------------------ | ----------- | ------------------------------------------------------------------------------------- |
+| `id`                           | text        | PK                                                                                    |
+| `app_id`                       | text        | FK → apps, not null                                                                   |
+| `name`                         | text        | not null, unique per `(app_id)`                                                       |
+| `display_name`                 | text        | not null                                                                              |
+| `description`                  | text        | nullable                                                                              |
+| `current_published_version_id` | text        | nullable, FK → event_definition_versions; must belong to this definition and `app_id` |
+| `created_at`                   | timestamptz | not null                                                                              |
+| `updated_at`                   | timestamptz | not null                                                                              |
+| `created_by`                   | text        | WorkOS user ID or deleted-user tombstone                                              |
+| `updated_by`                   | text        | WorkOS user ID or deleted-user tombstone                                              |
 
 ### `event_definition_versions` (immutable after creation)
 
@@ -130,21 +130,31 @@ Creating a version and advancing `current_published_version_id` is one D1 transa
 UPDATE or independent DELETE path for a published version. App deletion removes definitions and
 versions only after the normal App data purge has removed dependent Metric Event rows.
 
-| Column                | Type        | Constraints                                                    |
-| --------------------- | ----------- | -------------------------------------------------------------- |
-| `id`                  | text        | PK                                                             |
-| `app_id`              | text        | FK → apps, not null                                            |
-| `event_definition_id` | text        | FK → event_definitions, not null                               |
-| `version`             | integer     | not null, positive, unique per `(event_definition_id)`         |
-| `entity_type`         | text        | not null; required `id_type` for accepted Metric Events        |
-| `fields`              | text        | not null; JSON `EventFieldDefinition[]`                        |
-| `dimensions`          | text        | not null; JSON `DimensionDefinition[]`                         |
-| `schema_hash`         | text        | not null; SHA-256 of canonical Entity/field/Dimension contract |
-| `published_at`        | timestamptz | not null; also the immutable creation timestamp                |
-| `published_by`        | text        | WorkOS user ID or deleted-user tombstone                       |
+| Column                | Type        | Constraints                                                      |
+| --------------------- | ----------- | ---------------------------------------------------------------- |
+| `id`                  | text        | PK                                                               |
+| `app_id`              | text        | FK → apps, not null                                              |
+| `event_definition_id` | text        | FK → event_definitions, not null; must match this row's `app_id` |
+| `version`             | integer     | not null, positive, unique per `(event_definition_id)`           |
+| `entity_type`         | text        | not null; required `id_type` for accepted Metric Events          |
+| `fields`              | text        | not null; JSON `EventFieldDefinition[]`                          |
+| `dimensions`          | text        | not null; JSON `DimensionDefinition[]`                           |
+| `schema_hash`         | text        | not null; SHA-256 of canonical Entity/field/Dimension contract   |
+| `published_at`        | timestamptz | not null; also the immutable creation timestamp                  |
+| `published_by`        | text        | WorkOS user ID or deleted-user tombstone                         |
 
 UNIQUE constraints: `(event_definition_id, version)` and `(event_definition_id, schema_hash)`.
 Every repository query carries `app_id` first even when it also has `event_definition_id`.
+
+D1 does not enforce composite/co-scoped foreign keys across `event_definitions` and
+`event_definition_versions`. The Worker data-access seam must reject any write where:
+
+- a version's `event_definition_id` names a definition whose `app_id` differs from the version's
+  `app_id`;
+- `current_published_version_id` names a version that does not belong to the same Event Definition
+  and App.
+
+Cross-App and mismatched-parent references fail before commit; repository tests cover both cases.
 
 ### `flag_configs` (CONFIGURATION — per-Environment)
 

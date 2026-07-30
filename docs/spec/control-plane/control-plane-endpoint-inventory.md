@@ -43,7 +43,7 @@ against and the co-scope guard never fires. Authorization there is the handler's
 | [endpoints-org-app.md](endpoints-org-app.md)                         | Organization **create** + member management; App CRUD; **Environment CRUD**                                              |
 | [endpoints-flag-segment.md](endpoints-flag-segment.md)               | Flag **definition** (App-level) + **Flag Configuration** (per-Env) + **Promotion**; Segment CRUD                         |
 | [endpoints-experiment-run.md](endpoints-experiment-run.md)           | Experiment draft/**start** lifecycle; Experiment Run reads + end (per-Env)                                               |
-| [endpoints-metric.md](endpoints-metric.md)                           | Event Definition/version authoring + typed-field Metric CRUD (binomial, count, revenue, ratio, guardrail)                |
+| [endpoints-metric.md](endpoints-metric.md)                           | Event Definition/version authoring + typed-field Metric CRUD (binomial, count, revenue, ratio)                           |
 | [endpoints-credentials.md](endpoints-credentials.md)                 | Client Key + API Key management (per-Env)                                                                                |
 | [endpoints-test-eval-analytics.md](endpoints-test-eval-analytics.md) | Dry-run test-evaluation (Evaluation Worker), analytics proxy reads (Analysis Worker), OpenAPI schema discovery (per-Env) |
 | [endpoints-privacy-data.md](endpoints-privacy-data.md)               | Privacy requests, export jobs, delete jobs, and Entity data subject requests                                             |

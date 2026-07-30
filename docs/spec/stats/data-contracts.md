@@ -53,9 +53,14 @@ independent aggregation. Rows with `denom_value = 0` are retained; dropping them
 randomized population and can bias denominator-sensitive Metrics.
 
 The pipeline derives these values from the separate `metric_events` datasource. A Metric Event joins
-only on matching `app_id`, `environment_id`, `id_type`, and `targeting_key_hash`, and only when
-`id_type = Run.targeting_key_type`. Metric Events never create denominator rows: the pipeline
-left-joins values onto the complete first-touch Exposure population.
+an Entity only on matching `app_id`, `environment_id`, `id_type`, and `targeting_key_hash`, and only
+when `id_type = Run.targeting_key_type`. Metric selection further requires
+`event_definition_id = Metric.event_definition_id` and, for Count and Revenue, the Metric's
+`event_field_name` present on that row's accepting Event Definition Version; the Conversion Window
+filter then keeps events inside the Entity's window. Ratio Metrics resolve numerator and denominator
+independently through each operand Metric's Event Definition and field contract before forming the
+per-Entity `(num_value, denom_value)` pair. Metric Events never create denominator rows: the
+pipeline left-joins values onto the complete first-touch Exposure population.
 
 For locked non-Ratio decision-family or Guardrail Metrics, `metric_values` may be sparse at the
 beginning of a Run. If no row has arrived for a locked Metric yet, the engine still evaluates that

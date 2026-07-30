@@ -115,7 +115,11 @@ a finished Run still reflects exactly the population it actually randomized. Thi
 
 Metrics never store an event-name string, expression, or nested JSON path. The Worker resolves
 `eventDefinitionId` in the same App and validates `eventFieldName` against the current published
-Event Definition Version. Historical Metric Event rows carry their accepting version.
+Event Definition Version at create/patch time. Metrics do not pin an Event Definition Version.
+Historical Metric Event rows carry their accepting `eventDefinitionVersionId`; analysis and
+measurement-edit recomputation resolve `eventFieldName` type and presence from that immutable
+accepting version, not from the current published version, so existing Runs remain lossless after
+later schema publishes.
 
 ## Sources
 

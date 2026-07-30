@@ -43,7 +43,7 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
   management CRUD, including post-create Org management, lives on the Control Plane API Worker.
 - Client Key immediately usable at creation; `origin_allowlist = null` means no origin restriction
 - Client Key has only two public data-plane capabilities: evaluate and write-only Metric Event
-  `track`; it cannot read Event Definitions, events, Metrics, or configuration.
+  `track`; it cannot read Event Definitions, Metric Events, Metrics, or Flag Configuration.
 - Tinybird never queried directly; Analysis Worker injects `app_id` and `environment_id` from
   control-plane auth/path context.
 - Privacy requests are first-class Control Plane API operations. Delete jobs commit tombstones before

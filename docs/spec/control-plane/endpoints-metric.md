@@ -99,7 +99,7 @@ Body:
   // Required for count/revenue. Must be a declared top-level number field.
   event_field_name?: string;
 
-  // Required for ratio. Both must name non-Ratio Metrics in the same App.
+  // Required for ratio. Both must name distinct same-App non-Ratio Metrics; cycles rejected.
   numerator_metric_id?: string;
   denominator_metric_id?: string;
 
@@ -109,12 +109,22 @@ Body:
 }
 ```
 
-The Worker resolves the current published Event Definition Version before writing:
+The Worker resolves the current published Event Definition Version before writing a Metric that
+directly references an Event Definition:
 
 - Binomial references the definition and leaves `event_field_name` absent.
-- Count and Revenue reference a declared `number` field by exact name. JSON paths and expressions
-  are rejected.
-- Ratio references two same-App non-Ratio Metrics and carries no direct Event Definition or field.
+- Count and Revenue reference a declared `number` field by exact name on that published version.
+  JSON paths and expressions are rejected.
+- Ratio references two same-App non-Ratio Metrics with distinct ids, rejects Ratio operands and
+  dependency cycles, and carries no direct Event Definition or field.
+
+Metrics store `event_definition_id` (not a pinned version). Create and patch validate the field
+contract against the then-current published version. Analysis never re-resolves fields from the
+current version: each Metric Event row supplies its accepting immutable
+`event_definition_version_id`, and field name/type are taken from that stamped version so Runs that
+span versions remain lossless after later measurement edits. A later publish that removes or retypes
+a referenced field rejects new Metric create/patch and new ingest against the current version; it
+does not rewrite already-accepted rows.
 
 Returns the canonical `Metric`.
 
@@ -138,9 +148,10 @@ referenced Event Definition's current published version. Its `entity_type` must 
 Experiment/Run `targeting_key_type`. A mismatch returns `400 ENTITY_TYPE_MISMATCH` and writes no
 Experiment, Run, or Metric-reference mutation.
 
-The Analysis Worker repeats this condition when joining Metric Events:
-`metric_events.id_type = runs.targeting_key_type`. A Metric Event can remain a valid App/
-Environment fact even when it is not compatible with a particular Run.
+The Analysis Worker joins Metric Events only when all of these match the Run's first-touch Exposure
+set: `app_id`, `environment_id`, `id_type = runs.targeting_key_type`, and `targeting_key_hash`. A
+Metric Event can remain a valid App/Environment fact even when it is incompatible with a particular
+Run.
 
 ## Sources
 

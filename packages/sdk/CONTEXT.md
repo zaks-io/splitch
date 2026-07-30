@@ -90,7 +90,8 @@ cannot select an Event Definition Version.
 - Reading through the exposing accessor fires Exposure.
 - Peeking must be explicit and loudly named.
 - Tracking is write-only, strict, and fail-loud. Unknown fields, Dimensions, nested JSON keys, or
-  Entity profile properties write nothing.
+  Entity profile properties return the canonical validation error and perform no append, so rejected
+  Metric Events are distinguishable from successful ingestion.
 - Evaluation is **fail-loud**: a failure-fallback to the Default Variant always carries
   `reason: ERROR` + `errorCode` and a loud log/hook, never a silent default (ADR-0036). A
   disabled / no-config / no-match flag is a normal `DEFAULT`/`DISABLED`, not an error.

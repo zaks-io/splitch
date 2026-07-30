@@ -85,7 +85,7 @@ Every SDK call presents either a Client Key or an API Key. The Worker validates 
 
 ```
 Key:   ck:{sha256(key_material)}
-Value: { app_id, environment_id, capabilities: ["evaluate", "track"], revoked: boolean, origin_allowlist: string[] | null, valid_until: ISO8601 }
+Value: { organizationId, app_id, environment_id, capabilities: ["evaluate", "track"], revoked: boolean, origin_allowlist: string[] | null, valid_until: ISO8601 }
 ```
 
 **API Key cache entry:**

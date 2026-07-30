@@ -28,11 +28,12 @@ has a canonical enforcing contract.
 
 The Evaluation and Event Ingest Workers are reachable by untrusted clients holding a **Client Key**.
 
-- Client Keys are public and origin-closed; their only write capability is strict Metric Event
-  `track()`; `peekVariant()` is **API-Key-only**; `verify()` is
-  available on all tiers but reveals nothing extra under a Client Key (ADR-0037); origin-blocked
-  requests fail loud with `ORIGIN_NOT_ALLOWED`; anon registration is gated by Turnstile; revoke is
-  **fail-loud**.
+- Client Keys are public. Auto-provisioned keys start `origin_allowlist = null` (open to all
+  origins) with loud open-state surfacing and a one-action lock-down (ADR-0034 §1); a non-empty
+  allow-list is origin-closed and origin-blocked requests fail loud with `ORIGIN_NOT_ALLOWED`. Their
+  only write capability is strict Metric Event `track()`; `peekVariant()` is **API-Key-only**;
+  `verify()` is available on all tiers but reveals nothing extra under a Client Key (ADR-0037); anon
+  registration is gated by Turnstile; revoke is **fail-loud**.
 - Canonical contract: **ADR-0034** + [`edge-abuse-controls`](../pipeline/edge-ingest-contract.md).
 
 ### 2. Tenant isolation
@@ -51,8 +52,9 @@ Two key classes with different blast radii.
 
 - **API Key** (secret, server-side): provisioned, never read back after
   creation, never returned in a response, never logged.
-- **Client Key** (public, client-side): safe to embed, origin-closed, evaluate plus one strict
-  write-only Metric Event `track()` capability; no configuration reads or other writes.
+- **Client Key** (public, client-side): safe to embed; open-by-default with loud origin surfacing
+  (ADR-0034 §1); evaluate plus one strict write-only Metric Event `track()` capability; no Flag
+  Configuration reads or other writes.
 - Canonical contract: [`credentials-and-keys`](../control-plane/credentials-and-keys.md), [`auth-doors`](../control-plane/auth-doors.md), [`access-control-matrix`](../control-plane/access-control-matrix.md).
 - Enforced in code by the `splitch-api-key-never-returned` and
   `splitch-no-secret-in-logs` Semgrep rules and by gitleaks.

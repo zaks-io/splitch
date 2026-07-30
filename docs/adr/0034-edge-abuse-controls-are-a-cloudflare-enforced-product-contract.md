@@ -21,8 +21,10 @@ No second mechanism is invented; these compose with the WAF already in use.
 One Client Key is **auto-provisioned when an Environment is created** so the public SDK works with zero
 setup; it starts `origin_allowlist = null` (open to all origins). The zero-friction path is the default
 because a public client-side key that needs configuration before the first `evaluate` is friction the
-industry norm has already rejected, and because the key carries exactly one capability — Exposure-bearing
-`evaluate` — never a silent oracle (see §2).
+industry norm has already rejected, and because the key's public read path carries exactly one
+Variant-resolution capability — Exposure-bearing `evaluate` — never a silent oracle (see §2). ADR-0040
+adds a second public surface: strict write-only Metric Event `track()` (and future Web Event ingest);
+neither returns allocation or configuration.
 
 The security obligation is met not by a create-time gate but by making the open state **impossible to
 miss and trivial to fix**: every surface flags an open key loudly (control-panel banner, an
@@ -43,10 +45,11 @@ use cases (server-side pre-computation, below-the-fold decisions made server-sid
 server-side already. Client-side below-the-fold deferral is served by firing `evaluate` when the element
 scrolls into view, not by a silent client peek. For Variant resolution, the public Client Key keeps
 exactly one capability: `evaluate`, whose successful fresh assignment under a live Experiment Run
-always leaves an Exposure. ADR-0040 later adds strictly write-only public event-ingest capabilities;
-they return no allocation or configuration and do not weaken this read boundary.
-Disabled, no-Experiment, no-live-Run, holdover, and error branches reveal no live allocation and leave
-no new Exposure.
+always leaves an Exposure. ADR-0040 adds strictly write-only public Metric Event `track()` (and
+future Web Event ingest); those surfaces return no allocation or configuration and do not weaken
+this read boundary. `verify()` remains available on all tiers but reveals nothing extra under a
+Client Key (ADR-0037). Disabled, no-Experiment, no-live-Run, holdover, and error branches reveal no
+live allocation and leave no new Exposure.
 
 ### 3. Credential revocation fails loud and fast
 
@@ -93,8 +96,9 @@ evaluate surface.
 ## Consequences
 
 - The public Client Key's only Variant-resolution capability is Exposure-bearing `evaluate`. Peek,
-  reasons, config, rule sets, and salt are all off the public path. ADR-0040 later adds strictly
-  write-only public event ingest without adding another read capability.
+  reasons, config, rule sets, and salt are all off the public path. ADR-0040 adds strictly
+  write-only public Metric Event `track()` (and future Web Event ingest) without adding another read
+  capability; `verify()` under a Client Key reveals nothing extra (ADR-0037).
 - A Client Key is auto-provisioned per Environment and usable immediately (open), so onboarding needs no
   credential step. The trade is that an open key can exist unattended; the open-state surfacing
   (banner + `is_origin_open` + one-click lock) is therefore part of the contract, not optional polish —
@@ -114,6 +118,7 @@ evaluate surface.
 - [ADR-0022: agent and human auth, one principal three doors](./0022-agent-and-human-auth-via-auth-md-one-principal-three-doors.md)
 - [ADR-0026: test-evaluation endpoint dry-run never exposes](./0026-test-evaluation-endpoint-dry-run-never-exposes.md)
 - [ADR-0032: privacy/data lifecycle is an enforced product contract](./0032-privacy-data-lifecycle-is-an-enforced-product-contract.md)
+- [ADR-0040: Client Keys can write public event ingest](./0040-client-keys-can-write-public-event-ingest.md)
 - [Cloudflare WAF rate limiting best practices](https://developers.cloudflare.com/waf/rate-limiting-rules/best-practices/)
 - [Cloudflare Turnstile overview](https://developers.cloudflare.com/turnstile/)
 - [Integrating Turnstile with the Cloudflare WAF](https://blog.cloudflare.com/integrating-turnstile-with-the-cloudflare-waf-to-challenge-fetch-requests/)

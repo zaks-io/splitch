@@ -48,20 +48,29 @@ The Worker performs these steps in order:
 1. Cloudflare rejects a disallowed origin or exceeded rate limit.
 2. Credential validation resolves one App and Environment or rejects the request.
 3. Strict Zod parsing rejects unknown top-level fields and malformed values.
-4. The Worker resolves `eventName` to the App-level Event Definition and its current published
+4. The Worker derives `targeting_key_hash` with the active App privacy salt and builds the stable
+   request fingerprint (see Idempotency). The fingerprint intentionally excludes
+   `event_definition_version_id` so retries survive a later publish.
+5. The Worker looks up any existing `(app_id, environment_id, event_id)` idempotency claim:
+   - Exact fingerprint match returns `202 { duplicate: true }` with the originally accepted
+     `eventDefinitionId` / `eventDefinitionVersionId` and writes nothing further. Current published
+     version validation is not re-applied.
+   - A different fingerprint returns `409 EVENT_ID_CONFLICT` and writes nothing.
+   - No claim continues.
+6. The Worker resolves `eventName` to the App-level Event Definition and its current published
    Event Definition Version. The client cannot select a version.
-5. `idType` must equal the published version's `entityType`.
-6. The complete `fields` and `dimensions` objects are validated against that version. Unknown field
+7. `idType` must equal the published version's `entityType`.
+8. The complete `fields` and `dimensions` objects are validated against that version. Unknown field
    names, unknown Dimensions, missing required values, type mismatches, schemaless JSON, and unknown
    nested JSON keys fail.
-7. The Worker derives `targeting_key_hash` with the active App privacy salt, builds the canonical
-   payload fingerprint, and claims `(app_id, environment_id, event_id)` in the sharded ingest
-   idempotency seam.
-8. The accepted immutable version and server-owned scope fields are stamped onto one
-   `metric_events` row and appended to Tinybird.
+9. The Worker claims `(app_id, environment_id, event_id)` with the stable fingerprint and the
+   accepted immutable version id in the sharded ingest idempotency seam.
+10. The accepted immutable version and server-owned scope fields are stamped onto one
+    `metric_events` row and appended to Tinybird.
 
-Steps 1 through 6 are side-effect free. A failure at any of those steps writes no idempotency claim
-and no Tinybird row. An idempotency claim is committed only for a fully valid canonical payload.
+Steps 1 through 8 are side-effect free until a new claim is committed. A failure at any of those
+steps writes no idempotency claim and no Tinybird row. An idempotency claim is committed only for a
+fully valid canonical payload (or is already present for an exact retry).
 
 ## Idempotency
 
@@ -71,7 +80,6 @@ and no Tinybird row. An idempotency claim is committed only for a fully valid ca
 dedup_key = sha256("metric:" + app_id + ":" + environment_id + ":" + event_id)
 payload_fingerprint = sha256(canonical_json(
   event_name,
-  event_definition_version_id,
   id_type,
   targeting_key_hash,
   fields,
@@ -79,9 +87,15 @@ payload_fingerprint = sha256(canonical_json(
 ))
 ```
 
-- A first claim appends the row and returns `duplicate: false`.
-- A retry with the same key and fingerprint is idempotent and returns `duplicate: true`; it does not
-  append a second logical row.
+`payload_fingerprint` excludes `event_definition_version_id`. Callers cannot select a version, so an
+exact retry must remain idempotent even when a new Event Definition Version was published between
+attempts.
+
+- A first claim validates against the current published version, stores the fingerprint plus the
+  accepted version id, appends the row, and returns `duplicate: false`.
+- A retry with the same key and fingerprint is idempotent and returns `duplicate: true` with the
+  originally accepted version; it does not re-validate against the current published version and
+  does not append a second logical row.
 - Reusing the key with a different fingerprint returns `409 EVENT_ID_CONFLICT` and writes nothing.
 
 At-least-once Tinybird delivery may still produce duplicate physical rows. `dedup_key` is the

@@ -148,9 +148,10 @@ splitch api-keys create [--app <app_id>] [--env <environment_id>]           # [c
 splitch api-keys revoke [--app <app_id>] [--env <environment_id>] <key_id>  # [ctx]
 ```
 
-One command per endpoint. The SDK's `track()` data-plane call is not a control-plane CLI/MCP command;
-the CLI/MCP surfaces author and discover Event Definitions and Metrics but do not impersonate an SDK
-event producer. No composite multi-step commands unless agent ergonomics demand them.
+One command per endpoint. CLI/MCP author and discover Event Definitions and Metrics and manage Flags,
+Environments, Experiments, policies, evaluations, and credentials, but they do not impersonate an SDK
+producer for Metric Event ingestion: the SDK's `track()` data-plane call is not a control-plane
+CLI/MCP command. No composite multi-step commands unless agent ergonomics demand them.
 Experiments, Experiment Runs, and SDK credentials are per-Environment (ADR-0027), so their commands
 need an Environment (from `[ctx]` or `--env`); Flag definition, Environment CRUD, and policy reads
 are App/Env scoped accordingly. Environment-level writes that the Environment Policy gates may
