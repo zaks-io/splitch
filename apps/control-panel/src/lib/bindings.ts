@@ -12,7 +12,7 @@ export interface ControlPanelBindings {
   SENTRY_DSN?: string;
 }
 
-interface ControlPanelMutationBindings extends ControlPanelBindings {
+export interface ControlPanelMutationBindings extends ControlPanelBindings {
   CONTROL_PLANE_API: Fetcher;
   CONTROL_PANEL_DELEGATION_SECRET: string;
 }
