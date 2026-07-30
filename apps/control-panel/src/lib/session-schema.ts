@@ -3,7 +3,12 @@ import { nowSeconds } from "./session-cookie";
 
 const ORG_ROLES = new Set(["owner", "admin", "member"]);
 const APP_ROLES = new Set(["owner", "admin", "member", "viewer"]);
-const STORED_SESSION_KEYS = new Set([
+/**
+ * Exported so the live-update contract schema can be checked against them. That
+ * schema is `.strict()` over this same shape and lives in another package, so a
+ * key added here and not there refuses every session at the socket boundary.
+ */
+export const STORED_SESSION_KEYS = new Set([
   "userId",
   "orgs",
   "orgsTruncated",
@@ -12,7 +17,7 @@ const STORED_SESSION_KEYS = new Set([
   "workosAccessToken",
   "version",
 ]);
-const ORG_MEMBERSHIP_KEYS = new Set([
+export const ORG_MEMBERSHIP_KEYS = new Set([
   "orgId",
   "orgSlug",
   "orgRole",
@@ -20,7 +25,7 @@ const ORG_MEMBERSHIP_KEYS = new Set([
   "demoExpiresAt",
   "apps",
 ]);
-const APP_MEMBERSHIP_KEYS = new Set(["appId", "appSlug", "role"]);
+export const APP_MEMBERSHIP_KEYS = new Set(["appId", "appSlug", "role"]);
 const LEGACY_ORG_MEMBERSHIP_KEYS = new Set(["orgId", "orgSlug", "orgRole", "apps"]);
 
 export function parseStoredSession(

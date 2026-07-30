@@ -4,6 +4,13 @@ import { buildSessionPrincipal } from "./membership";
 import { refreshSession, type StoredSession } from "./session";
 
 /**
+ * Narrowed to the two bindings this actually touches. The callers hold the full
+ * mutation bindings; a resync has no business reaching the Control Plane fetcher
+ * or the delegation secret.
+ */
+type SessionResyncBindings = Pick<ControlPanelBindings, "DB" | "SESSION_STORE">;
+
+/**
  * Rebuilds the session's membership snapshot from D1 after a mutation that
  * changed what the User can reach.
  *
@@ -19,13 +26,6 @@ import { refreshSession, type StoredSession } from "./session";
  * the principal means a field added to it can never again be lost between
  * building the snapshot and storing it.
  */
-/**
- * Narrowed to the two bindings this actually touches. The callers hold the full
- * mutation bindings; a resync has no business reaching the Control Plane fetcher
- * or the delegation secret.
- */
-type SessionResyncBindings = Pick<ControlPanelBindings, "DB" | "SESSION_STORE">;
-
 export async function resyncSessionMemberships(
   bindings: SessionResyncBindings,
   tokenHash: string,
