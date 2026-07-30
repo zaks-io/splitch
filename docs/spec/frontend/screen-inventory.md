@@ -474,8 +474,8 @@ future `approve` level without a rewrite** (ADR-0029):
   **permission change** (self-review disallowed → a second principal must Review), not a new
   pipeline. The diff screen, the Approval Request, the audit trail are already there.
 
-This is the explicit "build a system we grow into" choice: confirm-by-default on prod today,
-second-person approval slots in later.
+This is the explicit "build a system we grow into" choice: self-review ships under `confirm` today,
+and second-person approval slots in later.
 
 The positive action is always `approve_and_apply`. There is no approve-only state or deferred
 application. `decline` is terminal. A changed target version moves the request to terminal `stale`.
@@ -513,10 +513,10 @@ friction removed, but never a silent side effect. If you submit anyway with the 
 the **Worker rejects** the Approval Request with a structured error naming the missing Variant. The
 strictness is the invariant; the nudge is the affordance.
 
-Ticking and submitting creates the Approval Request. Under `allow`, no Review is required and the
-same validated application seam applies directly. Under `confirm`, the proposer self-reviews with
-`approve_and_apply`. Future `approve` changes only Review authority and waits for a distinct
-authorized principal.
+Ticking and submitting creates a durable Approval Request only when the effective Environment
+Policy requires Review. Under `allow`, the same validated application seam applies directly and
+returns no Approval Request. Under `confirm`, the proposer self-reviews with `approve_and_apply`.
+Future `approve` changes only Review authority and waits for a distinct authorized principal.
 
 The cross-env "all Flags' dev-vs-prod drift at once" bulk view is a useful **secondary** power-user
 surface, not the primary promote flow.

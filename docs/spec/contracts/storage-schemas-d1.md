@@ -108,6 +108,8 @@ differ only in who may Review it.
 | `proposed_at`              | timestamptz | not null                                                                |
 | `resolved_at`              | timestamptz | nullable; set once on `applied`, `declined`, or `stale`                 |
 | `resulting_target_version` | text        | nullable; set only on `applied`                                         |
+| `resulting_resource_type`  | text        | nullable; canonical applied resource type, set only on `applied`        |
+| `resulting_resource_id`    | text        | nullable; canonical applied resource ID, set only on `applied`          |
 | `idempotency_key`          | text        | not null                                                                |
 | `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS proposal input                  |
 
@@ -170,6 +172,8 @@ approve-only or deferred-application state. `decline` is the terminal negative d
 | `idempotency_key`          | text        | not null                                                          |
 | `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS Review input              |
 | `resulting_target_version` | text        | nullable; populated only for `outcome = applied`                  |
+| `resulting_resource_type`  | text        | nullable; canonical applied resource type on success              |
+| `resulting_resource_id`    | text        | nullable; canonical applied resource ID on success                |
 | `error_code`               | text        | nullable; machine-stable application error for `outcome = failed` |
 | `error_details`            | text        | nullable; bounded JSON matching the error code's detail contract  |
 
@@ -177,6 +181,12 @@ UNIQUE constraint: `(approval_request_id, reviewed_by, idempotency_key)`. An ide
 returns the recorded Review. A different payload under the same key fails with
 `IDEMPOTENCY_KEY_CONFLICT`. After a failed attempt, the Approval Request remains `pending`; a caller
 may make a new authorized attempt with a new idempotency key.
+
+An applied request's wire `applicationResult` is reconstructed from its resulting target version,
+resource type, resource ID, and `resolved_at`. The successful Review mirrors the same result identity
+and uses the same timestamp for `reviewed_at`, `resolved_at`, and `applicationResult.appliedAt`.
+This preserves the created Run ID for `experiments_start`, where the applied `experiment_run`
+differs from the original `experiment_draft` target.
 
 Successful `approve_and_apply` uses one transaction at the target's owning D1 persistence boundary:
 

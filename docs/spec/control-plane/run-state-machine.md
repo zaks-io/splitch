@@ -44,16 +44,20 @@ What happens, ordered:
 3. Recompute the Experiment-draft target version, including `live_run_id` and the relevant
    Environment Policy projection; a mismatch records `stale` and applies nothing.
 4. In one D1 transaction, end the existing running Run if present, create the new `running` Run with
-   its frozen draft config, update the Experiment's canonical `live_run_id`, record the successful
-   Review and resulting version, and move the Approval Request to `applied`.
+   its frozen draft config, and update the Experiment's canonical `live_run_id`. On an
+   approval-gated path, the same transaction also records the successful Review and resulting
+   version and moves the Approval Request to `applied`.
 5. After D1 commit, project the new Run config and
    `live_run:{app_id}:{environment_id}:{experiment_id}` pointer to KV.
-6. Return the new Run object and applied Approval Request inline (no separate GET needed).
+6. Return the new Run object and the applied Approval Request inline, or `null` under `allow` (no
+   separate GET needed).
 
 Review authorization and target-version validation precede any canonical mutation. If application
-inside step 4 fails, D1 rolls back the Run and Approval Request changes; a failed Review attempt is
-recorded separately and the request remains `pending`. A KV failure in step 5 is a loud, retryable
-projection failure, not an application rollback: D1 has already committed the canonical mutation.
+inside step 4 fails, D1 rolls back the Run mutation and, on an approval-gated path, its Approval
+Request and Review changes. A failed gated Review attempt is recorded separately and the request
+remains `pending`; an `allow` failure returns the underlying application error. A KV failure in
+step 5 is a loud, retryable projection failure, not an application rollback: D1 has already
+committed the canonical mutation.
 
 **KV propagation:** ~60s until all POPs see the new `live_run_id` (accepted; self-healing per
 ADR-0009). The Worker returns the new Run immediately; the edge catches up within the window.
