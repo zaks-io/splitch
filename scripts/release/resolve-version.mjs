@@ -9,32 +9,30 @@ export function readReleaseManifest(targetKey, repoRoot) {
   return JSON.parse(readFileSync(join(repoRoot, config.packagePath), "utf8"));
 }
 
+const RELEASE_SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:[-+][\w.-]+)*$/;
+
 export function readReleaseVersion(targetKey, repoRoot) {
   const config = getReleaseTarget(targetKey);
   const manifest = readReleaseManifest(targetKey, repoRoot);
   if (typeof manifest.version !== "string" || manifest.version.trim().length === 0) {
     throw new Error(`${config.packagePath} is missing a release version`);
   }
-  return manifest.version.trim();
+  const version = manifest.version.trim();
+  if (!RELEASE_SEMVER_PATTERN.test(version)) {
+    throw new Error(
+      `${config.packagePath} version ${JSON.stringify(version)} is not a release semver`,
+    );
+  }
+  return version;
 }
 
 export function deriveReleaseTag(targetKey, version) {
   return `${getReleaseTarget(targetKey).tagPrefix}${version}`;
 }
 
-export function assertAllowedReleaseVersion(targetKey, version) {
-  const config = getReleaseTarget(targetKey);
-  if (version !== config.allowedVersion) {
-    throw new Error(
-      `${targetKey.toUpperCase()} release workflow currently allows only version ${config.allowedVersion}; found ${version}`,
-    );
-  }
-}
-
 export function resolveReleaseTarget(targetKey, repoRoot) {
   const config = getReleaseTarget(targetKey);
   const version = readReleaseVersion(targetKey, repoRoot);
-  assertAllowedReleaseVersion(targetKey, version);
   return {
     version,
     tag: deriveReleaseTag(targetKey, version),

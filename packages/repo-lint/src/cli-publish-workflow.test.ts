@@ -5,6 +5,5 @@ registerPublishWorkflowContract({
   label: "CLI",
   packageName: "@splitch/cli",
   packageDir: "apps/cli",
-  tag: "cli-v0.1.0",
   workflowName: "cli-publish.yml",
 });

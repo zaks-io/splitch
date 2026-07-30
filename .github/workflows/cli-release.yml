@@ -22,6 +22,7 @@ jobs:
       cli_version: ${{ steps.resolve.outputs.cli_version }}
       cli_tag: ${{ steps.resolve.outputs.cli_tag }}
       commit_sha: ${{ steps.resolve.outputs.commit_sha }}
+      already_released: ${{ steps.release-state.outputs.already_released }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
@@ -99,10 +100,33 @@ jobs:
             echo "- Commit: \`$GITHUB_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # A version whose tag already has a published (non-draft) release is a
+      # deliberate no-op, not a failure: bump the manifest to cut a release.
+      - name: Check whether this version is already released
+        id: release-state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLI_TAG: ${{ steps.resolve.outputs.cli_tag }}
+        run: |
+          set -euo pipefail
+          already_released="$(node scripts/release/check-release-published.mjs cli "$GITHUB_WORKSPACE")"
+          echo "already_released=$already_released" >> "$GITHUB_OUTPUT"
+          if [ "$already_released" = "true" ]; then
+            echo "::notice::$CLI_TAG already has a published release; bump apps/cli/package.json to cut a new release. Nothing was validated or drafted."
+            {
+              echo "## CLI release skipped"
+              echo
+              echo "\`$CLI_TAG\` already has a published release. Bump the version in"
+              echo "\`apps/cli/package.json\` to cut a new release. Nothing was validated or drafted."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Validate CLI candidate
+        if: steps.release-state.outputs.already_released != 'true'
         run: node scripts/release/validate-candidate.mjs cli "$GITHUB_WORKSPACE" "$RUNNER_TEMP/cli-release-artifacts"
 
       - name: Upload validation artifacts
+        if: steps.release-state.outputs.already_released != 'true'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: cli-release-validation-${{ steps.resolve.outputs.cli_tag }}
@@ -114,6 +138,7 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 20
     needs: validate
+    if: needs.validate.outputs.already_released != 'true'
     outputs:
       cli_tag: ${{ needs.validate.outputs.cli_tag }}
       commit_sha: ${{ needs.validate.outputs.commit_sha }}
@@ -185,6 +210,7 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 15
     needs: [validate, prepare]
+    if: needs.validate.outputs.already_released != 'true'
     env:
       CLI_TAG: ${{ needs.validate.outputs.cli_tag }}
       CLI_VERSION: ${{ needs.validate.outputs.cli_version }}

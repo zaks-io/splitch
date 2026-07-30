@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const FIRST_RELEASE_VERSION = "0.1.0";
+const RELEASE_SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
 
 interface ReleaseContractOptions {
   targetKey: "sdk" | "cli";
@@ -61,7 +61,7 @@ export function registerReleaseWorkflowContract(options: ReleaseContractOptions)
       const manifest = JSON.parse(
         readFileSync(path.join(repoRoot, options.packageDir, "package.json"), "utf8"),
       ) as { version?: string };
-      expect(manifest.version).toBe(FIRST_RELEASE_VERSION);
+      expect(manifest.version).toMatch(RELEASE_SEMVER_PATTERN);
 
       const output = execFileSync(
         "node",
@@ -69,10 +69,22 @@ export function registerReleaseWorkflowContract(options: ReleaseContractOptions)
         { cwd: repoRoot, encoding: "utf8" },
       );
       expect(JSON.parse(output)).toEqual({
-        version: FIRST_RELEASE_VERSION,
-        tag: `${options.tagPrefix}${FIRST_RELEASE_VERSION}`,
+        version: manifest.version,
+        tag: `${options.tagPrefix}${manifest.version}`,
         packageName: options.packageName,
       });
+    });
+
+    it("green-skips an already-released version instead of failing", () => {
+      expect(workflow).toContain(
+        `scripts/release/check-release-published.mjs ${options.targetKey}`,
+      );
+      const skipConditions = workflow
+        .split("\n")
+        .filter((line) => line.includes("needs.validate.outputs.already_released != 'true'"));
+      // prepare and draft-release must both stand down on the no-op path.
+      expect(skipConditions.length).toBe(2);
+      expect(workflow).toContain("already has a published release");
     });
 
     it("prepare-artifacts succeeds without a checked-in dist directory", () => {
@@ -85,6 +97,46 @@ export function registerReleaseWorkflowContract(options: ReleaseContractOptions)
     }, 60_000);
   });
 }
+
+describe("already-released detection", () => {
+  const load = async () =>
+    (await import(
+      pathToFileURL(path.join(repoRoot, "scripts/release/check-release-published.mjs")).href
+    )) as { isReleasePublished: (options: Record<string, unknown>) => Promise<boolean> };
+  const base = { tag: "cli-v9.9.9", repository: "zaks-io/splitch", token: "t" };
+  const respond = (status: number, body?: unknown) =>
+    (async () => ({
+      status,
+      ok: status >= 200 && status < 300,
+      json: async () => body,
+    })) as unknown as typeof fetch;
+
+  it("is false when the tag has no release", async () => {
+    const { isReleasePublished } = await load();
+    await expect(isReleasePublished({ ...base, fetchImpl: respond(404) })).resolves.toBe(false);
+  });
+
+  it("is false while the release is still a draft", async () => {
+    const { isReleasePublished } = await load();
+    await expect(
+      isReleasePublished({ ...base, fetchImpl: respond(200, { draft: true }) }),
+    ).resolves.toBe(false);
+  });
+
+  it("is true for a published release", async () => {
+    const { isReleasePublished } = await load();
+    await expect(
+      isReleasePublished({ ...base, fetchImpl: respond(200, { draft: false }) }),
+    ).resolves.toBe(true);
+  });
+
+  it("fails loudly on unexpected lookup errors", async () => {
+    const { isReleasePublished } = await load();
+    await expect(isReleasePublished({ ...base, fetchImpl: respond(500) })).rejects.toThrow(
+      /HTTP 500/,
+    );
+  });
+});
 
 describe("release target argument validation", () => {
   it.each([{ args: [] }, { args: ["unknown"] }])("fails loudly for target args $args", ({
