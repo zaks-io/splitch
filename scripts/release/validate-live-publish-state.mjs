@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { resolveSdkReleaseTarget } from "./resolve-version.mjs";
+import { resolveReleaseTarget } from "./resolve-version.mjs";
 
-const repoRoot = process.argv[2] ?? process.cwd();
+const targetKey = process.argv[2];
+const repoRoot = process.argv[3] ?? process.cwd();
 
-function requiredEnv(environment, name) {
+function requiredEnv(environment, name, releaseTargetKey) {
   const value = environment[name]?.trim();
   if (!value) {
-    throw new Error(`${name} is required for SDK trusted publishing`);
+    throw new Error(`${name} is required for ${releaseTargetKey.toUpperCase()} trusted publishing`);
   }
   return value;
 }
@@ -59,10 +60,12 @@ async function fetchJson(fetcher, url, token) {
 
 /**
  * @param {string} repoRoot
+ * @param {string} releaseTargetKey
  * @param {Record<string, string | undefined>} environment
  * @param {{ fetcher?: typeof fetch; head?: () => string; peeledTag?: (tag: string) => string }} [options]
  */
 export async function validateLivePublishState(
+  releaseTargetKey,
   repoRoot,
   environment = process.env,
   {
@@ -71,12 +74,13 @@ export async function validateLivePublishState(
     peeledTag = (tag) => remotePeeledTagCommit(repoRoot, tag),
   } = {},
 ) {
-  const githubSha = requiredEnv(environment, "GITHUB_SHA");
-  const repository = requiredEnv(environment, "GITHUB_REPOSITORY");
-  const token = requiredEnv(environment, "GITHUB_TOKEN");
-  const releaseTag = requiredEnv(environment, "RELEASE_TAG");
+  const targetLabel = releaseTargetKey.toUpperCase();
+  const githubSha = requiredEnv(environment, "GITHUB_SHA", releaseTargetKey);
+  const repository = requiredEnv(environment, "GITHUB_REPOSITORY", releaseTargetKey);
+  const token = requiredEnv(environment, "GITHUB_TOKEN", releaseTargetKey);
+  const releaseTag = requiredEnv(environment, "RELEASE_TAG", releaseTargetKey);
   const apiUrl = (environment.GITHUB_API_URL ?? "https://api.github.com").replace(/\/$/, "");
-  const target = resolveSdkReleaseTarget(repoRoot);
+  const target = resolveReleaseTarget(releaseTargetKey, repoRoot);
 
   if (!isCommitSha(githubSha)) {
     throw new Error(`GITHUB_SHA must be a full commit SHA; found ${githubSha}`);
@@ -85,7 +89,9 @@ export async function validateLivePublishState(
     throw new Error(`GITHUB_REPOSITORY must be owner/repo; found ${repository}`);
   }
   if (releaseTag !== target.tag) {
-    throw new Error(`release tag ${releaseTag} does not match expected SDK tag ${target.tag}`);
+    throw new Error(
+      `release tag ${releaseTag} does not match expected ${targetLabel} tag ${target.tag}`,
+    );
   }
 
   const repositoryUrl = `${apiUrl}/repos/${repository}`;
@@ -97,7 +103,7 @@ export async function validateLivePublishState(
 
   if (liveRepository.private !== false || liveRepository.visibility !== "public") {
     throw new Error(
-      "refusing SDK trusted publishing for a repository that is not publicly visible",
+      `refusing ${targetLabel} trusted publishing for a repository that is not publicly visible`,
     );
   }
   if (
@@ -133,7 +139,7 @@ export async function validateLivePublishState(
 }
 
 async function main() {
-  const result = await validateLivePublishState(repoRoot);
+  const result = await validateLivePublishState(targetKey, repoRoot);
   console.log(`repository=${result.repository}`);
   console.log(`repository_visibility=${result.visibility}`);
   console.log(`release_tag=${result.releaseTag}`);

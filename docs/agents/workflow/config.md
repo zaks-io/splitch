@@ -46,8 +46,8 @@ in this config; refresh them from Linear during each workflow run.
 
 ## Repo
 
-- Name: `splitch-monorepo` (workspace packages use `@splitch/*`; `sdk-publish` is the token-free
-  trusted-publish path for `@splitch/sdk` after its human-approved npm bootstrap)
+- Name: `splitch-monorepo` (workspace packages use `@splitch/*`; package-specific publish
+  workflows are the token-free trusted-publish paths for `@splitch/sdk` and `@splitch/cli`)
 - Default branch: `main`
 - Branch prefix: `codex/` for Codex-created branches unless the user asks for
   another prefix
@@ -84,11 +84,12 @@ in this config; refresh them from Linear during each workflow run.
   coverage, `.turbo/`, and `.wrangler/` are ignored.
 - PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus
   a range-scoped Gitleaks secret scan.
-- npm SDK publish: the OIDC `.github/workflows/sdk-publish.yml` workflow is wired as the explicit
-  Blacksmith exception. It runs
-  only after an SDK GitHub Release is published, on GitHub-hosted `ubuntu-24.04` because npm trusted
-  publishing does not support Blacksmith, and carries no long-lived npm token. The package bootstrap,
-  trusted-publisher configuration, and provider-side verification remain human-owned and unverified.
+- npm package publish: the OIDC `.github/workflows/sdk-publish.yml` and
+  `.github/workflows/cli-publish.yml` workflows are explicit Blacksmith exceptions. Each runs only
+  after its namespaced GitHub Release is published, on GitHub-hosted `ubuntu-24.04` because npm
+  trusted publishing does not support Blacksmith, and carries no long-lived npm token. CLI
+  bootstrap, trusted-publisher configuration, and provider-side verification remain human-owned
+  and unverified.
 - Shared preview deploy: workflow and hosted smoke wired, Cloudflare D1/KV resources are provisioned, the Tinybird
   `shared_preview` Branch exists, and Worker secret sync is wired before deploy. Cloudflare Custom
   Domain DNS/cert activation can lag after first deploy. See
@@ -125,7 +126,7 @@ real package API boundary.
 
 | Path                         | Name                         | Status                                      |
 | ---------------------------- | ---------------------------- | ------------------------------------------- |
-| `apps/cli`                   | `@splitch/cli`               | CLI app scaffold, `bin: splitch`            |
+| `apps/cli`                   | `@splitch/cli`               | public ESM CLI package, `bin: splitch`      |
 | `apps/control-panel`         | `@splitch/control-panel`     | Control Panel Worker-shaped scaffold        |
 | `apps/marketing`             | `@splitch/marketing`         | Marketing Worker-shaped scaffold            |
 | `apps/control-plane-api`     | `@splitch/control-plane-api` | Control Plane API Worker scaffold           |
@@ -141,11 +142,10 @@ real package API boundary.
 | `packages/ui`                | `@splitch/ui`                | shared UI primitive scaffold                |
 | `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files            |
 
-- Internal workspace packages remain `version: 0.0.0`; `@splitch/sdk` is the versioned public package
-  at `version: 0.1.0`.
-- Apps and internal packages are private. `@splitch/sdk` is a public package scaffold with
-  `publishConfig.access = public`; its OIDC `sdk-publish` workflow is wired, but npm bootstrap and
-  provider setup remain human-owned and unverified.
+- Internal workspace packages remain `version: 0.0.0`; `@splitch/sdk` and `@splitch/cli` are
+  versioned public packages at `version: 0.1.0`.
+- Other Apps and internal packages are private. Both public packages set
+  `publishConfig.access = public` and use package-specific OIDC publish workflows.
 
 ## Issue Tracker
 
@@ -422,12 +422,11 @@ real package API boundary.
       runs a real `wrangler d1 migrations apply --local` and is wired into
       `verify:push`; a malformed/duplicate-column migration fails the gate
       non-zero.
-- [ ] npm bootstrap and provider setup are unverified. The OIDC `sdk-publish` workflow is wired as a
-      GitHub-hosted workflow, but
-      `@splitch/sdk` does not yet exist on npm, so a human must bootstrap only
-      `0.1.0-bootstrap.0`, configure the trusted publisher for `sdk-publish.yml`, remove temporary
-      bootstrap publishing access, and verify the provider before the provenance-bearing `0.1.0`
-      release. Do not add a long-lived npm token to close this gap.
+- [ ] CLI npm bootstrap and provider setup are unverified. The OIDC `cli-publish` workflow is wired
+      as a GitHub-hosted workflow, but a human must bootstrap only
+      `@splitch/cli@0.1.0-bootstrap.0`, configure the trusted publisher for `cli-publish.yml`,
+      remove temporary bootstrap publishing access, and verify the provider before the
+      provenance-bearing `0.1.0` release. Do not add a long-lived npm token to close this gap.
 - [x] Shared-preview deploy/reset and production deploy workflows are wired, Cloudflare
       D1/KV resource IDs are provisioned and committed, Worker secret sync is wired, hosted
       shared-preview smoke verifies deployed revision evidence, and the `shared_preview` Tinybird

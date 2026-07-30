@@ -1,6 +1,6 @@
 import { violation } from "./constants.mjs";
 import {
-  ALLOWED_PUBLISHABLE_PACKAGE,
+  ALLOWED_PUBLISHABLE_PACKAGES,
   DEPENDENCY_FIELDS,
   FORBIDDEN_PUBLISHABLE_PACKAGES,
   WORKSPACE_PROTOCOL,
@@ -45,21 +45,18 @@ function lintPackagePublishability(packagePath, name, manifest) {
     );
   }
 
-  if (isPublishable(manifest) && name !== ALLOWED_PUBLISHABLE_PACKAGE) {
+  if (isPublishable(manifest) && !ALLOWED_PUBLISHABLE_PACKAGES.has(name)) {
     violations.push(
       violation(
         packagePath,
-        `${name} is publishable but only ${ALLOWED_PUBLISHABLE_PACKAGE} may be published; set "private": true`,
+        `${name} is publishable but only ${[...ALLOWED_PUBLISHABLE_PACKAGES].join(", ")} may be published; set "private": true`,
       ),
     );
   }
 
-  if (name === ALLOWED_PUBLISHABLE_PACKAGE && !isPublishable(manifest)) {
+  if (ALLOWED_PUBLISHABLE_PACKAGES.has(name) && !isPublishable(manifest)) {
     violations.push(
-      violation(
-        packagePath,
-        `${ALLOWED_PUBLISHABLE_PACKAGE} must remain publishable; do not set "private": true`,
-      ),
+      violation(packagePath, `${name} must remain publishable; do not set "private": true`),
     );
   }
 

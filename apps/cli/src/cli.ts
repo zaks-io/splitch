@@ -1,5 +1,3 @@
-#!/usr/bin/env -S tsx
-import { pathToFileURL } from "node:url";
 import { initCliObservability, shutdownCliObservability } from "@splitch/observability";
 import { createFileCredentialStore } from "./credentials.js";
 import { CLI_COMMANDS, findCommand, META_COMMANDS } from "./command-registry.js";
@@ -94,8 +92,4 @@ export async function launchCli(): Promise<void> {
   } finally {
     await shutdownCliObservability();
   }
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void launchCli();
 }

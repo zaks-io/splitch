@@ -10,7 +10,8 @@
     ".": {
       "entry": [
         "scripts/check-cli-mcp-parity.ts",
-        "scripts/sdk-release/check-published-version.mjs",
+        "scripts/release/check-published-version.mjs",
+        "scripts/release/constants.mjs",
         "fixtures/external-dark-launch-product/resolve.mjs"
       ]
     },
@@ -24,6 +25,10 @@
     },
     "packages/sdk": {
       "entry": ["scripts/pack-release.mjs"]
+    },
+    "apps/cli": {
+      "entry": ["scripts/pack-release.mjs"],
+      "ignoreDependencies": ["@hono/zod-openapi", "@sentry/node", "tsx", "zod"]
     }
   }
 }

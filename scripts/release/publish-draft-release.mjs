@@ -2,7 +2,8 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveSdkReleaseTarget } from "./resolve-version.mjs";
+import { getReleaseTarget } from "./constants.mjs";
+import { resolveReleaseTarget } from "./resolve-version.mjs";
 
 function run(command, args, options = {}) {
   return execFileSync(command, args, {
@@ -43,15 +44,18 @@ function inspectExistingRelease(tag) {
   }
 }
 
-const repoRoot = process.argv[2] ?? process.cwd();
-const outputDir = process.argv[3] ?? join(repoRoot, ".sdk-release-artifacts");
-const commitSha = process.argv[4] ?? process.env.GITHUB_SHA;
+const targetKey = process.argv[2];
+getReleaseTarget(targetKey);
+const targetLabel = targetKey.toUpperCase();
+const repoRoot = process.argv[3] ?? process.cwd();
+const outputDir = process.argv[4] ?? join(repoRoot, `.${targetKey}-release-artifacts`);
+const commitSha = process.argv[5] ?? process.env.GITHUB_SHA;
 
 if (!commitSha) {
-  throw new Error("commit SHA is required to create or update the draft SDK release");
+  throw new Error(`commit SHA is required to create or update the draft ${targetLabel} release`);
 }
 
-const target = resolveSdkReleaseTarget(repoRoot);
+const target = resolveReleaseTarget(targetKey, repoRoot);
 const releaseManifest = JSON.parse(readFileSync(join(outputDir, "release-manifest.json"), "utf8"));
 const existing = inspectExistingRelease(target.tag);
 
@@ -79,14 +83,14 @@ runInherit("git", ["push", "origin", `refs/tags/${target.tag}`, "--force"]);
 
 const releaseTitle = `${target.packageName}@${target.version}`;
 const releaseNotes = [
-  `Draft SDK release for \`${target.packageName}@${target.version}\`.`,
+  `Draft ${targetLabel} release for \`${target.packageName}@${target.version}\`.`,
   "",
   `- Tag: \`${target.tag}\``,
   `- Commit: \`${commitSha}\``,
   `- Tarball: \`${releaseManifest.tarballName}\``,
   `- SHA-256: \`${releaseManifest.sha256}\``,
   "",
-  "This draft was prepared by the manual `sdk-release` workflow. Publishing the GitHub Release is handled by a separate trusted-publish workflow.",
+  `This draft was prepared by the manual \`${targetKey}-release\` workflow. Publishing the GitHub Release is handled by a separate trusted-publish workflow.`,
 ].join("\n");
 
 if (!existing.exists) {

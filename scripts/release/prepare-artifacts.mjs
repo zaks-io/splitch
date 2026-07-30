@@ -3,42 +3,52 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveSdkReleaseTarget, readSdkManifest } from "./resolve-version.mjs";
+import { getReleaseTarget } from "./constants.mjs";
+import { readReleaseManifest, resolveReleaseTarget } from "./resolve-version.mjs";
 
-/**
- * @param {string} repoRoot
- */
-export function ensureSdkBuilt(repoRoot) {
-  const sdkRoot = join(repoRoot, "packages/sdk");
-  const distIndex = join(sdkRoot, "dist/index.js");
-  if (existsSync(distIndex)) {
-    return;
+export function ensurePackageBuilt(targetKey, repoRoot) {
+  const config = getReleaseTarget(targetKey);
+  const packageRoot = join(repoRoot, config.packageDir);
+  const distIndex = join(packageRoot, "dist/index.js");
+  if (existsSync(distIndex)) return;
+
+  for (const dependencyKey of config.buildDependencies) {
+    ensurePackageBuilt(dependencyKey, repoRoot);
   }
 
   execFileSync("node", ["scripts/prepack-build.mjs"], {
-    cwd: sdkRoot,
+    cwd: packageRoot,
     stdio: "inherit",
     env: { ...process.env, CI: "true" },
   });
+  if (targetKey === "cli") {
+    execFileSync("node", ["scripts/sync-pack-manifest.mjs", "restore"], {
+      cwd: packageRoot,
+      stdio: "inherit",
+    });
+  }
 
   if (!existsSync(distIndex)) {
-    throw new Error("packages/sdk/dist/index.js is missing after @splitch/sdk build");
+    throw new Error(
+      `${config.packageDir}/dist/index.js is missing after ${config.packageName} build`,
+    );
   }
 }
 
-const repoRoot = process.argv[2] ?? process.cwd();
-const outputDir = process.argv[3] ?? join(repoRoot, ".sdk-release-artifacts");
-const commitSha = process.argv[4] ?? process.env.GITHUB_SHA ?? "unknown";
+const targetKey = process.argv[2];
+const config = getReleaseTarget(targetKey);
+const repoRoot = process.argv[3] ?? process.cwd();
+const outputDir = process.argv[4] ?? join(repoRoot, `.${targetKey}-release-artifacts`);
+const commitSha = process.argv[5] ?? process.env.GITHUB_SHA ?? "unknown";
 
 mkdirSync(outputDir, { recursive: true });
 
-const target = resolveSdkReleaseTarget(repoRoot);
-const manifest = readSdkManifest(repoRoot);
-
-ensureSdkBuilt(repoRoot);
+const target = resolveReleaseTarget(targetKey, repoRoot);
+const manifest = readReleaseManifest(targetKey, repoRoot);
+ensurePackageBuilt(targetKey, repoRoot);
 
 const packOutput = execFileSync("node", ["scripts/pack-release.mjs", outputDir], {
-  cwd: join(repoRoot, "packages/sdk"),
+  cwd: join(repoRoot, config.packageDir),
   encoding: "utf8",
 });
 const tarballName = packOutput.trim().split("\n").at(-1);
@@ -94,9 +104,10 @@ writeFileSync(
   `${JSON.stringify(releaseManifest, null, 2)}\n`,
 );
 
-const validationLog = join(outputDir, "validation.log");
-const validationSummary = join(outputDir, "validation-summary.json");
-for (const filePath of [validationLog, validationSummary]) {
+for (const filePath of [
+  join(outputDir, "validation.log"),
+  join(outputDir, "validation-summary.json"),
+]) {
   try {
     readFileSync(filePath);
   } catch {

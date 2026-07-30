@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { getReleaseTarget } from "./constants.mjs";
 
-const SDK_PACKAGE = "@splitch/sdk";
 const NPM_REGISTRY = "https://registry.npmjs.org";
 
 /**
@@ -26,9 +26,10 @@ function runNpmView(command, args, options) {
 
 /**
  * @param {NpmViewResult} result
+ * @param {string} packageName
  * @param {string} version
  */
-function interpretNpmView(result, version) {
+function interpretNpmView(result, packageName, version) {
   if (result.status === 0) {
     let publishedVersion;
     try {
@@ -40,7 +41,7 @@ function interpretNpmView(result, version) {
     }
     if (publishedVersion !== version) {
       throw new Error(
-        `npm returned ${publishedVersion} for ${SDK_PACKAGE}@${version}; refusing an ambiguous result`,
+        `npm returned ${publishedVersion} for ${packageName}@${version}; refusing an ambiguous result`,
       );
     }
     return true;
@@ -51,30 +52,35 @@ function interpretNpmView(result, version) {
   }
 
   throw new Error(
-    `npm view failed for ${SDK_PACKAGE}@${version} without a not-found response:\n${result.stderr.trim()}`,
+    `npm view failed for ${packageName}@${version} without a not-found response:\n${result.stderr.trim()}`,
   );
 }
 
 /**
  * @param {{
+ *   targetKey?: string;
  *   version?: string;
  *   run?: (command: string, args: string[], options: { encoding: "utf8" }) => NpmViewResult;
  * }} [options]
  */
 export function checkPublishedVersion({
-  version = process.argv[2]?.trim(),
+  targetKey = process.argv[2],
+  version = process.argv[3]?.trim(),
   run = runNpmView,
 } = {}) {
+  const target = getReleaseTarget(targetKey);
   if (!version) {
-    throw new Error("SDK_VERSION is required to check npm publication state");
+    throw new Error(
+      `${targetKey.toUpperCase()}_VERSION is required to check npm publication state`,
+    );
   }
 
   const result = run(
     "npm",
-    ["view", `${SDK_PACKAGE}@${version}`, "version", "--json", `--registry=${NPM_REGISTRY}`],
+    ["view", `${target.packageName}@${version}`, "version", "--json", `--registry=${NPM_REGISTRY}`],
     { encoding: "utf8" },
   );
-  return interpretNpmView(result, version);
+  return interpretNpmView(result, target.packageName, version);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

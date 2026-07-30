@@ -2,10 +2,13 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveSdkReleaseTarget } from "./resolve-version.mjs";
+import { getReleaseTarget } from "./constants.mjs";
+import { resolveReleaseTarget } from "./resolve-version.mjs";
 
-const repoRoot = process.argv[2] ?? process.cwd();
-const outputDir = process.argv[3] ?? join(repoRoot, ".sdk-release-artifacts");
+const targetKey = process.argv[2];
+getReleaseTarget(targetKey);
+const repoRoot = process.argv[3] ?? process.cwd();
+const outputDir = process.argv[4] ?? join(repoRoot, `.${targetKey}-release-artifacts`);
 
 const validationLogPath = join(outputDir, "validation.log");
 const validationSummaryPath = join(outputDir, "validation-summary.json");
@@ -13,13 +16,14 @@ const validationStartedAt = Date.now();
 
 mkdirSync(outputDir, { recursive: true });
 
-const target = resolveSdkReleaseTarget(repoRoot);
+const target = resolveReleaseTarget(targetKey, repoRoot);
+const targetLabel = targetKey.toUpperCase();
 
 // One turbo graph owns candidate validation: turbo schedules independent
 // tasks in parallel and replays warm caches. Tasks that write shared
 // artifacts are serialized by dependsOn edges in turbo.json, not here:
-// sdk build -> //#knip -> pack:dry-run -> pack:check -> test:consumer-smoke
-// all write packages/sdk dist/generated, and the populated D1 check runs
+// package build -> //#knip -> pack:dry-run -> pack:check -> test:consumer-smoke
+// serializes package-local generated output, and the populated D1 check runs
 // after the local migration check.
 const TASKS = [
   "//#format:check",
@@ -38,7 +42,7 @@ const TASKS = [
 ];
 
 process.stdout.write(
-  `SDK release validation for ${target.packageName}@${target.version} (${target.tag})\n`,
+  `${targetLabel} release validation for ${target.packageName}@${target.version} (${target.tag})\n`,
 );
 
 let turboFailure;
@@ -91,14 +95,16 @@ const failed = checks.filter((check) => check.status === "failed");
 const status = turboFailure || failed.length > 0 ? "failed" : "passed";
 
 const logLines = [
-  `SDK release validation for ${target.packageName}@${target.version} (${target.tag})`,
+  `${targetLabel} release validation for ${target.packageName}@${target.version} (${target.tag})`,
   "",
   ...checks.map(
     (check) =>
       `${check.status === "passed" ? "OK" : "FAILED"} ${check.name} (${check.durationMs}ms, cache ${check.cache})`,
   ),
   "",
-  status === "passed" ? "SDK release validation passed" : "SDK release validation FAILED",
+  status === "passed"
+    ? `${targetLabel} release validation passed`
+    : `${targetLabel} release validation FAILED`,
 ];
 writeFileSync(validationLogPath, `${logLines.join("\n")}\n`);
 

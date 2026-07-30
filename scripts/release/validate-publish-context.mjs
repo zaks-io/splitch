@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { resolveSdkReleaseTarget } from "./resolve-version.mjs";
+import { resolveReleaseTarget } from "./resolve-version.mjs";
 
-const repoRoot = process.argv[2] ?? process.cwd();
+const targetKey = process.argv[2];
+const repoRoot = process.argv[3] ?? process.cwd();
 
-function requiredEnv(environment, name) {
+function requiredEnv(environment, name, releaseTargetKey) {
   const value = environment[name]?.trim();
   if (!value) {
-    throw new Error(`${name} is required for SDK trusted publishing`);
+    throw new Error(`${name} is required for ${releaseTargetKey.toUpperCase()} trusted publishing`);
   }
   return value;
 }
@@ -22,28 +23,39 @@ function resolveCommit(repoRoot, ref) {
 
 /**
  * @param {string} repoRoot
+ * @param {string} releaseTargetKey
  * @param {Record<string, string | undefined>} environment
  * @param {(ref: string) => string} [resolveCommitForRef]
  */
 export function validatePublishContext(
+  releaseTargetKey,
   repoRoot,
   environment = process.env,
   resolveCommitForRef = (ref) => resolveCommit(repoRoot, ref),
 ) {
-  const repositoryPrivate = requiredEnv(environment, "REPOSITORY_PRIVATE");
+  const targetLabel = releaseTargetKey.toUpperCase();
+  const repositoryPrivate = requiredEnv(environment, "REPOSITORY_PRIVATE", releaseTargetKey);
   if (repositoryPrivate !== "false") {
-    throw new Error(`refusing SDK trusted publishing for repository.private=${repositoryPrivate}`);
+    throw new Error(
+      `refusing ${targetLabel} trusted publishing for repository.private=${repositoryPrivate}`,
+    );
   }
 
-  const releaseTag = requiredEnv(environment, "RELEASE_TAG");
-  const releaseTargetCommitish = requiredEnv(environment, "RELEASE_TARGET_COMMITISH");
-  const githubRef = requiredEnv(environment, "GITHUB_REF");
-  const githubSha = requiredEnv(environment, "GITHUB_SHA");
-  const target = resolveSdkReleaseTarget(repoRoot);
+  const releaseTag = requiredEnv(environment, "RELEASE_TAG", releaseTargetKey);
+  const releaseTargetCommitish = requiredEnv(
+    environment,
+    "RELEASE_TARGET_COMMITISH",
+    releaseTargetKey,
+  );
+  const githubRef = requiredEnv(environment, "GITHUB_REF", releaseTargetKey);
+  const githubSha = requiredEnv(environment, "GITHUB_SHA", releaseTargetKey);
+  const target = resolveReleaseTarget(releaseTargetKey, repoRoot);
   const expectedRef = `refs/tags/${releaseTag}`;
 
   if (releaseTag !== target.tag) {
-    throw new Error(`release tag ${releaseTag} does not match expected SDK tag ${target.tag}`);
+    throw new Error(
+      `release tag ${releaseTag} does not match expected ${targetLabel} tag ${target.tag}`,
+    );
   }
   if (githubRef !== expectedRef) {
     throw new Error(`GITHUB_REF ${githubRef} does not match release tag ref ${expectedRef}`);
@@ -84,7 +96,7 @@ export function validatePublishContext(
 }
 
 function main() {
-  const result = validatePublishContext(repoRoot);
+  const result = validatePublishContext(targetKey, repoRoot);
   console.log(`package=${result.packageName}`);
   console.log(`version=${result.version}`);
   console.log(`tag=${result.releaseTag}`);

@@ -159,7 +159,7 @@ function isNonDeployableChange(path) {
     path.startsWith(".agents/") ||
     path.startsWith(".codex/") ||
     path.startsWith(".github/") ||
-    path.startsWith("scripts/sdk-release/") ||
+    path.startsWith("scripts/release/") ||
     path === "LICENSE" ||
     (!path.includes("/") && path.endsWith(".md")) ||
     path.endsWith("/CONTEXT.md")
