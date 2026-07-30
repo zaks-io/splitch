@@ -29,6 +29,11 @@ import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do
 import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
 import { makePanelDelegationReplayStore } from "./panel-identity-replay";
 import { makePanelSessionAccess } from "./panel-session-access";
+import {
+  panelExperimentDetail,
+  panelExperimentResults,
+  panelExperimentsList,
+} from "./panel-experiments";
 import { panelSettingsRead } from "./panel-settings";
 import { rateLimiterForTarget } from "./rate-limit";
 import { makePanelSessionStore, makeSessionStore } from "./session-store";
@@ -83,7 +88,7 @@ async function handlePanelExperimentsRequest(
   request: Request,
   env: ControlPlaneApiEnv,
   actorId: string,
-  operation: "experiments_detail" | "experiments_list",
+  operation: "experiments_detail" | "experiments_list" | "experiments_results",
 ): Promise<Response> {
   const input = await request.json().catch(() => null);
   if (!isPanelExperimentsInput(input)) {
@@ -97,20 +102,32 @@ async function handlePanelExperimentsRequest(
     );
   }
   try {
+    if (operation === "experiments_list") {
+      return await panelExperimentsList(
+        { repo: createRepository(env.DB), analysis: env.ANALYSIS_API },
+        { actorId, ...input },
+      );
+    }
+    if (!isPanelExperimentDetailInput(input)) {
+      return Response.json(
+        {
+          code: "VALIDATION_ERROR",
+          message: "appId, environmentId, and experimentId are required",
+          details: {},
+        },
+        { status: 400 },
+      );
+    }
     if (operation === "experiments_detail") {
-      if (!isPanelExperimentDetailInput(input)) {
-        return Response.json(
-          {
-            code: "VALIDATION_ERROR",
-            message: "appId, environmentId, and experimentId are required",
-            details: {},
-          },
-          { status: 400 },
-        );
-      }
       return await panelExperimentDetail({ repo: createRepository(env.DB) }, { actorId, ...input });
     }
-    return await panelExperimentsList(
+    if (!isPanelExperimentResultsInput(input)) {
+      return Response.json(
+        { code: "VALIDATION_ERROR", message: "runId must be a non-empty string", details: {} },
+        { status: 400 },
+      );
+    }
+    return await panelExperimentResults(
       { repo: createRepository(env.DB), analysis: env.ANALYSIS_API },
       { actorId, ...input },
     );
@@ -135,6 +152,16 @@ function isPanelExperimentDetailInput(value: {
     typeof value.experimentId === "string" &&
     value.experimentId.length > 0
   );
+}
+
+function isPanelExperimentResultsInput(value: {
+  appId: string;
+  environmentId: string;
+  experimentId: string;
+}): value is { appId: string; environmentId: string; experimentId: string; runId?: string } {
+  if (!("runId" in value)) return true;
+  const runId = (value as { runId: unknown }).runId;
+  return runId === undefined || (typeof runId === "string" && runId.length > 0);
 }
 
 function isPanelExperimentsInput(
@@ -286,7 +313,13 @@ async function handleSignedPanelExperiments(
 ): Promise<Response | null> {
   if (protocol !== "signed") return null;
   const operation = parseControlPanelBindingOperation(request)?.id;
-  if (operation !== "experiments_list" && operation !== "experiments_detail") return null;
+  if (
+    operation !== "experiments_list" &&
+    operation !== "experiments_detail" &&
+    operation !== "experiments_results"
+  ) {
+    return null;
+  }
   const auth = await authResolver(request);
   if (!auth.ok) return unauthorized();
   return handlePanelExperimentsRequest(request, env, auth.principal.id, operation);

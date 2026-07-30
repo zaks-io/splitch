@@ -36,7 +36,7 @@ test.describe("Control Panel Experiments", () => {
     await captureThemeScreenshots(page, testInfo, "experiments-list");
 
     await page.goto("/acme-labs/checkout-api/prod/experiments");
-    await expect(page.getByText("SRM firing", { exact: true })).toBeVisible();
+    await expect(page.getByText("SRM firing", { exact: true }).first()).toBeVisible();
   });
 
   test("teaches the Experiment concept in an empty Environment", async ({ page }) => {
@@ -71,7 +71,11 @@ test.describe("Control Panel Experiments", () => {
       /\/experiments\/experiment_checkout_dev_e2e\/runs\/run_checkout_dev_previous_e2e\/results$/u,
     );
     await expect(page.getByRole("link", { name: /Run 1/ })).toHaveAttribute("aria-current", "page");
-    await expect(page.getByText("Results for Run 1")).toBeVisible();
+    await expect(page.getByText("Measured on Run 1 alone")).toBeVisible();
+    // Run 1 seeded 6 Exposures per arm and the live Run 2 seeded 10. A results
+    // read that served the live Run's rows under this frozen Run's heading would
+    // otherwise pass every assertion above.
+    await expect(page.getByText(/Exposures control 6 · treatment 6/)).toBeVisible();
 
     await page.getByRole("link", { name: "Setup", exact: true }).click();
     await page.getByRole("link", { name: /Run 2/ }).click();
@@ -92,7 +96,7 @@ test.describe("Control Panel Experiments", () => {
       "aria-current",
       "page",
     );
-    await expect(pastedLink.getByText("Results for Run 1")).toBeVisible();
+    await expect(pastedLink.getByText("Measured on Run 1 alone")).toBeVisible();
     await secondUser.close();
   });
 

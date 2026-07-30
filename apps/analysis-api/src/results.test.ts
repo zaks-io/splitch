@@ -9,9 +9,9 @@ import {
   EXPERIMENT_ID,
   FakeTinybird,
   OTHER_APP_ID,
-  rowsByPipe,
-  RUN_ID,
   type RowsByPipe,
+  RUN_ID,
+  rowsByPipe,
 } from "./results-test-support";
 
 const PATH = `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/experiments/${EXPERIMENT_ID}/results`;
@@ -257,6 +257,28 @@ describe("GET/POST experiment results isolation", () => {
     expect(body.status).toBe(400);
     expect(((await body.json()) as ErrorResponse).code).toBe("VALIDATION_ERROR");
     expect(bodyHarness.tinybird.calls).toEqual([]);
+  });
+
+  // Downstream pipes are keyed on the Run the inputs pipe returned, so a pipe
+  // that ignores run_id would serve one Run's Exposures under another Run's
+  // identity, defeating the no-pooling guarantee the caller reports to users.
+  it("refuses when the run-inputs pipe answers with a Run other than the requested one", async () => {
+    const rows = rowsByPipe();
+    const [runInput] = rows.analysis_run_inputs as { run_id: string }[];
+    const tinybird = new FakeTinybird({
+      ...rows,
+      analysis_run_inputs: [{ ...runInput, run_id: "run_some_other_run" }],
+    });
+
+    await expect(
+      readStatsInputFromTinybird(tinybird, {
+        appId: APP_ID,
+        environmentId: ENVIRONMENT_ID,
+        experimentId: EXPERIMENT_ID,
+        runId: RUN_ID,
+      }),
+    ).rejects.toThrow(/returned Run run_some_other_run for requested Run/);
+    expect(tinybird.calls.map((call) => call.pipeName)).toEqual(["analysis_run_inputs"]);
   });
 
   it("fails before any Tinybird read when app_id context is missing", async () => {

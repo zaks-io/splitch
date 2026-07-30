@@ -1,12 +1,12 @@
 import {
   type ErrorResponse,
   type StatsEngine,
+  type StatsInput,
   StatsInputSchema,
   StatsOutputSchema,
-  type StatsInput,
 } from "@splitch/contracts";
 import { StatsEngine as DefaultStatsEngine } from "@splitch/stats";
-import { renderError, type HandlerArgs } from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { scopedPipeParams, TinybirdReadError, type TinybirdReadTransport } from "./tinybird";
 
 const RUN_INPUTS_PIPE = "analysis_run_inputs";
@@ -55,6 +55,15 @@ export async function readStatsInputFromTinybird(
     );
   }
   const run = materializeRunInput(runInput);
+  // Every downstream read is keyed on the Run the inputs pipe returned. If that
+  // is not the Run the caller asked for, the response would carry one Run's
+  // Exposures under another Run's identity, and no pooling guarantee upstream
+  // could detect it. Refuse instead of mislabelling.
+  if (scope.runId !== undefined && run.run_id !== scope.runId) {
+    throw new Error(
+      `analysis_run_inputs returned Run ${run.run_id} for requested Run ${scope.runId}`,
+    );
+  }
   const params = scopedPipeParams({ ...scope, runId: run.run_id });
 
   const [exposureRows, metricRows, prePeriodRows, activationRows] = await Promise.all([

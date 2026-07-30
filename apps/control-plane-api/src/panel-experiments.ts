@@ -1,13 +1,15 @@
+import { evaluateExperimentDecisionGate, experimentSrmDiagnostics } from "@splitch/contracts";
 import {
   type PanelExperimentHealth,
   type PanelExperimentListItem,
+  type PanelExperimentResultsOutput,
   parseScopedAnalysisResults,
   scopedAnalysisResultsRequest,
 } from "@splitch/control-plane-sdk/panel-experiments";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
-import { experimentNotFound } from "./experiment-errors";
-import { experimentResponse, jsonObject } from "./experiment-model";
+import { experimentNotFound, runNotFound } from "./experiment-errors";
+import { experimentResponse, jsonArray, jsonObject } from "./experiment-model";
 
 interface PanelExperimentsDeps {
   repo: Repository;
@@ -22,6 +24,10 @@ interface PanelExperimentsInput {
 
 interface PanelExperimentDetailInput extends PanelExperimentsInput {
   experimentId: string;
+}
+
+interface PanelExperimentResultsRequestInput extends PanelExperimentDetailInput {
+  runId?: string;
 }
 
 export async function panelExperimentsList(
@@ -106,6 +112,71 @@ export async function panelExperimentDetail(
         createdAt: run.createdAt,
       })),
   });
+}
+
+/**
+ * Results for exactly one Run, with the ship-decision gate evaluated here.
+ *
+ * The gate is a Worker invariant (ADR-0030): the Panel renders this refusal and
+ * never recomputes it, so the Panel, CLI, and MCP skins cannot disagree.
+ */
+export async function panelExperimentResults(
+  deps: PanelExperimentsDeps,
+  input: PanelExperimentResultsRequestInput,
+): Promise<Response> {
+  const requestId = crypto.randomUUID();
+  const accessError = await panelAccessError(deps.repo, input, requestId);
+  if (accessError) return accessError;
+
+  const scope = envScope(input.appId, input.environmentId);
+  const experiment = await deps.repo.experiments.getExperiment(scope, input.experimentId);
+  if (!experiment) return experimentNotFound(requestId);
+
+  const runs = await deps.repo.experiments.listRunsForExperiment(scope, input.experimentId);
+  const run = input.runId
+    ? runs.find((candidate) => candidate.id === input.runId)
+    : runs.reduce<(typeof runs)[number] | undefined>(
+        (latest, candidate) =>
+          latest && latest.runNumber > candidate.runNumber ? latest : candidate,
+        undefined,
+      );
+  if (!run) return runNotFound(requestId);
+
+  const stats = await parseScopedAnalysisResults(
+    await deps.analysis.fetch(
+      scopedAnalysisResultsRequest({
+        operation: "experiment_results_post",
+        actorId: input.actorId,
+        appId: input.appId,
+        environmentId: input.environmentId,
+        experimentId: input.experimentId,
+        runId: run.id,
+      }),
+    ),
+  );
+
+  const output: PanelExperimentResultsOutput = {
+    runId: run.id,
+    runNumber: run.runNumber,
+    runStatus: run.status === "ended" ? "ended" : "running",
+    controlVariant: controlVariantName(run.variantSet, experiment.defaultVariantId, run.id),
+    stats,
+    srm: experimentSrmDiagnostics(stats),
+    gate: evaluateExperimentDecisionGate(stats),
+  };
+  return Response.json(output);
+}
+
+/** The Run's frozen baseline Variant. Every reported lift is measured against it. */
+function controlVariantName(
+  variantSetJson: string,
+  defaultVariantId: string | null,
+  runId: string,
+): string {
+  const variants = jsonArray<{ id: string; name: string }>(variantSetJson);
+  const control = variants.find((variant) => variant.id === defaultVariantId);
+  if (!control) throw new Error(`Run ${runId} has no Variant matching its default Variant`);
+  return control.name;
 }
 
 async function panelAccessError(

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ExperimentTabStub } from "#components/experiment-detail";
+import { ExperimentResultsPanel } from "#components/experiment-results-panel";
 import { useExperimentDetailRouteData } from "#lib/experiment-detail-route";
 
 export const Route = createFileRoute(
@@ -11,5 +11,13 @@ export const Route = createFileRoute(
 function PinnedRunResultsTab() {
   const route = useExperimentDetailRouteData();
   const run = route.data.runs.find((item) => item.id === route.selectedRunId);
-  return <ExperimentTabStub run={run} tab="results" />;
+  if (!run) throw new Error("Experiment Run not found");
+  return (
+    <ExperimentResultsPanel
+      appId={route.scope.appId}
+      environmentId={route.scope.environmentId}
+      experimentId={route.data.experiment.id}
+      run={run}
+    />
+  );
 }

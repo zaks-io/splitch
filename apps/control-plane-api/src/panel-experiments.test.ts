@@ -2,12 +2,24 @@ import { SCOPED_SERVICE_IDENTITY_HEADER } from "@splitch/control-plane-sdk/panel
 import type { Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
 import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
+import { experimentRow, type PanelExperimentIds, runRow } from "./panel-experiments-test-fixtures";
 
 const APP_ID = "app_panel_list";
 const ENVIRONMENT_ID = "env_panel_list";
 const ACTOR_ID = "user_panel_list";
 const EXPERIMENT_ID = "exp_panel_list";
 const RUN_ID = "run_panel_list";
+
+const ids: PanelExperimentIds = {
+  appId: APP_ID,
+  environmentId: ENVIRONMENT_ID,
+  experimentId: EXPERIMENT_ID,
+  latestRunId: RUN_ID,
+  previousRunId: "run_panel_previous",
+  actorId: ACTOR_ID,
+  flagId: "flag_panel_list",
+  orgId: "org_panel_list",
+};
 
 describe("panel Experiments composite read", () => {
   it("rechecks live scope and requests health for the exact live Run", async () => {
@@ -159,78 +171,11 @@ function repository(
       flags: { findMany: vi.fn(async () => [{ id: "flag_panel_list", name: "Checkout Flag" }]) },
     },
     experiments: {
-      listExperiments: vi.fn(async () => [experimentRow()]),
-      getExperiment: vi.fn(async () => experimentRow()),
-      listRunsForExperiment: vi.fn(async () => [runRow(1), runRow(2)]),
+      listExperiments: vi.fn(async () => [experimentRow(ids)]),
+      getExperiment: vi.fn(async () => experimentRow(ids)),
+      listRunsForExperiment: vi.fn(async () => [runRow(ids, 1), runRow(ids, 2)]),
     },
   } as unknown as Repository;
-}
-
-function experimentRow() {
-  return {
-    id: EXPERIMENT_ID,
-    appId: APP_ID,
-    environmentId: ENVIRONMENT_ID,
-    key: "checkout-test",
-    flagId: "flag_panel_list",
-    name: "Checkout Test",
-    description: null,
-    hypothesis: null,
-    status: "running",
-    targetingKeyField: "userId",
-    targetingKeyType: "user",
-    confidenceLevel: 0.95,
-    defaultVariantId: "variant_control",
-    metrics: "[]",
-    guardrailMetrics: "[]",
-    activationMetricId: null,
-    conversionWindowMs: 0,
-    dimensions: "[]",
-    draftAllocation: null,
-    draftSalt: null,
-    draftTargetingRules: null,
-    draftSegmentIds: null,
-    liveRunId: RUN_ID,
-    createdAt: "2026-07-18T00:00:00.000Z",
-    updatedAt: "2026-07-18T00:00:00.000Z",
-  };
-}
-
-function runRow(runNumber: 1 | 2) {
-  const latest = runNumber === 2;
-  return {
-    id: latest ? RUN_ID : "run_panel_previous",
-    appId: APP_ID,
-    environmentId: ENVIRONMENT_ID,
-    experimentId: EXPERIMENT_ID,
-    runNumber,
-    status: latest ? "running" : "ended",
-    targetingKeyField: "userId",
-    targetingKeyType: "user",
-    salt: latest ? "salt-2" : "salt-1",
-    allocation: JSON.stringify(
-      latest ? { control: 70, treatment: 30 } : { control: 50, treatment: 50 },
-    ),
-    controlVariantId: "variant_control",
-    variantSet: JSON.stringify([
-      { id: "variant_control", name: "control", value: false },
-      { id: "variant_treatment", name: "treatment", value: true },
-    ]),
-    targetingRules: "[]",
-    confidenceLevel: 0.95,
-    horizon: "sequential",
-    targetN: null,
-    sampleSizeLocked: null,
-    decisionFamily: "[]",
-    guardrailDecisions: "[]",
-    configHash: latest ? "sha256:two" : "sha256:one",
-    startedAt: latest ? "2026-07-19T00:00:00.000Z" : "2026-07-18T00:00:00.000Z",
-    endedAt: latest ? null : "2026-07-18T23:00:00.000Z",
-    startReason: latest ? "Increase treatment traffic" : null,
-    endReason: latest ? null : "Prepared a larger treatment allocation",
-    createdAt: latest ? "2026-07-19T00:00:00.000Z" : "2026-07-18T00:00:00.000Z",
-    createdBy: ACTOR_ID,
-  };
 }
 
 function statsOutput() {

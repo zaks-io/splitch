@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ExperimentTabStub } from "#components/experiment-detail";
+import { ExperimentResultsPanel } from "#components/experiment-results-panel";
 import { useExperimentDetailRouteData } from "#lib/experiment-detail-route";
 
 export const Route = createFileRoute(
@@ -11,5 +12,17 @@ export const Route = createFileRoute(
 function AdaptivePinnedRunTab() {
   const route = useExperimentDetailRouteData();
   const run = route.data.runs.find((item) => item.id === route.selectedRunId);
-  return <ExperimentTabStub run={run} tab={route.activeTab} />;
+  // An unknown Run id must not read as "this Experiment has no Run yet".
+  if (!run) throw new Error("Experiment Run not found");
+  if (route.activeTab !== "results") {
+    return <ExperimentTabStub run={run} tab={route.activeTab} />;
+  }
+  return (
+    <ExperimentResultsPanel
+      appId={route.scope.appId}
+      environmentId={route.scope.environmentId}
+      experimentId={route.data.experiment.id}
+      run={run}
+    />
+  );
 }

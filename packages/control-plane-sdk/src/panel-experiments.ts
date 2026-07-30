@@ -7,6 +7,12 @@ import {
   type PanelExperimentDetailOutput,
   parsePanelExperimentDetailOutput,
 } from "./panel-experiment-detail";
+import {
+  type PanelExperimentResultsInput,
+  type PanelExperimentResultsOutput,
+  PanelExperimentResultsOutputSchema,
+  parsePanelExperimentResultsOutput,
+} from "./panel-experiment-results";
 
 export type {
   PanelExperimentDetail,
@@ -14,9 +20,15 @@ export type {
   PanelExperimentDetailOutput,
   PanelExperimentRun,
 } from "./panel-experiment-detail";
+export type {
+  PanelExperimentResultsInput,
+  PanelExperimentResultsOutput,
+} from "./panel-experiment-results";
+export { PanelExperimentResultsOutputSchema, parsePanelExperimentResultsOutput };
 
 const PANEL_EXPERIMENTS_PATH = "/control-panel/experiments/list";
 const PANEL_EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
+const PANEL_EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
 export const SCOPED_SERVICE_IDENTITY_HEADER = "x-splitch-scoped-service-identity";
 
 export interface PanelExperimentsListInput {
@@ -84,6 +96,22 @@ export function createPanelExperimentsClient(options: { fetch: typeof fetch; bas
         "panel_experiment_detail",
         {
           safeParse: parsePanelExperimentDetailOutput,
+        },
+      );
+    },
+    async results(
+      input: PanelExperimentResultsInput,
+    ): Promise<ControlPlaneOperationResult<PanelExperimentResultsOutput>> {
+      const response = await options.fetch(new URL(PANEL_EXPERIMENT_RESULTS_PATH, baseUrl), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      return parseControlPlaneResponse<PanelExperimentResultsOutput>(
+        response,
+        "panel_experiment_results",
+        {
+          safeParse: parsePanelExperimentResultsOutput,
         },
       );
     },

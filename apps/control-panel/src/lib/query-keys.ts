@@ -44,6 +44,14 @@ export const queryKeys = {
       [...entityPrefix(appId, environmentId, "experiment"), experimentId, "run"] as const,
     run: (appId: string, environmentId: string, experimentId: string, runId: string) =>
       [...entityPrefix(appId, environmentId, "experiment"), experimentId, "run", runId] as const,
+    results: (appId: string, environmentId: string, experimentId: string, runId: string) =>
+      [
+        ...entityPrefix(appId, environmentId, "experiment"),
+        experimentId,
+        "run",
+        runId,
+        "results",
+      ] as const,
   },
   flag: {
     prefix: (appId: string, environmentId: string) =>
