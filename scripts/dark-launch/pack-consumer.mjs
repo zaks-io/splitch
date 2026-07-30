@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +18,9 @@ export function installPackedSdkConsumer() {
 
   cpSync(fixtureRoot, consumerRoot, { recursive: true });
 
-  execFileSync("pnpm", ["run", "build"], { cwd: sdkRoot, stdio: "inherit" });
+  if (!existsSync(join(sdkRoot, "dist/index.js"))) {
+    throw new Error("@splitch/sdk dist is missing; run its Turbo build before the CLI test");
+  }
   const packOutput = execFileSync("node", ["scripts/pack-release.mjs", packDir], {
     cwd: sdkRoot,
     encoding: "utf8",
