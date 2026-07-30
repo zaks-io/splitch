@@ -10,6 +10,11 @@ Exposure is stamped with its `runId`, and SRM, significance, and Conversion Wind
 that an opaque version number does not. Because the Run is immutable, Assignment (ADR-0001) is pure over it
 and re-bucketing within a Run is impossible by construction.
 
+Runs created before `control_variant_id` existed are backfilled from the Experiment's current
+`default_variant_id` at migration time. That value is explicitly the best-available legacy identity,
+not a claim that the original historical Control can be reconstructed. Runs started after the
+migration always freeze the Control at Start.
+
 The invariant is **frozen bucketing and its analysis identity**, not frozen measurement. Metric definitions, the Conversion Window,
 and Guardrail/Activation config are _not_ part of the Run's frozen config — they recompute losslessly over
 the Run's raw log (ADR-0003). Analyzability requires only that _who is in which arm_ was fixed; _what we

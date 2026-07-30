@@ -178,7 +178,6 @@ async function startExperiment(
     args.requestId,
   );
   if (!prepared.ok) return prepared.response;
-  const controlVariantId = controlVariantIdForStart(experiment);
 
   const now = nowIso(deps);
   const committed = await deps.repo.experiments.startRun(scope, {
@@ -189,7 +188,7 @@ async function startExperiment(
       draftSalt: experiment.draftSalt,
       draftTargetingRules: experiment.draftTargetingRules,
       draftSegmentIds: experiment.draftSegmentIds,
-      defaultVariantId: controlVariantId,
+      defaultVariantId: prepared.value.controlVariantId,
       liveRunId: experiment.liveRunId,
     },
     run: {
@@ -233,13 +232,6 @@ async function startExperiment(
     run: runResponse(committed.run),
     previousRunId: committed.previous?.id ?? null,
   });
-}
-
-function controlVariantIdForStart(experiment: ExperimentRow): string {
-  if (!experiment.defaultVariantId) {
-    throw new Error(`Experiment ${experiment.id} has no Control Variant to freeze`);
-  }
-  return experiment.defaultVariantId;
 }
 
 async function prepareStartOrReplaySync(

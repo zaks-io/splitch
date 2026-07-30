@@ -119,7 +119,7 @@ async function seedTenant(repo: ReturnType<typeof createRepository>, t: Tenant):
     targetingKeyType: "user",
     salt: `salt_${t.runId}`,
     allocation: '{"control":100}',
-    variantSet: "[]",
+    variantSet: JSON.stringify([{ id: t.variantId, name: "control", value: "control" }]),
     controlVariantId: t.variantId,
     targetingRules: "[]",
     confidenceLevel: 0.95,

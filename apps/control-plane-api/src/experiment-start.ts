@@ -28,6 +28,7 @@ export async function prepareStart(
     allocation: Record<string, number>;
     salt: string;
     variantSet: Variant[];
+    controlVariantId: string;
     targetingRules: TargetingRule[];
     configHash: string;
     decisionFamily: MetricRef[];
@@ -70,6 +71,18 @@ export async function prepareStart(
       ),
     };
   }
+  const controlVariantId = experiment.defaultVariantId;
+  if (!isFrozenControlVariant(controlVariantId, variantSet.value)) {
+    return {
+      ok: false,
+      response: variantNotAvailable(
+        experiment.flagId,
+        scope.environmentId,
+        [controlVariantId ?? "control"],
+        requestId,
+      ),
+    };
+  }
 
   const resolved = await resolvedTargetingRules(repo, scope, experiment, requestId);
   if (!resolved.ok) return resolved;
@@ -87,12 +100,20 @@ export async function prepareStart(
       allocation,
       salt,
       variantSet: variantSet.value,
+      controlVariantId,
       targetingRules,
       configHash,
       decisionFamily: jsonArray<MetricRef>(experiment.metrics),
       guardrailDecisions: jsonArray<MetricRef>(experiment.guardrailMetrics),
     },
   };
+}
+
+function isFrozenControlVariant(
+  controlVariantId: string | null,
+  variantSet: Variant[],
+): controlVariantId is string {
+  return controlVariantId !== null && variantSet.some((variant) => variant.id === controlVariantId);
 }
 
 function validateAllocation(

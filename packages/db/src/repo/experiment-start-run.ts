@@ -37,6 +37,7 @@ export function makeStartRun(
 ) {
   return async function startRun(scope: EnvScope, input: StartRunInput): Promise<StartRunResult> {
     assertMintedScope(scope);
+    assertControlInFrozenVariantSet(input.expectedDraft.defaultVariantId, input.run.variantSet);
     const state = await loadStartState(experimentsTable, runsTable, scope, input);
     if (!state.ok) return state;
 
@@ -50,6 +51,29 @@ export function makeStartRun(
       : null;
     return { ok: true, run, previous: previous ?? state.previous };
   };
+}
+
+function assertControlInFrozenVariantSet(controlVariantId: string, variantSetJson: string): void {
+  let variantSet: unknown;
+  try {
+    variantSet = JSON.parse(variantSetJson);
+  } catch {
+    throw new Error("startRun: frozen Variant set is not valid JSON");
+  }
+  if (
+    !Array.isArray(variantSet) ||
+    !variantSet.some(
+      (variant) =>
+        typeof variant === "object" &&
+        variant !== null &&
+        "id" in variant &&
+        variant.id === controlVariantId,
+    )
+  ) {
+    throw new Error(
+      `startRun: Control Variant ${controlVariantId} is absent from the frozen Variant set`,
+    );
+  }
 }
 
 async function loadStartState(

@@ -6,6 +6,8 @@ import { makeEndRun } from "./experiment-end-run";
 import { makeStartRun } from "./experiment-start-run";
 import { scopedTable } from "./scoped-table";
 
+const RUN_STATUS_UPDATE_KEYS = new Set(["status", "endedAt", "endReason"]);
+
 /**
  * Experiment-domain repository. Per-Environment (require an EnvScope):
  * experiments, runs (ADR-0027). App-scoped: metrics.
@@ -121,6 +123,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       patch: Pick<typeof runs.$inferInsert, "status" | "endedAt"> &
         Partial<Pick<typeof runs.$inferInsert, "endReason">>,
     ): Promise<typeof runs.$inferSelect | null> {
+      assertRunStatusUpdate(patch);
       return runsTable.update(scope, patch, eq(runs.id, runId)).then((rows) => rows[0] ?? null);
     },
 
@@ -166,4 +169,12 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       return metricsTable.remove(scope, eq(metrics.id, metricId));
     },
   };
+}
+
+function assertRunStatusUpdate(patch: Record<string, unknown>): void {
+  for (const key of Object.keys(patch)) {
+    if (!RUN_STATUS_UPDATE_KEYS.has(key)) {
+      throw new Error(`updateRunStatus: cannot update immutable Run snapshot field "${key}"`);
+    }
+  }
 }

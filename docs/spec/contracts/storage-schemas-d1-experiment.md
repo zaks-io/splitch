@@ -58,6 +58,11 @@ nullable because a freshly created Experiment has no staged Run yet.
 
 Immutable assignment config columns are marked; Drizzle migrations must not add UPDATE paths for them.
 
+For pre-existing Runs, the `control_variant_id` migration uses the Experiment's current
+`default_variant_id` as the best-available backfill. It cannot reconstruct a historical Control that
+was not previously stored. New Runs copy and validate the Control against their frozen Variant set
+at Start.
+
 | Column                | Type        | Constraints                                                                                              |
 | --------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
 | `id`                  | text        | PK                                                                                                       |
