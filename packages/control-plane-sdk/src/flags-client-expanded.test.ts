@@ -103,7 +103,7 @@ describe("control plane sdk Variant catalog operations", () => {
         frozenFields: ["value"],
         currentRunId: "run_live",
         attemptedChange: "variant.value",
-        recommendedAction: "END_RUNNING_RUN_FIRST",
+        recommendedAction: "CREATE_NEW_RUN",
       },
     };
     const { sdk } = sdkWith(() => Response.json(runFrozen, { status: 409 }));
