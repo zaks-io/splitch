@@ -22,7 +22,7 @@ const service = "splitch-mcp-server";
 const defaultAuthorization = "Bearer local-test-token";
 
 export const demoExpiresAt = "2026-07-22T00:00:00.000Z";
-export const authIssuer = "http://localhost:8791";
+const authIssuer = "http://localhost:8791";
 
 export const anonymousActor: McpAccessTokenActor = {
   subject: "user_anon",

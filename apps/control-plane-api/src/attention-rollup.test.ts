@@ -1,10 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { AnalysisResultsReader } from "./attention-analysis-reader";
-import {
-  ANALYSIS_READ_CONCURRENCY,
-  ANALYSIS_READ_LIMIT,
-  ENVIRONMENT_FANOUT_LIMIT,
-} from "./attention-rollup";
 import {
   ATTENTION_TEST_TIMEOUT,
   authFor,
@@ -13,17 +8,10 @@ import {
   harness,
   itemFor,
   QA_ENVIRONMENT_ID,
-  repository,
   setupAttentionRollupFixture,
-  spyOnPlanningReads,
   statsOutput,
   USER_ID,
 } from "./attention-rollup-fixture";
-import {
-  seedEnvironments,
-  seedRunningExperiments,
-  seedRunningExperimentWithoutRun,
-} from "./attention-rollup-seeds";
 import { ids } from "./config-store-fixture-data";
 
 setupAttentionRollupFixture();

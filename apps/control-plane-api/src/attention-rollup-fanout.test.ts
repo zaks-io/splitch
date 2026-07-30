@@ -8,10 +8,7 @@ import {
 import {
   ATTENTION_TEST_TIMEOUT,
   authFor,
-  DEV_EXPERIMENT_ID,
-  type EnvironmentAttentionItem,
   harness,
-  itemFor,
   QA_ENVIRONMENT_ID,
   repository,
   setupAttentionRollupFixture,
