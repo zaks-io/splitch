@@ -118,12 +118,20 @@ function isScopedOperationId(value: string): value is (typeof SCOPED_OPERATION_I
  * scope it, and `isControlPanelOperation` rejects any claim whose key set does
  * not match its id. So identity is structural equality over that key set.
  *
- * This deliberately replaces a per-variant `switch`. That shape has to be
- * extended by hand for every new operation, and the variant nobody remembered
- * to add falls through to a default arm that compares a SUBSET of its scope
- * fields — which reads as "same operation" for two different resources. That is
- * an authorization bypass, not a lint nit, so the comparison is made total by
- * construction instead.
+ * This deliberately replaces a per-variant `switch`. That switch was correct
+ * for the vocabulary it was written against — its default arm compared appId
+ * and environmentId, and every member that reached it carried exactly those two
+ * fields. It is the *extension* that is unsafe: a new member with a third
+ * scoping field, added without a matching case, silently falls through and gets
+ * compared on a subset of its scope, which reads as "same operation" for two
+ * different resources. `experiments_update` is exactly such a member. An arm
+ * that cannot be extended safely should not exist, so identity is compared
+ * structurally and stays total by construction.
+ *
+ * Members that carry no scope fields (`experiments_list`, `experiments_detail`,
+ * `experiments_results`, `organizations_create`) still match on the id alone,
+ * as they did under the switch: their key set is `["id"]`, so equal ids compare
+ * equal. That is deliberate and documented in `control-panel-operation.ts`.
  */
 export function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation): boolean {
   const claimed = left as Record<string, unknown>;
