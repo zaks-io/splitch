@@ -1,7 +1,7 @@
 # Event Ingest API context
 
 Read this when touching `apps/event-ingest-api`, event append paths, Exposure row contracts,
-activation events, Metric Events, or dedup handoff.
+activation events, Metric Events, Web Events, or dedup handoff.
 
 ## Owns
 
@@ -10,6 +10,7 @@ activation events, Metric Events, or dedup handoff.
 - Delivery, dedup key, and first-touch analysis handoff.
 - Activation events as logged facts.
 - Metric Event validation, version stamping, and append behavior.
+- Web Event validation, version stamping, and append behavior.
 
 ## Terms
 
@@ -50,14 +51,19 @@ Future counterfactual triggering can add would-have-activated markers without a 
 See [`../analysis-api/CONTEXT.md`](../analysis-api/CONTEXT.md) for Activation Metric interpretation.
 
 **Event Definition**:
-An App-level schema for one named Metric Event. Each immutable published Event Definition Version
-pins the Entity type, typed fields, Dimensions, and closed JSON Schema. Versions are shared across
-Environments.
+An App-level schema for one named Metric Event or Web Event whose family is immutable after creation.
 
 **Metric Event**:
 An App/Environment/Entity product fact submitted through `track()`. It is validated against the
 Event Definition's current published version and appended to the separate `metric_events` log.
 Metric Events supply Metric values but never become the Exposure denominator.
+
+**Web Event**:
+An App/Environment browser telemetry fact used for exploratory web analytics, never as a Metric
+input or the Exposure denominator.
+
+**Web Session**:
+A bounded browser activity scope that correlates Web Events without creating Entity identity.
 
 **Holdover write**:
 The first Exposure is when the Assignment Store record is written. That record makes sticky holdover
@@ -71,6 +77,13 @@ See [`../evaluation-api/CONTEXT.md`](../evaluation-api/CONTEXT.md#assignment-sto
 - Exposure is the recorded fact.
 - `raw_events` is the system of record for Exposures and Activations.
 - `metric_events` is the system of record for Metric Events.
+- Metric Event ingest accepts only Event Definitions in the `metric` family.
+- Web Event ingest accepts only Event Definitions in the `web` family.
+- Every Web Event belongs to one Web Session; explicit Entity identity is optional but `idType` and
+  Targeting Key appear together.
+- A `web` Event Definition Version with no Entity type is anonymous-only. A non-null Entity type
+  permits anonymous Web Events or a complete matching identity pair.
+- Web Session stitching is exploratory and never participates in Experiment measurement.
 - Dedup and analysis are downstream query behavior, not ingest mutation.
 - Event ingest must preserve enough raw evidence for SRM, `__multiple__`, Activation Metrics, and
   Conversion Windows.

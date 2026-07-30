@@ -141,7 +141,7 @@ The Worker computes `targeting_key_hash` for every active salt version, inserts 
 tombstones, and queues physical purge across KV, Assignment Store DO, Tinybird raw rows, snapshots,
 and rollups.
 
-The Analysis Worker MUST exclude rows where `server_ts <= delete_before_ts` immediately after the
+The Analysis Worker MUST exclude rows where `server_received_at <= delete_before_ts` immediately after the
 tombstone commits. New events after `delete_before_ts` are newly collected data.
 
 Returns: `{ request: PrivacyRequest, job: PrivacyJob }`

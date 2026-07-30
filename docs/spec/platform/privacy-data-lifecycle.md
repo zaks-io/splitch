@@ -12,14 +12,70 @@ days.
 
 ## Privacy roles
 
-| Data class              | Examples                                                                                 | Role                                                       | Durable stores                             |
-| ----------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------ |
-| Control-plane User data | WorkOS user ID, email in WorkOS, memberships, sessions, device-flow tokens               | Splitch-controlled                                         | WorkOS, D1 IDs, KV sessions, keychain/CLI  |
-| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata     | Customer-controlled                                        | D1, KV config cache, per-App DO            |
-| Entity data             | Targeting Key, idType, Exposures, Activations, Metric Events, Assignment Store holdovers | Customer-controlled; Splitch is processor/service provider | Tinybird, KV, Assignment Store DO          |
-| Audit/security data     | control-plane mutation audit, auth door, actor ID, request logs                          | shared legal/security record                               | Tinybird audit log, D1 privacy request log |
-| Observability data      | errors, traces, structured logs                                                          | Splitch-controlled operations data                         | Sentry, Axiom, Cloudflare logs             |
-| Billing data            | plan, Stripe customer/subscription IDs, invoices                                         | Splitch-controlled billing data                            | D1, Stripe when enabled                    |
+| Data class              | Examples                                                                                 | Role                                                       | Durable stores                                               |
+| ----------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------ |
+| Control-plane User data | WorkOS user ID, email in WorkOS, memberships, sessions, device-flow tokens               | Splitch-controlled                                         | WorkOS, D1 IDs, KV sessions, keychain/CLI                    |
+| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata     | Customer-controlled                                        | D1, KV config cache, per-App DO                              |
+| Entity data             | Targeting Key, idType, Exposures, Activations, Metric Events, Assignment Store holdovers | Customer-controlled; Splitch is processor/service provider | Tinybird, KV, Assignment Store DO, ingest outbox/queues/DLQs |
+| Browser analytics data  | Web Events, Web Sessions, optional Entity identity                                       | Customer-controlled; Splitch is processor/service provider | Tinybird `web_events`, ingest outbox/queues/DLQ              |
+| Audit/security data     | control-plane mutation audit, auth door, actor ID, request logs                          | shared legal/security record                               | Tinybird audit log, D1 privacy request log                   |
+| Observability data      | errors, traces, structured logs                                                          | Splitch-controlled operations data                         | Sentry, Axiom, Cloudflare logs                               |
+| Billing data            | plan, Stripe customer/subscription IDs, invoices                                         | Splitch-controlled billing data                            | D1, Stripe when enabled                                      |
+
+## Browser analytics identity
+
+The browser SDK's default Web Session identifier is a cryptographically random UUID v4 stored only
+in `sessionStorage`. It survives same-tab navigation and reloads and ends when the tab closes.
+Splitch does not create an analytics cookie, persistent `localStorage` identity, browser
+fingerprint, or cross-site/cross-device identifier. Event Ingest stores only the
+App/Environment-scoped `session_id_hash`, never the wire UUID.
+
+Creating a normal SDK client does not read or write `sessionStorage`, inspect the DOM, register
+browser instrumentation, or emit Web Events. Manual collection begins only when application code
+calls `sdk.web.track()`. Automatic collection begins only through `sdk.web.instrument()` with a
+bounded capture list. Automatic capture never reads form values, DOM text, or raw URLs.
+
+The browser SDK buffers pending Web Events only in memory. It does not persist event payloads,
+generated event IDs, or retry state in IndexedDB, `localStorage`, `sessionStorage`, cookies, or
+another browser store. `sessionStorage` contains only the default Web Session identifier.
+Unaccepted buffered events may be lost when the page terminates and are not restored on the next
+load.
+
+Web Analytics registers queue-flush visibility and page-lifecycle listeners only while the queue is
+non-empty. Its flush timer has the same lifetime; it does not create an idle heartbeat or background
+request. Calling `sdk.web.instrument()` may register only the explicitly selected automatic source
+listeners.
+
+Each instrumentation call returns a scoped cleanup function. Cleanup removes that handle's browser
+listeners when the adapter supports teardown, detaches every adapter subscription, and discards its
+unflushed automatic events without affecting manual events or other instrumentation handles. It
+cannot revoke an event already in flight or accepted by ingest.
+
+The `web_vital` adapter uses one lazy page-lifetime `web-vitals` collector because the library does
+not expose observer teardown. A stopped handle has no subscription to it. With no subscribers, the
+collector creates no Web Event, does not access Web Session storage, retains no Splitch event
+payload, and performs no network I/O. The SDK never registers a second collector on reinstrumentation.
+
+The `browser_error` adapter records only the bounded signal kind and normalized built-in exception
+type. It never reads or emits messages, stacks, filenames, source URLs, rejection values,
+breadcrumbs, DOM state, or arbitrary exception properties.
+
+The SDK may copy only a valid active OpenTelemetry `traceId` and `spanId` onto a Web Event for
+correlation. It does not initialize tracing or copy trace state, flags, attributes, resources,
+events, links, status, or instrumentation scope. Trace correlation never creates Entity identity.
+
+Web Event rejection and background-delivery logs contain only event ID, event name, capture source,
+canonical error code, schema issue paths, transport status, and batch item count as applicable. They
+never contain event values, Dimensions, Web Session or Entity identity, Targeting Key hashes, trace
+context, request bodies, or response bodies.
+
+The SDK permits only one active owner for each browser instrumentation source. Conflicting
+registration fails before adding any adapter subscription or handle-owned listener, preventing
+duplicate collection from overlapping handles.
+
+An application may explicitly provide a canonical lowercase UUID for consent-aware cross-tab or
+cross-domain continuity. Arbitrary strings are rejected before a claim or write. Splitch never
+discovers or imports an identifier from application cookies or storage automatically.
 
 ## Entity privacy identity
 
@@ -36,8 +92,8 @@ Rules:
 - New Entity rows use the latest salt version. Historical rows keep their original hash version.
 - Entity export/delete computes one `targeting_key_hash` per active salt version and operates on all
   matches. Old salt versions are kept until every row using that version has expired or been purged.
-- The raw Targeting Key is used in memory for `assign()`, Condition matching, or Metric Event HMAC
-  derivation, then discarded.
+- The raw Targeting Key is used in memory for `assign()`, Condition matching, or Metric/Web Event
+  HMAC derivation, then discarded.
 - KV keys, DO names, Tinybird rows, Axiom fields, Sentry payloads, and audit details never contain the
   raw Targeting Key or raw Evaluation Context attributes.
 - Data subject requests take `{ app_id, id_type, targetingKey }`; the Control Plane API Worker computes
@@ -79,6 +135,7 @@ Exports are asynchronous jobs with a signed, expiring download URL. Raw secrets 
 
 Entity exports are scoped by App and idType. They include the categories, sources, purposes, and
 processors for the data, not only the physical rows.
+Entity-identified Web Events with the same `targeting_key_hash` are included.
 
 ## Deletion contracts
 
@@ -93,9 +150,27 @@ Deletion is a two-phase job: stop future use first, then hard-purge every store 
 | Entity                  | insert `entity_deletions` tombstone and exclude from analysis       | delete Assignment Store key/DO row and Tinybird rows matching `targeting_key_hash`                      |
 
 `entity_deletions` contains `{ app_id, id_type, targeting_key_hash, delete_before_ts, requested_at,
-completed_at }`. The Analysis Worker MUST exclude rows where `server_ts <= delete_before_ts` as soon as
+completed_at }`. The Analysis Worker MUST exclude rows where `server_received_at <= delete_before_ts` as soon as
 the tombstone is committed, even before Tinybird hard purge finishes. New events for the same Targeting
 Key after `delete_before_ts` are treated as newly collected customer data.
+
+App deletion immediately suppresses every pending outbox publication, primary-queue delivery,
+poison transfer, and manual DLQ replay for that `app_id`. Entity deletion applies the same
+suppression to queued or replayed rows carrying the matching `(app_id, id_type,
+targeting_key_hash)` at or before `delete_before_ts`. Event Ingest consumers and operator replay
+tools must recheck the current deletion suppression before Tinybird publication; a suppressed row is
+acknowledged or purged without append. Deletion cannot be marked complete until matching outbox and
+poison-transfer state is purged and the bounded primary-queue/DLQ retention or equivalent purge
+evidence proves no matching delivery can re-enter Tinybird.
+
+Entity deletion redacts matching ingest claims and removes their canonical payloads, but it retains
+a payload-free suppression claim containing only the family-scoped `dedup_key`, payload fingerprint,
+original Event Definition IDs, and deletion state for at least the event family's maximum retention
+window. An exact stale retry returns the original duplicate result without queue publication; reuse
+with different content remains `EVENT_ID_CONFLICT`. The suppression claim carries no Targeting Key,
+Targeting Key hash, Web Session identifier, event fields, Dimensions, or trace context. This
+prevents an old retry from recreating a deleted logical fact after its original outbox and Tinybird
+rows are purged.
 
 Audit/security rows are not used for product analytics or targeting. If retained under legal/security
 exceptions, read surfaces show a deleted-user tombstone instead of a name or email.
@@ -107,8 +182,11 @@ Every delete job must record per-store status for:
 - WorkOS: user, Organization, SSO/SCIM state.
 - D1: Organization/App/config/membership/credential metadata/privacy ledgers.
 - KV: sessions, credential caches, config cache, liveRun keys, Assignment Store read keys.
-- Durable Objects: per-App live-update state and Assignment Store writer rows.
-- Tinybird: raw events, Metric Events, deduped exposures, rollups, audit reads.
+- Durable Objects: per-App live-update state, Assignment Store writer rows, ingest claims/outbox
+  payloads, Admission Gate state, and poison-transfer records.
+- Cloudflare Queues: all four primary ingest queues and all four DLQs, including manual replay
+  inventory and bounded retention evidence.
+- Tinybird: raw events, Metric Events, Web Events, deduped exposures, rollups, audit reads.
 - Sentry/Axiom/Cloudflare logs: no raw Entity data by design; request deletion from processor if a
   scrubber regression captured personal data.
 - Stripe, when enabled: customer/subscription/invoice lifecycle by billing policy.
@@ -139,6 +217,10 @@ Minimum required coverage:
 - Schema tests proving durable stores use `targeting_key_hash`, never raw Targeting Key.
 - Golden leak tests with canary emails, phone-like strings, Targeting Keys, and custom attributes.
 - Deletion tests proving `entity_deletions` excludes analysis before physical purge finishes.
+- Queue lifecycle tests proving App and Entity suppression prevents pending outbox, primary queue,
+  poison-transfer, and manual DLQ replay from re-appending deleted rows.
+- Retry suppression tests proving a deleted Metric or Web Event cannot be resurrected after its
+  payload-bearing claim is redacted.
 - Export tests proving raw API Key values, processor secrets, and other tenants' data are absent.
 - Backup/restore tests proving privacy tombstones replay before serving traffic or analytics.
 
@@ -148,6 +230,16 @@ The `metric_events` datasource has a default 90-day retention, matching the Expo
 Every configured Conversion Window and promised analysis replay window must fit inside retention.
 Event Definition and Metric metadata may outlive physical Metric Event rows, but immutable version
 records remain while any retained row references them.
+
+## Web Event retention
+
+The `web_events` datasource has an independent default 30-day retention because it contains
+higher-volume exploratory browser facts and is not an Experiment input. Retention may be configured
+within plan limits and has no Conversion Window or Experiment replay minimum. Entity and App
+deletion obligations apply regardless of the configured TTL.
+
+Event Definition metadata may outlive physical Web Event rows, but each immutable Event Definition
+Version remains available while any retained row references it.
 
 The governing ADR is
 [0032](../../adr/0032-privacy-data-lifecycle-is-an-enforced-product-contract.md).

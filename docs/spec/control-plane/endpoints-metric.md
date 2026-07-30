@@ -1,8 +1,9 @@
 # Control-plane endpoints: Event Definition and Metric
 
-Request/response shapes for App-level Event Definitions, immutable published versions, and Metrics.
-All endpoints live on the Control Plane API Worker and require a control-plane bearer token.
-Requests/responses are `Content-Type: application/json`. Shared errors and pagination are defined in
+Request/response shapes for the shared App-level Event Definition catalog, immutable published
+versions, and Metrics. An Event Definition has one immutable `metric` or `web` family. All endpoints
+live on the Control Plane API Worker and require a control-plane bearer token. Requests/responses
+are `Content-Type: application/json`. Shared errors and pagination are defined in
 [control-plane-endpoint-inventory.md](control-plane-endpoint-inventory.md).
 
 Event Definitions and Metrics are App-level. Metric Events are per-Environment data-plane facts and
@@ -22,6 +23,7 @@ Body:
 ```typescript
 {
   name: string; // stable SDK eventName; unique per App
+  family: "metric" | "web"; // immutable
   display_name: string;
   description?: string;
 }
@@ -37,35 +39,71 @@ Returns the Event Definition plus its published version summaries.
 ### `PATCH /apps/{app_id}/event-definitions/{event_definition_id}`
 
 Body may update `display_name` and `description` only. `name` is stable after creation because it is
-the SDK event key.
+the SDK event key. `family` is also stable because it selects the wire contract, validation branch,
+and physical datasource.
 
 ### `POST /apps/{app_id}/event-definitions/{event_definition_id}/versions`
 
-Atomically creates and publishes the next immutable version:
+Atomically creates and publishes the next immutable version. The parent family selects one of two
+strict request branches:
 
 ```typescript
-{
-  entity_type: string;
+type MetricEventDefinitionVersionRequest = {
+  entity_type: string; // required identity
   fields: Array<{
     name: string;
     type: "boolean" | "string" | "number" | "json";
     required: boolean;
+    allowed_values?: Array<boolean | string | number>;
+    minimum?: number;
+    maximum?: number;
     json_schema?: ClosedJsonSchema;
   }>;
   dimensions: Array<{
     name: string;
     type: "boolean" | "string" | "number";
     required: boolean;
+    allowed_values?: Array<boolean | string | number>;
+    minimum?: number;
+    maximum?: number;
   }>;
-}
+};
+
+type WebEventDefinitionVersionRequest = {
+  entity_type: string | null; // null prohibits identity; string permits matching optional identity
+  fields: MetricEventDefinitionVersionRequest["fields"];
+  dimensions: MetricEventDefinitionVersionRequest["dimensions"];
+};
 ```
 
 The Worker enforces unique field names, unique Dimension names, disjoint sets, a JSON Schema only for
-`type = "json"`, and `additionalProperties: false` at every object node. It assigns the dense version
-ordinal, computes `schema_hash`, inserts the version, and advances
-`current_published_version_id` in one transaction.
+`type = "json"`, and `additionalProperties: false` at every object node. An `allowed_values` list
+must be non-empty, unique, and exactly match its scalar declaration; it is prohibited on a JSON
+field, which uses JSON Schema `enum`. Allowlists participate in `schema_hash`.
+
+`ClosedJsonSchema` is the exact recursive subset defined in
+[leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md#closed-json-schema). Unknown schema
+keywords, references, composition, open object nodes, and malformed bounds fail publication with
+`VALIDATION_ERROR`; the API does not accept an arbitrary JSON Schema document.
+
+`minimum` and `maximum` are allowed only for number declarations, must be finite, and are inclusive.
+Publication rejects `minimum > maximum`. Numeric bounds participate in `schema_hash`.
+
+The Worker assigns the dense version ordinal, computes `schema_hash`, inserts the version, and
+advances `current_published_version_id` in one transaction.
 
 Returns the published `EventDefinitionVersion`.
+
+The shared version resource dispatches by the parent Event Definition's family. A `metric` version
+rejects null `entity_type`. A `web` version requires either explicit null for an anonymous-only
+definition or a non-empty Entity type. Clients cannot submit or override `family` on a version
+request.
+
+For built-in browser adapters, `@splitch/contracts` exports canonical `page_view`, `web_vital`, and
+`browser_error` templates containing the required fields and Dimensions. The control panel and CLI
+may prefill this same existing request from a template after the user chooses the definition's name,
+display metadata, and Entity policy. The API receives and validates the fully expanded ordinary
+request; it does not accept a template selector, infer a schema, or expose another endpoint.
 
 Published versions have `GET` and list routes but no PATCH or independent DELETE route:
 
@@ -73,8 +111,8 @@ Published versions have `GET` and list routes but no PATCH or independent DELETE
 - `GET /apps/{app_id}/event-definitions/{event_definition_id}/versions/{version_id}`
 
 An App delete removes definitions only through the normal App data-purge workflow after dependent
-Metric Events are purged. V1 has no standalone Event Definition delete because historical accepted
-rows must remain traceable to their version.
+Metric Events and Web Events are purged. V1 has no standalone Event Definition delete because
+historical accepted rows must remain traceable to their version.
 
 ## Metric endpoints
 
@@ -110,7 +148,7 @@ Body:
 ```
 
 The Worker resolves the current published Event Definition Version before writing a Metric that
-directly references an Event Definition:
+directly references an Event Definition. The Event Definition must have `family = "metric"`:
 
 - Binomial references the definition and leaves `event_field_name` absent.
 - Count and Revenue reference a declared `number` field by exact name on that published version.

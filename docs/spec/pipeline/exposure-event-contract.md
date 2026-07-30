@@ -6,7 +6,7 @@ Every Exposure and Activation event appended to the unified raw log must conform
 
 One Tinybird datasource (`raw_events`) holds Exposure and Activation row types. The `type`
 discriminator distinguishes those two types. Metric Events use the separate `metric_events`
-datasource and contract; future Web Events use another separate family. A peek or test-evaluation
+datasource and contract; Web Events use another separate family. A peek or test-evaluation
 (dry-run) MUST NOT write any row because those paths never touch ingest.
 
 ## Exposure row (`type = 'exposure'`)
@@ -22,9 +22,9 @@ datasource and contract; future Web Events use another separate family. A peek o
 | `targeting_key_hash` | `string`        | yes      | HMAC-derived Entity identifier; computed from the Targeting Key, never client-supplied                                                                                            |
 | `variant`            | `string`        | yes      | The Variant name (string, never the value/metadata) assigned to this Entity                                                                                                       |
 | `event_id`           | `string`        | yes      | Retry-stable physical event id generated once when the Worker creates this raw row                                                                                                |
-| `server_ts`          | `DateTime64(3)` | yes      | Server-received-at timestamp (millisecond precision, UTC); canonical for `MIN(ts)` first-touch ordering — monotonic, no clock skew                                                |
+| `server_received_at` | `DateTime64(3)` | yes      | Server-received-at timestamp (millisecond precision, UTC); canonical for `MIN(ts)` first-touch ordering — monotonic, no clock skew                                                |
 | `ingest_ts`          | `DateTime64(3)` | yes      | Raw-log append timestamp; used only for snapshot/tail watermarks, never for analysis ordering                                                                                     |
-| `client_ts`          | `DateTime64(3)` | no       | Client-fired timestamp; carried for diagnostics only, never used for ordering                                                                                                     |
+| `client_timestamp`   | `DateTime64(3)` | no       | Client-fired timestamp; carried for diagnostics only, never used for ordering                                                                                                     |
 | `dedup_key`          | `string`        | yes      | Idempotent at-least-once key; see Dedup Key section below                                                                                                                         |
 | `source_id`          | `string`        | yes      | Edge POP identifier (e.g. `'sea01'`); included in `dedup_key`                                                                                                                     |
 | `sdk_version`        | `string`        | no       | SDK version string; diagnostics                                                                                                                                                   |
@@ -39,13 +39,13 @@ dedup_key = sha256(type + ':' + app_id + ':' + experiment_id + ':' + run_id + ':
 - `type` is part of the key so an Exposure and Activation for the same Entity in the same millisecond cannot collide in the unified log.
 - `event_id` is generated once when the raw row is created and reused on retry, so at-least-once delivery is idempotent even if a retry happens later.
 - `source_id` (POP hostname) makes same-Entity, same-ms events from different POPs distinct.
-- `server_ts` is not part of the key; it is for first-touch ordering, not wire-level idempotency.
+- `server_received_at` is not part of the key; it is for first-touch ordering, not wire-level idempotency.
 - New fields do NOT change this key — schema-stable by construction.
 - Tinybird datasource configures this column as its `dedup_key` to handle at-least-once ingest.
 
 ### Idempotency invariant
 
-The dedup key is for wire-level ingest deduplication only. The first-touch dedup (query-time `GROUP BY` over the first-touch identity tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)` + `MIN(server_ts)`) is the **authoritative** first-touch definition and supersedes it. `environment_id`, `experiment_id`, and `id_type` are functionally determined by `run_id` (a Run belongs to exactly one Experiment in exactly one Environment with one declared Entity type); they are carried through the grouping, not independent keys. `environment_id` is intentionally **not** part of the wire `dedup_key` for the same reason — it adds nothing to per-row idempotency. Two rows with different `dedup_key` values for the same `(targeting_key_hash, run_id)` are expected — the query picks `MIN(server_ts)` among them.
+The dedup key is for wire-level ingest deduplication only. The first-touch dedup (query-time `GROUP BY` over the first-touch identity tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)` + `MIN(server_received_at)`) is the **authoritative** first-touch definition and supersedes it. `environment_id`, `experiment_id`, and `id_type` are functionally determined by `run_id` (a Run belongs to exactly one Experiment in exactly one Environment with one declared Entity type); they are carried through the grouping, not independent keys. `environment_id` is intentionally **not** part of the wire `dedup_key` for the same reason — it adds nothing to per-row idempotency. Two rows with different `dedup_key` values for the same `(targeting_key_hash, run_id)` are expected — the query picks `MIN(server_received_at)` among them.
 
 ## Activation row (`type = 'activation'`)
 
@@ -59,7 +59,7 @@ The dedup key is for wire-level ingest deduplication only. The first-touch dedup
 | `id_type`            | `string`        | yes      | Must match the Run's declared `id_type`                                                                |
 | `targeting_key_hash` | `string`        | yes      | HMAC-derived Entity identifier                                                                         |
 | `event_id`           | `string`        | yes      | Retry-stable physical event id generated once when the Worker creates this raw row                     |
-| `server_ts`          | `DateTime64(3)` | yes      | Server-received-at timestamp; equals `activation_ts` for server-received activations                   |
+| `server_received_at` | `DateTime64(3)` | yes      | Server-received-at timestamp; equals `activation_ts` for server-received activations                   |
 | `ingest_ts`          | `DateTime64(3)` | yes      | Raw-log append timestamp; used only for snapshot/tail watermarks, never for analysis ordering          |
 | `activation_ts`      | `DateTime64(3)` | yes      | When the activation event occurred (server-received-at)                                                |
 | `dedup_key`          | `string`        | yes      | Same construction as Exposure dedup key                                                                |

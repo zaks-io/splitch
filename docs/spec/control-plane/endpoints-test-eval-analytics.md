@@ -1,7 +1,7 @@
 # Control-plane-authorized endpoints: test-evaluation, analytics proxy, schema discovery
 
-Request/response shapes for the dry-run test-evaluation endpoint, the Tinybird analytics proxy reads,
-and the unauthenticated OpenAPI schema discovery endpoint.
+Request/response shapes for the dry-run test-evaluation endpoint, the Tinybird Experiment and Web
+Analytics proxy reads, and the unauthenticated OpenAPI schema discovery endpoint.
 
 These endpoints share control-plane auth and contracts, but they do not all live on one Worker.
 Dry-run test-evaluation is mounted on the **Evaluation Worker**. Analytics proxy reads are mounted
@@ -76,6 +76,10 @@ construction (ADR-0026).
 
 Tinybird is never queried directly by clients or agents. The Analysis Worker proxies analytics
 reads, injecting `app_id` and `environment_id` from the auth/path context (mandatory, non-defaulted).
+Web Analytics uses the same Worker and shared typed control-plane client as Experiment results. It
+does not add a direct Tinybird credential, browser-to-Tinybird request, standalone analytics
+service, or separately authored panel, CLI, and MCP contracts. Its purpose-built route and response
+contracts live in [endpoints-web-analytics.md](./endpoints-web-analytics.md).
 
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/results`
 

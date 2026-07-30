@@ -19,7 +19,7 @@ query (ADR-0010); `__multiple__` Entities are already excluded upstream.
 | `id_type`            | `string`    | yes      | Entity type label (e.g. `"user"`, `"workspace"`)                                                                                                   |
 | `run_id`             | `string`    | yes      | The Run this Exposure belongs to                                                                                                                   |
 | `variant`            | `string`    | yes      | Variant name assigned to this Entity in this Run                                                                                                   |
-| `first_exposure_ts`  | `timestamp` | yes      | `MIN(server_ts)` — the Conversion Window anchor (ungated)                                                                                          |
+| `first_exposure_ts`  | `timestamp` | yes      | `MIN(server_received_at)` — the Conversion Window anchor (ungated)                                                                                 |
 | `window_anchor`      | `timestamp` | yes      | `COALESCE(activation_ts, first_exposure_ts)` — effective anchor                                                                                    |
 | `dimension_values`   | `object`    | no       | Attribute values available for Dimension slicing, keyed by Dimension id                                                                            |
 

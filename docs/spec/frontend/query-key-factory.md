@@ -43,6 +43,11 @@ enables:
 ['app', appId, 'env', envId, 'segment', segmentId, 'detail']        // segment detail
 ['app', appId, 'env', envId, 'variant']                             // variant list prefix (per flag)
 ['app', appId, 'env', envId, 'variant', flagId, 'list']             // variants for a flag
+['app', appId, 'env', envId, 'web-analytics']                       // Web Analytics prefix
+['app', appId, 'env', envId, 'web-analytics', 'overview', window]   // overview aggregate
+['app', appId, 'env', envId, 'web-analytics', 'sessions', filters]  // session summaries
+['app', appId, 'env', envId, 'web-analytics', 'session', sessionIdHash, window] // session events
+['app', appId, 'env', envId, 'web-analytics', 'vitals', window]     // Web Vitals aggregate
 ```
 
 ## Factory interface (pseudo-signature)
@@ -75,6 +80,17 @@ keys = {
     list:   (appId: string, envId: string) => ['app', appId, 'env', envId, 'segment', 'list']
     prefix: (appId: string, envId: string) => ['app', appId, 'env', envId, 'segment']
     detail: (appId: string, envId: string, segId: string) => ['app', appId, 'env', envId, 'segment', segId, 'detail']
+  },
+  webAnalytics: {
+    prefix:   (appId: string, envId: string) => ['app', appId, 'env', envId, 'web-analytics']
+    overview: (appId: string, envId: string, from: string, to: string, interval: 'hour' | 'day')
+              => ['app', appId, 'env', envId, 'web-analytics', 'overview', { from, to, interval }]
+    sessions: (appId: string, envId: string, from: string, to: string, eventName: string | null, association: string | null, limit: number)
+              => ['app', appId, 'env', envId, 'web-analytics', 'sessions', { from, to, eventName, association, limit }]
+    sessionEvents: (appId: string, envId: string, sessionIdHash: string, from: string, to: string, limit: number)
+                   => ['app', appId, 'env', envId, 'web-analytics', 'session', sessionIdHash, { from, to, limit }]
+    vitals:   (appId: string, envId: string, from: string, to: string)
+              => ['app', appId, 'env', envId, 'web-analytics', 'vitals', { from, to }]
   },
 }
 ```
@@ -130,6 +146,12 @@ builder returns a key array unconditionally. Malformed usage is caught at compil
 - The factory is the only import site for cache keys in the Control Panel app.
 - `appId` is always at index 1 and `environmentId` at index 3 (after the `'env'` tag) of every key;
   any key without the `(appId, environmentId)` root is a bug.
+- Web Analytics keys include the complete normalized time window, route-specific filters, and
+  pagination limit. Cursor pages belong to the corresponding infinite query and never create
+  hand-authored component keys.
+- Web Event ingest produces no WebSocket nudge and Web Analytics queries have no polling interval.
+  Refresh invalidates the current complete key. Latest creates a new key only after replacing the
+  URL's `from` and `to` with a duration-preserving window ending at the current UTC instant.
 
 ## Sources
 

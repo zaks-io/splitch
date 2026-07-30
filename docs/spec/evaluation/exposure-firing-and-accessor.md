@@ -71,8 +71,8 @@ canonical first-touch anchor.
 ## First-touch identity
 
 `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)` — six components, no Variant (the query-time pipeline tuple; canonical in [pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md)). Resolved by
-`MIN(server_ts)` at query time: many raw Exposures for the same Entity/Run share this identity and
-the earliest `server_ts` is the first-touch winner. Variant is excluded so that two Exposures with
+`MIN(server_received_at)` at query time: many raw Exposures for the same Entity/Run share this identity and
+the earliest `server_received_at` is the first-touch winner. Variant is excluded so that two Exposures with
 **different** Variants for the same Entity/Run are a conflict caught by the `__multiple__`
 quarantine (a separate GROUP BY step), not silently collapsed.
 

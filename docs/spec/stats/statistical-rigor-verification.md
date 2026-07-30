@@ -19,14 +19,14 @@ These names are package scripts and CI jobs. Math slices add their own fixtures 
 
 ### Ingest and dedup
 
-- Exposure and Activation rows reject missing `event_id`, `source_id`, `dedup_key`, `server_ts`, or
+- Exposure and Activation rows reject missing `event_id`, `source_id`, `dedup_key`, `server_received_at`, or
   `ingest_ts`.
 - Retrying the same raw row with the same `event_id` yields the same `dedup_key`.
 - Exposure and Activation rows with the same identity and `event_id` do not collide because `type` is
   included in the key.
-- `server_ts` controls first-touch ordering.
+- `server_received_at` controls first-touch ordering.
 - `ingest_ts` controls snapshot/tail boundaries only.
-- Late-arriving events with old `server_ts` but new `ingest_ts` appear in the real-time tail and then
+- Late-arriving events with old `server_received_at` but new `ingest_ts` appear in the real-time tail and then
   dedup correctly against the snapshot.
 
 ### Run Start decision spec

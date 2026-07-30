@@ -11,7 +11,7 @@ codes. The spine: one Zod schema per glossary noun, everything else derived from
 | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | [leaf-schemas-flag.md](./leaf-schemas-flag.md)                                                           | Canonical field lists for the flag-side leaves: Flag, Variant, TargetingRule, PercentageRollout, Condition, Segment                |
 | [leaf-schemas-experiment.md](./leaf-schemas-experiment.md)                                               | Canonical field lists for the experimentation leaves: Experiment, Run, Metric (allocation, MetricKind)                             |
-| [leaf-schemas-runtime.md](./leaf-schemas-runtime.md)                                                     | Runtime/identity leaves: EvaluationContext, Exposure, Event Definition Version, Metric Event, Organization, App, User, credentials |
+| [leaf-schemas-runtime.md](./leaf-schemas-runtime.md)                                                     | Runtime leaves: EvaluationContext, Exposure, Event Definition, event identities, Org/App/User, credentials                         |
 | [error-responses.md](./error-responses.md)                                                               | ErrorResponse shape, ErrorCode enum, per-code detail shapes, HTTP status map, and per-endpoint error contracts                     |
 | [request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md)                 | Shared envelope conventions (pagination, create/patch asymmetry) plus test-evaluation and data-plane evaluate contracts            |
 | [request-response-envelopes-flag-variant.md](./request-response-envelopes-flag-variant.md)               | Wire shapes for Flag and Variant endpoints: create/patch asymmetry, Variant Run-frozen guard                                       |
@@ -21,7 +21,7 @@ codes. The spine: one Zod schema per glossary noun, everything else derived from
 | [storage-schemas-d1.md](./storage-schemas-d1.md)                                                         | D1 identity and App-level definition tables: organizations, memberships, apps, flags, Event Definitions, variants, rules, segments |
 | [storage-schemas-d1-privacy.md](./storage-schemas-d1-privacy.md)                                         | D1 privacy request and Entity deletion tombstone tables                                                                            |
 | [storage-schemas-d1-experiment.md](./storage-schemas-d1-experiment.md)                                   | D1 experiment-side table columns: experiments, runs, typed-field Metrics, client_keys, api_keys                                    |
-| [storage-schemas-tinybird.md](./storage-schemas-tinybird.md)                                             | Tinybird datasource schemas: Exposure/Activation raw log, Metric Event log, and audit log                                          |
+| [storage-schemas-tinybird.md](./storage-schemas-tinybird.md)                                             | Tinybird datasource schemas: Exposure/Activation raw log, Metric Event log, Web Event log, and audit log                           |
 | [validation-policy.md](./validation-policy.md)                                                           | Which layer validates (Worker always, KV always, D1 trusts), invariants enforced in the Worker, Start atomicity contract           |
 | [two-packages-topology.md](./two-packages-topology.md)                                                   | `@splitch/contracts` vs `@splitch/control-plane-sdk`: what each exports, dependencies, consumer import map, seam contracts         |
 | [mcp-tool-derivation.md](./mcp-tool-derivation.md)                                                       | How MCP tools derive from Zod route schemas, canonical tool list, error handling, authorization model                              |
@@ -72,10 +72,10 @@ into request/response envelopes unless the endpoint is explicitly returning phys
 - Activation Metric changes are assignment edits; `RUN_FROZEN` applies while an Experiment is running.
 - First Start opens the first Experiment Run; `liveRunId` is explicit persisted state in KV.
 - Environment is a first-class axis under App (ADR-0027): Experiments, Experiment Runs, Exposures,
-  Metric Events, and SDK credentials are per-Environment; Flag and Event Definitions are App-level;
-  Flag CONFIGURATION is per-Environment.
+  Metric Events, Web Events, and SDK credentials are per-Environment; Flag and Event Definitions
+  are App-level; Flag CONFIGURATION is per-Environment.
 - Published Event Definition Versions are immutable. The Event Ingest Worker, never the client,
-  selects and stamps the current version onto every accepted Metric Event.
+  selects and stamps the current version onto every accepted Metric Event or Web Event.
 - DO is truth for holdover writes; KV miss self-heals; corrupted blobs fail loud.
 - `targetingKey` lives on Experiment, not Run.
 - `Variant.value` is JSON and is frozen per Run.
