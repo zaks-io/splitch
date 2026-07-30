@@ -1,6 +1,9 @@
 import { SCOPED_SERVICE_IDENTITY_HEADER } from "@splitch/control-plane-sdk/panel-experiments";
 import { describe, expect, it, vi } from "vitest";
-import { type AnalysisResultsReader, createAnalysisResultsReader } from "./attention-rollup";
+import {
+  type AnalysisResultsReader,
+  createAnalysisResultsReader,
+} from "./attention-analysis-reader";
 import {
   ATTENTION_TEST_TIMEOUT,
   authFor,
@@ -9,21 +12,21 @@ import {
   OTHER_APP_ID,
   QA_ENVIRONMENT_ID,
   repository,
-  seedOtherTenant,
   setupAttentionRollupFixture,
   statsOutput,
   USER_ID,
 } from "./attention-rollup-fixture";
+import { seedOtherOrganization } from "./attention-rollup-seeds";
 import { ids, NOW } from "./config-store-fixture-data";
 
 setupAttentionRollupFixture();
 
-describe("attention rollup tenant isolation", { timeout: ATTENTION_TEST_TIMEOUT }, () => {
+describe("attention rollup Organization isolation", { timeout: ATTENTION_TEST_TIMEOUT }, () => {
   it("never surfaces another Organization's Environments or reads its analysis", async () => {
-    // A second tenant with its own Organization, App, Environment and running
+    // A second Organization with its own Organization, App, Environment and running
     // Experiment, seeded with attention so any leak flips a flag rather than
     // matching the caller's own data.
-    const other = await seedOtherTenant(repository());
+    const other = await seedOtherOrganization(repository());
     const scopes: Array<{ appId: string; environmentId: string }> = [];
     const analysisResults: AnalysisResultsReader = {
       async read(scope) {
@@ -51,12 +54,12 @@ describe("attention rollup tenant isolation", { timeout: ATTENTION_TEST_TIMEOUT 
     expect(scopes.every((scope) => scope.appId === ids.appId)).toBe(true);
     expect(scopes.some((scope) => scope.environmentId === other.environmentId)).toBe(false);
 
-    // The same live credential must not reach the other tenant's App by asking.
-    const crossTenant = await app.request(`/apps/${other.appId}/attention-rollup`, {
+    // The same live credential must not reach the other Organization's App by asking.
+    const crossOrganization = await app.request(`/apps/${other.appId}/attention-rollup`, {
       headers: { authorization: "Bearer valid" },
     });
 
-    expect(crossTenant.status).toBe(403);
+    expect(crossOrganization.status).toBe(403);
     expect(scopes.some((scope) => scope.appId === other.appId)).toBe(false);
   });
 

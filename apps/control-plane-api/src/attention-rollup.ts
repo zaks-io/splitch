@@ -1,18 +1,24 @@
 import {
+  AppAttentionRollupResponseSchema,
   type EnvironmentAttentionRollup,
-  type ErrorResponse,
-  ErrorResponseSchema,
-  StatsOutputSchema,
   type StatsOutput,
 } from "@splitch/contracts";
-import {
-  guardrailBreached,
-  scopedAnalysisResultsRequest,
-  srmFiring,
-} from "@splitch/control-plane-sdk/panel-experiments";
+import { guardrailBreached, srmFiring } from "@splitch/control-plane-sdk/panel-experiments";
 import { appScope, envScope, type Repository } from "@splitch/db";
-import { renderError, type HandlerArgs } from "@splitch/worker-runtime";
+import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound } from "./app-environment-model";
+import {
+  type AnalysisResultsReader,
+  type AnalysisResultsScope,
+  AnalysisResultsUnavailableError,
+} from "./attention-analysis-reader";
+import {
+  analysisUnavailable,
+  ExperimentIntegrityError,
+  experimentIntegrityFault,
+  fanoutLimitExceeded,
+  forbidden,
+} from "./attention-rollup-errors";
 import { pathParam } from "./handler-input";
 
 /** Concurrent Analysis reads per rollup request, across all Environments. */
@@ -33,27 +39,6 @@ export const ANALYSIS_READ_LIMIT = 200;
  */
 export const ENVIRONMENT_FANOUT_LIMIT = 200;
 
-interface AnalysisResultsScope {
-  appId: string;
-  environmentId: string;
-  experimentId: string;
-  runId: string;
-}
-
-export interface AnalysisResultsReader {
-  read(scope: AnalysisResultsScope, actorId: string): Promise<StatsOutput | null>;
-}
-
-export const unavailableAnalysisResults: AnalysisResultsReader = {
-  async read() {
-    throw new AnalysisResultsUnavailableError("analysis results binding is unavailable");
-  },
-};
-
-interface FetcherLike {
-  fetch(request: Request): Promise<Response>;
-}
-
 interface AttentionRollupDeps {
   repo: Repository;
   analysisResults: AnalysisResultsReader;
@@ -68,6 +53,8 @@ export function makeAttentionRollupHandler(deps: AttentionRollupDeps) {
     try {
       return await rollupResponse(deps, appId, principal.id, requestId);
     } catch (cause) {
+      if (cause instanceof ExperimentIntegrityError)
+        return experimentIntegrityFault(cause, requestId);
       if (cause instanceof AnalysisResultsUnavailableError) return analysisUnavailable(requestId);
       throw cause;
     }
@@ -86,10 +73,22 @@ async function rollupResponse(
   actorId: string,
   requestId: string,
 ): Promise<Response> {
-  const environments = await deps.repo.identity.listEnvironments(appScope(appId));
+  // One row past the budget is all it takes to decide, so the read that enforces
+  // the bound is itself bounded: materializing every row first would be the same
+  // unbounded work the budget exists to refuse.
+  const environments = await deps.repo.identity.listEnvironments(appScope(appId), {
+    limit: ENVIRONMENT_FANOUT_LIMIT + 1,
+  });
   if (environments.length > ENVIRONMENT_FANOUT_LIMIT) {
+    // The bounded read proves the budget is blown but cannot say by how much, and
+    // an error that explains a refusal must not report a count it made up. One
+    // COUNT, only on the path that is already failing, buys the honest number.
     return fanoutLimitExceeded(
-      { appId, limit: ENVIRONMENT_FANOUT_LIMIT, environments: environments.length },
+      {
+        appId,
+        limit: ENVIRONMENT_FANOUT_LIMIT,
+        environments: await deps.repo.identity.countEnvironments(appScope(appId)),
+      },
       requestId,
     );
   }
@@ -109,7 +108,10 @@ async function rollupResponse(
   }
 
   const items = await rollupPlans(deps, plans, actorId);
-  return Response.json({ appId, items });
+  // We validate our own output: the SDK checks the far end of the wire, so without
+  // this a Worker-side shape bug reaches the Panel and every agent as a plausible
+  // 200. Parsing here makes our own fabrication fail loud instead (ADR-0036).
+  return Response.json(AppAttentionRollupResponseSchema.parse({ appId, items }));
 }
 
 interface EnvironmentPlan {
@@ -162,11 +164,7 @@ async function planEnvironment(
   return {
     environmentId,
     reads: experiments.map((experiment) => {
-      if (!experiment.liveRunId) {
-        throw new AnalysisResultsUnavailableError(
-          `running Experiment ${experiment.id} has no live Run`,
-        );
-      }
+      if (!experiment.liveRunId) throw new ExperimentIntegrityError(experiment.id);
       return { appId, environmentId, experimentId: experiment.id, runId: experiment.liveRunId };
     }),
   };
@@ -244,103 +242,4 @@ async function mapWithConcurrency<T, R>(
   await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, () => worker()));
   if (failure) throw failure.cause;
   return out;
-}
-
-export function createAnalysisResultsReader(fetcher: FetcherLike): AnalysisResultsReader {
-  return {
-    async read(scope, actorId) {
-      let response: Response;
-      try {
-        response = await fetcher.fetch(
-          scopedAnalysisResultsRequest({
-            operation: "experiment_results_post",
-            actorId,
-            ...scope,
-          }),
-        );
-      } catch (cause) {
-        throw new AnalysisResultsUnavailableError(cause);
-      }
-      return parseAnalysisResponse(response);
-    },
-  };
-}
-
-async function parseAnalysisResponse(response: Response): Promise<StatsOutput | null> {
-  if (!response.ok) {
-    const error = await safeError(response);
-    if (response.status === 404 && isMissingAnalysisResult(error)) return null;
-    throw new AnalysisResultsUnavailableError(error);
-  }
-  try {
-    return StatsOutputSchema.parse(await response.json());
-  } catch (cause) {
-    throw new AnalysisResultsUnavailableError(cause);
-  }
-}
-
-async function safeError(response: Response): Promise<ErrorResponse | { status: number }> {
-  try {
-    const parsed = ErrorResponseSchema.safeParse(await response.json());
-    if (parsed.success) return parsed.data;
-  } catch {
-    // The error is deliberately collapsed at this internal boundary.
-  }
-  return { status: response.status };
-}
-
-function isMissingAnalysisResult(
-  error: ErrorResponse | { status: number },
-): error is Extract<ErrorResponse, { code: "EXPERIMENT_NOT_FOUND" | "RUN_NOT_FOUND" }> {
-  return (
-    "code" in error && (error.code === "EXPERIMENT_NOT_FOUND" || error.code === "RUN_NOT_FOUND")
-  );
-}
-
-class AnalysisResultsUnavailableError extends Error {
-  constructor(readonly detail: unknown) {
-    super("analysis results unavailable");
-    this.name = "AnalysisResultsUnavailableError";
-  }
-}
-
-/**
- * `runningExperiments` is null when the Environment count alone was already over
- * budget: planning never ran, so no honest count of running Experiments exists.
- */
-function fanoutLimitExceeded(
-  details: { appId: string; limit: number; environments: number; runningExperiments?: number },
-  requestId: string,
-): Response {
-  const runningExperiments = details.runningExperiments ?? null;
-  const over =
-    runningExperiments === null
-      ? `${details.environments} Environments`
-      : `${runningExperiments} running Experiments`;
-  return renderError(
-    {
-      code: "ATTENTION_FANOUT_LIMIT_EXCEEDED",
-      message: `attention rollup spans ${over}, above the ${details.limit} limit; read attention per Environment instead`,
-      details: { ...details, runningExperiments, recommendedAction: "READ_PER_ENVIRONMENT" },
-    },
-    { requestId },
-  );
-}
-
-function analysisUnavailable(requestId: string): Response {
-  return renderError(
-    {
-      code: "SERVICE_UNAVAILABLE",
-      message: "analysis attention data is unavailable",
-      details: { retryAfterMs: 30_000 },
-    },
-    { requestId },
-  );
-}
-
-function forbidden(requestId: string): Response {
-  return renderError(
-    { code: "FORBIDDEN", message: "credential is not allowed for this App", details: {} },
-    { requestId },
-  );
 }

@@ -11,9 +11,9 @@ import { Hono } from "hono";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
 import {
   type AnalysisResultsReader,
-  makeAttentionRollupHandler,
   unavailableAnalysisResults,
-} from "./attention-rollup";
+} from "./attention-analysis-reader";
+import { makeAttentionRollupHandler } from "./attention-rollup";
 import type { ConfigStoreAccess } from "./config-store-do";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
