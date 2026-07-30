@@ -8,9 +8,9 @@ import {
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
 import {
+  McpDelegationReplayDurableObject,
   makeDurableMcpDelegationReplayGuard,
   makeMcpDelegationAuthResolver,
-  McpDelegationReplayDurableObject,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
 import { authJwksUri } from "./auth-jwks-config";
@@ -26,14 +26,10 @@ import type { ControlPlaneApiEnv } from "./env";
 import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
+import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
 import { makePanelDelegationReplayStore } from "./panel-identity-replay";
 import { makePanelSessionAccess } from "./panel-session-access";
-<<<<<<< HEAD
-import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
-=======
-import { panelExperimentsList } from "./panel-experiments";
 import { panelSettingsRead } from "./panel-settings";
->>>>>>> 5bcadec (feat(control-panel): add environment settings (SPL-115))
 import { rateLimiterForTarget } from "./rate-limit";
 import { makePanelSessionStore, makeSessionStore } from "./session-store";
 
