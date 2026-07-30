@@ -60,15 +60,23 @@ function recoveryMessages(
   return messages;
 }
 
+const APPROVAL_RECOVERY_ACTIONS = new Set<RecommendedAction>([
+  "REVIEW_APPROVAL_REQUEST",
+  "REFRESH_AND_REPROPOSE",
+  "RETRY_REVIEW",
+]);
+
+function isApprovalRecoveryAction(
+  action: RecommendedAction,
+): action is "REVIEW_APPROVAL_REQUEST" | "REFRESH_AND_REPROPOSE" | "RETRY_REVIEW" {
+  return APPROVAL_RECOVERY_ACTIONS.has(action);
+}
+
 function recoverySteps(
   action: RecommendedAction,
   details: Record<string, unknown>,
 ): readonly McpPromptMessage[] {
-  if (
-    action === "REVIEW_APPROVAL_REQUEST" ||
-    action === "REFRESH_AND_REPROPOSE" ||
-    action === "RETRY_REVIEW"
-  ) {
+  if (isApprovalRecoveryAction(action)) {
     return approvalRecoverySteps(action, details);
   }
 

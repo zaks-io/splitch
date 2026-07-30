@@ -30,6 +30,7 @@ export const recommendedActions = [
   "REFRESH_AND_REPROPOSE",
   "RETRY_REVIEW",
   "CHOOSE_DIFFERENT_SLUG",
+  "READ_PER_ENVIRONMENT",
 ] as const;
 
 export const RecommendedActionSchema = z.enum(recommendedActions);
@@ -296,6 +297,17 @@ const errorMembers = [
       runId: z.string(),
       idType: z.string(),
       targetingKeyHash: z.string(),
+    }),
+  ),
+  member(
+    "ATTENTION_FANOUT_LIMIT_EXCEEDED",
+    z.object({
+      appId: z.string(),
+      limit: z.number().int(),
+      environments: z.number().int(),
+      // null when the Environment count alone was over budget, so no plan ran.
+      runningExperiments: z.number().int().nullable(),
+      recommendedAction: z.literal("READ_PER_ENVIRONMENT"),
     }),
   ),
 

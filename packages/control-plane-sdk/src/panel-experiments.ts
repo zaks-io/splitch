@@ -1,4 +1,4 @@
-import type { AnalysisResultsEnvelope } from "@splitch/contracts";
+import type { AnalysisResultsEnvelope, StatsOutput } from "@splitch/contracts";
 import { AnalysisResultsEnvelopeSchema, ErrorResponseSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";

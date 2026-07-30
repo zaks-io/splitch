@@ -59,6 +59,7 @@ export const errorCodes = [
 
   // Analysis-state signals
   "MULTIPLE_VARIANT_CONFLICT",
+  "ATTENTION_FANOUT_LIMIT_EXCEEDED",
 
   // System
   "RATE_LIMITED",
