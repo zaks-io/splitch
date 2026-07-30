@@ -70,6 +70,7 @@ describe("PatchExperimentRequestSchema", () => {
 
   it("parses assignment draft edits for Worker taxonomy enforcement", () => {
     const req = PatchExperimentRequestSchema.parse({
+      stageForNextRun: true,
       allocation: { control: 50, treatment: 50 },
       salt: "next-salt",
       variantSet: [variantControl, variantTreatment],
@@ -79,6 +80,7 @@ describe("PatchExperimentRequestSchema", () => {
       activationMetricId: "metric_activation",
     });
     expect(req.salt).toBe("next-salt");
+    expect(req.stageForNextRun).toBe(true);
     expect(req.variantSet).toHaveLength(2);
   });
 
@@ -101,9 +103,12 @@ describe("ExperimentResponseSchema", () => {
       key: "checkout-test",
       flagId: "flag_1",
       name: "Checkout test",
+      owner: "user_1",
+      tags: ["checkout", "q3"],
       status: "draft",
       targetingKey: "userId",
       targetingKeyType: "user",
+      activationMetricId: null,
       confidenceLevel: 0.95,
       defaultVariantId: "var_1",
       metrics: [{ metricId: "m_1" }],

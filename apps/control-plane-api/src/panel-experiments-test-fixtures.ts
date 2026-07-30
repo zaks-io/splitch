@@ -21,6 +21,8 @@ export function experimentRow(ids: PanelExperimentIds) {
     name: "Checkout Test",
     description: null,
     hypothesis: null,
+    owner: null,
+    tags: "[]",
     status: "running",
     targetingKeyField: "userId",
     targetingKeyType: "user",
@@ -52,6 +54,7 @@ export function runRow(ids: PanelExperimentIds, runNumber: 1 | 2) {
     status: latest ? "running" : "ended",
     targetingKeyField: "userId",
     targetingKeyType: "user",
+    activationMetricId: null,
     salt: latest ? "salt-2" : "salt-1",
     allocation: JSON.stringify(
       latest ? { control: 70, treatment: 30 } : { control: 50, treatment: 50 },

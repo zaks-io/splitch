@@ -109,6 +109,8 @@ export const ExperimentSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   hypothesis: z.string().optional(),
+  owner: z.string().optional(),
+  tags: z.array(z.string()).optional(),
   status: ExperimentStatusSchema,
   targetingKey: z.string(),
   targetingKeyType: z.string(),
@@ -149,6 +151,7 @@ export const RunSchema = z.object({
   environmentId: z.string(),
   status: RunStatusSchema,
   targetingKeyType: z.string(),
+  activationMetricId: z.string().nullable().optional(),
   salt: z.string(),
   // Each share is a percentage in [0, 100] (matching flag-side PercentageRollout),
   // and the shares must sum to 100. Bounding per-share rejects nonsensical splits

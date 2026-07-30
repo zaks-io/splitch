@@ -62,8 +62,9 @@ committed the canonical mutation.
 **KV propagation:** ~60s until all POPs see the new `live_run_id` (accepted; self-healing per
 ADR-0009). The Worker returns the new Run immediately; the edge catches up within the window.
 
-**Assignment edits accumulate on the draft; Start is the single reset point.** N edits = one
-sample reset, not N.
+**Assignment edits accumulate on the draft; Start is the single reset point.** While a Run is
+running, the PATCH must explicitly carry `stageForNextRun: true`; an ordinary assignment PATCH is
+refused with `RUN_FROZEN`. N staged edits = one sample reset, not N.
 
 ### running → ended: `POST /apps/{app_id}/envs/{environment_id}/runs/{run_id}/end`
 

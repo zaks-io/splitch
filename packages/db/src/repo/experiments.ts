@@ -61,6 +61,8 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
           | "name"
           | "description"
           | "hypothesis"
+          | "owner"
+          | "tags"
           | "status"
           | "targetingKeyField"
           | "targetingKeyType"

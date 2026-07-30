@@ -94,7 +94,7 @@ test.describe("Control Panel Experiments", () => {
     await expect(page).toHaveURL(
       /\/experiments\/experiment_checkout_dev_e2e\/runs\/run_checkout_dev_e2e\/setup$/u,
     );
-    await expect(page.getByText("The frozen assignment configuration for Run 2")).toBeVisible();
+    await expect(page.getByText("frozen for Run 2", { exact: false })).toBeVisible();
 
     const secondUser = await browser.newContext();
     await secondUser.addCookies([

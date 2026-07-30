@@ -71,6 +71,8 @@ export const PatchExperimentRequestSchema = z
     name: z.string().optional(),
     description: z.string().optional(),
     hypothesis: z.string().optional(),
+    owner: z.string().optional(),
+    tags: z.array(z.string()).optional(),
     flagId: z.string().optional(),
     targetingKey: z.string().optional(),
     targetingKeyType: z.string().optional(),
@@ -85,6 +87,9 @@ export const PatchExperimentRequestSchema = z
     conversionWindowMs: z.number().optional(),
     dimensions: z.array(z.string()).optional(),
     confidenceLevel: z.number().optional(),
+    // Assignment fields remain frozen on a running Run. This explicit marker
+    // stages them for the next Run instead of pretending to edit the live one.
+    stageForNextRun: z.literal(true).optional(),
   })
   .strict();
 export type PatchExperimentRequest = z.infer<typeof PatchExperimentRequestSchema>;

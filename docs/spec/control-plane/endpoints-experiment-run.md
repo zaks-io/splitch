@@ -62,6 +62,12 @@ Returns: Experiment including `live_run_id` (null if no running Run), draft allo
 }
 ```
 
+While a Run is running, assignment fields require `stageForNextRun: true` in the PATCH body. The
+marker is the explicit distinction between configuring the next Run and attempting to mutate the
+live Run. Without it, the Worker returns `409 RUN_FROZEN`; with it, omitted draft fields are carried
+forward from the running Run's frozen snapshot and Start remains the only operation that ends the
+current Run.
+
 **Measurement-config fields** (apply to live Run in place, no reset):
 
 ```

@@ -12,7 +12,7 @@ import {
   runningRunForExperiment,
   validateMetricRefs,
 } from "./experiment-handler-shared";
-import { type ExperimentRow, json } from "./experiment-model";
+import { type ExperimentRow, json, jsonArray, jsonObject, type RunRow } from "./experiment-model";
 import { validationError } from "./flag-definition-errors";
 import { pathParam } from "./handler-input";
 
@@ -70,7 +70,7 @@ export async function validateRunningPatch(
   const runningRun = await runningRunForExperiment(deps.repo, scope, experiment);
   if (!runningRun) return null;
   const assignmentFields = presentFields(body, ASSIGNMENT_FIELDS);
-  if (assignmentFields.length > 0) {
+  if (assignmentFields.length > 0 && body.stageForNextRun !== true) {
     return runFrozen(runningRun.id, assignmentFields, "PATCH_EXPERIMENT", requestId);
   }
   return body.confidenceLevel !== undefined
@@ -84,6 +84,7 @@ export async function prepareUpdatePatch(
   experiment: ExperimentRow,
   body: Record<string, unknown>,
   args: HandlerArgs<unknown>,
+  runningRun?: RunRow | null,
 ): Promise<{ ok: true; value: ExperimentPatch } | { ok: false; response: Response }> {
   const metricIssue = await validateMetricRefs(deps.repo, scope.appId, body, args.requestId);
   if (metricIssue) return { ok: false, response: metricIssue };
@@ -97,7 +98,13 @@ export async function prepareUpdatePatch(
   if (!flagConfig.ok) return flagConfig;
   return {
     ok: true,
-    value: experimentPatchFromBody(body, flagConfig.defaultVariantId, deps, args.principal.id),
+    value: experimentPatchFromBody(
+      body,
+      flagConfig.defaultVariantId,
+      deps,
+      args.principal.id,
+      runningRun,
+    ),
   };
 }
 
@@ -128,15 +135,20 @@ function experimentPatchFromBody(
   defaultVariantId: string | null,
   deps: ExperimentDeps,
   userId: string,
+  runningRun?: RunRow | null,
 ): ExperimentPatch {
   const patch: ExperimentPatch = {
-    ...draftPatch(body),
+    ...(runningRun && body.stageForNextRun === true
+      ? nextRunDraftPatch(body, runningRun)
+      : draftPatch(body)),
     updatedAt: nowIso(deps),
     updatedBy: userId,
   };
   applyPatchField(patch, body, "name", "name");
   applyPatchField(patch, body, "description", "description");
   applyPatchField(patch, body, "hypothesis", "hypothesis");
+  applyPatchField(patch, body, "owner", "owner");
+  applyPatchField(patch, body, "tags", "tags", json);
   applyPatchField(patch, body, "flagId", "flagId");
   applyPatchField(patch, body, "targetingKey", "targetingKeyField");
   applyPatchField(patch, body, "targetingKeyType", "targetingKeyType");
@@ -148,6 +160,22 @@ function experimentPatchFromBody(
   applyPatchField(patch, body, "dimensions", "dimensions", json);
   if (body.flagId !== undefined) patch.defaultVariantId = defaultVariantId;
   return patch;
+}
+
+function nextRunDraftPatch(body: Record<string, unknown>, runningRun: RunRow): ExperimentPatch {
+  const staged = draftPatch(body);
+  return {
+    draftAllocation:
+      staged.draftAllocation ??
+      json(jsonObject<Record<string, number>>(runningRun.allocation) ?? {}),
+    // A fresh salt preserves the new Run boundary even when allocation is the
+    // only visible change. An explicit salt override still wins.
+    draftSalt: body.salt === undefined ? null : String(body.salt),
+    draftTargetingRules: staged.draftTargetingRules ?? json(jsonArray(runningRun.targetingRules)),
+    // A frozen Run contains resolved Targeting Rules, not Segment references.
+    // Carry the resolved snapshot forward rather than silently widening traffic.
+    draftSegmentIds: staged.draftSegmentIds ?? json([]),
+  };
 }
 
 function applyPatchField(

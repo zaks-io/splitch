@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ExperimentTabStub } from "#components/experiment-detail";
+import { ExperimentSetup } from "#components/experiment-setup";
 import { useExperimentDetailRouteData } from "#lib/experiment-detail-route";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/$experimentId/setup")({
@@ -8,5 +8,12 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/$exper
 
 function ExperimentSetupTab() {
   const route = useExperimentDetailRouteData();
-  return <ExperimentTabStub run={route.data.runs[0]} tab="setup" />;
+  return (
+    <ExperimentSetup
+      appId={route.scope.appId}
+      data={route.data}
+      environmentId={route.scope.environmentId}
+      selectedRun={route.data.runs[0]}
+    />
+  );
 }

@@ -14,11 +14,14 @@ export interface PanelExperimentRun {
   status: "ended" | "running";
   targetingKey: string;
   targetingKeyType: string;
+  activationMetricId: string | null;
   salt: string;
   allocation: Record<string, number>;
   controlVariantId: string;
   variantsJson: string;
   targetingRulesJson: string;
+  decisionMetricIds: string[];
+  decisionGuardrailMetricIds: string[];
   configHash: string;
   startedAt: string;
   endedAt: string | null;
@@ -30,27 +33,51 @@ export interface PanelExperimentRun {
 export interface PanelExperimentDetail {
   id: string;
   name: string;
+  description: string;
+  owner: string;
+  tags: string[];
   status: "draft" | "running" | "ended";
   flagId: string;
+  targetingKey: string;
+  targetingKeyType: string;
+  activationMetricId: string | null;
+  conversionWindowMs: number;
+  metricIds: string[];
+  guardrailMetricIds: string[];
+  draftAllocation: Record<string, number> | null;
+  draftSalt: string | null;
+  draftTargetingRulesJson: string | null;
   liveRunId: string | null;
 }
 
 export interface PanelExperimentDetailOutput {
   experiment: PanelExperimentDetail;
   flag: { id: string; name: string };
+  metrics: Array<{ id: string; name: string }>;
+  variants: Array<{ id: string; name: string }>;
   runs: PanelExperimentRun[];
 }
 
 export function parsePanelExperimentDetailOutput(input: unknown) {
-  if (!isObject(input) || !isObject(input.flag) || !Array.isArray(input.runs)) {
+  if (
+    !isObject(input) ||
+    !isObject(input.flag) ||
+    !Array.isArray(input.metrics) ||
+    !Array.isArray(input.variants) ||
+    !Array.isArray(input.runs)
+  ) {
     return { success: false as const };
   }
   const experiment = parsePanelExperimentDetail(input.experiment);
+  const metrics = input.metrics.map(parseMetric);
+  const variants = input.variants.map(parseMetric);
   const runs = input.runs.map(parsePanelExperimentRun);
   if (
     experiment === null ||
     !isNonEmptyString(input.flag.id) ||
     !isNonEmptyString(input.flag.name) ||
+    metrics.some((metric) => metric === null) ||
+    variants.some((variant) => variant === null) ||
     runs.some((run) => run === null)
   ) {
     return { success: false as const };
@@ -60,6 +87,8 @@ export function parsePanelExperimentDetailOutput(input: unknown) {
     data: {
       experiment,
       flag: { id: input.flag.id, name: input.flag.name },
+      metrics,
+      variants,
       runs,
     } as PanelExperimentDetailOutput,
   };
@@ -76,11 +105,14 @@ function parsePanelExperimentRun(input: unknown): PanelExperimentRun | null {
     !isRunStatus(input.status) ||
     !isNonEmptyString(input.targetingKey) ||
     !isNonEmptyString(input.targetingKeyType) ||
+    !isNullableString(input.activationMetricId) ||
     !isNonEmptyString(input.salt) ||
     !isAllocation(input.allocation) ||
     !isNonEmptyString(input.controlVariantId) ||
     !isVariantArrayJson(input.variantsJson) ||
     !isJsonArray(input.targetingRulesJson) ||
+    !isStringArray(input.decisionMetricIds) ||
+    !isStringArray(input.decisionGuardrailMetricIds) ||
     !isNonEmptyString(input.configHash) ||
     !isNonEmptyString(input.startedAt) ||
     !isOptionalString(input.endedAt) ||
@@ -98,11 +130,14 @@ function parsePanelExperimentRun(input: unknown): PanelExperimentRun | null {
     status: input.status,
     targetingKey: input.targetingKey,
     targetingKeyType: input.targetingKeyType,
+    activationMetricId: input.activationMetricId,
     salt: input.salt,
     allocation: input.allocation,
     controlVariantId: input.controlVariantId,
     variantsJson: input.variantsJson,
     targetingRulesJson: input.targetingRulesJson,
+    decisionMetricIds: input.decisionMetricIds,
+    decisionGuardrailMetricIds: input.decisionGuardrailMetricIds,
     configHash: input.configHash,
     startedAt: input.startedAt,
     endedAt: input.endedAt,
@@ -117,8 +152,21 @@ function parsePanelExperimentDetail(input: unknown): PanelExperimentDetail | nul
     !isObject(input) ||
     !isNonEmptyString(input.id) ||
     !isNonEmptyString(input.name) ||
+    typeof input.description !== "string" ||
+    typeof input.owner !== "string" ||
+    !isStringArray(input.tags) ||
     !isLifecycle(input.status) ||
     !isNonEmptyString(input.flagId) ||
+    !isNonEmptyString(input.targetingKey) ||
+    !isNonEmptyString(input.targetingKeyType) ||
+    !isNullableString(input.activationMetricId) ||
+    typeof input.conversionWindowMs !== "number" ||
+    !Number.isFinite(input.conversionWindowMs) ||
+    !isStringArray(input.metricIds) ||
+    !isStringArray(input.guardrailMetricIds) ||
+    !isNullableAllocation(input.draftAllocation) ||
+    !isNullableString(input.draftSalt) ||
+    !isNullableJsonArray(input.draftTargetingRulesJson) ||
     !(input.liveRunId === null || isNonEmptyString(input.liveRunId))
   ) {
     return null;
@@ -126,10 +174,28 @@ function parsePanelExperimentDetail(input: unknown): PanelExperimentDetail | nul
   return {
     id: input.id,
     name: input.name,
+    description: input.description,
+    owner: input.owner,
+    tags: input.tags,
     status: input.status,
     flagId: input.flagId,
+    targetingKey: input.targetingKey,
+    targetingKeyType: input.targetingKeyType,
+    activationMetricId: input.activationMetricId,
+    conversionWindowMs: input.conversionWindowMs,
+    metricIds: input.metricIds,
+    guardrailMetricIds: input.guardrailMetricIds,
+    draftAllocation: input.draftAllocation,
+    draftSalt: input.draftSalt,
+    draftTargetingRulesJson: input.draftTargetingRulesJson,
     liveRunId: input.liveRunId,
   };
+}
+
+function parseMetric(input: unknown): { id: string; name: string } | null {
+  return isObject(input) && isNonEmptyString(input.id) && isNonEmptyString(input.name)
+    ? { id: input.id, name: input.name }
+    : null;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -144,6 +210,8 @@ function isOptionalString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
+const isNullableString = isOptionalString;
+
 function isRunStatus(value: unknown): value is PanelExperimentRun["status"] {
   return value === "ended" || value === "running";
 }
@@ -153,6 +221,10 @@ function isAllocation(value: unknown): value is Record<string, number> {
     isObject(value) &&
     Object.values(value).every((share) => typeof share === "number" && Number.isFinite(share))
   );
+}
+
+function isNullableAllocation(value: unknown): value is Record<string, number> | null {
+  return value === null || isAllocation(value);
 }
 
 function isVariantArrayJson(value: unknown): value is string {
@@ -172,6 +244,14 @@ function isJsonArray(value: unknown): value is string {
   } catch {
     return false;
   }
+}
+
+function isNullableJsonArray(value: unknown): value is string | null {
+  return value === null || isJsonArray(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 function isLifecycle(value: unknown): value is PanelExperimentDetail["status"] {

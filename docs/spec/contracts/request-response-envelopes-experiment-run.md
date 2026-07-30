@@ -86,6 +86,8 @@ frozen at Run Start and immutable for the Run's life (see [storage-schemas-d1-ex
 - `name`
 - `description`
 - `hypothesis`
+- `owner`
+- `tags`
 
 **Status transitions**:
 
@@ -95,24 +97,31 @@ with `VALIDATION_ERROR`; callers end a Run with `POST .../runs/{run_id}/end`.
 
 `PatchExperimentRequest` field set (all optional, Worker validates taxonomy on each):
 
-| Field                | Required | Edit type        |
-| -------------------- | -------- | ---------------- |
-| `name`               | no       | non-material     |
-| `description`        | no       | non-material     |
-| `hypothesis`         | no       | non-material     |
-| `targetingKey`       | no       | assignment       |
-| `targetingKeyType`   | no       | assignment       |
-| `activationMetricId` | no       | assignment       |
-| `allocation`         | no       | draft assignment |
-| `salt`               | no       | draft assignment |
-| `variantSet`         | no       | draft assignment |
-| `targetingRules`     | no       | draft assignment |
-| `segmentIds`         | no       | draft assignment |
-| `metrics`            | no       | measurement      |
-| `guardrailMetrics`   | no       | measurement      |
-| `conversionWindowMs` | no       | measurement      |
-| `dimensions`         | no       | measurement      |
-| `confidenceLevel`    | no       | decision-locked  |
+| Field                | Required | Edit type                        |
+| -------------------- | -------- | -------------------------------- |
+| `name`               | no       | non-material                     |
+| `description`        | no       | non-material                     |
+| `hypothesis`         | no       | non-material                     |
+| `owner`              | no       | non-material                     |
+| `tags`               | no       | non-material                     |
+| `targetingKey`       | no       | assignment                       |
+| `targetingKeyType`   | no       | assignment                       |
+| `activationMetricId` | no       | assignment                       |
+| `allocation`         | no       | draft assignment                 |
+| `salt`               | no       | draft assignment                 |
+| `variantSet`         | no       | draft assignment                 |
+| `targetingRules`     | no       | draft assignment                 |
+| `segmentIds`         | no       | draft assignment                 |
+| `metrics`            | no       | measurement                      |
+| `guardrailMetrics`   | no       | measurement                      |
+| `conversionWindowMs` | no       | measurement                      |
+| `dimensions`         | no       | measurement                      |
+| `confidenceLevel`    | no       | decision-locked                  |
+| `stageForNextRun`    | no       | explicit next-Run staging marker |
+
+On a running Run, assignment fields without `stageForNextRun: true` return `RUN_FROZEN`. The marker
+does not weaken Run immutability: it writes only the Experiment's draft staging fields. Start still
+owns the atomic boundary that ends Run N and opens Run N+1.
 
 ---
 

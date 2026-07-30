@@ -14,9 +14,10 @@ import {
   scopedAnalysisResultsRequest,
   srmFiring,
 } from "@splitch/control-plane-sdk/panel-experiments";
+import type { MetricRef } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
-import { experimentResponse, jsonObject } from "./experiment-model";
+import { experimentResponse, jsonArray, jsonObject } from "./experiment-model";
 import { panelScopeAccessError } from "./panel-scope-access";
 
 interface PanelExperimentsDeps {
@@ -79,12 +80,15 @@ export async function panelExperimentDetail(
   if (accessError) return accessError;
 
   const scope = envScope(input.appId, input.environmentId);
-  const [row, flagRows, runRows] = await Promise.all([
-    deps.repo.experiments.getExperiment(scope, input.experimentId),
+  const row = await deps.repo.experiments.getExperiment(scope, input.experimentId);
+  if (!row) return experimentNotFound(requestId);
+  const [flagRows, metricRows, variantRows, flagConfig, runRows] = await Promise.all([
     deps.repo.flags.flags.findMany(appScope(input.appId)),
+    deps.repo.experiments.metrics.findMany(appScope(input.appId)),
+    deps.repo.flags.listVariants(appScope(input.appId), row.flagId),
+    deps.repo.flags.getFlagConfig(scope, row.flagId),
     deps.repo.experiments.listRunsForExperiment(scope, input.experimentId),
   ]);
-  if (!row) return experimentNotFound(requestId);
   const flagName = flagRows.find((flag) => flag.id === row.flagId)?.name;
   if (!flagName) throw new Error(`Experiment ${row.id} references a missing Flag`);
 
@@ -92,11 +96,25 @@ export async function panelExperimentDetail(
     experiment: {
       id: row.id,
       name: row.name,
+      description: row.description ?? "",
+      owner: row.owner ?? "",
+      tags: jsonArray<string>(row.tags),
       status: row.status,
       flagId: row.flagId,
+      targetingKey: row.targetingKeyField,
+      targetingKeyType: row.targetingKeyType,
+      activationMetricId: row.activationMetricId,
+      conversionWindowMs: row.conversionWindowMs,
+      metricIds: metricIds(row.metrics),
+      guardrailMetricIds: metricIds(row.guardrailMetrics),
+      draftAllocation: jsonObject<Record<string, number>>(row.draftAllocation),
+      draftSalt: row.draftSalt,
+      draftTargetingRulesJson: row.draftTargetingRules,
       liveRunId: row.liveRunId,
     },
     flag: { id: row.flagId, name: flagName },
+    metrics: metricRows.map((metric) => ({ id: metric.id, name: metric.name })),
+    variants: availableVariants(variantRows, flagConfig?.availableVariantNames ?? "[]"),
     runs: runRows
       .sort((left, right) => right.runNumber - left.runNumber)
       .map((run) => ({
@@ -107,11 +125,14 @@ export async function panelExperimentDetail(
         status: run.status,
         targetingKey: run.targetingKeyField,
         targetingKeyType: run.targetingKeyType,
+        activationMetricId: run.activationMetricId,
         salt: run.salt,
         allocation: jsonObject<Record<string, number>>(run.allocation) ?? {},
         controlVariantId: run.controlVariantId,
         variantsJson: run.variantSet,
         targetingRulesJson: run.targetingRules,
+        decisionMetricIds: metricIds(run.decisionFamily),
+        decisionGuardrailMetricIds: metricIds(run.guardrailDecisions),
         configHash: run.configHash,
         startedAt: run.startedAt,
         endedAt: run.endedAt,
@@ -184,6 +205,20 @@ export async function panelExperimentResults(
     significance: experimentSignificanceDisplays(stats),
   };
   return Response.json(output);
+}
+
+function metricIds(raw: string): string[] {
+  return jsonArray<MetricRef>(raw).map((metric) => metric.metricId);
+}
+
+function availableVariants(
+  variants: Array<{ id: string; name: string }>,
+  availableVariantNames: string,
+) {
+  const available = new Set(jsonArray<string>(availableVariantNames));
+  return variants
+    .filter((variant) => available.has(variant.name))
+    .map((variant) => ({ id: variant.id, name: variant.name }));
 }
 
 async function runningHealth(

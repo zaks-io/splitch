@@ -2,6 +2,7 @@ import type { AnalysisResultsEnvelope, StatsOutput } from "@splitch/contracts";
 import { AnalysisResultsEnvelopeSchema, ErrorResponseSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
+import { createExperimentsClient } from "./experiments-client";
 import {
   type PanelExperimentDetailInput,
   type PanelExperimentDetailOutput,
@@ -66,6 +67,7 @@ export interface ScopedAnalysisIdentity {
 
 export function createPanelExperimentsClient(options: { fetch: typeof fetch; baseUrl?: string }) {
   const baseUrl = options.baseUrl ?? "https://control-plane.internal";
+  const mutations = createExperimentsClient({ fetch: options.fetch, baseUrl });
   return {
     async list(
       input: PanelExperimentsListInput,
@@ -115,6 +117,8 @@ export function createPanelExperimentsClient(options: { fetch: typeof fetch; bas
         },
       );
     },
+    update: mutations.update,
+    start: mutations.start,
   };
 }
 

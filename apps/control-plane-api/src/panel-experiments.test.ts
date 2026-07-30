@@ -200,8 +200,18 @@ function repository(
     },
     flags: {
       flags: { findMany: vi.fn(async () => [{ id: "flag_panel_list", name: "Checkout Flag" }]) },
+      listVariants: vi.fn(async () => [
+        { id: "variant_control", name: "control" },
+        { id: "variant_treatment", name: "treatment" },
+      ]),
+      getFlagConfig: vi.fn(async () => ({
+        availableVariantNames: JSON.stringify(["control", "treatment"]),
+      })),
     },
     experiments: {
+      metrics: {
+        findMany: vi.fn(async () => [{ id: "metric_signup", name: "Signup" }]),
+      },
       listExperiments: vi.fn(async () => [experimentRow(ids)]),
       getExperiment: vi.fn(async () => experimentRow(ids)),
       listRunsForExperiment: vi.fn(async () => [runRow(ids, 1), runRow(ids, 2)]),

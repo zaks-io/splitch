@@ -152,7 +152,7 @@ function insertRunStatement(
       INSERT INTO runs (
         id, app_id, environment_id, experiment_id, run_number, status,
         targeting_key_field, targeting_key_type, salt, allocation, variant_set, control_variant_id,
-        targeting_rules,
+        targeting_rules, activation_metric_id,
         confidence_level, decision_family, guardrail_decisions, config_hash,
         started_at, start_reason, created_at, created_by
       )
@@ -164,7 +164,7 @@ function insertRunStatement(
           WHERE app_id = ? AND environment_id = ? AND experiment_id = ?
         ),
         'running',
-        ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?
       WHERE EXISTS (SELECT 1 FROM experiments WHERE ${START_GUARD_SQL})
@@ -284,6 +284,7 @@ function insertRunParams(scope: EnvScope, input: StartRunInput): unknown[] {
     input.run.variantSet,
     input.expectedDraft.defaultVariantId,
     input.run.targetingRules,
+    input.run.activationMetricId ?? null,
     input.run.confidenceLevel,
     input.run.decisionFamily,
     input.run.guardrailDecisions,

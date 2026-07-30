@@ -125,7 +125,11 @@ async function updateExperiment(
   );
   if (guardError) return guardError;
 
-  const patch = await prepareUpdatePatch(deps, scope, context.experiment, body, args);
+  const runningRun =
+    body.stageForNextRun === true
+      ? await runningRunForExperiment(deps.repo, scope, context.experiment)
+      : null;
+  const patch = await prepareUpdatePatch(deps, scope, context.experiment, body, args, runningRun);
   if (!patch.ok) return patch.response;
 
   const updated = await deps.repo.experiments.updateExperiment(
@@ -195,6 +199,7 @@ async function startExperiment(
       id: `run_${randomHex(12)}`,
       targetingKeyField: experiment.targetingKeyField,
       targetingKeyType: experiment.targetingKeyType,
+      activationMetricId: experiment.activationMetricId,
       salt: prepared.value.salt,
       allocation: json(prepared.value.allocation),
       variantSet: json(prepared.value.variantSet),
