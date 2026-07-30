@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { LOCAL_E2E_SESSION_TOKEN } from "../../scripts/local-e2e-fixtures.mjs";
+import { waitForHydration } from "./hydration";
 import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
@@ -13,6 +14,7 @@ test.describe("per-Environment Flags", () => {
     page,
   }, testInfo) => {
     await page.goto("/acme-labs/checkout-api/dev/flags");
+    await waitForHydration(page);
 
     const row = page.locator("[data-flag-key='new-checkout']");
     await expect(row).toContainText("Enabled");
@@ -41,7 +43,7 @@ test.describe("per-Environment Flags", () => {
     const flagKey = `billing-refresh-${testInfo.retry}`;
     await page.goto("/acme-labs/billing-api/prod/flags");
 
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
     // The on/off pair is the zero-configuration preset: a new Flag opens ready
@@ -80,7 +82,7 @@ test.describe("per-Environment Flags", () => {
     const flagKey = `checkout-copy-${testInfo.retry}`;
     await page.goto("/acme-labs/billing-api/prod/flags");
 
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
     const catalog = dialog.getByTestId("variant-catalog");
@@ -123,6 +125,7 @@ test.describe("Flag detail", () => {
     page,
   }, testInfo) => {
     await page.goto("/acme-labs/checkout-api/dev/flags");
+    await waitForHydration(page);
     await page.locator("[data-flag-key='new-checkout']").getByRole("link").click();
     await expect(page).toHaveURL("/acme-labs/checkout-api/dev/flags/new-checkout");
 
@@ -204,7 +207,7 @@ test.describe("Flag detail", () => {
   }, testInfo) => {
     const flagKey = `detail-honest-${testInfo.retry}`;
     await page.goto("/acme-labs/billing-api/prod/flags");
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
 
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");

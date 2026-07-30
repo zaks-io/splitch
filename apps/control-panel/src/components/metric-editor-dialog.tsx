@@ -1,7 +1,8 @@
 import type { Metric } from "@splitch/contracts";
 import { Button } from "@splitch/ui/components/button";
 import { Dialog, DialogContent, DialogTrigger } from "@splitch/ui/components/dialog";
-import { useEffect, useState } from "react";
+import { useHydrated } from "#lib/use-hydrated";
+import { useState } from "react";
 import { MetricForm } from "./metric-form";
 
 export function MetricEditorDialog({
@@ -19,10 +20,8 @@ export function MetricEditorDialog({
   onDeleted: (metricId: string) => void | Promise<void>;
   onSaved: (metric: Metric) => void | Promise<void>;
 }) {
-  const [hydrated, setHydrated] = useState(false);
+  const hydrated = useHydrated();
   const [open, setOpen] = useState(false);
-
-  useEffect(() => setHydrated(true), []);
 
   async function saved(savedMetric: Metric) {
     setOpen(false);

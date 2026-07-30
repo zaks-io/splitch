@@ -4,8 +4,8 @@ import { LiveUpdatesClient } from "#components/live-updates-client";
 import { AppShellSwitchers } from "#components/app-shell-switcher";
 import type { ScopedLoaderContext } from "#lib/loader-context";
 import { scopedHref } from "#lib/app-shell-navigation";
+import { useHydrated } from "#lib/use-hydrated";
 import type { QueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
 
 type AppShellProps = {
   context: ScopedLoaderContext;
@@ -22,11 +22,10 @@ const sections = [
 ] as const;
 
 export function AppShell({ context, queryClient }: AppShellProps) {
-  const [isHydrated, setIsHydrated] = useState(false);
+  const isHydrated = useHydrated();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const rootHref = scopedHref(context.scope);
   const isOverview = pathname === rootHref || pathname === `${rootHref}/`;
-  useEffect(() => setIsHydrated(true), []);
 
   return (
     <div
