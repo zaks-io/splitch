@@ -2,6 +2,7 @@ import {
   ExperimentDecisionGateSchema,
   ExperimentSignificanceDisplaysSchema,
   ExperimentSrmDiagnosticsSchema,
+  FrozenControlIdentitySchema,
   StatsOutputSchema,
 } from "@splitch/contracts";
 import { z } from "zod";
@@ -26,8 +27,13 @@ export const PanelExperimentResultsOutputSchema = z
     runId: z.string().min(1),
     runNumber: z.number().int().min(1),
     runStatus: z.enum(["running", "ended"]),
-    /** The baseline Variant every lift in `stats` is measured against. */
-    controlVariant: z.string().min(1),
+    /**
+     * The baseline every lift in `stats` is measured against, resolved from what
+     * the Run froze. `unresolvable` is a real state: a Run backfilled by SPL-184
+     * may carry a Control that is absent from its own frozen Variant set, and no
+     * arm may be substituted for it.
+     */
+    control: FrozenControlIdentitySchema,
     stats: StatsOutputSchema,
     srm: ExperimentSrmDiagnosticsSchema,
     gate: ExperimentDecisionGateSchema,

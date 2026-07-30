@@ -1,4 +1,8 @@
-import type { ArmResult, ExperimentSignificanceDisplays } from "@splitch/contracts";
+import type {
+  ArmResult,
+  ExperimentSignificanceDisplays,
+  FrozenControlIdentity,
+} from "@splitch/contracts";
 import { significanceKey } from "@splitch/contracts";
 import { type CiPlotDomain, ciPlotDomain, ciPlotTicks, ciPlotX } from "#lib/ci-plot-scale";
 import {
@@ -10,6 +14,7 @@ import {
   VALUE_WIDTH,
 } from "./experiment-results-ci-plot-geometry";
 import { ArmRow, BaselineRow } from "./experiment-results-ci-plot-rows";
+import { baselineLabel, baselineVariant } from "./experiment-results-control";
 
 /**
  * Per-arm lift with its Confidence Interval, rendered for every Run state.
@@ -22,13 +27,15 @@ import { ArmRow, BaselineRow } from "./experiment-results-ci-plot-rows";
 
 export function ExperimentResultsCiPlot({
   results,
-  controlVariant,
+  control,
   significance,
 }: {
   results: ArmResult[];
-  controlVariant: string;
+  control: FrozenControlIdentity;
   significance: ExperimentSignificanceDisplays;
 }) {
+  const baseline = baselineVariant(control);
+  const label = baselineLabel(control);
   if (results.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
@@ -50,11 +57,11 @@ export function ExperimentResultsCiPlot({
   return (
     <figure className="m-0">
       <figcaption className="sr-only">
-        Relative lift and confidence interval per arm, against the {controlVariant} baseline.
+        Relative lift and confidence interval per arm, against the {label} baseline.
       </figcaption>
       <div className="overflow-x-auto">
         <svg
-          aria-label={`Relative lift with confidence intervals against the ${controlVariant} baseline`}
+          aria-label={`Relative lift with confidence intervals against the ${label} baseline`}
           className="h-auto w-full min-w-[44rem]"
           role="img"
           viewBox={`0 0 ${totalWidth} ${height}`}
@@ -69,7 +76,7 @@ export function ExperimentResultsCiPlot({
             y2={TOP_PAD + results.length * ROW_HEIGHT}
           />
           {results.map((result, index) =>
-            result.variant === controlVariant ? (
+            result.variant === baseline ? (
               <BaselineRow
                 index={index}
                 key={`${result.metric_id}:${result.variant}`}
@@ -92,11 +99,11 @@ export function ExperimentResultsCiPlot({
             x={LABEL_WIDTH + PLOT_WIDTH / 2}
             y={height - 5}
           >
-            relative lift vs {controlVariant} (%)
+            relative lift vs {label} (%)
           </text>
         </svg>
       </div>
-      <Legend controlVariant={controlVariant} />
+      <Legend control={control} />
     </figure>
   );
 }
@@ -131,7 +138,7 @@ function Ticks({ domain, height }: { domain: CiPlotDomain; height: number }) {
   );
 }
 
-function Legend({ controlVariant }: { controlVariant: string }) {
+function Legend({ control }: { control: FrozenControlIdentity }) {
   return (
     <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-muted-foreground text-xs">
       <li className="flex items-center gap-2">
@@ -139,7 +146,9 @@ function Legend({ controlVariant }: { controlVariant: string }) {
           aria-hidden="true"
           className="inline-block size-2.5 rounded-full bg-[color:var(--arm-control)]"
         />
-        Baseline ({controlVariant}) at zero lift by definition
+        {control.state === "frozen"
+          ? `Baseline (${control.variant}) at zero lift by definition`
+          : "Baseline unidentified, so no arm is drawn at zero lift"}
       </li>
       <li className="flex items-center gap-2">
         <span

@@ -156,14 +156,15 @@ export type StatsOutput = z.infer<typeof StatsOutputSchema>;
 /**
  * What the Analysis Worker answers a /results read with.
  *
- * `run_id` and `control_variant` name the Run and the baseline the numbers were
- * actually computed against, so a caller never has to look either up. That is
- * the whole guarantee today: `control_variant` is resolved from the Experiment's
- * current default Variant at read time, NOT from anything the Run froze, so a
- * historical Run's arms can still be relabelled by an edit to that default.
- * SPL-184 adds the immutable `runs.control_variant_id` this field should come
- * from; until it lands, treat the value as current configuration, not
- * provenance (ADR-0002, ADR-0003).
+ * `run_id` is provenance and is checked: a read whose answer names a different
+ * Run than the one asked for is refused rather than relabelled (ADR-0006).
+ *
+ * `control_variant` is not. It reaches this Worker from the `analysis_run_inputs`
+ * pipe, which resolves it at read time, so it describes current configuration.
+ * A caller that needs the Run's actual baseline resolves it from the immutable
+ * `runs.control_variant_id` inside that Run's own frozen Variant set instead
+ * (`resolveFrozenControlIdentity`, ADR-0002, ADR-0003), which is what the
+ * Control Panel Results read does.
  */
 export const AnalysisResultsEnvelopeSchema = z
   .object({

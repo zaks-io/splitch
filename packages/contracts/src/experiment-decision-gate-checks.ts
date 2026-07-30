@@ -1,9 +1,10 @@
+import type { FrozenControlIdentity } from "./experiment-control-identity";
+import { decisionValidMembers, lockedFamilyMembers, named } from "./experiment-decision-family";
 import type {
   DecisionGateCheck,
   ExperimentSrmDiagnostics,
   SrmSignal,
 } from "./experiment-decision-gate";
-import { decisionValidMembers, lockedFamilyMembers, named } from "./experiment-decision-family";
 import { formatPValue } from "./p-value-format";
 import type { StatsOutput, StatsResultStatus } from "./stats-result-contract";
 
@@ -58,6 +59,27 @@ export function srmIsFiring(signal: {
 }): boolean {
   if (signal.isMismatch !== null) return signal.isMismatch;
   return signal.pValue !== null && signal.pValue < SRM_MISMATCH_P;
+}
+
+export function controlIdentityCheck(control: FrozenControlIdentity): DecisionGateCheck {
+  if (control.state === "frozen") {
+    return {
+      id: "control_identity",
+      status: "pass",
+      title: "Control arm is the one the Run froze",
+      detail: `Every lift is measured against "${control.variant}", the Control this Run froze at Start. Editing the Experiment's default Variant since then did not move it.`,
+    };
+  }
+  const froze =
+    control.frozenVariantNames.length > 0
+      ? `The Run froze ${control.frozenVariantNames.map((name) => `"${name}"`).join(", ")}.`
+      : "The Run's frozen Variant set could not be read.";
+  return {
+    id: "control_identity",
+    status: "fail",
+    title: "Control arm cannot be identified",
+    detail: `This Run's frozen Control Variant ${control.variantId} is not one of its own Variants (${control.reason}). ${froze} Nothing can be promoted against a baseline this Run never recorded, and guessing one would invent provenance. Start a new Run to get a Control that is frozen and validated.`,
+  };
 }
 
 export function exposureSrmCheck(signal: SrmSignal, isMismatch: boolean | null): DecisionGateCheck {

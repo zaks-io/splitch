@@ -27,6 +27,8 @@ export {
   RecommendedActionSchema,
   recommendedActions,
 } from "./errors";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
+export * from "./experiment-rigor";
 export type { HealthResponse, PlatformTarget } from "./health-response";
 export {
   createHealthResponse,
@@ -57,75 +59,6 @@ export {
   RunStatusSchema,
   runStatuses,
 } from "./leaf-schemas-experiment";
-export {
-  ActivationRowSchema,
-  CupedCovariateRowSchema,
-  CupedCovariateSourceSchema,
-  DecisionFamilyMemberSchema,
-  DimensionInputSchema,
-  DedupeExposureRowSchema,
-  PerEntityMetricRowSchema,
-  PrePeriodRowSchema,
-  StatsInputSchema,
-} from "./stats-input-contract";
-export type {
-  ActivationRow,
-  CupedCovariateRow,
-  CupedCovariateSource,
-  DecisionFamilyMember,
-  DimensionInput,
-  DedupeExposureRow,
-  PerEntityMetricRow,
-  PrePeriodRow,
-  StatsInput,
-} from "./stats-input-contract";
-// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
-export * from "./experiment-rigor";
-export {
-  ArmResultSchema,
-  CupedAttributeSourceSchema,
-  AnalysisResultsEnvelopeSchema,
-  cupedAttributeSources,
-  CupedMethodSchema,
-  cupedMethods,
-  DimensionClassSchema,
-  dimensionClasses,
-  DimensionResultSchema,
-  GuardrailResultSchema,
-  HealthMetricsSchema,
-  SrmResultSchema,
-  StatsOutputSchema,
-  StatsResultStatusSchema,
-  statsResultStatuses,
-  WinsorizeCapSchema,
-  VarianceTechniquesSchema,
-} from "./stats-result-contract";
-export type {
-  AnalysisResultsEnvelope,
-  ArmResult,
-  CupedAttributeSource,
-  CupedMethod,
-  DimensionClass,
-  DimensionResult,
-  GuardrailResult,
-  HealthMetrics,
-  SrmResult,
-  StatsEngine,
-  StatsOutput,
-  StatsResultStatus,
-  WinsorizeCap,
-  VarianceTechniques,
-} from "./stats-result-contract";
-export {
-  ConditionOperatorSchema,
-  ConditionSchema,
-  FlagSchema,
-  PercentageRolloutSchema,
-  SegmentSchema,
-  TargetingRuleSchema,
-  VariantSchema,
-  conditionOperators,
-} from "./leaf-schemas-flag";
 export type {
   Condition,
   ConditionOperator,
@@ -332,6 +265,7 @@ export {
   StatsInputSchema,
 } from "./stats-input-contract";
 export type {
+  AnalysisResultsEnvelope,
   ArmResult,
   CupedAttributeSource,
   CupedMethod,
@@ -347,6 +281,7 @@ export type {
   WinsorizeCap,
 } from "./stats-result-contract";
 export {
+  AnalysisResultsEnvelopeSchema,
   ArmResultSchema,
   CupedAttributeSourceSchema,
   CupedMethodSchema,

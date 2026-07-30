@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  evaluateExperimentDecisionGate,
-  experimentSrmDiagnostics,
-  srmTierFor,
-} from "./experiment-decision-gate";
-import { armResult, check, stats } from "./experiment-decision-gate-test-fixtures";
+import { experimentSrmDiagnostics, srmTierFor } from "./experiment-decision-gate";
+import { armResult, check, gateFor, stats } from "./experiment-decision-gate-test-fixtures";
 import type { ArmResult } from "./stats-result-contract";
 
 describe("srmTierFor", () => {
@@ -28,7 +24,7 @@ describe("srmTierFor", () => {
   it("does not call a mismatch the engine denied confirmed, and agrees with the gate", () => {
     expect(srmTierFor(0.0009, false)).toBe("possible_imbalance");
 
-    const gate = evaluateExperimentDecisionGate(
+    const gate = gateFor(
       stats({ srm: { ...stats().srm, srm_p_value: 0.0009, srm_is_mismatch: false } }),
     );
     expect(gate.blockedBy).not.toContain("exposure_srm");
@@ -73,14 +69,14 @@ describe("experimentSrmDiagnostics", () => {
 
 describe("evaluateExperimentDecisionGate", () => {
   it("allows the ship decision when every applicable check passes", () => {
-    const gate = evaluateExperimentDecisionGate(stats());
+    const gate = gateFor(stats());
     expect(gate.shipAllowed).toBe(true);
     expect(gate.blockedBy).toEqual([]);
     expect(gate.enforcedBy).toBe("control-plane-api");
   });
 
   it("blocks and cites the exposure SRM check when SRM is firing", () => {
-    const gate = evaluateExperimentDecisionGate(
+    const gate = gateFor(
       stats({
         srm: {
           srm_p_value: 0.0000001,
@@ -100,7 +96,7 @@ describe("evaluateExperimentDecisionGate", () => {
   // The spec blocks a firing SRM. The caution band warns, and blocking on it
   // would hold a stricter bar than the stats engine itself does.
   it("warns on the caution band without blocking the decision", () => {
-    const gate = evaluateExperimentDecisionGate(
+    const gate = gateFor(
       stats({ srm: { ...stats().srm, srm_p_value: 0.004, srm_is_mismatch: false } }),
     );
     expect(gate.shipAllowed).toBe(true);
@@ -110,7 +106,7 @@ describe("evaluateExperimentDecisionGate", () => {
 
   // The engine's verdict is the authority, not a threshold re-applied here.
   it("blocks whenever the engine says SRM is firing, whatever the p-value reads", () => {
-    const gate = evaluateExperimentDecisionGate(
+    const gate = gateFor(
       stats({ srm: { ...stats().srm, srm_p_value: 0.004, srm_is_mismatch: true } }),
     );
     expect(gate.blockedBy).toEqual(["exposure_srm"]);
@@ -118,7 +114,7 @@ describe("evaluateExperimentDecisionGate", () => {
 
   it("does not block on either side of the caution boundary when the engine reports no mismatch", () => {
     for (const srmP of [0.0011, 0.009, 0.011]) {
-      const gate = evaluateExperimentDecisionGate(
+      const gate = gateFor(
         stats({ srm: { ...stats().srm, srm_p_value: srmP, srm_is_mismatch: false } }),
       );
       expect(gate.blockedBy).toEqual([]);
@@ -126,13 +122,13 @@ describe("evaluateExperimentDecisionGate", () => {
   });
 
   it("marks activation checks not applicable rather than passing them on no evidence", () => {
-    const gate = evaluateExperimentDecisionGate(stats());
+    const gate = gateFor(stats());
     expect(check(gate, "activated_srm").status).toBe("not_applicable");
     expect(check(gate, "activation_balance").status).toBe("not_applicable");
   });
 
   it("never lets a Guardrail breach alone block the decision", () => {
-    const gate = evaluateExperimentDecisionGate(
+    const gate = gateFor(
       stats({
         guardrail_results: [
           {
@@ -155,9 +151,7 @@ describe("evaluateExperimentDecisionGate", () => {
 
 describe("evaluateExperimentDecisionGate readiness", () => {
   it("blocks and names the starved Metric when the result is underpowered", () => {
-    const gate = evaluateExperimentDecisionGate(
-      stats({ arm_results: [armResult({ status: "insufficient_n" })] }),
-    );
+    const gate = gateFor(stats({ arm_results: [armResult({ status: "insufficient_n" })] }));
     expect(gate.blockedBy).toEqual(["underpowered"]);
     expect(check(gate, "underpowered").detail).toContain("checkout-conversion / treatment");
   });
@@ -169,25 +163,21 @@ describe("evaluateExperimentDecisionGate readiness", () => {
    * shippable while it is still collecting.
    */
   it("refuses a fixed-horizon Run that is still collecting, which the engine reports as running", () => {
-    const gate = evaluateExperimentDecisionGate(
-      stats({ arm_results: [armResult({ status: "running" })] }),
-    );
+    const gate = gateFor(stats({ arm_results: [armResult({ status: "running" })] }));
     expect(gate.shipAllowed).toBe(false);
     expect(gate.blockedBy).toEqual(["underpowered"]);
     expect(check(gate, "underpowered").title).toBe("Run has not reached its locked sample size");
   });
 
   it("refuses an estimator error rather than reporting it as a sample-size problem", () => {
-    const gate = evaluateExperimentDecisionGate(
-      stats({ arm_results: [armResult({ status: "error" })] }),
-    );
+    const gate = gateFor(stats({ arm_results: [armResult({ status: "error" })] }));
     expect(gate.shipAllowed).toBe(false);
     expect(gate.blockedBy).toEqual(["engine_status"]);
     expect(check(gate, "engine_status").detail).toContain("checkout-conversion / treatment");
   });
 
   it("refuses a starved denominator, which the engine reports separately from insufficient_n", () => {
-    const gate = evaluateExperimentDecisionGate(
+    const gate = gateFor(
       stats({ arm_results: [armResult({ status: "insufficient_denominator" })] }),
     );
     expect(gate.blockedBy).toEqual(["underpowered"]);
@@ -205,21 +195,19 @@ describe("evaluateExperimentDecisionGate readiness", () => {
       ["error", false],
     ]);
     for (const [status, expected] of shippable) {
-      const gate = evaluateExperimentDecisionGate(stats({ arm_results: [armResult({ status })] }));
+      const gate = gateFor(stats({ arm_results: [armResult({ status })] }));
       expect(gate.shipAllowed, `status ${status}`).toBe(expected);
     }
   });
 
   it("blocks on a low-n warning even when no arm reports a starved status", () => {
-    const gate = evaluateExperimentDecisionGate(
-      stats({ health: { ...stats().health, low_n_warning: true } }),
-    );
+    const gate = gateFor(stats({ health: { ...stats().health, low_n_warning: true } }));
     expect(gate.blockedBy).toEqual(["underpowered"]);
   });
 
   // "Large enough to decide" would be a claim about zero Metrics.
   it("does not claim a sample-size pass when there is no decision-valid result to size", () => {
-    const gate = evaluateExperimentDecisionGate(stats({ arm_results: [] }));
+    const gate = gateFor(stats({ arm_results: [] }));
 
     expect(check(gate, "underpowered").status).toBe("not_applicable");
     expect(check(gate, "underpowered").detail).not.toContain("enough");
@@ -228,7 +216,7 @@ describe("evaluateExperimentDecisionGate readiness", () => {
   });
 
   it("blocks when the Run has no FDR-corrected decision-valid result", () => {
-    const gate = evaluateExperimentDecisionGate(
+    const gate = gateFor(
       stats({ arm_results: [armResult({ in_bh_family: false, exploratory: true })] }),
     );
     expect(gate.blockedBy).toEqual(["decision_valid_result"]);
@@ -236,7 +224,7 @@ describe("evaluateExperimentDecisionGate readiness", () => {
 
   it("blocks on both activation guardrails for a gated Experiment", () => {
     const base = stats();
-    const gate = evaluateExperimentDecisionGate(
+    const gate = gateFor(
       stats({
         srm: { ...base.srm, activated_srm_p_value: 0.00001, activated_srm_mismatch: true },
         health: {
@@ -252,7 +240,7 @@ describe("evaluateExperimentDecisionGate readiness", () => {
 
   it("cites every failing check rather than stopping at the first", () => {
     const base = stats();
-    const gate = evaluateExperimentDecisionGate(
+    const gate = gateFor(
       stats({
         srm: { ...base.srm, srm_p_value: 0.0000001, srm_is_mismatch: true },
         arm_results: [armResult({ status: "insufficient_n" })],

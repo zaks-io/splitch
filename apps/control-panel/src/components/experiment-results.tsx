@@ -1,5 +1,6 @@
 import type { PanelExperimentResultsOutput } from "@splitch/control-plane-sdk/panel-experiments";
 import { ExperimentResultsCiPlot } from "./experiment-results-ci-plot";
+import { baselineLabel, ExperimentResultsControlIntegrity } from "./experiment-results-control";
 import { ExperimentResultsDecision } from "./experiment-results-decision";
 import { ExperimentResultsGuardrails } from "./experiment-results-guardrails";
 import { ExperimentResultsMetricsTable } from "./experiment-results-metrics-table";
@@ -30,21 +31,23 @@ export function ExperimentResults({ results }: { results: PanelExperimentResults
         </p>
       </header>
 
+      <ExperimentResultsControlIntegrity control={results.control} />
+
       <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
         <h3 className="font-semibold text-base text-foreground">Lift by arm</h3>
         <p className="mt-1 mb-4 max-w-prose text-muted-foreground text-sm">
-          Relative lift against {results.controlVariant}, with an always-valid confidence sequence.
-          Checking mid-Run is safe: the interval already accounts for continuous peeking.
+          Relative lift against {baselineLabel(results.control)}, with an always-valid confidence
+          sequence. Checking mid-Run is safe: the interval already accounts for continuous peeking.
         </p>
         <ExperimentResultsCiPlot
-          controlVariant={results.controlVariant}
+          control={results.control}
           results={results.stats.arm_results}
           significance={results.significance}
         />
       </div>
 
       <ExperimentResultsMetricsTable
-        controlVariant={results.controlVariant}
+        control={results.control}
         results={results.stats.arm_results}
         significance={results.significance}
       />

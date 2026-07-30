@@ -1,4 +1,4 @@
-import type { StatsOutput } from "@splitch/contracts";
+import type { FrozenControlIdentity, StatsOutput } from "@splitch/contracts";
 import {
   evaluateExperimentDecisionGate,
   experimentSignificanceDisplays,
@@ -153,6 +153,11 @@ export function modestLiftStats(): StatsOutput {
   };
 }
 
+/** The Control the fixture Run froze, resolvable unless a case overrides it. */
+function frozenControl(): FrozenControlIdentity {
+  return { state: "frozen", variantId: "variant_control", variant: "control" };
+}
+
 /** Mirrors the Worker: gate and srm derived once, then transported as data. */
 export function resultsFixture(
   stats: StatsOutput,
@@ -162,10 +167,10 @@ export function resultsFixture(
     runId: "run_2",
     runNumber: 2,
     runStatus: "running",
-    controlVariant: "control",
+    control: frozenControl(),
     stats,
     srm: experimentSrmDiagnostics(stats),
-    gate: evaluateExperimentDecisionGate(stats),
+    gate: evaluateExperimentDecisionGate(stats, overrides.control ?? frozenControl()),
     significance: experimentSignificanceDisplays(stats),
     ...overrides,
   };

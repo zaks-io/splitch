@@ -3,6 +3,7 @@ import {
   experimentSignificanceDisplays,
   experimentSrmDiagnostics,
   lockedFamilyMembers,
+  resolveFrozenControlIdentity,
 } from "@splitch/contracts";
 import {
   type PanelExperimentHealth,
@@ -14,7 +15,7 @@ import {
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
-import { experimentResponse, jsonArray, jsonObject } from "./experiment-model";
+import { experimentResponse, jsonObject } from "./experiment-model";
 
 interface PanelExperimentsDeps {
   repo: Repository;
@@ -161,20 +162,23 @@ export async function panelExperimentResults(
     run.id,
   );
 
-  // The baseline is whatever the Analysis Worker computed against, echoed back
-  // rather than re-derived here, so the Panel and the numbers cannot disagree.
-  // It is not yet provenance: upstream still resolves it from the Experiment's
-  // current default Variant, so editing that default relabels a historical Run's
-  // arms. SPL-184 freezes it on the Run and this read then inherits the fix.
+  // Provenance, not current configuration: the baseline comes from the Run's own
+  // immutable control_variant_id resolved inside the Variant set that same Run
+  // froze (SPL-184, ADR-0002). Reading the Experiment's default Variant here
+  // instead would relabel a historical Run's arms whenever somebody edits it.
+  // The Analysis envelope carries its own control_variant, which upstream still
+  // resolves at read time; it is validated on arrival but deliberately not the
+  // label, because a read-time value cannot describe a frozen Run.
+  const control = resolveFrozenControlIdentity(run.controlVariantId, run.variantSet);
   const stats = results.stats;
   const output: PanelExperimentResultsOutput = {
     runId: run.id,
     runNumber: run.runNumber,
     runStatus: run.status === "ended" ? "ended" : "running",
-    controlVariant: results.control_variant,
+    control,
     stats,
     srm: experimentSrmDiagnostics(stats),
-    gate: evaluateExperimentDecisionGate(stats),
+    gate: evaluateExperimentDecisionGate(stats, control),
     significance: experimentSignificanceDisplays(stats),
   };
   return Response.json(output);

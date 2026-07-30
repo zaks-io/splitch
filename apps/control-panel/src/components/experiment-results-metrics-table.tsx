@@ -1,10 +1,12 @@
 import type {
   ArmResult,
   ExperimentSignificanceDisplays,
+  FrozenControlIdentity,
   SignificanceDisplay,
 } from "@splitch/contracts";
 import { formatPValue, significanceKey } from "@splitch/contracts";
 import { Badge } from "@splitch/ui/components/badge";
+import { baselineVariant } from "./experiment-results-control";
 import { formatInterval, formatLift } from "./experiment-results-format";
 
 /**
@@ -16,14 +18,15 @@ import { formatInterval, formatLift } from "./experiment-results-format";
 
 export function ExperimentResultsMetricsTable({
   results,
-  controlVariant,
+  control,
   significance,
 }: {
   results: ArmResult[];
-  controlVariant: string;
+  control: FrozenControlIdentity;
   significance: ExperimentSignificanceDisplays;
 }) {
   if (results.length === 0) return null;
+  const baseline = baselineVariant(control);
   return (
     <section aria-labelledby="results-table-heading" className="grid gap-2">
       <h3 className="font-semibold text-base text-foreground" id="results-table-heading">
@@ -49,7 +52,7 @@ export function ExperimentResultsMetricsTable({
           <tbody>
             {results.map((result) => (
               <Row
-                controlVariant={controlVariant}
+                baseline={baseline}
                 key={`${result.metric_id}:${result.variant}`}
                 result={result}
                 significance={significance}
@@ -76,14 +79,15 @@ export function ExperimentResultsMetricsTable({
  */
 function Row({
   result,
-  controlVariant,
+  baseline,
   significance,
 }: {
   result: ArmResult;
-  controlVariant: string;
+  /** Null when the Run's frozen Control could not be resolved: no row is the baseline. */
+  baseline: string | null;
   significance: ExperimentSignificanceDisplays;
 }) {
-  const isBaseline = result.variant === controlVariant;
+  const isBaseline = result.variant === baseline;
   return (
     <tr className="border-border border-t">
       <td className="px-4 py-2 font-mono text-foreground text-xs">{result.metric_id}</td>

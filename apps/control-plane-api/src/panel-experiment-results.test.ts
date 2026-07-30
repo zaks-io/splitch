@@ -1,4 +1,5 @@
 import {
+  type PanelExperimentResultsOutput,
   parsePanelExperimentResultsOutput,
   SCOPED_SERVICE_IDENTITY_HEADER,
 } from "@splitch/control-plane-sdk/panel-experiments";
@@ -132,14 +133,39 @@ describe("panel Experiment Results read", () => {
     expect(analysis).not.toHaveBeenCalled();
   });
 
-  // Only claims what this read can enforce: the label is the Analysis Worker's,
-  // not one this Worker looked up for itself. Whether that value is frozen
-  // provenance is upstream's problem and is still open (SPL-184).
-  it("echoes the Analysis Worker's Control label instead of re-deriving one", async () => {
+  // The Analysis envelope's own label is read-time configuration, so it must not
+  // be able to move the Run's baseline. The frozen column is the only source.
+  it("ignores the Analysis Worker's Control label in favour of the Run's frozen one", async () => {
     const analysis = analysisReturning(statsOutput(), { control_variant: "legacy_checkout" });
     const response = await results(analysis, { runId: PREVIOUS_RUN_ID });
 
-    expect(await response.json()).toMatchObject({ controlVariant: "legacy_checkout" });
+    expect(await response.json()).toMatchObject({
+      control: { state: "frozen", variantId: "variant_control", variant: "control" },
+    });
+  });
+
+  it("names an unresolvable frozen Control and blocks the decision on it", async () => {
+    // Shaped like the SPL-184 backfill: a Control copied from the Experiment's
+    // default that this Run's own frozen Variant set never held.
+    const legacy = { ...runRow(ids, 1), controlVariantId: "variant_from_a_later_edit" };
+    const response = await results(
+      analysisReturning(statsOutput()),
+      { runId: PREVIOUS_RUN_ID },
+      repository({ runs: [legacy, runRow(ids, 2)] }),
+    );
+    const body = (await response.json()) as PanelExperimentResultsOutput;
+
+    expect(response.status).toBe(200);
+    expect(body.control).toEqual({
+      state: "unresolvable",
+      variantId: "variant_from_a_later_edit",
+      reason: "absent_from_frozen_variant_set",
+      frozenVariantNames: ["control", "treatment"],
+    });
+    expect(body.gate.shipAllowed).toBe(false);
+    expect(body.gate.blockedBy).toContain("control_identity");
+    // The numbers are still served: rigor is enforced on the decision.
+    expect(body.stats.arm_results).toHaveLength(1);
   });
 
   it("emits a payload the Panel contract accepts", async () => {

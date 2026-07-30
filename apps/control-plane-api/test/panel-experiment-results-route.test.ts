@@ -1,10 +1,4 @@
-import { env } from "cloudflare:workers";
-import {
-  CONTROL_PANEL_DELEGATION_HEADER,
-  issueControlPanelDelegation,
-} from "@splitch/control-plane-sdk/control-panel-identity";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { ControlPlaneApiEnv } from "../src/env.js";
 import {
   createExperimentDraft,
   experimentFixture,
@@ -13,8 +7,8 @@ import {
   startExperiment,
   type StartResponse,
 } from "../src/experiment-run-test-fixture.js";
-import { SignedControlPanelEntrypoint } from "../src/index.js";
 import { analysisEnvelope, statsOutput } from "../src/panel-experiments-test-fixtures.js";
+import { analysisReturning, callPanelResults } from "./panel-results-request.js";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings.js";
 
 /**
@@ -27,14 +21,6 @@ import { makePoolBindings as makeLocalBindings } from "./pool-bindings.js";
  * `ScopedAnalysisError` into an HTTP refusal was removed, and the suite would
  * still be green.
  */
-const AUDIENCE = "https://cp.splitch.test";
-const DELEGATION_SECRET = "test-control-panel-delegation-secret-1234";
-const OWNER = "user_flag_definition_owner";
-const testCtx = {
-  waitUntil() {},
-  passThroughOnException() {},
-} as unknown as ExecutionContext;
-
 let fixture: { appId: string; environmentId: string; experimentId: string; runId: string };
 
 beforeAll(async () => {
@@ -59,8 +45,9 @@ beforeAll(async () => {
 
 describe("panel Experiment Results route refusals", () => {
   it("answers a Run-provenance mismatch with a permanent refusal", async () => {
-    const response = await callResults(
+    const response = await callPanelResults(
       analysisReturning(Response.json(analysisEnvelope("run_somewhere_else", statsOutput()))),
+      fixture,
     );
 
     await expectRefusal(response, { status: 500, code: "INTERNAL_SERVER_ERROR" });
@@ -69,20 +56,21 @@ describe("panel Experiment Results route refusals", () => {
   // The Worker states whether waiting can help. Classifying on the HTTP status
   // alone would file this permanent integrity failure under "try again shortly".
   it("keeps a typed permanent failure permanent when it arrives as a 503", async () => {
-    const response = await callResults(
+    const response = await callPanelResults(
       analysisReturning(
         Response.json(
           { code: "INTERNAL_SERVER_ERROR", message: "run provenance mismatch", details: {} },
           { status: 503 },
         ),
       ),
+      fixture,
     );
 
     await expectRefusal(response, { status: 500, code: "INTERNAL_SERVER_ERROR" });
   });
 
   it("keeps a typed transient failure retryable when it arrives as a 500", async () => {
-    const response = await callResults(
+    const response = await callPanelResults(
       analysisReturning(
         Response.json(
           {
@@ -93,6 +81,7 @@ describe("panel Experiment Results route refusals", () => {
           { status: 500 },
         ),
       ),
+      fixture,
     );
 
     const body = await expectRefusal(response, { status: 503, code: "SERVICE_UNAVAILABLE" });
@@ -102,8 +91,9 @@ describe("panel Experiment Results route refusals", () => {
   // With no typed body there is nothing to poll on, so advertising a retry would
   // turn a loud failure into a quiet wait.
   it("refuses an untyped upstream failure permanently", async () => {
-    const response = await callResults(
+    const response = await callPanelResults(
       analysisReturning(Response.json({ unexpected: true }, { status: 500 })),
+      fixture,
     );
 
     await expectRefusal(response, { status: 500, code: "INTERNAL_SERVER_ERROR" });
@@ -119,39 +109,4 @@ async function expectRefusal(
   expect(body.code).toBe(expected.code);
   if (expected.status !== 503) expect(body.details).not.toHaveProperty("retryAfterMs");
   return body;
-}
-
-function analysisReturning(response: Response): Fetcher {
-  return { fetch: async () => response.clone() } as unknown as Fetcher;
-}
-
-async function callResults(analysis: Fetcher): Promise<Response> {
-  const request = new Request(`${AUDIENCE}/control-panel/experiments/results`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      appId: fixture.appId,
-      environmentId: fixture.environmentId,
-      experimentId: fixture.experimentId,
-      runId: fixture.runId,
-    }),
-  });
-  request.headers.set(
-    CONTROL_PANEL_DELEGATION_HEADER,
-    await issueControlPanelDelegation(
-      request,
-      { id: "experiments_results" },
-      OWNER,
-      DELEGATION_SECRET,
-      { sessionExpiresAt: Math.floor(Date.now() / 1000) + 3600 },
-    ),
-  );
-
-  const entrypoint = new SignedControlPanelEntrypoint(testCtx, {
-    ...env,
-    CONTROL_PLANE_ORIGIN: AUDIENCE,
-    CONTROL_PANEL_DELEGATION_SECRET: DELEGATION_SECRET,
-    ANALYSIS_API: analysis,
-  } as ControlPlaneApiEnv);
-  return entrypoint.fetch(request);
 }

@@ -1,7 +1,9 @@
 import { z } from "zod";
+import type { FrozenControlIdentity } from "./experiment-control-identity";
 import {
   activatedSrmCheck,
   activationBalanceCheck,
+  controlIdentityCheck,
   decisionValidCheck,
   engineStatusCheck,
   exposureSrmCheck,
@@ -27,6 +29,7 @@ export const srmTiers = ["clean", "possible_imbalance", "confirmed"] as const;
 export const SrmTierSchema = z.enum(srmTiers);
 
 export const decisionGateCheckIds = [
+  "control_identity",
   "exposure_srm",
   "activated_srm",
   "activation_balance",
@@ -143,9 +146,13 @@ export function experimentSrmDiagnostics(stats: StatsOutput): ExperimentSrmDiagn
   };
 }
 
-export function evaluateExperimentDecisionGate(stats: StatsOutput): ExperimentDecisionGate {
+export function evaluateExperimentDecisionGate(
+  stats: StatsOutput,
+  control: FrozenControlIdentity,
+): ExperimentDecisionGate {
   const srm = experimentSrmDiagnostics(stats);
   const checks: DecisionGateCheck[] = [
+    controlIdentityCheck(control),
     exposureSrmCheck(srm.exposure, stats.srm.srm_is_mismatch),
     activatedSrmCheck(srm.activated, stats.srm.activated_srm_mismatch),
     activationBalanceCheck(srm.activationBalance, stats.health.activation_balance_mismatch),

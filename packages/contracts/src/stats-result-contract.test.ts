@@ -224,7 +224,9 @@ describe("StatsEngine", () => {
  * `control_variant` were emitted but invisible to callers, so every client had
  * to re-derive the baseline for itself and could disagree with the numbers it
  * was labelling. Declaring them does not make `control_variant` frozen
- * provenance; SPL-184 is what will.
+ * provenance: upstream resolves it at read time. A caller that needs the Run's
+ * real baseline resolves the Run's immutable `control_variant_id` inside that
+ * same Run's frozen Variant set (`resolveFrozenControlIdentity`).
  */
 describe("declared /results response contract", () => {
   const envelope = { run_id: "run_1", control_variant: "control", stats: statsOutput };

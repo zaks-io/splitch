@@ -4,8 +4,18 @@
  * Kept in one place so the gate tests and the dimension-slice tests assert
  * against the same payload shape rather than two drifting hand-rolled ones.
  */
-import type { evaluateExperimentDecisionGate } from "./experiment-decision-gate";
+import type { FrozenControlIdentity } from "./experiment-control-identity";
+import { evaluateExperimentDecisionGate } from "./experiment-decision-gate";
 import type { ArmResult, StatsOutput } from "./stats-result-contract";
+
+/** A Control the Run really froze, so cases exercise one variable at a time. */
+function frozenControl(): FrozenControlIdentity {
+  return { state: "frozen", variantId: "variant_control", variant: "control" };
+}
+
+export function gateFor(stats: StatsOutput, control: FrozenControlIdentity = frozenControl()) {
+  return evaluateExperimentDecisionGate(stats, control);
+}
 
 const varianceTechniques: ArmResult["variance_techniques"] = {
   winsorized: false,
@@ -65,7 +75,7 @@ export function stats(overrides: Partial<StatsOutput> = {}): StatsOutput {
   };
 }
 
-export function check(output: ReturnType<typeof evaluateExperimentDecisionGate>, id: string) {
+export function check(output: ReturnType<typeof gateFor>, id: string) {
   const found = output.checks.find((candidate) => candidate.id === id);
   if (!found) throw new Error(`gate is missing check ${id}`);
   return found;

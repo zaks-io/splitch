@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { evaluateExperimentDecisionGate } from "./experiment-decision-gate";
-import { armResult, check, stats } from "./experiment-decision-gate-test-fixtures";
+import { armResult, check, gateFor, stats } from "./experiment-decision-gate-test-fixtures";
 import type { DimensionResult } from "./stats-result-contract";
+
 // (docs/spec/stats/dimension-slicing.md), so readiness has to read both.
 describe("evaluateExperimentDecisionGate dimension slices", () => {
   function dimension(overrides: Partial<DimensionResult> = {}): DimensionResult {
@@ -20,15 +20,13 @@ describe("evaluateExperimentDecisionGate dimension slices", () => {
   }
 
   it("allows a decision carried entirely by a Primary Dimension slice", () => {
-    const gate = evaluateExperimentDecisionGate(
-      stats({ arm_results: [], dimension_results: [dimension()] }),
-    );
+    const gate = gateFor(stats({ arm_results: [], dimension_results: [dimension()] }));
     expect(gate.shipAllowed).toBe(true);
     expect(check(gate, "decision_valid_result").status).toBe("pass");
   });
 
   it("refuses to ignore an estimator failure inside a Primary Dimension slice", () => {
-    const gate = evaluateExperimentDecisionGate(
+    const gate = gateFor(
       stats({ dimension_results: [dimension({ arm_results: [armResult({ status: "error" })] })] }),
     );
     expect(gate.shipAllowed).toBe(false);
@@ -39,7 +37,7 @@ describe("evaluateExperimentDecisionGate dimension slices", () => {
   });
 
   it("leaves a Secondary Dimension out of the decision family entirely", () => {
-    const gate = evaluateExperimentDecisionGate(
+    const gate = gateFor(
       stats({
         arm_results: [],
         dimension_results: [
