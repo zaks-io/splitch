@@ -1,11 +1,11 @@
-import type { ArmResult } from "@splitch/contracts";
+import type {
+  ArmResult,
+  ExperimentSignificanceDisplays,
+  SignificanceDisplay,
+} from "@splitch/contracts";
+import { formatPValue, significanceKey } from "@splitch/contracts";
 import { Badge } from "@splitch/ui/components/badge";
-import {
-  formatInterval,
-  formatLift,
-  formatPValue,
-  significanceDisplay,
-} from "./experiment-results-format";
+import { formatInterval, formatLift } from "./experiment-results-format";
 
 /**
  * The table view of the same arms the plot draws, so identity and value are
@@ -17,9 +17,11 @@ import {
 export function ExperimentResultsMetricsTable({
   results,
   controlVariant,
+  significance,
 }: {
   results: ArmResult[];
   controlVariant: string;
+  significance: ExperimentSignificanceDisplays;
 }) {
   if (results.length === 0) return null;
   return (
@@ -50,6 +52,7 @@ export function ExperimentResultsMetricsTable({
                 controlVariant={controlVariant}
                 key={`${result.metric_id}:${result.variant}`}
                 result={result}
+                significance={significance}
               />
             ))}
           </tbody>
@@ -71,7 +74,15 @@ export function ExperimentResultsMetricsTable({
  * [−∞, +∞] and p 1.0 there reads as a wildly uncertain result instead of as
  * the anchor the plot correctly draws it as.
  */
-function Row({ result, controlVariant }: { result: ArmResult; controlVariant: string }) {
+function Row({
+  result,
+  controlVariant,
+  significance,
+}: {
+  result: ArmResult;
+  controlVariant: string;
+  significance: ExperimentSignificanceDisplays;
+}) {
   const isBaseline = result.variant === controlVariant;
   return (
     <tr className="border-border border-t">
@@ -105,7 +116,7 @@ function Row({ result, controlVariant }: { result: ArmResult; controlVariant: st
             {formatPValue(result.p_value)}
           </td>
           <td className="px-4 py-2">
-            <FamilyBadges result={result} />
+            <FamilyBadges result={result} significance={significance} />
           </td>
         </>
       )}
@@ -113,7 +124,13 @@ function Row({ result, controlVariant }: { result: ArmResult; controlVariant: st
   );
 }
 
-function FamilyBadges({ result }: { result: ArmResult }) {
+function FamilyBadges({
+  result,
+  significance,
+}: {
+  result: ArmResult;
+  significance: ExperimentSignificanceDisplays;
+}) {
   return (
     <span className="flex flex-wrap gap-1">
       <Badge variant={result.in_bh_family ? "secondary" : "outline"}>
@@ -121,7 +138,7 @@ function FamilyBadges({ result }: { result: ArmResult }) {
       </Badge>
       {result.decision_valid ? null : <Badge variant="outline">Not decision-valid</Badge>}
       {result.status === "ready" ? null : <Badge variant="outline">{statusLabel(result)}</Badge>}
-      <SignificanceBadge result={result} />
+      <SignificanceBadge display={significance[significanceKey(result)]} />
     </span>
   );
 }
@@ -131,9 +148,8 @@ function FamilyBadges({ result }: { result: ArmResult }) {
  * decided on a different scale than the one shown, both readings are reported
  * rather than silently reconciled (ADR-0014, ADR-0036).
  */
-function SignificanceBadge({ result }: { result: ArmResult }) {
-  const display = significanceDisplay(result);
-  if (display === "not_significant") return null;
+function SignificanceBadge({ display }: { display: SignificanceDisplay | undefined }) {
+  if (display === undefined || display === "not_significant") return null;
   if (display === "inconsistent") {
     return (
       <Badge

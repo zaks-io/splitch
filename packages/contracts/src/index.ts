@@ -79,29 +79,8 @@ export type {
   PrePeriodRow,
   StatsInput,
 } from "./stats-input-contract";
-export {
-  DecisionGateCheckIdSchema,
-  decisionGateCheckIds,
-  DecisionGateCheckSchema,
-  evaluateExperimentDecisionGate,
-  ExperimentDecisionGateSchema,
-  experimentSrmDiagnostics,
-  ExperimentSrmDiagnosticsSchema,
-  SrmDeviationSchema,
-  SrmSignalSchema,
-  srmTierFor,
-  srmTiers,
-  SrmTierSchema,
-} from "./experiment-decision-gate";
-export type {
-  DecisionGateCheck,
-  DecisionGateCheckId,
-  ExperimentDecisionGate,
-  ExperimentSrmDiagnostics,
-  SrmDeviation,
-  SrmSignal,
-  SrmTier,
-} from "./experiment-decision-gate";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
+export * from "./experiment-rigor";
 export {
   ArmResultSchema,
   CupedAttributeSourceSchema,

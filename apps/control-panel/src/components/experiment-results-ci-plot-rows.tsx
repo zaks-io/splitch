@@ -1,7 +1,7 @@
-import type { ArmResult } from "@splitch/contracts";
+import type { ArmResult, SignificanceDisplay } from "@splitch/contracts";
 import { type CiPlotDomain, ciBoundIsOpen, ciPlotX } from "#lib/ci-plot-scale";
 import { LABEL_WIDTH, PLOT_WIDTH, rowY, VALUE_X } from "./experiment-results-ci-plot-geometry";
-import { formatInterval, formatLift, significanceDisplay } from "./experiment-results-format";
+import { formatInterval, formatLift } from "./experiment-results-format";
 
 /**
  * One row of marks per arm. Colour encodes the arm's role and never its rank:
@@ -64,10 +64,12 @@ export function ArmRow({
   result,
   index,
   domain,
+  display,
 }: {
   result: ArmResult;
   index: number;
   domain: CiPlotDomain;
+  display: SignificanceDisplay | undefined;
 }) {
   const y = rowY(index);
   const openLower = ciBoundIsOpen(result.ci_lower);
@@ -79,10 +81,11 @@ export function ArmRow({
     result.relative_lift_pct === null
       ? null
       : LABEL_WIDTH + ciPlotX(result.relative_lift_pct, domain, PLOT_WIDTH);
-  // Filled only when the shown interval agrees with the engine's verdict. A
-  // filled dot on an interval that spans zero would assert a decision the
-  // picture contradicts (ADR-0014).
-  const decided = significanceDisplay(result) === "significant";
+  // Filled only when the Worker's significance verdict is an unqualified one.
+  // A filled dot on an interval that spans zero would assert a decision the
+  // picture contradicts (ADR-0014), and the surface never makes that call
+  // itself (ADR-0030).
+  const decided = display === "significant";
 
   return (
     <g>

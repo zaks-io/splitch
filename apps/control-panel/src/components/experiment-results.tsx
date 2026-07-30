@@ -39,12 +39,14 @@ export function ExperimentResults({ results }: { results: PanelExperimentResults
         <ExperimentResultsCiPlot
           controlVariant={results.controlVariant}
           results={results.stats.arm_results}
+          significance={results.significance}
         />
       </div>
 
       <ExperimentResultsMetricsTable
         controlVariant={results.controlVariant}
         results={results.stats.arm_results}
+        significance={results.significance}
       />
 
       <div className="grid gap-6 xl:grid-cols-2">

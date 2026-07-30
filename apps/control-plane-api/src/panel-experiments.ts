@@ -1,4 +1,8 @@
-import { evaluateExperimentDecisionGate, experimentSrmDiagnostics } from "@splitch/contracts";
+import {
+  evaluateExperimentDecisionGate,
+  experimentSignificanceDisplays,
+  experimentSrmDiagnostics,
+} from "@splitch/contracts";
 import {
   type PanelExperimentHealth,
   type PanelExperimentListItem,
@@ -168,6 +172,7 @@ export async function panelExperimentResults(
     stats,
     srm: experimentSrmDiagnostics(stats),
     gate: evaluateExperimentDecisionGate(stats),
+    significance: experimentSignificanceDisplays(stats),
   };
   return Response.json(output);
 }

@@ -3,7 +3,9 @@ import type {
   ExperimentSrmDiagnostics,
   SrmSignal,
 } from "./experiment-decision-gate";
-import type { ArmResult, StatsOutput, StatsResultStatus } from "./stats-result-contract";
+import { decisionValidMembers, lockedFamilyMembers, named } from "./experiment-decision-family";
+import { formatPValue } from "./p-value-format";
+import type { StatsOutput, StatsResultStatus } from "./stats-result-contract";
 
 /**
  * The individual readiness checks behind the ship-decision gate.
@@ -16,7 +18,7 @@ import type { ArmResult, StatsOutput, StatsResultStatus } from "./stats-result-c
 /** Statsig-style caution band: noisy enough to watch, not to condemn. */
 export const SRM_CAUTION_P = 0.01;
 /** SRM chi-square hard threshold (docs/spec/stats/srm-and-health.md). */
-export const SRM_MISMATCH_P = 0.001;
+const SRM_MISMATCH_P = 0.001;
 
 /**
  * How far a Metric result is from supporting a decision.
@@ -50,7 +52,10 @@ function classifyStatus(status: StatsResultStatus): StatusClass {
  * threshold the engine already applied would let this module quietly hold a
  * different bar than the stats engine does.
  */
-function srmIsFiring(signal: { pValue: number | null; isMismatch: boolean | null }): boolean {
+export function srmIsFiring(signal: {
+  pValue: number | null;
+  isMismatch: boolean | null;
+}): boolean {
   if (signal.isMismatch !== null) return signal.isMismatch;
   return signal.pValue !== null && signal.pValue < SRM_MISMATCH_P;
 }
@@ -164,8 +169,10 @@ export function activationBalanceCheck(
  * as merely "underpowered" would suggest waiting fixes it.
  */
 export function engineStatusCheck(stats: StatsOutput): DecisionGateCheck {
-  const decisionValid = decisionValidResults(stats);
-  const errored = decisionValid.filter((result) => classifyStatus(result.status) === "errored");
+  const decisionValid = decisionValidMembers(stats);
+  const errored = decisionValid.filter(
+    (member) => classifyStatus(member.result.status) === "errored",
+  );
   if (decisionValid.length === 0) {
     return {
       id: "engine_status",
@@ -191,7 +198,7 @@ export function engineStatusCheck(stats: StatsOutput): DecisionGateCheck {
 }
 
 export function underpoweredCheck(stats: StatsOutput): DecisionGateCheck {
-  const decisionValid = decisionValidResults(stats);
+  const decisionValid = decisionValidMembers(stats);
   // With nothing decision-valid to size, there is no evidence to pass on. Saying
   // "large enough" here would be a claim about zero Metrics.
   if (decisionValid.length === 0 && !stats.health.low_n_warning) {
@@ -202,7 +209,9 @@ export function underpoweredCheck(stats: StatsOutput): DecisionGateCheck {
       detail: "This Run has no decision-valid Metric result to size.",
     };
   }
-  const starved = decisionValid.filter((result) => classifyStatus(result.status) === "starved");
+  const starved = decisionValid.filter(
+    (member) => classifyStatus(member.result.status) === "starved",
+  );
   if (starved.length > 0 || stats.health.low_n_warning) {
     const detail =
       starved.length > 0
@@ -214,7 +223,7 @@ export function underpoweredCheck(stats: StatsOutput): DecisionGateCheck {
   // `running`, not a shortfall status. Treating that as decidable would hand a
   // ship decision to a Run that has not finished collecting.
   const collecting = decisionValid.filter(
-    (result) => classifyStatus(result.status) === "collecting",
+    (member) => classifyStatus(member.result.status) === "collecting",
   );
   if (collecting.length > 0) {
     return {
@@ -233,7 +242,7 @@ export function underpoweredCheck(stats: StatsOutput): DecisionGateCheck {
 }
 
 export function decisionValidCheck(stats: StatsOutput): DecisionGateCheck {
-  const family = stats.arm_results.filter((result) => result.in_bh_family && result.decision_valid);
+  const family = lockedFamilyMembers(stats);
   if (family.length > 0) {
     return {
       id: "decision_valid_result",
@@ -251,15 +260,6 @@ export function decisionValidCheck(stats: StatsOutput): DecisionGateCheck {
   };
 }
 
-function decisionValidResults(stats: StatsOutput): ArmResult[] {
-  return stats.arm_results.filter((result) => result.decision_valid);
-}
-
-function named(results: ArmResult[]): string {
-  return results.map((result) => `${result.metric_id} / ${result.variant}`).join(", ");
-}
-
 function formatP(value: number | null): string {
-  if (value === null) return "unavailable";
-  return value < 0.0001 ? "<0.0001" : value.toPrecision(3);
+  return value === null ? "unavailable" : formatPValue(value);
 }

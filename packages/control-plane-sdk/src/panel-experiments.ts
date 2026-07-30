@@ -1,5 +1,5 @@
 import type { AnalysisResultsEnvelope } from "@splitch/contracts";
-import { AnalysisResultsEnvelopeSchema } from "@splitch/contracts";
+import { AnalysisResultsEnvelopeSchema, ErrorResponseSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
 import {
@@ -141,14 +141,49 @@ export function scopedAnalysisResultsRequest(identity: ScopedAnalysisIdentity): 
  */
 export class ScopedAnalysisError extends Error {
   readonly status: number;
+  /** The Analysis Worker's own error code, when it sent a typed body. */
+  readonly code: string | null;
   readonly retryable: boolean;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.name = "ScopedAnalysisError";
     this.status = status;
-    // Only the codes that describe a temporary condition may be retried.
-    this.retryable = status === 429 || status === 503;
+    this.code = code;
+    // The typed body is the authority on whether waiting can help. Classifying
+    // on the HTTP status alone would read a 500 carrying SERVICE_UNAVAILABLE as
+    // a permanent fault, and a permanent integrity failure that happened to be
+    // sent as a 503 as something worth polling.
+    this.retryable = code === null ? TRANSIENT_STATUS.has(status) : TRANSIENT_CODES.has(code);
+  }
+}
+
+const TRANSIENT_STATUS = new Set([429, 503]);
+const TRANSIENT_CODES = new Set(["RATE_LIMITED", "SERVICE_UNAVAILABLE"]);
+
+/**
+ * Turns a refusal from the Analysis Worker into a typed error.
+ *
+ * The body is read before the status is trusted: the Worker states plainly
+ * whether the condition is temporary, and discarding that to guess from a
+ * three-digit code throws away the only reliable signal we were sent.
+ */
+async function scopedAnalysisFailure(response: Response): Promise<ScopedAnalysisError> {
+  const parsed = ErrorResponseSchema.safeParse(await readJson(response));
+  if (!parsed.success) {
+    return new ScopedAnalysisError(
+      response.status,
+      `scoped analysis read failed with HTTP ${response.status}`,
+    );
+  }
+  return new ScopedAnalysisError(response.status, parsed.data.message, parsed.data.code);
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
   }
 }
 
@@ -157,10 +192,7 @@ export async function parseScopedAnalysisResults(
   expectedRunId: string,
 ): Promise<AnalysisResultsEnvelope> {
   if (!response.ok) {
-    throw new ScopedAnalysisError(
-      response.status,
-      `scoped analysis read failed with HTTP ${response.status}`,
-    );
+    throw await scopedAnalysisFailure(response);
   }
   const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
   // Numbers from one Run rendered under another Run's heading is the exact

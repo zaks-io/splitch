@@ -6,7 +6,7 @@ import {
   engineStatusCheck,
   exposureSrmCheck,
   SRM_CAUTION_P,
-  SRM_MISMATCH_P,
+  srmIsFiring,
   underpoweredCheck,
 } from "./experiment-decision-gate-checks";
 import type { StatsOutput } from "./stats-result-contract";
@@ -99,8 +99,15 @@ export type DecisionGateCheckId = z.infer<typeof DecisionGateCheckIdSchema>;
 export type DecisionGateCheck = z.infer<typeof DecisionGateCheckSchema>;
 export type ExperimentDecisionGate = z.infer<typeof ExperimentDecisionGateSchema>;
 
+/**
+ * The tier the rendering surface shows must be the same verdict the gate
+ * enforces, or the page condemns a Run the gate is happy to ship. Both read
+ * `srmIsFiring`, so the engine's boolean wins in both places and a payload
+ * carrying `srm_is_mismatch: false` with a sub-threshold p-value lands in the
+ * caution band rather than being labelled a confirmed mismatch.
+ */
 export function srmTierFor(pValue: number | null, isMismatch: boolean | null): SrmTier {
-  if (isMismatch === true || (pValue !== null && pValue < SRM_MISMATCH_P)) return "confirmed";
+  if (srmIsFiring({ pValue, isMismatch })) return "confirmed";
   if (pValue !== null && pValue < SRM_CAUTION_P) return "possible_imbalance";
   return "clean";
 }

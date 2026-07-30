@@ -4,71 +4,8 @@ import {
   experimentSrmDiagnostics,
   srmTierFor,
 } from "./experiment-decision-gate";
-import type { ArmResult, StatsOutput } from "./stats-result-contract";
-
-const varianceTechniques: ArmResult["variance_techniques"] = {
-  winsorized: false,
-  winsorize_pct: null,
-  winsorize_cap: null,
-  cuped_applied: false,
-  cuped_method: null,
-  cuped_attribute: null,
-  cuped_attribute_source: null,
-  cuped_coverage_pct: null,
-  delta_method: false,
-};
-
-function armResult(overrides: Partial<ArmResult> = {}): ArmResult {
-  return {
-    variant: "treatment",
-    metric_id: "checkout-conversion",
-    sample_size_n: 4_000,
-    point_estimate: 0.42,
-    relative_lift_pct: 6.5,
-    ci_lower: 1.2,
-    ci_upper: 11.8,
-    p_value: 0.004,
-    is_significant: true,
-    in_bh_family: true,
-    exploratory: false,
-    decision_valid: true,
-    status: "ready",
-    variance_techniques: varianceTechniques,
-    ...overrides,
-  };
-}
-
-function stats(overrides: Partial<StatsOutput> = {}): StatsOutput {
-  return {
-    arm_results: [armResult()],
-    srm: {
-      srm_p_value: 0.62,
-      srm_is_mismatch: false,
-      observed_counts: { control: 4_010, treatment: 3_990 },
-      expected_counts: { control: 4_000, treatment: 4_000 },
-      activated_srm_p_value: null,
-      activated_srm_mismatch: null,
-    },
-    guardrail_results: [],
-    health: {
-      multiple_rate: 0,
-      multiple_count: 0,
-      activation_rates: null,
-      activation_balance_p_value: null,
-      activation_balance_mismatch: null,
-      exposure_counts: { control: 4_010, treatment: 3_990 },
-      deduped_counts: { control: 4_010, treatment: 3_990 },
-      low_n_warning: false,
-    },
-    ...overrides,
-  };
-}
-
-function check(output: ReturnType<typeof evaluateExperimentDecisionGate>, id: string) {
-  const found = output.checks.find((candidate) => candidate.id === id);
-  if (!found) throw new Error(`gate is missing check ${id}`);
-  return found;
-}
+import { armResult, check, stats } from "./experiment-decision-gate-test-fixtures";
+import type { ArmResult } from "./stats-result-contract";
 
 describe("srmTierFor", () => {
   it("tiers the caution band separately from a confirmed mismatch", () => {
@@ -76,11 +13,26 @@ describe("srmTierFor", () => {
     expect(srmTierFor(0.011, false)).toBe("clean");
     expect(srmTierFor(0.009, false)).toBe("possible_imbalance");
     expect(srmTierFor(0.0011, false)).toBe("possible_imbalance");
-    expect(srmTierFor(0.0009, false)).toBe("confirmed");
   });
 
   it("trusts an engine-declared mismatch over the raw p-value", () => {
     expect(srmTierFor(0.9, true)).toBe("confirmed");
+  });
+
+  it("falls back to the threshold only when the engine declared no verdict", () => {
+    expect(srmTierFor(0.0009, null)).toBe("confirmed");
+  });
+
+  // The tier a surface renders and the verdict the gate enforces have to come
+  // from the same authority, or the page condemns a Run the gate will ship.
+  it("does not call a mismatch the engine denied confirmed, and agrees with the gate", () => {
+    expect(srmTierFor(0.0009, false)).toBe("possible_imbalance");
+
+    const gate = evaluateExperimentDecisionGate(
+      stats({ srm: { ...stats().srm, srm_p_value: 0.0009, srm_is_mismatch: false } }),
+    );
+    expect(gate.blockedBy).not.toContain("exposure_srm");
+    expect(check(gate, "exposure_srm").status).toBe("pass");
   });
 
   it("reports clean when there is no signal to read", () => {
@@ -116,6 +68,8 @@ describe("experimentSrmDiagnostics", () => {
     expect(diagnostics.activated?.tier).toBe("confirmed");
   });
 });
+
+// BH correction spans top-level goal Metrics and Primary Dimension slices
 
 describe("evaluateExperimentDecisionGate", () => {
   it("allows the ship decision when every applicable check passes", () => {

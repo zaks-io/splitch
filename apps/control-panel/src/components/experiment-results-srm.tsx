@@ -1,5 +1,5 @@
 import type { ExperimentSrmDiagnostics, SrmSignal, StatsOutput } from "@splitch/contracts";
-import { formatPValue } from "./experiment-results-format";
+import { formatPValue } from "@splitch/contracts";
 
 /**
  * Graduated Sample Ratio Mismatch reporting.

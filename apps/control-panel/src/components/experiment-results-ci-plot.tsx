@@ -1,4 +1,5 @@
-import type { ArmResult } from "@splitch/contracts";
+import type { ArmResult, ExperimentSignificanceDisplays } from "@splitch/contracts";
+import { significanceKey } from "@splitch/contracts";
 import { type CiPlotDomain, ciPlotDomain, ciPlotTicks, ciPlotX } from "#lib/ci-plot-scale";
 import {
   AXIS_HEIGHT,
@@ -22,9 +23,11 @@ import { ArmRow, BaselineRow } from "./experiment-results-ci-plot-rows";
 export function ExperimentResultsCiPlot({
   results,
   controlVariant,
+  significance,
 }: {
   results: ArmResult[];
   controlVariant: string;
+  significance: ExperimentSignificanceDisplays;
 }) {
   if (results.length === 0) {
     return (
@@ -75,6 +78,7 @@ export function ExperimentResultsCiPlot({
               />
             ) : (
               <ArmRow
+                display={significance[significanceKey(result)]}
                 domain={domain}
                 index={index}
                 key={`${result.metric_id}:${result.variant}`}
@@ -142,14 +146,14 @@ function Legend({ controlVariant }: { controlVariant: string }) {
           aria-hidden="true"
           className="inline-block size-2.5 rounded-full bg-[color:var(--arm-treatment-foreground)]"
         />
-        Treatment lift, filled when FDR-corrected significant
+        Treatment lift, filled when the Run's significance call is affirmative
       </li>
       <li className="flex items-center gap-2">
         <span
           aria-hidden="true"
           className="inline-block size-2.5 rounded-full border-2 border-[color:var(--arm-treatment-foreground)]"
         />
-        Not significant after correction
+        No affirmative significance call (not significant, or disputed)
       </li>
     </ul>
   );

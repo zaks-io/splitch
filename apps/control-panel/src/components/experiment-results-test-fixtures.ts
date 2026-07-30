@@ -1,5 +1,9 @@
 import type { StatsOutput } from "@splitch/contracts";
-import { evaluateExperimentDecisionGate, experimentSrmDiagnostics } from "@splitch/contracts";
+import {
+  evaluateExperimentDecisionGate,
+  experimentSignificanceDisplays,
+  experimentSrmDiagnostics,
+} from "@splitch/contracts";
 import type { PanelExperimentResultsOutput } from "@splitch/control-plane-sdk/panel-experiments";
 
 /**
@@ -162,6 +166,7 @@ export function resultsFixture(
     stats,
     srm: experimentSrmDiagnostics(stats),
     gate: evaluateExperimentDecisionGate(stats),
+    significance: experimentSignificanceDisplays(stats),
     ...overrides,
   };
 }

@@ -1,5 +1,6 @@
 import {
   ExperimentDecisionGateSchema,
+  ExperimentSignificanceDisplaysSchema,
   ExperimentSrmDiagnosticsSchema,
   StatsOutputSchema,
 } from "@splitch/contracts";
@@ -16,8 +17,9 @@ export interface PanelExperimentResultsInput {
 /**
  * The Results payload the Control Panel renders.
  *
- * `gate` and `srm` are evaluated by the Worker, never by the rendering surface:
- * the Panel transports this refusal rather than recomputing statistics.
+ * `gate`, `srm` and `significance` are evaluated by the Worker, never by the
+ * rendering surface: the Panel transports this verdict rather than recomputing
+ * statistics (ADR-0030).
  */
 export const PanelExperimentResultsOutputSchema = z
   .object({
@@ -29,6 +31,8 @@ export const PanelExperimentResultsOutputSchema = z
     stats: StatsOutputSchema,
     srm: ExperimentSrmDiagnosticsSchema,
     gate: ExperimentDecisionGateSchema,
+    /** Per-arm significance claim, keyed by `metric_id/variant`. */
+    significance: ExperimentSignificanceDisplaysSchema,
   })
   .strict();
 

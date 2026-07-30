@@ -9,6 +9,7 @@ import {
   VarianceTechniquesSchema,
 } from "./index";
 import type { StatsEngine, StatsInput, StatsOutput } from "./index";
+import { getRoute } from "./route-registry";
 
 const varianceTechniques = {
   winsorized: false,
@@ -214,5 +215,38 @@ describe("StatsEngine", () => {
     await expect(engine.analyze(input)).resolves.toMatchObject({
       arm_results: [{ metric_id: "metric_1" }],
     });
+  });
+});
+
+/**
+ * The /results routes are the seam every generated client infers from. When the
+ * declared response was a bare StatsOutput, the Worker's `run_id` and
+ * `control_variant` were emitted but invisible to callers, and a client could
+ * only recover the baseline by re-deriving it from mutable Experiment
+ * configuration, which is exactly the mislabelling ADR-0002/0003 forbid.
+ */
+describe("declared /results response contract", () => {
+  const envelope = { run_id: "run_1", control_variant: "control", stats: statsOutput };
+
+  function declaredResponse(operationId: string) {
+    const route = getRoute(operationId);
+    if (!route) throw new Error(`no registered route for ${operationId}`);
+    return route.output;
+  }
+
+  it.each([
+    "experiment_results_get",
+    "experiment_results_post",
+  ] as const)("%s declares the envelope, not a bare StatsOutput", (operationId) => {
+    const response = declaredResponse(operationId);
+
+    expect(response.safeParse(envelope).success).toBe(true);
+    expect(response.safeParse(statsOutput).success).toBe(false);
+  });
+
+  it.each(["run_id", "control_variant"] as const)("%s is required on the envelope", (field) => {
+    const { [field]: _dropped, ...withoutField } = envelope;
+
+    expect(declaredResponse("experiment_results_get").safeParse(withoutField).success).toBe(false);
   });
 });
