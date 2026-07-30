@@ -64,6 +64,11 @@ export async function resyncSessionMemberships(
  * turn a read into a thrown error. The still-pending marker (unchanged, since
  * `resyncSessionMemberships` only clears it on success) is what the caller
  * re-reads to keep showing the notice honestly.
+ *
+ * The fallback is deliberate; the silence is not (ADR-0036). If this fails on
+ * every load for an operator, "Reload to check again" is quietly lying again
+ * and nothing else says so — `console.warn` is the closest local convention
+ * (`live-updates.ts`).
  */
 export async function retryPendingResync(
   bindings: SessionResyncBindings,
@@ -72,7 +77,8 @@ export async function retryPendingResync(
 ): Promise<StoredSession> {
   try {
     return await resyncSessionMemberships(bindings, tokenHash, session);
-  } catch {
+  } catch (cause) {
+    console.warn(`Failed to retry a pending resync for User "${session.userId}"`, cause);
     return session;
   }
 }

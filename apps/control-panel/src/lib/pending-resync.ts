@@ -44,6 +44,11 @@ export async function markPendingResync(
  * `SESSION_STORE` — so an unguarded call here would resurrect the exact bug
  * the marker exists to fix. Losing the durable marker means the notice will
  * not survive a reload, which is strictly better than lying about the create.
+ *
+ * The fallback is deliberate; the silence is not (ADR-0036). If this starts
+ * failing for every create, the durability half of SPL-203 is quietly gone
+ * and nothing else says so — `console.warn` is the closest local convention
+ * (`live-updates.ts`).
  */
 export async function markPendingResyncBestEffort(
   kv: KVNamespace,
@@ -52,8 +57,11 @@ export async function markPendingResyncBestEffort(
 ): Promise<void> {
   try {
     await markPendingResync(kv, tokenHash, pending);
-  } catch {
-    // Best-effort by design: see the doc comment above.
+  } catch (cause) {
+    console.warn(
+      `Failed to record pending resync marker for ${pending.resource} "${pending.slug}"`,
+      cause,
+    );
   }
 }
 
