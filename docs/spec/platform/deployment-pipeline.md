@@ -347,13 +347,14 @@ drift from the release path.
 3. Run Tinybird deployment check with the environment-scoped production Tinybird token.
 4. Deploy Tinybird to Cloud main.
 5. Apply D1 migrations to production.
-6. Sync Worker secrets, then deploy Workers through Turborepo package deploy tasks. Deploy Analysis
-   before Control Plane so its service-binding target exists. The Control Panel delegation protocol
-   then uses a bounded cutover: deploy the Control Plane with the predecessor session-handle binding
-   entrypoint enabled with a 30-minute expiry, deploy the V2 Panel bound to the signed entrypoint, then
-   immediately redeploy the Control Plane from its checked-in config with predecessor session
-   redemption disabled. Complete credential-cache backfill before deploying the remaining Workers;
-   the backfill gate keeps Evaluation from deploying against incomplete credential state.
+6. Build or restore Worker artifacts once through Turborepo, then deploy those prepared artifacts.
+   Deploy Analysis before Control Plane so its service-binding target exists. The Control Panel
+   delegation protocol then uses a bounded cutover: deploy the Control Plane with the predecessor
+   session-handle binding entrypoint enabled with a 30-minute expiry, deploy the V2 Panel bound to the
+   signed entrypoint, then immediately redeploy the Control Plane from its checked-in config with
+   predecessor session redemption disabled. Complete credential-cache backfill before deploying the
+   remaining Workers; Turborepo deploys independent Workers in parallel while preserving the
+   Event Ingest before Evaluation dependency.
 7. Verify cron trigger registration on Control Plane API and Analysis Workers.
 8. Run route and binding smoke checks before marking the GitHub deployment complete.
 9. Record Worker version IDs, D1 migration names, Tinybird deployment URL, commit SHA, and smoke results
