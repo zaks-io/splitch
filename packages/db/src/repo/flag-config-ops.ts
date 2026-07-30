@@ -5,6 +5,7 @@ import {
   appliedReviewInsert,
   appliedReviewQueries,
   approvalPendingCondition,
+  approvalReviewLanded,
   reviewRecorded,
 } from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
@@ -102,6 +103,10 @@ export function makeFlagConfigOps(
         await db.batch([mutation, ...appliedReviewQueries(db, approval)] as unknown as Parameters<
           Db["batch"]
         >[0]);
+        // The guard can lose (request resolved, reviewer role revoked, Policy
+        // level changed, version CAS lost) and leave every statement a no-op.
+        // Returning the re-read row would report that as an applied change.
+        if (!(await approvalReviewLanded(db, approval))) return null;
         return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       }
       const rows = await flagConfigsTable.update(
@@ -180,6 +185,7 @@ export function makeFlagConfigOps(
           ...guardedInserts,
           appliedRequestUpdate(db, approval),
         ] as unknown as Parameters<Db["batch"]>[0]);
+        if (!(await approvalReviewLanded(db, approval))) return null;
         return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       }
 

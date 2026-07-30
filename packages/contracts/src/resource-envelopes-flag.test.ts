@@ -115,8 +115,8 @@ describe("FlagResponseSchema", () => {
   });
 });
 
-describe("CreateVariantRequestSchema (non-idempotent create)", () => {
-  it("parses a request with an optional idempotency_key", () => {
+describe("CreateVariantRequestSchema (Idempotency-Key route)", () => {
+  it("parses a request carrying an idempotency_key", () => {
     const req = CreateVariantRequestSchema.parse({
       appId: "app_1",
       flagId: "flag_1",
@@ -132,6 +132,32 @@ describe("CreateVariantRequestSchema (non-idempotent create)", () => {
   it("rejects a missing value", () => {
     expect(
       CreateVariantRequestSchema.safeParse({ appId: "app_1", flagId: "flag_1", name: "t" }).success,
+    ).toBe(false);
+  });
+
+  // Without the key the Worker cannot tell a retry from a second Variant, so
+  // `flag_variants_create` declares `idempotency: "required"` and the envelope
+  // has to refuse a request that omits it.
+  it("rejects a request with no idempotency_key", () => {
+    expect(
+      CreateVariantRequestSchema.safeParse({
+        appId: "app_1",
+        flagId: "flag_1",
+        name: "treatment-b",
+        value: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects an empty idempotency_key", () => {
+    expect(
+      CreateVariantRequestSchema.safeParse({
+        appId: "app_1",
+        flagId: "flag_1",
+        name: "treatment-b",
+        value: true,
+        idempotency_key: "",
+      }).success,
     ).toBe(false);
   });
 

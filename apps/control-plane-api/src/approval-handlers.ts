@@ -5,6 +5,7 @@ import { renderError } from "@splitch/worker-runtime";
 import { requireAppMember } from "./app-authz";
 import { approvalRequestProjection } from "./approval-model";
 import { reviewApproval } from "./approval-service";
+import type { ApplicationOutcome } from "./approval-service-types";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { objectBody, pathParam } from "./handler-input";
 
@@ -12,19 +13,7 @@ interface ApprovalHandlerDeps {
   repo: Repository;
   configStore?: ConfigStoreAccess;
   nowIso?: () => string;
-  applyOther?: (
-    request: ApprovalRequest,
-    commit: ApprovalCommit,
-  ) => Promise<
-    | { ok: true }
-    | {
-        ok: false;
-        error: {
-          code: import("@splitch/contracts").ErrorCode;
-          details: Record<string, unknown>;
-        };
-      }
-  >;
+  applyOther?: (request: ApprovalRequest, commit: ApprovalCommit) => Promise<ApplicationOutcome>;
 }
 
 export function makeApprovalHandlers(deps: ApprovalHandlerDeps) {

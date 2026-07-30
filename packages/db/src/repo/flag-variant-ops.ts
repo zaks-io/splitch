@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { flags, variants } from "../schema/index";
-import { approvalPendingCondition } from "./approval-atomic";
+import { approvalPendingCondition, approvalReviewLanded } from "./approval-atomic";
 import type { Db } from "./client";
 import {
   catalogApprovalBatch,
@@ -14,6 +14,39 @@ export type FlagInScope = (
   scope: TenantScope,
   flagId: string,
 ) => Promise<typeof flags.$inferSelect | null>;
+
+/**
+ * The Approval-guarded delete, its landing check, and the confirming re-read.
+ * A lost guard leaves every statement in the batch a no-op, so without the
+ * landing check the re-read would report an unrelated absence as this
+ * proposal's delete.
+ */
+async function approvedVariantDelete(
+  db: Db,
+  input: {
+    scope: TenantScope;
+    flag: typeof flags.$inferSelect;
+    variantId: string;
+    options: VariantWriteOptions;
+    reread: () => Promise<unknown>;
+  },
+): Promise<number> {
+  const approval = input.options.approval;
+  if (!approval) throw new Error("approvedVariantDelete: an Approval commit is required");
+  await db.batch(
+    catalogApprovalBatch(db, {
+      scope: input.scope,
+      flag: input.flag,
+      mutation: db
+        .delete(variants)
+        .where(and(eq(variants.id, input.variantId), approvalPendingCondition(db, approval)))
+        .returning(),
+      options: input.options,
+    }),
+  );
+  if (!(await approvalReviewLanded(db, approval))) return 0;
+  return (await input.reread()) ? 0 : 1;
+}
 
 export function makeVariantOps(db: Db, flagInScope: FlagInScope) {
   async function variantByName(scope: TenantScope, flagId: string, name: string) {
@@ -54,6 +87,9 @@ export function makeVariantOps(db: Db, flagInScope: FlagInScope) {
             options,
           }),
         );
+        // A lost guard leaves every statement a no-op; the re-read would then
+        // report some pre-existing row as this proposal's creation.
+        if (!(await approvalReviewLanded(db, options.approval))) return null;
         return variantByName(scope, flagId, values.name);
       }
       const rows = await db
@@ -93,24 +129,16 @@ export function makeVariantOps(db: Db, flagInScope: FlagInScope) {
       options?: VariantWriteOptions,
     ): Promise<number> {
       const variant = await variantByName(scope, flagId, name);
-      if (!variant) return 0;
       const flag = await flagInScope(scope, flagId);
-      if (!flag) return 0;
+      if (!(variant && flag)) return 0;
       if (options?.approval) {
-        await db.batch(
-          catalogApprovalBatch(db, {
-            scope,
-            flag,
-            mutation: db
-              .delete(variants)
-              .where(
-                and(eq(variants.id, variant.id), approvalPendingCondition(db, options.approval)),
-              )
-              .returning(),
-            options,
-          }),
-        );
-        return (await variantByName(scope, flagId, name)) ? 0 : 1;
+        return approvedVariantDelete(db, {
+          scope,
+          flag,
+          variantId: variant.id,
+          options,
+          reread: () => variantByName(scope, flagId, name),
+        });
       }
       const rows = await db.delete(variants).where(eq(variants.id, variant.id)).returning();
       return rows.length;

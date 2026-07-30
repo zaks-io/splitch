@@ -1,8 +1,9 @@
 /**
- * Cross-tenant / authz attacks on the Approval runtime, kept as a permanent
- * regression suite. Tenant B uses DELIBERATELY DISTINCT seeds from tenant A so
- * that any leakage shows up as a foreign value, never as a coincidentally-equal
- * fixture: identical seeds on both sides mask isolation bugs by construction.
+ * Cross-Organization / authz attacks on the Approval runtime, kept as a
+ * permanent regression suite. Organization B uses DELIBERATELY DISTINCT seeds
+ * from Organization A so that any leakage shows up as a foreign value, never as
+ * a coincidentally-equal fixture: identical seeds on both sides mask isolation
+ * bugs by construction.
  */
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -11,7 +12,7 @@ import { type Harness, ids, setProdPolicy, token, USER_ID } from "../src/config-
 import { appAdminScope } from "../src/scope-binding";
 import { seedAppMember } from "../src/test-seeds";
 import { confirmPolicy, proposeA } from "./approval-harness";
-import { B, get, jwtFor, proposeB, reviewAs, seedTenantB } from "./approval-tenant-b";
+import { B, get, jwtFor, proposeB, reviewAs, seedOrganizationB } from "./approval-organization-b";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -23,7 +24,7 @@ beforeEach(async () => {
   // explicitly instead of leaning on a fixture default.
   await narrowSeededAvailability(h.d1);
   await setProdPolicy(h, confirmPolicy);
-  await seedTenantB(h);
+  await seedOrganizationB(h);
 });
 
 afterEach(async () => {
@@ -177,6 +178,12 @@ describe("ATTACK: cross-App approval writes", () => {
       "idem_a6_9271",
     );
     expect(response.status).toBe(403);
+    // The role refusal has to arrive as the route's declared review error, not as
+    // an application failure that happens to also be a 4xx.
+    expect(await response.json()).toMatchObject({
+      code: "APPROVAL_REVIEW_FORBIDDEN",
+      details: { reason: "ROLE_NOT_ALLOWED" },
+    });
     expect(await h.repo.approvals.getRequest(appScope(ids.appId), requestId)).toMatchObject({
       status: "pending",
     });

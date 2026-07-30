@@ -1,5 +1,6 @@
 import { DeltaNudgeSchema } from "@splitch/contracts";
 import { appScope, type EnvScope, envScope } from "@splitch/db";
+import { applyApprovedFlagConfig } from "./config-store-approved-write";
 import { deleteFlagConfigSnapshot } from "./config-store-kv";
 import { promoteFlagConfig, replaceTargetingRules } from "./config-store-mutations";
 import {
@@ -19,7 +20,6 @@ import {
   readFlagSnapshot,
   responseFromSnapshot,
   type Snapshot,
-  targetingRuleRows,
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { baselineIsUnresolvable, nextBaselineRollout } from "./flag-config-rollout";
@@ -249,70 +249,6 @@ async function previewFlagConfig(
       : {}),
     ...(rollout !== undefined ? { rollout } : {}),
   });
-}
-
-async function applyApprovedFlagConfig(
-  deps: ConfigStoreDeps,
-  input: ApplyApprovedFlagConfigInput,
-): Promise<FlagConfigWriteResult> {
-  const scope = envScope(input.appId, input.environmentId);
-  const current = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
-  if (!current) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  const missingVariants = missingAvailableVariants(
-    input.proposed.availableVariantNames,
-    current.flag.variants,
-  );
-  const missingRuleVariants = missingRuleVariantNames(
-    input.proposed.targetingRules,
-    current.flag.variants,
-    input.proposed.availableVariantNames,
-  );
-  if (missingVariants.length + missingRuleVariants.length > 0) {
-    return {
-      ok: false,
-      reason: "VARIANT_NOT_AVAILABLE",
-      missingVariants: [...new Set([...missingVariants, ...missingRuleVariants])],
-    };
-  }
-  const defaultVariant = current.flag.variants.find(
-    (variant) => variant.id === current.flag.defaultVariantId,
-  );
-  if (
-    baselineIsUnresolvable(
-      input.proposed.rollout,
-      input.proposed.availableVariantNames,
-      defaultVariant?.name,
-      current.flag.variants.map((variant) => variant.name),
-    )
-  ) {
-    return {
-      ok: false,
-      reason: "ROLLOUT_AMBIGUOUS",
-      availableVariantNames: input.proposed.availableVariantNames,
-    };
-  }
-
-  const patch = {
-    enabled: input.proposed.enabled,
-    availableVariantNames: json(input.proposed.availableVariantNames),
-    rollout: input.proposed.rollout ? json(input.proposed.rollout) : null,
-    updatedAt: input.approval.reviewedAt,
-  };
-  const rulesChanged =
-    JSON.stringify(current.flag.targetingRules) !== JSON.stringify(input.proposed.targetingRules);
-  const updated = rulesChanged
-    ? await deps.repo.flags.replaceTargetingRules(
-        scope,
-        input.flagId,
-        targetingRuleRows(input.proposed.targetingRules, new Date(input.approval.reviewedAt)),
-        patch,
-        input.approval,
-      )
-    : await deps.repo.flags.updateFlagConfig(scope, input.flagId, patch, input.approval);
-  if (!updated) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  const committed = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
-  if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  return writeSnapshotAndBroadcast(deps, scope, input.flagId, committed);
 }
 
 function previewSnapshotResult(

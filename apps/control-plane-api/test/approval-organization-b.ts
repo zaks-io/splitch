@@ -6,10 +6,10 @@ import { seedAppMember } from "../src/test-seeds";
 import { confirmPolicy } from "./approval-harness";
 
 /**
- * A second tenant whose every id and value differs from tenant A's fixture
- * graph, so cross-tenant leakage shows up as a foreign value rather than as a
- * coincidentally-equal fixture. Identical seeds on both sides mask isolation
- * bugs by construction.
+ * A second Organization whose every id and value differs from Organization A's
+ * fixture graph, so leakage across the isolation boundary shows up as a foreign
+ * value rather than as a coincidentally-equal fixture. Identical seeds on both
+ * sides mask isolation bugs by construction.
  */
 export const B = {
   orgId: "org_beta_9271",
@@ -26,7 +26,7 @@ export const B = {
 
 const NOW_B = "2026-07-02T11:22:33.000Z";
 
-export async function seedTenantB(h: Harness): Promise<void> {
+export async function seedOrganizationB(h: Harness): Promise<void> {
   const repo = createRepository(h.d1);
   await repo.identity.createOrganization({
     organization: {
@@ -92,7 +92,7 @@ export async function seedTenantB(h: Harness): Promise<void> {
   await seedAppMember(h.d1, { appId: B.appId, userId: B.userId, role: "owner" });
 }
 
-/** Tenant B proposal (pending) via the served PATCH route, as B's own owner. */
+/** Organization B proposal (pending) via the served PATCH route, as B's own owner. */
 export async function proposeB(h: Harness, idempotencyKey = "idem_beta_9271"): Promise<string> {
   const jwt = await jwtFor(h, B.userId, [appAdminScope(B.appId)]);
   const response = await h.app.request(

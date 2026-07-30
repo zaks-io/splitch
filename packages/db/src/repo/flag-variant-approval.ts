@@ -4,6 +4,7 @@ import {
   appliedRequestUpdate,
   appliedReviewInsert,
   approvalPendingCondition,
+  approvalReviewLanded,
   reviewRecorded,
 } from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
@@ -202,6 +203,9 @@ export function makeUpdateVariant(
       ...renameQueries,
       ...requestUpdate,
     ] as unknown as Parameters<Db["batch"]>[0]);
+    // A lost guard no-ops the whole batch, and the re-read below would then hand
+    // back the untouched Variant as though the proposal had been applied.
+    if (options?.approval && !(await approvalReviewLanded(db, options.approval))) return null;
     return variantByName(scope, flagId, (patch.name as string | undefined) ?? name);
   };
 }

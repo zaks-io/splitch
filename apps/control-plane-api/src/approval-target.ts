@@ -144,10 +144,23 @@ export function absentTargetVersion(target: Pick<ApprovalTarget, "type" | "id">)
   return canonicalHash({ absentTarget: { type: target.type, id: target.id } });
 }
 
+/**
+ * Single-Environment targets (a Flag Configuration, an Experiment draft) carry
+ * contexts minted by `environmentPolicyContexts` for ONE Environment, split only
+ * by Policy level. Reading `contexts[0]` is therefore not positional luck, but
+ * it is only safe while that holds, so a context list spanning Environments
+ * fails loud here instead of silently hashing against whichever level sorted
+ * first.
+ */
 function reviewEnvironmentId(contexts: readonly ApprovalPolicyContext[]): string {
   const environmentId = contexts[0]?.environmentId;
   if (!environmentId) {
     throw new Error("Approval Request policy contexts are empty; cannot resolve a target version");
+  }
+  if (contexts.some((context) => context.environmentId !== environmentId)) {
+    throw new Error(
+      "Approval Request policy contexts span multiple Environments; this target has one",
+    );
   }
   return environmentId;
 }

@@ -81,9 +81,10 @@ export type FlagResponse = z.infer<typeof FlagResponseSchema>;
 // ---------------------------------------------------------------------------
 // CreateVariantRequest (Variant sub-resource)
 //
-// `idempotency_key` is optional on this non-idempotent create so a retried
-// `flag_variants_create` after a timeout never double-creates (mcp-tool-derivation
-// "Idempotency on retried creates"). Worker computes the Variant `id`.
+// `flag_variants_create` is an Idempotency-Key route, so `idempotency_key` is
+// REQUIRED: a retried create after a timeout replays instead of adding a second
+// Variant (mcp-tool-derivation "Idempotency on retried creates"). Worker
+// computes the Variant `id`.
 // ---------------------------------------------------------------------------
 
 export const CreateVariantRequestSchema = z

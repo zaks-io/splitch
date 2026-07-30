@@ -9,6 +9,7 @@ import {
   countApprovalReviews,
   outOfContractPolicy,
   patchConfig,
+  patchVariant,
   readRequest,
   reviewRequest,
 } from "./approval-harness";
@@ -115,6 +116,61 @@ describe("ungated writes create no Approval rows", () => {
   });
 });
 
+describe("a replay of a resolved Approval Request is not a successful write", () => {
+  it("a declined proposal replays as APPROVAL_REQUEST_RESOLVED, not 200", async () => {
+    const proposed = await patchConfig(h, "idem_c9", { availableVariantNames: ["control"] });
+    expect(proposed.status).toBe(409);
+    const requestId = proposed.approvalRequestId as string;
+    const declined = await reviewRequest(h, requestId, "idem_c9r", "decline");
+    expect(declined.status).toBe(200);
+
+    // Same actor, same key, same payload: the retry must not read back the live
+    // Configuration and present it as the result of a change that was refused.
+    const replay = await patchConfig(h, "idem_c9", { availableVariantNames: ["control"] });
+    expect(replay.status).toBe(409);
+    expect(replay.code).toBe("APPROVAL_REQUEST_RESOLVED");
+
+    const config = await h.repo.flags.getFlagConfig(
+      envScope(ids.appId, ids.environmentId),
+      ids.flagId,
+    );
+    expect(config?.version).toBe(1);
+  });
+});
+
+describe("a stored proposal that cannot be read is a recorded failure, not a thrown fault", () => {
+  it("records VALIDATION_ERROR / MALFORMED_APPROVAL_PROPOSAL and applies nothing", async () => {
+    const proposed = await patchVariant(h, "treatment", "idem_c11", { value: "corrupted" });
+    expect(proposed.status).toBe(409);
+    const requestId = proposed.approvalRequestId as string;
+
+    // A row only reachable by bypassing the write API: the proposal parses as an
+    // ApprovalDiff but its `name` is not a string, so the applier cannot read it.
+    const row = await h.repo.approvals.getRequest(appScope(ids.appId), requestId);
+    const diff = JSON.parse(row?.diff ?? "{}") as { proposed: Record<string, unknown> };
+    diff.proposed.name = 42;
+    await h.d1
+      .prepare("UPDATE approval_requests SET diff = ? WHERE id = ?")
+      .bind(JSON.stringify(diff), requestId)
+      .run();
+
+    const reviewed = await reviewRequest(h, requestId, "idem_c11r");
+    expect(reviewed.status).toBe(409);
+    expect(await reviewed.json()).toMatchObject({ code: "APPROVAL_APPLICATION_FAILED" });
+
+    const latest = await h.repo.approvals.latestReview(appScope(ids.appId), requestId);
+    expect(latest?.outcome).toBe("failed");
+    expect(latest?.errorCode).toBe("VALIDATION_ERROR");
+    expect(JSON.parse(latest?.errorDetails ?? "{}")).toMatchObject({
+      field: "name",
+      reason: "MALFORMED_APPROVAL_PROPOSAL",
+    });
+
+    const variant = await h.repo.flags.getVariantById(appScope(ids.appId), ids.treatmentVariantId);
+    expect(variant?.value).toBe(JSON.stringify("on"));
+  });
+});
+
 describe("an out-of-contract stored Environment Policy fails closed and diagnosably", () => {
   it("names the offending field instead of surfacing an anonymous runtime fault", async () => {
     const proposed = await patchConfig(h, "idem_c7", { availableVariantNames: ["control"] });
@@ -137,6 +193,25 @@ describe("an out-of-contract stored Environment Policy fails closed and diagnosa
     expect(((await reviewed.json()) as { code: string }).code).toBe("INTERNAL_SERVER_ERROR");
 
     // Fails closed: nothing was applied.
+    const config = await h.repo.flags.getFlagConfig(
+      envScope(ids.appId, ids.environmentId),
+      ids.flagId,
+    );
+    expect(config?.version).toBe(1);
+  });
+
+  it("funnels a policy column that is not JSON at all into the same named fault", async () => {
+    await h.d1
+      .prepare("UPDATE environments SET policy = ? WHERE id = ?")
+      .bind("{not json", ids.environmentId)
+      .run();
+
+    const patched = await patchConfig(h, "idem_c10", { availableVariantNames: ["control"] });
+    expect(patched.status).toBe(500);
+    expect(patched.code).toBe("INTERNAL_SERVER_ERROR");
+    expect(patched.message).toContain("stored Environment Policy is out of contract");
+    expect(patched.message).toContain("not valid JSON");
+
     const config = await h.repo.flags.getFlagConfig(
       envScope(ids.appId, ids.environmentId),
       ids.flagId,

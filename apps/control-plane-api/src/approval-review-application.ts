@@ -9,7 +9,7 @@ import { type ApprovalCommit, appScope } from "@splitch/db";
 import { requireAppAdmin } from "./app-authz";
 import { approvalReviewId } from "./approval-canonical";
 import { approvalRequestProjection } from "./approval-model";
-import { resultingVersionFor } from "./approval-resulting-version";
+import { isFlagConfigurationOperation, resultingVersionFor } from "./approval-resulting-version";
 import {
   approvalNotFound,
   materializeStale,
@@ -21,6 +21,7 @@ import {
 } from "./approval-review-outcomes";
 import { rowTargetVersion } from "./approval-row-target";
 import type {
+  ApplicationOutcome,
   ApprovalRequestRow,
   ApprovalResult,
   ApprovalServiceDeps,
@@ -88,7 +89,9 @@ async function applyAndProject(
         input.requestId,
       );
     }
-    if (!application.ok) {
+    // A `notApplied` outcome falls through to the reconciliation below, which
+    // reads the stored status and answers applied / resolved / stale.
+    if (!(application.ok || "notApplied" in application)) {
       return recordApplicationFailure(deps, row, commit, application.error, input.requestId);
     }
   } catch (cause) {
@@ -164,7 +167,7 @@ async function applyFlagConfiguration(
   deps: ApprovalServiceDeps,
   request: ApprovalRequest,
   commit: ApprovalCommit,
-) {
+): Promise<ApplicationOutcome> {
   if (!deps.configStore) {
     return {
       ok: false as const,
@@ -196,7 +199,10 @@ function configFailure(
   result: Extract<FlagConfigWriteResult, { ok: false }>,
   flagId: string,
   environmentId: string,
-) {
+): ApplicationOutcome {
+  if (result.reason === "APPROVAL_NOT_APPLIED") {
+    return { ok: false as const, notApplied: true as const };
+  }
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return {
       ok: false as const,
@@ -215,14 +221,6 @@ function configFailure(
     ok: false as const,
     error: { code: "INTERNAL_SERVER_ERROR" as const, details: {} },
   };
-}
-
-function isFlagConfigurationOperation(operation: ApprovalOperation): boolean {
-  return (
-    operation === "flag_config_update" ||
-    operation === "flag_targeting_rules_replace" ||
-    operation === "flags_promote"
-  );
 }
 
 function resultingResource(

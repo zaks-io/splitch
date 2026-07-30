@@ -166,7 +166,7 @@ export function makeApprovalRepo(db: Db) {
       disposition: ApprovalDisposition,
     ): Promise<boolean> {
       assertMintedScope(scope);
-      const results = await db.batch(dispositionQueries(db, disposition));
+      const results = await db.batch(dispositionQueries(db, scope, disposition));
       return results[1].length === 1;
     },
 
@@ -210,7 +210,12 @@ function failureInsert(db: Db, scope: TenantScope, failure: ApprovalFailure) {
   );
 }
 
-function dispositionQueries(db: Db, disposition: ApprovalDisposition) {
+/**
+ * Every predicate is keyed off the MINTED scope, never `disposition.appId`: the
+ * scope is what the caller was authorized for, so a disposition carrying a
+ * foreign `appId` matches nothing instead of writing outside that scope.
+ */
+function dispositionQueries(db: Db, scope: TenantScope, disposition: ApprovalDisposition) {
   const insert = db
     .insert(approvalReviews)
     .select(
@@ -236,7 +241,7 @@ function dispositionQueries(db: Db, disposition: ApprovalDisposition) {
         .from(approvalRequests)
         .where(
           and(
-            eq(approvalRequests.appId, disposition.appId),
+            eq(approvalRequests.appId, scope.appId),
             eq(approvalRequests.id, disposition.requestId),
             eq(approvalRequests.status, "pending"),
           ),
@@ -248,14 +253,22 @@ function dispositionQueries(db: Db, disposition: ApprovalDisposition) {
     .set({ status: disposition.outcome, resolvedAt: disposition.reviewedAt })
     .where(
       and(
-        eq(approvalRequests.appId, disposition.appId),
+        eq(approvalRequests.appId, scope.appId),
         eq(approvalRequests.id, disposition.requestId),
         eq(approvalRequests.status, "pending"),
+        // Same three-part identity the applied path guards on: a Review id alone
+        // could belong to another App's request.
         exists(
           db
             .select({ one: sql<number>`1` })
             .from(approvalReviews)
-            .where(eq(approvalReviews.id, disposition.reviewId)),
+            .where(
+              and(
+                eq(approvalReviews.appId, scope.appId),
+                eq(approvalReviews.id, disposition.reviewId),
+                eq(approvalReviews.approvalRequestId, disposition.requestId),
+              ),
+            ),
         ),
       ),
     )

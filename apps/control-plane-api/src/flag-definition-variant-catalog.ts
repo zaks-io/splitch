@@ -54,6 +54,13 @@ export async function createVariant(
   );
   if (replay) return replay.ok ? flagJson(deps, loaded.value, args.requestId) : replay.response;
 
+  // `flag_variants_create` declares `idempotency: "required"`, and `variantId` is
+  // derived from (flagId, name, idempotencyKey), so a row already carrying that id
+  // can only be this same request landing twice. Without this, a retry after a
+  // timeout answers "Variant name already exists" instead of replaying.
+  const already = await deps.repo.flags.getVariantById(loaded.value.scope, variantId);
+  if (already) return flagJson(deps, loaded.value, args.requestId);
+
   const prepared = await prepareCreateVariant(deps, loaded.value, body, args.requestId);
   if (!prepared.ok) return prepared.response;
 

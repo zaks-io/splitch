@@ -97,13 +97,7 @@ export async function startExperiment(
       },
     );
     if (!approval.ok) return approval.response;
-    return appliedExperimentStartResponse(
-      deps,
-      scope,
-      experiment.id,
-      approval.approvalRequest,
-      args.requestId,
-    );
+    return appliedExperimentStartResponse(deps, scope, experiment.id, approval.approvalRequest);
   }
 
   const now = nowIso(deps);
@@ -189,25 +183,31 @@ async function replayExperimentStart(
   );
   if (!replay) return null;
   if (!replay.ok) return replay.response;
-  return appliedExperimentStartResponse(
-    deps,
-    scope,
-    experimentId,
-    replay.approvalRequest,
-    args.requestId,
-  );
+  return appliedExperimentStartResponse(deps, scope, experimentId, replay.approvalRequest);
 }
 
+/**
+ * Only reached for an `applied` Approval Request, so the application result and
+ * the Run it names both have to exist. A 404 here would blame a missing
+ * Experiment for what is really a broken applied record, so it fails loud
+ * instead (ADR-0036).
+ */
 async function appliedExperimentStartResponse(
   deps: ExperimentDeps,
   scope: EnvScope,
   experimentId: string,
   approvalRequest: import("@splitch/contracts").ApprovalRequest,
-  requestId: string,
 ) {
   const result = approvalRequest.applicationResult;
-  const run = result ? await deps.repo.experiments.getRun(scope, result.resourceId) : null;
-  if (!run) return experimentNotFound(requestId);
+  if (!result) {
+    throw new Error(`applied Approval Request ${approvalRequest.id} carries no application result`);
+  }
+  const run = await deps.repo.experiments.getRun(scope, result.resourceId);
+  if (!run) {
+    throw new Error(
+      `applied Approval Request ${approvalRequest.id} names Run ${result.resourceId}, which does not exist`,
+    );
+  }
   const previousRunId = approvalRequest.diff.current.liveRunId;
   return Response.json({
     experimentId,

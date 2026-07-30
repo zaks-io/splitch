@@ -62,7 +62,7 @@ describe("mcp operation adapter", () => {
     );
   });
 
-  it("rejects a legacy Approval response without rewriting the canonical request", async () => {
+  it("rejects a legacy Approval Request response without rewriting the canonical request", async () => {
     let forwardedRequest: Request | undefined;
     const adapter = createMcpOperationAdapter({
       baseUrl: "https://control-plane.test",

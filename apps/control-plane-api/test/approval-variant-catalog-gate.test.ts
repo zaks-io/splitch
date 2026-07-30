@@ -98,6 +98,22 @@ describe("catalog membership is gated where the Environment was never narrowed",
   });
 });
 
+describe("an ungated catalog create is idempotent", () => {
+  it("a retry under the same key replays instead of colliding on the name", async () => {
+    await setProdPolicy(h, allowPolicy);
+    const created = await createVariantRequest(h, "cat_idem", { name: "beta", value: "beta-on" });
+    expect(created.status).toBe(200);
+
+    const retried = await createVariantRequest(h, "cat_idem", { name: "beta", value: "beta-on" });
+    expect(retried.status).toBe(200);
+
+    const betas = (await h.repo.flags.listVariants(appScope(ids.appId), ids.flagId)).filter(
+      (variant) => variant.name === "beta",
+    );
+    expect(betas.length).toBe(1);
+  });
+});
+
 describe("the delete guard reads explicit references, not servability", () => {
   it("allows an ungated delete when no Environment names the Variant", async () => {
     await setProdPolicy(h, allowPolicy);

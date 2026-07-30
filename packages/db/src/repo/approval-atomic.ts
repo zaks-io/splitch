@@ -121,40 +121,72 @@ export function appliedReviewInsert(
   commit: ApprovalCommit,
   mutationEvidence: SQL = sql`changes() = 1`,
 ) {
-  return db.insert(approvalReviews).select(
+  return (
     db
-      .select({
-        id: sql<string>`${commit.reviewId}`.as("id"),
-        appId: approvalRequests.appId,
-        approvalRequestId: approvalRequests.id,
-        action: sql<string>`'approve_and_apply'`.as("action"),
-        outcome: sql<string>`'applied'`.as("outcome"),
-        reviewedBy: sql<string>`${commit.reviewedBy}`.as("reviewed_by"),
-        reviewedVia: sql<string>`${commit.reviewedVia}`.as("reviewed_via"),
-        reviewedAt: sql<string>`${commit.reviewedAt}`.as("reviewed_at"),
-        reason: sql<string | null>`${commit.reason}`.as("reason"),
-        idempotencyKey: sql<string>`${commit.idempotencyKey}`.as("idempotency_key"),
-        requestHash: sql<string>`${commit.requestHash}`.as("request_hash"),
-        resultingTargetVersion: sql<string>`${commit.resultingTargetVersion}`.as(
-          "resulting_target_version",
-        ),
-        resultingResourceType: sql<string>`${commit.resultingResourceType}`.as(
-          "resulting_resource_type",
-        ),
-        resultingResourceId: sql<string>`${commit.resultingResourceId}`.as("resulting_resource_id"),
-        errorCode: sql<string | null>`NULL`.as("error_code"),
-        errorDetails: sql<string | null>`NULL`.as("error_details"),
-      })
-      .from(approvalRequests)
-      .where(
-        and(
-          eq(approvalRequests.appId, commit.appId),
-          eq(approvalRequests.id, commit.requestId),
-          eq(approvalRequests.status, "pending"),
-          mutationEvidence,
-        ),
-      ),
+      .insert(approvalReviews)
+      .select(
+        db
+          .select({
+            id: sql<string>`${commit.reviewId}`.as("id"),
+            appId: approvalRequests.appId,
+            approvalRequestId: approvalRequests.id,
+            action: sql<string>`'approve_and_apply'`.as("action"),
+            outcome: sql<string>`'applied'`.as("outcome"),
+            reviewedBy: sql<string>`${commit.reviewedBy}`.as("reviewed_by"),
+            reviewedVia: sql<string>`${commit.reviewedVia}`.as("reviewed_via"),
+            reviewedAt: sql<string>`${commit.reviewedAt}`.as("reviewed_at"),
+            reason: sql<string | null>`${commit.reason}`.as("reason"),
+            idempotencyKey: sql<string>`${commit.idempotencyKey}`.as("idempotency_key"),
+            requestHash: sql<string>`${commit.requestHash}`.as("request_hash"),
+            resultingTargetVersion: sql<string>`${commit.resultingTargetVersion}`.as(
+              "resulting_target_version",
+            ),
+            resultingResourceType: sql<string>`${commit.resultingResourceType}`.as(
+              "resulting_resource_type",
+            ),
+            resultingResourceId: sql<string>`${commit.resultingResourceId}`.as(
+              "resulting_resource_id",
+            ),
+            errorCode: sql<string | null>`NULL`.as("error_code"),
+            errorDetails: sql<string | null>`NULL`.as("error_details"),
+          })
+          .from(approvalRequests)
+          .where(
+            and(
+              eq(approvalRequests.appId, commit.appId),
+              eq(approvalRequests.id, commit.requestId),
+              eq(approvalRequests.status, "pending"),
+              mutationEvidence,
+            ),
+          ),
+      )
+      // The insert is conditional: an empty result is the per-statement signal
+      // that the guard filtered every row and no Review row was recorded.
+      .returning({ id: approvalReviews.id })
   );
+}
+
+/**
+ * Did THIS Review attempt's row land? Every Approval-guarded write batch is a
+ * conditional insert: when the guard loses (request no longer pending, reviewer
+ * role revoked, Policy level changed, version CAS lost), the target mutation and
+ * the Review insert both select zero rows and the batch still succeeds. Callers
+ * ask here instead of returning the re-read row as if it had been written, so a
+ * lost guard is observable rather than a silent no-op (ADR-0036).
+ */
+export async function approvalReviewLanded(db: Db, commit: ApprovalCommit): Promise<boolean> {
+  const rows = await db
+    .select({ one: sql<number>`1` })
+    .from(approvalReviews)
+    .where(
+      and(
+        eq(approvalReviews.appId, commit.appId),
+        eq(approvalReviews.id, commit.reviewId),
+        eq(approvalReviews.approvalRequestId, commit.requestId),
+      ),
+    )
+    .limit(1);
+  return rows.length === 1;
 }
 
 export function appliedRequestUpdate(db: Db, commit: ApprovalCommit) {

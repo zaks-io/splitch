@@ -33,8 +33,12 @@ export async function resultingVersionFor(
   if (operation === "flags_delete") {
     return absentTargetVersion({ type: "flag", id: row.targetId });
   }
+  // An empty context list is a malformed row, not a missing Experiment. An
+  // `envScope(appId, "")` would match nothing and report the two as one.
+  const environmentId = contexts[0]?.environmentId;
+  if (!environmentId) return null;
   const experiment = await repo.experiments.getExperiment(
-    envScope(row.appId, contexts[0]?.environmentId ?? ""),
+    envScope(row.appId, environmentId),
     row.targetId,
   );
   if (!experiment) return null;
@@ -117,7 +121,13 @@ async function createdVariantVersion(
   );
 }
 
-function isFlagConfigurationOperation(operation: ApprovalOperation): boolean {
+/**
+ * The operations whose target is a Flag Configuration. Exported so the
+ * application path classifies operations through the same predicate the
+ * resulting-version path does; two copies drift the moment an operation is
+ * added.
+ */
+export function isFlagConfigurationOperation(operation: ApprovalOperation): boolean {
   return (
     operation === "flag_config_update" ||
     operation === "flag_targeting_rules_replace" ||

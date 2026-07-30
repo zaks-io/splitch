@@ -80,7 +80,9 @@ export async function readEnvironmentPolicy(
 ): Promise<EnvironmentPolicy | null> {
   const row = await repo.identity.getEnvironment(appScope(appId), environmentId);
   if (!row) return null;
-  const parsed = EnvironmentPolicySchema.safeParse(JSON.parse(row.policy));
+  const parsed = EnvironmentPolicySchema.safeParse(
+    parsePolicyJson(appId, environmentId, row.policy),
+  );
   if (!parsed.success) {
     throw new EnvironmentPolicyContractError(
       appId,
@@ -89,6 +91,21 @@ export async function readEnvironmentPolicy(
     );
   }
   return parsed.data;
+}
+
+/**
+ * Non-JSON is the same class of fault as JSON that misses the schema: the
+ * stored row is out of contract. Both arrive as the one named fault so neither
+ * escapes as the anonymous runtime 500 (ADR-0036).
+ */
+function parsePolicyJson(appId: string, environmentId: string, policy: string): unknown {
+  try {
+    return JSON.parse(policy);
+  } catch (cause) {
+    throw new EnvironmentPolicyContractError(appId, environmentId, [
+      `<root>: not valid JSON (${cause instanceof Error ? cause.message : String(cause)})`,
+    ]);
+  }
 }
 
 export function flagConfigPatchGates(payload: Record<string, unknown>): PolicyChangeType[] {

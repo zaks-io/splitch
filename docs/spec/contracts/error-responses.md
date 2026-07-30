@@ -92,8 +92,12 @@ ErrorCode =
   | 'INTERNAL_SERVER_ERROR'       // includes corrupted KV blob (fail-loud per ADR-0025)
 ```
 
-Policy-gated mutations create durable Approval Requests and return
-`APPROVAL_REVIEW_REQUIRED`. The former `CONFIRMATION_REQUIRED` code is not part of the contract.
+A mutation whose Environment Policy level is `allow` applies directly and creates
+no Approval Request. A mutation gated at `confirm` creates a durable Approval
+Request and returns `APPROVAL_REVIEW_REQUIRED` only when the caller sent no
+inline `review`; a caller that sent `review: { action: 'approve_and_apply' }`
+applies in the same call. The former `CONFIRMATION_REQUIRED` code is not part of
+the contract.
 
 ---
 

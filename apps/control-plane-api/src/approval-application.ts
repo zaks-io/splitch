@@ -1,5 +1,6 @@
 import type { ApprovalRequest, ErrorCode } from "@splitch/contracts";
 import { type ApprovalCommit, appScope, envScope, type Repository } from "@splitch/db";
+import type { ApplicationOutcome } from "./approval-service-types";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { syncExperimentConfigFromD1 } from "./experiment-handler-shared";
 import { json } from "./experiment-model";
@@ -13,12 +14,7 @@ interface ApprovalApplicationDeps {
 }
 
 export function makeOtherApprovalApplication(deps: ApprovalApplicationDeps) {
-  return async (
-    request: ApprovalRequest,
-    commit: ApprovalCommit,
-  ): Promise<
-    { ok: true } | { ok: false; error: { code: ErrorCode; details: Record<string, unknown> } }
-  > => {
+  return async (request: ApprovalRequest, commit: ApprovalCommit): Promise<ApplicationOutcome> => {
     if (request.operation === "flag_variants_update") {
       return applyVariant(deps, request, commit);
     }
@@ -46,13 +42,16 @@ async function applyExperimentStart(
   request: ApprovalRequest,
   commit: ApprovalCommit,
 ) {
-  const environmentId = request.policyContexts[0]?.environmentId;
-  if (!environmentId || !deps.configStore) {
+  // A missing binding is transient and worth retrying; a stored Approval
+  // Request with no Environment context is a malformed row and never will be.
+  if (!deps.configStore) {
     return {
       ok: false as const,
       error: { code: "SERVICE_UNAVAILABLE" as const, details: { retryAfterMs: 1000 } },
     };
   }
+  const environmentId = request.policyContexts[0]?.environmentId;
+  if (!environmentId) return malformedProposal("policyContexts");
   const scope = envScope(request.appId, environmentId);
   const experiment = await deps.repo.experiments.getExperiment(scope, request.target.id);
   if (!experiment) {
@@ -141,12 +140,14 @@ async function applyVariant(
       error: { code: "VARIANT_NOT_FOUND" as const, details: {} },
     };
   }
+  if (typeof proposed.name !== "string") return malformedProposal("name");
+  if (proposed.value === undefined) return malformedProposal("value");
   const updated = await deps.repo.flags.updateVariant(
     appScope(request.appId),
     variant.flagId,
     variant.name,
     {
-      name: requiredString(proposed.name, "name"),
+      name: proposed.name,
       value: JSON.stringify(proposed.value),
       description: typeof proposed.description === "string" ? proposed.description : null,
     },
@@ -156,12 +157,9 @@ async function applyVariant(
       approval: commit,
     },
   );
-  if (!updated) {
-    return {
-      ok: false as const,
-      error: { code: "VARIANT_NOT_FOUND" as const, details: {} },
-    };
-  }
+  // The Variant was read above, so null is the Approval-guarded write reporting
+  // that it landed nothing; the reconciliation decides stale vs resolved.
+  if (!updated) return notApplied();
   await resyncFlagSnapshots(deps, request.appId, variant.flagId);
   return { ok: true as const };
 }
@@ -172,22 +170,23 @@ async function applyVariantCreate(
   commit: ApprovalCommit,
 ) {
   const proposed = request.diff.proposed;
-  const flagId = requiredString(proposed.flagId, "flagId");
+  const flagId = proposed.flagId;
+  if (typeof flagId !== "string") return malformedProposal("flagId");
+  if (typeof proposed.name !== "string") return malformedProposal("name");
+  if (proposed.value === undefined) return malformedProposal("value");
   const created = await deps.repo.flags.addVariant(
     appScope(request.appId),
     flagId,
     {
       id: request.target.id,
-      name: requiredString(proposed.name, "name"),
+      name: proposed.name,
       value: JSON.stringify(proposed.value),
       ...(typeof proposed.description === "string" ? { description: proposed.description } : {}),
       createdAt: commit.reviewedAt,
     },
     { updatedAt: commit.reviewedAt, updatedBy: commit.reviewedBy, approval: commit },
   );
-  if (!created) {
-    return { ok: false as const, error: { code: "INTERNAL_SERVER_ERROR" as const, details: {} } };
-  }
+  if (!created) return notApplied();
   await resyncFlagSnapshots(deps, request.appId, flagId);
   return { ok: true as const };
 }
@@ -207,9 +206,7 @@ async function applyVariantDelete(
     variant.name,
     { updatedAt: commit.reviewedAt, updatedBy: commit.reviewedBy, approval: commit },
   );
-  if (removed === 0) {
-    return { ok: false as const, error: { code: "INTERNAL_SERVER_ERROR" as const, details: {} } };
-  }
+  if (removed === 0) return notApplied();
   await resyncFlagSnapshots(deps, request.appId, variant.flagId);
   return { ok: true as const };
 }
@@ -237,16 +234,33 @@ async function applyFlagDelete(
     environments.map((environment) => environment.id),
     { approval: commit },
   );
-  if (!deleted) {
-    return { ok: false as const, error: { code: "INTERNAL_SERVER_ERROR" as const, details: {} } };
-  }
+  if (!deleted) return notApplied();
   await purgeFlagConfigsKvForKey(deps, request.appId, flagId, flag.key);
   return { ok: true as const };
 }
 
-function requiredString(value: unknown, field: string): string {
-  if (typeof value !== "string") {
-    throw new Error(`Approval variant proposal is missing ${field}`);
-  }
-  return value;
+/**
+ * The Approval-guarded write selected zero rows: nothing was applied, and the
+ * reconciliation re-reads the stored state to decide `stale` vs a recorded
+ * failure. Reporting it as a failure here would bury a legitimate race.
+ */
+function notApplied() {
+  return { ok: false as const, notApplied: true as const };
+}
+
+/**
+ * A stored proposal that cannot be read is a recorded application failure, not
+ * a thrown exception: every other branch here returns `{ ok: false, error }` so
+ * the Review row keeps a machine-stable reason, and a throw would instead land
+ * as an anonymous INTERNAL_SERVER_ERROR through the catch in
+ * `approval-review-application.ts`.
+ */
+function malformedProposal(field: string) {
+  return {
+    ok: false as const,
+    error: {
+      code: "VALIDATION_ERROR" as const,
+      details: { field, reason: "MALFORMED_APPROVAL_PROPOSAL" },
+    },
+  };
 }

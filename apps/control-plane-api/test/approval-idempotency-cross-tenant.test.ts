@@ -1,8 +1,9 @@
 /**
- * Idempotency-key replay across tenants. A key is only unique within an App, so
- * a shared key must never let one tenant's proposal or Review resolve another's.
- * Tenant B uses DELIBERATELY DISTINCT seeds from tenant A so that leakage shows
- * up as a foreign value, never as a coincidentally-equal fixture.
+ * Idempotency-key replay across Organizations. A key is only unique within an
+ * App, so a shared key must never let one Organization's proposal or Review
+ * resolve another's. Organization B uses DELIBERATELY DISTINCT seeds from
+ * Organization A so that leakage shows up as a foreign value, never as a
+ * coincidentally-equal fixture.
  */
 import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -10,7 +11,7 @@ import { type Harness, ids, setProdPolicy, token, USER_ID } from "../src/config-
 import { appAdminScope } from "../src/scope-binding";
 import { seedAppMember } from "../src/test-seeds";
 import { confirmPolicy, proposeA } from "./approval-harness";
-import { B, jwtFor, proposeB, reviewAs, seedTenantB } from "./approval-tenant-b";
+import { B, jwtFor, proposeB, reviewAs, seedOrganizationB } from "./approval-organization-b";
 import { makePoolHarness } from "./config-store-pool-harness";
 
 let h: Harness;
@@ -18,14 +19,14 @@ let h: Harness;
 beforeEach(async () => {
   h = await makePoolHarness();
   await setProdPolicy(h, confirmPolicy);
-  await seedTenantB(h);
+  await seedOrganizationB(h);
 });
 
 afterEach(async () => {
   await h.dispose();
 });
 
-describe("ATTACK: idempotency key replay across tenants", () => {
+describe("ATTACK: idempotency key replay across Organizations", () => {
   it("A9: the same actor + same key in two Apps yields two independent requests", async () => {
     const dualUser = USER_ID;
     await seedAppMember(h.d1, { appId: B.appId, userId: dualUser, role: "owner" });

@@ -7,13 +7,21 @@ export interface ApprovalServiceDeps {
   repo: Repository;
   configStore?: ConfigStoreAccess;
   nowIso?: () => string;
-  applyOther?: (
-    request: ApprovalRequest,
-    commit: ApprovalCommit,
-  ) => Promise<
-    { ok: true } | { ok: false; error: { code: ErrorCode; details: Record<string, unknown> } }
-  >;
+  applyOther?: (request: ApprovalRequest, commit: ApprovalCommit) => Promise<ApplicationOutcome>;
 }
+
+/**
+ * `notApplied` is not a failure: the guarded write selected zero rows because
+ * the Approval Request stopped being applicable mid-flight (resolved by a
+ * concurrent Review, target moved, reviewer role revoked). It carries no error
+ * because the reconciliation in `approval-review-application.ts` re-reads the
+ * stored state and decides between `applied`, `stale`, and a recorded failure —
+ * recording a failure here would bury a legitimate race as a 500.
+ */
+export type ApplicationOutcome =
+  | { ok: true }
+  | { ok: false; notApplied: true }
+  | { ok: false; error: { code: ErrorCode; details: Record<string, unknown> } };
 
 export type ApprovalResult =
   | { ok: true; approvalRequest: ApprovalRequest }

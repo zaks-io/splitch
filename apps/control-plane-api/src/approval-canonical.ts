@@ -31,7 +31,11 @@ export function canonicalJson(value: unknown): string {
   }
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
+    // RFC 8785 has no `undefined`, and neither does JSON: an explicitly
+    // undefined property is omitted exactly as `JSON.stringify` omits it,
+    // rather than throwing mid-request on a patch object built in JS.
     return `{${Object.keys(record)
+      .filter((key) => record[key] !== undefined)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
       .join(",")}}`;
@@ -45,7 +49,10 @@ export function approvalDiff(
 ): ApprovalDiff {
   const entries: ApprovalDiffEntry[] = [];
   diffValue(current, proposed, "", entries);
-  entries.sort((left, right) => left.path.localeCompare(right.path));
+  // Code-unit order, not `localeCompare`: the diff is hashed, and ICU collation
+  // orders punctuation and case differently across runtimes, which would give
+  // the same proposal two canonical forms and two request hashes.
+  entries.sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
   return { current, proposed, entries };
 }
 
@@ -61,9 +68,12 @@ function diffValue(
     const keys = [...new Set([...Object.keys(current), ...Object.keys(proposed)])].sort();
     for (const key of keys) {
       const childPath = `${path}/${escapePointer(key)}`;
-      if (!(key in current)) {
+      const inCurrent = present(current, key);
+      const inProposed = present(proposed, key);
+      if (!(inCurrent || inProposed)) continue;
+      if (!inCurrent) {
         entries.push({ path: childPath, operation: "add", proposed: proposed[key] });
-      } else if (!(key in proposed)) {
+      } else if (!inProposed) {
         entries.push({ path: childPath, operation: "remove", current: current[key] });
       } else {
         diffValue(current[key], proposed[key], childPath, entries);
@@ -72,6 +82,11 @@ function diffValue(
     return;
   }
   entries.push({ path: path || "/", operation: "replace", current, proposed });
+}
+
+/** A key holding `undefined` is absent, the way `JSON.stringify` sees it. */
+function present(record: Record<string, unknown>, key: string): boolean {
+  return key in record && record[key] !== undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

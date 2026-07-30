@@ -28,9 +28,11 @@ import {
   resolvedWinner,
   reviewForbidden,
   reviewRequired,
+  staleReplay,
 } from "./approval-review-outcomes";
 import { rowTargetVersion } from "./approval-row-target";
 import type {
+  ApprovalRequestRow,
   ApprovalResult,
   ApprovalServiceDeps,
   ReviewApprovalInput,
@@ -95,10 +97,28 @@ export async function replayApprovalIfExists(
       requestId: input.requestId,
     });
   }
+  return replayOutcome(deps, row, input.requestId);
+}
+
+/**
+ * Only an APPLIED replay is a successful write. A `declined` or `stale` request
+ * changed nothing, so answering `ok` would let the caller read the live resource
+ * and report a change that never happened as the result of this call.
+ */
+async function replayOutcome(
+  deps: ApprovalServiceDeps,
+  row: ApprovalRequestRow,
+  requestId: string,
+): Promise<ApprovalResult> {
   const request = await approvalRequestProjection(deps.repo, row);
-  return request.status === "pending"
-    ? { ok: false, response: reviewRequired(request, input.requestId) }
-    : { ok: true, approvalRequest: request };
+  if (request.status === "applied") return { ok: true, approvalRequest: request };
+  if (request.status === "pending") {
+    return { ok: false, response: reviewRequired(request, requestId) };
+  }
+  // A derived `stale` status sits on a still-`pending` row, which the resolved
+  // error cannot describe: its `status` detail admits only terminal values.
+  if (row.status === "pending") return staleReplay(deps, row, requestId);
+  return { ok: false, response: await resolvedError(deps, row, requestId) };
 }
 
 export async function createApproval(

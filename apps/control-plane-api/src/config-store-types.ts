@@ -80,6 +80,12 @@ export interface PromoteFlagConfigInput {
  */
 type FlagConfigWriteFailure =
   | { ok: false; reason: "FLAG_NOT_FOUND" }
+  /**
+   * The Approval-guarded D1 write selected zero rows, so no Review landed,
+   * nothing was applied, and no KV snapshot was published. Distinct from
+   * FLAG_NOT_FOUND, which means the Flag Configuration itself is gone.
+   */
+  | { ok: false; reason: "APPROVAL_NOT_APPLIED" }
   | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] }
   | { ok: false; reason: "ROLLOUT_AMBIGUOUS"; availableVariantNames: string[] };
 

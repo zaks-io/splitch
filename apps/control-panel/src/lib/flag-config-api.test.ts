@@ -26,7 +26,14 @@ describe("Control Panel Flag Configuration adapter", () => {
 
     const [payload] = flags.updateConfig.mock.calls[0] as [Record<string, unknown>];
     expect(payload).not.toHaveProperty("review");
-    expect(payload).toMatchObject({ ...scope, flagId: "flag_checkout", enabled: true });
+    expect(payload).toMatchObject({
+      ...scope,
+      flagId: "flag_checkout",
+      enabled: true,
+      // The caller's key has to survive the adapter untouched: re-minting or
+      // dropping it turns a retried Configuration change into a second write.
+      idempotency_key: "idem_panel_1",
+    });
   });
 
   it("forwards an explicit Review untouched", async () => {

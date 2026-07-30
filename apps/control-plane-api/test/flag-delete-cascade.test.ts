@@ -25,11 +25,11 @@ beforeEach(async () => {
 afterEach(async () => h.bindings.dispose());
 
 describe("flag delete cascade cleanup", () => {
-  it("cascade-deletes Environment configs and KV snapshots when a Flag is deleted", async () => {
+  it("cascade-deletes Flag Configurations and KV snapshots when a Flag is deleted", async () => {
     const createdApp = await lifecycleCreateDefaultApp(h);
     const jwt = await lifecycleAppToken(h, createdApp.app.id);
     // This suite is about the cascade, not the Approval gate a `confirm`
-    // Environment puts in front of it.
+    // Environment Policy puts in front of it.
     await allowAllPolicies(h, createdApp.app.id);
     const flag = await createFlag(h, createdApp.app.id, jwt);
     const repo = createRepository(h.bindings.d1);

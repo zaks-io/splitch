@@ -141,7 +141,7 @@ function failedReplay(
   };
 }
 
-async function staleReplay(
+export async function staleReplay(
   deps: ApprovalServiceDeps,
   row: ApprovalRequestRow,
   requestId: string,
