@@ -198,10 +198,16 @@ async function resolvePanelPrincipal(
       },
     };
   }
+  // Unbound operations name no resource, so there is nothing to derive authority
+  // from and nothing to co-scope against. The principal carries the actor and an
+  // empty scope set; the handler is the sole authorization authority. For
+  // `organizations_create` that is `refuses a provisional door` plus, once
+  // SPL-175 lands, the per-User creation quota.
   if (
     operation.id === "experiments_list" ||
     operation.id === "experiments_detail" ||
-    operation.id === "experiments_results"
+    operation.id === "experiments_results" ||
+    operation.id === "organizations_create"
   ) {
     return {
       ok: true as const,
@@ -250,7 +256,14 @@ async function resolveBoundedPanelSessionPrincipal(
 async function resolvePanelResourcePrincipal(
   operation: Exclude<
     ReturnType<typeof parseControlPanelBindingOperation>,
-    { id: "apps_create" | "experiments_detail" | "experiments_list" | "experiments_results" } | null
+    {
+      id:
+        | "apps_create"
+        | "experiments_detail"
+        | "experiments_list"
+        | "experiments_results"
+        | "organizations_create";
+    } | null
   >,
   actorId: string,
   panelAccess?: PanelSessionAccess,

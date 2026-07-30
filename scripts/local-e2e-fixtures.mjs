@@ -8,6 +8,16 @@ export const LOCAL_E2E_MEMBER_SESSION_TOKEN = `spl_${"141e2e".padEnd(64, "0")}`;
 export const LOCAL_E2E_MEMBER_SESSION_KEY = `session:${createHash("sha256")
   .update(LOCAL_E2E_MEMBER_SESSION_TOKEN)
   .digest("hex")}`;
+/**
+ * A signed-in User who belongs to no Organization at all (SPL-205). Every other
+ * fixture principal already has memberships, so the landing page a brand new
+ * User actually sees was unreachable from e2e until this existed. Deliberately
+ * absent from `LOCAL_E2E_D1_SEED`: zero memberships means zero rows.
+ */
+export const LOCAL_E2E_NEWCOMER_SESSION_TOKEN = `spl_${"205e2e".padEnd(64, "0")}`;
+export const LOCAL_E2E_NEWCOMER_SESSION_KEY = `session:${createHash("sha256")
+  .update(LOCAL_E2E_NEWCOMER_SESSION_TOKEN)
+  .digest("hex")}`;
 
 export const LOCAL_E2E_FIXTURE_CONTRACT = Object.freeze({
   organization: {
@@ -170,6 +180,16 @@ export function localE2eMemberSession(expiresAt = Math.floor(Date.now() / 1000) 
         apps: [{ appId: "app_checkout_e2e", appSlug: "checkout-api", role: "member" }],
       },
     ],
+  };
+}
+
+export function localE2eNewcomerSession(expiresAt = Math.floor(Date.now() / 1000) + 3_600) {
+  return {
+    version: 2,
+    userId: "user_local_newcomer_e2e",
+    expiresAt,
+    workosSessionId: "session_local_newcomer_e2e",
+    orgs: [],
   };
 }
 
