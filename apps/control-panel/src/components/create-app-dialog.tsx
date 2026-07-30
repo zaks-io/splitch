@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@splitch/ui/components/
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { CreateAppForm } from "#components/create-app-form";
+import { StaleSessionNotice } from "#components/stale-session-notice";
 import { canCreateApp } from "#lib/org-app-list";
 import type { OrgRole } from "#lib/session";
 
@@ -15,6 +16,10 @@ import type { OrgRole } from "#lib/session";
 export function CreateAppDialog({ orgId, orgRole }: { orgId: string; orgRole: OrgRole }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  // Not cleared on the next open: the notice below the dialog is the only place
+  // this App's create is ever surfaced, since the session list it would appear
+  // in is exactly what is stale (SPL-203).
+  const [staleAppSlug, setStaleAppSlug] = useState<string | null>(null);
 
   if (!canCreateApp(orgRole)) {
     return (
@@ -38,17 +43,24 @@ export function CreateAppDialog({ orgId, orgRole }: { orgId: string; orgRole: Or
   }
 
   return (
-    <Dialog onOpenChange={changeOpen} open={open}>
-      <DialogTrigger render={<Button data-testid="create-app" />}>Create App</DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
-        <CreateAppForm
-          onCreated={() => {
-            setOpen(false);
-            void router.invalidate();
-          }}
-          orgId={orgId}
-        />
-      </DialogContent>
-    </Dialog>
+    <div className="grid gap-3">
+      {staleAppSlug ? <StaleSessionNotice resource="App" slug={staleAppSlug} /> : null}
+      <Dialog onOpenChange={changeOpen} open={open}>
+        <DialogTrigger render={<Button data-testid="create-app" />}>Create App</DialogTrigger>
+        <DialogContent className="sm:max-w-lg">
+          <CreateAppForm
+            onCreated={() => {
+              setOpen(false);
+              void router.invalidate();
+            }}
+            onStaleSession={(appSlug) => {
+              setOpen(false);
+              setStaleAppSlug(appSlug);
+            }}
+            orgId={orgId}
+          />
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

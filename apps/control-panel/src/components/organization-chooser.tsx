@@ -43,7 +43,7 @@ export function OrganizationChooser({
       data-hydrated={isHydrated ? "true" : "false"}
       data-org-chooser="ready"
     >
-      {staleOrgSlug ? <StaleSessionNotice orgSlug={staleOrgSlug} /> : null}
+      {staleOrgSlug ? <StaleSessionNotice resource="Organization" slug={staleOrgSlug} /> : null}
       {truncated ? <OrganizationsTruncatedNotice limit={orgs.length} /> : null}
       {orgs.length === 0 ? (
         <OrganizationsEmptyState onCreated={enterOrganization} onStaleSession={setStaleOrgSlug} />
