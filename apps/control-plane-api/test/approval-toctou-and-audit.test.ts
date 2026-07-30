@@ -129,7 +129,7 @@ describe("ATTACK: audit trail on the ungated (kill-switch) path", () => {
 
     // Turning a Flag OFF is an availability reduction and is deliberately
     // ungated, so it opens no Approval Request and records no Review.
-    expect((await h.repo.approvals.listRequests(appScope(ids.appId))).length).toBe(0);
+    expect(await h.repo.approvals.countRequests(appScope(ids.appId), {})).toBe(0);
     expect(await countApprovalReviews(h)).toBe(0);
   });
 

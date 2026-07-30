@@ -112,7 +112,7 @@ function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
     if (!flag) return false;
 
     const approval = options?.approval;
-    const pending = approval ? [approvalPendingCondition(db, approval)] : [];
+    const pending = approval ? [approvalPendingCondition(db, scope, approval)] : [];
     const batch = [
       ...environmentIds.flatMap((environmentId) => {
         const env = envScope(scope.appId, environmentId);
@@ -135,7 +135,9 @@ function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
         .delete(flags)
         .where(and(eq(flags.appId, scope.appId), eq(flags.id, flagId), ...pending))
         .returning(),
-      ...(approval ? [appliedReviewInsert(db, approval), appliedRequestUpdate(db, approval)] : []),
+      ...(approval
+        ? [appliedReviewInsert(db, scope, approval), appliedRequestUpdate(db, scope, approval)]
+        : []),
     ];
     await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
     return approval ? (await flagInScope(scope, flagId)) === null : true;

@@ -94,7 +94,7 @@ describe("ungated writes create no Approval rows", () => {
       ids.flagId,
     );
     expect(config?.enabled).toBe(true);
-    expect((await h.repo.approvals.listRequests(appScope(ids.appId))).length).toBe(0);
+    expect(await h.repo.approvals.countRequests(appScope(ids.appId), {})).toBe(0);
     expect(await countApprovalReviews(h)).toBe(0);
   });
 
@@ -111,7 +111,7 @@ describe("ungated writes create no Approval rows", () => {
       ids.flagId,
     );
     expect(config?.enabled).toBe(false);
-    expect((await h.repo.approvals.listRequests(appScope(ids.appId))).length).toBe(0);
+    expect(await h.repo.approvals.countRequests(appScope(ids.appId), {})).toBe(0);
     expect(await countApprovalReviews(h)).toBe(0);
   });
 });

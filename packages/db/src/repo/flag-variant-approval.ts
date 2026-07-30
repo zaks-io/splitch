@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, exists, sql } from "drizzle-orm";
 import { approvalRequests, flagConfigs, flags, variants } from "../schema/index";
 import {
   appliedRequestUpdate,
@@ -42,7 +42,7 @@ function renameAvailableVariant(
         eq(flagConfigs.appId, scope.appId),
         eq(flagConfigs.flagId, flagId),
         sql`EXISTS (SELECT 1 FROM json_each(${flagConfigs.availableVariantNames}) WHERE "value" = ${from})`,
-        ...(approval ? [reviewRecorded(db, approval)] : []),
+        ...(approval ? [reviewRecorded(db, scope, approval)] : []),
       ),
     )
     .returning({ id: flagConfigs.id });
@@ -62,6 +62,7 @@ export interface VariantWriteOptions {
  */
 export function guardedVariantInsert(
   db: Db,
+  scope: TenantScope,
   values: typeof variants.$inferInsert,
   approval: ApprovalCommit,
 ) {
@@ -78,9 +79,9 @@ export function guardedVariantInsert(
       .from(approvalRequests)
       .where(
         and(
-          eq(approvalRequests.appId, approval.appId),
+          eq(approvalRequests.appId, scope.appId),
           eq(approvalRequests.id, approval.requestId),
-          approvalPendingCondition(db, approval),
+          approvalPendingCondition(db, scope, approval),
         ),
       ),
   );
@@ -115,7 +116,7 @@ export function catalogApprovalBatch(
         eq(flags.appId, args.scope.appId),
         eq(flags.id, args.flag.id),
         eq(flags.version, args.flag.version),
-        approvalPendingCondition(db, approval),
+        approvalPendingCondition(db, args.scope, approval),
         sql`changes() = 1`,
       ),
     )
@@ -123,9 +124,29 @@ export function catalogApprovalBatch(
   return [
     args.mutation,
     flagUpdate,
-    appliedReviewInsert(db, approval),
-    appliedRequestUpdate(db, approval),
+    appliedReviewInsert(db, args.scope, approval),
+    appliedRequestUpdate(db, args.scope, approval),
   ] as unknown as Parameters<Db["batch"]>[0];
+}
+
+/**
+ * The parent Flag is still at the version this write was planned against.
+ *
+ * `variants` has no `version` column of its own, so the Flag version IS the
+ * concurrency token for the catalog. The sibling `flags` bump in the same batch
+ * carries the CAS, but a CAS on a LATER statement cannot un-commit an EARLIER
+ * one: without this the Variant row mutates, the version bump silently loses,
+ * and the caller is told the change did not apply. Binding the CAS to the
+ * Variant mutation itself makes the whole batch collapse together, exactly the
+ * way `flag-config-ops` puts the config version CAS on its own mutation.
+ */
+function flagVersionUnchanged(db: Db, scope: TenantScope, flagId: string, version: number) {
+  return exists(
+    db
+      .select({ one: sql<number>`1` })
+      .from(flags)
+      .where(and(eq(flags.appId, scope.appId), eq(flags.id, flagId), eq(flags.version, version))),
+  );
 }
 
 type VariantByName = (
@@ -156,7 +177,11 @@ export function makeUpdateVariant(
     const flag = await flagInScope(scope, flagId);
     if (!flag) return null;
     const variantWhere = options?.approval
-      ? and(eq(variants.id, variant.id), approvalPendingCondition(db, options.approval))
+      ? and(
+          eq(variants.id, variant.id),
+          approvalPendingCondition(db, scope, options.approval),
+          flagVersionUnchanged(db, scope, flagId, flag.version),
+        )
       : eq(variants.id, variant.id);
     const variantUpdate = db.update(variants).set(patch).where(variantWhere).returning();
     const flagUpdate = db
@@ -172,7 +197,7 @@ export function makeUpdateVariant(
           eq(flags.id, flagId),
           eq(flags.version, flag.version),
           ...(options?.approval
-            ? [approvalPendingCondition(db, options.approval), sql`changes() = 1`]
+            ? [approvalPendingCondition(db, scope, options.approval), sql`changes() = 1`]
             : []),
         ),
       )
@@ -180,8 +205,12 @@ export function makeUpdateVariant(
     // `changes() = 1` binds the Review to the flag version bump immediately
     // above it; a value probe could be satisfied by a concurrent Review of a
     // different request committing in the same millisecond.
-    const reviewInsert = options?.approval ? [appliedReviewInsert(db, options.approval)] : [];
-    const requestUpdate = options?.approval ? [appliedRequestUpdate(db, options.approval)] : [];
+    const reviewInsert = options?.approval
+      ? [appliedReviewInsert(db, scope, options.approval)]
+      : [];
+    const requestUpdate = options?.approval
+      ? [appliedRequestUpdate(db, scope, options.approval)]
+      : [];
     // A rename must carry `flag_configs.available_variant_names` with it in the
     // same transaction. Otherwise every Environment keeps pointing at a Variant
     // name that no longer exists: the served snapshot dangles and the Variant
@@ -205,7 +234,8 @@ export function makeUpdateVariant(
     ] as unknown as Parameters<Db["batch"]>[0]);
     // A lost guard no-ops the whole batch, and the re-read below would then hand
     // back the untouched Variant as though the proposal had been applied.
-    if (options?.approval && !(await approvalReviewLanded(db, options.approval))) return null;
+    if (options?.approval && !(await approvalReviewLanded(db, scope, options.approval)))
+      return null;
     return variantByName(scope, flagId, (patch.name as string | undefined) ?? name);
   };
 }

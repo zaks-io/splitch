@@ -22,6 +22,14 @@ beforeEach(async () => {
   local = await createLocalD1();
   repo = createRepository(local.d1);
   seed = await seedTwoTenants(local.d1);
+  // The attacker holds a reviewer role in BOTH Apps, so a refusal below can
+  // only be App scoping — never a missing role.
+  for (const appId of [seed.a.appId, seed.b.appId]) {
+    await local.d1
+      .prepare("INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES (?,?,?,?)")
+      .bind(appId, "user_a_owner", "owner", NOW)
+      .run();
+  }
 });
 
 afterEach(async () => {
@@ -51,8 +59,6 @@ async function seedPendingRequestForB(): Promise<string> {
 function attackerDisposition(requestId: string): ApprovalDisposition {
   return {
     requestId,
-    // FORGED: the attacker names App B while holding only App A's scope.
-    appId: seed.b.appId,
     reviewId: "rev_a_attack",
     action: "decline",
     outcome: "declined",

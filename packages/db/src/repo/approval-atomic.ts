@@ -2,51 +2,67 @@ import { and, eq, exists, inArray, type SQL, sql } from "drizzle-orm";
 import { appMemberships, approvalRequests, approvalReviews, environments } from "../schema/index";
 import type { ApprovalCommit, ApprovalPolicyContextGuard } from "./approval-types";
 import type { Db } from "./client";
+import type { TenantScope } from "./scope";
+import { assertMintedScope } from "./scope";
 
-export function approvalPendingCondition(db: Db, commit: ApprovalCommit) {
+/**
+ * Every App predicate below binds `scope.appId`, never a field off the commit.
+ * The scope is a minted, frozen value object the caller had to obtain from
+ * `appScope`/`envScope` after authorization; commit fields are just data the
+ * caller assembled. Keeping the tenant predicate on the scope makes App
+ * isolation a LOCAL invariant of this seam (ADR-0018) instead of a property of
+ * whoever happened to construct the commit.
+ */
+
+export function approvalPendingCondition(db: Db, scope: TenantScope, commit: ApprovalCommit) {
+  assertMintedScope(scope);
   return exists(
     db
       .select({ one: sql<number>`1` })
       .from(approvalRequests)
       .where(
         and(
-          eq(approvalRequests.appId, commit.appId),
+          eq(approvalRequests.appId, scope.appId),
           eq(approvalRequests.id, commit.requestId),
           eq(approvalRequests.status, "pending"),
-          currentReviewerCondition(db, commit),
-          ...commit.policyContexts.map((context) => currentPolicyCondition(db, commit, context)),
+          currentReviewerCondition(db, scope, commit.reviewedBy),
+          ...commit.policyContexts.map((context) => currentPolicyCondition(db, scope, context)),
         ),
       ),
   );
 }
 
-function currentReviewerCondition(db: Db, commit: ApprovalCommit) {
+/**
+ * The reviewer still holds a role that may review, checked in D1 at write time.
+ * The service layer checks the same thing first so the caller gets the declared
+ * `ROLE_NOT_ALLOWED` contract shape; this is the backstop underneath it, because
+ * the data-access seam is the security boundary (ADR-0018) and a role can be
+ * revoked between the service check and the write.
+ */
+export function currentReviewerCondition(db: Db, scope: TenantScope, reviewedBy: string) {
+  assertMintedScope(scope);
   return exists(
     db
       .select({ one: sql<number>`1` })
       .from(appMemberships)
       .where(
         and(
-          eq(appMemberships.appId, commit.appId),
-          eq(appMemberships.userId, commit.reviewedBy),
+          eq(appMemberships.appId, scope.appId),
+          eq(appMemberships.userId, reviewedBy),
           inArray(appMemberships.role, ["owner", "admin"]),
         ),
       ),
   );
 }
 
-function currentPolicyCondition(
-  db: Db,
-  commit: ApprovalCommit,
-  context: ApprovalPolicyContextGuard,
-) {
+function currentPolicyCondition(db: Db, scope: TenantScope, context: ApprovalPolicyContextGuard) {
   return exists(
     db
       .select({ one: sql<number>`1` })
       .from(environments)
       .where(
         and(
-          eq(environments.appId, commit.appId),
+          eq(environments.appId, scope.appId),
           eq(environments.id, context.environmentId),
           ...context.changeTypes.map((changeType) =>
             policyLevelCondition(changeType, context.level),
@@ -79,14 +95,15 @@ function policyLevelCondition(
  * unique per attempt, so a concurrent Review of a *different* request against
  * the same target can never satisfy it.
  */
-export function reviewRecorded(db: Db, commit: ApprovalCommit) {
+export function reviewRecorded(db: Db, scope: TenantScope, commit: ApprovalCommit) {
+  assertMintedScope(scope);
   return exists(
     db
       .select({ one: sql<number>`1` })
       .from(approvalReviews)
       .where(
         and(
-          eq(approvalReviews.appId, commit.appId),
+          eq(approvalReviews.appId, scope.appId),
           eq(approvalReviews.id, commit.reviewId),
           eq(approvalReviews.approvalRequestId, commit.requestId),
         ),
@@ -107,20 +124,23 @@ export function reviewRecorded(db: Db, commit: ApprovalCommit) {
  */
 export function appliedReviewQueries(
   db: Db,
+  scope: TenantScope,
   commit: ApprovalCommit,
   mutationEvidence: SQL = sql`changes() = 1`,
 ) {
   return [
-    appliedReviewInsert(db, commit, mutationEvidence),
-    appliedRequestUpdate(db, commit),
+    appliedReviewInsert(db, scope, commit, mutationEvidence),
+    appliedRequestUpdate(db, scope, commit),
   ] as const;
 }
 
 export function appliedReviewInsert(
   db: Db,
+  scope: TenantScope,
   commit: ApprovalCommit,
   mutationEvidence: SQL = sql`changes() = 1`,
 ) {
+  assertMintedScope(scope);
   return (
     db
       .insert(approvalReviews)
@@ -153,7 +173,7 @@ export function appliedReviewInsert(
           .from(approvalRequests)
           .where(
             and(
-              eq(approvalRequests.appId, commit.appId),
+              eq(approvalRequests.appId, scope.appId),
               eq(approvalRequests.id, commit.requestId),
               eq(approvalRequests.status, "pending"),
               mutationEvidence,
@@ -174,13 +194,18 @@ export function appliedReviewInsert(
  * ask here instead of returning the re-read row as if it had been written, so a
  * lost guard is observable rather than a silent no-op (ADR-0036).
  */
-export async function approvalReviewLanded(db: Db, commit: ApprovalCommit): Promise<boolean> {
+export async function approvalReviewLanded(
+  db: Db,
+  scope: TenantScope,
+  commit: ApprovalCommit,
+): Promise<boolean> {
+  assertMintedScope(scope);
   const rows = await db
     .select({ one: sql<number>`1` })
     .from(approvalReviews)
     .where(
       and(
-        eq(approvalReviews.appId, commit.appId),
+        eq(approvalReviews.appId, scope.appId),
         eq(approvalReviews.id, commit.reviewId),
         eq(approvalReviews.approvalRequestId, commit.requestId),
       ),
@@ -189,7 +214,8 @@ export async function approvalReviewLanded(db: Db, commit: ApprovalCommit): Prom
   return rows.length === 1;
 }
 
-export function appliedRequestUpdate(db: Db, commit: ApprovalCommit) {
+export function appliedRequestUpdate(db: Db, scope: TenantScope, commit: ApprovalCommit) {
+  assertMintedScope(scope);
   return db
     .update(approvalRequests)
     .set({
@@ -201,10 +227,10 @@ export function appliedRequestUpdate(db: Db, commit: ApprovalCommit) {
     })
     .where(
       and(
-        eq(approvalRequests.appId, commit.appId),
+        eq(approvalRequests.appId, scope.appId),
         eq(approvalRequests.id, commit.requestId),
         eq(approvalRequests.status, "pending"),
-        reviewRecorded(db, commit),
+        reviewRecorded(db, scope, commit),
       ),
     )
     .returning({ id: approvalRequests.id });

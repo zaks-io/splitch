@@ -227,7 +227,6 @@ export async function reviewApproval(
   if (input.action === "decline") {
     const resolved = await deps.repo.approvals.resolveWithoutApplication(scope, {
       requestId: row.id,
-      appId: input.appId,
       reviewId: approvalReviewId(new Date(now).getTime()),
       action: input.action,
       outcome: "declined",

@@ -39,7 +39,7 @@ describe("a frozen Run outranks the Approval gate", () => {
     expect(frozen.status).toBe(409);
     expect(frozen.code).toBe("RUN_FROZEN");
     expect(frozen.approvalRequestId).toBeUndefined();
-    expect((await h.repo.approvals.listRequests(appScope(ids.appId))).length).toBe(0);
+    expect(await h.repo.approvals.countRequests(appScope(ids.appId), {})).toBe(0);
     expect(await countApprovalReviews(h)).toBe(0);
   });
 });

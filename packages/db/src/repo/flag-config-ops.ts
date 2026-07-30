@@ -95,18 +95,19 @@ export function makeFlagConfigOps(
             and(
               scopedFlagConfig(scope, flagId),
               eq(flagConfigs.version, current.version),
-              approvalPendingCondition(db, approval),
+              approvalPendingCondition(db, scope, approval),
             ),
           )
           .returning({ id: flagConfigs.id });
         // `changes() = 1` binds the Review to this exact mutation statement.
-        await db.batch([mutation, ...appliedReviewQueries(db, approval)] as unknown as Parameters<
-          Db["batch"]
-        >[0]);
+        await db.batch([
+          mutation,
+          ...appliedReviewQueries(db, scope, approval),
+        ] as unknown as Parameters<Db["batch"]>[0]);
         // The guard can lose (request resolved, reviewer role revoked, Policy
         // level changed, version CAS lost) and leave every statement a no-op.
         // Returning the re-read row would report that as an applied change.
-        if (!(await approvalReviewLanded(db, approval))) return null;
+        if (!(await approvalReviewLanded(db, scope, approval))) return null;
         return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       }
       const rows = await flagConfigsTable.update(
@@ -140,7 +141,7 @@ export function makeFlagConfigOps(
       if (approval) {
         // The Review row is this attempt's unique evidence: the rule writes ride
         // along with it, and it is itself bound to the config bump by changes().
-        const evidence = reviewRecorded(db, approval);
+        const evidence = reviewRecorded(db, scope, approval);
         const guardedDelete = db
           .delete(targetingRules)
           .where(and(scopedTargetingRule(scope, flagId), evidence))
@@ -174,18 +175,18 @@ export function makeFlagConfigOps(
             and(
               scopedFlagConfig(scope, flagId),
               eq(flagConfigs.version, current.version),
-              approvalPendingCondition(db, approval),
+              approvalPendingCondition(db, scope, approval),
             ),
           )
           .returning();
         await db.batch([
           guardedUpdate,
-          appliedReviewInsert(db, approval),
+          appliedReviewInsert(db, scope, approval),
           guardedDelete,
           ...guardedInserts,
-          appliedRequestUpdate(db, approval),
+          appliedRequestUpdate(db, scope, approval),
         ] as unknown as Parameters<Db["batch"]>[0]);
-        if (!(await approvalReviewLanded(db, approval))) return null;
+        if (!(await approvalReviewLanded(db, scope, approval))) return null;
         return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       }
 

@@ -52,7 +52,6 @@ export async function prepareAndApplyApproval(
   }
   const commit: ApprovalCommit = {
     requestId: row.id,
-    appId: row.appId,
     reviewId: approvalReviewId(new Date(now).getTime()),
     action: "approve_and_apply",
     reviewedBy: input.principal.id,

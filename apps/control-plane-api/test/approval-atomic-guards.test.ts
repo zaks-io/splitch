@@ -24,7 +24,6 @@ describe("Approval Request runtime: atomic guards and tenant isolation", () => {
     if (!row) throw new Error("missing Approval Request");
     const commit = (reviewedBy: string, reviewId: string): ApprovalCommit => ({
       requestId,
-      appId: ids.appId,
       reviewId,
       action: "approve_and_apply",
       reviewedBy,

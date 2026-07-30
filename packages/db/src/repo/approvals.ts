@@ -1,5 +1,6 @@
 import { and, desc, eq, exists, inArray, sql } from "drizzle-orm";
 import { approvalRequests, approvalReviews } from "../schema/index";
+import { currentReviewerCondition } from "./approval-atomic";
 import type { ApprovalDisposition, ApprovalFailure } from "./approval-types";
 import type { Db } from "./client";
 import type { TenantScope } from "./scope";
@@ -80,15 +81,6 @@ export function makeApprovalRepo(db: Db) {
     getRequestByActorKey(scope: TenantScope, proposedBy: string, idempotencyKey: string) {
       assertMintedScope(scope);
       return requestByActorKey(db, scope, proposedBy, idempotencyKey);
-    },
-
-    listRequests(scope: TenantScope) {
-      assertMintedScope(scope);
-      return db
-        .select()
-        .from(approvalRequests)
-        .where(eq(approvalRequests.appId, scope.appId))
-        .orderBy(desc(approvalRequests.proposedAt), desc(approvalRequests.id));
     },
 
     /**
@@ -211,11 +203,20 @@ function failureInsert(db: Db, scope: TenantScope, failure: ApprovalFailure) {
 }
 
 /**
- * Every predicate is keyed off the MINTED scope, never `disposition.appId`: the
- * scope is what the caller was authorized for, so a disposition carrying a
- * foreign `appId` matches nothing instead of writing outside that scope.
+ * Every predicate is keyed off the MINTED scope: the scope is what the caller
+ * was authorized for, so a disposition naming a foreign App matches nothing
+ * instead of writing outside that scope.
+ *
+ * `currentReviewerCondition` is the same D1 backstop the apply paths get from
+ * `approvalPendingCondition`. Decline and stale-materialization resolve a
+ * Request and write an audit row, so they need it for the same reason: the
+ * service-layer role check can be bypassed by any future caller of this seam,
+ * and a role can be revoked between that check and this write. The service
+ * check stays on top of it — it is what produces the contract-declared
+ * `ROLE_NOT_ALLOWED` shape, which this layer cannot express.
  */
 function dispositionQueries(db: Db, scope: TenantScope, disposition: ApprovalDisposition) {
+  const reviewerIsAllowed = currentReviewerCondition(db, scope, disposition.reviewedBy);
   const insert = db
     .insert(approvalReviews)
     .select(
@@ -244,6 +245,7 @@ function dispositionQueries(db: Db, scope: TenantScope, disposition: ApprovalDis
             eq(approvalRequests.appId, scope.appId),
             eq(approvalRequests.id, disposition.requestId),
             eq(approvalRequests.status, "pending"),
+            reviewerIsAllowed,
           ),
         ),
     )
@@ -256,6 +258,7 @@ function dispositionQueries(db: Db, scope: TenantScope, disposition: ApprovalDis
         eq(approvalRequests.appId, scope.appId),
         eq(approvalRequests.id, disposition.requestId),
         eq(approvalRequests.status, "pending"),
+        reviewerIsAllowed,
         // Same three-part identity the applied path guards on: a Review id alone
         // could belong to another App's request.
         exists(

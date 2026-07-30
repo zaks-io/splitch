@@ -29,7 +29,6 @@ export async function materializeStale(
   const now = deps.nowIso?.() ?? new Date().toISOString();
   const resolved = await deps.repo.approvals.resolveWithoutApplication(appScope(row.appId), {
     requestId: row.id,
-    appId: row.appId,
     reviewId: approvalReviewId(new Date(now).getTime()),
     action: input.action,
     outcome: "stale",
@@ -70,7 +69,6 @@ export async function recordApplicationFailure(
   const errorDetails = ErrorDetailsSchema.parse(error.details);
   const recorded = await deps.repo.approvals.recordFailure(appScope(row.appId), {
     requestId: row.id,
-    appId: row.appId,
     reviewId: commit.reviewId,
     reviewedBy: commit.reviewedBy,
     reviewedVia: commit.reviewedVia,

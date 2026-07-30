@@ -39,12 +39,17 @@ async function approvedVariantDelete(
       flag: input.flag,
       mutation: db
         .delete(variants)
-        .where(and(eq(variants.id, input.variantId), approvalPendingCondition(db, approval)))
+        .where(
+          and(
+            eq(variants.id, input.variantId),
+            approvalPendingCondition(db, input.scope, approval),
+          ),
+        )
         .returning(),
       options: input.options,
     }),
   );
-  if (!(await approvalReviewLanded(db, approval))) return 0;
+  if (!(await approvalReviewLanded(db, input.scope, approval))) return 0;
   return (await input.reread()) ? 0 : 1;
 }
 
@@ -83,13 +88,13 @@ export function makeVariantOps(db: Db, flagInScope: FlagInScope) {
           catalogApprovalBatch(db, {
             scope,
             flag,
-            mutation: guardedVariantInsert(db, { ...values, flagId }, options.approval),
+            mutation: guardedVariantInsert(db, scope, { ...values, flagId }, options.approval),
             options,
           }),
         );
         // A lost guard leaves every statement a no-op; the re-read would then
         // report some pre-existing row as this proposal's creation.
-        if (!(await approvalReviewLanded(db, options.approval))) return null;
+        if (!(await approvalReviewLanded(db, scope, options.approval))) return null;
         return variantByName(scope, flagId, values.name);
       }
       const rows = await db

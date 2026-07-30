@@ -1,6 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { experiments, runs } from "../schema/index";
 import type { ApprovalCommit } from "./approval-types";
+import {
+  approvalAppliedStatements,
+  approvalGuardParams,
+  approvalGuardSql,
+} from "./experiment-start-approval";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 import type { ScopedTable } from "./scoped-table";
@@ -113,13 +118,21 @@ async function runStartBatch(
     endCurrentRunStatement(d1, scope, input, guardParams),
     insertRunStatement(d1, scope, input, guardParams),
     updateExperimentStartedStatement(d1, input, guardParams),
-    ...(input.approval ? approvalAppliedStatements(d1, input.approval, input.run.id) : []),
+    ...(input.approval ? approvalAppliedStatements(d1, scope, input.approval, input.run.id) : []),
   ]);
   const inserted = batch[1]?.results ?? [];
   const updated = batch[2]?.results ?? [];
   if (inserted.length === 0 && updated.length === 0) return false;
   if (inserted.length !== 1 || updated.length !== 1) {
     throw new Error("startRun: guarded D1 batch produced an inconsistent result");
+  }
+  // The Approval statements are appended to this same batch but were never
+  // inspected, so a Run could start while its Approval Request stayed pending
+  // and the caller was still told `ok`. This is the `approvalReviewLanded`
+  // equivalent every other Approval write path already has; here the Review
+  // insert RETURNs its id, so the evidence is in the batch result itself.
+  if (input.approval && (batch[3]?.results ?? []).length !== 1) {
+    throw new Error("startRun: the Run started but its Approval Review did not land");
   }
   return true;
 }
@@ -238,19 +251,7 @@ function startGuardSql(approval?: ApprovalCommit): string {
       AND blocker.status = 'running'
       AND blocker.id <> ?
   )
-  ${
-    approval
-      ? `AND EXISTS (
-    SELECT 1 FROM approval_requests
-    WHERE app_id = ? AND id = ? AND status = 'pending'
-  )
-  AND EXISTS (
-    SELECT 1 FROM app_memberships
-    WHERE app_id = ? AND user_id = ? AND role IN ('owner', 'admin')
-  )
-  ${approval.policyContexts.map(policyGuardSql).join("\n  ")}`
-      : ""
-  }
+  ${approval ? approvalGuardSql(approval) : ""}
 `;
 }
 
@@ -261,118 +262,8 @@ function startGuardParams(scope: EnvScope, input: StartRunInput): unknown[] {
     scope.environmentId,
     input.flagId,
     input.experimentId,
-    ...(input.approval
-      ? [
-          input.approval.appId,
-          input.approval.requestId,
-          input.approval.appId,
-          input.approval.reviewedBy,
-          ...input.approval.policyContexts.flatMap((context) =>
-            policyGuardParams(input.approval?.appId ?? "", context),
-          ),
-        ]
-      : []),
+    ...(input.approval ? approvalGuardParams(scope.appId, input.approval) : []),
   ];
-}
-
-function policyGuardSql(context: ApprovalCommit["policyContexts"][number]): string {
-  return `AND EXISTS (
-    SELECT 1 FROM environments
-    WHERE app_id = ? AND id = ?
-      ${context.changeTypes.map((changeType) => `AND json_extract(policy, '${policyPath(changeType)}') = ?`).join("\n      ")}
-  )`;
-}
-
-function policyGuardParams(
-  appId: string,
-  context: ApprovalCommit["policyContexts"][number],
-): unknown[] {
-  return [appId, context.environmentId, ...context.changeTypes.flatMap(() => [context.level])];
-}
-
-function policyPath(changeType: ApprovalCommit["policyContexts"][number]["changeTypes"][number]) {
-  switch (changeType) {
-    case "variant_availability":
-      return "$.variantAvailability";
-    case "targeting_rollout_value":
-      return "$.targetingRolloutValue";
-    case "enabled_state":
-      return "$.enabledState";
-    case "start_experiment_run":
-      return "$.startExperimentRun";
-  }
-}
-
-function approvalAppliedStatements(
-  d1: D1Database,
-  approval: ApprovalCommit,
-  runId: string,
-): D1PreparedStatement[] {
-  const review = d1
-    .prepare(
-      `
-      INSERT INTO approval_reviews (
-        id, app_id, approval_request_id, action, outcome,
-        reviewed_by, reviewed_via, reviewed_at, reason,
-        idempotency_key, request_hash, resulting_target_version,
-        resulting_resource_type, resulting_resource_id, error_code, error_details
-      )
-      SELECT
-        ?, app_id, id, 'approve_and_apply', 'applied',
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL
-      FROM approval_requests
-      WHERE app_id = ? AND id = ? AND status = 'pending'
-        AND EXISTS (
-          SELECT 1 FROM runs
-          WHERE app_id = ? AND id = ? AND status = 'running' AND started_at = ?
-        )
-    `,
-    )
-    .bind(
-      approval.reviewId,
-      approval.reviewedBy,
-      approval.reviewedVia,
-      approval.reviewedAt,
-      approval.reason,
-      approval.idempotencyKey,
-      approval.requestHash,
-      approval.resultingTargetVersion,
-      approval.resultingResourceType,
-      approval.resultingResourceId,
-      approval.appId,
-      approval.requestId,
-      approval.appId,
-      runId,
-      approval.reviewedAt,
-    );
-  const request = d1
-    .prepare(
-      `
-      UPDATE approval_requests
-      SET status = 'applied',
-          resolved_at = ?,
-          resulting_target_version = ?,
-          resulting_resource_type = ?,
-          resulting_resource_id = ?
-      WHERE app_id = ? AND id = ? AND status = 'pending'
-        AND EXISTS (
-          SELECT 1 FROM approval_reviews
-          WHERE app_id = ? AND id = ? AND approval_request_id = ?
-        )
-    `,
-    )
-    .bind(
-      approval.reviewedAt,
-      approval.resultingTargetVersion,
-      approval.resultingResourceType,
-      approval.resultingResourceId,
-      approval.appId,
-      approval.requestId,
-      approval.appId,
-      approval.reviewId,
-      approval.requestId,
-    );
-  return [review, request];
 }
 
 function draftGuardParams(
