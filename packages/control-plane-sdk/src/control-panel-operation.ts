@@ -55,61 +55,24 @@ export function isControlPanelOperation(value: unknown): value is ControlPanelOp
   return false;
 }
 
+/**
+ * Every operation is a flat record of its id plus the exact resource ids that
+ * scope it, and `isControlPanelOperation` rejects anything with a different key
+ * set. So identity is structural equality: a per-variant comparison would have
+ * to be extended by hand for each new operation, and the one that got forgotten
+ * would silently compare as "same" on its unlisted scope field.
+ */
 export function sameControlPanelOperation(
   left: ControlPanelOperation,
   right: ControlPanelOperation,
 ): boolean {
-  if (left.id !== right.id) return false;
-  switch (left.id) {
-    case "apps_create":
-      return right.id === "apps_create" && left.orgId === right.orgId;
-    case "app_attention_rollup_get":
-      return right.id === "app_attention_rollup_get" && left.appId === right.appId;
-    case "experiments_list":
-    case "experiments_detail":
-    case "experiments_results":
-      return true;
-    case "experiments_update":
-    case "experiments_start":
-      return (
-        (right.id === "experiments_update" || right.id === "experiments_start") &&
-        left.appId === right.appId &&
-        left.environmentId === right.environmentId &&
-        left.experimentId === right.experimentId
-      );
-    case "flag_config_get":
-      return (
-        right.id === "flag_config_get" &&
-        left.appId === right.appId &&
-        left.environmentId === right.environmentId &&
-        left.flagId === right.flagId
-      );
-    case "metrics_get":
-    case "metrics_update":
-    case "metrics_delete":
-      return (
-        (right.id === "metrics_get" ||
-          right.id === "metrics_update" ||
-          right.id === "metrics_delete") &&
-        left.appId === right.appId &&
-        left.environmentId === right.environmentId &&
-        left.metricId === right.metricId
-      );
-    case "api_key_revoke":
-      return (
-        "keyId" in right &&
-        left.appId === right.appId &&
-        left.environmentId === right.environmentId &&
-        left.keyId === right.keyId
-      );
-    default:
-      return (
-        "appId" in right &&
-        "environmentId" in right &&
-        left.appId === right.appId &&
-        left.environmentId === right.environmentId
-      );
-  }
+  const claimed = left as Record<string, unknown>;
+  const presented = right as Record<string, unknown>;
+  const keys = Object.keys(claimed);
+  return (
+    keys.length === Object.keys(presented).length &&
+    keys.every((key) => claimed[key] === presented[key])
+  );
 }
 
 function parseExperimentMutation(method: string, pathname: string): ControlPanelOperation | null {
