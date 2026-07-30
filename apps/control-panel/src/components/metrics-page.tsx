@@ -1,7 +1,9 @@
 import type { Metric } from "@splitch/contracts";
 import { EmptyState } from "@splitch/ui/state/empty-state";
+import { parityHint } from "#lib/parity-hints";
 import { useEffect, useState } from "react";
 import { MetricEditorDialog } from "./metric-editor-dialog";
+import { ParityNote } from "./parity-note";
 import { MetricsTable } from "./metrics-table";
 
 export function MetricsPage({
@@ -71,11 +73,7 @@ export function MetricsPage({
             />
           }
           description="A Metric combines an event fact with a Binomial, Count, Revenue, or Ratio aggregation."
-          secondaryAction={
-            <code className="rounded bg-muted px-2 py-1 font-mono text-muted-foreground text-xs">
-              splitch metrics create
-            </code>
-          }
+          secondaryAction={<ParityNote hint={parityHint("metrics_create")} />}
           title="Create your first Metric"
         />
       )}

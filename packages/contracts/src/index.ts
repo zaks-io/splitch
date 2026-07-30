@@ -153,8 +153,8 @@ export {
   membershipRoles,
   scopeSatisfiesMembershipGate,
 } from "./mcp-tool-membership-gates";
-export type { McpProtocolToolDefinition, McpToolDefinition } from "./mcp-tools";
-export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped CLI/MCP parity-skin API
+export * from "./barrels/parity-skins";
 export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
 export { defineApiRoute } from "./openapi-route";

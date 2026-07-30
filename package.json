@@ -36,6 +36,7 @@
     "shared-preview:smoke": "playwright test -c tests/shared-preview/playwright.config.ts",
     "smoke:dark-launch:shared-preview": "node scripts/dark-launch/shared-preview-smoke.mjs",
     "smoke:sdk-consumer": "pnpm --filter @splitch/sdk test:consumer-smoke",
+    "smoke:connect-snippet": "pnpm --filter @splitch/control-panel test:connect-snippet",
     "claim:local-fleet": "playwright test -c tests/local-fleet/claim.playwright.config.ts",
     "smoke:ci": "node -e \"console.log('smoke:ci is deployment-workflow-only; run pnpm shared-preview:smoke against a deployed preview.')\"",
     "smoke:local": "node scripts/smoke-workers-local.mjs",
