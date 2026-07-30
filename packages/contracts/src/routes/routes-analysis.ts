@@ -1,7 +1,7 @@
 import { z } from "@hono/zod-openapi";
 import { TestEvaluationRequestSchema, TestEvaluationResponseSchema } from "../wire-envelopes-core";
 import { OrganizationUsageResponseSchema } from "../resource-envelopes-usage";
-import { StatsOutputSchema } from "../stats-result-contract";
+import { AnalysisResultsEnvelopeSchema } from "../stats-result-contract";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import { AppParams, EnvFlagParams, ExperimentParams, OrgParams } from "./route-shapes";
 
@@ -56,9 +56,9 @@ export const analysisRoutes = [
     owner: "analysis-api",
     method: "GET",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/results",
-    summary: "Get an Experiment's StatsOutput from the Analysis Worker.",
+    summary: "Get an Experiment's results envelope (Run id, Control Variant, StatsOutput).",
     request: { params: ExperimentParams, query: ResultsSelectorSchema },
-    response: StatsOutputSchema,
+    response: AnalysisResultsEnvelopeSchema,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
@@ -77,9 +77,9 @@ export const analysisRoutes = [
     owner: "analysis-api",
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/results",
-    summary: "Get an Experiment's StatsOutput from the Analysis Worker.",
+    summary: "Get an Experiment's results envelope (Run id, Control Variant, StatsOutput).",
     request: { params: ExperimentParams, body: OptionalResultsSelectorSchema },
-    response: StatsOutputSchema,
+    response: AnalysisResultsEnvelopeSchema,
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",

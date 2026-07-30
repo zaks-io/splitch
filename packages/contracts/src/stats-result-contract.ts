@@ -153,6 +153,28 @@ export const StatsOutputSchema = z
   .strict();
 export type StatsOutput = z.infer<typeof StatsOutputSchema>;
 
+/**
+ * What the Analysis Worker answers a /results read with.
+ *
+ * `run_id` is provenance and is checked: a read whose answer names a different
+ * Run than the one asked for is refused rather than relabelled (ADR-0006).
+ *
+ * `control_variant` is not. It reaches this Worker from the `analysis_run_inputs`
+ * pipe, which resolves it at read time, so it describes current configuration.
+ * A caller that needs the Run's actual baseline resolves it from the immutable
+ * `runs.control_variant_id` inside that Run's own frozen Variant set instead
+ * (`resolveFrozenControlIdentity`, ADR-0002, ADR-0003), which is what the
+ * Control Panel Results read does.
+ */
+export const AnalysisResultsEnvelopeSchema = z
+  .object({
+    run_id: z.string().min(1),
+    control_variant: z.string().min(1),
+    stats: StatsOutputSchema,
+  })
+  .strict();
+export type AnalysisResultsEnvelope = z.infer<typeof AnalysisResultsEnvelopeSchema>;
+
 export interface StatsEngine {
   analyze(input: StatsInput): Promise<StatsOutput>;
 }

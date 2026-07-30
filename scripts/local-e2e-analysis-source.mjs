@@ -3,7 +3,7 @@
 import { createSign, generateKeyPairSync } from "node:crypto";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
-import { LOCAL_E2E_ANALYSIS_INPUTS } from "./local-e2e-fixtures.mjs";
+import { LOCAL_E2E_ANALYSIS_INPUTS } from "./local-e2e-analysis-inputs.mjs";
 
 const origin = "http://127.0.0.1:18788";
 const audience = "http://127.0.0.1:18790";
@@ -48,11 +48,16 @@ function servePublicRoute(pathname, response, runId) {
 }
 
 function pipeRows(pipeName, params) {
+  // A requested run_id must select the fixture, never just filter rows after the
+  // fact. Answering the run-inputs pipe with a different Run would hand back one
+  // Run's Exposures under another Run's identity.
+  const requestedRunId = params.get("run_id");
   const fixture = LOCAL_E2E_ANALYSIS_INPUTS.find(
     (candidate) =>
       candidate.appId === params.get("app_id") &&
       candidate.environmentId === params.get("environment_id") &&
-      candidate.experimentId === params.get("experiment_id"),
+      candidate.experimentId === params.get("experiment_id") &&
+      (requestedRunId === null || candidate.runId === requestedRunId),
   );
   if (!fixture) return [];
   if (pipeName === "analysis_run_inputs") {

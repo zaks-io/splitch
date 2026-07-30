@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ExperimentTabStub } from "#components/experiment-detail";
+import { ExperimentResultsPanel } from "#components/experiment-results-panel";
 import { useExperimentDetailRouteData } from "#lib/experiment-detail-route";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/$experimentId/")({
@@ -8,5 +9,15 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/experiments/$exper
 
 function AdaptiveExperimentTab() {
   const route = useExperimentDetailRouteData();
-  return <ExperimentTabStub run={route.data.runs[0]} tab={route.activeTab} />;
+  if (route.activeTab !== "results") {
+    return <ExperimentTabStub run={route.data.runs[0]} tab={route.activeTab} />;
+  }
+  return (
+    <ExperimentResultsPanel
+      appId={route.scope.appId}
+      environmentId={route.scope.environmentId}
+      experimentId={route.data.experiment.id}
+      run={route.data.runs[0]}
+    />
+  );
 }

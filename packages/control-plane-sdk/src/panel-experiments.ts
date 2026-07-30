@@ -1,5 +1,5 @@
-import type { StatsOutput } from "@splitch/contracts";
-import { StatsOutputSchema } from "@splitch/contracts";
+import type { AnalysisResultsEnvelope } from "@splitch/contracts";
+import { AnalysisResultsEnvelopeSchema, ErrorResponseSchema } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
 import {
@@ -7,6 +7,12 @@ import {
   type PanelExperimentDetailOutput,
   parsePanelExperimentDetailOutput,
 } from "./panel-experiment-detail";
+import {
+  type PanelExperimentResultsInput,
+  type PanelExperimentResultsOutput,
+  PanelExperimentResultsOutputSchema,
+  parsePanelExperimentResultsOutput,
+} from "./panel-experiment-results";
 
 export type {
   PanelExperimentDetail,
@@ -14,9 +20,15 @@ export type {
   PanelExperimentDetailOutput,
   PanelExperimentRun,
 } from "./panel-experiment-detail";
+export type {
+  PanelExperimentResultsInput,
+  PanelExperimentResultsOutput,
+} from "./panel-experiment-results";
+export { PanelExperimentResultsOutputSchema, parsePanelExperimentResultsOutput };
 
 const PANEL_EXPERIMENTS_PATH = "/control-panel/experiments/list";
 const PANEL_EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
+const PANEL_EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
 export const SCOPED_SERVICE_IDENTITY_HEADER = "x-splitch-scoped-service-identity";
 
 export interface PanelExperimentsListInput {
@@ -87,6 +99,22 @@ export function createPanelExperimentsClient(options: { fetch: typeof fetch; bas
         },
       );
     },
+    async results(
+      input: PanelExperimentResultsInput,
+    ): Promise<ControlPlaneOperationResult<PanelExperimentResultsOutput>> {
+      const response = await options.fetch(new URL(PANEL_EXPERIMENT_RESULTS_PATH, baseUrl), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      return parseControlPlaneResponse<PanelExperimentResultsOutput>(
+        response,
+        "panel_experiment_results",
+        {
+          safeParse: parsePanelExperimentResultsOutput,
+        },
+      );
+    },
   };
 }
 
@@ -104,11 +132,79 @@ export function scopedAnalysisResultsRequest(identity: ScopedAnalysisIdentity): 
   );
 }
 
-export async function parseScopedAnalysisResults(response: Response): Promise<StatsOutput> {
-  if (!response.ok) {
-    throw new Error(`scoped analysis read failed with HTTP ${response.status}`);
+/**
+ * A refusal from the Analysis Worker, carried as a type rather than a string.
+ *
+ * `retryable` is the load-bearing field. A permanent integrity refusal that a
+ * caller reports as "try again in 30s" teaches the caller to poll through a
+ * fault that polling cannot clear (ADR-0036).
+ */
+export class ScopedAnalysisError extends Error {
+  readonly status: number;
+  /** The Analysis Worker's own error code, when it sent a typed body. */
+  readonly code: string | null;
+  readonly retryable: boolean;
+
+  constructor(status: number, message: string, code: string | null = null) {
+    super(message);
+    this.name = "ScopedAnalysisError";
+    this.status = status;
+    this.code = code;
+    // The typed body is the authority on whether waiting can help. Classifying
+    // on the HTTP status alone would read a 500 carrying SERVICE_UNAVAILABLE as
+    // a permanent fault, and a permanent integrity failure that happened to be
+    // sent as a 503 as something worth polling.
+    this.retryable = code === null ? TRANSIENT_STATUS.has(status) : TRANSIENT_CODES.has(code);
   }
-  return StatsOutputSchema.parse(await response.json());
+}
+
+const TRANSIENT_STATUS = new Set([429, 503]);
+const TRANSIENT_CODES = new Set(["RATE_LIMITED", "SERVICE_UNAVAILABLE"]);
+
+/**
+ * Turns a refusal from the Analysis Worker into a typed error.
+ *
+ * The body is read before the status is trusted: the Worker states plainly
+ * whether the condition is temporary, and discarding that to guess from a
+ * three-digit code throws away the only reliable signal we were sent.
+ */
+async function scopedAnalysisFailure(response: Response): Promise<ScopedAnalysisError> {
+  const parsed = ErrorResponseSchema.safeParse(await readJson(response));
+  if (!parsed.success) {
+    return new ScopedAnalysisError(
+      response.status,
+      `scoped analysis read failed with HTTP ${response.status}`,
+    );
+  }
+  return new ScopedAnalysisError(response.status, parsed.data.message, parsed.data.code);
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function parseScopedAnalysisResults(
+  response: Response,
+  expectedRunId: string,
+): Promise<AnalysisResultsEnvelope> {
+  if (!response.ok) {
+    throw await scopedAnalysisFailure(response);
+  }
+  const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+  // Numbers from one Run rendered under another Run's heading is the exact
+  // failure the no-pooling guarantee exists to prevent, and no amount of
+  // retrying turns it into the right Run.
+  if (envelope.run_id !== expectedRunId) {
+    throw new ScopedAnalysisError(
+      500,
+      `scoped analysis answered for Run ${envelope.run_id}, not Run ${expectedRunId}`,
+    );
+  }
+  return envelope;
 }
 
 export function parseScopedAnalysisIdentity(value: string | null): ScopedAnalysisIdentity | null {

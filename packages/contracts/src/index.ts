@@ -27,6 +27,8 @@ export {
   RecommendedActionSchema,
   recommendedActions,
 } from "./errors";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
+export * from "./experiment-rigor";
 export type { HealthResponse, PlatformTarget } from "./health-response";
 export {
   createHealthResponse,
@@ -263,6 +265,7 @@ export {
   StatsInputSchema,
 } from "./stats-input-contract";
 export type {
+  AnalysisResultsEnvelope,
   ArmResult,
   CupedAttributeSource,
   CupedMethod,
@@ -278,6 +281,7 @@ export type {
   WinsorizeCap,
 } from "./stats-result-contract";
 export {
+  AnalysisResultsEnvelopeSchema,
   ArmResultSchema,
   CupedAttributeSourceSchema,
   CupedMethodSchema,
