@@ -24,8 +24,9 @@ function IndexRoute() {
         <div className="grid gap-2">
           <h1 className="font-semibold text-3xl text-foreground tracking-tight">Control Panel</h1>
           <p className="max-w-2xl text-muted-foreground text-sm leading-6">
-            Choose an Organization to see its Apps. Flags and Experiments live inside an App's
-            Environments.
+            {session.orgs.length === 0
+              ? "Every App, Flag, and Experiment belongs to an Organization, so that is the first thing to make."
+              : "Choose an Organization to see its Apps. Flags and Experiments live inside an App's Environments."}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -36,7 +37,7 @@ function IndexRoute() {
         </div>
       </header>
 
-      <OrganizationChooser orgs={session.orgs} />
+      <OrganizationChooser orgs={session.orgs} truncated={session.orgsTruncated ?? false} />
     </main>
   );
 }

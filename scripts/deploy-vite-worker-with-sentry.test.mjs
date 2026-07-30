@@ -25,6 +25,8 @@ test("control-panel deploy scripts use the Vite-aware deploy wrapper", () => {
     "node ../../scripts/deploy-vite-worker-with-sentry.mjs --dry-run",
   );
   assert.deepEqual(turbo.tasks.deploy.dependsOn, ["build"]);
+  assert.deepEqual(turbo.globalEnv, ["CI", "NODE_ENV"]);
+  assert.equal("env" in turbo.tasks.build, false);
   for (const task of ["@splitch/control-panel#build", "@splitch/marketing#build"]) {
     assert.equal(turbo.tasks[task].env.includes("CLOUDFLARE_ENV"), true);
     assert.equal(turbo.tasks[task].env.includes("SPLITCH_GENERATED_WRANGLER_ENV"), true);
@@ -32,6 +34,24 @@ test("control-panel deploy scripts use the Vite-aware deploy wrapper", () => {
   }
   for (const name of [
     "SENTRY_DSN",
+    "AUTH_API_ORIGIN",
+    "AUTH_JWKS_URI",
+    "CONTROL_PLANE_ORIGIN",
+    "TINYBIRD_API_URL",
+  ]) {
+    assert.equal(
+      turbo.tasks["@splitch/control-panel#build"].env.includes(name),
+      false,
+      `${name} is a runtime input and must not participate in the Control Panel build cache key`,
+    );
+    assert.equal(
+      turbo.globalEnv.includes(name),
+      false,
+      `${name} must not invalidate every Turbo task`,
+    );
+  }
+  for (const name of [
+    "SPLITCH_PLATFORM_TARGET",
     "SENTRY_RELEASE",
     "SENTRY_RELEASE_BASE",
     "VITE_SENTRY_DSN",
@@ -44,6 +64,10 @@ test("control-panel deploy scripts use the Vite-aware deploy wrapper", () => {
       `${name} must participate in the Control Panel build cache key`,
     );
   }
+  assert.deepEqual(turbo.tasks["@splitch/marketing#build"].env, [
+    "CLOUDFLARE_ENV",
+    "SPLITCH_GENERATED_WRANGLER_ENV",
+  ]);
   for (const environment of ["production", "shared-preview"]) {
     assert.match(
       rootPackageJson.scripts[`deploy:dry-run:${environment}`],

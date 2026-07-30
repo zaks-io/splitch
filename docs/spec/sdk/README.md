@@ -1,8 +1,11 @@
 # SDK area spec index
 
 Spine: the SDK is a thin JS/TS HTTP client. `evaluate`/`evaluateDetails` fire an Exposure,
-`peekVariant` and `verify` resolve without one, and `track()` submits a strictly validated Metric
-Event. Every evaluation accessor speaks the OpenFeature
+`peekVariant` and `verify` resolve without one, top-level `track()` submits a strictly validated
+Metric Event, `web.track()` queues an explicitly submitted Web Event, and `web.flush()` awaits an
+acknowledged batch result. `web.instrument()` separately registers explicitly selected automatic
+browser signals and returns their scoped cleanup. Browser Web Events use a tab-scoped Web Session by
+default and remain outside Experiment measurement. Every evaluation accessor speaks the OpenFeature
 `ResolutionDetails` shape and is **fail-loud** — a failure-fallback always carries
 `reason: ERROR` + `errorCode`, never a silent default (ADR-0036). `idType` defaults to `'user'`.
 The evaluate endpoint is safe under a public Client Key (returns only the resolved Variant and a
@@ -23,6 +26,8 @@ deferred; the `ResolutionDetails` _shape_ is not.
 | [five-runtimes.md](./five-runtimes.md)                                       | SDK invariants across five Cloudflare edge runtimes                                                                                    |
 | [test-evaluation-endpoint.md](./test-evaluation-endpoint.md)                 | Control-plane dry-run: `POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval` — resolves without Exposure (per-Env, ADR-0027) |
 | [../pipeline/metric-event-contract.md](../pipeline/metric-event-contract.md) | `track()` and `POST /api/sdk/events`: strict Metric Event validation, identity, version stamping, and idempotency                      |
+| [../pipeline/web-event-identity.md](../pipeline/web-event-identity.md)       | Browser Web Session generation and persistence, optional explicit Entity identity, and Experiment exclusion                            |
+| [web-analytics-capture.md](./web-analytics-capture.md)                       | Manual `web.track()`, automatic `web.instrument()`, batch-only ingest, memory-only queue, and bounded browser collection               |
 | [openfeature-deferred.md](./openfeature-deferred.md)                         | Explicitly deferred full OpenFeature provider surface                                                                                  |
 
 ## Sources

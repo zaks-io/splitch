@@ -16,6 +16,9 @@ This file pins exactly what is deferred so implementing agents do not guess.
 - Single-flag-per-call; batch evaluation is deferred
 - In-memory seen-set (LRU, per-instance)
 - `sdk.track(eventName, { targetingKey, idType, eventId, fields, dimensions })` for Metric Events
+- `sdk.web.track(eventName, webEvent)` for explicit schema-defined Web Events
+- `sdk.web.instrument({ captures }) -> () => void` for scoped automatic browser signals and cleanup
+- `sdk.web.flush() -> Promise<WebEventBatchResult>` for acknowledged Web Event delivery
 - Client Key / API Key auth (runtime-appropriate)
 
 The SDK speaks the OpenFeature `ResolutionDetails` shape (`value`, `variantName`, `reason`,
@@ -63,8 +66,10 @@ deferred. (The `ResolutionDetails` _output_ shape and the `reason`/error enums a
 deferred — they are in scope per ADR-0036.)
 
 **7. Full OpenFeature `track()` compatibility**
-The thin SDK defines a standalone, stateless `track()` surface for Metric Events. Adapting it to
-OpenFeature's client/context/details lifecycle remains deferred with the full Provider surface.
+The thin SDK defines a standalone, stateless top-level `track()` surface exclusively for Metric
+Events. Adapting it to OpenFeature's client/context/details lifecycle remains deferred with the full
+Provider surface. The namespaced `web.track()` accessor is Splitch-specific and does not overload
+the OpenFeature or Metric Event surface.
 
 ## Why deferred
 

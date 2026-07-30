@@ -6,6 +6,7 @@ experiment health.
 ## Owns
 
 - Metric and result language.
+- Web Analytics read projections and Web Session association.
 - SRM and health diagnostics.
 - Sequential, always-valid inference language.
 - Variance, CUPED, FDR, and Dimension slicing terms.
@@ -19,7 +20,18 @@ Entity. It is what an Experiment moves or guards.
 **Metric Event**:
 An App/Environment/Entity fact validated against an immutable Event Definition Version. Metric
 Events contribute values for named typed fields. They never replace or narrow the first-touch
-Exposure denominator.
+Exposure denominator. Analysis collapses at-least-once physical retries to one logical Metric Event
+per `dedup_key` before any statistical aggregation.
+
+**Web Analytics**:
+Exploratory analysis of Web Events by Web Session and optional Entity identity, separate from
+Experiment measurement. Counts, journeys, and percentiles operate on one logical Web Event per
+`dedup_key`.
+
+**Ambiguous Web Session**:
+A Web Session containing Web Events from more than one distinct explicit Entity. Exploratory
+analysis attributes the session to no Entity. This is not the Experiment-specific `__multiple__`
+Variant-conflict sentinel.
 
 **Binomial Metric** (Proportion Metric):
 A yes/no Metric. The Entity either did the thing or did not. Conversion is a colloquial alias for a
@@ -126,6 +138,15 @@ Entities per arm per Run, excluding `__multiple__`, against the Run's declared a
 - Analysis is scoped to one Experiment Run.
 - First-touch unique Entity per Run is the denominator for Metrics and SRM.
 - Metric Events join a Run only when App, Environment, Entity type, and Targeting Key hash match.
+- Metrics reference only Event Definitions in the `metric` family.
+- Web Events never become Metric inputs or the Exposure denominator.
+- Authenticated Web Analytics reads are served by the existing Analysis Worker through the shared
+  control-plane contract; clients never query Tinybird directly.
+- Web Session stitching may connect anonymous and Entity-identified Web Events for exploratory
+  journeys when exactly one distinct Entity appears in the session. A session with no Entity remains
+  anonymous; a session with multiple Entities is an Ambiguous Web Session attributed to none.
+- Query-time Web Session association never rewrites anonymous Web Event rows or supplies an
+  Experiment join.
 - Exposed Entities with no matching Metric Event remain in the denominator with zero-valued
   Binomial, Count, or Revenue aggregates.
 - Activation Metrics re-anchor the Conversion Window.

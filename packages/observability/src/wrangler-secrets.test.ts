@@ -116,10 +116,7 @@ describe("Deploy workflow observability secrets", () => {
       "utf8",
     );
 
-    expect(workflow).toContain(
-      "SENTRY_RELEASE: $" +
-        "{{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}",
-    );
+    expect(workflow).toContain("SENTRY_RELEASE: $" + "{{ inputs.release_sha || github.sha }}");
     expect(workflow).toContain(GITHUB_LINEAR_SECRET_REFERENCE);
     expect(workflow).toContain(GITHUB_RELEASE_VERSION_REFERENCE);
     expect(workflow).toContain(GITHUB_ACTIONS_LINK_REFERENCE);

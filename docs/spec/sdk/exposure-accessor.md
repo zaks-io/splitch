@@ -173,9 +173,9 @@ This table is a cross-reference only; do not duplicate the authoritative definit
 | `id_type`            | string                     | validated request `idType`; must match the Run config              |
 | `variant`            | string                     | Variant name (not value) — immutable experimental arm label        |
 | `source_id`          | string                     | edge POP identifier                                                |
-| `server_ts`          | timestamp                  | server-received-at (canonical for MIN(ts) first-touch)             |
+| `server_received_at` | timestamp                  | server-received-at (canonical for MIN(ts) first-touch)             |
 | `ingest_ts`          | timestamp                  | raw-log append watermark; never used for first-touch               |
-| `client_ts`          | timestamp                  | client-fired time (diagnostics only; may have clock skew)          |
+| `client_timestamp`   | timestamp                  | client-fired time (diagnostics only; may have clock skew)          |
 | `type`               | 'exposure' \| 'activation' | always 'exposure' here                                             |
 
 `run_id` is stamped **server-side at request time** (not at dedup time) to avoid race
@@ -186,8 +186,8 @@ the Variant value is not logged (it is flag config, not event data).
 
 The pipeline's first-touch identity is the tuple `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`
 (`environment_id` co-scoped with `app_id`; Exposures are per-Environment, ADR-0027),
-resolved by `MIN(server_ts)` at query time. Multiple raw Exposures for the same Entity/Run share this
-identity; the earliest `server_ts` is the authoritative first-touch row. The tuple deliberately excludes
+resolved by `MIN(server_received_at)` at query time. Multiple raw Exposures for the same Entity/Run share this
+identity; the earliest `server_received_at` is the authoritative first-touch row. The tuple deliberately excludes
 `variant` — variant conflicts are caught by the `__multiple__` quarantine path (ADR-0011).
 
 This is distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key for

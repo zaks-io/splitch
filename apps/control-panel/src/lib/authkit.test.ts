@@ -85,41 +85,33 @@ describe("WorkOS AuthKit callback materialization", () => {
 function repository(): Repository {
   return {
     identity: {
-      getAppMembership: async () => ({
-        appId: "app_1",
-        createdAt: "2026-07-05T12:00:00.000Z",
-        role: "viewer",
-        updatedAt: "2026-07-05T12:00:00.000Z",
-        userId: "user_1",
-      }),
-      getOrg: async () => ({
-        createdAt: "2026-07-05T12:00:00.000Z",
-        demoExpiresAt: null,
-        id: "org_1",
-        isProvisional: false,
-        name: "Acme",
-        slug: "acme",
-        plan: "free",
-        updatedAt: "2026-07-05T12:00:00.000Z",
-      }),
-      listAppsForOrg: async () => [
+      listOrgMembershipsWithOrgForUser: async () => [
         {
-          createdAt: "2026-07-05T12:00:00.000Z",
-          description: null,
-          id: "app_1",
-          key: "checkout-api",
-          name: "Checkout API",
-          organizationId: "org_1",
-          updatedAt: "2026-07-05T12:00:00.000Z",
+          role: "admin",
+          org: {
+            createdAt: "2026-07-05T12:00:00.000Z",
+            demoExpiresAt: null,
+            id: "org_1",
+            isProvisional: false,
+            name: "Acme",
+            slug: "acme",
+            plan: "free",
+            updatedAt: "2026-07-05T12:00:00.000Z",
+          },
         },
       ],
-      listOrgMembershipsForUser: async () => [
+      listAppMembershipsWithAppForUser: async () => [
         {
-          createdAt: "2026-07-05T12:00:00.000Z",
-          orgId: "org_1",
-          role: "admin",
-          updatedAt: "2026-07-05T12:00:00.000Z",
-          userId: "user_1",
+          role: "viewer",
+          app: {
+            createdAt: "2026-07-05T12:00:00.000Z",
+            description: null,
+            id: "app_1",
+            key: "checkout-api",
+            name: "Checkout API",
+            organizationId: "org_1",
+            updatedAt: "2026-07-05T12:00:00.000Z",
+          },
         },
       ],
     },

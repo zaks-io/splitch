@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   appMemberships,
   apps,
@@ -9,6 +9,8 @@ import {
 } from "../schema/index";
 import type { Db } from "./client";
 import { makeDemoReaper } from "./identity-demo-reaper";
+import { makeOrgMutations } from "./identity-org-mutations";
+import { makeSessionReads } from "./identity-session-reads";
 import { makeCreateOrganization } from "./organization-create";
 import type { TenantScope } from "./scope";
 import { type ReadOptions, scopedTable } from "./scoped-table";
@@ -38,6 +40,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
   const environmentsTable = scopedTable(db, environments);
   const appMembershipsTable = scopedTable(db, appMemberships);
   const orgMutations = makeOrgMutations(db);
+  const sessionReads = makeSessionReads(db);
   const demoReaper = makeDemoReaper(db, d1);
   const createOrganization = makeCreateOrganization(db, d1);
 
@@ -113,6 +116,7 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
     },
 
     ...orgMutations,
+    ...sessionReads,
     ...demoReaper,
 
     /**
@@ -235,65 +239,4 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
         .where(eq(deviceRefreshSessions.refreshTokenHash, refreshTokenHash));
     },
   };
-}
-
-function makeOrgMutations(db: Db) {
-  return {
-    async updateOrg(
-      orgId: string,
-      values: Partial<Pick<typeof organizations.$inferInsert, "name" | "plan" | "updatedAt">>,
-    ): Promise<typeof organizations.$inferSelect | null> {
-      const rows = await db
-        .update(organizations)
-        .set(values)
-        .where(eq(organizations.id, orgId))
-        .returning();
-      return rows[0] ?? null;
-    },
-
-    async updateOrgMembershipRole(
-      orgId: string,
-      userId: string,
-      role: string,
-    ): Promise<typeof orgMemberships.$inferSelect | null> {
-      const rows = await db
-        .update(orgMemberships)
-        .set({ role })
-        .where(
-          and(
-            eq(orgMemberships.orgId, orgId),
-            eq(orgMemberships.userId, userId),
-            canChangeOwnerRole(orgId, role),
-          ),
-        )
-        .returning();
-      return rows[0] ?? null;
-    },
-
-    async deleteOrgMembership(orgId: string, userId: string): Promise<number> {
-      const rows = await db
-        .delete(orgMemberships)
-        .where(
-          and(
-            eq(orgMemberships.orgId, orgId),
-            eq(orgMemberships.userId, userId),
-            canDeleteMember(orgId),
-          ),
-        )
-        .returning();
-      return rows.length;
-    },
-  };
-}
-
-function canChangeOwnerRole(orgId: string, nextRole: string) {
-  return sql`(${orgMemberships.role} <> 'owner' OR ${nextRole} = 'owner' OR ${ownerCount(orgId)} > 1)`;
-}
-
-function canDeleteMember(orgId: string) {
-  return sql`(${orgMemberships.role} <> 'owner' OR ${ownerCount(orgId)} > 1)`;
-}
-
-function ownerCount(orgId: string) {
-  return sql`(SELECT COUNT(*) FROM ${orgMemberships} WHERE ${orgMemberships.orgId} = ${orgId} AND ${orgMemberships.role} = 'owner')`;
 }

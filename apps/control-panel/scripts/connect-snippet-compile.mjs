@@ -16,7 +16,7 @@
  * command resolves against the public registry (needs network).
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,11 +43,9 @@ if (SDK_INSTALL_COMMAND !== "npm install @splitch/sdk") {
 const consumerRoot = mkdtempSync(join(tmpdir(), "splitch-connect-snippet-"));
 
 try {
-  execFileSync("npx", ["tsup", "--config", "tsup.contract-surface.config.ts"], {
-    cwd: sdkRoot,
-    stdio: "inherit",
-  });
-  execFileSync("npx", ["tsup", "--config", "tsup.config.ts"], { cwd: sdkRoot, stdio: "inherit" });
+  if (!existsSync(join(sdkRoot, "dist/index.js"))) {
+    throw new Error("@splitch/sdk dist is missing; run its Turbo build before the snippet check");
+  }
 
   const packOutput = execFileSync("node", ["scripts/pack-release.mjs", consumerRoot], {
     cwd: sdkRoot,

@@ -203,19 +203,23 @@ Auth: control-plane token (not Client Key). Writes nothing; zero Exposures. (ADR
 
 `flags_test_eval` is the agent's verify step — the control-plane, full-reason tier. Data-plane
 `POST /api/sdk/evaluate`, `POST /api/sdk/peek` (ADR-0034), `POST /api/sdk/verify` (ADR-0037), and
-`POST /api/sdk/events` are **not** MCP tools: they are data-plane endpoints called by SDK clients
-with an SDK credential.
+`POST /api/sdk/events` and `POST /api/sdk/web-events` are **not** MCP tools: they are data-plane
+endpoints called by SDK clients with an SDK credential.
 The verify endpoint is surfaced in the CLI as `splitch flags verify` for developers testing with
 the credential their code holds.
 
 ### Analytics
 
-| Tool                      | Method | Path                                                                 |
-| ------------------------- | ------ | -------------------------------------------------------------------- |
-| `organization_usage_get`  | GET    | `/orgs/:orgId/usage`                                                 |
-| `experiment_results_get`  | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results` |
-| `experiment_results_post` | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results` |
-| `audit_log_list`          | GET    | `/apps/:appId/audit-log`                                             |
+| Tool                                | Method | Path                                                                            |
+| ----------------------------------- | ------ | ------------------------------------------------------------------------------- |
+| `organization_usage_get`            | GET    | `/orgs/:orgId/usage`                                                            |
+| `experiment_results_get`            | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results`            |
+| `experiment_results_post`           | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results`            |
+| `web_analytics_overview_get`        | GET    | `/apps/:appId/envs/:environmentId/web-analytics/overview`                       |
+| `web_analytics_sessions_list`       | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions`                       |
+| `web_analytics_session_events_list` | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions/:sessionIdHash/events` |
+| `web_analytics_vitals_get`          | GET    | `/apps/:appId/envs/:environmentId/web-analytics/vitals`                         |
+| `audit_log_list`                    | GET    | `/apps/:appId/audit-log`                                                        |
 
 ### Privacy data
 

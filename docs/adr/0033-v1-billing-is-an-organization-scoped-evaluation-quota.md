@@ -30,16 +30,16 @@ The counting rules are deliberately simple:
 - Control-plane dry runs such as `test-evaluation` consume zero.
 - Exposure side effects consume zero extra. An Evaluation that records an Exposure is still one
   Evaluation total.
-- Metric events consume zero extra in V1. They must have operational abuse and fairness limits, but
-  those limits are not spend guards, quotas, or a second billing meter.
+- Metric Events and Web Events consume zero extra in V1. They must have operational abuse and
+  fairness limits, but those limits are not spend guards, quotas, or a second billing meter.
 
 The monthly included allowance resets on the billing period boundary and unused included Evaluations
 expire at reset. Purchased top-up Evaluations are prepaid, non-refundable, expire one year after
 purchase, and are consumed only after the monthly included allowance is exhausted.
 
 No V1 billing rule creates service-connection charges, per-Environment quotas, production reserves,
-spend guards, seat-based usage charges, App count charges, Flag count charges, Exposure charges, or
-Metric-event charges.
+spend guards, seat-based usage charges, App count charges, Flag count charges, Exposure charges,
+Metric Event charges, or Web Event charges.
 
 ## Usage visibility
 
@@ -139,9 +139,11 @@ The V1 billing contract is implemented when:
 - A successful data-plane Evaluation increments usage once per Flag resolved, including batch
   requests.
 - Cached/local SDK reads, failed requests, and `test-evaluation` consume zero.
-- Exposure and Metric events do not consume separate V1 billing units.
-- Metric-event ingest has operational abuse and fairness limits that are visible to the customer but
-  do not create a second billing meter.
+- Exposures, Metric Events, and Web Events do not consume separate V1 billing units.
+- Metric Event and Web Event ingest have operational abuse and fairness limits that are visible to
+  the customer but do not create a second billing meter.
+- Aggregate Ingest Admission Gate row and byte budgets are operational Tinybird-protection controls,
+  not billable usage, plan quota, or customer spend guards.
 - All Apps and Environments under an Organization draw from one quota.
 - Quota exhaustion enters grace for 7 days on free Organizations and 14 days on paid Organizations.
 - Grace usage records negative Evaluation balance.
@@ -158,12 +160,12 @@ The V1 billing contract is implemented when:
 ## Consequences
 
 This makes V1 easy to explain and hard to game. The tradeoff is that Splitch absorbs some analysis
-cost from Exposure and Metric-event volume inside the Evaluation price. That is acceptable for V1
-because it keeps the contract legible and avoids a second hidden meter.
+cost from Exposure, Metric Event, and Web Event volume inside the Evaluation price. That is
+acceptable for V1 because it keeps the contract legible and avoids a second hidden meter.
 
-If Metric-event volume becomes the dominant cost later, the next ADR must decide whether to raise the
-Evaluation price, introduce a clearly named add-on, or split analytics billing. V1 does not pre-build
-that complexity.
+If Metric Event or Web Event volume becomes the dominant cost later, the next ADR must decide whether
+to raise the Evaluation price, introduce a clearly named add-on, or split analytics billing. V1 does
+not pre-build that complexity.
 
 ## Sources
 

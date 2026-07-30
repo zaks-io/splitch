@@ -12,7 +12,7 @@ the two kinds is determined by the runtime context — trusted server vs untrust
 | -------------------------- | ------------------------------------ | ---------------------------------------------------- |
 | Secrecy                    | Secret — never shipped client-side   | Public by design — safe in browser / mobile          |
 | Runtime                    | Server-side trusted environment      | Client-side (browser, mobile, any untrusted runtime) |
-| Capability                 | Full data-plane access               | Evaluate flags for its App only                      |
+| Capability                 | Full data-plane access               | Evaluate plus strict write-only Metric/Web ingest    |
 | Can read config/rules/salt | Yes                                  | No                                                   |
 | Can write / mint keys      | No (SDK-only; control plane manages) | No                                                   |
 | Cross-App access           | No (scoped to issuing App)           | No                                                   |
@@ -40,6 +40,10 @@ If you paste an API Key into client code it is now leaked — rotate it. If you 
 a server, evaluation still works (Client Keys hold `evaluate`), you just don't get the API-Key tier
 (peek, full `verify` reason). The keys are not interchangeable for capability; pick by runtime trust.
 
+The Client Key also authorizes only the strict write-only `track()` and `web.track()` routes. It
+cannot read Event Definitions, event rows, Web Analytics, or configuration, and both writes remain
+origin-bound and rate-limited.
+
 ## Storage and validation
 
 Both credential types follow the same D1/KV pattern (ADR-0018):
@@ -53,7 +57,7 @@ CredentialRecord {
   environment_id: string    -- owning Environment (required; the key reaches only this Environment, ADR-0027)
   type:       'api_key' | 'client_key'
   key_hash:   string        -- SHA-256 of the raw credential value; raw value never stored
-  scopes:     string[]      -- for API Key: e.g. ['evaluate', 'track']; Client Key: ['evaluate']
+  scopes:     string[]      -- API Key scopes; Client Key capabilities are structural
   revoked:    boolean
   created_at: timestamp
   revoked_at: timestamp | null

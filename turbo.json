@@ -1,15 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["biome.json", "tsconfig.base.json"],
-  "globalEnv": [
-    "CI",
-    "NODE_ENV",
-    "SPLITCH_PLATFORM_TARGET",
-    "AUTH_API_ORIGIN",
-    "AUTH_JWKS_URI",
-    "CONTROL_PLANE_ORIGIN",
-    "TINYBIRD_API_URL"
-  ],
+  "globalEnv": ["CI", "NODE_ENV"],
   "globalPassThroughEnv": [
     "GITHUB_RUN_ID",
     "SPLITCH_SMOKE_APP_ID",
@@ -27,14 +19,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
-      "inputs": ["$TURBO_DEFAULT$"],
-      "env": [
-        "SPLITCH_PLATFORM_TARGET",
-        "AUTH_API_ORIGIN",
-        "AUTH_JWKS_URI",
-        "CONTROL_PLANE_ORIGIN",
-        "TINYBIRD_API_URL"
-      ]
+      "inputs": ["$TURBO_DEFAULT$"]
     },
     "@splitch/control-panel#build": {
       "dependsOn": ["^build"],
@@ -42,13 +27,8 @@
       "inputs": ["$TURBO_DEFAULT$"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
-        "AUTH_API_ORIGIN",
-        "AUTH_JWKS_URI",
-        "CONTROL_PLANE_ORIGIN",
-        "TINYBIRD_API_URL",
         "CLOUDFLARE_ENV",
         "SPLITCH_GENERATED_WRANGLER_ENV",
-        "SENTRY_DSN",
         "SENTRY_RELEASE",
         "SENTRY_RELEASE_BASE",
         "VITE_SENTRY_DSN",
@@ -60,15 +40,7 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
       "inputs": ["$TURBO_DEFAULT$"],
-      "env": [
-        "SPLITCH_PLATFORM_TARGET",
-        "AUTH_API_ORIGIN",
-        "AUTH_JWKS_URI",
-        "CONTROL_PLANE_ORIGIN",
-        "TINYBIRD_API_URL",
-        "CLOUDFLARE_ENV",
-        "SPLITCH_GENERATED_WRANGLER_ENV"
-      ]
+      "env": ["CLOUDFLARE_ENV", "SPLITCH_GENERATED_WRANGLER_ENV"]
     },
     "@splitch/cli#test": {
       "dependsOn": ["^build"],
@@ -114,6 +86,49 @@
     "test": {
       "dependsOn": ["^build"],
       "outputs": []
+    },
+    "//#format:check": {
+      "cache": false
+    },
+    "//#spec:lint": {
+      "cache": false
+    },
+    "//#check:cli-mcp-parity": {
+      "cache": false
+    },
+    "//#test:scripts": {
+      "cache": false
+    },
+    "@splitch/control-panel#test:connect-snippet": {
+      "dependsOn": ["@splitch/sdk#build"],
+      "cache": false,
+      "outputs": []
+    },
+    "@splitch/mcp-server#generate": {
+      "inputs": [
+        "$TURBO_ROOT$/CONTEXT.md",
+        "$TURBO_ROOT$/docs/spec/quickstart.md",
+        "$TURBO_ROOT$/scripts/generate-mcp-resource-files.mjs"
+      ],
+      "outputs": ["src/mcp-resource-files.generated.ts"]
+    },
+    "@splitch/mcp-server#build": {
+      "dependsOn": ["^build", "@splitch/mcp-server#generate"],
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
+      "inputs": ["$TURBO_DEFAULT$"]
+    },
+    "@splitch/mcp-server#typecheck": {
+      "dependsOn": ["^build", "@splitch/mcp-server#generate"],
+      "outputs": []
+    },
+    "@splitch/mcp-server#test": {
+      "dependsOn": ["^build", "@splitch/mcp-server#generate"],
+      "outputs": []
+    },
+    "test:e2e": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["SPLITCH_PLATFORM_TARGET"]
     },
     "stats:unit": {
       "dependsOn": ["^build"],
@@ -294,11 +309,19 @@
         "SPLITCH_SMOKE_CLIENT_SECRET"
       ]
     },
-    "d1:migrate:local": {
+    "//#d1:migrate:local": {
       "cache": false
     },
-    "d1:migrate:populated": {
+    "//#d1:migrate:populated": {
+      "cache": false,
+      "dependsOn": ["//#d1:migrate:local"]
+    },
+    "//#secrets:range": {
       "cache": false
+    },
+    "//#knip": {
+      "cache": false,
+      "dependsOn": ["@splitch/sdk#build"]
     },
     "migrate": {
       "cache": false,
@@ -327,7 +350,7 @@
     "tinybird:deploy:production": {
       "cache": false
     },
-    "tinybird:local": {
+    "//#tinybird:local": {
       "cache": false
     },
     "wrangler": {
@@ -350,6 +373,18 @@
       "dependsOn": ["build"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/contracts/src/**"],
       "outputs": []
+    },
+    "@splitch/sdk#pack:dry-run": {
+      "dependsOn": ["build", "//#knip"],
+      "cache": false
+    },
+    "@splitch/sdk#pack:check": {
+      "dependsOn": ["pack:dry-run"],
+      "cache": false
+    },
+    "@splitch/sdk#test:consumer-smoke": {
+      "dependsOn": ["pack:check"],
+      "cache": false
     }
   }
 }

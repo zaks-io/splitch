@@ -19,7 +19,7 @@ query (ADR-0010); `__multiple__` Entities are already excluded upstream.
 | `id_type`            | `string`    | yes      | Entity type label (e.g. `"user"`, `"workspace"`)                                                                                                   |
 | `run_id`             | `string`    | yes      | The Run this Exposure belongs to                                                                                                                   |
 | `variant`            | `string`    | yes      | Variant name assigned to this Entity in this Run                                                                                                   |
-| `first_exposure_ts`  | `timestamp` | yes      | `MIN(server_ts)` — the Conversion Window anchor (ungated)                                                                                          |
+| `first_exposure_ts`  | `timestamp` | yes      | `MIN(server_received_at)` — the Conversion Window anchor (ungated)                                                                                 |
 | `window_anchor`      | `timestamp` | yes      | `COALESCE(activation_ts, first_exposure_ts)` — effective anchor                                                                                    |
 | `dimension_values`   | `object`    | no       | Attribute values available for Dimension slicing, keyed by Dimension id                                                                            |
 
@@ -52,8 +52,9 @@ arrive as a per-Entity pair so the delta-method covariance term is computable �
 independent aggregation. Rows with `denom_value = 0` are retained; dropping them would change the
 randomized population and can bias denominator-sensitive Metrics.
 
-The pipeline derives these values from the separate `metric_events` datasource. A Metric Event joins
-an Entity only on matching `app_id`, `environment_id`, `id_type`, and `targeting_key_hash`, and only
+The pipeline derives these values from the separate `metric_events` datasource after first collapsing
+the bounded physical row set to one logical Metric Event per `dedup_key`. A Metric Event joins an
+Entity only on matching `app_id`, `environment_id`, `id_type`, and `targeting_key_hash`, and only
 when `id_type = Run.targeting_key_type`. Metric selection further requires
 `event_definition_id = Metric.event_definition_id` and, for Count and Revenue, the Metric's
 `event_field_name` present on that row's accepting Event Definition Version; the Conversion Window
@@ -61,6 +62,10 @@ filter then keeps events inside the Entity's window. Ratio Metrics resolve numer
 independently through each operand Metric's Event Definition and field contract before forming the
 per-Entity `(num_value, denom_value)` pair. Metric Events never create denominator rows: the
 pipeline left-joins values onto the complete first-touch Exposure population.
+
+Physical retry rows must never inflate Binomial, Count, Revenue, or Ratio inputs. The mandatory
+logical source and ordering are defined in
+[physical-datasources.md](../pipeline/physical-datasources.md#logical-metric-event-source).
 
 For locked non-Ratio decision-family or Guardrail Metrics, `metric_values` may be sparse at the
 beginning of a Run. If no row has arrived for a locked Metric yet, the engine still evaluates that
