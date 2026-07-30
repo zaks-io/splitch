@@ -55,6 +55,7 @@ export function OverviewPage({
               scopeHref={scopeHref}
             />
             <OverviewFlagChangesCard
+              changedCount={overview.flagConfiguration.changedCount}
               readLimit={overview.flagConfiguration.readLimit}
               readTruncated={overview.flagConfiguration.readTruncated}
               recentlyChanged={overview.flagConfiguration.recentlyChanged}
