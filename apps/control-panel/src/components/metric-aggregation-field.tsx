@@ -8,15 +8,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@splitch/ui/components/select";
-import { METRIC_KINDS, type MetricDraft } from "#lib/metric-form-model";
+import { type MetricDraft, metricKindOptions } from "#lib/metric-form-model";
 
 export function MetricAggregationField({
   draft,
   editing,
+  hasDenominatorCandidates,
   onEdit,
 }: {
   draft: MetricDraft;
   editing: boolean;
+  hasDenominatorCandidates: boolean;
   onEdit: (patch: Partial<MetricDraft>) => void;
 }) {
   return (
@@ -32,8 +34,8 @@ export function MetricAggregationField({
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
-            {METRIC_KINDS.map(({ kind, label }) => (
-              <SelectItem key={kind} value={kind}>
+            {metricKindOptions(hasDenominatorCandidates).map(({ disabled, kind, label }) => (
+              <SelectItem disabled={disabled} key={kind} value={kind}>
                 {label}
               </SelectItem>
             ))}

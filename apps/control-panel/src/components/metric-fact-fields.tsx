@@ -23,7 +23,12 @@ export function MetricFactFields({
 }) {
   return (
     <>
-      <MetricAggregationField draft={draft} editing={editing} onEdit={edit} />
+      <MetricAggregationField
+        draft={draft}
+        editing={editing}
+        hasDenominatorCandidates={denominatorMetrics.length > 0}
+        onEdit={edit}
+      />
       <MetricTextField
         description="The exact event type matched in the Metric Event stream."
         draft={draft}

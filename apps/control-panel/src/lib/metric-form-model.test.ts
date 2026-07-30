@@ -1,16 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   emptyMetricDraft,
-  METRIC_KINDS,
   metricCreateInput,
   metricDraft,
   metricDraftIssues,
+  metricKindOptions,
   metricUpdateInput,
 } from "./metric-form-model";
 
 describe("Metric editor model", () => {
   it("supports all four aggregation types with their required fields", () => {
-    expect(METRIC_KINDS.map(({ kind }) => kind)).toEqual(["binomial", "count", "revenue", "ratio"]);
+    expect(metricKindOptions(true).map(({ kind }) => kind)).toEqual([
+      "binomial",
+      "count",
+      "revenue",
+      "ratio",
+    ]);
 
     expect(
       metricDraftIssues({
@@ -35,6 +40,19 @@ describe("Metric editor model", () => {
     ).toContainEqual({
       path: "denominatorMetricId",
       message: "Choose a denominator Metric.",
+    });
+  });
+
+  it("disables Ratio with an explanation until a denominator Metric exists", () => {
+    expect(metricKindOptions(false).find(({ kind }) => kind === "ratio")).toEqual({
+      kind: "ratio",
+      label: "Ratio (create another Metric first)",
+      disabled: true,
+    });
+    expect(metricKindOptions(true).find(({ kind }) => kind === "ratio")).toEqual({
+      kind: "ratio",
+      label: "Ratio",
+      disabled: false,
     });
   });
 

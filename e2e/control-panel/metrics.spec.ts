@@ -36,7 +36,9 @@ test.describe("App-level Metrics", () => {
     const ratioKey = `signup-rate-${suffix}`;
 
     await page.goto("/acme-labs/billing-api/prod/metrics");
-    await expect(page.getByText("Create your first Metric")).toBeVisible();
+    for (const key of [signupsKey, countKey, revenueKey, ratioKey]) {
+      await expect(page.locator(`[data-metric-key='${key}']`)).toHaveCount(0);
+    }
 
     await createMetric(page, {
       name: `Signups ${suffix}`,

@@ -37,7 +37,7 @@ describe("Metric editor dialog", () => {
     expect(html).toContain("Metric name");
   });
 
-  it("commits Worker create, update, and delete results without a route reload", () => {
+  it("applies Metric upserts and removals to local state", () => {
     const created = metric({ id: "metric_signups", key: "signups", name: "Signups" });
     const updated = { ...created, name: "Completed signups" };
 

@@ -7,12 +7,27 @@ import {
 } from "@splitch/contracts";
 import { z } from "zod";
 
-export const METRIC_KINDS: ReadonlyArray<{ kind: MetricKind; label: string }> = [
+const METRIC_KINDS: ReadonlyArray<{ kind: MetricKind; label: string }> = [
   { kind: "binomial", label: "Binomial" },
   { kind: "count", label: "Count" },
   { kind: "revenue", label: "Revenue" },
   { kind: "ratio", label: "Ratio" },
 ];
+
+export function metricKindOptions(hasDenominatorCandidates: boolean): ReadonlyArray<{
+  kind: MetricKind;
+  label: string;
+  disabled: boolean;
+}> {
+  return METRIC_KINDS.map(({ kind, label }) => {
+    const disabled = kind === "ratio" && !hasDenominatorCandidates;
+    return {
+      kind,
+      label: disabled ? `${label} (create another Metric first)` : label,
+      disabled,
+    };
+  });
+}
 
 export const MetricDraftSchema = z
   .object({
