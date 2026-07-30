@@ -8,12 +8,17 @@ import {
   CardTitle,
 } from "@splitch/ui/components/card";
 import { changedAtLabel } from "#lib/overview-view";
+import { FlagChangesTruncatedNotice } from "./flag-changes-truncated-notice";
 
 export function OverviewFlagChangesCard({
+  readLimit,
+  readTruncated,
   recentlyChanged,
   scopeHref,
   windowDays,
 }: {
+  readLimit: number;
+  readTruncated: boolean;
   recentlyChanged: readonly OverviewFlagConfigChange[];
   scopeHref: string;
   windowDays: number;
@@ -29,8 +34,19 @@ export function OverviewFlagChangesCard({
           recorded yet.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        {recentlyChanged.length === 0 ? (
+      <CardContent className="grid gap-3">
+        {readTruncated ? (
+          <FlagChangesTruncatedNotice
+            readLimit={readLimit}
+            scopeHref={scopeHref}
+            windowDays={windowDays}
+          />
+        ) : null}
+        {/* The empty line is a claim about the Environment, and a truncated scan
+            cannot support it. The server cannot produce this pair, but nothing
+            stops a caller from constructing it, and "more than 50 changed" sitting
+            above "nothing changed" is worse than showing neither. */}
+        {recentlyChanged.length === 0 && !readTruncated ? (
           <p className="text-muted-foreground text-sm">
             No Flag Configuration changed in the last {windowDays} days.
           </p>

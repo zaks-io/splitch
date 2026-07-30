@@ -20,6 +20,22 @@ export const FLAG_CHANGE_WINDOW_DAYS = 7;
 /** Most recently-changed Flag Configurations shown; the card is a pointer, not a log. */
 export const FLAG_CHANGE_LIMIT = 5;
 
+/**
+ * Hard ceiling on Flag Configuration rows the Overview scans for the
+ * recently-changed card. Held at the `SESSION_ORG_LIMIT` value for the same
+ * reason: a per-request read whose cost tracks how much data a tenant has
+ * accumulated is a self-inflicted denial of service, and 50 rows is already far
+ * more than any single screen can act on.
+ *
+ * Deliberately well ABOVE `FLAG_CHANGE_LIMIT`, not equal to it. This bounds READ
+ * COST, and hitting it is a real statement — more Flag Configurations changed in
+ * this Environment in the window than the Overview will look at. Collapsing the
+ * two constants would make the read bound fire on ordinary Environments and turn
+ * the truncation notice into noise; how the card presents its own display cap is
+ * a separate question with its own ticket.
+ */
+export const FLAG_CHANGE_READ_LIMIT = 50;
+
 /** Concurrent Analysis reads for one Overview request. */
 export const OVERVIEW_ANALYSIS_READ_CONCURRENCY = 8;
 

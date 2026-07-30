@@ -22,7 +22,7 @@ function render(overrides: Partial<AppOverviewResponse>): string {
     appId: "app_checkout",
     environmentId: "env_prod",
     experiments: { status: "ok", needingDecision: [], failing: [], noData: [] },
-    flagConfiguration: { recentlyChanged: [], windowDays: 7 },
+    flagConfiguration: { recentlyChanged: [], windowDays: 7, readTruncated: false, readLimit: 50 },
     environment: ENVIRONMENT,
     ...overrides,
   };
@@ -138,6 +138,8 @@ describe("Overview page", () => {
     const html = render({
       flagConfiguration: {
         windowDays: 7,
+        readTruncated: false,
+        readLimit: 50,
         recentlyChanged: [
           {
             flagId: "flag_checkout",
@@ -167,5 +169,84 @@ describe("Overview page", () => {
     expect(html).not.toContain("Enable / disable a Flag");
     expect(html).toContain("Start an Experiment Run");
     expect(html).toContain(`href="${SCOPE_HREF}/settings"`);
+  });
+});
+
+/**
+ * The Overview's Flag Configuration scan is bounded, so a full-looking card can
+ * be a partial one. These cover the signal that says so.
+ */
+describe("Overview page Flag Configuration truncation", () => {
+  it("says the Flag Configuration scan was capped instead of passing off a partial list", () => {
+    const html = render({
+      flagConfiguration: {
+        windowDays: 7,
+        readTruncated: true,
+        readLimit: 50,
+        recentlyChanged: [
+          {
+            flagId: "flag_checkout",
+            flagKey: "checkout-redesign",
+            flagName: "Checkout redesign",
+            enabled: true,
+            updatedAt: "2026-07-19T10:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    expect(html).toContain('data-testid="flag-changes-truncated"');
+    expect(html).toContain("More than 50 Flag Configurations changed");
+    // The remedy is a surface that answers the whole question, never "reload":
+    // the ceiling is not transient, so a retry returns the same page (ADR-0036).
+    expect(html).not.toContain("Refresh");
+    // And the reader is in a browser, where the whole catalog is one click away.
+    // Naming only the CLI and MCP would send them to a terminal for a screen this
+    // app already ships.
+    expect(html).toContain('data-testid="flag-changes-truncated-link"');
+    expect(html).toContain(`href="${SCOPE_HREF}/flags"`);
+  });
+
+  it("never renders the calm state while the Flag Configuration scan is truncated", () => {
+    // Truncated means the list is KNOWN to be incomplete, so an empty one is not
+    // evidence of quiet -- and calm would render the truncation notice away.
+    const html = render({
+      flagConfiguration: {
+        windowDays: 7,
+        readTruncated: true,
+        readLimit: 50,
+        recentlyChanged: [],
+      },
+    });
+
+    expect(html).not.toContain("Nothing needs your attention");
+    expect(html).toContain('data-testid="flag-changes-truncated"');
+    // "More than 50 changed" and "nothing changed" cannot both be true, so the
+    // empty line yields to the notice rather than sitting under it.
+    expect(html).not.toContain("No Flag Configuration changed in the last");
+  });
+
+  it("does not claim truncation when the scan came back under the ceiling", () => {
+    // Rendered with a change present, so the card itself is on the page and the
+    // absent notice is a real finding rather than a card that never rendered.
+    const html = render({
+      flagConfiguration: {
+        windowDays: 7,
+        readTruncated: false,
+        readLimit: 50,
+        recentlyChanged: [
+          {
+            flagId: "flag_checkout",
+            flagKey: "checkout-redesign",
+            flagName: "Checkout redesign",
+            enabled: true,
+            updatedAt: "2026-07-19T10:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    expect(html).toContain('data-overview-card="flag-changes"');
+    expect(html).not.toContain('data-testid="flag-changes-truncated"');
   });
 });

@@ -16,6 +16,18 @@ interface FlagRow {
 const DAY_MS = 86_400_000;
 
 /**
+ * Start of the "recently changed" window, as an ISO-8601 instant.
+ *
+ * Exported so the bounded D1 read and this in-memory filter cut at exactly the
+ * same instant. Two independently computed windows could disagree, and a row the
+ * SQL admitted but this dropped would make the truncation flag describe a page
+ * larger than the one returned.
+ */
+export function flagChangeWindowStart(now: Date): string {
+  return new Date(now.getTime() - FLAG_CHANGE_WINDOW_DAYS * DAY_MS).toISOString();
+}
+
+/**
  * The most recently changed Flag Configuration in this Environment.
  *
  * Sourced from `flag_configs.updated_at`, which is the only change record that
@@ -29,7 +41,7 @@ export function overviewFlagChanges(
   now: Date,
 ): OverviewFlagConfigChange[] {
   const byId = new Map(flags.map((flag) => [flag.id, flag]));
-  const since = now.getTime() - FLAG_CHANGE_WINDOW_DAYS * DAY_MS;
+  const since = Date.parse(flagChangeWindowStart(now));
   return configs
     .flatMap((config) => {
       const changedAt = Date.parse(config.updatedAt);

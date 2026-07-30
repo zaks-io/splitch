@@ -99,10 +99,21 @@ export const AppOverviewResponseSchema = z
     appId: z.string().min(1),
     environmentId: z.string().min(1),
     experiments: OverviewExperimentsSchema,
+    /**
+     * `readTruncated` says the bounded scan of changed Flag Configurations hit its
+     * ceiling: more than `readLimit` of them changed inside the window, so what
+     * follows is the head of that list and not the whole of it. It rides on the
+     * wire because only the Worker that issued the bounded read can observe it,
+     * and a capped list rendered as a complete one is the silent fallback ADR-0036
+     * forbids. `readLimit` travels with it so a skin can state the ceiling without
+     * holding its own copy of a server constant.
+     */
     flagConfiguration: z
       .object({
         recentlyChanged: z.array(OverviewFlagConfigChangeSchema),
         windowDays: z.number().int().positive(),
+        readTruncated: z.boolean(),
+        readLimit: z.number().int().positive(),
       })
       .strict(),
     environment: z

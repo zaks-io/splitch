@@ -60,6 +60,17 @@ export function makeFlagRepo(db: Db) {
 
     ...makeFlagConfigOps(db, flagConfigsTable, targetingRulesTable),
 
+    /**
+     * App-scoped Flag fetch by a set of IDs, for callers that already hold a
+     * bounded set of `flag_id`s and only need to resolve them to keys and names.
+     * Reading the App's whole Flag catalog to build that lookup makes the caller's
+     * cost scale with the App instead of with its own bound.
+     */
+    listFlagsByIds(scope: TenantScope, ids: readonly string[]) {
+      if (ids.length === 0) return Promise.resolve([] as (typeof flags.$inferSelect)[]);
+      return flagsTable.findMany(scope, inArray(flags.id, [...ids]));
+    },
+
     /** App-scoped Segment fetch by a set of IDs (e.g. for a draft Run snapshot). */
     listSegmentsByIds(scope: TenantScope, ids: readonly string[]) {
       if (ids.length === 0) return Promise.resolve([] as (typeof segments.$inferSelect)[]);
