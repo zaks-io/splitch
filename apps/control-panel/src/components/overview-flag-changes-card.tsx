@@ -8,12 +8,17 @@ import {
   CardTitle,
 } from "@splitch/ui/components/card";
 import { changedAtLabel } from "#lib/overview-view";
+import { FlagChangesTruncatedNotice } from "./flag-changes-truncated-notice";
 
 export function OverviewFlagChangesCard({
+  readLimit,
+  readTruncated,
   recentlyChanged,
   scopeHref,
   windowDays,
 }: {
+  readLimit: number;
+  readTruncated: boolean;
   recentlyChanged: readonly OverviewFlagConfigChange[];
   scopeHref: string;
   windowDays: number;
@@ -29,7 +34,10 @@ export function OverviewFlagChangesCard({
           recorded yet.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="grid gap-3">
+        {readTruncated ? (
+          <FlagChangesTruncatedNotice readLimit={readLimit} windowDays={windowDays} />
+        ) : null}
         {recentlyChanged.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             No Flag Configuration changed in the last {windowDays} days.

@@ -38,6 +38,17 @@ type RequiredScope<T extends AppScopedTable> = T extends HasEnvColumn ? EnvScope
 
 export interface ReadOptions {
   limit?: number;
+  /**
+   * ORDER BY terms, applied before `limit`.
+   *
+   * A `limit` with no order is only safe when the caller throws the rows away —
+   * "is this scope past a budget" reads one row past the ceiling and then
+   * refuses whole, so which rows came back never mattered. Any caller that KEEPS
+   * a bounded page must pass a TOTAL order (end on a unique column), or two
+   * otherwise identical reads can drop different rows and the page silently
+   * shuffles between them.
+   */
+  orderBy?: readonly SQL[];
 }
 
 type Row<T extends SQLiteTable> = T["$inferSelect"];
@@ -115,10 +126,14 @@ export function scopedTable<T extends AppScopedTable>(db: Db, table: T): ScopedT
 
   return {
     async findMany(scope, extra, options) {
-      const query = db
+      const filtered = db
         .select()
         .from(table as SQLiteTable)
         .where(withScope(columns, scope, extra));
+      const query =
+        options?.orderBy && options.orderBy.length > 0
+          ? filtered.orderBy(...options.orderBy)
+          : filtered;
       if (options?.limit === undefined) return query as Promise<Row<T>[]>;
       if (!Number.isInteger(options.limit) || options.limit < 1) {
         throw new Error(`findMany: limit must be a positive integer, got ${options.limit}`);

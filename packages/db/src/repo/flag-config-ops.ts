@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import { flagConfigs, targetingRules } from "../schema/index";
 import type { Db } from "./client";
 import type { EnvScope } from "./scope";
@@ -19,6 +19,33 @@ export function makeFlagConfigOps(
   return {
     getFlagConfig(scope: EnvScope, flagId: string) {
       return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
+    },
+
+    /**
+     * Flag Configurations in this Environment changed at or after `since`, most
+     * recently changed first, bounded to `limit` rows.
+     *
+     * Exists so a "what changed lately" surface costs what it renders instead of
+     * what the Environment holds: the unbounded read this replaces made every
+     * page load scale with the App's Flag count.
+     *
+     * `updated_at` is fixed-width ISO-8601 TEXT, so the lexicographic comparison
+     * SQLite applies IS the chronological one — no conversion, and the `>=` bound
+     * and the DESC order agree with how a caller reads the column in JS.
+     *
+     * Ordered by `(updated_at DESC, id DESC)`. `id` is the table's PRIMARY KEY, so
+     * the pair is a TOTAL order. Timestamps collide (a batch write stamps one
+     * `updated_at` across rows), and without the tiebreaker which of the tied rows
+     * a `LIMIT` dropped would vary between two otherwise identical reads.
+     *
+     * Ask for one row more than you intend to keep and you learn whether you
+     * truncated, rather than inferring it from a full page.
+     */
+    listRecentFlagConfigs(scope: EnvScope, since: string, limit: number) {
+      return flagConfigsTable.findMany(scope, gte(flagConfigs.updatedAt, since), {
+        limit,
+        orderBy: [desc(flagConfigs.updatedAt), desc(flagConfigs.id)],
+      });
     },
 
     /**

@@ -81,16 +81,21 @@ export function experimentsUnavailableCopy(
 }
 
 /**
- * True only when every section was read successfully AND every one of them is
- * empty. An unavailable section can never produce the calm empty state, because
+ * True only when every section was read successfully AND IN FULL, and every one
+ * of them is empty. An unavailable section can never produce the calm empty state, because
  * "nothing needs you" and "we could not look" are different answers — and neither
  * can a running Experiment with no Analysis result, because "not yet" is a third.
  */
 export function isCalmOverview(input: {
   experiments: OverviewExperiments;
+  flagChangesTruncated: boolean;
   recentlyChanged: readonly unknown[];
 }): boolean {
   if (input.experiments.status !== "ok") return false;
+  // A truncated Flag Configuration scan means the list is known to be incomplete,
+  // so it cannot be evidence of an empty one. It also renders the whole card away,
+  // taking the truncation notice with it.
+  if (input.flagChangesTruncated) return false;
   return (
     input.experiments.needingDecision.length === 0 &&
     input.experiments.failing.length === 0 &&
