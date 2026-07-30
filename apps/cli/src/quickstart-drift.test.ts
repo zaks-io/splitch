@@ -115,7 +115,13 @@ describe("quickstart flag create drift", () => {
   });
 });
 
-describe("quickstart local control-plane lifecycle", () => {
+// Scoped to this block, not the whole file: these tests drive a real
+// CLI-to-control-plane lifecycle against the harness, so they are the only ones
+// here whose honest runtime is near vitest's 5s default. They take ~1-3s
+// locally but roughly 3x that on a contended CI runner, which is close enough
+// to fail on scheduling alone. Every other suite in this package keeps the
+// default, where a 5s overrun really does mean something hung.
+describe("quickstart local control-plane lifecycle", { timeout: 60_000 }, () => {
   let harness: QuickstartHarness;
 
   beforeEach(async () => {

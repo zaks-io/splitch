@@ -1,13 +1,14 @@
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
-import { createFileRoute, notFound, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, notFound, redirect } from "@tanstack/react-router";
 import { FlagsPage } from "#components/flags-page";
+import { scopedHref } from "#lib/app-shell-navigation";
 import { loadControlPanelFlags } from "#lib/control-plane-flag-functions";
 import { AccessDeniedError } from "#lib/loader-context";
 import { reportRouteError } from "#lib/panel-observability";
 import { loadScopedSession } from "#lib/session-functions";
 
-export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags")({
+export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/")({
   loader: async ({ location, params }) => {
     const scoped = await loadScopedSession({ data: params });
     if (scoped.kind === "unauthenticated") {
@@ -21,7 +22,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags")({
     return { items: result.data.items, scope: scoped.context.scope };
   },
   onError: ({ error }) => {
-    reportRouteError("section", error, "/$orgSlug/$appSlug/$env/flags");
+    reportRouteError("section", error, "/$orgSlug/$appSlug/$env/flags/");
   },
   errorComponent: () => <SectionErrorPage title="Flags unavailable" />,
   pendingComponent: TableSkeleton,
@@ -30,15 +31,14 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags")({
 
 function FlagsSectionRoute() {
   const { items, scope } = Route.useLoaderData();
+
   return (
-    <>
-      <FlagsPage
-        appId={scope.appId}
-        env={scope.env}
-        environmentId={scope.environmentId}
-        items={items}
-      />
-      <Outlet />
-    </>
+    <FlagsPage
+      appId={scope.appId}
+      env={scope.env}
+      environmentId={scope.environmentId}
+      items={items}
+      scopeHref={scopedHref(scope)}
+    />
   );
 }

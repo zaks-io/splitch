@@ -8,7 +8,7 @@ vi.mock("./create-flag-dialog", () => ({
 }));
 
 describe("Flags page", () => {
-  it("keeps rows non-navigable until the Flag detail route is implemented", () => {
+  it("links each row to the Flag detail screen in the active Environment", () => {
     const html = renderToStaticMarkup(
       <FlagsTable
         env="dev"
@@ -22,6 +22,7 @@ describe("Flags page", () => {
             },
           },
         ]}
+        scopeHref="/acme-labs/checkout-api/dev"
       />,
     );
 
@@ -30,8 +31,10 @@ describe("Flags page", () => {
     expect(html).toContain("Enabled");
     expect(html).toContain("25% rollout");
     expect(html).toContain("2 of 2");
-    expect(html).not.toContain("/acme-labs/checkout-api/dev/flags/");
-    expect(html).not.toContain("<a");
+    // The key, not the id: the key is the addressable identity and is what the
+    // operator already knows from the CLI and the SDK.
+    expect(html).toContain('href="/acme-labs/checkout-api/dev/flags/new-checkout"');
+    expect(html).not.toContain("flag_checkout");
   });
 
   it("teaches the Flag concept and the CLI/MCP equivalents in the empty state", () => {

@@ -116,6 +116,8 @@ async function buildSnapshot(
       updatedAt: config.updatedAt,
     }),
     experiment: experimentConfig(scope, experiment),
+    controllingExperiment:
+      experiment?.status === "running" ? { id: experiment.id, name: experiment.name } : null,
     run: runConfig(run),
     version: config.version,
   };
@@ -148,6 +150,7 @@ export function responseFromSnapshot(snapshot: Snapshot): FlagConfigResult {
     availableVariantNames: snapshot.flag.availableVariantNames,
     targetingRules: snapshot.flag.targetingRules,
     rollout: snapshot.flag.rollout,
+    experiment: snapshot.controllingExperiment,
   };
 }
 
