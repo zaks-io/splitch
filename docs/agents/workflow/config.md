@@ -93,14 +93,20 @@ in this config; refresh them from Linear during each workflow run.
   `shared_preview` Branch exists, and Worker secret sync is wired before deploy. Cloudflare Custom
   Domain DNS/cert activation can lag after first deploy. See
   `docs/spec/platform/deployment-pipeline.md`.
-- Production deploy path: auto-starts after `ci` succeeds on `main` and can also be manually
-  dispatched from `main`; it diffs the exact release SHA against the latest successful GitHub
+- Production deploy path: the successful `ci` job on `main` calls and waits for the reusable
+  production workflow; main CI uses per-run concurrency so a newer push cannot cancel an active
+  production mutation. It can also be manually dispatched from `main`. It rejects releases that are
+  no longer current `main` unless `allow_stale_release` is explicitly enabled for code-only incident
+  recovery, then diffs the exact release SHA against the latest successful GitHub
   `production` deployment, skips non-runtime documentation, workflow, CLI, repository-lint, and
   public-SDK-only releases before the environment gate, and runs only affected Tinybird, D1, and
-  Cloudflare Worker phases/packages. Root `CONTEXT.md` and `docs/spec/quickstart.md` remain MCP Worker
-  inputs. Missing or ambiguous baseline evidence fails closed to the full deployment. Cloudflare deploy
+  Cloudflare Worker phases/packages. Spec-only changes never deploy. Root `CONTEXT.md` remains an MCP
+  Worker input; `docs/spec/quickstart.md` refreshes only when an MCP runtime change next deploys.
+  Missing or ambiguous baseline evidence fails closed to the full deployment. Cloudflare deploy
   legs remain wired through Turborepo package tasks. Manual dispatch can set `force_full_deploy` for
-  intentional same-SHA redeploys. See
+  intentional same-SHA redeploys. The stale-release override does not roll back D1, KV, Durable
+  Objects, Queues, or Tinybird. Current main is rechecked after the production environment gate and
+  immediately before mutation. See
   `docs/spec/platform/deployment-pipeline.md`.
 - Merge authority: Orchestrator may merge low/normal-risk PRs when the automation
   merge gate in `Pull Requests` passes. Human approval is required for the high-risk
@@ -361,12 +367,13 @@ real package API boundary.
 - PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
   Blacksmith; `spec:lint` runs inside its `verify:ci` graph.
   `Control Panel E2E` runs nightly in the `e2e` workflow and on manual
-  dispatch; production deploys are gated on its latest completed run. See the
+  dispatch as a signal-only check and does not gate production deploys. See the
   gate parity gap above for Tinybird Local and D1 local validators.
 - Shared Preview / Production: workflows are wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
   resources plus one Tinybird Branch. Production starts automatically after
-  `ci` succeeds on a same-repository push to `main`, validates the exact CI
+  `ci` succeeds on a same-repository push to `main`, stays visible as a reusable
+  job in that CI run, validates the current-main exact CI
   commit, then deploys Tinybird, D1 migrations, and Workers through the GitHub
   `production` environment.
 - Planned backing services not yet wired: Cloudflare Flagship and Queues. Cloudflare D1/KV resources
