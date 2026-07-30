@@ -89,6 +89,26 @@ Web Events are deferred to a separate future datasource. They are never stored i
 | `changes`       | String                 | JSON; before/after snapshot or description                                    |
 | `timestamp`     | DateTime               | Event time                                                                    |
 
+Approval audit rows use this existing `audit_log` datasource, not a new datasource. The minimum
+projection is the ordinary `app_id`, `user_id`, `auth_method`, `action`, `resource_type`,
+`resource_id`, and `timestamp`, with `changes` carrying:
+
+```
+{
+  approval_request_id: string,
+  review_id: string | null,
+  review_action: 'approve_and_apply' | 'decline' | null,
+  outcome: 'pending' | 'applied' | 'declined' | 'stale' | 'failed',
+  target_version: string,
+  resulting_target_version: string | null,
+  error_code: ErrorCode | null
+}
+```
+
+`resource_type` is `approval_request`; `resource_id` is the Approval Request ID. D1 remains
+canonical. Emitting these post-commit Approval audit rows through the D1-to-Tinybird bridge is
+forward-referenced here and implemented by the separately tracked bridge work.
+
 Not in D1 — unbounded, append-only workload fits Tinybird (ADR-0018). Audit reads must apply the
 deleted-user tombstone rules in [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md).
 

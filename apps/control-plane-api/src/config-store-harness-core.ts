@@ -12,6 +12,7 @@ import { appAdminScope } from "./scope-binding";
 import { makeSessionStore } from "./session-store";
 
 const AUDIENCE = "https://cp.splitch.test";
+const TEST_IDEMPOTENCY_KEY = "idem_config_store_test";
 export const USER_ID = "user_config_admin";
 
 export { ids, NOW, NOW_MS };
@@ -105,12 +106,17 @@ export async function replaceTargetingRules(
   body: Record<string, unknown>,
 ): Promise<Response> {
   const jwt = await token(h.signer);
+  const requestBody = approvalMutationBody(body);
   return h.app.request(
     `/apps/${ids.appId}/envs/${ids.environmentId}/flags/${ids.flagId}/targeting-rules`,
     {
       method: "PUT",
-      headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json" },
-      body: JSON.stringify(body),
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        "content-type": "application/json",
+        "idempotency-key": TEST_IDEMPOTENCY_KEY,
+      },
+      body: JSON.stringify(requestBody),
     },
   );
 }
@@ -120,10 +126,15 @@ export async function promoteFlagConfig(
   body: Record<string, unknown>,
 ): Promise<Response> {
   const jwt = await token(h.signer);
+  const requestBody = approvalMutationBody(body);
   return h.app.request(`/apps/${ids.appId}/envs/${ids.environmentId}/flags/${ids.flagId}/promote`, {
     method: "POST",
-    headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json" },
-    body: JSON.stringify(body),
+    headers: {
+      authorization: `Bearer ${jwt}`,
+      "content-type": "application/json",
+      "idempotency-key": TEST_IDEMPOTENCY_KEY,
+    },
+    body: JSON.stringify(requestBody),
   });
 }
 
@@ -136,11 +147,20 @@ export async function setProdPolicy(h: Harness, policy: EnvironmentPolicy): Prom
 
 export async function authedPatch(app: Hono, signer: FixtureSigner, body: Record<string, unknown>) {
   const jwt = await token(signer);
+  const requestBody = approvalMutationBody(body);
   return app.request(`/apps/${ids.appId}/envs/${ids.environmentId}/flags/${ids.flagId}/config`, {
     method: "PATCH",
-    headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json" },
-    body: JSON.stringify(body),
+    headers: {
+      authorization: `Bearer ${jwt}`,
+      "content-type": "application/json",
+      "idempotency-key": TEST_IDEMPOTENCY_KEY,
+    },
+    body: JSON.stringify(requestBody),
   });
+}
+
+function approvalMutationBody(body: Record<string, unknown>): Record<string, unknown> {
+  return { idempotency_key: TEST_IDEMPOTENCY_KEY, ...body };
 }
 
 export function token(signer: FixtureSigner, scopes = [appAdminScope(ids.appId)]): Promise<string> {

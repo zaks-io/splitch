@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { LOCAL_E2E_ANALYSIS_INPUTS } from "./local-e2e-analysis-inputs.mjs";
 import {
-  LOCAL_E2E_ANALYSIS_INPUTS,
   LOCAL_E2E_D1_SEED,
   LOCAL_E2E_FIXTURE_CONTRACT,
   LOCAL_E2E_MEMBER_SESSION_KEY,
@@ -85,22 +85,26 @@ test("fixture App has explicit Environments and Run-scoped Experiment health sta
     },
   ]);
 
-  const inputByExperiment = new Map(
-    LOCAL_E2E_ANALYSIS_INPUTS.map((fixture) => [fixture.experimentId, fixture]),
-  );
-  assert.equal(inputByExperiment.size, 4);
-  assert.deepEqual(inputByExperiment.get("experiment_checkout_dev_e2e")?.counts, {
+  // Keyed by Run, not by Experiment: an Experiment can carry several frozen Runs
+  // and each one is its own analysis window.
+  const inputByRun = new Map(LOCAL_E2E_ANALYSIS_INPUTS.map((fixture) => [fixture.runId, fixture]));
+  assert.equal(inputByRun.size, 6);
+  assert.deepEqual(inputByRun.get("run_checkout_dev_e2e")?.counts, {
     control: 10,
     treatment: 10,
   });
-  assert.deepEqual(inputByExperiment.get("experiment_checkout_prod_e2e")?.counts, {
+  assert.deepEqual(inputByRun.get("run_checkout_prod_e2e")?.counts, {
     control: 19,
     treatment: 1,
   });
-  assert.deepEqual(inputByExperiment.get("experiment_checkout_significance_e2e")?.decisionFamily, [
+  assert.deepEqual(inputByRun.get("run_checkout_significance_e2e")?.decisionFamily, [
     { metric_id: "checkout-conversion", variant: "treatment" },
   ]);
-  assert.deepEqual(inputByExperiment.get("experiment_checkout_guardrail_e2e")?.guardrailDecisions, [
+  assert.deepEqual(inputByRun.get("run_checkout_srm_e2e")?.counts, {
+    control: 140,
+    treatment: 60,
+  });
+  assert.deepEqual(inputByRun.get("run_checkout_guardrail_e2e")?.guardrailDecisions, [
     {
       metric_id: "checkout-reliability",
       variant: "treatment",
@@ -109,8 +113,12 @@ test("fixture App has explicit Environments and Run-scoped Experiment health sta
       threshold_locked_at_run_start: true,
     },
   ]);
-  assert.equal(inputByExperiment.get("experiment_checkout_dev_e2e")?.exposures.length, 20);
-  assert.equal(inputByExperiment.get("experiment_checkout_prod_e2e")?.exposures.length, 20);
+  assert.equal(inputByRun.get("run_checkout_dev_e2e")?.exposures.length, 20);
+  assert.equal(inputByRun.get("run_checkout_prod_e2e")?.exposures.length, 20);
+  assert.deepEqual(inputByRun.get("run_checkout_dev_previous_e2e")?.counts, {
+    control: 6,
+    treatment: 6,
+  });
   assert.match(LOCAL_E2E_D1_SEED, /variant_checkout_control_e2e/);
   assert.match(LOCAL_E2E_D1_SEED, /config_checkout_dev_e2e/);
   assert.match(LOCAL_E2E_D1_SEED, /config_checkout_prod_e2e/);
@@ -125,4 +133,31 @@ test("fixture App has explicit Environments and Run-scoped Experiment health sta
     /env_checkout_settings_retry_e2e[\s\S]*variantAvailability":"allow"/,
   );
   assert.match(LOCAL_E2E_D1_SEED, /env_checkout_prod_e2e[\s\S]*variantAvailability":"confirm"/);
+});
+
+// A Run freezes the Variant set it allocates over. If that frozen set does not
+// contain the Experiment's default Variant, the Run has no baseline to measure
+// lift against and every Results read fails loudly. The seed once shared one
+// Flag's Variants across five Experiments and hid exactly that.
+test("every seeded Run freezes a Variant set containing its Experiment's control", () => {
+  const defaultVariantByExperiment = new Map(
+    [...LOCAL_E2E_D1_SEED.matchAll(/\('(experiment_\w+)'(?:, '[^']*'){8}, (?:'(\w+)'|NULL),/g)].map(
+      ([, experimentId, variantId]) => [experimentId, variantId],
+    ),
+  );
+  assert.ok(defaultVariantByExperiment.size >= 6);
+
+  const runs = [
+    ...LOCAL_E2E_D1_SEED.matchAll(
+      /\('(run_\w+)', '\w+', '\w+', '(experiment_\w+)'[\s\S]*?'(\[\{"id":[^']*\])'/g,
+    ),
+  ];
+  assert.ok(runs.length >= 6);
+
+  for (const [, runId, experimentId, variantSetJson] of runs) {
+    const control = defaultVariantByExperiment.get(experimentId);
+    assert.ok(control, `${runId} points at unseeded ${experimentId}`);
+    const names = JSON.parse(variantSetJson).map((variant) => variant.id);
+    assert.ok(names.includes(control), `${runId} froze a set without ${control}`);
+  }
 });

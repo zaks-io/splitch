@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { ErrorCodeSchema } from "../errors";
+import { ErrorCodeSchema } from "../error-code";
 import { ResolutionReasonSchema } from "./resolution-reason";
-import { VariantValueSchema, type VariantValue } from "./variant-value";
+import { type VariantValue, VariantValueSchema } from "./variant-value";
 
 const BaseResolutionDetailsSchema = z.object({
   value: VariantValueSchema,

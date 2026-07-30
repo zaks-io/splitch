@@ -64,6 +64,14 @@ function recoverySteps(
   action: RecommendedAction,
   details: Record<string, unknown>,
 ): readonly McpPromptMessage[] {
+  if (
+    action === "REVIEW_APPROVAL_REQUEST" ||
+    action === "REFRESH_AND_REPROPOSE" ||
+    action === "RETRY_REVIEW"
+  ) {
+    return approvalRecoverySteps(action, details);
+  }
+
   switch (action) {
     case "CREATE_NEW_RUN":
       return [
@@ -117,13 +125,6 @@ function recoverySteps(
         ),
       ];
     }
-    case "RETRY_WITH_CONFIRMATION":
-      return [
-        message(
-          "assistant",
-          "Resend the identical call with confirm: true (Environment Policy gate, ADR-0029). No different tool is required.",
-        ),
-      ];
     case "CHOOSE_DIFFERENT_SLUG": {
       const taken =
         typeof details.conflictingSlug === "string"
@@ -156,6 +157,43 @@ function recoverySteps(
       ];
     }
   }
+}
+
+function approvalRecoverySteps(
+  action: "REVIEW_APPROVAL_REQUEST" | "REFRESH_AND_REPROPOSE" | "RETRY_REVIEW",
+  details: Record<string, unknown>,
+): readonly McpPromptMessage[] {
+  const approvalRequestId =
+    typeof details.approvalRequestId === "string"
+      ? details.approvalRequestId
+      : "<approvalRequestId>";
+
+  if (action === "REVIEW_APPROVAL_REQUEST") {
+    return [
+      toolMessage(
+        "approval_request_reviews_create",
+        `Review ${approvalRequestId} with the authorized approve_and_apply or decline action.`,
+      ),
+    ];
+  }
+  if (action === "REFRESH_AND_REPROPOSE") {
+    return [
+      toolMessage(
+        "approval_requests_get",
+        `Read stale request ${approvalRequestId} and its immutable proposal.`,
+      ),
+      message(
+        "assistant",
+        "Read the current target with its canonical GET tool, then resubmit the intended mutation with a new idempotency key.",
+      ),
+    ];
+  }
+  return [
+    toolMessage(
+      "approval_request_reviews_create",
+      `Retry Review of pending request ${approvalRequestId} with a new idempotency key.`,
+    ),
+  ];
 }
 
 function parseDetails(detailsRaw: unknown): Record<string, unknown> {

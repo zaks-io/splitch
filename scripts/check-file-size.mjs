@@ -21,8 +21,8 @@ const staged = execFileSync("git", ["diff", "--cached", "--name-only", "--diff-f
   // Vendored shadcn component copies; upstream sizes, kept diffable for `shadcn add --diff`.
   .filter((f) => !f.startsWith("packages/ui/src/components/"))
   // Machine-generated (e.g. TanStack Router's routeTree.gen.ts): size tracks the
-  // number of routes and cannot be hand-split, so the guard can only be bypassed.
-  .filter((f) => !/\.gen\.(ts|tsx|js|jsx)$/.test(f));
+  // number of routes and cannot be hand-split.
+  .filter((f) => !f.endsWith(".gen.ts"));
 
 const offenders = [];
 for (const file of staged) {

@@ -1,25 +1,25 @@
 import { z } from "zod";
 import {
-  ResolutionDetailsSchema,
   type ResolutionDetails,
+  ResolutionDetailsSchema,
   type VariantValue,
 } from "./leaves/resolution-details";
 import {
+  type ResolutionReason,
   ResolutionReasonSchema,
   resolutionReasons,
-  type ResolutionReason,
 } from "./leaves/resolution-reason";
 import { VariantValueSchema } from "./leaves/variant-value";
 import { OrganizationSlugSchema } from "./organization-slug";
 
 export {
-  ResolutionDetailsSchema,
-  ResolutionReasonSchema,
-  VariantValueSchema,
-  resolutionReasons,
   type ResolutionDetails,
+  ResolutionDetailsSchema,
   type ResolutionReason,
+  ResolutionReasonSchema,
+  resolutionReasons,
   type VariantValue,
+  VariantValueSchema,
 };
 
 /**
@@ -132,9 +132,19 @@ export type App = z.infer<typeof AppSchema>;
 // ---------------------------------------------------------------------------
 
 export const environmentPolicyLevels = ["allow", "confirm"] as const;
+export const reservedEnvironmentPolicyLevels = ["approve"] as const;
+export const approvalPolicyLevels = [
+  ...environmentPolicyLevels,
+  ...reservedEnvironmentPolicyLevels,
+] as const;
 
 export const EnvironmentPolicyLevelSchema = z.enum(environmentPolicyLevels);
 export type EnvironmentPolicyLevel = z.infer<typeof EnvironmentPolicyLevelSchema>;
+
+// `approve` is reserved for the Approval contract only. Environment writes keep
+// rejecting it until the second-person authority slice activates that level.
+export const ApprovalPolicyLevelSchema = z.enum(approvalPolicyLevels);
+export type ApprovalPolicyLevel = z.infer<typeof ApprovalPolicyLevelSchema>;
 
 export const EnvironmentPolicySchema = z
   .object({

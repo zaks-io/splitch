@@ -122,6 +122,10 @@ function buildRequest(
   if (body !== undefined) {
     headers.set("content-type", "application/json");
   }
+  const idempotencyKey = inputRecord(input).idempotency_key;
+  if (route.idempotency !== "none" && typeof idempotencyKey === "string") {
+    headers.set("idempotency-key", idempotencyKey);
+  }
 
   return new Request(url, {
     method: route.method,
@@ -168,7 +172,11 @@ function bodyForRoute(route: ApiRouteContract, input: unknown): unknown {
     ...objectSchemaKeys(route.openapi.request?.query),
   ]);
   const stripped = bodySchema.safeParse(withoutRouteFields);
-  return stripped.success ? stripped.data : input;
+  if (stripped.success) {
+    return stripped.data;
+  }
+
+  return input;
 }
 
 type SafeParseResult = { success: true; data: unknown } | { success: false };

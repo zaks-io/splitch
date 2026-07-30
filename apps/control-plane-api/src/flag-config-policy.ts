@@ -58,7 +58,7 @@ export function confirmationRequired(
         gate,
         environmentId,
         attemptedOp,
-        recommendedAction: "RETRY_WITH_CONFIRMATION",
+        recommendedAction: "REVIEW_APPROVAL_REQUEST",
       },
     },
     { requestId },

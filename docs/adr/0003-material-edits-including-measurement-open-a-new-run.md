@@ -4,10 +4,10 @@
 
 A config edit is sorted by **what it invalidates**, and the two cases get different treatment:
 
-- **Assignment-affecting edits** — salt, allocation, Variant set, Targeting, Targeting Key — change
-  `assign()`, so Exposures collected before and after are bucketed differently and are **not comparable**.
+- **Assignment-affecting edits** — salt, allocation, Variant set, Control identity, Targeting, Targeting Key — change
+  `assign()` or how its output is interpreted, so Exposures collected before and after are **not comparable**.
   These **end the current Run and open the next** (sample resets to zero). This is the ADR-0002 invariant:
-  a Run is a window over which _bucketing_ was frozen.
+  a Run is a window over which _bucketing and the Control used to interpret it_ were frozen.
 - **Measurement edits** — Secondary Metric definitions, Conversion Window, and exploratory Guardrail config — change _what
   the numbers mean_, but not _who is in which arm_. The raw Exposure/event log is untouched and still
   comparable. These **recompute losslessly over the existing Run**: re-run the analysis query with the new
@@ -23,6 +23,10 @@ exploratory view, but it cannot change what splitch calls decision-valid signifi
 decision-valid Guardrail breach for the current Run. Post-start additions are Secondary /
 exploratory unless the operator opens a new Run or a future locked-analysis mode explicitly creates
 a new pre-registered analysis version.
+
+The Run stores that Control identity as immutable `runs.control_variant_id`, copied from
+`experiments.default_variant_id` at Start. Results must resolve Control from this Run field, never
+from the mutable Experiment row.
 
 This is what the reference platforms do, and we follow it deliberately. All three decouple metric
 definitions from collected data and recompute: **Eppo** backfills a changed/added metric "from the start of

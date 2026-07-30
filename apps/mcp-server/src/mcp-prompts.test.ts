@@ -125,6 +125,7 @@ describe("MCP prompts workflows", () => {
           recommendedAction: action,
           runningRunId: "run_live",
           retryAfterMs: 250,
+          approvalRequestId: "apr_01J00000000000000000000000",
         },
       });
       expect(plan.operationIds).toEqual([...RECOVERY_OPERATION_IDS[action as RecommendedAction]]);
@@ -146,6 +147,11 @@ describe("MCP prompts workflows", () => {
       "experiments_list",
       "experiment_results_get",
     ]);
+    expect(RECOVERY_OPERATION_IDS.REVIEW_APPROVAL_REQUEST).toEqual([
+      "approval_request_reviews_create",
+    ]);
+    expect(RECOVERY_OPERATION_IDS.REFRESH_AND_REPROPOSE).toEqual(["approval_requests_get"]);
+    expect(RECOVERY_OPERATION_IDS.RETRY_REVIEW).toEqual(["approval_request_reviews_create"]);
   });
 });
 

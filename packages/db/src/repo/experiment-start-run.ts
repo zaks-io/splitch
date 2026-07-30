@@ -11,13 +11,16 @@ type RunInsert = typeof runs.$inferInsert;
 type StartRunExpectedDraft = Pick<
   ExperimentRow,
   "draftAllocation" | "draftSalt" | "draftTargetingRules" | "draftSegmentIds" | "liveRunId"
->;
+> & { defaultVariantId: string };
 
 export type StartRunInput = {
   experimentId: string;
   flagId: string;
   expectedDraft: StartRunExpectedDraft;
-  run: Omit<RunInsert, "appId" | "environmentId" | "experimentId" | "runNumber" | "status">;
+  run: Omit<
+    RunInsert,
+    "appId" | "environmentId" | "experimentId" | "runNumber" | "status" | "controlVariantId"
+  >;
   endedAt: string;
   updatedAt: string;
   updatedBy?: string | null;
@@ -34,6 +37,7 @@ export function makeStartRun(
 ) {
   return async function startRun(scope: EnvScope, input: StartRunInput): Promise<StartRunResult> {
     assertMintedScope(scope);
+    assertControlInFrozenVariantSet(input.expectedDraft.defaultVariantId, input.run.variantSet);
     const state = await loadStartState(experimentsTable, runsTable, scope, input);
     if (!state.ok) return state;
 
@@ -47,6 +51,29 @@ export function makeStartRun(
       : null;
     return { ok: true, run, previous: previous ?? state.previous };
   };
+}
+
+function assertControlInFrozenVariantSet(controlVariantId: string, variantSetJson: string): void {
+  let variantSet: unknown;
+  try {
+    variantSet = JSON.parse(variantSetJson);
+  } catch {
+    throw new Error("startRun: frozen Variant set is not valid JSON");
+  }
+  if (
+    !Array.isArray(variantSet) ||
+    !variantSet.some(
+      (variant) =>
+        typeof variant === "object" &&
+        variant !== null &&
+        "id" in variant &&
+        variant.id === controlVariantId,
+    )
+  ) {
+    throw new Error(
+      `startRun: Control Variant ${controlVariantId} is absent from the frozen Variant set`,
+    );
+  }
 }
 
 async function loadStartState(
@@ -124,7 +151,8 @@ function insertRunStatement(
       `
       INSERT INTO runs (
         id, app_id, environment_id, experiment_id, run_number, status,
-        targeting_key_field, targeting_key_type, salt, allocation, variant_set, targeting_rules,
+        targeting_key_field, targeting_key_type, salt, allocation, variant_set, control_variant_id,
+        targeting_rules,
         confidence_level, decision_family, guardrail_decisions, config_hash,
         started_at, start_reason, created_at, created_by
       )
@@ -136,7 +164,7 @@ function insertRunStatement(
           WHERE app_id = ? AND environment_id = ? AND experiment_id = ?
         ),
         'running',
-        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?
       WHERE EXISTS (SELECT 1 FROM experiments WHERE ${START_GUARD_SQL})
@@ -178,6 +206,7 @@ function hasExpectedDraft(experiment: ExperimentRow, expected: StartRunExpectedD
     experiment.draftSalt === expected.draftSalt &&
     experiment.draftTargetingRules === expected.draftTargetingRules &&
     experiment.draftSegmentIds === expected.draftSegmentIds &&
+    experiment.defaultVariantId === expected.defaultVariantId &&
     experiment.liveRunId === expected.liveRunId
   );
 }
@@ -190,6 +219,7 @@ const DRAFT_GUARD_SQL = `
   AND (draft_salt = ? OR (draft_salt IS NULL AND ? IS NULL))
   AND (draft_targeting_rules = ? OR (draft_targeting_rules IS NULL AND ? IS NULL))
   AND (draft_segment_ids = ? OR (draft_segment_ids IS NULL AND ? IS NULL))
+  AND default_variant_id = ?
   AND (live_run_id = ? OR (live_run_id IS NULL AND ? IS NULL))
 `;
 
@@ -232,6 +262,7 @@ function draftGuardParams(
     expected.draftTargetingRules,
     expected.draftSegmentIds,
     expected.draftSegmentIds,
+    expected.defaultVariantId,
     expected.liveRunId,
     expected.liveRunId,
   ];
@@ -251,6 +282,7 @@ function insertRunParams(scope: EnvScope, input: StartRunInput): unknown[] {
     input.run.salt,
     input.run.allocation,
     input.run.variantSet,
+    input.expectedDraft.defaultVariantId,
     input.run.targetingRules,
     input.run.confidenceLevel,
     input.run.decisionFamily,

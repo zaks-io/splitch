@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
 import { ExperimentSchema, MetricRefSchema, RunSchema } from "./leaf-schemas-experiment";
+import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
+import { ApprovalRequestSchema, InlineApproveAndApplyReviewSchema } from "./routes/route-shapes";
 
 /**
  * Create/patch/response wire envelopes for the Experiment and Experiment Run
@@ -99,19 +100,28 @@ export type ExperimentResponse = z.infer<typeof ExperimentResponseSchema>;
 // StartRunRequest (opens a new Experiment Run — the ONLY path to open one)
 //
 // The assignment config lives on the Experiment draft. Start validates the draft
-// and freezes it into a Run. `confirm?` makes this a gated write under the
-// Environment Policy (ADR-0029); `reason?` is the Run's start note.
+// and freezes it into a Run. `review?` can approve and apply inline; without it,
+// a gated write returns an Approval Request. `reason?` is the Run's start note.
 // ---------------------------------------------------------------------------
 
 export const StartRunRequestSchema = z
   .object({
-    // Environment-Policy confirmation gate (ADR-0029); default false.
-    confirm: z.boolean().optional(),
+    review: InlineApproveAndApplyReviewSchema.optional(),
     reason: z.string().optional(),
-    idempotency_key: z.string().optional(),
+    idempotency_key: z.string().min(1),
   })
   .strict();
 export type StartRunRequest = z.infer<typeof StartRunRequestSchema>;
+
+export const StartRunResponseSchema = z
+  .object({
+    experimentId: z.string(),
+    run: RunSchema,
+    previousRunId: z.string().nullable(),
+    approvalRequest: ApprovalRequestSchema.nullable(),
+  })
+  .strict();
+export type StartRunResponse = z.infer<typeof StartRunResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // PatchRunRequest (non-material only)

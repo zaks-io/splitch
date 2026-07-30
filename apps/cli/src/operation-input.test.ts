@@ -65,6 +65,7 @@ describe("buildOperationInput", () => {
     expect(input.environmentId).toBe("env_cli");
     expect(input.flagId).toBe("flag_cli");
     expect(input.enabled).toBe(true);
+    expect(input.idempotency_key).toEqual(expect.stringMatching(/^cli_/));
   });
 
   it("parses --enabled false as a boolean false", () => {
@@ -136,5 +137,30 @@ describe("buildOperationInput", () => {
     expect(input.targetEnvironmentId).toBe("env_target");
     expect(input.flagId).toBe("flag_cli");
     expect(input.fromEnvironmentId).toBe("env_source");
+  });
+});
+
+describe("canonical approval input", () => {
+  it("maps --confirm to the canonical inline review", () => {
+    const command = requireCommand(["experiments", "start"]);
+    const invocation = parseInvocation([
+      "experiments",
+      "start",
+      "--confirm",
+      "--app",
+      "app_cli",
+      "--env",
+      "env_cli",
+      "experiment_cli",
+    ]);
+
+    const input = buildOperationInput(command, invocation, {
+      appId: "app_cli",
+      environmentId: "env_cli",
+    });
+
+    expect(input.review).toEqual({ action: "approve_and_apply" });
+    expect(input.confirm).toBeUndefined();
+    expect(input.idempotency_key).toEqual(expect.stringMatching(/^cli_/));
   });
 });

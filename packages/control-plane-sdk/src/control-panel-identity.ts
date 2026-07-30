@@ -11,6 +11,7 @@ export type ControlPanelOperation =
   | { id: "app_attention_rollup_get"; appId: string }
   | { id: "experiments_detail" }
   | { id: "experiments_list" }
+  | { id: "experiments_results" }
   | { id: "flags_list" | "flags_create"; appId: string; environmentId: string }
   | { id: "flag_config_get"; appId: string; environmentId: string; flagId: string }
   | {
@@ -55,6 +56,7 @@ interface DelegationOptions {
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
 const APP_ATTENTION_PATH = /^\/apps\/([^/]+)\/attention-rollup\/?$/;
 const EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
+const EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
 const EXPERIMENTS_PATH = "/control-panel/experiments/list";
 const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
@@ -113,6 +115,7 @@ function parseExperimentsList(method: string, pathname: string): ControlPanelOpe
   if (method !== "POST") return null;
   if (pathname === EXPERIMENTS_PATH) return { id: "experiments_list" };
   if (pathname === EXPERIMENT_DETAIL_PATH) return { id: "experiments_detail" };
+  if (pathname === EXPERIMENT_RESULTS_PATH) return { id: "experiments_results" };
   return null;
 }
 
@@ -409,7 +412,11 @@ function isControlPanelOperation(value: unknown): value is ControlPanelOperation
 }
 
 function isExperimentsOperation(value: string): boolean {
-  return value === "experiments_list" || value === "experiments_detail";
+  return (
+    value === "experiments_list" ||
+    value === "experiments_detail" ||
+    value === "experiments_results"
+  );
 }
 
 /** Operations named by exactly one resource id: apps_create (Org) and the App rollup. */
@@ -469,6 +476,7 @@ function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation
       return right.id === "app_attention_rollup_get" && left.appId === right.appId;
     case "experiments_list":
     case "experiments_detail":
+    case "experiments_results":
       return true;
     case "flag_config_get":
       return (

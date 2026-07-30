@@ -100,6 +100,7 @@ function panelRun() {
     targetingKeyType: "user",
     salt: "salt-2",
     allocation: { control: 70, treatment: 30 },
+    controlVariantId: "variant_control",
     variantsJson: JSON.stringify([
       { id: "variant_control", name: "control", value: false },
       { id: "variant_treatment", name: "treatment", value: true },

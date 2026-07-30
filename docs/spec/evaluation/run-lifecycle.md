@@ -1,7 +1,8 @@
 # Run lifecycle and state machine
 
 A Run is the immutable unit of analysis for an Experiment. Its assignment config (salt,
-allocation, Variant set, Targeting rules, Targeting Key) is frozen for its entire life.
+allocation, Variant set, Control identity, Targeting rules, Targeting Key) is frozen for its entire
+life.
 
 ## Identity
 
@@ -56,6 +57,7 @@ open a new one (sample resets to zero; UI must warn loudly):
 - `salt` — per-experiment bucketing seed
 - `allocation` — Variant proportions (weights)
 - `variantSet` — the set of Variants
+- `controlVariantId` — the Control identity copied from the Experiment at Start
 - `targetingRules` — rule set (Conditions, Segments, Percentage Rollouts)
 - `targetingKey` — which Entity attribute to bucket on
 - **Activation Metric** — re-anchors the Conversion Window retroactively; redefines the

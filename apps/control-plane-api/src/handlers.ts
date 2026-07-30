@@ -81,7 +81,7 @@ export function makeHandlers(deps: HandlerDeps) {
       const confirmation = confirmationRequired(
         policy,
         flagConfigPatchGates(body),
-        body.confirm === true,
+        body.review !== undefined,
         environmentId,
         "PATCH_FLAG_CONFIG",
         requestId,
@@ -114,7 +114,7 @@ export function makeHandlers(deps: HandlerDeps) {
       const confirmation = confirmationRequired(
         policy,
         ["targeting_rollout_value"],
-        body.confirm === true,
+        body.review !== undefined,
         environmentId,
         "PUT_TARGETING_RULES",
         requestId,
@@ -158,7 +158,7 @@ export function makeHandlers(deps: HandlerDeps) {
       const confirmation = confirmationRequired(
         policy,
         gates,
-        body.confirm === true,
+        body.review !== undefined,
         targetEnvironmentId,
         "PROMOTE_FLAG_CONFIG",
         requestId,

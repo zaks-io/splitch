@@ -213,7 +213,10 @@ export async function seedRunningFlagExperiment(
     targetingKeyType: "user",
     salt: `salt_${suffix}`,
     allocation: JSON.stringify({ control: 100 }),
-    variantSet: "[]",
+    variantSet: JSON.stringify([
+      { id: `variant_control_${suffix}`, name: "control", value: false },
+    ]),
+    controlVariantId: `variant_control_${suffix}`,
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: "[]",

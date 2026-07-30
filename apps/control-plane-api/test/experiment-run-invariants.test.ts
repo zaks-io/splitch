@@ -103,13 +103,13 @@ describe("control-plane Experiment Run invariants", () => {
       await ctx.h.bindings.kv.get(liveRunKey(fx.appId, fx.environmentId, experiment.id), "text"),
     ).toBe(null);
 
-    const confirmed = await request(
-      ctx.h,
-      "POST",
-      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experiment.id}/start`,
-      fx.jwt,
-      { confirm: true },
-    );
+    const legacyConfirm = await startExperiment(ctx, fx, experiment.id, { confirm: true });
+    expect(legacyConfirm.status).toBe(400);
+    expect((await errorBody(legacyConfirm)).code).toBe("VALIDATION_ERROR");
+
+    const confirmed = await startExperiment(ctx, fx, experiment.id, {
+      review: { action: "approve_and_apply" },
+    });
     expect(confirmed.status).toBe(200);
     const started = (await confirmed.json()) as StartResponse;
 

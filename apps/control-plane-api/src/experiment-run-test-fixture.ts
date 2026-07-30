@@ -136,12 +136,14 @@ export async function startExperiment(
   ctx: ExperimentRunHarness,
   fx: Fixture,
   experimentId: string,
+  body: Record<string, unknown> = {},
 ) {
   return request(
     ctx.h,
     "POST",
     `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experimentId}/start`,
     fx.jwt,
+    { idempotency_key: `idem_start_${experimentId}`, ...body },
   );
 }
 
@@ -225,6 +227,7 @@ export async function insertSyntheticNewerRun(
     salt: "synthetic-salt",
     allocation: JSON.stringify({ control: 100 }),
     variantSet: JSON.stringify([{ id: fx.flag.defaultVariantId, name: "control", value: false }]),
+    controlVariantId: fx.flag.defaultVariantId,
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: "[]",

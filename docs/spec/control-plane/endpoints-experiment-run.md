@@ -88,20 +88,32 @@ Returns: updated Experiment.
 ### `POST /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/start`
 
 Starts the draft as a new Run; ends any running Run.
-Body: `{ confirm?: boolean, reason?: string }`
+Body:
+`{ review?: { action: "approve_and_apply" }, reason?: string, idempotency_key: string }`
 `reason` is an optional human note capturing _intent_ for the new Run ("testing higher exposure to
 v2"). It is stored as the Run's `start_reason` and surfaced by the Run-history timeline alongside the
 **derived** assignment-config diff from the prior Run (the timeline never depends on it being present —
 see [../frontend/screen-inventory.md](../frontend/screen-inventory.md)). Symmetric with the optional
 `reason` on `/end`.
-Returns: `{ experiment_id, run: RunObject, previous_run_id?: string }`
+Returns:
+`{ experiment_id, run: RunObject, previous_run_id?: string, approval_request: ApprovalRequest | null }`.
+`approval_request` is null under `allow` and the applied request under `confirm`.
 See [run-state-machine.md](run-state-machine.md) for transition details.
 Auth: App `owner` or `admin`. **Subject to the Environment Policy** (ADR-0029): if this Environment's
-Policy gates "Start an Experiment Run" at `confirm`, the call must carry `confirm: true` in the body
-or it is rejected with `409 CONFIRMATION_REQUIRED` before any state change. When the Policy does not
-gate this change type, `confirm` is ignored and the body may be omitted entirely. The CLI/MCP
-`--confirm` flag derives from this same `confirm` field (see
+Policy gates "Start an Experiment Run" at `confirm`, the proposer is authorized to perform the
+inline `approve_and_apply` Review. If the Review is omitted, the server persists the immutable
+Approval Request and returns `409 APPROVAL_REVIEW_REQUIRED`; no Run state changes. The CLI/MCP
+`--confirm` affordance derives `review.action = "approve_and_apply"` (see
 [../contracts/mcp-tool-derivation.md](../contracts/mcp-tool-derivation.md)).
+
+Under `allow`, no Review is required and Start enters the same validated application seam directly.
+Future `approve` changes Review authority only: the proposer cannot self-review, and an authorized
+distinct principal performs the same `approve_and_apply` action. Authorization and target-version
+validation happen before mutation. The Run mutation, Review, resulting version, Approval Request
+transition, and bounded audit metadata commit atomically in D1. KV is a post-commit projection.
+
+The request and Review lifecycle, idempotency behavior, stale handling, and fail-loud errors are
+canonical in [../contracts/error-responses.md](../contracts/error-responses.md#approval-request-and-review-errors).
 
 ### `DELETE /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}`
 

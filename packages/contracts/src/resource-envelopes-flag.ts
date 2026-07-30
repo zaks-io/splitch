@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FlagSchema, VariantSchema } from "./leaf-schemas-flag";
+import { ApprovalRequestSchema, InlineApproveAndApplyReviewSchema } from "./routes/route-shapes";
 
 /**
  * Create/patch/response wire envelopes for App-level Flag definition and
@@ -102,6 +103,16 @@ export const PatchVariantRequestSchema = z
     name: z.string().optional(),
     value: VariantSchema.shape.value.optional(),
     description: z.string().optional(),
+    review: InlineApproveAndApplyReviewSchema.optional(),
+    idempotency_key: z.string().min(1),
   })
   .strict();
 export type PatchVariantRequest = z.infer<typeof PatchVariantRequestSchema>;
+
+export const FlagMutationResponseSchema = z
+  .object({
+    flag: FlagResponseSchema,
+    approvalRequest: ApprovalRequestSchema.nullable(),
+  })
+  .strict();
+export type FlagMutationResponse = z.infer<typeof FlagMutationResponseSchema>;

@@ -82,6 +82,7 @@ function run(runNumber: 1 | 2): PanelExperimentRun {
     targetingKeyType: "user",
     salt: `salt-${runNumber}`,
     allocation: latest ? { control: 70, treatment: 30 } : { control: 50, treatment: 50 },
+    controlVariantId: "variant_control",
     variantsJson: JSON.stringify([
       { id: "variant_control", name: "control", value: false },
       { id: "variant_treatment", name: "treatment", value: true },

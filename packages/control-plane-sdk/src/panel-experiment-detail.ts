@@ -16,6 +16,7 @@ export interface PanelExperimentRun {
   targetingKeyType: string;
   salt: string;
   allocation: Record<string, number>;
+  controlVariantId: string;
   variantsJson: string;
   targetingRulesJson: string;
   configHash: string;
@@ -77,6 +78,7 @@ function parsePanelExperimentRun(input: unknown): PanelExperimentRun | null {
     !isNonEmptyString(input.targetingKeyType) ||
     !isNonEmptyString(input.salt) ||
     !isAllocation(input.allocation) ||
+    !isNonEmptyString(input.controlVariantId) ||
     !isVariantArrayJson(input.variantsJson) ||
     !isJsonArray(input.targetingRulesJson) ||
     !isNonEmptyString(input.configHash) ||
@@ -98,6 +100,7 @@ function parsePanelExperimentRun(input: unknown): PanelExperimentRun | null {
     targetingKeyType: input.targetingKeyType,
     salt: input.salt,
     allocation: input.allocation,
+    controlVariantId: input.controlVariantId,
     variantsJson: input.variantsJson,
     targetingRulesJson: input.targetingRulesJson,
     configHash: input.configHash,

@@ -119,11 +119,13 @@ export async function request(
   jwt: string,
   body?: Record<string, unknown>,
 ): Promise<Response> {
+  const idempotencyKey = body?.idempotency_key;
   return h.app.request(path, {
     method,
     headers: {
       authorization: `Bearer ${jwt}`,
       ...(body ? { "content-type": "application/json" } : {}),
+      ...(typeof idempotencyKey === "string" ? { "idempotency-key": idempotencyKey } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });

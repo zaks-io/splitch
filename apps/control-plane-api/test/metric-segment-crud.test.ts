@@ -273,7 +273,14 @@ async function seedRunningExperiment(
     targetingKeyType: "user",
     salt: "salt_metric_segment_guard",
     allocation: JSON.stringify({ control: 100 }),
-    variantSet: "[]",
+    variantSet: JSON.stringify([
+      {
+        id: "variant_control_metric_segment_guard",
+        name: "control",
+        value: false,
+      },
+    ]),
+    controlVariantId: "variant_control_metric_segment_guard",
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: JSON.stringify([{ metricId }]),

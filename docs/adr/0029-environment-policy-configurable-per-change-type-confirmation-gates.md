@@ -69,9 +69,11 @@ gate is enforced at the commit seam) rather than advisory.
   renders it as a confirm dialog, the CLI/MCP as an explicit confirm flag/step (agent-friendly).
 - **The kill-switch-off exemption is a hard rule**, independent of Policy.
 - **CONTEXT.md** gains Environment Policy, Confirmation, **Approval Request**, and **Review**.
-- **A gated change is persisted as an Approval Request** (diff, proposer, status `pending → applied |
-declined`, audit) from day one — under `confirm` it is created and self-reviewed in one step. This is
-  the seam that makes the future `approve` level additive (who-may-review changes; the object does not).
+- **A gated change is persisted as an Approval Request** (immutable proposed-vs-current diff, target
+  version, proposer, status `pending → applied | declined | stale`, application result, audit) from
+  day one. Under `confirm` it is created and self-reviewed through `approve_and_apply` in one step.
+  There is no approve-only or deferred-application state. This is the seam that makes the future
+  `approve` level additive (who-may-review changes; the object does not).
 - **The "what is production" open question from flag-editing-ux.md is resolved**: production is an
   Environment, and "careful" is its Policy — not a global hardcoded check.
 - **CLI/MCP parity (ADR-0023) must carry Policy** — a `confirm`-level change over CLI/MCP requires an
