@@ -1,7 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { parseMcpDelegation } from "@splitch/contracts";
-import { expect } from "vitest";
 import { handleMcpServerRequest } from "./mcp-handler";
 import type {
   McpSessionContext,
@@ -215,7 +214,7 @@ export async function bootControlPlaneApi(seen: SeenDownstream[]): Promise<strin
   });
 }
 
-export async function bootServer(
+async function bootServer(
   handler: (request: IncomingMessage, response: ServerResponse) => void | Promise<void>,
 ): Promise<string> {
   const server = createServer((request, response) => {

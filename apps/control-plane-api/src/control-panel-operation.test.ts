@@ -7,6 +7,7 @@ import {
 describe("Control Panel binding operation allowlist", () => {
   it.each([
     ["POST", "/orgs/org_1/apps", { id: "apps_create", orgId: "org_1" }],
+    ["GET", "/apps/app_1/attention-rollup", { id: "app_attention_rollup_get", appId: "app_1" }],
     ["GET", "/apps/app_1/flags", { id: "flags_list", appId: "app_1", environmentId: "env_1" }],
     ["POST", "/apps/app_1/flags", { id: "flags_create", appId: "app_1", environmentId: "env_1" }],
     [

@@ -42,6 +42,7 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   apps_list: ORG_MEMBER,
   apps_create: ORG_ADMIN,
   apps_get: APP_MEMBER,
+  app_attention_rollup_get: APP_MEMBER,
   apps_update: APP_ADMIN,
   apps_delete: APP_OWNER,
   environments_list: APP_MEMBER,

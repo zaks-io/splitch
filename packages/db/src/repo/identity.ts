@@ -11,7 +11,7 @@ import type { Db } from "./client";
 import { makeDemoReaper } from "./identity-demo-reaper";
 import { makeCreateOrganization } from "./organization-create";
 import type { TenantScope } from "./scope";
-import { scopedTable } from "./scoped-table";
+import { type ReadOptions, scopedTable } from "./scoped-table";
 
 /**
  * Identity-domain repository.
@@ -45,8 +45,12 @@ export function makeIdentityRepo(db: Db, d1: D1Database) {
     environments: environmentsTable,
     appMemberships: appMembershipsTable,
 
-    listEnvironments(scope: TenantScope) {
-      return environmentsTable.findMany(scope);
+    listEnvironments(scope: TenantScope, options?: ReadOptions) {
+      return environmentsTable.findMany(scope, undefined, options);
+    },
+
+    countEnvironments(scope: TenantScope) {
+      return environmentsTable.countRows(scope);
     },
 
     getEnvironment(scope: TenantScope, environmentId: string) {

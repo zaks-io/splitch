@@ -15,6 +15,7 @@ import {
 import { createApp } from "./app";
 import { authJwksUri } from "./auth-jwks-config";
 import { type ControlPlaneAuthOptions, makeControlPlaneAuthResolver } from "./auth-resolver";
+import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
@@ -161,6 +162,7 @@ async function handleRequest(
       env,
       workerObservabilityWithWaitUntil("control-plane-api", ctx),
     ),
+    analysisResults: createAnalysisResultsReader(env.ANALYSIS_API),
   });
 
   return app.fetch(request, env);

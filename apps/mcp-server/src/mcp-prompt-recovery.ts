@@ -60,15 +60,23 @@ function recoveryMessages(
   return messages;
 }
 
+const APPROVAL_RECOVERY_ACTIONS = new Set<RecommendedAction>([
+  "REVIEW_APPROVAL_REQUEST",
+  "REFRESH_AND_REPROPOSE",
+  "RETRY_REVIEW",
+]);
+
+function isApprovalRecoveryAction(
+  action: RecommendedAction,
+): action is "REVIEW_APPROVAL_REQUEST" | "REFRESH_AND_REPROPOSE" | "RETRY_REVIEW" {
+  return APPROVAL_RECOVERY_ACTIONS.has(action);
+}
+
 function recoverySteps(
   action: RecommendedAction,
   details: Record<string, unknown>,
 ): readonly McpPromptMessage[] {
-  if (
-    action === "REVIEW_APPROVAL_REQUEST" ||
-    action === "REFRESH_AND_REPROPOSE" ||
-    action === "RETRY_REVIEW"
-  ) {
+  if (isApprovalRecoveryAction(action)) {
     return approvalRecoverySteps(action, details);
   }
 
@@ -134,6 +142,25 @@ function recoverySteps(
         message(
           "assistant",
           `The URL handle ${taken} is already taken. Resend the same call with a different "slug". No different tool is required.`,
+        ),
+      ];
+    }
+    case "READ_PER_ENVIRONMENT": {
+      const environments =
+        typeof details.environments === "number" ? details.environments : "<environments>";
+      return [
+        toolMessage(
+          "experiments_list",
+          `List Experiments one Environment at a time (${environments} Environments) to enumerate the running Experiments in each; the Experiment record itself carries no SRM or Guardrail health.`,
+        ),
+        message("assistant", "For every running Experiment returned above, fetch its health next."),
+        toolMessage(
+          "experiment_results_get",
+          "Get the Experiment's StatsOutput (srm, guardrail_results) — this is the operation that actually carries SRM and Guardrail health, not experiments_list.",
+        ),
+        message(
+          "assistant",
+          "Do not retry the App-wide rollup: the refusal is a fan-out budget, not a transient failure, and only a smaller App shape (or this per-Environment, per-Experiment walk) changes it.",
         ),
       ];
     }

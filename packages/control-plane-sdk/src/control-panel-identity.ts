@@ -8,6 +8,7 @@ export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 
 export type ControlPanelOperation =
   | { id: "apps_create"; orgId: string }
+  | { id: "app_attention_rollup_get"; appId: string }
   | { id: "experiments_detail" }
   | { id: "experiments_list" }
   | { id: "experiments_results" }
@@ -53,6 +54,7 @@ interface DelegationOptions {
 }
 
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
+const APP_ATTENTION_PATH = /^\/apps\/([^/]+)\/attention-rollup\/?$/;
 const EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
 const EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
 const EXPERIMENTS_PATH = "/control-panel/experiments/list";
@@ -94,12 +96,19 @@ export function parseControlPanelOperation(
 ): ControlPanelOperation | null {
   return (
     parseAppsCreate(method, pathname) ??
+    parseAppAttention(method, pathname) ??
     parseExperimentsList(method, pathname) ??
     parseFlags(method, pathname, panelEnvironmentId) ??
     parseConfig(method, pathname) ??
     parseEnvironmentSettings(method, pathname) ??
     parseMetrics(method, pathname, panelEnvironmentId)
   );
+}
+
+function parseAppAttention(method: string, pathname: string): ControlPanelOperation | null {
+  const match = pathname.match(APP_ATTENTION_PATH);
+  const appId = match?.[1] ? decodeSegment(match[1]) : null;
+  return method === "GET" && appId ? { id: "app_attention_rollup_get", appId } : null;
 }
 
 function parseExperimentsList(method: string, pathname: string): ControlPanelOperation | null {
@@ -390,7 +399,8 @@ function isControlPanelDelegationClaims(value: unknown): value is ControlPanelDe
 
 function isControlPanelOperation(value: unknown): value is ControlPanelOperation {
   if (!isRecord(value) || typeof value.id !== "string") return false;
-  if (value.id === "apps_create") return isAppCreateOperation(value);
+  if (value.id === "apps_create") return isResourceOperation(value, "orgId");
+  if (value.id === "app_attention_rollup_get") return isResourceOperation(value, "appId");
   if (isExperimentsOperation(value.id)) return hasKeys(value, ["id"]);
   if (value.id === "flag_config_get") return isFlagConfigOperation(value);
   if (isScopedOperationId(value.id)) return isAppCollectionOperation(value);
@@ -409,8 +419,9 @@ function isExperimentsOperation(value: string): boolean {
   );
 }
 
-function isAppCreateOperation(value: Record<string, unknown>): boolean {
-  return hasKeys(value, ["id", "orgId"]) && isNonEmptyString(value.orgId);
+/** Operations named by exactly one resource id: apps_create (Org) and the App rollup. */
+function isResourceOperation(value: Record<string, unknown>, key: string): boolean {
+  return hasKeys(value, ["id", key]) && isNonEmptyString(value[key]);
 }
 
 function isFlagConfigOperation(value: Record<string, unknown>): boolean {
@@ -461,6 +472,8 @@ function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation
   switch (left.id) {
     case "apps_create":
       return right.id === "apps_create" && left.orgId === right.orgId;
+    case "app_attention_rollup_get":
+      return right.id === "app_attention_rollup_get" && left.appId === right.appId;
     case "experiments_list":
     case "experiments_detail":
     case "experiments_results":

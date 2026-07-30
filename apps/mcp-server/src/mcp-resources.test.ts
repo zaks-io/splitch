@@ -4,7 +4,6 @@ import { MCP_RESOURCE_URIS } from "./mcp-resources";
 import {
   anonymousActor,
   authFixture,
-  authIssuer,
   demoExpiresAt,
   failingSessionStore,
   initializeSession,
