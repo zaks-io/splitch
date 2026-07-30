@@ -84,6 +84,7 @@ export function CreateFlagForm({
     } catch {
       setMutationError({
         kind: "form",
+        code: "TRANSPORT_FAILURE",
         message: "The Control Plane could not create this Flag. Try again.",
         fields: [],
       });

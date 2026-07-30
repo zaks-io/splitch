@@ -191,6 +191,7 @@ describe("Create Flag error surfacing", () => {
   it("places Worker key validation on the key field", () => {
     const error: MutationErrorSurface = {
       kind: "field",
+      code: "VALIDATION_ERROR",
       message: "validation failed",
       fields: [{ field: "body.key", code: "VALIDATION_ERROR", message: "flag key already exists" }],
     };

@@ -1,9 +1,9 @@
+import type { Metric } from "@splitch/contracts";
 import {
   type CreateMetricRequest,
   MetricSchema,
   type PatchMetricRequest,
 } from "@splitch/contracts";
-import type { Metric } from "@splitch/contracts";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
 

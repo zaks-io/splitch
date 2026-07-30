@@ -1,6 +1,5 @@
 import { Badge } from "@splitch/ui/components/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@splitch/ui/components/card";
-import { Switch } from "@splitch/ui/components/switch";
 import {
   Table,
   TableBody,
@@ -11,6 +10,8 @@ import {
 } from "@splitch/ui/components/table";
 import type { CatalogVariantView, FlagDetailView } from "#lib/flag-detail-view";
 import { isLocked } from "#lib/flag-detail-view";
+import type { FlagEditing } from "#lib/use-flag-editing";
+import { FlagAvailabilitySwitch } from "./flag-availability-switch";
 import { FlagDetailLock } from "./flag-detail-lock";
 
 /**
@@ -21,8 +22,16 @@ import { FlagDetailLock } from "./flag-detail-lock";
  * is per-Environment (ADR-0028). That is why the availability control lives on the
  * catalog row, exactly where the confusion would otherwise happen.
  */
-export function FlagDetailDefinition({ view }: { view: FlagDetailView }) {
+export function FlagDetailDefinition({
+  editing,
+  view,
+}: {
+  editing: FlagEditing;
+  view: FlagDetailView;
+}) {
   const experiment = view.controllingExperiment;
+  // Locked or unconfigured means the control is not in the tree at all.
+  const editable = !(isLocked(view, "availability") || !view.configured);
 
   return (
     <Card className="bg-muted/30" data-flag-definition="true">
@@ -76,7 +85,14 @@ export function FlagDetailDefinition({ view }: { view: FlagDetailView }) {
             </TableHeader>
             <TableBody>
               {view.catalog.map((variant) => (
-                <CatalogRow env={view.env} key={variant.id} variant={variant} />
+                <CatalogRow
+                  editable={editable}
+                  editing={editing}
+                  env={view.env}
+                  key={variant.id}
+                  variant={variant}
+                  view={view}
+                />
               ))}
             </TableBody>
           </Table>
@@ -86,7 +102,19 @@ export function FlagDetailDefinition({ view }: { view: FlagDetailView }) {
   );
 }
 
-function CatalogRow({ env, variant }: { env: string; variant: CatalogVariantView }) {
+function CatalogRow({
+  editable,
+  editing,
+  env,
+  variant,
+  view,
+}: {
+  editable: boolean;
+  editing: FlagEditing;
+  env: string;
+  variant: CatalogVariantView;
+  view: FlagDetailView;
+}) {
   const state = availabilityCopy(variant.availability, env);
 
   return (
@@ -112,17 +140,19 @@ function CatalogRow({ env, variant }: { env: string; variant: CatalogVariantView
         <span className="inline-flex items-center gap-2">
           <span className="text-muted-foreground text-xs leading-5">{state.label}</span>
           {/*
-            Disabled, not absent: the STATE is what this read-only slice owes the
-            reader, and a toggle frozen in position shows it without pretending the
-            change is available here (toggling ships with the mutations slice).
+            No disabled switch. When a running Experiment owns availability the
+            control is ABSENT and the label carries the state; a frozen toggle
+            still receives clicks and would eventually send one.
           */}
-          <Switch
-            aria-label={state.ariaLabel}
-            checked={state.checked}
-            disabled
-            readOnly
-            size="sm"
-          />
+          {editable ? (
+            <FlagAvailabilitySwitch
+              ariaLabel={state.ariaLabel}
+              checked={state.checked}
+              editing={editing}
+              variantName={variant.name}
+              view={view}
+            />
+          ) : null}
         </span>
       </TableCell>
     </TableRow>

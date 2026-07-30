@@ -43,6 +43,8 @@ type TargetingRuleView = {
 export type FlagDetailFieldGroup = "availability" | "targeting" | "rollout" | "kill-switch";
 
 export type FlagDetailView = {
+  /** The mutation address of this Flag; the URL carries the human `key`. */
+  flagId: string;
   key: string;
   name: string;
   description?: string;
@@ -69,6 +71,7 @@ export function flagDetailView(data: FlagDetailData, env: string): FlagDetailVie
   const narrowed = available.length > 0;
 
   return {
+    flagId: data.definition.id,
     key: data.definition.key,
     name: data.definition.name,
     ...(data.definition.description ? { description: data.definition.description } : {}),

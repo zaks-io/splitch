@@ -120,6 +120,20 @@ export function hcRequestOptions(options: ControlPlaneHcOptions): {
 }
 
 /**
+ * Put the request's idempotency key where the Control Plane reads it: the
+ * `Idempotency-Key` HEADER. Every mutating route rejects a request without it,
+ * and the body field alone is not enough — a client that sends only the body
+ * field gets a VALIDATION_ERROR for a header it never set, which reads as a
+ * caller mistake rather than the SDK omission it is.
+ */
+export function withIdempotencyHeader(
+  options: { headers?: Record<string, string> },
+  idempotencyKey: string,
+): { headers: Record<string, string> } {
+  return { ...options, headers: { ...options.headers, "idempotency-key": idempotencyKey } };
+}
+
+/**
  * Join a route path onto a base URL the way hono `hc` does (mergePath):
  * concatenation, preserving any path PREFIX on the base. `new URL(path, base)`
  * would instead REPLACE the base path for an absolute `path`, so a

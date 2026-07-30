@@ -12,6 +12,7 @@ import {
   createApprovalsHcClient,
   hcRequestOptions,
   withAuthorization,
+  withIdempotencyHeader,
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
 import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "./operation-result";
@@ -66,19 +67,6 @@ export function createApprovalsClient(
             ),
           ),
       );
-    },
-  };
-}
-
-function withIdempotencyHeader(
-  options: ReturnType<typeof hcRequestOptions>,
-  idempotencyKey: string,
-) {
-  return {
-    ...options,
-    headers: {
-      ...options.headers,
-      "idempotency-key": idempotencyKey,
     },
   };
 }

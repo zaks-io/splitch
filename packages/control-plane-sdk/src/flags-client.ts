@@ -30,6 +30,7 @@ import {
   type FlagsHcClient,
   hcRequestOptions,
   withAuthorization,
+  withIdempotencyHeader,
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
 import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "./operation-result";
@@ -103,7 +104,10 @@ export function createFlagsClient(
       invokeHcRoute<FlagsCreateOutput>("flags_create", () =>
         hcClient.apps[":appId"].flags.$post(
           { param: { appId: input.appId }, json: input } as never,
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+          withIdempotencyHeader(
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            input.idempotency_key,
+          ),
         ),
       ),
     get: (input, callOptions) =>
@@ -136,7 +140,10 @@ export function createFlagsClient(
       invokeHcRoute<FlagVariantsCreateOutput>("flag_variants_create", () =>
         hcClient.apps[":appId"].flags[":flagId"].variants.$post(
           { param: { appId: input.appId, flagId: input.flagId }, json: input } as never,
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+          withIdempotencyHeader(
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            input.idempotency_key,
+          ),
         ),
       ),
     updateVariant: (input, callOptions) => {
@@ -144,7 +151,10 @@ export function createFlagsClient(
       return invokeHcRoute<FlagVariantsUpdateOutput>("flag_variants_update", () =>
         hcClient.apps[":appId"].flags[":flagId"].variants[":variantName"].$patch(
           { param: { appId, flagId, variantName }, json: body } as never,
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+          withIdempotencyHeader(
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            body.idempotency_key,
+          ),
         ),
       );
     },
@@ -179,7 +189,10 @@ export function createFlagsClient(
       return invokeHcRoute<FlagConfigUpdateOutput>("flag_config_update", () =>
         hcClient.apps[":appId"].envs[":environmentId"].flags[":flagId"].config.$patch(
           { param: { appId, environmentId, flagId }, json: body } as never,
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+          withIdempotencyHeader(
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            body.idempotency_key,
+          ),
         ),
       );
     },
@@ -188,7 +201,10 @@ export function createFlagsClient(
       return invokeHcRoute<FlagTargetingRulesReplaceOutput>("flag_targeting_rules_replace", () =>
         hcClient.apps[":appId"].envs[":environmentId"].flags[":flagId"]["targeting-rules"].$put(
           { param: { appId, environmentId, flagId }, json: body } as never,
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+          withIdempotencyHeader(
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            body.idempotency_key,
+          ),
         ),
       );
     },
@@ -197,7 +213,10 @@ export function createFlagsClient(
       return invokeHcRoute<FlagsPromoteOutput>("flags_promote", () =>
         hcClient.apps[":appId"].envs[":targetEnvironmentId"].flags[":flagId"].promote.$post(
           { param: { appId, targetEnvironmentId, flagId }, json: body } as never,
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+          withIdempotencyHeader(
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            body.idempotency_key,
+          ),
         ),
       );
     },

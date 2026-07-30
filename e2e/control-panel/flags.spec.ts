@@ -158,16 +158,15 @@ test.describe("Flag detail", () => {
     const treatment = page.locator("[data-variant-name='treatment']");
     await expect(treatment).toHaveAttribute("data-variant-availability", "unavailable");
     await expect(treatment).toContainText("Not available");
-    // The toggle STATE is rendered so the App-level/per-Environment split is legible,
-    // but nothing on this read-only screen is togglable.
-    const toggle = treatment.getByRole("switch");
-    await expect(toggle).toBeDisabled();
-    await expect(toggle).not.toBeChecked();
+    // A running Experiment owns availability in this Environment, so the toggle is
+    // ABSENT rather than disabled (SPL-118): the label carries the state and there
+    // is no control left to misfire.
+    await expect(treatment.getByRole("switch")).toHaveCount(0);
 
     const control = page.locator("[data-variant-name='control']");
     await expect(control).toHaveAttribute("data-variant-availability", "available");
-    await expect(control.getByRole("switch")).toBeChecked();
-    await expect(control.getByRole("switch")).toBeDisabled();
+    await expect(control).toContainText("Available");
+    await expect(control.getByRole("switch")).toHaveCount(0);
 
     await expect(page.getByText("Definition — shared across all environments")).toBeVisible();
     await captureThemeScreenshots(page, testInfo, "flag-detail-variant-availability");

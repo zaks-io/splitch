@@ -106,6 +106,7 @@ export function workerMetricFieldError(
 function transportError(operation: "save" | "delete"): MutationErrorSurface {
   return {
     kind: "form",
+    code: "TRANSPORT_FAILURE",
     message: `The Control Plane could not ${operation} this Metric. Try again.`,
     fields: [],
   };

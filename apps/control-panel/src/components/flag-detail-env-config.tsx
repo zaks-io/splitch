@@ -1,15 +1,11 @@
-import { Badge } from "@splitch/ui/components/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@splitch/ui/components/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@splitch/ui/components/table";
 import { type FlagDetailView, isLocked } from "#lib/flag-detail-view";
+import type { FlagEditing } from "#lib/use-flag-editing";
+import { FlagBaselineRolloutEditor } from "./flag-baseline-rollout-editor";
 import { FlagDetailLock } from "./flag-detail-lock";
+import { FlagKillSwitch } from "./flag-kill-switch";
+import { FlagTargetingRulesEditor } from "./flag-targeting-rules-editor";
+import { FlagTargetingSummary } from "./flag-targeting-summary";
 
 /**
  * The PRIMARY content of the Flag detail screen: what this one Environment serves.
@@ -19,7 +15,13 @@ import { FlagDetailLock } from "./flag-detail-lock";
  * unconfigured Flag says so outright rather than borrowing another Environment's
  * numbers.
  */
-export function FlagDetailEnvConfig({ view }: { view: FlagDetailView }) {
+export function FlagDetailEnvConfig({
+  editing,
+  view,
+}: {
+  editing: FlagEditing;
+  view: FlagDetailView;
+}) {
   const experiment = view.controllingExperiment;
 
   return (
@@ -32,16 +34,7 @@ export function FlagDetailEnvConfig({ view }: { view: FlagDetailView }) {
       <CardContent className="grid gap-8 pt-6">
         <section className="grid gap-2" aria-label="Kill switch">
           <FieldLabel>Kill switch</FieldLabel>
-          <div className="flex flex-wrap items-center gap-3" data-flag-kill-switch="true">
-            <Badge variant={view.enabled ? "default" : "secondary"}>
-              {view.enabled ? "Enabled" : "Disabled"}
-            </Badge>
-            <span className="text-muted-foreground text-xs leading-5">
-              {view.configured
-                ? "Never locked, so this Flag can always be turned off."
-                : "No Flag Configuration in this Environment yet, so nothing is served here."}
-            </span>
-          </div>
+          <FlagKillSwitch editing={editing} view={view} />
         </section>
 
         <section className="grid gap-3" aria-label="Available Variants">
@@ -61,53 +54,41 @@ export function FlagDetailEnvConfig({ view }: { view: FlagDetailView }) {
               <FlagDetailLock experimentName={experiment.name} />
             ) : null}
           </div>
-          {view.targetingRules.length === 0 ? (
-            <Empty>No Targeting Rules in this Environment.</Empty>
-          ) : (
-            <Table data-flag-targeting-rules={view.targetingRules.length}>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Conditions</TableHead>
-                  <TableHead>Serves</TableHead>
-                  <TableHead className="text-right">Rollout</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {view.targetingRules.map((rule) => (
-                  <TableRow data-targeting-rule={rule.id} key={rule.id}>
-                    <TableCell className="font-mono">{rule.priority}</TableCell>
-                    <TableCell className="text-muted-foreground text-xs leading-5">
-                      {rule.conditions
-                        .map(
-                          (condition) =>
-                            `${condition.attribute} ${condition.operator} ${condition.value}`,
-                        )
-                        .join(" AND ")}
-                    </TableCell>
-                    <TableCell className="font-mono">{rule.variantName}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {rule.rolloutPercentage === null
-                        ? "All matches"
-                        : `${rule.rolloutPercentage}%`}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          {/*
+            Locked means ABSENT, not disabled. A running Experiment owns targeting
+            in this Environment, and a frozen-but-present control is a control that
+            can still misfire; the read-only summary carries the state instead.
+          */}
+          {renderTargeting(editing, view)}
         </section>
 
         <section className="grid gap-2" aria-label="Baseline rollout">
           <FieldLabel>Baseline rollout</FieldLabel>
-          <p className="text-foreground text-sm leading-6" data-flag-baseline-rollout="true">
-            {view.baselineRolloutPercentage === null
-              ? "No baseline percentage rollout."
-              : `${view.baselineRolloutPercentage}% of traffic`}
-          </p>
+          {/*
+            Not locked by an Experiment: the baseline is not part of the frozen Run
+            configuration, so freezing it here would invent a lock the Worker does
+            not enforce.
+          */}
+          <FlagBaselineRolloutEditor editing={editing} view={view} />
         </section>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * There is nothing to edit until a Configuration exists in this Environment, so
+ * the editor is absent rather than offered against a resource the Worker would
+ * refuse to write.
+ */
+function renderTargeting(editing: FlagEditing, view: FlagDetailView) {
+  if (!view.configured) {
+    return <Empty>No Flag Configuration here, so there are no Targeting Rules to edit.</Empty>;
+  }
+  return isLocked(view, "targeting") ? (
+    <FlagTargetingSummary view={view} />
+  ) : (
+    <FlagTargetingRulesEditor editing={editing} view={view} />
   );
 }
 

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { LOCAL_E2E_FLAG_EDITING_SEED } from "./local-e2e-flag-editing-fixture.mjs";
 import { d1RunDecisions, LOCAL_E2E_RUN_CONFIG as run } from "./local-e2e-run-config.mjs";
 
 export const LOCAL_E2E_SESSION_TOKEN = `spl_${"101e2e".padEnd(64, "0")}`;
@@ -108,6 +109,7 @@ export function localE2eSession(expiresAt = Math.floor(Date.now() / 1000) + 3_60
         apps: [
           { appId: "app_checkout_e2e", appSlug: "checkout-api", role: "owner" },
           { appId: "app_billing_e2e", appSlug: "billing-api", role: "admin" },
+          { appId: "app_editing_e2e", appSlug: "flag-editing", role: "admin" },
           ...onboardingApps.map((app) => ({ appId: app.appId, appSlug: app.slug, role: "admin" })),
         ],
       },
@@ -263,4 +265,4 @@ INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES
 ${onboardingApps
   .map((app) => `  ('${app.appId}', 'user_local_e2e', 'admin', '${createdAt}')`)
   .join(",\n")};
-`;
+${LOCAL_E2E_FLAG_EDITING_SEED}`;

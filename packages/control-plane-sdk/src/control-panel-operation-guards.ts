@@ -38,7 +38,8 @@ export function isControlPanelOperation(value: unknown): value is ControlPanelOp
   // so a forged claim cannot smuggle an extra resource field past this.
   if (isUnboundOperationId(value.id)) return hasKeys(value, ["id"]);
   if (isExperimentMutationOperationId(value.id)) return isExperimentMutationOperation(value);
-  if (value.id === "flag_config_get") return isFlagConfigOperation(value);
+  if (isFlagConfigOperationId(value.id)) return isFlagConfigOperation(value);
+  if (isApprovalOperationId(value.id)) return isApprovalOperation(value);
   if (isScopedOperationId(value.id)) return isAppCollectionOperation(value);
   if (isMetricResourceOperationId(value.id)) return isMetricResourceOperation(value);
   if (value.id === "api_key_revoke") {
@@ -70,11 +71,41 @@ function isExperimentMutationOperation(value: Record<string, unknown>): boolean 
   );
 }
 
+const FLAG_CONFIG_OPERATION_IDS = [
+  "flag_config_get",
+  "flag_config_update",
+  "flag_targeting_rules_replace",
+] as const;
+
+const APPROVAL_OPERATION_IDS = ["approval_request_get", "approval_request_review"] as const;
+
+function isFlagConfigOperationId(value: string): boolean {
+  return (FLAG_CONFIG_OPERATION_IDS as readonly string[]).includes(value);
+}
+
+function isApprovalOperationId(value: string): boolean {
+  return (APPROVAL_OPERATION_IDS as readonly string[]).includes(value);
+}
+
 function isFlagConfigOperation(value: Record<string, unknown>): boolean {
   return (
     hasKeys(value, ["id", "appId", "environmentId", "flagId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.flagId)
+  );
+}
+
+/**
+ * An Approval claim names the App and the request, and NOTHING else. The
+ * exact-length check matters more here than elsewhere: an extra `environmentId`
+ * smuggled alongside a valid pair would let a forged claim assert a narrower
+ * scope than the App-scoped resource actually has.
+ */
+function isApprovalOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "approvalRequestId"]) &&
+    isNonEmptyString(value.appId) &&
+    isNonEmptyString(value.approvalRequestId)
   );
 }
 

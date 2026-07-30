@@ -1,4 +1,4 @@
-import type { ErrorResponse } from "@splitch/contracts";
+import type { ErrorCode, ErrorResponse } from "@splitch/contracts";
 
 export type ApiResult<T> =
   | { readonly ok: true; readonly data: T; readonly status: number }
@@ -10,19 +10,54 @@ type FormFieldError = {
   readonly message: string;
 };
 
+type ApprovalReviewRequired = Extract<ErrorResponse, { code: "APPROVAL_REVIEW_REQUIRED" }>;
+
+/**
+ * The call never reached a structured refusal — the request itself failed.
+ *
+ * It is a panel-local code, deliberately not one of the Worker's: reusing a real
+ * ErrorCode here would report a decision the Control Plane never made.
+ */
+type SurfaceErrorCode = ErrorCode | "TRANSPORT_FAILURE";
+
+/** The immutable Policy context the Worker attached to a gated refusal. */
+type ApprovalPolicyContext = ApprovalReviewRequired["details"]["policyContexts"][number];
+
+/**
+ * Every surface carries `code`. A surface that kept only `message` forced callers
+ * to pattern-match prose to tell one refusal from another, and prose is not a
+ * contract.
+ */
 export type MutationErrorSurface =
   | {
       readonly kind: "field";
+      readonly code: SurfaceErrorCode;
       readonly message: string;
       readonly fields: readonly FormFieldError[];
     }
   | {
       readonly kind: "tier";
+      readonly code: SurfaceErrorCode;
       readonly message: string;
+      readonly fields: readonly [];
+    }
+  /**
+   * The Worker refused a Policy-gated write and durably recorded the proposal.
+   * The request id is the whole point of the refusal — flattening it into a
+   * generic message strands the operator with an unactionable error while a real
+   * pending Approval Request sits in the audit log.
+   */
+  | {
+      readonly kind: "approval";
+      readonly code: "APPROVAL_REVIEW_REQUIRED";
+      readonly message: string;
+      readonly approvalRequestId: string;
+      readonly policyContexts: readonly ApprovalPolicyContext[];
       readonly fields: readonly [];
     }
   | {
       readonly kind: "form";
+      readonly code: SurfaceErrorCode;
       readonly message: string;
       readonly fields: readonly [];
     };
@@ -31,21 +66,53 @@ export type MutationErrorSurface =
 export function mutationErrorSurface(
   result: Extract<ApiResult<never>, { ok: false }>,
 ): MutationErrorSurface {
-  if (result.status === 403) {
-    return { kind: "tier", message: result.error.message, fields: [] };
+  const { error } = result;
+
+  if (error.code === "APPROVAL_REVIEW_REQUIRED") {
+    return {
+      kind: "approval",
+      code: error.code,
+      message: error.message,
+      approvalRequestId: error.details.approvalRequestId,
+      policyContexts: error.details.policyContexts,
+      fields: [],
+    };
   }
 
-  if (result.status === 400 && result.error.code === "VALIDATION_ERROR") {
+  /**
+   * The Worker names the Variants it cannot serve here. Dropping them leaves the
+   * operator with "requested variants are not available" and no way to tell WHICH
+   * one — a refusal nobody can act on is the disguised default ADR-0036 forbids.
+   */
+  if (error.code === "VARIANT_NOT_AVAILABLE") {
     return {
       kind: "field",
-      message: result.error.message,
-      fields: result.error.details.issues.map((issue) => ({
+      code: error.code,
+      message: error.message,
+      fields: error.details.missingVariants.map((variant) => ({
+        field: "availableVariantNames",
+        code: error.code,
+        message: `${variant} is not available in this Environment`,
+      })),
+    };
+  }
+
+  if (result.status === 403) {
+    return { kind: "tier", code: error.code, message: error.message, fields: [] };
+  }
+
+  if (result.status === 400 && error.code === "VALIDATION_ERROR") {
+    return {
+      kind: "field",
+      code: error.code,
+      message: error.message,
+      fields: error.details.issues.map((issue) => ({
         field: issue.path.join("."),
-        code: result.error.code,
+        code: error.code,
         message: issue.message,
       })),
     };
   }
 
-  return { kind: "form", message: result.error.message, fields: [] };
+  return { kind: "form", code: error.code, message: error.message, fields: [] };
 }

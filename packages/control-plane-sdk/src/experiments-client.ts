@@ -13,10 +13,10 @@ import type {
   ExperimentsUpdateOutput,
 } from "@splitch/contracts/route-types";
 import {
-  createExperimentsHcClient,
-  hcRequestOptions,
-  type ExperimentsHcClient,
   type ControlPlaneHcOptions,
+  createExperimentsHcClient,
+  type ExperimentsHcClient,
+  hcRequestOptions,
   withAuthorization,
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";

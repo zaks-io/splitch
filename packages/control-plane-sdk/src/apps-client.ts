@@ -13,10 +13,10 @@ import type {
   AppsUpdateOutput,
 } from "@splitch/contracts/route-types";
 import {
-  createAppsHcClient,
-  hcRequestOptions,
   type AppsHcClient,
   type ControlPlaneHcOptions,
+  createAppsHcClient,
+  hcRequestOptions,
   withAuthorization,
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
