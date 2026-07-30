@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { appMemberships, apps, organizations, orgMemberships } from "../schema/index";
 import type { Db } from "./client";
 
@@ -29,6 +29,13 @@ export function makeSessionReads(db: Db) {
      *
      * `limit` is the caller's bound. Ask for one more row than you intend to
      * keep and you learn whether you truncated.
+     *
+     * NEWEST FIRST, so the row a `LIMIT` drops is the membership the User has
+     * gone longest without acquiring. Ascending order made the create-at-cap
+     * case maximally bad: the Organization dropped was by construction the one
+     * just created, which is also the one being navigated to. An Organization
+     * you have not touched in a long time is the safe one to lose to the cap,
+     * and the truncation notice covers it.
      */
     listOrgMembershipsWithOrgForUser(userId: string, limit: number) {
       return (
@@ -37,9 +44,9 @@ export function makeSessionReads(db: Db) {
           .from(orgMemberships)
           .leftJoin(organizations, eq(organizations.id, orgMemberships.orgId))
           .where(eq(orgMemberships.userId, userId))
-          // Deterministic, so a truncated snapshot is stable across rebuilds
-          // instead of shuffling which Organizations a User can still see.
-          .orderBy(orgMemberships.createdAt, orgMemberships.orgId)
+          // `orgId` is the tiebreaker, so the LIMIT+1 boundary is stable across
+          // rebuilds instead of shuffling which Organizations a User can see.
+          .orderBy(desc(orgMemberships.createdAt), desc(orgMemberships.orgId))
           .limit(limit)
       );
     },

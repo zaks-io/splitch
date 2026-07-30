@@ -1,13 +1,12 @@
 import { env as workerEnv } from "cloudflare:workers";
-import { createRepository } from "@splitch/db";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { type ControlPanelMutationBindings, controlPanelMutationBindings } from "./bindings";
+import { controlPanelMutationBindings } from "./bindings";
 import { createControlPanelOrganizationsClient } from "./control-plane-apps";
 import type { CreateControlPanelOrganizationResult } from "./create-organization-outcome";
-import { buildSessionPrincipal } from "./membership";
-import { loadSessionFromRequest, refreshSession, type StoredSession } from "./session";
+import { loadSessionFromRequest } from "./session";
+import { resyncSessionMemberships } from "./session-resync";
 
 /**
  * Parsed rather than cast: an unauthenticated caller can reach this handler, and
@@ -71,29 +70,4 @@ export const createControlPanelOrganization = createServerFn({ method: "POST" })
 
 function describe(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
-}
-
-/**
- * The new Organization membership is created alongside the Organization, and the
- * session's membership snapshot predates both. Without this the Organization the
- * user just created is absent from the list they are about to land on. Rebuilt
- * from D1, which is the authority; every other session field is carried through
- * untouched.
- */
-async function resyncSessionMemberships(
-  bindings: ControlPanelMutationBindings,
-  tokenHash: string,
-  session: StoredSession,
-): Promise<void> {
-  if (!session.workosSessionId) {
-    throw new Error("control-panel session is missing its WorkOS session identifier");
-  }
-  const principal = await buildSessionPrincipal(createRepository(bindings.DB), {
-    userId: session.userId,
-    workosSessionId: session.workosSessionId,
-  });
-  await refreshSession(bindings.SESSION_STORE, tokenHash, {
-    ...session,
-    orgs: principal.orgs,
-  });
 }

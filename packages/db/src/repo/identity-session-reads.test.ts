@@ -32,9 +32,11 @@ describe("batched session membership reads", () => {
 
     const rows = await repo.identity.listOrgMembershipsWithOrgForUser("user_1", 10);
 
+    // Newest membership first: the row a LIMIT gives up must be the one the User
+    // has gone longest without acquiring, never the one they just created.
     expect(rows.map((row) => ({ role: row.role, id: row.org?.id, slug: row.org?.slug }))).toEqual([
-      { role: "owner", id: "org_1", slug: "org-one" },
       { role: "member", id: "org_2", slug: "org-two" },
+      { role: "owner", id: "org_1", slug: "org-one" },
     ]);
   }, 15_000);
 
@@ -55,12 +57,15 @@ describe("batched session membership reads", () => {
     ).rejects.toThrow(/FOREIGN KEY constraint failed/);
   }, 15_000);
 
-  it("honours the caller's limit so truncation can be detected", async () => {
+  it("gives up the oldest membership to the limit, never the newest", async () => {
     await seed(local.d1);
 
-    await expect(repo.identity.listOrgMembershipsWithOrgForUser("user_1", 1)).resolves.toHaveLength(
-      1,
-    );
+    const rows = await repo.identity.listOrgMembershipsWithOrgForUser("user_1", 1);
+
+    expect(rows).toHaveLength(1);
+    // org_2 is the newer membership. Ascending order would have kept org_1 here,
+    // which is the create-at-cap case dropping the Organization just created.
+    expect(rows[0]?.org?.id).toBe("org_2");
   }, 15_000);
 
   it("returns only the User's own App memberships, keyed by owning Organization", async () => {

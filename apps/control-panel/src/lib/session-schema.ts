@@ -1,5 +1,5 @@
-import { nowSeconds } from "./session-cookie";
 import type { AppMembership, OrgMembership, StoredSession } from "./session";
+import { nowSeconds } from "./session-cookie";
 
 const ORG_ROLES = new Set(["owner", "admin", "member"]);
 const APP_ROLES = new Set(["owner", "admin", "member", "viewer"]);
@@ -86,6 +86,11 @@ function isLegacyStoredSession(
     Number.isInteger(value.expiresAt) &&
     (value.workosSessionId === undefined || isNonEmptyString(value.workosSessionId)) &&
     (value.workosAccessToken === undefined || isNonEmptyString(value.workosAccessToken)) &&
+    // Checked here too, not only on the v2 path: the key allowlist admits it and
+    // `normalizeStoredSession` spreads the candidate through, so without this a
+    // v1 session carrying `orgsTruncated: "definitely"` would load with the
+    // string intact while the identical v2 session is rejected.
+    (value.orgsTruncated === undefined || typeof value.orgsTruncated === "boolean") &&
     Array.isArray(value.orgs) &&
     value.orgs.every(isLegacyOrgMembership)
   );

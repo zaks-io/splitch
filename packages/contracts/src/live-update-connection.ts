@@ -65,6 +65,21 @@ const LiveUpdateSessionSchema = z
     workosSessionId: z.string().min(1).optional(),
     workosAccessToken: z.string().min(1).optional(),
     version: z.union([z.literal(1), z.literal(2)]).optional(),
+    /**
+     * Carried, not used. Authorization asks whether the App is in `orgs`, and a
+     * capped list can only ever answer that more conservatively. But `.strict()`
+     * means an unmodelled field REFUSES the whole session, so the Control Panel
+     * adding a session field would silently kill every live-update socket. It
+     * has to be modelled here to be ignored here.
+     */
+    orgsTruncated: z.boolean().optional(),
+    /**
+     * Carried, not used. Authorization asks whether the App is in `orgs`, and a
+     * capped list can only ever answer that more conservatively. But `.strict()`
+     * means an unmodelled field REFUSES the whole session, so the Control Panel
+     * adding a session field would silently kill every live-update socket. It
+     * has to be modelled here to be ignored here.
+     */
   })
   .strict();
 

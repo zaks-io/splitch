@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { OAUTH_STATE_COOKIE_NAME, consumeOAuthState, createOAuthState } from "./oauth-state";
+import { consumeOAuthState, createOAuthState, OAUTH_STATE_COOKIE_NAME } from "./oauth-state";
 import {
-  SESSION_COOKIE_NAME,
-  type StoredSession,
   createSession,
   loadSessionFromCookieHeader,
   refreshSession,
+  SESSION_COOKIE_NAME,
+  type StoredSession,
   sessionKey,
 } from "./session";
 
@@ -146,6 +146,34 @@ describe("control-panel session cookie and KV validation", () => {
         orgs: [expect.objectContaining({ demoExpiresAt: null, isProvisional: false })],
       },
     });
+  });
+
+  // The key allowlist admits `orgsTruncated` and `normalizeStoredSession` spreads
+  // the candidate through, so the v1 path has to type-check it too. Without that
+  // a v1 session smuggles a non-boolean past validation that the identical v2
+  // session is correctly refused for.
+  it("refuses a v1 session carrying a non-boolean orgsTruncated", async () => {
+    const kv = new MemoryKv();
+    const created = await createSession(kv.namespace(), sessionPrincipal(), NOW);
+    kv.store.set(
+      sessionKey(created.tokenHash),
+      JSON.stringify({
+        userId: created.session.userId,
+        expiresAt: created.session.expiresAt,
+        workosSessionId: created.session.workosSessionId,
+        orgsTruncated: "definitely",
+        orgs: created.session.orgs.map(
+          ({ isProvisional: _isProvisional, demoExpiresAt: _demo, ...org }) => org,
+        ),
+      }),
+    );
+
+    await expect(loadSessionFromCookieHeader(kv.namespace(), created.cookie, NOW)).resolves.toEqual(
+      {
+        ok: false,
+        reason: "invalid",
+      },
+    );
   });
 });
 

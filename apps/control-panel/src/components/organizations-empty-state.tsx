@@ -1,5 +1,7 @@
 import { EmptyState } from "@splitch/ui/state/empty-state";
 import { CreateOrganizationDialog } from "#components/create-organization-dialog";
+import { parityHint } from "#lib/parity-hints";
+import { ParityNote } from "./parity-note";
 
 /**
  * The first screen a User with no memberships sees. It teaches what an
@@ -30,8 +32,7 @@ export function OrganizationsEmptyState({
           and your billing, and nothing is shared across two of them. You create one, then an App
           inside it, then Flags inside that App's Environments.{" "}
           <span className="block pt-2">
-            Prefer your terminal or agent? Run <code>splitch orgs create</code> or call{" "}
-            <code>organizations_create</code>.
+            Prefer your terminal or agent? <ParityNote hint={parityHint("organizations_create")} />
           </span>
         </span>
       }
