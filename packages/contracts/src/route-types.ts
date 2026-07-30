@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { AppSchema, type ClientKeySchema, EnvironmentSchema } from "./leaf-schemas-runtime";
 import type {
   CreateAppRequestSchema,
   CreateAppResponseSchema,
@@ -8,17 +9,17 @@ import type {
   OrganizationResponseSchema,
   PatchAppRequestSchema,
 } from "./resource-envelopes-account";
-import { AppSchema, type ClientKeySchema, EnvironmentSchema } from "./leaf-schemas-runtime";
 import {
   type CreateExperimentRequestSchema,
   ExperimentResponseSchema,
   type PatchExperimentRequestSchema,
-  RunResponseSchema,
   type StartRunRequestSchema,
+  type StartRunResponseSchema,
 } from "./resource-envelopes-experiment";
 import {
   type CreateFlagRequestSchema,
   type CreateVariantRequestSchema,
+  type FlagMutationResponseSchema,
   FlagResponseSchema,
   type PatchFlagRequestSchema,
   type PatchVariantRequestSchema,
@@ -27,12 +28,15 @@ import type {
   ApiKeyParams,
   ApiKeyRevokeResponseSchema,
   AppParams,
+  ApprovalRequestListQuerySchema,
+  ApprovalRequestParams,
   ClientKeyRotateResponseSchema,
   CreateApiKeyRequestSchema,
   CreateEnvironmentRequestSchema,
   EnvFlagParams,
   EnvParams,
   ExperimentParams,
+  FlagConfigMutationResponseSchema,
   FlagConfigResponseSchema,
   FlagParams,
   FlagVariantParams,
@@ -44,7 +48,10 @@ import type {
   PromoteRequestSchema,
   PromoteResponseSchema,
   ReplaceTargetingRulesRequestSchema,
+  ReviewApprovalRequestSchema,
 } from "./routes/route-shapes";
+import { ApprovalRequestSchema } from "./routes/route-shapes";
+import { paginatedResponse } from "./wire-envelopes-core";
 
 /**
  * Typed flat inputs/outputs for representative Control Plane operations.
@@ -54,11 +61,7 @@ import type {
 
 const FlagListResponseSchema = z.object({ items: z.array(FlagResponseSchema) });
 const ExperimentListResponseSchema = z.object({ items: z.array(ExperimentResponseSchema) });
-const StartRunResponseSchema = z.object({
-  experimentId: z.string(),
-  run: RunResponseSchema,
-  previousRunId: z.string().nullable(),
-});
+const ApprovalRequestListResponseSchema = paginatedResponse(ApprovalRequestSchema);
 const DeletedResponseSchema = z.object({ deleted: z.literal(true) });
 
 export type FlagsListInput = z.infer<typeof AppParams>;
@@ -75,7 +78,16 @@ export type FlagConfigGetInput = z.infer<typeof EnvFlagParams>;
 export type FlagConfigGetOutput = z.infer<typeof FlagConfigResponseSchema>;
 export type FlagConfigUpdateInput = z.infer<typeof EnvFlagParams> &
   z.infer<typeof PatchFlagConfigRequestSchema>;
-export type FlagConfigUpdateOutput = z.infer<typeof FlagConfigResponseSchema>;
+export type FlagConfigUpdateOutput = z.infer<typeof FlagConfigMutationResponseSchema>;
+
+export type ApprovalRequestsListInput = z.infer<typeof AppParams> &
+  z.infer<typeof ApprovalRequestListQuerySchema>;
+export type ApprovalRequestsListOutput = z.infer<typeof ApprovalRequestListResponseSchema>;
+export type ApprovalRequestsGetInput = z.infer<typeof ApprovalRequestParams>;
+export type ApprovalRequestsGetOutput = z.infer<typeof ApprovalRequestSchema>;
+export type ApprovalRequestReviewsCreateInput = z.infer<typeof ApprovalRequestParams> &
+  z.infer<typeof ReviewApprovalRequestSchema>;
+export type ApprovalRequestReviewsCreateOutput = z.infer<typeof ApprovalRequestSchema>;
 
 export type ExperimentsListInput = z.infer<typeof EnvParams>;
 export type ExperimentsListOutput = z.infer<typeof ExperimentListResponseSchema>;
@@ -98,13 +110,13 @@ export type FlagVariantsCreateInput = z.infer<typeof FlagParams> &
 export type FlagVariantsCreateOutput = z.infer<typeof FlagResponseSchema>;
 export type FlagVariantsUpdateInput = z.infer<typeof FlagVariantParams> &
   z.infer<typeof PatchVariantRequestSchema>;
-export type FlagVariantsUpdateOutput = z.infer<typeof FlagResponseSchema>;
+export type FlagVariantsUpdateOutput = z.infer<typeof FlagMutationResponseSchema>;
 export type FlagVariantsDeleteInput = z.infer<typeof FlagVariantParams>;
 export type FlagVariantsDeleteOutput = z.infer<typeof FlagResponseSchema>;
 
 export type FlagTargetingRulesReplaceInput = z.infer<typeof EnvFlagParams> &
   z.infer<typeof ReplaceTargetingRulesRequestSchema>;
-export type FlagTargetingRulesReplaceOutput = z.infer<typeof FlagConfigResponseSchema>;
+export type FlagTargetingRulesReplaceOutput = z.infer<typeof FlagConfigMutationResponseSchema>;
 
 export type FlagsPromoteInput = z.infer<typeof PromoteParams> &
   z.infer<typeof PromoteRequestSchema>;
@@ -183,6 +195,16 @@ export interface RouteTypeMap {
   environments_get: { input: EnvironmentsGetInput; output: EnvironmentsGetOutput };
   environments_update: { input: EnvironmentsUpdateInput; output: EnvironmentsUpdateOutput };
   environments_delete: { input: EnvironmentsDeleteInput; output: EnvironmentsDeleteOutput };
+
+  approval_requests_list: {
+    input: ApprovalRequestsListInput;
+    output: ApprovalRequestsListOutput;
+  };
+  approval_requests_get: { input: ApprovalRequestsGetInput; output: ApprovalRequestsGetOutput };
+  approval_request_reviews_create: {
+    input: ApprovalRequestReviewsCreateInput;
+    output: ApprovalRequestReviewsCreateOutput;
+  };
 
   client_key_get: { input: ClientKeyGetInput; output: ClientKeyGetOutput };
   client_key_update: { input: ClientKeyUpdateInput; output: ClientKeyUpdateOutput };

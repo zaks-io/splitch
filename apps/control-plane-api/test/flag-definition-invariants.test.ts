@@ -143,7 +143,12 @@ describe("control-plane Flag Variant updates", () => {
       "PATCH",
       `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
       jwt,
-      { name: "beta", value: false, description: "renamed catalog entry" },
+      {
+        name: "beta",
+        value: false,
+        description: "renamed catalog entry",
+        idempotency_key: "idem_variant_update_success",
+      },
     );
 
     expect(res.status).toBe(200);
@@ -170,7 +175,7 @@ describe("control-plane Flag Variant updates", () => {
       "PATCH",
       `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
       jwt,
-      { name: "control" },
+      { name: "control", idempotency_key: "idem_variant_update_duplicate" },
     );
     expect(duplicate.status).toBe(400);
     expect((await errorBody(duplicate)).code).toBe("VALIDATION_ERROR");
@@ -180,7 +185,7 @@ describe("control-plane Flag Variant updates", () => {
       "PATCH",
       `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
       jwt,
-      { value: "not-boolean" },
+      { value: "not-boolean", idempotency_key: "idem_variant_update_wrong_type" },
     );
     expect(wrongType.status).toBe(400);
     expect((await errorBody(wrongType)).code).toBe("VALIDATION_ERROR");
@@ -207,7 +212,7 @@ describe("control-plane Flag Variant updates", () => {
       "PATCH",
       `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
       jwt,
-      { value: false },
+      { value: false, idempotency_key: "idem_variant_update_running" },
     );
 
     expect(res.status).toBe(409);

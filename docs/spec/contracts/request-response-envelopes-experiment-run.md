@@ -127,13 +127,33 @@ staged by `CreateExperimentRequest` or `PatchExperimentRequest` fields such as `
 `variantSet`, `targetingRules`, and `segmentIds`. Start validates that staged draft, freezes it onto
 the new Run, and then consumes the draft so an unchanged second Start returns `EXPERIMENT_NO_DRAFT`.
 
-The request body is optional. When present, it is lifecycle metadata only:
+The request body is lifecycle metadata only:
 
-| Field             | Required | Notes                                                              |
-| ----------------- | -------- | ------------------------------------------------------------------ |
-| `confirm`         | no       | `true` self-confirms when Environment Policy requires confirmation |
-| `reason`          | no       | Human or agent-readable Start reason copied onto the Run           |
-| `idempotency_key` | no       | Optional caller retry key; no assignment config is accepted here   |
+| Field             | Required | Notes                                                                                               |
+| ----------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `review`          | no       | `{ action: 'approve_and_apply' }`; inline use of the canonical Review action under `confirm`        |
+| `reason`          | no       | Human or agent-readable Start reason copied onto the Run                                            |
+| `idempotency_key` | yes      | Idempotently owns Approval Request creation and any inline Review; no assignment config is accepted |
+
+There is no `confirm` boolean or confirmation-retry pipeline. The CLI `--confirm` affordance and the
+panel Confirmation modal produce `review.action = 'approve_and_apply'`. The Control Plane then uses
+the same Approval Request, Review authorization, target-version check, and atomic D1 application
+path as future second-person Review.
+
+Policy changes only Review authority:
+
+- `allow`: no Review is required; Start enters the same validated application seam directly.
+- `confirm`: the proposer may supply the inline `approve_and_apply` Review.
+- future `approve`: the proposer cannot self-review. Start creates a `pending` Approval Request, and
+  an authorized distinct principal submits the same action through the Review endpoint.
+
+The Approval target is the Experiment draft. Its opaque target version hashes the complete draft
+assignment and decision projection, `liveRunId`, and the relevant Environment Policy projection. A
+draft, live-Run, or Policy change before Review moves the request to `stale`; it never starts a
+different Run or uses weaker authority than the immutable proposal.
+The canonical Approval Request, Review, diff, and application-result shapes are in
+[storage-schemas-d1.md](./storage-schemas-d1.md#approval_requests) and executable in
+`packages/contracts/src/routes/route-shapes.ts`.
 
 Worker computes: `id`, dense `runNumber`, `configHash`, `status = 'running'`, `startedAt`,
 `variantSet`, `allocation`, and **`targetingRules`** from the staged draft. Draft `segmentIds` are
@@ -145,6 +165,27 @@ Worker writes `Experiment.liveRunId`, `ExperimentConfigKV.liveRunId`, the new `R
 explicit `live_run:{appId}:{environmentId}:{experimentId}` pointer. Edge readers use
 `ExperimentConfigKV.liveRunId` plus `RunConfigKV` as the reader model; they never derive a live Run
 from the latest D1 Run.
+
+For a reviewed Start, the new Run row, prior-Run End, `Experiment.liveRunId`, successful Review,
+resulting target version, and Approval Request `applied` transition commit in one owning D1
+transaction. KV writes are post-commit projections. A KV projection failure is retried and surfaced
+loudly; it cannot roll back or relabel an already-applied canonical D1 mutation.
+
+Applied response:
+
+```
+{
+  experimentId: string
+  run: RunResponse
+  previousRunId: string | null
+  approvalRequest: ApprovalRequest | null
+}
+```
+
+`approvalRequest` is null under `allow` and contains the applied request and latest Review under
+`confirm`. When required Review is omitted or future `approve` awaits a distinct reviewer, the
+mutation returns the canonical `APPROVAL_REVIEW_REQUIRED` error with the durable pending request ID;
+no Run response is synthesized.
 
 ### PatchRunRequest (non-material only)
 

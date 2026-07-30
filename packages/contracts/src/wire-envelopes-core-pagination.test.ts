@@ -1,5 +1,5 @@
-import { z } from "zod";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   PAGINATION_DEFAULT_LIMIT,
   PAGINATION_MAX_LIMIT,
@@ -75,6 +75,11 @@ describe("PaginationQuerySchema", () => {
   it("accepts the cap limit of 500", () => {
     const q = PaginationQuerySchema.parse({ limit: PAGINATION_MAX_LIMIT });
     expect(q.limit).toBe(500);
+  });
+
+  it("coerces a URL query-string limit", () => {
+    const q = PaginationQuerySchema.parse({ limit: "50" });
+    expect(q.limit).toBe(50);
   });
 
   it("rejects limit > 500 at the schema level (fail loud, not clamped)", () => {

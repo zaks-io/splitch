@@ -38,6 +38,10 @@ const CANONICAL_OPERATION_IDS = [
   "environments_get",
   "environments_update",
   "environments_delete",
+  // Approval Requests + Reviews
+  "approval_requests_list",
+  "approval_requests_get",
+  "approval_request_reviews_create",
   // Flags
   "flags_list",
   "flags_create",

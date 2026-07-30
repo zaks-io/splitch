@@ -74,9 +74,15 @@ async function typeChecks() {
     flagId: "flag_local",
     variantName: "treatment",
     description: "the new checkout",
+    idempotency_key: "variant-update-1",
   });
   // @ts-expect-error flag_variants_update requires variantName
-  await sdk.flags.updateVariant({ appId: "app_local", flagId: "flag_local", description: "x" });
+  await sdk.flags.updateVariant({
+    appId: "app_local",
+    flagId: "flag_local",
+    description: "x",
+    idempotency_key: "variant-update-2",
+  });
 
   await sdk.flags.deleteVariant({
     appId: "app_local",
@@ -90,12 +96,14 @@ async function typeChecks() {
     environmentId: "env_local",
     flagId: "flag_local",
     targetingRules: [],
+    idempotency_key: "targeting-replace-1",
   });
   // @ts-expect-error flag_targeting_rules_replace requires the rule list
   await sdk.flags.replaceTargetingRules({
     appId: "app_local",
     environmentId: "env_local",
     flagId: "flag_local",
+    idempotency_key: "targeting-replace-2",
   });
 
   await sdk.flags.promote({
@@ -104,6 +112,7 @@ async function typeChecks() {
     flagId: "flag_local",
     fromEnvironmentId: "env_dev",
     select: { enabled: true },
+    idempotency_key: "promote-1",
   });
   // @ts-expect-error flags_promote requires the source Environment
   await sdk.flags.promote({
@@ -111,6 +120,7 @@ async function typeChecks() {
     targetEnvironmentId: "env_prod",
     flagId: "flag_local",
     select: { enabled: true },
+    idempotency_key: "promote-2",
   });
 
   // --- Apps ---------------------------------------------------------------

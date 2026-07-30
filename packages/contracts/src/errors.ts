@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
+import { CanonicalJsonSha256Schema } from "./canonical-hash";
+import { type ErrorCode, ErrorCodeSchema, errorCodes } from "./error-code";
+import { ApprovalPolicyLevelSchema } from "./leaf-schemas-runtime";
 
 /**
  * Canonical error contract. One base shape, discriminated on `code`, parsed by
@@ -7,64 +11,8 @@ import { z } from "zod";
  * this file is its executable form.
  */
 
-export const errorCodes = [
-  // Validation
-  "VALIDATION_ERROR",
-  "ALLOCATION_INVALID",
-  "ACTIVATION_TIMESTAMP_INVALID",
-  "INVALID_PAGINATION",
-  "INVALID_SORT",
-
-  // Run / Experiment invariants
-  "RUN_FROZEN",
-  "DECISION_LOCKED",
-  "TARGETING_KEY_MISMATCH",
-  "RUN_NOT_RUNNING",
-  "EXPERIMENT_RUNNING",
-  "EXPERIMENT_NO_DRAFT",
-  "VARIANT_NOT_AVAILABLE",
-  "RESOURCE_NOT_EMPTY",
-
-  // Uniqueness
-  "SLUG_CONFLICT",
-
-  // Not found
-  "EXPERIMENT_NOT_FOUND",
-  "RUN_NOT_FOUND",
-  "FLAG_NOT_FOUND",
-  "VARIANT_NOT_FOUND",
-  "METRIC_NOT_FOUND",
-  "APP_NOT_FOUND",
-  "ORGANIZATION_NOT_FOUND",
-  "USER_NOT_FOUND",
-  "CREDENTIAL_NOT_FOUND",
-  "SEGMENT_NOT_FOUND",
-  "PRIVACY_JOB_NOT_FOUND",
-
-  // Auth / authz
-  "UNAUTHORIZED",
-  "CREDENTIAL_REVOKED",
-  "INSUFFICIENT_SCOPES",
-  "FORBIDDEN",
-  "ORIGIN_NOT_ALLOWED",
-  "APP_MISMATCH",
-  "LAST_OWNER_REQUIRED",
-  "LAST_ENVIRONMENT_REQUIRED",
-  "PRIVACY_CONFIRMATION_REQUIRED",
-  "CONFIRMATION_REQUIRED",
-
-  // Analysis-state signals
-  "MULTIPLE_VARIANT_CONFLICT",
-
-  // System
-  "RATE_LIMITED",
-  "SERVICE_UNAVAILABLE",
-  "PRIVACY_JOB_FAILED",
-  "INTERNAL_SERVER_ERROR",
-] as const;
-
-export const ErrorCodeSchema = z.enum(errorCodes);
-export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
+export type { ErrorCode };
+export { ErrorCodeSchema, errorCodes };
 
 /**
  * Machine-stable recovery guidance carried in `details` on operational 409s. An
@@ -78,7 +26,9 @@ export const recommendedActions = [
   "EDIT_DRAFT_THEN_START",
   "ADD_VARIANT_TO_ENV",
   "RETRY_AFTER",
-  "RETRY_WITH_CONFIRMATION",
+  "REVIEW_APPROVAL_REQUEST",
+  "REFRESH_AND_REPROPOSE",
+  "RETRY_REVIEW",
   "CHOOSE_DIFFERENT_SLUG",
 ] as const;
 
@@ -86,8 +36,8 @@ export const RecommendedActionSchema = z.enum(recommendedActions);
 export type RecommendedAction = z.infer<typeof RecommendedActionSchema>;
 
 /**
- * Environment-Policy change types (ADR-0029). Names which gate tripped a
- * CONFIRMATION_REQUIRED so the caller need not re-read the Policy.
+ * Environment-Policy change types (ADR-0029). Approval errors carry these so
+ * the caller can render the immutable Policy context without guessing.
  */
 export const policyChangeTypes = [
   "variant_availability",
@@ -98,6 +48,31 @@ export const policyChangeTypes = [
 
 export const PolicyChangeTypeSchema = z.enum(policyChangeTypes);
 export type PolicyChangeType = z.infer<typeof PolicyChangeTypeSchema>;
+
+const JsonScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const JsonScalarArraySchema = z.array(JsonScalarSchema);
+const FlatJsonObjectSchema = z.record(
+  z.string(),
+  z.union([JsonScalarSchema, JsonScalarArraySchema]),
+);
+
+export const ErrorDetailsSchema = z.record(
+  z.string(),
+  z.union([
+    JsonScalarSchema,
+    JsonScalarArraySchema,
+    FlatJsonObjectSchema,
+    z.array(FlatJsonObjectSchema),
+  ]),
+);
+
+const ApprovalPolicyContextDetailsSchema = z
+  .object({
+    environmentId: z.string(),
+    changeTypes: z.array(PolicyChangeTypeSchema).min(1),
+    level: ApprovalPolicyLevelSchema,
+  })
+  .strict();
 
 const EmptyDetails = z.object({}).strict();
 
@@ -233,6 +208,7 @@ const errorMembers = [
   member("CREDENTIAL_NOT_FOUND", EmptyDetails),
   member("SEGMENT_NOT_FOUND", EmptyDetails),
   member("PRIVACY_JOB_NOT_FOUND", EmptyDetails),
+  member("APPROVAL_REQUEST_NOT_FOUND", EmptyDetails),
 
   member("UNAUTHORIZED", EmptyDetails),
   member("CREDENTIAL_REVOKED", EmptyDetails),
@@ -249,13 +225,67 @@ const errorMembers = [
     "PRIVACY_CONFIRMATION_REQUIRED",
     z.object({ confirmationRequired: z.literal(true), confirmationExpiresAt: z.string() }),
   ),
+  // Deprecated: emitted by the legacy flag-config-policy runtime path and removed by SPL-150 when the Approval runtime replaces it.
   member(
     "CONFIRMATION_REQUIRED",
     z.object({
       gate: PolicyChangeTypeSchema,
       environmentId: z.string(),
       attemptedOp: z.string(),
-      recommendedAction: z.literal("RETRY_WITH_CONFIRMATION"),
+      recommendedAction: z.literal("REVIEW_APPROVAL_REQUEST"),
+    }),
+  ),
+  member(
+    "APPROVAL_REVIEW_FORBIDDEN",
+    z.object({
+      approvalRequestId: ApprovalRequestIdSchema,
+      action: z.enum(["approve_and_apply", "decline"]),
+      reason: z.enum(["SELF_REVIEW_NOT_ALLOWED", "ROLE_NOT_ALLOWED"]),
+    }),
+  ),
+  member(
+    "APPROVAL_REVIEW_REQUIRED",
+    z.object({
+      approvalRequestId: ApprovalRequestIdSchema,
+      status: z.literal("pending"),
+      policyContexts: z.array(ApprovalPolicyContextDetailsSchema).min(1),
+      recommendedAction: z.literal("REVIEW_APPROVAL_REQUEST"),
+    }),
+  ),
+  member(
+    "APPROVAL_REQUEST_STALE",
+    z.object({
+      approvalRequestId: ApprovalRequestIdSchema,
+      targetVersion: CanonicalJsonSha256Schema,
+      currentTargetVersion: CanonicalJsonSha256Schema,
+      recommendedAction: z.literal("REFRESH_AND_REPROPOSE"),
+    }),
+  ),
+  member(
+    "APPROVAL_REQUEST_RESOLVED",
+    z.object({
+      approvalRequestId: ApprovalRequestIdSchema,
+      status: z.enum(["applied", "declined", "stale"]),
+      reviewId: ApprovalReviewIdSchema.nullable(),
+    }),
+  ),
+  member(
+    "APPROVAL_APPLICATION_FAILED",
+    z.object({
+      approvalRequestId: ApprovalRequestIdSchema,
+      reviewId: ApprovalReviewIdSchema,
+      applicationError: z.object({
+        code: ErrorCodeSchema,
+        details: ErrorDetailsSchema,
+      }),
+      recommendedAction: z.literal("RETRY_REVIEW"),
+    }),
+  ),
+  member(
+    "IDEMPOTENCY_KEY_CONFLICT",
+    z.object({
+      scope: z.enum(["approval_request", "review"]),
+      idempotencyKey: z.string().min(1),
     }),
   ),
 

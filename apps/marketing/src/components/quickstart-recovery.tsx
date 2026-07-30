@@ -9,9 +9,9 @@ import {
 
 const recoveries = [
   [
-    "CONFIRMATION_REQUIRED",
+    "APPROVAL_REVIEW_REQUIRED",
     "the Environment Policy gates this change",
-    "resend with confirm: true",
+    "review the durable request",
   ],
   [
     "VARIANT_NOT_AVAILABLE",

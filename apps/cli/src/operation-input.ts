@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { getRoute } from "@splitch/contracts";
 import type { EvaluateContext } from "@splitch/sdk";
 import type { CliCommandDefinition } from "./command-registry.js";
@@ -20,6 +21,7 @@ export function buildOperationInput(
   applyPositionalFields(command, invocation, input);
   applyNamedFlags(command, invocation.flags, input);
   applyCommandSpecificFields(command, invocation, input);
+  applyRequiredIdempotencyKey(command, input);
   return input;
 }
 
@@ -88,7 +90,17 @@ function applyNamedFlags(
     input.key = flags.key;
   }
   if (command.supportsConfirm && flags.confirm) {
-    input.confirm = true;
+    input.review = { action: "approve_and_apply" };
+  }
+}
+
+function applyRequiredIdempotencyKey(
+  command: CliCommandDefinition,
+  input: Record<string, unknown>,
+): void {
+  const route = getRoute(command.operationId);
+  if (route?.idempotency === "required" && typeof input.idempotency_key !== "string") {
+    input.idempotency_key = `cli_${randomUUID()}`;
   }
 }
 

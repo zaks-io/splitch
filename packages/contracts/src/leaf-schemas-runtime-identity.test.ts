@@ -2,16 +2,20 @@ import { describe, expect, it } from "vitest";
 import type { User } from "./leaf-schemas-runtime";
 import {
   APIKeySchema,
+  ApprovalPolicyLevelSchema,
   AppSchema,
+  approvalPolicyLevels,
   ClientKeySchema,
-  EnvironmentSchema,
   EnvironmentPolicySchema,
+  EnvironmentSchema,
+  environmentPolicyLevels,
   OrganizationSchema,
   OrgPlanSchema,
   orgPlans,
+  reservedEnvironmentPolicyLevels,
   UserRoleSchema,
-  userRoles,
   UserSchema,
+  userRoles,
 } from "./leaf-schemas-runtime";
 
 describe("Organization", () => {
@@ -99,6 +103,17 @@ describe("Environment", () => {
 
   it("parses the inline Environment Policy", () => {
     expect(EnvironmentPolicySchema.parse(allowPolicy).enabledState).toBe("allow");
+    expect(
+      EnvironmentPolicySchema.safeParse({ ...allowPolicy, enabledState: "approve" }).success,
+    ).toBe(false);
+  });
+
+  it("derives Approval Policy levels while reserving approve from Environment writes", () => {
+    expect(approvalPolicyLevels).toEqual([
+      ...environmentPolicyLevels,
+      ...reservedEnvironmentPolicyLevels,
+    ]);
+    expect(ApprovalPolicyLevelSchema.safeParse("approve").success).toBe(true);
     expect(
       EnvironmentPolicySchema.safeParse({ ...allowPolicy, enabledState: "approve" }).success,
     ).toBe(false);

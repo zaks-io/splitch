@@ -61,6 +61,7 @@ ErrorCode =
   | 'CREDENTIAL_NOT_FOUND'
   | 'SEGMENT_NOT_FOUND'
   | 'PRIVACY_JOB_NOT_FOUND'
+  | 'APPROVAL_REQUEST_NOT_FOUND'
 
   // Auth / authz
   | 'UNAUTHORIZED'                // no valid credential
@@ -72,7 +73,12 @@ ErrorCode =
   | 'LAST_OWNER_REQUIRED'         // deletion would leave a shared Org without an owner
   | 'LAST_ENVIRONMENT_REQUIRED'   // deletion would leave an App without an Environment
   | 'PRIVACY_CONFIRMATION_REQUIRED' // destructive privacy job lacks confirmation
-  | 'CONFIRMATION_REQUIRED'       // Environment Policy gates this change type; resend with confirm: true (ADR-0029)
+  | 'APPROVAL_REVIEW_REQUIRED'    // durable Approval Request is pending Review
+  | 'APPROVAL_REVIEW_FORBIDDEN'   // principal may not perform this Review
+  | 'APPROVAL_REQUEST_STALE'      // target version changed; request is terminal
+  | 'APPROVAL_REQUEST_RESOLVED'   // a different Review already resolved the request
+  | 'APPROVAL_APPLICATION_FAILED' // application rolled back; request remains pending
+  | 'IDEMPOTENCY_KEY_CONFLICT'    // same key was reused with a different canonical payload
 
   // Analysis-state signals
   | 'MULTIPLE_VARIANT_CONFLICT'   // Entity bucketed to __multiple__; results untrusted
@@ -85,46 +91,55 @@ ErrorCode =
   | 'INTERNAL_SERVER_ERROR'       // includes corrupted KV blob (fail-loud per ADR-0025)
 ```
 
+During the contracts-first transition, deprecated `CONFIRMATION_REQUIRED` remains emitted only by
+the legacy `flag-config-policy` runtime path until SPL-150 replaces it with the Approval runtime and
+removes the code, status mapping, and `REVIEW_APPROVAL_REQUEST` details token.
+
 ---
 
 ## Per-code detail shapes
 
-| code                            | details shape                                                                                                                                                                                                                                             |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `VALIDATION_ERROR`              | `{ issues: Array<{ path: string[], message: string }> }` — Zod `.format()` output                                                                                                                                                                         |
-| `ALLOCATION_INVALID`            | `{ expected: 100, got: number, variantAllocations: Record<string, number> }`                                                                                                                                                                              |
-| `ACTIVATION_TIMESTAMP_INVALID`  | `{ activationTs: string, firstExposureTs: string, message: 'activation must occur after first exposure' }`                                                                                                                                                |
-| `INVALID_PAGINATION`            | `{ field: 'cursor' \| 'limit', reason: string }`                                                                                                                                                                                                          |
-| `INVALID_SORT`                  | `{ field: string, allowedFields: string[] }`                                                                                                                                                                                                              |
-| `EVENT_SCHEMA_MISMATCH`         | `{ eventName: string, eventDefinitionVersionId: string, issues: Array<{ path: string[], message: string }> }` — paths identify unknown/missing/type-invalid fields, Dimensions, or nested JSON keys                                                       |
-| `ENTITY_TYPE_MISMATCH`          | `{ expectedIdType: string, receivedIdType: string, eventDefinitionId: string, metricId?: string, runId?: string }`                                                                                                                                        |
-| `RUN_FROZEN`                    | `{ frozenFields: string[], currentRunId: string, attemptedChange: string, recommendedAction: RecommendedAction }`                                                                                                                                         |
-| `DECISION_LOCKED`               | `{ lockedFields: string[], currentRunId: string, attemptedChange: string, recommendedAction: RecommendedAction }`                                                                                                                                         |
-| `TARGETING_KEY_MISMATCH`        | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string, recommendedAction: RecommendedAction }`                                                                                                                              |
-| `RUN_NOT_RUNNING`               | `{ runId: string, currentState: 'draft' \| 'ended', attemptedOp: string, recommendedAction: RecommendedAction }`                                                                                                                                          |
-| `EXPERIMENT_RUNNING`            | `{ experimentId: string, runningRunId: string, attemptedOp: string, recommendedAction: RecommendedAction }`                                                                                                                                               |
-| `EXPERIMENT_NO_DRAFT`           | `{ experimentId: string, currentRunId: string \| null, recommendedAction: RecommendedAction }`                                                                                                                                                            |
-| `VARIANT_NOT_AVAILABLE`         | `{ flagId: string, environmentId: string, missingVariants: string[], recommendedAction: RecommendedAction }`                                                                                                                                              |
-| `RESOURCE_NOT_EMPTY`            | `{ resourceType: 'app' \| 'environment', resourceId: string, childType: string, childCount: number, attemptedOp: string }`                                                                                                                                |
-| `EVENT_DEFINITION_UNPUBLISHED`  | `{ eventDefinitionId: string, eventName: string }`                                                                                                                                                                                                        |
-| `EVENT_DEFINITION_IMMUTABLE`    | `{ eventDefinitionId: string, eventDefinitionVersionId: string, attemptedOp: string }`                                                                                                                                                                    |
-| `EVENT_ID_CONFLICT`             | `{ eventId: string }`                                                                                                                                                                                                                                     |
-| `INSUFFICIENT_SCOPES`           | `{ requiredScopes: string[], heldScopes: string[] }`                                                                                                                                                                                                      |
-| `LAST_OWNER_REQUIRED`           | `{ orgId: string }`                                                                                                                                                                                                                                       |
-| `LAST_ENVIRONMENT_REQUIRED`     | `{ appId: string }`                                                                                                                                                                                                                                       |
-| `PRIVACY_CONFIRMATION_REQUIRED` | `{ confirmationRequired: true, confirmationExpiresAt: string }`                                                                                                                                                                                           |
-| `CONFIRMATION_REQUIRED`         | `{ gate: PolicyChangeType, environmentId: string, attemptedOp: string, recommendedAction: 'RETRY_WITH_CONFIRMATION' }` — `gate` names the Environment-Policy change type that requires confirmation (ADR-0029); resend the same call with `confirm: true` |
-| `PRIVACY_JOB_FAILED`            | `{ requestId: string, failedStores: string[] }`                                                                                                                                                                                                           |
-| `MULTIPLE_VARIANT_CONFLICT`     | `{ experimentId: string, runId: string, idType: string, targetingKeyHash: string }`                                                                                                                                                                       |
-| `RATE_LIMITED`                  | `{ retryAfterMs: number }`                                                                                                                                                                                                                                |
-| `SERVICE_UNAVAILABLE`           | `{ retryAfterMs: number }` — Provider unresolvable; mirrors the `Retry-After` response header                                                                                                                                                             |
-| `ORIGIN_NOT_ALLOWED`            | `{ origin: string, hint: string }` — names the offending origin + how to fix (add to allow-list / open key)                                                                                                                                               |
-| `APP_MISMATCH`                  | `{}`                                                                                                                                                                                                                                                      |
-| All `*_NOT_FOUND` codes         | `{}`                                                                                                                                                                                                                                                      |
-| `UNAUTHORIZED`                  | `{}`                                                                                                                                                                                                                                                      |
-| `CREDENTIAL_REVOKED`            | `{}`                                                                                                                                                                                                                                                      |
-| `FORBIDDEN`                     | `{}`                                                                                                                                                                                                                                                      |
-| `INTERNAL_SERVER_ERROR`         | `{}`                                                                                                                                                                                                                                                      |
+| code                            | details shape                                                                                                                                                                                       |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_ERROR`              | `{ issues: Array<{ path: string[], message: string }> }` — Zod `.format()` output                                                                                                                   |
+| `ALLOCATION_INVALID`            | `{ expected: 100, got: number, variantAllocations: Record<string, number> }`                                                                                                                        |
+| `ACTIVATION_TIMESTAMP_INVALID`  | `{ activationTs: string, firstExposureTs: string, message: 'activation must occur after first exposure' }`                                                                                          |
+| `INVALID_PAGINATION`            | `{ field: 'cursor' \| 'limit', reason: string }`                                                                                                                                                    |
+| `INVALID_SORT`                  | `{ field: string, allowedFields: string[] }`                                                                                                                                                        |
+| `EVENT_SCHEMA_MISMATCH`         | `{ eventName: string, eventDefinitionVersionId: string, issues: Array<{ path: string[], message: string }> }` — paths identify unknown/missing/type-invalid fields, Dimensions, or nested JSON keys |
+| `ENTITY_TYPE_MISMATCH`          | `{ expectedIdType: string, receivedIdType: string, eventDefinitionId: string, metricId?: string, runId?: string }`                                                                                  |
+| `RUN_FROZEN`                    | `{ frozenFields: string[], currentRunId: string, attemptedChange: string, recommendedAction: RecommendedAction }`                                                                                   |
+| `DECISION_LOCKED`               | `{ lockedFields: string[], currentRunId: string, attemptedChange: string, recommendedAction: RecommendedAction }`                                                                                   |
+| `TARGETING_KEY_MISMATCH`        | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string, recommendedAction: RecommendedAction }`                                                                        |
+| `RUN_NOT_RUNNING`               | `{ runId: string, currentState: 'draft' \| 'ended', attemptedOp: string, recommendedAction: RecommendedAction }`                                                                                    |
+| `EXPERIMENT_RUNNING`            | `{ experimentId: string, runningRunId: string, attemptedOp: string, recommendedAction: RecommendedAction }`                                                                                         |
+| `EXPERIMENT_NO_DRAFT`           | `{ experimentId: string, currentRunId: string \| null, recommendedAction: RecommendedAction }`                                                                                                      |
+| `VARIANT_NOT_AVAILABLE`         | `{ flagId: string, environmentId: string, missingVariants: string[], recommendedAction: RecommendedAction }`                                                                                        |
+| `RESOURCE_NOT_EMPTY`            | `{ resourceType: 'app' \| 'environment', resourceId: string, childType: string, childCount: number, attemptedOp: string }`                                                                          |
+| `EVENT_DEFINITION_UNPUBLISHED`  | `{ eventDefinitionId: string, eventName: string }`                                                                                                                                                  |
+| `EVENT_DEFINITION_IMMUTABLE`    | `{ eventDefinitionId: string, eventDefinitionVersionId: string, attemptedOp: string }`                                                                                                              |
+| `EVENT_ID_CONFLICT`             | `{ eventId: string }`                                                                                                                                                                               |
+| `INSUFFICIENT_SCOPES`           | `{ requiredScopes: string[], heldScopes: string[] }`                                                                                                                                                |
+| `LAST_OWNER_REQUIRED`           | `{ orgId: string }`                                                                                                                                                                                 |
+| `LAST_ENVIRONMENT_REQUIRED`     | `{ appId: string }`                                                                                                                                                                                 |
+| `PRIVACY_CONFIRMATION_REQUIRED` | `{ confirmationRequired: true, confirmationExpiresAt: string }`                                                                                                                                     |
+| `APPROVAL_REVIEW_REQUIRED`      | `{ approvalRequestId: string, status: 'pending', policyContexts: ApprovalPolicyContext[], recommendedAction: 'REVIEW_APPROVAL_REQUEST' }`                                                           |
+| `APPROVAL_REVIEW_FORBIDDEN`     | `{ approvalRequestId: string, action: ReviewAction, reason: 'SELF_REVIEW_NOT_ALLOWED' \| 'ROLE_NOT_ALLOWED' }`                                                                                      |
+| `APPROVAL_REQUEST_STALE`        | `{ approvalRequestId: string, targetVersion: string, currentTargetVersion: string, recommendedAction: 'REFRESH_AND_REPROPOSE' }`                                                                    |
+| `APPROVAL_REQUEST_RESOLVED`     | `{ approvalRequestId: string, status: 'applied' \| 'declined' \| 'stale', reviewId: string \| null }`                                                                                               |
+| `APPROVAL_APPLICATION_FAILED`   | `{ approvalRequestId: string, reviewId: string, applicationError: { code: ErrorCode, details: object }, recommendedAction: 'RETRY_REVIEW' }`                                                        |
+| `IDEMPOTENCY_KEY_CONFLICT`      | `{ scope: 'approval_request' \| 'review', idempotencyKey: string }`                                                                                                                                 |
+| `PRIVACY_JOB_FAILED`            | `{ requestId: string, failedStores: string[] }`                                                                                                                                                     |
+| `MULTIPLE_VARIANT_CONFLICT`     | `{ experimentId: string, runId: string, idType: string, targetingKeyHash: string }`                                                                                                                 |
+| `RATE_LIMITED`                  | `{ retryAfterMs: number }`                                                                                                                                                                          |
+| `SERVICE_UNAVAILABLE`           | `{ retryAfterMs: number }` — Provider unresolvable; mirrors the `Retry-After` response header                                                                                                       |
+| `ORIGIN_NOT_ALLOWED`            | `{ origin: string, hint: string }` — names the offending origin + how to fix (add to allow-list / open key)                                                                                         |
+| `APP_MISMATCH`                  | `{}`                                                                                                                                                                                                |
+| All `*_NOT_FOUND` codes         | `{}`                                                                                                                                                                                                |
+| `UNAUTHORIZED`                  | `{}`                                                                                                                                                                                                |
+| `CREDENTIAL_REVOKED`            | `{}`                                                                                                                                                                                                |
+| `FORBIDDEN`                     | `{}`                                                                                                                                                                                                |
+| `INTERNAL_SERVER_ERROR`         | `{}`                                                                                                                                                                                                |
 
 ---
 
@@ -143,26 +158,30 @@ RecommendedAction =
   | 'EDIT_DRAFT_THEN_START'  // make a change to the draft, then Start (the draft currently matches the live Run)
   | 'ADD_VARIANT_TO_ENV'     // a referenced Variant is not promoted to this Environment; promote it (ADR-0028), then retry
   | 'RETRY_AFTER'            // transient; retry after the window in retryAfterMs / Retry-After
-  | 'RETRY_WITH_CONFIRMATION'// the Environment Policy gates this change type; resend the same call with confirm: true (ADR-0029)
+  | 'REVIEW_APPROVAL_REQUEST'// perform an authorized Review on the durable pending request
+  | 'REFRESH_AND_REPROPOSE'  // target changed; read current state and create a new request
+  | 'RETRY_REVIEW'           // application failed without mutation; retry with a new idempotency key
 ```
 
 Per-code mapping (the action is deterministic per code, but lives in `details` so the agent reads
 one field rather than maintaining a code→action table of its own):
 
-| code                     | `recommendedAction`       | what the agent does                                                                                 |
-| ------------------------ | ------------------------- | --------------------------------------------------------------------------------------------------- |
-| `RUN_FROZEN`             | `CREATE_NEW_RUN`          | the edit touches a frozen field; open a new draft Run and apply it there (ADR-0003)                 |
-| `DECISION_LOCKED`        | `CREATE_NEW_RUN`          | the decision-family / alpha edit is locked on the running Run; new Run required                     |
-| `TARGETING_KEY_MISMATCH` | `CREATE_NEW_RUN`          | the targetingKey changed; a new Run is required to rebucket                                         |
-| `RUN_NOT_RUNNING`        | `START_A_RUN`             | End (or other running-only op) hit a non-running Run; Start a Run first                             |
-| `EXPERIMENT_RUNNING`     | `END_RUNNING_RUN_FIRST`   | the op (e.g. delete) is blocked while a Run is live; End it, then retry                             |
-| `EXPERIMENT_NO_DRAFT`    | `EDIT_DRAFT_THEN_START`   | Start found no draft changes vs the current Run; edit the draft, then Start                         |
-| `VARIANT_NOT_AVAILABLE`  | `ADD_VARIANT_TO_ENV`      | a referenced Variant is not in this Environment's available set; promote it                         |
-| `CONFIRMATION_REQUIRED`  | `RETRY_WITH_CONFIRMATION` | the Environment Policy gates this change type; resend the same call with `confirm: true` (ADR-0029) |
+| code                          | `recommendedAction`       | what the agent does                                                                 |
+| ----------------------------- | ------------------------- | ----------------------------------------------------------------------------------- |
+| `RUN_FROZEN`                  | `CREATE_NEW_RUN`          | the edit touches a frozen field; open a new draft Run and apply it there (ADR-0003) |
+| `DECISION_LOCKED`             | `CREATE_NEW_RUN`          | the decision-family / alpha edit is locked on the running Run; new Run required     |
+| `TARGETING_KEY_MISMATCH`      | `CREATE_NEW_RUN`          | the targetingKey changed; a new Run is required to rebucket                         |
+| `RUN_NOT_RUNNING`             | `START_A_RUN`             | End (or other running-only op) hit a non-running Run; Start a Run first             |
+| `EXPERIMENT_RUNNING`          | `END_RUNNING_RUN_FIRST`   | the op (e.g. delete) is blocked while a Run is live; End it, then retry             |
+| `EXPERIMENT_NO_DRAFT`         | `EDIT_DRAFT_THEN_START`   | Start found no draft changes vs the current Run; edit the draft, then Start         |
+| `VARIANT_NOT_AVAILABLE`       | `ADD_VARIANT_TO_ENV`      | a referenced Variant is not in this Environment's available set; promote it         |
+| `APPROVAL_REVIEW_REQUIRED`    | `REVIEW_APPROVAL_REQUEST` | perform an authorized Review on the returned durable request                        |
+| `APPROVAL_REQUEST_STALE`      | `REFRESH_AND_REPROPOSE`   | read current state and create a new request; stale is terminal                      |
+| `APPROVAL_APPLICATION_FAILED` | `RETRY_REVIEW`            | retry the pending request with a new Review idempotency key                         |
 
 `recommendedAction` is **advisory recovery, not authorization**: following it does not bypass any
 gate. A `CREATE_NEW_RUN` action still goes through the normal create-Run path with its own
-validation and Environment Policy confirmation (ADR-0029). The field exists so an agent's
+validation and Environment Policy Review (ADR-0029). The field exists so an agent's
 error-recovery branch is a stable token lookup, not prose parsing — the same fail-loud-then-guide
 principle the error contract is built on (ADR-0036).
 
@@ -183,35 +202,152 @@ frozenFields = [
 
 ---
 
-## CONFIRMATION_REQUIRED: the Environment-Policy confirmation handshake
+## Approval Request and Review errors
 
-When an Environment Policy gates a change type at `confirm` (ADR-0029), the gated write
-(`experiments_start`, `flag_config_update`, `flags_promote`, enabled-state toggle) is rejected with
-`409 CONFIRMATION_REQUIRED` **unless the request carries `confirm: true`**. This is the one
-confirmation contract for every skin:
+There is no stateless `confirm: true` retry handshake. Promotion, direct Flag Configuration edits,
+Variant value edits, and Experiment Run Start use one durable Approval Request and Review contract.
+The positive Review action is always `approve_and_apply`; `approve` is never a deferred state or a
+second action.
 
-- **Input.** Every gated write schema includes an optional `confirm?: boolean` field (default
-  `false`). The CLI `--confirm` flag sets it; the MCP tool exposes it as a derived input field; the
-  panel's Confirmation modal sets it on submit. No separate ceremony, no extra round-trip endpoint.
-- **`gate`.** `details.gate` is a `PolicyChangeType` so the agent/human knows _which_ change type
-  tripped the gate without re-reading the Policy:
+Canonical wire projection:
 
-  ```
-  PolicyChangeType =
-    | 'variant_availability'   // promote a Variant into this Environment's available set
-    | 'targeting_rollout_value'// change what is served and to whom
-    | 'enabled_state'          // the kill switch
-    | 'start_experiment_run'   // open a Run for measurement in this Environment
-  ```
+```
+ApprovalRequest = {
+  id: `apr_${ULID}`
+  appId: string
+  policyContexts: Array<{
+    environmentId: string
+    changeTypes: PolicyChangeType[]
+    level: 'allow' | 'confirm' | 'approve'
+  }>
+  operation:
+    | 'flag_config_update'
+    | 'flag_targeting_rules_replace'
+    | 'flags_promote'
+    | 'flag_variants_update'
+    | 'experiments_start'
+  target: {
+    type: 'flag_configuration' | 'flag_variant' | 'experiment_draft'
+    id: string
+    version: `sha256:${lowercaseHex}`
+  }
+  diff: {
+    current: Record<string, unknown>
+    proposed: Record<string, unknown>
+    entries: Array<{
+      path: string
+      operation: 'add' | 'remove' | 'replace'
+      current?: unknown
+      proposed?: unknown
+    }>
+  }
+  status: 'pending' | 'applied' | 'declined' | 'stale'
+  proposer: { userId: string, authDoor: string }
+  proposedAt: string
+  resolvedAt: string | null
+  applicationResult: {
+    targetVersion: `sha256:${lowercaseHex}`
+    resourceType: 'flag_configuration' | 'flag_variant' | 'experiment_run'
+    resourceId: string
+    appliedAt: string
+  } | null
+  latestReview: Review | null
+}
 
-- **Recovery.** `recommendedAction: 'RETRY_WITH_CONFIRMATION'` — resend the identical call with
-  `confirm: true`. An agent that knows the token needs no prompt; the recovery is deterministic. The
-  kill switch (turning a flag **off**) is never gated (ADR-0029) and so never returns this code.
-- **Reading the gate ahead of time.** `environments_get` returns the Environment Policy inline so a
-  caller can decide to send `confirm: true` on the first attempt instead of round-tripping through the 409. (There is no separate policy endpoint; the CLI `env-policy get` projects the same field.)
+Review = {
+  id: `rev_${ULID}`
+  approvalRequestId: `apr_${ULID}`
+  action: 'approve_and_apply' | 'decline'
+  outcome: 'applied' | 'declined' | 'stale' | 'failed'
+  actor: { userId: string, authDoor: string }
+  reviewedAt: string
+  reason: string | null
+  idempotencyKey: string
+  resultingTargetVersion: `sha256:${lowercaseHex}` | null
+  error: { code: ErrorCode, details: Record<string, unknown> } | null
+}
+```
 
-`confirm: true` satisfies the gate; it does not widen authorization. A confirmed change still
-passes full Worker validation and is recorded as a self-reviewed Approval Request (ADR-0029).
+`PolicyChangeType` is
+`'variant_availability' | 'targeting_rollout_value' | 'enabled_state' | 'start_experiment_run'`.
+
+Approval Request IDs are `apr_` plus a 26-character ULID; Review IDs are `rev_` plus a
+26-character ULID, matching the service's monotonic `ulid()` convention.
+
+`diff.current` and `diff.proposed` are immutable canonical snapshots of the mutation's complete
+target projection, excluding server-generated result fields such as IDs and timestamps. Entries are
+strictly lexicographic by RFC 6901 JSON Pointer `path`: `add` requires only `proposed`, `remove` only
+`current`, and `replace` both. The server computes entries from the snapshots; callers cannot submit
+their own diff. `applicationResult` is non-null only for `status = applied`.
+
+`target.version`, `applicationResult.targetVersion`, and `resultingTargetVersion` are lowercase
+SHA-256 tokens over UTF-8 RFC 8785 JSON Canonicalization Scheme bytes. The same canonicalization
+rule binds Approval Request and Review idempotency payloads. Application error codes use the
+machine-stable `ErrorCode` set, never an open string.
+
+Policy changes only the required Review authority:
+
+- `allow`: no Review is required. The write enters the same validated application seam directly.
+- `confirm`: the proposer may Review with `approve_and_apply`. The inline mutation field
+  `review: { action: 'approve_and_apply' }` invokes that same action in one request.
+- future `approve`: self-review returns `403 APPROVAL_REVIEW_FORBIDDEN`; an authorized distinct
+  principal must invoke `approve_and_apply`.
+
+Authentication and Review authorization failures happen before target validation or mutation. They
+create no Review row and use the ordinary security audit path; the Approval Request remains
+`pending`.
+
+If a gated mutation omits the required inline Review, the server persists the immutable proposal and
+returns `409 APPROVAL_REVIEW_REQUIRED` with its `approvalRequestId`. The caller submits:
+
+```
+POST /apps/{app_id}/approval-requests/{approval_request_id}/reviews
+{
+  action: 'approve_and_apply' | 'decline'
+  reason?: string
+  idempotency_key: string
+}
+```
+
+`decline` is a terminal negative Review. V1 has no approve-only action, no approved-but-unapplied
+state, and no deferred application job.
+
+Multiple pending requests for one target are allowed and independent. A write that advances the
+target version makes every sibling proposal for the old version effectively stale.
+
+Single and list reads compute effective staleness against the live target without mutating D1. A
+stored pending request can therefore render `status: stale` with `resolvedAt: null` and no stale
+Review. V1 has no TTL. A later Review rechecks the target and materializes the stale Review and
+terminal timestamp before returning `APPROVAL_REQUEST_STALE`.
+
+Review authorization and target-version validation happen before mutation. A version mismatch
+atomically records the stale attempt, moves `pending -> stale`, and returns
+`APPROVAL_REQUEST_STALE`. Stale requests cannot be revived. A Review on any terminal request returns
+`APPROVAL_REQUEST_RESOLVED` unless it is an exact idempotent replay of the Review that resolved it;
+that replay returns the original result.
+
+The opaque target version includes the relevant current Environment Policy projection as well as
+the target resource versions. A Policy change after proposal therefore produces `stale`; it cannot
+silently lower the authority required by the immutable proposal.
+
+`approve_and_apply` commits the canonical D1 mutation, successful Review, resulting target version,
+Approval Request `pending -> applied` transition, and bounded audit metadata in one transaction at
+the target's owning persistence boundary. KV and Tinybird writes are post-commit projections and do
+not redefine the canonical result.
+
+If canonical application fails, the transaction rolls back with no target mutation. A separate
+transaction records the failed Review with `applicationError.code` only if the Approval Request is
+still `pending`; it never overwrites a concurrent terminal Review. The Approval Request remains
+`pending`, and the caller receives `APPROVAL_APPLICATION_FAILED`. Replaying the same Review
+idempotency key returns the same failed attempt. A new authorized attempt uses a new key and can
+apply at most once.
+
+Approval Request creation and Review each bind the idempotency key to a canonical request hash.
+Exact retries return the stored result. Reusing a key for a different payload returns
+`IDEMPOTENCY_KEY_CONFLICT`; it never creates or applies a second mutation.
+
+The kill switch turning a Flag off is never gated. It uses the ordinary `allow` application path
+regardless of Environment Policy.
 
 ---
 
@@ -315,16 +451,16 @@ Every failure is no-write. The route returns an error before claiming idempotenc
 
 ## HTTP status mapping
 
-| code group                                                                                                                                                                                                                                                                                                                                                                                             | HTTP status |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
-| `VALIDATION_ERROR`, `ALLOCATION_INVALID`, `ACTIVATION_TIMESTAMP_INVALID`, `INVALID_*`, `EVENT_SCHEMA_MISMATCH`, `ENTITY_TYPE_MISMATCH`                                                                                                                                                                                                                                                                 | 400         |
-| `UNAUTHORIZED`                                                                                                                                                                                                                                                                                                                                                                                         | 401         |
-| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`, `ORIGIN_NOT_ALLOWED`, `APP_MISMATCH`                                                                                                                                                                                                                                                                                                         | 403         |
-| `*_NOT_FOUND`                                                                                                                                                                                                                                                                                                                                                                                          | 404         |
-| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `RUN_NOT_RUNNING`, `EXPERIMENT_RUNNING`, `EXPERIMENT_NO_DRAFT`, `VARIANT_NOT_AVAILABLE`, `RESOURCE_NOT_EMPTY`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `LAST_ENVIRONMENT_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED`, `CONFIRMATION_REQUIRED`, `EVENT_DEFINITION_UNPUBLISHED`, `EVENT_DEFINITION_IMMUTABLE`, `EVENT_ID_CONFLICT` | 409         |
-| `RATE_LIMITED`                                                                                                                                                                                                                                                                                                                                                                                         | 429         |
-| `PRIVACY_JOB_FAILED`, `INTERNAL_SERVER_ERROR`                                                                                                                                                                                                                                                                                                                                                          | 500         |
-| `SERVICE_UNAVAILABLE`                                                                                                                                                                                                                                                                                                                                                                                  | 503         |
+| code group                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | HTTP status |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `VALIDATION_ERROR`, `ALLOCATION_INVALID`, `ACTIVATION_TIMESTAMP_INVALID`, `INVALID_*`, `EVENT_SCHEMA_MISMATCH`, `ENTITY_TYPE_MISMATCH`                                                                                                                                                                                                                                                                                                                                                                                      | 400         |
+| `UNAUTHORIZED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 401         |
+| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`, `ORIGIN_NOT_ALLOWED`, `APP_MISMATCH`, `APPROVAL_REVIEW_FORBIDDEN`                                                                                                                                                                                                                                                                                                                                                                                                 | 403         |
+| `*_NOT_FOUND`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 404         |
+| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `RUN_NOT_RUNNING`, `EXPERIMENT_RUNNING`, `EXPERIMENT_NO_DRAFT`, `VARIANT_NOT_AVAILABLE`, `RESOURCE_NOT_EMPTY`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `LAST_ENVIRONMENT_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED`, `APPROVAL_REVIEW_REQUIRED`, `APPROVAL_REQUEST_STALE`, `APPROVAL_REQUEST_RESOLVED`, `APPROVAL_APPLICATION_FAILED`, `IDEMPOTENCY_KEY_CONFLICT`, `EVENT_DEFINITION_UNPUBLISHED`, `EVENT_DEFINITION_IMMUTABLE`, `EVENT_ID_CONFLICT` | 409         |
+| `RATE_LIMITED`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 429         |
+| `PRIVACY_JOB_FAILED`, `INTERNAL_SERVER_ERROR`                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | 500         |
+| `SERVICE_UNAVAILABLE`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | 503         |
 
 ## Sources
 

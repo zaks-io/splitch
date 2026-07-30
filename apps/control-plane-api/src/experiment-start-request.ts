@@ -26,7 +26,7 @@ export async function validateStartRequest(
   const confirmation = confirmationRequired(
     policy,
     ["start_experiment_run"],
-    body.confirm === true,
+    body.review !== undefined,
     scope.environmentId,
     "START_EXPERIMENT_RUN",
     args.requestId,

@@ -74,16 +74,142 @@ Privacy request tables live in [storage-schemas-d1-privacy.md](./storage-schemas
 A first-class axis under App (ADR-0027). Experiments, Experiment Runs, Exposures, SDK credentials,
 and Flag CONFIGURATION are scoped to one Environment.
 
-| Column       | Type        | Constraints                                                           |
-| ------------ | ----------- | --------------------------------------------------------------------- |
-| `id`         | text        | PK                                                                    |
-| `app_id`     | text        | FK → apps, not null                                                   |
-| `key`        | text        | not null, unique per `(app_id)` (e.g. `'production'`, `'staging'`)    |
-| `name`       | text        | not null                                                              |
-| `policy`     | text        | not null JSON Environment Policy (`allow \| confirm` per change type) |
-| `created_at` | timestamptz | not null                                                              |
-| `updated_at` | timestamptz | not null                                                              |
-| `created_by` | text        | WorkOS user ID or deleted-user tombstone                              |
+| Column       | Type        | Constraints                                                               |
+| ------------ | ----------- | ------------------------------------------------------------------------- |
+| `id`         | text        | PK                                                                        |
+| `app_id`     | text        | FK → apps, not null                                                       |
+| `key`        | text        | not null, unique per `(app_id)` (e.g. `'production'`, `'staging'`)        |
+| `name`       | text        | not null                                                                  |
+| `policy`     | text        | not null JSON Environment Policy (`allow \| confirm`; `approve` reserved) |
+| `created_at` | timestamptz | not null                                                                  |
+| `updated_at` | timestamptz | not null                                                                  |
+| `created_by` | text        | WorkOS user ID or deleted-user tombstone                                  |
+
+### `approval_requests`
+
+The durable proposal for every Policy-gated Promotion, direct Flag Configuration edit, Variant
+value edit, and Experiment Run Start. `allow` does not create an Approval Request; it enters the
+same validated application seam directly. `confirm` and future `approve` both create this row and
+differ only in who may Review it.
+
+| Column                     | Type        | Constraints                                                             |
+| -------------------------- | ----------- | ----------------------------------------------------------------------- |
+| `id`                       | text        | PK; `apr_` + 26-character ULID                                          |
+| `app_id`                   | text        | FK → apps, not null                                                     |
+| `operation`                | text        | not null; canonical route `operationId`                                 |
+| `target_type`              | text        | not null; `flag_configuration \| flag_variant \| experiment_draft`      |
+| `target_id`                | text        | not null                                                                |
+| `target_version`           | text        | not null; RFC 8785 JCS SHA-256 token for the complete target projection |
+| `policy_contexts`          | text        | not null; immutable JSON `ApprovalPolicyContext[]`                      |
+| `diff`                     | text        | not null; immutable canonical JSON `ApprovalDiff`                       |
+| `status`                   | text        | not null; `pending \| applied \| declined \| stale`                     |
+| `proposed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone             |
+| `proposed_via`             | text        | not null; resolved auth door                                            |
+| `proposed_at`              | timestamptz | not null                                                                |
+| `resolved_at`              | timestamptz | nullable; set once on `applied`, `declined`, or `stale`                 |
+| `resulting_target_version` | text        | nullable; set only on `applied`                                         |
+| `resulting_resource_type`  | text        | nullable; canonical applied resource type, set only on `applied`        |
+| `resulting_resource_id`    | text        | nullable; canonical applied resource ID, set only on `applied`          |
+| `idempotency_key`          | text        | not null                                                                |
+| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS proposal input                  |
+
+UNIQUE constraint: `(app_id, proposed_by, idempotency_key)`. Reusing the key with the same
+`request_hash` returns the existing Approval Request. Reusing it with a different hash fails with
+`IDEMPOTENCY_KEY_CONFLICT`.
+
+Both `request_hash` and `target_version` are encoded as `sha256:` plus 64 lowercase hexadecimal
+digits. Their preimage is UTF-8 RFC 8785 JSON Canonicalization Scheme output, not
+implementation-dependent object serialization. `diff.entries` is strictly lexicographic by its
+RFC 6901 JSON Pointer `path`, so equal projections produce byte-identical request hashes.
+
+Multiple `pending` rows may name the same target. They are independent proposals and there is no
+unique target/status constraint. Applying one advances the target version, making every sibling
+proposal for the old version effectively stale. V1 has no staleness TTL.
+
+`target_version` covers everything whose change could invalidate the proposal. Every token includes
+the sorted current Policy projection for its `policy_contexts`: `(environment_id, change_type,
+level)`. A Policy change therefore makes the proposal stale instead of silently weakening its
+authority.
+
+- Flag Configuration edits and Promotion hash the target `flag_configs.version` plus the target
+  Environment's relevant Policy projection.
+- Experiment Run Start hashes the Experiment draft assignment/decision projection, `live_run_id`,
+  and the target Environment's relevant Policy projection.
+- An App-level Variant value edit hashes the parent `flags.version` and the sorted vector of
+  `(environment_id, flag_configs.version, targeting_rollout_value Policy level)` for every
+  Environment where the Variant is effectively servable. One Environment cannot approve an
+  App-level value change behind a stricter Environment's Policy.
+
+The Worker recomputes the same token immediately before application. Any mismatch atomically moves
+the request from `pending` to `stale`; no field on a stale request can be edited to revive it.
+Single and list reads also recompute the token, but only render effective `stale`; they do not
+mutate this row, set `resolved_at`, or append a Review. A later Review materializes that terminal
+state transactionally.
+
+`policy_contexts` records the immutable policy evidence used at proposal time:
+`{ environmentId, changeTypes[], level }[]`. Review authorization is re-evaluated against current
+membership and current Policy before target-version validation. A Policy or Flag Configuration
+change included in the concurrency projection therefore cannot silently weaken the original gate.
+
+### `approval_reviews` (append-only attempts)
+
+Each authorized Review attempt that reaches target validation or application is durable. An
+authentication or authorization rejection creates no `approval_reviews` row and is recorded by the
+ordinary security audit path. There is one positive action, `approve_and_apply`; there is no
+approve-only or deferred-application state. `decline` is the terminal negative disposition.
+
+| Column                     | Type        | Constraints                                                       |
+| -------------------------- | ----------- | ----------------------------------------------------------------- |
+| `id`                       | text        | PK; `rev_` + 26-character ULID                                    |
+| `app_id`                   | text        | FK → apps, not null                                               |
+| `approval_request_id`      | text        | FK → approval_requests, not null                                  |
+| `action`                   | text        | not null; `approve_and_apply \| decline`                          |
+| `outcome`                  | text        | not null; `applied \| declined \| stale \| failed`                |
+| `reviewed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone       |
+| `reviewed_via`             | text        | not null; resolved auth door                                      |
+| `reviewed_at`              | timestamptz | not null                                                          |
+| `reason`                   | text        | nullable; bounded human or agent Review rationale                 |
+| `idempotency_key`          | text        | not null                                                          |
+| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS Review input              |
+| `resulting_target_version` | text        | nullable; populated only for `outcome = applied`                  |
+| `resulting_resource_type`  | text        | nullable; canonical applied resource type on success              |
+| `resulting_resource_id`    | text        | nullable; canonical applied resource ID on success                |
+| `error_code`               | text        | nullable; machine-stable application error for `outcome = failed` |
+| `error_details`            | text        | nullable; bounded JSON matching the error code's detail contract  |
+
+UNIQUE constraint: `(approval_request_id, reviewed_by, idempotency_key)`. An identical retry
+returns the recorded Review. A different payload under the same key fails with
+`IDEMPOTENCY_KEY_CONFLICT`. After a failed attempt, the Approval Request remains `pending`; a caller
+may make a new authorized attempt with a new idempotency key.
+
+An applied request's wire `applicationResult` is reconstructed from its resulting target version,
+resource type, resource ID, and `resolved_at`. The successful Review mirrors the same result identity
+and uses the same timestamp for `reviewed_at`, `resolved_at`, and `applicationResult.appliedAt`.
+This preserves the created Run ID for `experiments_start`, where the applied `experiment_run`
+differs from the original `experiment_draft` target.
+
+Successful `approve_and_apply` uses one transaction at the target's owning D1 persistence boundary:
+
+1. Resolve the `pending` Approval Request and current principal.
+2. Authorize the Review from current membership and Policy.
+3. Recompute and compare `target_version`.
+4. Apply the canonical target mutation and advance its version.
+5. Insert the `applied` Review with actor, auth-door, and resulting-version audit metadata.
+6. Move the Approval Request to `applied` and store the same resulting version and timestamp.
+7. Commit.
+
+Steps 2 and 3 happen before any target mutation. A mismatch records a `stale` Review and moves the
+request to `stale` without applying. A decline inserts the `declined` Review and moves the request
+to `declined` without applying.
+
+If step 4, 5, or 6 fails, the transaction rolls back, including the target mutation. A separate
+failure-record transaction conditionally appends a `failed` Review only while the Approval Request
+is still `pending`, with a machine-stable error. It does not change the request status. If another
+Review resolved the request first, the failed attempt cannot overwrite that terminal result and
+the caller receives the resolved-request result instead. Failure to record the attempt fails loud,
+but cannot commit the target mutation. The Review row and Approval Request audit fields are the
+durable atomic audit metadata; the unbounded Tinybird audit row is emitted after commit and is
+never the mutation authority.
 
 ### `flags` (DEFINITION — App-level)
 

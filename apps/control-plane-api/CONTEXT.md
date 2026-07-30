@@ -63,19 +63,22 @@ and configurable, not hardcoded.
 Avoid: guardrail for policy; a separate approval flow; hardcoding prod as special.
 
 **Approval Request**:
-The pending-change record for a proposed production-affecting change while it awaits Review. Carries
-the diff against the target Environment's current config, proposer, status
-(`pending -> applied | declined`), and audit trail. It exists from day one even under `confirm`, where
-the proposer creates and self-reviews the request in one action. Every gated change type becomes an
-Approval Request: Promotion, direct prod Flag edit, Variant or value change, and Start an Experiment
-Run. This lets splitch grow into second-person approval without a domain rewrite.
+The durable pending-change record for a Policy-gated mutation while it awaits Review. Carries the
+immutable proposed-vs-current diff, target version, Policy context, proposer, status
+(`pending -> applied | declined | stale`), application result, and audit trail. It exists from day
+one under `confirm`, where the proposer creates and self-reviews the request in one action. Every
+gated change type becomes an Approval Request: Promotion, direct Flag Configuration edit, Variant
+value change, and Start an Experiment Run. This lets splitch grow into second-person approval
+without a domain rewrite.
 
 Avoid: change proposal; change request; pending change.
 
 **Review**:
-Acting on an Approval Request: approve-and-apply, approve-without-applying, or decline. Who may
-Review is determined by Environment Policy. Under `confirm`, the proposer may self-review. Under
-future `approve`, self-review is disallowed.
+Acting on an Approval Request: `approve_and_apply` or decline. V1 has no approve-only action and no
+deferred application. Who may Review is determined by Environment Policy. Under `confirm`, the
+proposer may self-review. Under future `approve`, self-review is disallowed. Review authorization
+and target-version validation happen before mutation; a changed target makes the request terminal
+`stale`.
 
 The Policy level is only the permission to self-review. Moving from confirm to approval is a
 policy/role change, not a new pipeline.

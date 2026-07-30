@@ -155,7 +155,8 @@ CLI/MCP command. No composite multi-step commands unless agent ergonomics demand
 Experiments, Experiment Runs, and SDK credentials are per-Environment (ADR-0027), so their commands
 need an Environment (from `[ctx]` or `--env`); Flag definition, Environment CRUD, and policy reads
 are App/Env scoped accordingly. Environment-level writes that the Environment Policy gates may
-require a `--confirm` flag (ADR-0029).
+require a `--confirm` affordance (ADR-0029); it submits the canonical
+`review.action = "approve_and_apply"` and never creates a separate confirmation pipeline.
 
 **Output and scripting:** every command accepts `--json` for machine-readable output (the same
 shape the MCP tool returns), so the CLI is pipe-able and an agent shelling out to the CLI parses one
