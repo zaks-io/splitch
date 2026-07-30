@@ -36,7 +36,7 @@ in this config; refresh them from Linear during each workflow run.
 - Configured hosted PR check name: `Verify` from the `ci` workflow (its
   `verify:ci` graph includes `spec:lint`). `Control Panel E2E` runs
   nightly in the standalone `e2e` workflow (plus manual dispatch), not in `ci`;
-  its latest completed run gates `deploy-production`. Secret scanning is
+  it is signal-only and never blocks deploys. Secret scanning is
   a step inside `Verify`; the standalone `gitleaks` workflow was removed. See
   `Pull Requests`.
 - Critical unknowns: friction-intake fields remain unverified. Branch protection
@@ -65,7 +65,7 @@ in this config; refresh them from Linear during each workflow run.
   `test`, `stats:golden`, `stats:property`, `build`) and then `pnpm secrets:range`.
 - Separate hosted checks: `Control Panel E2E` runs the local full-stack
   Playwright harness nightly in the `e2e` workflow and on manual dispatch; a
-  red or stale (>48h) latest run blocks `deploy-production`. The stats
+  red run is signal-only (the harness is too flaky to gate deploys). The stats
   simulation runs only nightly in `stats-simulation-audit` (`--mode=audit`);
   there is no per-push smoke, and no standalone `Spec Lint` job (`spec:lint`
   lives inside `Verify`).

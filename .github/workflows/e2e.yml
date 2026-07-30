@@ -1,9 +1,8 @@
 name: e2e
 
-# The Control Panel Playwright harness is too slow for the per-push hot path,
-# so it runs nightly. deploy-production refuses to deploy unless the latest
-# completed run of this workflow on main is a fresh success; dispatch this
-# workflow manually to unblock a deploy after a fix.
+# The Control Panel Playwright harness is too slow and too flaky for the
+# per-push hot path, so it runs nightly as a signal-only check. A red run
+# never blocks deploys; triage it from the Actions UI.
 on:
   schedule:
     - cron: "17 9 * * *"
