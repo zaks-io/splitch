@@ -200,6 +200,11 @@ describe("Overview page Flag Configuration truncation", () => {
     // The remedy is a surface that answers the whole question, never "reload":
     // the ceiling is not transient, so a retry returns the same page (ADR-0036).
     expect(html).not.toContain("Refresh");
+    // And the reader is in a browser, where the whole catalog is one click away.
+    // Naming only the CLI and MCP would send them to a terminal for a screen this
+    // app already ships.
+    expect(html).toContain('data-testid="flag-changes-truncated-link"');
+    expect(html).toContain(`href="${SCOPE_HREF}/flags"`);
   });
 
   it("never renders the calm state while the Flag Configuration scan is truncated", () => {
@@ -216,6 +221,9 @@ describe("Overview page Flag Configuration truncation", () => {
 
     expect(html).not.toContain("Nothing needs your attention");
     expect(html).toContain('data-testid="flag-changes-truncated"');
+    // "More than 50 changed" and "nothing changed" cannot both be true, so the
+    // empty line yields to the notice rather than sitting under it.
+    expect(html).not.toContain("No Flag Configuration changed in the last");
   });
 
   it("does not claim truncation when the scan came back under the ceiling", () => {

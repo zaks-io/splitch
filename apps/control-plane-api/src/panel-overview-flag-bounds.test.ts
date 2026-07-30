@@ -116,20 +116,23 @@ describe("panelOverviewRead Flag Configuration read bound", () => {
     "truncates the same rows on every read when the change timestamps collide",
     async () => {
       // Every row stamped at the same instant, which is what a batch write looks
-      // like. Without a total order the LIMIT window is free to differ per read
-      // and the card would shuffle between refreshes.
+      // like: `updated_at` alone cannot decide which rows the LIMIT keeps.
       await seedChangedFlagConfigs(FLAG_CHANGE_READ_LIMIT, () => NOW);
 
       const first = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
       const second = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
 
       expect(first.flagConfiguration.readTruncated).toBe(true);
+      // Weak on its own: a partial order can still be stable within one process,
+      // and this passes with the tiebreaker removed. It is here for the shuffle an
+      // operator would actually see, not as the total-order proof.
       expect(second.flagConfiguration.recentlyChanged).toEqual(
         first.flagConfiguration.recentlyChanged,
       );
-      // The tiebreaker is `flag_configs.id` DESC, and the id is the table's
-      // PRIMARY KEY, so the ordering is total and this head is the only one the
-      // query can produce: "flag_config_checkout_prod" sorts above every
+      // THIS is the total-order proof, and it is what fails if
+      // `desc(flagConfigs.id)` is dropped. The tiebreaker is `flag_configs.id`
+      // DESC and the id is the table's PRIMARY KEY, so exactly one head is
+      // reachable: "flag_config_checkout_prod" sorts above every
       // "flag_config_bulk_NNN", then the bulk ids descend.
       expect(first.flagConfiguration.recentlyChanged.map((change) => change.flagKey)).toEqual([
         ids.flagKey,

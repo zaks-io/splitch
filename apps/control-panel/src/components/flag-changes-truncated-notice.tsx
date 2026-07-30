@@ -12,15 +12,20 @@ import { ParityNote } from "./parity-note";
  * recent changes and conclude that anything absent from it did not change.
  *
  * The remedy is deliberately NOT "reload" — the ceiling is not transient and a
- * refresh returns the same page. The Flag surfaces answer the whole question, so
- * that is what is named here, derived from the shipped route registry rather than
- * typed out, so a command the skins do not answer to cannot render.
+ * refresh returns the same page. It IS the Flags screen, which reads the whole
+ * catalog and is one click away. The sibling notice for Organizations names only
+ * the CLI and MCP because a missing Organization is genuinely unreachable in the
+ * browser; a Flag never is, so the reader's own skin is offered first and the
+ * parity hint follows for the other two, derived from the shipped route registry
+ * rather than typed out.
  */
 export function FlagChangesTruncatedNotice({
   readLimit,
+  scopeHref,
   windowDays,
 }: {
   readLimit: number;
+  scopeHref: string;
   windowDays: number;
 }) {
   return (
@@ -29,8 +34,15 @@ export function FlagChangesTruncatedNotice({
       <AlertDescription>
         This Environment had more than {readLimit} Flag Configuration changes in the last{" "}
         {windowDays} days, which is more than the Overview reads at once. The changes below are the
-        most recent ones, not all of them. To see every Flag and its current state:{" "}
-        <ParityNote hint={parityHint("flags_list")} />
+        most recent ones, not all of them.{" "}
+        <a
+          className="underline underline-offset-4 hover:no-underline"
+          data-testid="flag-changes-truncated-link"
+          href={`${scopeHref}/flags`}
+        >
+          See every Flag and its current state
+        </a>
+        , or: <ParityNote hint={parityHint("flags_list")} />
       </AlertDescription>
     </Alert>
   );
