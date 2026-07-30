@@ -62,7 +62,7 @@ export const FLAG_CHANGE_READ_LIMIT = 50;
  * thousand bounded ones and land on the Worker subrequest limit instead. It
  * matches the rollup's `ENVIRONMENT_FANOUT_LIMIT` / `ANALYSIS_READ_LIMIT` for the
  * same reason those are 200: a single request's cost must not track how much
- * data a tenant has accumulated.
+ * data one App has accumulated.
  */
 export const FLAG_LIST_READ_LIMIT = 200;
 
