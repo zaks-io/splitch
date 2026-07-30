@@ -55,6 +55,8 @@ export function jsonError(code: ErrorResponse["code"], message: string): ErrorRe
 const timestamp = "2026-07-03T00:00:00.000Z";
 
 export const flagListPage = {
+  readTruncated: false,
+  readLimit: 200,
   items: [
     {
       id: "flag_checkout",

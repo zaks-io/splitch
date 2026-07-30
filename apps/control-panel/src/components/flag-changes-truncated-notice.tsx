@@ -17,8 +17,12 @@ import { ParityNote } from "./parity-note";
  *
  * Either way the card is not the whole answer, and the remedy is deliberately
  * NOT "reload": neither bound is transient, so a refresh returns the same page
- * (ADR-0036). It IS the Flags screen, which reads the whole catalog and is one
- * click away. The sibling notice for Organizations names only the CLI and MCP
+ * (ADR-0036). It IS the Flags screen, which is one click away and reads several
+ * times as many Flags as this scan does (`FLAG_LIST_READ_LIMIT` sits well above
+ * `FLAG_CHANGE_READ_LIMIT` for exactly this reason). It is a strictly wider
+ * view, not an unbounded one, and it reports its own bound when it binds — so
+ * the wording here promises a wider look, never a complete catalog.
+ * The sibling notice for Organizations names only the CLI and MCP
  * because a missing Organization is genuinely unreachable in the browser; a Flag
  * never is, so the reader's own skin is offered first and the parity hint
  * follows for the other two, derived from the shipped route registry rather than

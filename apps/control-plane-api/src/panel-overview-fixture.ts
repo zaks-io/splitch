@@ -1,4 +1,5 @@
 import { type AppOverviewResponse, AppOverviewResponseSchema } from "@splitch/contracts";
+import type { Repository } from "@splitch/db";
 import type { AnalysisResultsReader } from "./attention-analysis-reader";
 import { AnalysisResultsUnavailableError } from "./attention-analysis-reader";
 import { repository, USER_ID } from "./attention-rollup-fixture";
@@ -36,10 +37,16 @@ export const deadReader: AnalysisResultsReader = {
 
 export async function overview(
   analysisResults: AnalysisResultsReader,
-  input: { actorId?: string; appId?: string; environmentId?: string } = {},
+  input: {
+    actorId?: string;
+    appId?: string;
+    environmentId?: string;
+    /** Injectable so a test can observe which D1 reads the Overview issues. */
+    repo?: Repository;
+  } = {},
 ): Promise<Response> {
   return panelOverviewRead(
-    { repo: repository(), analysisResults, now: () => new Date(NOW) },
+    { repo: input.repo ?? repository(), analysisResults, now: () => new Date(NOW) },
     {
       actorId: input.actorId ?? USER_ID,
       appId: input.appId ?? ids.appId,

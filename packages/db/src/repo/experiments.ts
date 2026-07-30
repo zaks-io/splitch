@@ -1,10 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index";
 import type { Db } from "./client";
-import type { EnvScope, TenantScope } from "./scope";
 import { makeEndRun } from "./experiment-end-run";
 import { makeStartRun } from "./experiment-start-run";
-import { scopedTable } from "./scoped-table";
+import type { EnvScope, TenantScope } from "./scope";
+import { type ReadOptions, scopedTable } from "./scoped-table";
 
 const RUN_STATUS_UPDATE_KEYS = new Set(["status", "endedAt", "endReason"]);
 
@@ -105,8 +105,22 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       return rows[0] ?? null;
     },
 
-    listRunningExperiments(scope: EnvScope) {
-      return experimentsTable.findMany(scope, eq(experiments.status, "running"));
+    /**
+     * Running Experiments in this Environment, optionally bounded.
+     *
+     * A caller enforcing a fan-out budget passes `limit: budget + 1`: the extra
+     * row proves the budget is blown, and proves it WITHOUT materializing the
+     * rows the budget exists to refuse. Checking `rows.length` after an unbounded
+     * read pays the exact cost it then declines to pay.
+     *
+     * No `orderBy` is required here and none is imposed: a bounded page is only
+     * ever counted and thrown away, because both budgets refuse whole rather than
+     * truncating (a truncated attention list renders as "nothing to do"). Any
+     * future caller that KEEPS a bounded page owes a total order — see
+     * `ReadOptions`.
+     */
+    listRunningExperiments(scope: EnvScope, options?: ReadOptions) {
+      return experimentsTable.findMany(scope, eq(experiments.status, "running"), options);
     },
 
     listRunsForExperiment(scope: EnvScope, experimentId: string) {

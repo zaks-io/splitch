@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createControlPlaneSdk } from "./index";
 
 const flagPage = {
+  readTruncated: false,
+  readLimit: 200,
   items: [
     {
       id: "flag_checkout",

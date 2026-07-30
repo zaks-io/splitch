@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { flagPage } from "./mcp-flag-fixtures";
 import { actor, NOW_SECONDS } from "./mcp-oauth-prm-actor";
 import {
   bootAuthApi,
   bootControlPlaneApi,
   closeBootedServers,
-  flagPage,
   type JsonRpcSuccess,
   mcp,
   memorySessionStore,

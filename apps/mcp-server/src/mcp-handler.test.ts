@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { deriveMcpProtocolTools, type ErrorResponse } from "@splitch/contracts";
 import { afterEach, describe, expect, it } from "vitest";
+import { flagPage } from "./mcp-flag-fixtures";
 import { handleMcpServerRequest } from "./mcp-handler";
 import {
   allowMcpRevocations,
@@ -12,21 +13,6 @@ import {
 
 const service = "splitch-mcp-server";
 const token = "Bearer local-test-token";
-
-const flagPage = {
-  items: [
-    {
-      id: "flag_checkout",
-      appId: "app_local",
-      key: "checkout",
-      name: "Checkout",
-      variants: [{ id: "var_on", name: "on", value: true }],
-      defaultVariantId: "var_on",
-      createdAt: "2026-07-03T00:00:00.000Z",
-      updatedAt: "2026-07-03T00:00:00.000Z",
-    },
-  ],
-};
 
 const upstreamFlagPage = {
   ...flagPage,

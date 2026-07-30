@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appScope, createRepository, envScope } from "../index";
-import { seedTwoTenants } from "./test-seed";
 import { createLocalD1, type LocalD1 } from "./test-d1";
+import { seedTwoTenants } from "./test-seed";
 
 /**
  * The cross-tenant isolation proof (the headline acceptance criterion).
@@ -38,6 +38,19 @@ describe("App A cannot read App B (and vice versa)", () => {
     const aScope = appScope(seed.a.appId);
     expect(await repo.flags.listVariants(aScope, seed.b.flagId)).toEqual([]);
     expect(await repo.flags.listVariants(aScope, seed.a.flagId)).toHaveLength(1);
+  });
+
+  it("listVariantsForFlags drops App B's flag id even when App A asks for both", async () => {
+    const aScope = appScope(seed.a.appId);
+
+    // The batched catalog read is the one that could be tempted to trust the ids
+    // it was handed. Mixing a foreign id in with a legitimate one is the attack:
+    // a filter dropped from the batch path leaks B's Variants under A's scope.
+    const mixed = await repo.flags.listVariantsForFlags(aScope, [seed.a.flagId, seed.b.flagId]);
+
+    expect(mixed.has(seed.b.flagId)).toBe(false);
+    expect(mixed.get(seed.a.flagId)).toHaveLength(1);
+    expect(await repo.flags.listVariantsForFlags(aScope, [seed.b.flagId])).toEqual(new Map());
   });
 
   it("getExperiment scoped to App A's env returns null for App B's experiment", async () => {

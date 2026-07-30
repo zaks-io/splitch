@@ -19,7 +19,12 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/")({
 
     const result = await loadControlPanelFlags({ data: scoped.context.scope });
     if (!result.ok) throw new Error(result.error.message);
-    return { items: result.data.items, scope: scoped.context.scope };
+    return {
+      items: result.data.items,
+      readLimit: result.data.readLimit,
+      readTruncated: result.data.readTruncated,
+      scope: scoped.context.scope,
+    };
   },
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/flags/");
@@ -30,7 +35,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/")({
 });
 
 function FlagsSectionRoute() {
-  const { items, scope } = Route.useLoaderData();
+  const { items, readLimit, readTruncated, scope } = Route.useLoaderData();
 
   return (
     <FlagsPage
@@ -38,6 +43,8 @@ function FlagsSectionRoute() {
       env={scope.env}
       environmentId={scope.environmentId}
       items={items}
+      readLimit={readLimit}
+      readTruncated={readTruncated}
       scopeHref={scopedHref(scope)}
     />
   );

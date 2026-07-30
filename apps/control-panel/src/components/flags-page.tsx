@@ -2,12 +2,16 @@ import type { FlagsPageItem } from "#lib/flags-page-data";
 import { CreateFlagDialog } from "./create-flag-dialog";
 import { FlagsEmptyState } from "./flags-empty-state";
 import { FlagsTable } from "./flags-table";
+import { FlagsTruncatedNotice } from "./flags-truncated-notice";
 
 type FlagsPageProps = {
   appId: string;
   env: string;
   environmentId: string;
   items: FlagsPageItem[];
+  /** Ceiling the Worker's catalog read applied, reported when it actually bound. */
+  readLimit: number;
+  readTruncated: boolean;
   /** Scope root for the Flag detail links, e.g. `/acme/checkout-api/dev`. */
   scopeHref: string;
 };
@@ -31,6 +35,10 @@ export function FlagsPage(props: FlagsPageProps) {
           <CreateFlagDialog appId={props.appId} environmentId={props.environmentId} />
         ) : null}
       </header>
+
+      {props.readTruncated ? (
+        <FlagsTruncatedNotice readLimit={props.readLimit} shownCount={props.items.length} />
+      ) : null}
 
       {props.items.length === 0 ? (
         <FlagsEmptyState appId={props.appId} environmentId={props.environmentId} />
