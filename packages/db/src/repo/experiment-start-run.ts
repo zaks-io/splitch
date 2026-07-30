@@ -1,5 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { experiments, runs } from "../schema/index";
+import type { ApprovalCommit } from "./approval-types";
+import {
+  approvalAppliedStatements,
+  approvalGuardParams,
+  approvalGuardSql,
+} from "./experiment-start-approval";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 import type { ScopedTable } from "./scoped-table";
@@ -24,6 +30,7 @@ export type StartRunInput = {
   endedAt: string;
   updatedAt: string;
   updatedBy?: string | null;
+  approval?: ApprovalCommit;
 };
 
 export type StartRunResult =
@@ -111,12 +118,21 @@ async function runStartBatch(
     endCurrentRunStatement(d1, scope, input, guardParams),
     insertRunStatement(d1, scope, input, guardParams),
     updateExperimentStartedStatement(d1, input, guardParams),
+    ...(input.approval ? approvalAppliedStatements(d1, scope, input.approval, input.run.id) : []),
   ]);
   const inserted = batch[1]?.results ?? [];
   const updated = batch[2]?.results ?? [];
   if (inserted.length === 0 && updated.length === 0) return false;
   if (inserted.length !== 1 || updated.length !== 1) {
     throw new Error("startRun: guarded D1 batch produced an inconsistent result");
+  }
+  // The Approval statements are appended to this same batch but were never
+  // inspected, so a Run could start while its Approval Request stayed pending
+  // and the caller was still told `ok`. This is the `approvalReviewLanded`
+  // equivalent every other Approval write path already has; here the Review
+  // insert RETURNs its id, so the evidence is in the batch result itself.
+  if (input.approval && (batch[3]?.results ?? []).length !== 1) {
+    throw new Error("startRun: the Run started but its Approval Review did not land");
   }
   return true;
 }
@@ -133,7 +149,7 @@ function endCurrentRunStatement(
       UPDATE runs
       SET status = 'ended', ended_at = ?
       WHERE app_id = ? AND environment_id = ? AND experiment_id = ? AND status = 'running'
-        AND EXISTS (SELECT 1 FROM experiments WHERE ${START_GUARD_SQL})
+        AND EXISTS (SELECT 1 FROM experiments WHERE ${startGuardSql(input.approval)})
       RETURNING id
     `,
     )
@@ -167,7 +183,7 @@ function insertRunStatement(
         ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?
-      WHERE EXISTS (SELECT 1 FROM experiments WHERE ${START_GUARD_SQL})
+      WHERE EXISTS (SELECT 1 FROM experiments WHERE ${startGuardSql(input.approval)})
       RETURNING id
     `,
     )
@@ -192,7 +208,7 @@ function updateExperimentStartedStatement(
         draft_segment_ids = NULL,
         updated_at = ?,
         updated_by = ?
-      WHERE ${START_GUARD_SQL}
+      WHERE ${startGuardSql(input.approval)}
       RETURNING id
     `,
     )
@@ -223,7 +239,8 @@ const DRAFT_GUARD_SQL = `
   AND (live_run_id = ? OR (live_run_id IS NULL AND ? IS NULL))
 `;
 
-const START_GUARD_SQL = `
+function startGuardSql(approval?: ApprovalCommit): string {
+  return `
   ${DRAFT_GUARD_SQL}
   AND NOT EXISTS (
     SELECT 1
@@ -234,7 +251,9 @@ const START_GUARD_SQL = `
       AND blocker.status = 'running'
       AND blocker.id <> ?
   )
+  ${approval ? approvalGuardSql(approval) : ""}
 `;
+}
 
 function startGuardParams(scope: EnvScope, input: StartRunInput): unknown[] {
   return [
@@ -243,6 +262,7 @@ function startGuardParams(scope: EnvScope, input: StartRunInput): unknown[] {
     scope.environmentId,
     input.flagId,
     input.experimentId,
+    ...(input.approval ? approvalGuardParams(scope.appId, input.approval) : []),
   ];
 }
 

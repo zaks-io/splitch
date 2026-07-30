@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { ExperimentSchema, MetricRefSchema, RunSchema } from "./leaf-schemas-experiment";
 import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
-import { ApprovalRequestSchema, InlineApproveAndApplyReviewSchema } from "./routes/route-shapes";
+import {
+  ApprovalRequestSchema,
+  InlineApproveAndApplyReviewSchema,
+} from "./routes/route-shapes-approval-request";
 
 /**
  * Create/patch/response wire envelopes for the Experiment and Experiment Run

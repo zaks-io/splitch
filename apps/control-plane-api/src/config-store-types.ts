@@ -6,7 +6,7 @@ import type {
   RunConfigKV,
   TargetingRule,
 } from "@splitch/contracts";
-import type { Repository } from "@splitch/db";
+import type { ApprovalCommit, Repository } from "@splitch/db";
 
 /**
  * The config store's data shapes: what callers hand in, what they get back, and
@@ -35,6 +35,17 @@ export interface PatchFlagConfigInput {
   availableVariantNames?: string[];
   /** Percentage only; the salt is the store's to mint and preserve. */
   rollout?: { percentage: number } | null;
+  /** Internal deterministic mint used while replaying an approval proposal. */
+  approvalRolloutSalt?: string;
+  approval?: ApprovalCommit;
+}
+
+export interface ApplyApprovedFlagConfigInput {
+  appId: string;
+  environmentId: string;
+  flagId: string;
+  proposed: FlagConfigResult;
+  approval: ApprovalCommit;
 }
 
 export interface ReplaceTargetingRulesInput {
@@ -42,6 +53,7 @@ export interface ReplaceTargetingRulesInput {
   environmentId: string;
   flagId: string;
   targetingRules: TargetingRule[];
+  approval?: ApprovalCommit;
 }
 
 export interface PromoteFlagConfigInput {
@@ -55,6 +67,11 @@ export interface PromoteFlagConfigInput {
     rollout?: true;
     enabled?: true;
   };
+  /** Internal deterministic mint used while replaying an approval proposal. */
+  approvalRolloutSalt?: string;
+  approval?: ApprovalCommit;
+  /** Internal dry-run used to construct the immutable Approval diff. */
+  preview?: boolean;
 }
 
 /**
@@ -63,6 +80,12 @@ export interface PromoteFlagConfigInput {
  */
 type FlagConfigWriteFailure =
   | { ok: false; reason: "FLAG_NOT_FOUND" }
+  /**
+   * The Approval-guarded D1 write selected zero rows, so no Review landed,
+   * nothing was applied, and no KV snapshot was published. Distinct from
+   * FLAG_NOT_FOUND, which means the Flag Configuration itself is gone.
+   */
+  | { ok: false; reason: "APPROVAL_NOT_APPLIED" }
   | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] }
   | { ok: false; reason: "ROLLOUT_AMBIGUOUS"; availableVariantNames: string[] };
 

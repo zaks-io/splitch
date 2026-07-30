@@ -14,6 +14,7 @@ export interface ParsedGlobalFlags {
   readonly fromEnvironmentId?: string;
   readonly enabled?: boolean;
   readonly rollout?: number | null;
+  readonly idempotencyKey?: string;
 }
 
 export interface ParsedInvocation {
@@ -116,6 +117,7 @@ function toParsedFlags(flags: Record<string, string | boolean>): ParsedGlobalFla
     fromEnvironmentId: stringFlag(flags.fromEnvironmentId),
     enabled: parseEnabledFlag(flags.enabled),
     rollout: parseRolloutFlag(flags.rollout),
+    idempotencyKey: stringFlag(flags.idempotencyKey),
   };
 }
 

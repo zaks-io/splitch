@@ -1,22 +1,22 @@
 import type { PercentageRollout, TargetingRule, Variant } from "@splitch/contracts";
-import { envScope, type EnvScope } from "@splitch/db";
-import { randomHex } from "./credential-cache";
-import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
+import { type EnvScope, envScope } from "@splitch/db";
 import {
   buildSnapshotFromD1,
+  type ConfigStoreDeps,
+  type FlagConfigWriteResult,
   json,
   missingAvailableVariants,
   missingRuleVariantNames,
-  responseFromSnapshot,
-  targetingRuleRows,
-  writeSnapshotAndBroadcast,
-  type ConfigStoreDeps,
-  type FlagConfigWriteResult,
   type PromoteFlagConfigInput,
   type PromoteFlagConfigResult,
   type ReplaceTargetingRulesInput,
+  responseFromSnapshot,
   type Snapshot,
+  targetingRuleRows,
+  writeSnapshotAndBroadcast,
 } from "./config-store-shared";
+import { randomHex } from "./credential-cache";
+import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
 
 interface PreparedPromotion {
   availableVariantNames: string[];
@@ -43,7 +43,7 @@ export async function replaceTargetingRules(
     return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants };
   }
 
-  return commitTargetingRules(deps, scope, input.flagId, input.targetingRules);
+  return commitTargetingRules(deps, scope, input.flagId, input.targetingRules, input.approval);
 }
 
 export async function promoteFlagConfig(
@@ -55,6 +55,29 @@ export async function promoteFlagConfig(
 
   const prepared = preparePromotion(input, loaded.source, loaded.target);
   if (!prepared.ok) return prepared;
+
+  if (input.preview) {
+    const before = responseFromSnapshot(loaded.target);
+    const after = {
+      ...before,
+      version: before.version + 1,
+      availableVariantNames: prepared.value.availableVariantNames,
+      enabled: input.select.enabled ? prepared.value.enabled : before.enabled,
+      targetingRules: prepared.value.targetingRules,
+      rollout: prepared.value.rollout === undefined ? before.rollout : prepared.value.rollout,
+    };
+    return {
+      ok: true,
+      config: after,
+      diff: { before, after },
+      nudge: {
+        type: "config.changed",
+        entity: "flag",
+        id: input.flagId,
+        version: after.version,
+      },
+    };
+  }
 
   const write = await commitPromotion(deps, input, loaded.targetScope, prepared.value);
   if (!write.ok) return write;
@@ -72,13 +95,15 @@ async function commitTargetingRules(
   scope: EnvScope,
   flagId: string,
   targetingRules: TargetingRule[],
+  approval?: ReplaceTargetingRulesInput["approval"],
 ): Promise<FlagConfigWriteResult> {
-  const now = deps.now?.() ?? new Date();
+  const now = approval ? new Date(approval.reviewedAt) : (deps.now?.() ?? new Date());
   const replaced = await deps.repo.flags.replaceTargetingRules(
     scope,
     flagId,
     targetingRuleRows(targetingRules, now),
     { updatedAt: now.toISOString() },
+    approval,
   );
   if (!replaced) return { ok: false, reason: "FLAG_NOT_FOUND" };
 
@@ -129,7 +154,11 @@ function preparePromotion(
   }
 
   const rollout = input.select.rollout
-    ? promotedBaselineRollout(source.flag.rollout, target.flag.rollout)
+    ? promotedBaselineRollout(
+        source.flag.rollout,
+        target.flag.rollout,
+        input.approvalRolloutSalt ? () => input.approvalRolloutSalt as string : undefined,
+      )
     : undefined;
   // Checked against the state this Promotion LANDS. `select.availability` alone
   // can strand the target's existing baseline, so an unselected `rollout` still
@@ -204,9 +233,10 @@ function promotedRules(
 function promotedBaselineRollout(
   source: PercentageRollout | null,
   target: PercentageRollout | null,
+  freshSalt = mintSalt,
 ): PercentageRollout | null {
   if (source === null) return null;
-  return { percentage: source.percentage, salt: target?.salt ?? mintSalt() };
+  return { percentage: source.percentage, salt: target?.salt ?? freshSalt() };
 }
 
 function promotionConfigPatch(
@@ -232,7 +262,7 @@ async function commitPromotion(
   targetScope: EnvScope,
   prepared: PreparedPromotion,
 ): Promise<FlagConfigWriteResult> {
-  const now = deps.now?.() ?? new Date();
+  const now = input.approval ? new Date(input.approval.reviewedAt) : (deps.now?.() ?? new Date());
   const configPatch = promotionConfigPatch(input, prepared, now);
   // Only `select.targeting` moves rules. Since SPL-170 `select.rollout` means the
   // config-level baseline, which lives on flag_configs — routing it through
@@ -244,9 +274,17 @@ async function commitPromotion(
       input.flagId,
       targetingRuleRows(prepared.targetingRules, now),
       configPatch,
+      input.approval,
     );
     if (!replaced) return { ok: false, reason: "FLAG_NOT_FOUND" };
-  } else if (!(await deps.repo.flags.updateFlagConfig(targetScope, input.flagId, configPatch))) {
+  } else if (
+    !(await deps.repo.flags.updateFlagConfig(
+      targetScope,
+      input.flagId,
+      configPatch,
+      input.approval,
+    ))
+  ) {
     return { ok: false, reason: "FLAG_NOT_FOUND" };
   }
 

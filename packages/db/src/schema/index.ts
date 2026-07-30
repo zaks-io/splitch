@@ -6,9 +6,13 @@
  */
 
 // biome-ignore lint/performance/noBarrelFile: package schema entry — drizzle-kit reads it and consumers import named tables from one place
+export { approvalRequests, approvalReviews } from "./approvals";
+export { apiKeys, clientKeys } from "./credentials";
+export { experiments, metrics, runs } from "./experiments";
+export { flagConfigs, flags, segments, targetingRules, variants } from "./flags";
 export {
-  apps,
   appMemberships,
+  apps,
   claimConsentAttempts,
   claimIdempotency,
   claimVerifications,
@@ -18,7 +22,4 @@ export {
   orgMemberships,
   trustedIdps,
 } from "./identity";
-export { flagConfigs, flags, segments, targetingRules, variants } from "./flags";
-export { experiments, metrics, runs } from "./experiments";
-export { apiKeys, clientKeys } from "./credentials";
 export { entityDeletions, privacyRequests } from "./privacy";

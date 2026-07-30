@@ -73,6 +73,9 @@ export async function signedPanelRequest(
   const headers = new Headers({
     "x-splitch-panel-environment": ids.envId,
     ...(body ? { "content-type": "application/json" } : {}),
+    // Mutating Control Plane routes require an Idempotency Key; the panel
+    // supplies one per action, so the harness does the same.
+    ...(method === "GET" ? {} : { "idempotency-key": `idem-panel-${crypto.randomUUID()}` }),
   });
   const expectedOperation = parseControlPanelOperation(method, path, ids.envId);
   if (expectedOperation) {

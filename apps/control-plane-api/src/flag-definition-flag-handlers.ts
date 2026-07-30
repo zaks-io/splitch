@@ -8,14 +8,7 @@ import {
   initializeFlagConfigsForFlag,
   purgeFlagConfigsKvForFlag,
 } from "./flag-config-lifecycle";
-import {
-  flagNotFound,
-  resourceNotEmpty,
-  runningExperimentError,
-  validationError,
-  validationErrors,
-} from "./flag-definition-errors";
-import { experimentReferencingFlag } from "./flag-definition-guards";
+import { flagNotFound, validationError, validationErrors } from "./flag-definition-errors";
 import {
   type FlagDefinitionDeps,
   type FlagRow,
@@ -112,21 +105,6 @@ export async function updateFlag(
   });
   if (!updated) return flagNotFound(args.requestId);
   return Response.json(await flagResponse(deps.repo, loaded.value.appId, updated));
-}
-
-export async function deleteFlag(
-  deps: FlagDefinitionDeps,
-  args: HandlerArgs<unknown>,
-): Promise<Response> {
-  const loaded = await loadWritableFlag(deps, args);
-  if (!loaded.ok) return loaded.response;
-
-  const blocked = await flagDeleteBlocker(deps, loaded.value, args.requestId);
-  if (blocked) return blocked;
-
-  await purgeFlagConfigsKvForFlag(deps, loaded.value.appId, loaded.value.flag.id);
-  await deleteFlagD1Cascade(deps, loaded.value.appId, loaded.value.flag.id);
-  return Response.json({ deleted: true });
 }
 
 interface PreparedCreateFlag {
@@ -251,22 +229,4 @@ async function prepareSchemaPatch(
     ),
   ];
   return issues.length > 0 ? fail(validationErrors(requestId, issues)) : ok(schema);
-}
-
-async function flagDeleteBlocker(
-  deps: FlagDefinitionDeps,
-  loaded: LoadedFlag,
-  requestId: string,
-): Promise<Response | null> {
-  const envs = await deps.repo.identity.listEnvironments(loaded.scope);
-  const reference = await experimentReferencingFlag(deps.repo, loaded.appId, loaded.flag.id, envs);
-  if (!reference) return null;
-  if (reference.status === "running") {
-    return runningExperimentError(
-      { experimentId: reference.experimentId, runId: reference.runId ?? "unknown" },
-      "DELETE_FLAG",
-      requestId,
-    );
-  }
-  return resourceNotEmpty("flag", loaded.flag.id, "experiment", 1, "DELETE_FLAG", requestId);
 }

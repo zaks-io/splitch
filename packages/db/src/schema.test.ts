@@ -146,7 +146,7 @@ describe("credential invariants", () => {
 });
 
 describe("full table corpus", () => {
-  it("applies the 22 named live D1 tables", async () => {
+  it("applies the 24 named live D1 tables", async () => {
     const local = await createLocalD1();
     try {
       const tables = await local.d1
@@ -157,6 +157,8 @@ describe("full table corpus", () => {
       expect(tables.results.map((table) => table.name).sort()).toEqual([
         "api_keys",
         "app_memberships",
+        "approval_requests",
+        "approval_reviews",
         "apps",
         "claim_consent_attempts",
         "claim_idempotency",

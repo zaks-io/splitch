@@ -82,7 +82,11 @@ describe("flag configuration lifecycle on Flag create", () => {
 
     const res = await h.app.request(`/apps/${createdApp.app.id}/flags`, {
       method: "POST",
-      headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${jwt}`,
+        "content-type": "application/json",
+        "idempotency-key": `idem-create-flag-${crypto.randomUUID()}`,
+      },
       body: JSON.stringify(baseFlag(createdApp.app.id)),
     });
 
