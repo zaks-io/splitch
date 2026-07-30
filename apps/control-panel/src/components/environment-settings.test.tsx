@@ -19,7 +19,13 @@ describe("EnvironmentSettings", () => {
     expect(html).toContain("accepts requests from any origin");
     expect(html).toContain("Lock to origins");
     expect(html).toContain("sha256:aaaaaaaaaaaa");
-    expect(html).not.toContain("sk_not_returned");
+    expect(Object.keys(settings.apiKeys[0] ?? {}).sort()).toEqual([
+      "createdAt",
+      "keyHashPrefix",
+      "keyId",
+      "revokedAt",
+      "scopes",
+    ]);
     expect(html).toContain("Variant availability");
     expect(html).toContain("Start an Experiment Run");
     expect(html).toContain("Coming soon");

@@ -12,21 +12,21 @@ test.describe("per-Environment Settings", () => {
   test("keeps credentials show-once and round-trips Worker Policy truth", async ({
     page,
   }, testInfo) => {
+    const environmentKey = testInfo.retry === 0 ? "dev" : "settings-retry";
     await page.setViewportSize({ width: 1280, height: 1100 });
-    await page.goto("/acme-labs/checkout-api/dev/settings");
+    await page.goto(`/acme-labs/checkout-api/${environmentKey}/settings`);
 
     await expect(page.getByRole("heading", { name: "Development" })).toBeVisible();
-    await verifyInitialSettingsState(page, testInfo);
+    await expect(page.getByText("accepts requests from any origin")).toBeVisible();
+    await captureThemeScreenshots(page, testInfo, "settings-environment-open");
     await expect(page.getByLabel("Variant availability: Approve coming soon")).toBeDisabled();
     const killSwitch = page.getByTestId("kill-switch-policy");
     await expect(killSwitch).toContainText("Never gated");
     await expect(killSwitch.locator("input")).toHaveCount(0);
 
     const lockButton = page.getByRole("button", { name: "Lock to origins" });
-    if (await lockButton.isVisible().catch(() => false)) {
-      await page.getByLabel("Allowed origins").fill("https://app.example.com");
-      await lockButton.click();
-    }
+    await page.getByLabel("Allowed origins").fill("https://app.example.com");
+    await lockButton.click();
     await expect(page.getByText("Locked origins")).toBeVisible();
     await expect(page.getByText("https://app.example.com", { exact: true })).toBeVisible();
 
@@ -67,7 +67,7 @@ test.describe("per-Environment Settings", () => {
     await expect(revokedRow.getByRole("button", { name: "Revoke" })).toBeDisabled();
 
     const policyRow = page.locator("fieldset").filter({ hasText: "Variant availability" });
-    const nextLevel = testInfo.retry % 2 === 0 ? "confirm" : "allow";
+    const nextLevel = "confirm";
     await policyRow.locator(`input[value='${nextLevel}']`).check();
     await page.getByRole("button", { name: "Save Policy" }).click();
     await expect(page.getByRole("button", { name: "Save Policy" })).toBeDisabled();
@@ -90,17 +90,6 @@ test.describe("per-Environment Settings", () => {
     await captureThemeScreenshots(page, testInfo, "settings-environment-prod");
   });
 });
-
-async function verifyInitialSettingsState(
-  page: import("@playwright/test").Page,
-  testInfo: import("@playwright/test").TestInfo,
-): Promise<void> {
-  const openWarning = page.getByText("accepts requests from any origin");
-  await expect(openWarning.or(page.getByText("Locked origins"))).toBeVisible();
-  if (await openWarning.isVisible()) {
-    await captureThemeScreenshots(page, testInfo, "settings-environment-open");
-  }
-}
 
 async function apiKeyIds(page: import("@playwright/test").Page): Promise<string[]> {
   return page.locator("[data-api-key-id]").evaluateAll((rows) =>
