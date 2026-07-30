@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,12 +15,19 @@ export const CONTEXT_MD = ${JSON.stringify(contextMd)};
 export const QUICKSTART_MD = ${JSON.stringify(quickstartMd)};
 `;
 
-writeFileSync(outputPath, contents, "utf8");
-const format = spawnSync("npx", ["biome", "format", "--write", outputPath], {
+// Format in memory and swap the file in atomically: `//#format:check` and tsc
+// run concurrently with this task, so the file on disk must never exist in an
+// unformatted or half-written state.
+const format = spawnSync("npx", ["biome", "format", `--stdin-file-path=${outputPath}`], {
   cwd: repoRoot,
-  stdio: "inherit",
+  input: contents,
+  encoding: "utf8",
 });
 if (format.status !== 0) {
+  process.stderr.write(format.stderr ?? "");
   process.exit(format.status ?? 1);
 }
+const stagingPath = `${outputPath}.tmp`;
+writeFileSync(stagingPath, format.stdout, "utf8");
+renameSync(stagingPath, outputPath);
 console.log(`wrote ${outputPath}`);
