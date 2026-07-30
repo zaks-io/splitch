@@ -6,7 +6,7 @@ import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
 import { createControlPanelAppsClient } from "./control-plane-apps";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
 import type { AppAttention, OrgAppListView, PendingAppResync } from "./org-app-list";
-import { readPendingResync } from "./pending-resync";
+import { type PendingResync, readPendingResync } from "./pending-resync";
 import { loadSessionFromRequest, type StoredSession } from "./session";
 import { retryPendingResync } from "./session-resync";
 
@@ -20,73 +20,87 @@ export type OrgAppListResult =
  * each App's Environments, and each App's per-Environment attention rollup.
  * The rollup is read here rather than in the browser so the card renders in one
  * pass, and a failed rollup travels as a stated reason instead of an empty list.
+ *
+ * `bindings`/`request` are explicit parameters (rather than read internally
+ * from `workerEnv`/`getRequest()`) so this can be called directly in a test
+ * against real Miniflare D1 + KV: `createServerFn`'s wrapped export only
+ * behaves correctly through the framework's build-time transform, which
+ * plain vitest does not apply.
  */
+export async function loadOrgAppListForRequest(
+  bindings: ControlPanelBindings,
+  request: Request,
+  orgSlug: string,
+): Promise<OrgAppListResult> {
+  const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, request);
+  if (!loaded.ok) return { kind: "unauthenticated" };
+
+  const repo = createRepository(bindings.DB);
+  const rehydrated = await rehydrateLegacySession(
+    repo,
+    bindings.SESSION_STORE,
+    loaded.tokenHash,
+    loaded.session,
+  );
+  const organization0 = rehydrated.orgs.find((org) => org.orgSlug === orgSlug);
+  if (!organization0) return { kind: "forbidden" };
+
+  // The self-heal half of "Reload to check again" (SPL-203 review round 2,
+  // Blocker 2): a pending marker for THIS Organization's App means the last
+  // resync failed, so a reload actually re-attempts it instead of re-reading
+  // the identical stale principal forever.
+  const pendingBefore = await readPendingResync(bindings.SESSION_STORE, loaded.tokenHash, "app");
+  const retryEligible = pendingBefore?.orgId === organization0.orgId;
+  const session: StoredSession = retryEligible
+    ? await retryPendingResync(bindings, loaded.tokenHash, rehydrated)
+    : rehydrated;
+  // One SESSION_STORE read covers both the retry guard above and the notice
+  // below: `retryPendingResync` clears the marker on success, always handing
+  // back a new session reference (never the `rehydrated` one it was given —
+  // `session-resync.test.ts` pins this with `toBe`), and leaves the marker
+  // untouched, same reference, on failure or when no retry ran at all. So the
+  // post-retry marker state is derivable from `pendingBefore` without a
+  // second `get`.
+  const pendingAfter = retryEligible && session !== rehydrated ? null : pendingBefore;
+
+  const organization = session.orgs.find((org) => org.orgSlug === orgSlug) ?? organization0;
+
+  const resolver = createEnvironmentResolver(repo);
+  const actor = { actorId: session.userId, sessionExpiresAt: loaded.session.expiresAt };
+
+  return {
+    kind: "ok",
+    view: {
+      orgId: organization.orgId,
+      orgSlug: organization.orgSlug,
+      orgRole: organization.orgRole,
+      isProvisional: organization.isProvisional,
+      demoExpiresAt: organization.demoExpiresAt,
+      apps: await Promise.all(
+        organization.apps.map(async (app) => ({
+          appId: app.appId,
+          appSlug: app.appSlug,
+          environments: await resolver.listEnvironments(app.appId),
+          attention: await readAttention(bindings, actor, app.appId),
+        })),
+      ),
+      // Scoped to this Organization only: a pending App create in a
+      // different Organization must not surface a notice here.
+      pendingAppResync: toPendingAppResync(pendingAfter, organization.orgId),
+    },
+  };
+}
+
 export const loadOrgAppList = createServerFn({ method: "GET" })
   .validator((orgSlug: string) => orgSlug)
-  .handler(async ({ data: orgSlug }): Promise<OrgAppListResult> => {
-    const bindings = controlPanelBindings(workerEnv);
-    const loaded = await loadSessionFromRequest(bindings.SESSION_STORE, getRequest());
-    if (!loaded.ok) return { kind: "unauthenticated" };
+  .handler(({ data: orgSlug }) =>
+    loadOrgAppListForRequest(controlPanelBindings(workerEnv), getRequest(), orgSlug),
+  );
 
-    const repo = createRepository(bindings.DB);
-    const rehydrated = await rehydrateLegacySession(
-      repo,
-      bindings.SESSION_STORE,
-      loaded.tokenHash,
-      loaded.session,
-    );
-    const organization0 = rehydrated.orgs.find((org) => org.orgSlug === orgSlug);
-    if (!organization0) return { kind: "forbidden" };
-
-    // The self-heal half of "Reload to check again" (SPL-203 review round 2,
-    // Blocker 2): a pending marker for THIS Organization's App means the last
-    // resync failed, so a reload actually re-attempts it instead of re-reading
-    // the identical stale principal forever.
-    const pendingBefore = await readPendingResync(bindings.SESSION_STORE, loaded.tokenHash, "app");
-    const session: StoredSession =
-      pendingBefore?.orgId === organization0.orgId
-        ? await retryPendingResync(bindings, loaded.tokenHash, rehydrated)
-        : rehydrated;
-    const organization = session.orgs.find((org) => org.orgSlug === orgSlug) ?? organization0;
-
-    const resolver = createEnvironmentResolver(repo);
-    const actor = { actorId: session.userId, sessionExpiresAt: loaded.session.expiresAt };
-
-    return {
-      kind: "ok",
-      view: {
-        orgId: organization.orgId,
-        orgSlug: organization.orgSlug,
-        orgRole: organization.orgRole,
-        isProvisional: organization.isProvisional,
-        demoExpiresAt: organization.demoExpiresAt,
-        apps: await Promise.all(
-          organization.apps.map(async (app) => ({
-            appId: app.appId,
-            appSlug: app.appSlug,
-            environments: await resolver.listEnvironments(app.appId),
-            attention: await readAttention(bindings, actor, app.appId),
-          })),
-        ),
-        pendingAppResync: await readPendingAppResync(
-          bindings.SESSION_STORE,
-          loaded.tokenHash,
-          organization.orgId,
-        ),
-      },
-    };
-  });
-
-/**
- * Read fresh on every render, and scoped to this Organization only: a pending
- * App create in a different Organization must not surface a notice here.
- */
-async function readPendingAppResync(
-  kv: KVNamespace,
-  tokenHash: string,
+function toPendingAppResync(
+  pending: Extract<PendingResync, { resource: "app" }> | null,
   orgId: string,
-): Promise<PendingAppResync | null> {
-  const pending = await readPendingResync(kv, tokenHash, "app");
+): PendingAppResync | null {
   if (pending?.orgId !== orgId) return null;
   return { appSlug: pending.slug, reason: pending.reason, remedy: pending.remedy };
 }
