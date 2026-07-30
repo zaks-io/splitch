@@ -12,9 +12,12 @@ function run(command, args, options = {}) {
   });
 }
 
+// This script's stdout is a machine contract: the workflow captures it and
+// pipes it to jq. Child stdout (gh prints release URLs there) must go to
+// stderr so only the final JSON line lands on stdout.
 function runInherit(command, args, options = {}) {
   execFileSync(command, args, {
-    stdio: "inherit",
+    stdio: ["ignore", 2, "inherit"],
     ...options,
   });
 }

@@ -26,12 +26,23 @@ writeFileSync(
 );
 
 const target = resolveSdkReleaseTarget(repoRoot);
+// Cacheable work goes through the turbo graph so warm caches replay instead
+// of re-running; each residual check runs exactly once (the old list ran
+// format/lint/typecheck twice via verify:push).
 const checks = [
-  { name: "format:check", command: ["pnpm", "format:check"] },
-  { name: "lint", command: ["pnpm", "lint"] },
-  { name: "typecheck", command: ["pnpm", "typecheck"] },
-  { name: "sdk-test", command: ["pnpm", "--filter", "@splitch/sdk", "test"] },
-  { name: "sdk-build", command: ["pnpm", "--filter", "@splitch/sdk", "build"] },
+  {
+    name: "verify-graph",
+    command: ["pnpm", "exec", "turbo", "run", "//#format:check", "lint", "typecheck"],
+  },
+  {
+    name: "sdk-test-build",
+    command: ["pnpm", "exec", "turbo", "run", "test", "build", "--filter=@splitch/sdk"],
+  },
+  { name: "knip", command: ["pnpm", "knip"] },
+  { name: "secrets-range", command: ["pnpm", "secrets:range"] },
+  { name: "tinybird-local", command: ["pnpm", "tinybird:local"] },
+  { name: "d1-migrate-local", command: ["pnpm", "d1:migrate:local"] },
+  { name: "d1-migrate-populated", command: ["pnpm", "d1:migrate:populated"] },
   {
     name: "sdk-pack-dry-run",
     command: ["pnpm", "--filter", "@splitch/sdk", "pack", "--dry-run"],
@@ -44,7 +55,6 @@ const checks = [
     name: "sdk-consumer-smoke",
     command: ["pnpm", "--filter", "@splitch/sdk", "test:consumer-smoke"],
   },
-  { name: "verify:push", command: ["pnpm", "verify:push"] },
 ];
 
 /** @type {{ name: string; status: "passed" | "failed"; durationMs: number; error?: string }[]} */

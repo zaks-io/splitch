@@ -74,8 +74,9 @@ deployment command.
       until the package contents are intentionally corrected.
 - [ ] Confirm the built declarations and packed manifest contain no `@splitch/contracts` dependency
       or import. Public types must remain build-derived, never hand-copied.
-- [ ] Run the candidate evidence required by `sdk-release`: format, lint, typecheck, SDK tests,
-      SDK build, pack dry-run, pack check, consumer smoke, and `verify:push`.
+- [ ] Run the candidate evidence required by `sdk-release`: the turbo verify graph (format, lint,
+      typecheck repo-wide plus SDK tests and build), knip, secrets scan, Tinybird and D1 migration
+      checks, pack dry-run, pack check, and consumer smoke.
 
 ### 2. Provider readiness
 
