@@ -203,7 +203,7 @@ export const reviewControlPanelApprovalRequest = createServerFn({ method: "POST"
  * A new rule serves every request that matches and carries no percentage: a
  * rule-level rollout needs a bucketing salt, there is no minting path for one on
  * this route, and fabricating one would silently decide who gets bucketed
- * (SPL-232). Existing rules are passed through untouched.
+ * (SPL-245). Existing rules are passed through untouched.
  */
 function applyTargetingEdit(
   rules: readonly TargetingRule[],

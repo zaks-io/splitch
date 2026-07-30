@@ -19,7 +19,7 @@ import type { FlagEditing } from "#lib/use-flag-editing";
  * A new rule serves all matches and carries no percentage: a rule-level rollout
  * needs a bucketing salt, the salt is server-minted and has no minting path on
  * this route yet, and inventing one here would silently decide who gets bucketed
- * (SPL-232). Existing rules go back verbatim, salt included.
+ * (SPL-245). Existing rules go back verbatim, salt included.
  *
  * This component is rendered only when the field group is unlocked. An Experiment
  * that owns targeting makes it structurally absent, not disabled — a frozen

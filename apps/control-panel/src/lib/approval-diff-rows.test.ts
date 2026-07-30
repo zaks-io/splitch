@@ -86,6 +86,15 @@ describe("Approval diff rows", () => {
     expect(rows[0]?.hasBefore).toBe(false);
   });
 
+  it("names the Configuration version instead of showing a bare JSON Pointer", () => {
+    const [row] = approvalDiffRows(
+      diff([{ path: "/version", operation: "replace", current: 1, proposed: 2 }]),
+    );
+
+    expect(row?.group).toBe("Other");
+    expect(row?.field).toBe("Configuration version");
+  });
+
   it("orders groups so the incident-relevant change is read first", () => {
     const rows = approvalDiffRows(
       diff([

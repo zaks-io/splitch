@@ -92,7 +92,7 @@ export function removeTargetingRuleIntent(ruleId: string): FlagEditIntent {
  * No percentage rollout on a NEW rule: a rule-level rollout carries a bucketing
  * salt, the salt is server-minted for the baseline and has no minting path here
  * yet, and inventing one in the browser would silently choose who gets bucketed.
- * An honest "all matches" rule beats a fabricated salt (SPL-232).
+ * An honest "all matches" rule beats a fabricated salt (SPL-245).
  */
 export function addTargetingRuleIntent(
   draft: { attribute: string; value: string; variantId: string },

@@ -49,6 +49,9 @@ const FIELD_MAPPINGS: ReadonlyArray<readonly [RegExp, FieldMapping]> = [
   [/^\/rollout$/, { group: "Baseline rollout", field: "Baseline percentage" }],
   [/^\/rollout\/percentage$/, { group: "Baseline rollout", field: "Baseline percentage" }],
   [/^\/rollout\/salt$/, { group: "Baseline rollout", field: "Bucketing salt" }],
+  // Not a field anyone edits, but the Worker diffs it and dropping it would hide
+  // that the proposal was built against a specific Configuration version.
+  [/^\/version$/, { group: "Other", field: "Configuration version" }],
 ];
 
 export function approvalDiffRows(
