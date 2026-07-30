@@ -18,6 +18,7 @@ test("control-panel deploy scripts use the Vite-aware deploy wrapper", () => {
   );
   const rootPackageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
   const turbo = JSON.parse(readFileSync(join(repoRoot, "turbo.json"), "utf8"));
+  const viteConfig = readFileSync(join(repoRoot, "apps/control-panel/vite.config.ts"), "utf8");
 
   assert.equal(packageJson.scripts.deploy, "node ../../scripts/deploy-vite-worker-with-sentry.mjs");
   assert.equal(
@@ -37,7 +38,10 @@ test("control-panel deploy scripts use the Vite-aware deploy wrapper", () => {
     "AUTH_API_ORIGIN",
     "AUTH_JWKS_URI",
     "CONTROL_PLANE_ORIGIN",
+    "CONTROL_PANEL_DELEGATION_SECRET",
     "TINYBIRD_API_URL",
+    "WORKOS_API_KEY",
+    "WORKOS_CLIENT_ID",
   ]) {
     assert.equal(
       turbo.tasks["@splitch/control-panel#build"].env.includes(name),
@@ -50,6 +54,9 @@ test("control-panel deploy scripts use the Vite-aware deploy wrapper", () => {
       `${name} must not invalidate every Turbo task`,
     );
   }
+  assert.match(viteConfig, /cloudflareEnvironment === "production"/);
+  assert.match(viteConfig, /cloudflareEnvironment === "shared-preview"/);
+  assert.match(viteConfig, /delete config\.secrets/);
   for (const name of [
     "SPLITCH_PLATFORM_TARGET",
     "SENTRY_RELEASE",

@@ -150,11 +150,7 @@ function workspaceDependencies(packageJson) {
 }
 
 function isEmbeddedMcpResource(path) {
-  return (
-    path === "CONTEXT.md" ||
-    path === "docs/spec/quickstart.md" ||
-    path === "scripts/generate-mcp-resource-files.mjs"
-  );
+  return path === "CONTEXT.md" || path === "scripts/generate-mcp-resource-files.mjs";
 }
 
 function isNonDeployableChange(path) {
