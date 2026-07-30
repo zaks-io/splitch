@@ -4,6 +4,7 @@ import test from "node:test";
 
 const workflow = readFileSync(".github/workflows/deploy-production.yml", "utf8");
 const validateJob = workflow.match(/\n {2}validate:\n([\s\S]*?)\n {2}deploy:\n/)?.[1];
+const releaseJob = workflow.match(/\n {2}release:\n([\s\S]*)$/)?.[1];
 
 test("production deploy reuses successful CI instead of rerunning validation", () => {
   assert.ok(validateJob);
@@ -64,7 +65,6 @@ test("production deploy plans from the latest successful environment deployment"
   assert.match(workflow, /should_deploy: \$\{\{ steps\.plan\.outputs\.should_deploy \}\}/);
   assert.match(workflow, /worker_packages: \$\{\{ steps\.plan\.outputs\.worker_packages \}\}/);
   assert.match(workflow, /if: needs\.validate\.outputs\.should_deploy == 'true'/);
-  assert.match(validateJob, /if: steps\.plan\.outputs\.should_deploy == 'true'/);
 });
 
 test("production deploy runs only planned mutation phases in contract order", () => {
@@ -103,4 +103,14 @@ test("phase-specific setup and credentials stay conditional", () => {
   assert.match(workflow, /required\+=\(TB_TOKEN TB_HOST\)/);
   assert.match(workflow, /required\+=\(CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID\)/);
   assert.match(workflow, /if \[ "\$DEPLOY_WORKERS" = "true" \]; then/);
+});
+
+test("platform release tracking reads its key from the production environment", () => {
+  assert.ok(validateJob);
+  assert.ok(releaseJob);
+  assert.doesNotMatch(validateJob, /LINEAR_ACCESS_KEY/);
+  assert.match(releaseJob, /environment: production/);
+  assert.match(releaseJob, /LINEAR_ACCESS_KEY: \$\{\{ secrets\.LINEAR_ACCESS_KEY \}\}/);
+  assert.match(releaseJob, /LINEAR_ACCESS_KEY is required to track platform releases/);
+  assert.match(releaseJob, /needs: deploy/);
 });

@@ -168,16 +168,6 @@ jobs:
           SPLITCH_FORCE_FULL_DEPLOY: ${{ inputs.force_full_deploy && '1' || '0' }}
         run: node scripts/plan-production-deploy.mjs
 
-      - name: Check release credentials
-        if: steps.plan.outputs.should_deploy == 'true'
-        env:
-          LINEAR_ACCESS_KEY: ${{ secrets.LINEAR_ACCESS_KEY }}
-        run: |
-          if [ -z "$LINEAR_ACCESS_KEY" ]; then
-            echo "::error::LINEAR_ACCESS_KEY is required for production deploys"
-            exit 1
-          fi
-
       - name: Summary
         env:
           BASE_SHA: ${{ steps.plan.outputs.base_sha }}
@@ -378,6 +368,7 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     needs: deploy
+    environment: production
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -385,6 +376,15 @@ jobs:
           fetch-depth: 0
           ref: ${{ env.SENTRY_RELEASE }}
           persist-credentials: false
+
+      - name: Check Linear release credential
+        env:
+          LINEAR_ACCESS_KEY: ${{ secrets.LINEAR_ACCESS_KEY }}
+        run: |
+          if [ -z "$LINEAR_ACCESS_KEY" ]; then
+            echo "::error::LINEAR_ACCESS_KEY is required to track platform releases"
+            exit 1
+          fi
 
       - name: Sync Linear release
         id: linear-release
