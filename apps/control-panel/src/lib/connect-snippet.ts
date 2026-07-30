@@ -15,6 +15,13 @@
 const SDK_PACKAGE_NAME = "@splitch/sdk";
 
 /**
+ * The card claims to be a copy-paste snippet, so it may not leave a free
+ * variable behind: `targetingKey: userId` with no `userId` in scope is a
+ * `ReferenceError` on paste, not a placeholder.
+ */
+const EXAMPLE_TARGETING_KEY = "user-1";
+
+/**
  * The install line shown on the Connect card. `pnpm smoke:connect-snippet
  * --registry` checks that this package name resolves on the public registry; it
  * does NOT install from there (the compile guard installs the local tarball), so
@@ -40,6 +47,9 @@ export function renderConnectSnippet({ clientKey, flagKey }: ConnectSnippetInput
     "",
     `const splitch = createSplitchClient({ clientKey: ${JSON.stringify(clientKey)} });`,
     "",
+    "// Whoever you are deciding for. Swap in your own user id.",
+    `const userId = ${JSON.stringify(EXAMPLE_TARGETING_KEY)};`,
+    "",
     "// One stable id per logical Evaluation. Reuse it when you retry that call,",
     "// so a retry is not counted as a second Evaluation.",
     "const evaluationId = crypto.randomUUID();",
@@ -63,6 +73,7 @@ export function renderServerConnectSnippet({ flagKey }: { readonly flagKey: stri
     "",
     "const splitch = createSplitchClient({ apiKey: process.env.SPLITCH_API_KEY });",
     "",
+    `const userId = ${JSON.stringify(EXAMPLE_TARGETING_KEY)};`,
     "const evaluationId = crypto.randomUUID();",
     `const value = await splitch.evaluate(${JSON.stringify(flagKey)}, {`,
     "  targetingKey: userId,",

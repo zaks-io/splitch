@@ -78,6 +78,8 @@ test.describe("onboarding: connect your code", () => {
     expect(snippet).toContain(`clientKey: "${clientKey}"`);
     expect(snippet).toContain(`splitch.evaluate("${flagKey}"`);
     expect(snippet).toContain("idempotencyKey: evaluationId");
+    // Nothing left to fill in: a paste of this must not throw ReferenceError.
+    expect(snippet).toContain('const userId = "user-1";');
     // The shipped client takes no appId; scope comes from the credential.
     expect(snippet).not.toContain("appId");
 

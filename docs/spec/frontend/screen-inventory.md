@@ -425,12 +425,24 @@ Each step names the CLI/MCP parity it mirrors. No step is panel-only.
    Environment scope come from the credential alone (ADR-0018), and `SplitchClientOptions` has no
    such field.
 
+   The block below is what `renderConnectSnippet` emits, character for character, with the two
+   substituted values shown as placeholders. It declares `userId` rather than leaving it free: the
+   card promises a copy-paste snippet, so a paste must not throw `ReferenceError`.
+
    ```ts
    import { createSplitchClient } from "@splitch/sdk";
+
    const splitch = createSplitchClient({ clientKey: "ck_…" });
+
+   // Whoever you are deciding for. Swap in your own user id.
+   const userId = "user-1";
+
+   // One stable id per logical Evaluation. Reuse it when you retry that call,
+   // so a retry is not counted as a second Evaluation.
    const evaluationId = crypto.randomUUID();
+
    const value = await splitch.evaluate("your-flag-key", {
-     targetingKey: user.id,
+     targetingKey: userId,
      idempotencyKey: evaluationId,
    });
    ```

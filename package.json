@@ -78,7 +78,7 @@
     "workers:secrets:production": "node scripts/sync-worker-secrets.mjs production",
     "workers:secrets:shared-preview": "node scripts/sync-worker-secrets.mjs shared-preview",
     "typecheck": "turbo run typecheck",
-    "verify:ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm spec:lint && pnpm check:cli-mcp-parity && pnpm test:scripts && pnpm test && pnpm stats:golden && pnpm stats:property && pnpm build",
+    "verify:ci": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm spec:lint && pnpm check:cli-mcp-parity && pnpm test:scripts && pnpm test && pnpm smoke:connect-snippet && pnpm stats:golden && pnpm stats:property && pnpm build",
     "verify:commit": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:staged",
     "verify:push": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:range && pnpm tinybird:local && pnpm d1:migrate:local && pnpm d1:migrate:populated"
   },

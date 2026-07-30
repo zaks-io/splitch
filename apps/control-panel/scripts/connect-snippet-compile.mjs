@@ -119,14 +119,15 @@ function writeTsconfig(cwd, include) {
 }
 
 /**
- * The snippet is a fragment of a real app: `userId` is the caller's own value and
- * top-level `await` needs module scope. Declaring them here is the smallest wrap
- * that lets the SNIPPET ITSELF stay exactly what the panel shows.
+ * The snippet is a fragment of a real app, so it needs module scope for its
+ * top-level `await`. That is all the wrap supplies: the snippet declares its own
+ * `userId`, and this must NOT declare one for it — a wrapper that fills in a
+ * free variable would prove the snippet compiles somewhere the developer's
+ * clipboard does not.
  */
 function wrapForTypecheck(snippet, needsProcessEnv = false) {
   return [
     "export {};",
-    "declare const userId: string;",
     needsProcessEnv ? "declare const process: { env: Record<string, string> };" : "",
     snippet,
     "void value;",

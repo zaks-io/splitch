@@ -7,9 +7,12 @@ import {
 } from "@splitch/ui/components/dialog";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
+import { parityHint } from "#lib/parity-hints";
 import { environmentSettingsQuery } from "#lib/settings-query";
 import { ConnectYourCodeCard } from "./connect-your-code-card";
 import { FlagVerifyPanel } from "./flag-verify-panel";
+
+const CLIENT_KEY_PARITY = parityHint("client_key_get");
 
 /**
  * The guided SDK handoff shown immediately after a Flag is created
@@ -51,7 +54,7 @@ export function CreateFlagSuccess({
             <a className="underline underline-offset-4" href={settingsHref}>
               Environment settings
             </a>{" "}
-            to copy the Client Key, or run <code>splitch client-key get</code>.
+            to copy the Client Key, or run <code>{CLIENT_KEY_PARITY.cli}</code>.
           </AlertDescription>
         </Alert>
       ) : null}

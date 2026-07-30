@@ -48,25 +48,59 @@ function committedLines(file) {
   }
 }
 
-const staged = git(["diff", "--cached", "--name-only", "--diff-filter=ACM"])
-  .split("\n")
-  .map((f) => f.trim())
-  .filter(Boolean)
-  .filter((f) => EXTENSIONS.some((ext) => f.endsWith(ext)))
+/**
+ * Staged changes as `{ file, before }` pairs, where `before` is the path to
+ * compare against in HEAD.
+ *
+ * Renames and copies (`R`/`C`) are included deliberately. Dropping them lets a
+ * commit move a file and blow it up in the same breath: the destination path is
+ * invisible to a name-only `ACM` filter, so a 250-line file could land somewhere
+ * else at 400 lines and pass. Comparing the destination against its SOURCE in
+ * HEAD is also what keeps a pure move of an already-oversized file passing —
+ * moving a file does not make it worse.
+ */
+function stagedChanges() {
+  const records = git(["diff", "--cached", "--name-status", "-z", "--diff-filter=ACMR"]).split(
+    "\0",
+  );
+  const changes = [];
+  for (let i = 0; i < records.length; i += 1) {
+    const status = records[i];
+    if (!status) continue;
+    if (status.startsWith("R") || status.startsWith("C")) {
+      const from = records[i + 1];
+      const to = records[i + 2];
+      i += 2;
+      if (to) changes.push({ file: to, before: from ?? to });
+    } else {
+      const file = records[i + 1];
+      i += 1;
+      if (file) changes.push({ file, before: file });
+    }
+  }
+  return changes;
+}
+
+const IGNORED = [
   // Vendored generated skill copies from zaks-io/skills; never hand-edited here.
-  .filter((f) => !f.startsWith(".agents/"))
+  (f) => f.startsWith(".agents/"),
   // Vendored shadcn component copies; upstream sizes, kept diffable for `shadcn add --diff`.
-  .filter((f) => !f.startsWith("packages/ui/src/components/"))
+  (f) => f.startsWith("packages/ui/src/components/"),
   // Machine-generated (e.g. TanStack Router's routeTree.gen.ts): size tracks the
   // number of routes and cannot be hand-split.
-  .filter((f) => !f.endsWith(".gen.ts"));
+  (f) => f.endsWith(".gen.ts"),
+];
+
+const staged = stagedChanges()
+  .filter(({ file }) => EXTENSIONS.some((ext) => file.endsWith(ext)))
+  .filter(({ file }) => !IGNORED.some((ignore) => ignore(file)));
 
 const offenders = [];
-for (const file of staged) {
+for (const { file, before: baseline } of staged) {
   const lines = stagedLines(file);
   if (lines === null || lines <= MAX_LINES) continue;
 
-  const before = committedLines(file);
+  const before = committedLines(baseline);
   if (before <= MAX_LINES) {
     offenders.push({ file, lines, reason: `crosses the ${MAX_LINES}-line limit` });
   } else if (lines > before) {

@@ -116,8 +116,35 @@ describe("explainVerifyResult", () => {
           ...(reason === "TARGETING_MATCH" ? { ruleId: "rule-1" } : {}),
         } as ResolutionDetails),
       );
-      expect(explanation.tone).toBe("resolved");
       expect(explanation.detail.length).toBeGreaterThan(0);
     }
+  });
+
+  it.each([
+    "SPLIT",
+    "TARGETING_MATCH",
+    "DEFAULT",
+    "DISABLED",
+  ])("renders %s as a fresh resolution", (reason) => {
+    const explanation = explainVerifyResult(
+      panelVerifyOutcome({
+        value: true,
+        variantName: "treatment",
+        reason,
+        ...(reason === "TARGETING_MATCH" ? { ruleId: "rule-1" } : {}),
+      } as ResolutionDetails),
+    );
+    expect(explanation.tone).toBe("resolved");
+    expect(explanation.headline).toBe("Resolved to treatment");
+  });
+
+  // A cached or stale answer was not freshly computed, so it must not share the
+  // success shape with a live resolution (ADR-0036).
+  it.each(["CACHED", "STALE"])("renders %s as degraded, not as a green check", (reason) => {
+    const explanation = explainVerifyResult(
+      panelVerifyOutcome({ value: true, variantName: "treatment", reason } as ResolutionDetails),
+    );
+    expect(explanation.tone).toBe("degraded");
+    expect(explanation.headline).toContain("not freshly");
   });
 });

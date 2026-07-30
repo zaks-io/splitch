@@ -117,8 +117,12 @@ function VerifyOutcome({ state }: { state: PanelState }) {
     );
   }
 
+  const degraded = explanation.tone === "degraded";
   return (
-    <Alert data-testid="verify-success">
+    <Alert
+      className={degraded ? "border-warning bg-warning-muted text-warning-foreground" : undefined}
+      data-testid={degraded ? "verify-degraded" : "verify-success"}
+    >
       <AlertTitle>{explanation.headline}</AlertTitle>
       <AlertDescription>
         {explanation.detail} Value: <code>{state.outcome.valueJson}</code>

@@ -66,12 +66,22 @@ export async function verifyFlagWithClientKey(input: PanelVerifyInput): Promise<
  * `tone` is the fail-loud discriminator the UI keys off: an ERROR must never be
  * able to render in the same shape as a resolution (ADR-0036). There is no
  * "unknown" fallthrough — every reason in the contract has a sentence.
+ *
+ * `degraded` exists because CACHED and STALE are answers the data plane did not
+ * freshly compute. Rendering them in the same green shape as a live SPLIT would
+ * make "this may be out of date" read as "your wiring is proven", which is the
+ * same class of quiet lie as a green error.
  */
 export interface VerifyExplanation {
-  readonly tone: "resolved" | "failed";
+  readonly tone: "resolved" | "degraded" | "failed";
   readonly headline: string;
   readonly detail: string;
 }
+
+const DEGRADED_REASONS: ReadonlySet<ResolutionReason> = new Set<ResolutionReason>([
+  "CACHED",
+  "STALE",
+]);
 
 export function explainVerifyResult(outcome: PanelVerifyOutcome): VerifyExplanation {
   if (outcome.reason === "ERROR") {
@@ -84,9 +94,18 @@ export function explainVerifyResult(outcome: PanelVerifyOutcome): VerifyExplanat
     };
   }
 
+  const variant = outcome.variantName ?? "the Default Variant";
+  if (DEGRADED_REASONS.has(outcome.reason)) {
+    return {
+      tone: "degraded",
+      headline: `Resolved to ${variant}, but not freshly`,
+      detail: reasonSentence(outcome),
+    };
+  }
+
   return {
     tone: "resolved",
-    headline: `Resolved to ${outcome.variantName ?? "the Default Variant"}`,
+    headline: `Resolved to ${variant}`,
     detail: reasonSentence(outcome),
   };
 }

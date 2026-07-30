@@ -11,10 +11,17 @@ export function CopyableCode({
   label,
   testId,
   value,
+  wrap = false,
 }: {
   label: string;
   testId: string;
   value: string;
+  /**
+   * Wrap instead of scrolling. A multi-line snippet reads better scrolling, but
+   * a single long token — a Client Key — must be readable in full without
+   * dragging, because eyeballing it is the whole point of showing it.
+   */
+  wrap?: boolean;
 }) {
   const [copyLabel, setCopyLabel] = useState("Copy");
   const [copyError, setCopyError] = useState<string>();
@@ -44,7 +51,9 @@ export function CopyableCode({
         </Button>
       </div>
       <pre
-        className="min-w-0 overflow-x-auto rounded-lg bg-muted px-3 py-2 text-xs leading-5"
+        className={`min-w-0 rounded-lg bg-muted px-3 py-2 text-xs leading-5 ${
+          wrap ? "whitespace-pre-wrap break-all" : "overflow-x-auto"
+        }`}
         data-testid={testId}
       >
         <code>{value}</code>

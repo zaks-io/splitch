@@ -33,6 +33,7 @@ export function ConnectYourCodeCard({
         label="Client Key (public, for browser and mobile)"
         testId="connect-client-key"
         value={clientKey.keyMaterial}
+        wrap
       />
 
       <CopyableCode label="Install" testId="connect-install" value={SDK_INSTALL_COMMAND} />
