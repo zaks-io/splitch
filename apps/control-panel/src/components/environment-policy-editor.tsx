@@ -10,8 +10,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@splitch/ui/components/card";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { updateControlPanelEnvironmentPolicy } from "#lib/control-plane-settings-functions";
+import { refreshEnvironmentSettings } from "#lib/settings-query";
 
 interface EnvironmentPolicyEditorProps {
   appId: string;
@@ -31,6 +33,7 @@ export function EnvironmentPolicyEditor({
   environmentId,
   initialPolicy,
 }: EnvironmentPolicyEditorProps) {
+  const queryClient = useQueryClient();
   const [draft, setDraft] = useState(initialPolicy);
   const [saved, setSaved] = useState(initialPolicy);
   const [error, setError] = useState<string>();
@@ -47,6 +50,18 @@ export function EnvironmentPolicyEditor({
       if (result.ok) {
         setDraft(result.data.policy);
         setSaved(result.data.policy);
+        try {
+          const refreshed = await refreshEnvironmentSettings(queryClient, {
+            appId,
+            environmentId,
+          });
+          setDraft(refreshed.environment.policy);
+          setSaved(refreshed.environment.policy);
+        } catch {
+          setError(
+            "The Environment Policy was saved, but current settings could not be refreshed.",
+          );
+        }
       } else {
         setError(result.error.message);
       }

@@ -47,9 +47,11 @@ describe("redaction key policy", () => {
       "secret",
       "client_secret",
       "api-key",
+      "keyMaterial",
       "token",
       "accessToken",
       "refresh_token",
+      "value",
     ]) {
       expect(isLeafPiiKey(key)).toBe(true);
       expect(isPiiKey(key)).toBe(true);

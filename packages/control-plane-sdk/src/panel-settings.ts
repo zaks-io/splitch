@@ -5,7 +5,7 @@ import { createControlPlaneSdk } from "./index";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
 
-const API_KEY_SCOPES = ["data-plane:evaluate", "data-plane:write"] as const;
+export const PANEL_API_KEY_SCOPES = ["data-plane:evaluate", "data-plane:write"] as const;
 
 export interface PanelSettingsScope {
   appId: string;
@@ -67,7 +67,7 @@ export function createPanelSettingsClient(options: {
       sdk.credentials.apiKeys.create({
         appId,
         environmentId,
-        scopes: [...API_KEY_SCOPES],
+        scopes: [...PANEL_API_KEY_SCOPES],
       }),
     revokeApiKey: ({ appId, environmentId, keyId }) =>
       sdk.credentials.apiKeys.revoke({ appId, environmentId, keyId }),

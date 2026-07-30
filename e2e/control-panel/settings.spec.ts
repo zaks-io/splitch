@@ -17,6 +17,7 @@ test.describe("per-Environment Settings", () => {
     await page.setViewportSize({ width: 1280, height: 1100 });
     await page.goto(`/acme-labs/checkout-api/${environmentKey}/settings`);
 
+    await expect(page.locator('[data-app-shell="ready"]')).toHaveAttribute("data-hydrated", "true");
     await expect(page.getByRole("heading", { name: environmentName })).toBeVisible();
     await expect(page.getByText("accepts requests from any origin")).toBeVisible();
     await captureThemeScreenshots(page, testInfo, "settings-environment-open");
@@ -26,6 +27,7 @@ test.describe("per-Environment Settings", () => {
     await expect(killSwitch.locator("input")).toHaveCount(0);
 
     const lockButton = page.getByRole("button", { name: "Lock to origins" });
+    await expect(lockButton).toBeEnabled();
     await page.getByLabel("Allowed origins").fill("https://app.example.com");
     await lockButton.click();
     await expect(page.getByText("Locked origins")).toBeVisible();
@@ -45,6 +47,7 @@ test.describe("per-Environment Settings", () => {
 
     await page.getByRole("button", { name: "I saved it" }).click();
     await expect(onceOnly).toHaveCount(0);
+    await expect(page.locator(`[data-api-key-id='${newKeyId}']`)).toContainText("Active");
 
     const postCreationBodies: Array<Promise<string>> = [];
     page.on("response", (response) => {
@@ -62,6 +65,7 @@ test.describe("per-Environment Settings", () => {
       .locator(`[data-api-key-id='${newKeyId}']`)
       .getByRole("button", { name: "Revoke" })
       .click();
+    await expect(page.locator(`[data-api-key-id='${newKeyId}']`)).toContainText("Revoked");
     await page.reload();
     const revokedRow = page.locator(`[data-api-key-id='${newKeyId}']`);
     await expect(revokedRow).toContainText("Revoked");

@@ -2,8 +2,8 @@ import { env } from "cloudflare:workers";
 import type { ControlPanelOperation } from "@splitch/control-plane-sdk/control-panel-identity";
 import type { PanelEnvironmentSettings } from "@splitch/control-plane-sdk/panel-settings";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { SignedControlPanelEntrypoint } from "../src/index.js";
 import { sha256Hex } from "../src/credential-cache.js";
+import type { SignedControlPanelEntrypoint } from "../src/index.js";
 import {
   panelEntrypoint,
   panelFlagsIds,
@@ -133,6 +133,23 @@ describe("SignedControlPanelEntrypoint Environment settings", () => {
       ]),
     );
   });
+});
+
+describe("SignedControlPanelEntrypoint Environment settings security", () => {
+  it.each([
+    "null",
+    "*",
+    "not a URL",
+  ] as const)("refuses invalid Client Key origin %s", async (origin) => {
+    const refused = await panelRequest(
+      "PATCH",
+      `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/client-key`,
+      { originAllowlist: [origin] },
+    );
+
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+  });
 
   it("rechecks live membership and binds revoke to the exact API Key", async () => {
     await env.DB.prepare("DELETE FROM app_memberships WHERE app_id = ? AND user_id = ?")
@@ -155,6 +172,27 @@ describe("SignedControlPanelEntrypoint Environment settings", () => {
     const bound = await entrypoint.fetch(await signedPanelRequest(ids, "POST", path, {}, wrongKey));
     expect(bound.status).toBe(401);
   });
+
+  it("refuses scopes outside the Control Panel API Key allowlist", async () => {
+    const before = await apiKeyCount();
+    const refused = await panelRequest("POST", apiKeysPath(), {
+      scopes: ["data-plane:evaluate", "control-plane:admin"],
+    });
+
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: {
+        issues: [
+          {
+            path: ["scopes"],
+            message: "allowed scopes: data-plane:evaluate, data-plane:write",
+          },
+        ],
+      },
+    });
+    expect(await apiKeyCount()).toBe(before);
+  });
 });
 
 function apiKeysPath(): string {
@@ -163,4 +201,13 @@ function apiKeysPath(): string {
 
 async function panelRequest(method: string, path: string, body?: unknown): Promise<Response> {
   return entrypoint.fetch(await signedPanelRequest(ids, method, path, body));
+}
+
+async function apiKeyCount(): Promise<number> {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS count FROM api_keys WHERE app_id = ? AND environment_id = ?",
+  )
+    .bind(APP_ID, ENVIRONMENT_ID)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
 }

@@ -260,6 +260,8 @@ async function handleSignedPanelSettings(
   authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
   repo: ReturnType<typeof createRepository>,
 ): Promise<Response | null> {
+  // Keep this binding-only read narrow like handleSignedPanelExperiments; mutation
+  // routes still inherit the full createApp rate-limit and observability stack below.
   if (protocol !== "signed") return null;
   const operation = parseControlPanelBindingOperation(request);
   if (operation?.id !== "settings_get") return null;

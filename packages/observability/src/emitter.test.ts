@@ -44,4 +44,25 @@ describe("createScrubbedEmitter", () => {
     expect(captured).toHaveLength(1);
     expect(captured[0]?.extra.targeting).toBe("[Redacted]");
   });
+
+  it("scrubs API and Client Key material from Sentry and structured logs", () => {
+    const apiKey = `sk_${"a".repeat(64)}`;
+    const clientKey = `pk_${"b".repeat(64)}`;
+    const sentryEvents: Record<string, unknown>[] = [];
+    const structuredLogEvents: Record<string, unknown>[][] = [];
+    const emitter = createScrubbedEmitter({
+      surface: "control-panel",
+      onSentryEvent: (event) => sentryEvents.push(event),
+      onStructuredLogEvents: (events) => structuredLogEvents.push(events),
+    });
+
+    emitter.captureException(new Error(`credential leak ${apiKey}`), {
+      credential: clientKey,
+    });
+    emitter.log("error", `credential leak ${clientKey}`, { credential: apiKey });
+
+    const emitted = JSON.stringify({ sentryEvents, structuredLogEvents });
+    expect(emitted).not.toContain(apiKey);
+    expect(emitted).not.toContain(clientKey);
+  });
 });

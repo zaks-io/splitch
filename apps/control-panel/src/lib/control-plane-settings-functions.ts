@@ -1,5 +1,5 @@
 import { env as workerEnv } from "cloudflare:workers";
-import { EnvironmentPolicySchema } from "@splitch/contracts";
+import { EnvironmentPolicySchema, NormalizedOriginAllowlistSchema } from "@splitch/contracts";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
@@ -13,7 +13,7 @@ const SettingsScopeSchema = z.object({
 });
 
 const LockClientKeySchema = SettingsScopeSchema.extend({
-  originAllowlist: z.array(z.string().min(1)).min(1),
+  originAllowlist: NormalizedOriginAllowlistSchema,
 });
 
 const UpdatePolicySchema = SettingsScopeSchema.extend({
@@ -53,9 +53,7 @@ export const revokeControlPanelApiKey = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const authorized = await authorizedSettingsClient();
     if (!authorized.ok) return authorized.result;
-    const revoked = await authorized.client.revokeApiKey(data);
-    if (!revoked.ok) return revoked;
-    return authorized.client.read(data);
+    return authorized.client.revokeApiKey(data);
   });
 
 export const updateControlPanelEnvironmentPolicy = createServerFn({ method: "POST" })

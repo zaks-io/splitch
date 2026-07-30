@@ -1,4 +1,5 @@
 import type { PanelEnvironmentSettings } from "@splitch/control-plane-sdk/panel-settings";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,7 +15,11 @@ const { EnvironmentSettings } = await import("./environment-settings");
 
 describe("EnvironmentSettings", () => {
   it("renders the open Client Key warning, metadata-only API Keys, and Policy growth path", () => {
-    const html = renderToStaticMarkup(<EnvironmentSettings settings={settings} />);
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}>
+        <EnvironmentSettings settings={settings} />
+      </QueryClientProvider>,
+    );
 
     expect(html).toContain("accepts requests from any origin");
     expect(html).toContain("Lock to origins");

@@ -1,9 +1,9 @@
 import type { PanelEnvironmentSettings } from "@splitch/control-plane-sdk/panel-settings";
 import { appScope, envScope, type Repository } from "@splitch/db";
-import { renderError, type Principal } from "@splitch/worker-runtime";
+import { type Principal, renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
 import { environmentResponse } from "./app-environment-model";
-import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning";
+import { clientKeyResponse, readOrProvisionClientKey } from "./client-key-provisioning";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 
 interface PanelSettingsDeps {
@@ -42,7 +42,7 @@ export async function panelSettingsRead(
 
   const scope = envScope(input.appId, input.environmentId);
   const [clientKey, apiKeys] = await Promise.all([
-    provisionClientKey(deps, {
+    readOrProvisionClientKey(deps, {
       appId: input.appId,
       environmentId: input.environmentId,
       organizationId: app.organizationId,

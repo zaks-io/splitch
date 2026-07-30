@@ -1,3 +1,4 @@
+import type { PanelApiKeyMetadata } from "@splitch/control-plane-sdk/panel-settings";
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { Badge } from "@splitch/ui/components/badge";
 import { Button } from "@splitch/ui/components/button";
@@ -17,13 +18,13 @@ import {
   TableHeader,
   TableRow,
 } from "@splitch/ui/components/table";
-import type { PanelApiKeyMetadata } from "@splitch/control-plane-sdk/panel-settings";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
-  loadControlPanelSettings,
   provisionControlPanelApiKey,
   revokeControlPanelApiKey,
 } from "#lib/control-plane-settings-functions";
+import { refreshEnvironmentSettings } from "#lib/settings-query";
 
 interface ApiKeysCardProps {
   appId: string;
@@ -37,6 +38,7 @@ interface OnceOnlySecret {
 }
 
 export function ApiKeysCard({ appId, environmentId, initialApiKeys }: ApiKeysCardProps) {
+  const queryClient = useQueryClient();
   const [apiKeys, setApiKeys] = useState(initialApiKeys);
   const [secret, setSecret] = useState<OnceOnlySecret>();
   const [copyLabel, setCopyLabel] = useState("Copy API Key");
@@ -54,9 +56,7 @@ export function ApiKeysCard({ appId, environmentId, initialApiKeys }: ApiKeysCar
         return;
       }
       setSecret({ keyId: created.data.credential.keyId, value: created.data.value });
-      const refreshed = await loadControlPanelSettings({ data: { appId, environmentId } });
-      if (refreshed.ok) setApiKeys(refreshed.data.apiKeys);
-      else setError("The API Key was created, but its metadata could not be refreshed.");
+      await refreshApiKeys("The API Key was created, but its metadata could not be refreshed.");
     } catch {
       setError("The API Key could not be provisioned. Try again.");
     } finally {
@@ -86,12 +86,29 @@ export function ApiKeysCard({ appId, environmentId, initialApiKeys }: ApiKeysCar
     setRevokingKeyId(keyId);
     try {
       const result = await revokeControlPanelApiKey({ data: { appId, environmentId, keyId } });
-      if (result.ok) setApiKeys(result.data.apiKeys);
-      else setError(result.error.message);
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+      await refreshApiKeys(
+        "The API Key was revoked, but its current status could not be refreshed.",
+      );
     } catch {
       setError("Revocation did not complete. The API Key may still be active.");
     } finally {
       setRevokingKeyId(undefined);
+    }
+  }
+
+  async function refreshApiKeys(failureMessage: string) {
+    try {
+      const refreshed = await refreshEnvironmentSettings(queryClient, {
+        appId,
+        environmentId,
+      });
+      setApiKeys(refreshed.apiKeys);
+    } catch {
+      setError(failureMessage);
     }
   }
 

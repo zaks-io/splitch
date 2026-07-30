@@ -39,6 +39,18 @@ describe("scrubValue", () => {
     expect(out.a.b.targetingKey).toBe(REDACTED);
   });
 
+  it("redacts generic value and keyMaterial fields", () => {
+    const out = scrubValue({
+      credential: {
+        value: "sk_secret",
+        keyMaterial: "pk_secret",
+      },
+    }) as { credential: { value: unknown; keyMaterial: unknown } };
+
+    expect(out.credential.value).toBe(REDACTED);
+    expect(out.credential.keyMaterial).toBe(REDACTED);
+  });
+
   it("preserves __proto__ as an own scrubbed key without mutating the output prototype", () => {
     const input = JSON.parse('{"__proto__":{"email":"proto@example.com"}}') as Record<
       string,

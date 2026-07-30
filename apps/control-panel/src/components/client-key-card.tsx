@@ -1,3 +1,4 @@
+import { type ClientKey, normalizeClientOrigins, OriginAllowlistSchema } from "@splitch/contracts";
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { Button } from "@splitch/ui/components/button";
 import {
@@ -8,9 +9,10 @@ import {
   CardTitle,
 } from "@splitch/ui/components/card";
 import { Input } from "@splitch/ui/components/input";
-import type { ClientKey } from "@splitch/contracts";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { lockControlPanelClientKey } from "#lib/control-plane-settings-functions";
+import { refreshEnvironmentSettings } from "#lib/settings-query";
 
 interface ClientKeyCardProps {
   appId: string;
@@ -19,6 +21,7 @@ interface ClientKeyCardProps {
 }
 
 export function ClientKeyCard({ appId, environmentId, initialClientKey }: ClientKeyCardProps) {
+  const queryClient = useQueryClient();
   const [clientKey, setClientKey] = useState(initialClientKey);
   const [origins, setOrigins] = useState("");
   const [copyLabel, setCopyLabel] = useState("Copy");
@@ -49,6 +52,15 @@ export function ClientKeyCard({ appId, environmentId, initialClientKey }: Client
       if (result.ok) {
         setClientKey(result.data);
         setOrigins("");
+        try {
+          const refreshed = await refreshEnvironmentSettings(queryClient, {
+            appId,
+            environmentId,
+          });
+          setClientKey(refreshed.clientKey);
+        } catch {
+          setError("The Client Key was locked, but current settings could not be refreshed.");
+        }
       } else {
         setError(result.error.message);
       }
@@ -143,16 +155,9 @@ function parseOrigins(
   if (candidates.length === 0) {
     return { ok: false, message: "Enter at least one origin before locking this key." };
   }
-  try {
-    const values = candidates.map((candidate) => {
-      const url = new URL(candidate);
-      if (url.protocol !== "https:" && url.hostname !== "localhost") {
-        throw new Error("insecure origin");
-      }
-      return url.origin;
-    });
-    return { ok: true, values: [...new Set(values)] };
-  } catch {
+  const parsed = OriginAllowlistSchema.safeParse(candidates);
+  if (!parsed.success) {
     return { ok: false, message: "Enter valid HTTPS origins, such as https://app.example.com." };
   }
+  return { ok: true, values: normalizeClientOrigins(parsed.data) };
 }
