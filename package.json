@@ -79,8 +79,8 @@
     "workers:secrets:shared-preview": "node scripts/sync-worker-secrets.mjs shared-preview",
     "typecheck": "turbo run typecheck",
     "verify:ci": "pnpm knip && turbo run //#format:check //#spec:lint //#check:cli-mcp-parity //#test:scripts lint typecheck test test:connect-snippet stats:golden stats:property build",
-    "verify:commit": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:staged",
-    "verify:push": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm knip && pnpm secrets:range && pnpm tinybird:local && pnpm d1:migrate:local && pnpm d1:migrate:populated"
+    "verify:commit": "pnpm knip && turbo run //#format:check //#secrets:staged lint typecheck",
+    "verify:push": "pnpm knip && turbo run //#format:check //#secrets:range //#tinybird:local //#d1:migrate:local //#d1:migrate:populated lint typecheck"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",

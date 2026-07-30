@@ -57,9 +57,10 @@ in this config; refresh them from Linear during each workflow run.
   `lefthook`, `sharp`, and `workerd`.
 - Install: `pnpm install`
 - Lockfile: `pnpm-lock.yaml`
-- Full local pre-push gate: `pnpm verify:push` (`format:check`, `lint`,
-  `typecheck`, `knip`, `secrets:range`, `tinybird:local`,
-  `d1:migrate:local`).
+- Full local pre-push gate: `pnpm verify:push` (`knip` as a serial prefix, then
+  one parallel Turbo graph: `format:check`, `lint`, `typecheck`,
+  `secrets:range`, `tinybird:local`, `d1:migrate:local`,
+  `d1:migrate:populated`).
 - CI gate: `.github/workflows/ci.yml` job `Verify` runs `pnpm verify:ci`
   (`format:check`, `lint`, `typecheck`, `knip`, `spec:lint`, `test:scripts`,
   `test`, `stats:golden`, `stats:property`, `build`) and then `pnpm secrets:range`.
@@ -73,7 +74,8 @@ in this config; refresh them from Linear during each workflow run.
   `d1:migrate:local`, but `pnpm verify:ci` currently does not. Fix the repo
   gate entrypoints before treating CI and pre-push as equivalent.
 - Commit gate: Lefthook runs `node scripts/check-file-size.mjs` and
-  `CI=true pnpm verify:commit`.
+  `CI=true pnpm verify:commit` (`knip` as a serial prefix, then one parallel
+  Turbo graph: `format:check`, `lint`, `typecheck`, `secrets:staged`).
 - Build: `pnpm build`
 - Test: `pnpm test`
 - Lint / format / typecheck / Knip / Gitleaks: wired through root scripts,

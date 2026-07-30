@@ -22,5 +22,9 @@ export default defineConfig({
     name: "unit",
     include: ["src/**/*.{test,spec}.ts"],
     passWithNoTests: true,
+    // The verify graph runs many vitest processes at once; the 5s default
+    // flakes under that CPU contention (SPL-231).
+    testTimeout: 15_000,
+    hookTimeout: 30_000,
   },
 });
