@@ -1,8 +1,8 @@
 import {
   ApprovalDiffSchema,
   type ApprovalOperation,
-  ApprovalPolicyContextSchema,
   type ApprovalPolicyContext,
+  ApprovalPolicyContextSchema,
   type ApprovalTarget,
   ApprovalTargetSchema,
 } from "@splitch/contracts";
@@ -111,7 +111,6 @@ export async function createApproval(
     input.target,
     input.policyContexts,
   );
-  if (!targetVersion) return { ok: false, response: approvalNotFound(input.requestId) };
   const diff = ApprovalDiffSchema.parse(approvalDiff(input.current, input.proposed));
   const requestHash = await proposalRequestHash(input);
   const now = deps.nowIso?.() ?? new Date().toISOString();
@@ -199,28 +198,9 @@ export async function reviewApproval(
     };
   }
   const contexts = ApprovalPolicyContextSchema.array().parse(JSON.parse(row.policyContexts));
-  const policyError = await validateReviewPolicy(deps, row.proposedBy, contexts, input);
-  if (policyError) return policyError;
-
-  const currentVersion = await approvalTargetVersion(
-    deps.repo,
-    input.appId,
-    {
-      type: ApprovalTargetSchema.parse({
-        type: row.targetType,
-        id: row.targetId,
-        version: row.targetVersion,
-      }).type,
-      id: row.targetId,
-    },
-    contexts,
-  );
-  if (!currentVersion) return { ok: false, response: approvalNotFound(input.requestId) };
-  if (currentVersion !== row.targetVersion) {
-    return materializeStale(deps, row, input, requestHash, currentVersion);
-  }
-
   const now = deps.nowIso?.() ?? new Date().toISOString();
+  // Declining never touches the target, so it neither needs nor re-validates the
+  // target version: a proposal against a deleted target must still be closable.
   if (input.action === "decline") {
     const resolved = await deps.repo.approvals.resolveWithoutApplication(scope, {
       requestId: row.id,
@@ -239,6 +219,27 @@ export async function reviewApproval(
       ? projectedResult(deps, row.appId, row.id, input.requestId)
       : resolvedWinner(deps, row.appId, row.id, input.requestId);
   }
+
+  const policyError = await validateReviewPolicy(deps, row.proposedBy, contexts, input);
+  if (policyError) return policyError;
+
+  const currentVersion = await approvalTargetVersion(
+    deps.repo,
+    input.appId,
+    {
+      type: ApprovalTargetSchema.parse({
+        type: row.targetType,
+        id: row.targetId,
+        version: row.targetVersion,
+      }).type,
+      id: row.targetId,
+    },
+    contexts,
+  );
+  if (currentVersion !== row.targetVersion) {
+    return materializeStale(deps, row, input, requestHash, currentVersion);
+  }
+
   return prepareAndApplyApproval(deps, row, input, requestHash, now, contexts);
 }
 
@@ -249,7 +250,6 @@ async function validateReviewPolicy(
   input: ReviewApprovalInput,
 ): Promise<ApprovalResult | null> {
   const currentPolicy = await currentPolicyProjection(deps.repo, input.appId, contexts);
-  if (!currentPolicy) return { ok: false, response: approvalNotFound(input.requestId) };
   if (
     input.principal.id === proposedBy &&
     currentPolicy.some((context) => context.level === "approve")

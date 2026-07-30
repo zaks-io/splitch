@@ -1,7 +1,13 @@
-import { and, eq, exists, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { flagConfigs, targetingRules } from "../schema/index";
+import {
+  appliedRequestUpdate,
+  appliedReviewInsert,
+  appliedReviewQueries,
+  approvalPendingCondition,
+  reviewRecorded,
+} from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
-import { appliedReviewQueries, approvalPendingCondition } from "./approval-atomic";
 import type { Db } from "./client";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
@@ -92,22 +98,10 @@ export function makeFlagConfigOps(
             ),
           )
           .returning({ id: flagConfigs.id });
-        const evidence = exists(
-          db
-            .select({ one: sql<number>`1` })
-            .from(flagConfigs)
-            .where(
-              and(
-                scopedFlagConfig(scope, flagId),
-                eq(flagConfigs.version, current.version + 1),
-                eq(flagConfigs.updatedAt, approval.reviewedAt),
-              ),
-            ),
-        );
-        await db.batch([
-          mutation,
-          ...appliedReviewQueries(db, approval, evidence),
-        ] as unknown as Parameters<Db["batch"]>[0]);
+        // `changes() = 1` binds the Review to this exact mutation statement.
+        await db.batch([mutation, ...appliedReviewQueries(db, approval)] as unknown as Parameters<
+          Db["batch"]
+        >[0]);
         return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       }
       const rows = await flagConfigsTable.update(
@@ -139,18 +133,9 @@ export function makeFlagConfigOps(
       if (!current) return null;
 
       if (approval) {
-        const evidence = exists(
-          db
-            .select({ one: sql<number>`1` })
-            .from(flagConfigs)
-            .where(
-              and(
-                scopedFlagConfig(scope, flagId),
-                eq(flagConfigs.version, current.version + 1),
-                eq(flagConfigs.updatedAt, approval.reviewedAt),
-              ),
-            ),
-        );
+        // The Review row is this attempt's unique evidence: the rule writes ride
+        // along with it, and it is itself bound to the config bump by changes().
+        const evidence = reviewRecorded(db, approval);
         const guardedDelete = db
           .delete(targetingRules)
           .where(and(scopedTargetingRule(scope, flagId), evidence))
@@ -173,7 +158,7 @@ export function makeFlagConfigOps(
                 updatedAt: sql<string>`${row.updatedAt}`.as("updated_at"),
               })
               .from(flagConfigs)
-              .where(evidence)
+              .where(and(scopedFlagConfig(scope, flagId), evidence))
               .limit(1),
           ),
         );
@@ -190,9 +175,10 @@ export function makeFlagConfigOps(
           .returning();
         await db.batch([
           guardedUpdate,
+          appliedReviewInsert(db, approval),
           guardedDelete,
           ...guardedInserts,
-          ...appliedReviewQueries(db, approval, evidence),
+          appliedRequestUpdate(db, approval),
         ] as unknown as Parameters<Db["batch"]>[0]);
         return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       }

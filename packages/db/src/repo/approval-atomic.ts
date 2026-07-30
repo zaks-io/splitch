@@ -73,16 +73,55 @@ function policyLevelCondition(
 }
 
 /**
+ * True once this Review attempt's own row exists. Statements that must ride
+ * along with a committed Review — secondary target writes appended after it in
+ * the same batch — guard on this instead of on a value probe: the Review id is
+ * unique per attempt, so a concurrent Review of a *different* request against
+ * the same target can never satisfy it.
+ */
+export function reviewRecorded(db: Db, commit: ApprovalCommit) {
+  return exists(
+    db
+      .select({ one: sql<number>`1` })
+      .from(approvalReviews)
+      .where(
+        and(
+          eq(approvalReviews.appId, commit.appId),
+          eq(approvalReviews.id, commit.reviewId),
+          eq(approvalReviews.approvalRequestId, commit.requestId),
+        ),
+      ),
+  );
+}
+
+/**
  * Append immediately after the canonical target mutation in a D1 batch.
  * SQLite changes() binds the Review to the preceding guarded mutation: if the
  * target or pending-request guard lost a race, no successful Review is written.
+ *
+ * `changes() = 1` is the only evidence that stays unambiguous under
+ * concurrency, so it is the default and every caller should keep it. A value
+ * probe ("the row now reads version N+1 stamped at T") can be satisfied by a
+ * *different* pending request's commit landing in the same millisecond, which
+ * would record an applied Review for a mutation that actually no-op'd.
  */
 export function appliedReviewQueries(
   db: Db,
   commit: ApprovalCommit,
   mutationEvidence: SQL = sql`changes() = 1`,
 ) {
-  const reviewInsert = db.insert(approvalReviews).select(
+  return [
+    appliedReviewInsert(db, commit, mutationEvidence),
+    appliedRequestUpdate(db, commit),
+  ] as const;
+}
+
+export function appliedReviewInsert(
+  db: Db,
+  commit: ApprovalCommit,
+  mutationEvidence: SQL = sql`changes() = 1`,
+) {
+  return db.insert(approvalReviews).select(
     db
       .select({
         id: sql<string>`${commit.reviewId}`.as("id"),
@@ -116,7 +155,10 @@ export function appliedReviewQueries(
         ),
       ),
   );
-  const requestUpdate = db
+}
+
+export function appliedRequestUpdate(db: Db, commit: ApprovalCommit) {
+  return db
     .update(approvalRequests)
     .set({
       status: "applied",
@@ -130,20 +172,8 @@ export function appliedReviewQueries(
         eq(approvalRequests.appId, commit.appId),
         eq(approvalRequests.id, commit.requestId),
         eq(approvalRequests.status, "pending"),
-        exists(
-          db
-            .select({ one: sql<number>`1` })
-            .from(approvalReviews)
-            .where(
-              and(
-                eq(approvalReviews.appId, commit.appId),
-                eq(approvalReviews.id, commit.reviewId),
-                eq(approvalReviews.approvalRequestId, commit.requestId),
-              ),
-            ),
-        ),
+        reviewRecorded(db, commit),
       ),
     )
     .returning({ id: approvalRequests.id });
-  return [reviewInsert, requestUpdate] as const;
 }

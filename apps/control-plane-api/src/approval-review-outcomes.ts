@@ -2,11 +2,11 @@ import {
   ApprovalPolicyContextSchema,
   type ApprovalRequest,
   ApprovalTargetSchema,
+  type ErrorCode,
   ErrorCodeSchema,
   ErrorDetailsSchema,
-  type ErrorCode,
 } from "@splitch/contracts";
-import { appScope, type ApprovalCommit } from "@splitch/db";
+import { type ApprovalCommit, appScope } from "@splitch/db";
 import type { Principal } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { approvalReviewId } from "./approval-canonical";
@@ -170,7 +170,7 @@ async function staleReplay(
         details: {
           approvalRequestId: row.id,
           targetVersion: row.targetVersion,
-          currentTargetVersion: currentVersion ?? row.targetVersion,
+          currentTargetVersion: currentVersion,
           recommendedAction: "REFRESH_AND_REPROPOSE",
         },
       },

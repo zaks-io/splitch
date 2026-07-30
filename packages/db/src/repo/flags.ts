@@ -1,7 +1,12 @@
-import { and, eq, exists, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index";
+import {
+  appliedRequestUpdate,
+  appliedReviewInsert,
+  approvalPendingCondition,
+  reviewRecorded,
+} from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
-import { appliedReviewQueries, approvalPendingCondition } from "./approval-atomic";
 import type { Db } from "./client";
 import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
 import type { TenantScope } from "./scope";
@@ -218,28 +223,27 @@ function makeVariantOps(db: Db, flagInScope: FlagInScope) {
           ),
         )
         .returning();
-      const approvalQueries = options?.approval
-        ? appliedReviewQueries(
-            db,
-            options.approval,
-            exists(
-              db
-                .select({ one: sql<number>`1` })
-                .from(flags)
-                .where(
-                  and(
-                    eq(flags.appId, scope.appId),
-                    eq(flags.id, flagId),
-                    eq(flags.version, flag.version + 1),
-                    eq(flags.updatedAt, options.approval.reviewedAt),
-                  ),
-                ),
-            ),
-          )
-        : [];
-      await db.batch([variantUpdate, flagUpdate, ...approvalQueries] as unknown as Parameters<
-        Db["batch"]
-      >[0]);
+      // `changes() = 1` binds the Review to the flag version bump immediately
+      // above it; a value probe could be satisfied by a concurrent Review of a
+      // different request committing in the same millisecond.
+      const reviewInsert = options?.approval ? [appliedReviewInsert(db, options.approval)] : [];
+      const requestUpdate = options?.approval ? [appliedRequestUpdate(db, options.approval)] : [];
+      // A rename must carry `flag_configs.available_variant_names` with it in the
+      // same transaction. Otherwise every Environment keeps pointing at a Variant
+      // name that no longer exists: the served snapshot dangles and the Variant
+      // stops counting as servable, which silently disarms the Approval gate on
+      // any follow-up value edit.
+      const renameQueries =
+        patch.name !== undefined && patch.name !== variant.name
+          ? [renameAvailableVariant(db, scope, flagId, variant.name, patch.name, options?.approval)]
+          : [];
+      await db.batch([
+        variantUpdate,
+        flagUpdate,
+        ...reviewInsert,
+        ...renameQueries,
+        ...requestUpdate,
+      ] as unknown as Parameters<Db["batch"]>[0]);
       return variantByName(scope, flagId, (patch.name as string | undefined) ?? name);
     },
 
@@ -257,4 +261,34 @@ function makeVariantOps(db: Db, flagInScope: FlagInScope) {
       return rows.length;
     },
   };
+}
+
+/**
+ * Carry a Variant rename into every Environment's available set for the Flag,
+ * order preserved, in the same statement batch as the rename itself. When the
+ * rename was authorized by an Approval Review, the rewrite is guarded by that
+ * Review row so it can never land without it.
+ */
+function renameAvailableVariant(
+  db: Db,
+  scope: TenantScope,
+  flagId: string,
+  from: string,
+  to: string,
+  approval?: ApprovalCommit,
+) {
+  return db
+    .update(flagConfigs)
+    .set({
+      availableVariantNames: sql`(SELECT json_group_array(CASE WHEN "value" = ${from} THEN ${to} ELSE "value" END) FROM json_each(${flagConfigs.availableVariantNames}))`,
+    })
+    .where(
+      and(
+        eq(flagConfigs.appId, scope.appId),
+        eq(flagConfigs.flagId, flagId),
+        sql`EXISTS (SELECT 1 FROM json_each(${flagConfigs.availableVariantNames}) WHERE "value" = ${from})`,
+        ...(approval ? [reviewRecorded(db, approval)] : []),
+      ),
+    )
+    .returning({ id: flagConfigs.id });
 }

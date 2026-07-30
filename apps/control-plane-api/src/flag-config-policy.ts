@@ -4,9 +4,57 @@ import {
   type PolicyChangeType,
 } from "@splitch/contracts";
 import { appScope, type Repository } from "@splitch/db";
+import { renderError } from "@splitch/worker-runtime";
 import type { ConfigStoreWriter } from "./config-store";
 
 type PromotionSelect = Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0]["select"];
+
+/**
+ * A stored `environments.policy` that the Environment write API would reject.
+ * It fails the read closed (no mutation can proceed), and carries enough
+ * identity to diagnose which row violates the contract instead of surfacing as
+ * an anonymous runtime fault (ADR-0036).
+ */
+class EnvironmentPolicyContractError extends Error {
+  readonly appId: string;
+  readonly environmentId: string;
+  readonly issues: string[];
+
+  constructor(appId: string, environmentId: string, issues: string[]) {
+    super(
+      `environments.policy for ${environmentId} in ${appId} is out of contract: ${issues.join(", ")}`,
+    );
+    this.name = "EnvironmentPolicyContractError";
+    this.appId = appId;
+    this.environmentId = environmentId;
+    this.issues = issues;
+  }
+}
+
+/**
+ * Run a handler body so an out-of-contract stored Policy still fails closed —
+ * no mutation can have happened, the read threw before any write — but arrives
+ * as a named contract fault instead of an anonymous "unhandled runtime fault"
+ * 500 that gives an operator nothing to act on (ADR-0036).
+ */
+export async function diagnosableContractFaults(
+  requestId: string,
+  body: () => Promise<Response>,
+): Promise<Response> {
+  try {
+    return await body();
+  } catch (cause) {
+    if (!(cause instanceof EnvironmentPolicyContractError)) throw cause;
+    return renderError(
+      {
+        code: "INTERNAL_SERVER_ERROR",
+        message: `stored Environment Policy is out of contract: ${cause.issues.join(", ")}`,
+        details: {},
+      },
+      { requestId },
+    );
+  }
+}
 
 export async function readEnvironmentPolicy(
   repo: Repository,
@@ -14,7 +62,16 @@ export async function readEnvironmentPolicy(
   environmentId: string,
 ): Promise<EnvironmentPolicy | null> {
   const row = await repo.identity.getEnvironment(appScope(appId), environmentId);
-  return row ? EnvironmentPolicySchema.parse(JSON.parse(row.policy)) : null;
+  if (!row) return null;
+  const parsed = EnvironmentPolicySchema.safeParse(JSON.parse(row.policy));
+  if (!parsed.success) {
+    throw new EnvironmentPolicyContractError(
+      appId,
+      environmentId,
+      parsed.error.issues.map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`),
+    );
+  }
+  return parsed.data;
 }
 
 export function flagConfigPatchGates(payload: Record<string, unknown>): PolicyChangeType[] {

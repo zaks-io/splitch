@@ -6,6 +6,7 @@ import { requireAppMember } from "./app-authz";
 import { approvalRequestProjection } from "./approval-model";
 import { reviewApproval } from "./approval-service";
 import type { ConfigStoreAccess } from "./config-store-do";
+import { diagnosableContractFaults } from "./flag-config-policy";
 import { objectBody, pathParam } from "./handler-input";
 
 interface ApprovalHandlerDeps {
@@ -34,17 +35,21 @@ export function makeApprovalHandlers(deps: ApprovalHandlerDeps) {
       const memberError = await requireAppMember(deps, appId, principal, requestId);
       if (memberError) return memberError;
       const query = queryInput(input);
-      return listApprovalRequests(deps, appId, query, requestId);
+      return diagnosableContractFaults(requestId, () =>
+        listApprovalRequests(deps, appId, query, requestId),
+      );
     },
 
     async get({ input, principal, requestId }: HandlerArgs<unknown>) {
       const appId = pathParam(input, "appId");
       const memberError = await requireAppMember(deps, appId, principal, requestId);
       if (memberError) return memberError;
-      const row = await deps.repo.approvals.getRequest(appScope(appId), pathParam(input, "id"));
-      return row
-        ? Response.json(await approvalRequestProjection(deps.repo, row))
-        : approvalNotFound(requestId);
+      return diagnosableContractFaults(requestId, async () => {
+        const row = await deps.repo.approvals.getRequest(appScope(appId), pathParam(input, "id"));
+        return row
+          ? Response.json(await approvalRequestProjection(deps.repo, row))
+          : approvalNotFound(requestId);
+      });
     },
 
     async review({ input, principal, requestId }: HandlerArgs<unknown>) {
@@ -52,16 +57,18 @@ export function makeApprovalHandlers(deps: ApprovalHandlerDeps) {
       const memberError = await requireAppMember(deps, appId, principal, requestId);
       if (memberError) return memberError;
       const body = objectBody(input);
-      const reviewed = await reviewApproval(deps, {
-        appId,
-        approvalRequestId: pathParam(input, "id"),
-        action: body.action as "approve_and_apply" | "decline",
-        reason: typeof body.reason === "string" ? body.reason : null,
-        idempotencyKey: body.idempotency_key as string,
-        principal,
-        requestId,
+      return diagnosableContractFaults(requestId, async () => {
+        const reviewed = await reviewApproval(deps, {
+          appId,
+          approvalRequestId: pathParam(input, "id"),
+          action: body.action as "approve_and_apply" | "decline",
+          reason: typeof body.reason === "string" ? body.reason : null,
+          idempotencyKey: body.idempotency_key as string,
+          principal,
+          requestId,
+        });
+        return reviewed.ok ? Response.json(reviewed.approvalRequest) : reviewed.response;
       });
-      return reviewed.ok ? Response.json(reviewed.approvalRequest) : reviewed.response;
     },
   };
 }
@@ -77,16 +84,12 @@ async function listApprovalRequests(
   },
   requestId: string,
 ): Promise<Response> {
-  const rows = await deps.repo.approvals.listRequests(appScope(appId));
-  const projected = await Promise.all(rows.map((row) => approvalRequestProjection(deps.repo, row)));
-  const filtered = projected.filter(
-    (request) =>
-      (!query.status || request.status === query.status) &&
-      (!query.target_kind || request.target.type === query.target_kind),
-  );
   const limit = query.limit ?? 50;
-  const start = query.cursor ? filtered.findIndex((request) => request.id === query.cursor) + 1 : 0;
-  if (query.cursor && start === 0) {
+  const scope = appScope(appId);
+  const after = query.cursor
+    ? await deps.repo.approvals.getRequest(scope, query.cursor)
+    : undefined;
+  if (query.cursor && !after) {
     return renderError(
       {
         code: "INVALID_PAGINATION",
@@ -96,13 +99,41 @@ async function listApprovalRequests(
       { requestId },
     );
   }
-  const items = filtered.slice(start, start + limit);
+  // Effective staleness is derived per row, so only `pending` requests can
+  // render as either `pending` or `stale`. Both filters therefore push the same
+  // stored predicate down and reconcile against the projection afterwards.
+  const effectiveOnly = query.status === "pending" || query.status === "stale";
+  const filters = {
+    storedStatus: statusFilter(query.status),
+    targetType: query.target_kind,
+  };
+  const rows = await deps.repo.approvals.listRequestPage(scope, {
+    ...filters,
+    limit: limit + 1,
+    ...(after ? { after: { proposedAt: after.proposedAt, id: after.id } } : {}),
+  });
+  const page = rows.slice(0, limit);
+  const items = (
+    await Promise.all(page.map((row) => approvalRequestProjection(deps.repo, row)))
+  ).filter((request) => !query.status || request.status === query.status);
   return Response.json({
     items,
-    cursor: start + limit < filtered.length ? (items.at(-1)?.id ?? null) : null,
+    cursor: rows.length > limit ? (page.at(-1)?.id ?? null) : null,
     limit,
-    total: filtered.length,
+    // A `pending`/`stale` filter is resolved after projection, so no SQL count
+    // can state it honestly. `null` is the contract's "not computed".
+    total: effectiveOnly ? null : await deps.repo.approvals.countRequests(scope, filters),
   });
+}
+
+function statusFilter(status: string | undefined): readonly string[] | undefined {
+  if (!status) return undefined;
+  // Only a stored `pending` row can render as `pending`; a `stale` render comes
+  // from either a stored `pending` row whose target moved or an already
+  // materialized `stale` row.
+  if (status === "pending") return ["pending"];
+  if (status === "stale") return ["pending", "stale"];
+  return [status];
 }
 
 function queryInput(input: unknown) {

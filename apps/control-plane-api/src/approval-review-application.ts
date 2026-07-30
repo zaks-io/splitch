@@ -1,16 +1,16 @@
 import {
+  type ApprovalOperation,
   ApprovalOperationSchema,
-  ApprovalPolicyContextSchema,
   type ApprovalPolicyContext,
+  ApprovalPolicyContextSchema,
   type ApprovalRequest,
   ApprovalTargetSchema,
-  type ApprovalOperation,
 } from "@splitch/contracts";
-import { appScope, type ApprovalCommit } from "@splitch/db";
+import { type ApprovalCommit, appScope } from "@splitch/db";
+import { requireAppAdmin } from "./app-authz";
 import { approvalReviewId } from "./approval-canonical";
 import { approvalRequestProjection } from "./approval-model";
 import { resultingVersionFor } from "./approval-resulting-version";
-import { requireAppAdmin } from "./app-authz";
 import {
   approvalNotFound,
   materializeStale,
@@ -128,7 +128,6 @@ async function staleAfterLostApply(
   }
   const contexts = ApprovalPolicyContextSchema.array().parse(JSON.parse(row.policyContexts));
   const currentPolicy = await currentPolicyProjection(deps.repo, row.appId, contexts);
-  if (!currentPolicy) return { ok: false, response: approvalNotFound(input.requestId) };
   if (
     input.principal.id === row.proposedBy &&
     currentPolicy.some((context) => context.level === "approve")
@@ -149,7 +148,6 @@ async function staleAfterLostApply(
     { type: targetType, id: row.targetId },
     contexts,
   );
-  if (!currentVersion) return { ok: false, response: approvalNotFound(input.requestId) };
   if (currentVersion === row.targetVersion) {
     return recordApplicationFailure(
       deps,

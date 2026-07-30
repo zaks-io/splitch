@@ -1,4 +1,4 @@
-import { and, desc, eq, exists, sql } from "drizzle-orm";
+import { and, desc, eq, exists, inArray, sql } from "drizzle-orm";
 import { approvalRequests, approvalReviews } from "../schema/index";
 import type { ApprovalDisposition, ApprovalFailure } from "./approval-types";
 import type { Db } from "./client";
@@ -6,6 +6,31 @@ import type { TenantScope } from "./scope";
 import { assertMintedScope } from "./scope";
 
 type ApprovalRequestInsert = typeof approvalRequests.$inferInsert;
+
+export interface ApprovalPageFilters {
+  /** Persisted `status` values the page may contain. */
+  storedStatus?: readonly string[];
+  targetType?: string;
+}
+
+function pageFilters(
+  filters: ApprovalPageFilters & { after?: { proposedAt: string; id: string } },
+) {
+  const conditions = [];
+  if (filters.storedStatus) {
+    conditions.push(inArray(approvalRequests.status, [...filters.storedStatus]));
+  }
+  if (filters.targetType) conditions.push(eq(approvalRequests.targetType, filters.targetType));
+  // Keyset continuation on the (proposed_at desc, id desc) ordering. Unlike an
+  // offset into a post-filtered array it stays valid when rows around the
+  // cursor change status between pages.
+  if (filters.after) {
+    conditions.push(
+      sql`(${approvalRequests.proposedAt}, ${approvalRequests.id}) < (${filters.after.proposedAt}, ${filters.after.id})`,
+    );
+  }
+  return conditions;
+}
 
 export function makeApprovalRepo(db: Db) {
   return {
@@ -66,6 +91,38 @@ export function makeApprovalRepo(db: Db) {
         .orderBy(desc(approvalRequests.proposedAt), desc(approvalRequests.id));
     },
 
+    /**
+     * One page of Approval Requests, filtered and bounded in SQL. Reading every
+     * request in the App and slicing in the Worker costs ~1+3N subrequests, so
+     * list breaks permanently once an App accumulates a few hundred lifetime
+     * requests and there is no API-side recovery from that.
+     *
+     * `storedStatus` filters the persisted column only. Effective staleness is
+     * recomputed per row on read and cannot be pushed down, so the caller
+     * filters that after projecting the page.
+     */
+    listRequestPage(
+      scope: TenantScope,
+      page: ApprovalPageFilters & { limit: number; after?: { proposedAt: string; id: string } },
+    ) {
+      assertMintedScope(scope);
+      return db
+        .select()
+        .from(approvalRequests)
+        .where(and(eq(approvalRequests.appId, scope.appId), ...pageFilters(page)))
+        .orderBy(desc(approvalRequests.proposedAt), desc(approvalRequests.id))
+        .limit(page.limit);
+    },
+
+    async countRequests(scope: TenantScope, filters: ApprovalPageFilters): Promise<number> {
+      assertMintedScope(scope);
+      const rows = await db
+        .select({ total: sql<number>`count(*)` })
+        .from(approvalRequests)
+        .where(and(eq(approvalRequests.appId, scope.appId), ...pageFilters(filters)));
+      return rows[0]?.total ?? 0;
+    },
+
     latestReview(scope: TenantScope, requestId: string) {
       assertMintedScope(scope);
       return db
@@ -115,41 +172,42 @@ export function makeApprovalRepo(db: Db) {
 
     async recordFailure(scope: TenantScope, failure: ApprovalFailure): Promise<boolean> {
       assertMintedScope(scope);
-      const rows = await db
-        .insert(approvalReviews)
-        .select(
-          db
-            .select({
-              id: sql<string>`${failure.reviewId}`.as("id"),
-              appId: approvalRequests.appId,
-              approvalRequestId: approvalRequests.id,
-              action: sql<string>`'approve_and_apply'`.as("action"),
-              outcome: sql<string>`'failed'`.as("outcome"),
-              reviewedBy: sql<string>`${failure.reviewedBy}`.as("reviewed_by"),
-              reviewedVia: sql<string>`${failure.reviewedVia}`.as("reviewed_via"),
-              reviewedAt: sql<string>`${failure.reviewedAt}`.as("reviewed_at"),
-              reason: sql<string | null>`${failure.reason}`.as("reason"),
-              idempotencyKey: sql<string>`${failure.idempotencyKey}`.as("idempotency_key"),
-              requestHash: sql<string>`${failure.requestHash}`.as("request_hash"),
-              resultingTargetVersion: sql<string | null>`NULL`.as("resulting_target_version"),
-              resultingResourceType: sql<string | null>`NULL`.as("resulting_resource_type"),
-              resultingResourceId: sql<string | null>`NULL`.as("resulting_resource_id"),
-              errorCode: sql<string>`${failure.errorCode}`.as("error_code"),
-              errorDetails: sql<string>`${failure.errorDetails}`.as("error_details"),
-            })
-            .from(approvalRequests)
-            .where(
-              and(
-                eq(approvalRequests.appId, scope.appId),
-                eq(approvalRequests.id, failure.requestId),
-                eq(approvalRequests.status, "pending"),
-              ),
-            ),
-        )
-        .returning({ id: approvalReviews.id });
+      const rows = await failureInsert(db, scope, failure).returning({ id: approvalReviews.id });
       return rows.length === 1;
     },
   };
+}
+
+function failureInsert(db: Db, scope: TenantScope, failure: ApprovalFailure) {
+  return db.insert(approvalReviews).select(
+    db
+      .select({
+        id: sql<string>`${failure.reviewId}`.as("id"),
+        appId: approvalRequests.appId,
+        approvalRequestId: approvalRequests.id,
+        action: sql<string>`'approve_and_apply'`.as("action"),
+        outcome: sql<string>`'failed'`.as("outcome"),
+        reviewedBy: sql<string>`${failure.reviewedBy}`.as("reviewed_by"),
+        reviewedVia: sql<string>`${failure.reviewedVia}`.as("reviewed_via"),
+        reviewedAt: sql<string>`${failure.reviewedAt}`.as("reviewed_at"),
+        reason: sql<string | null>`${failure.reason}`.as("reason"),
+        idempotencyKey: sql<string>`${failure.idempotencyKey}`.as("idempotency_key"),
+        requestHash: sql<string>`${failure.requestHash}`.as("request_hash"),
+        resultingTargetVersion: sql<string | null>`NULL`.as("resulting_target_version"),
+        resultingResourceType: sql<string | null>`NULL`.as("resulting_resource_type"),
+        resultingResourceId: sql<string | null>`NULL`.as("resulting_resource_id"),
+        errorCode: sql<string>`${failure.errorCode}`.as("error_code"),
+        errorDetails: sql<string>`${failure.errorDetails}`.as("error_details"),
+      })
+      .from(approvalRequests)
+      .where(
+        and(
+          eq(approvalRequests.appId, scope.appId),
+          eq(approvalRequests.id, failure.requestId),
+          eq(approvalRequests.status, "pending"),
+        ),
+      ),
+  );
 }
 
 function dispositionQueries(db: Db, disposition: ApprovalDisposition) {

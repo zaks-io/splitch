@@ -32,9 +32,7 @@ export async function approvalRequestProjection(
         )
       : row.targetVersion;
   const status =
-    storedStatus === "pending" && currentVersion !== null && currentVersion !== row.targetVersion
-      ? "stale"
-      : storedStatus;
+    storedStatus === "pending" && currentVersion !== row.targetVersion ? "stale" : storedStatus;
 
   return ApprovalRequestSchema.parse({
     id: row.id,
