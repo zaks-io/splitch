@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { output, quietExitCode, quietExitCodeWithInput, run } from "./lib/tinybird-process.mjs";
 import { acquireMachineLock } from "./machine-lock.mjs";
 
 const projectDir = ".";
@@ -148,71 +148,6 @@ function fail(message) {
   process.exit(1);
 }
 
-async function run(command, args, cwd, options = {}) {
-  await new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: {
-        ...process.env,
-        ...options.env,
-        TB_CLI_TELEMETRY_OPTOUT: "1",
-        TB_VERSION_WARNING: "0",
-      },
-      stdio: options.input ? ["pipe", "inherit", "inherit"] : "inherit",
-    });
-
-    if (options.input) {
-      child.stdin.end(options.input);
-    }
-
-    child.on("error", reject);
-    child.on("exit", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`${command} ${args.join(" ")} failed with exit code ${code}`));
-    });
-  }).catch((error) => {
-    console.error(`tinybird:local: ${error.message}`);
-    process.exit(1);
-  });
-}
-
-async function output(command, args, cwd) {
-  return await new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: {
-        ...process.env,
-        TB_CLI_TELEMETRY_OPTOUT: "1",
-        TB_VERSION_WARNING: "0",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk;
-    });
-    child.on("error", reject);
-    child.on("exit", (code) => {
-      if (code === 0) {
-        resolve(stdout);
-        return;
-      }
-      reject(new Error(`${command} ${args.join(" ")} failed with exit code ${code}: ${stderr}`));
-    });
-  }).catch((error) => {
-    console.error(`tinybird:local: ${error.message}`);
-    process.exit(1);
-  });
-}
-
 async function requireTinybirdCli(cwd) {
   const code = await quietExitCode("tb", ["--no-version-warning", "--version"], cwd);
   if (code !== 0) {
@@ -259,39 +194,4 @@ async function resetTinybirdLocal(cwd, tokens) {
 async function removeTinybirdLocal(cwd) {
   await quietExitCode("tb", ["--no-version-warning", "local", "stop"], cwd);
   await quietExitCodeWithInput("tb", ["--no-version-warning", "local", "remove"], cwd, "y\n");
-}
-
-async function quietExitCodeWithInput(command, args, cwd, input) {
-  return await new Promise((resolve) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: {
-        ...process.env,
-        TB_CLI_TELEMETRY_OPTOUT: "1",
-        TB_VERSION_WARNING: "0",
-      },
-      stdio: ["pipe", "ignore", "ignore"],
-    });
-
-    child.stdin.end(input);
-    child.on("error", () => resolve(127));
-    child.on("exit", (code) => resolve(code ?? 1));
-  });
-}
-
-async function quietExitCode(command, args, cwd) {
-  return await new Promise((resolve) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: {
-        ...process.env,
-        TB_CLI_TELEMETRY_OPTOUT: "1",
-        TB_VERSION_WARNING: "0",
-      },
-      stdio: "ignore",
-    });
-
-    child.on("error", () => resolve(127));
-    child.on("exit", (code) => resolve(code ?? 1));
-  });
 }

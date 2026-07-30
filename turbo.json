@@ -319,6 +319,9 @@
     "//#secrets:range": {
       "cache": false
     },
+    "//#secrets:staged": {
+      "cache": false
+    },
     "//#knip": {
       "cache": false,
       "dependsOn": ["@splitch/sdk#build"]

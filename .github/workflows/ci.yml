@@ -49,22 +49,26 @@ jobs:
           cache: pnpm
 
       - name: Install
+        timeout-minutes: 8
         run: pnpm install --frozen-lockfile
 
       - name: Check Turbo remote cache inputs
         run: node scripts/check-turbo-remote-cache-env.mjs
 
       - name: Install Tinybird CLI
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL https://tinybird.co | sh
+          curl -fsSL --max-time 120 https://tinybird.co | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Verify
+        timeout-minutes: 15
         run: pnpm verify:ci
 
       - name: Install gitleaks
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
@@ -72,8 +76,8 @@ jobs:
           checksums="gitleaks_${GITLEAKS_VERSION}_checksums.txt"
           base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
 
-          curl -fsSLO "${base}/${asset}"
-          curl -fsSLO "${base}/${checksums}"
+          curl -fsSLO --max-time 120 "${base}/${asset}"
+          curl -fsSLO --max-time 120 "${base}/${checksums}"
           grep " ${asset}$" "${checksums}" > checksums.txt
           sha256sum -c checksums.txt
           tar -xzf "${asset}" gitleaks

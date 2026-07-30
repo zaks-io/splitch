@@ -9,6 +9,15 @@ import {
 
 const service = "splitch-mcp-server";
 
+// Imported at module scope so the cold transform of the entire
+// control-plane-api module graph lands in collection, not inside a test's
+// timeout budget (it blew the 5s default under a CPU-contended full run).
+const controlPlaneAppModule = (await import(
+  new URL("../../control-plane-api/src/app.ts", import.meta.url).href
+)) as {
+  createApp(deps: unknown): { fetch(request: Request): Promise<Response> };
+};
+
 describe("MCP contract errors", () => {
   it("keeps unauthorized organization and privacy errors typed", async () => {
     const seen: Request[] = [];
@@ -38,19 +47,18 @@ describe("MCP contract errors", () => {
     });
   });
 
-  it("returns the real Control Plane authorization result for privacy request status", async () => {
-    const controlPlaneFetch = await realControlPlaneFetch();
+  describe("returns the real Control Plane authorization result for privacy request status", () => {
     const arguments_ = { requestId: "privacy_request_mcp_contract" };
 
-    for (const authorization of [
+    it.each([
       "Bearer member",
       "Bearer unrelated",
       "Bearer wrong-org-scope",
       "Bearer wrong-app-scope",
-    ]) {
+    ])("%s is FORBIDDEN", async (authorization) => {
       const result = await callTool(
         "privacy_requests_get",
-        controlPlaneFetch,
+        realControlPlaneFetch(),
         arguments_,
         authorization,
       );
@@ -58,12 +66,16 @@ describe("MCP contract errors", () => {
         isError: true,
         structuredContent: { code: "FORBIDDEN" satisfies ErrorResponse["code"] },
       });
-    }
+    });
 
-    for (const authorization of ["Bearer requester", "Bearer org-owner", "Bearer app-admin"]) {
+    it.each([
+      "Bearer requester",
+      "Bearer org-owner",
+      "Bearer app-admin",
+    ])("%s is authorized and surfaces SERVICE_UNAVAILABLE", async (authorization) => {
       const result = await callTool(
         "privacy_requests_get",
-        controlPlaneFetch,
+        realControlPlaneFetch(),
         arguments_,
         authorization,
       );
@@ -71,7 +83,7 @@ describe("MCP contract errors", () => {
         isError: true,
         structuredContent: { code: "SERVICE_UNAVAILABLE" satisfies ErrorResponse["code"] },
       });
-    }
+    });
   });
 });
 
@@ -113,14 +125,9 @@ async function callTool(
   return (await response.json()) as ToolCallResult;
 }
 
-async function realControlPlaneFetch(): Promise<typeof fetch> {
+function realControlPlaneFetch(): typeof fetch {
   const replayGuard = memoryMcpDelegationReplayGuard();
-  const module = (await import(
-    new URL("../../control-plane-api/src/app.ts", import.meta.url).href
-  )) as {
-    createApp(deps: unknown): { fetch(request: Request): Promise<Response> };
-  };
-  const app = module.createApp({
+  const app = controlPlaneAppModule.createApp({
     authResolver: async (request: Request) => {
       const actor = await parseMcpDelegation({
         request,
