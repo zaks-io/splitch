@@ -19,11 +19,18 @@ interface PublishContractOptions {
   label: "SDK" | "CLI";
   packageName: "@splitch/sdk" | "@splitch/cli";
   packageDir: "packages/sdk" | "apps/cli";
-  tag: "sdk-v0.1.0" | "cli-v0.1.0";
   workflowName: "sdk-publish.yml" | "cli-publish.yml";
 }
 
 export function registerPublishWorkflowContract(options: PublishContractOptions): void {
+  // Derived from the checked-in manifest so the fixtures can never drift from
+  // the version the validators actually resolve.
+  const manifestVersion = (
+    JSON.parse(readFileSync(path.join(repoRoot, options.packageDir, "package.json"), "utf8")) as {
+      version: string;
+    }
+  ).version;
+  const releaseTag = `${options.targetKey}-v${manifestVersion}`;
   const workflow = readFileSync(
     path.join(repoRoot, `.github/workflows/${options.workflowName}`),
     "utf8",
@@ -101,27 +108,27 @@ export function registerPublishWorkflowContract(options: PublishContractOptions)
     });
   });
 
-  registerLiveStateTests(options);
-  registerContextTests(options);
+  registerLiveStateTests(options, releaseTag);
+  registerContextTests(options, releaseTag);
   registerPublishedVersionTests(options);
 }
 
-function registerLiveStateTests(options: PublishContractOptions): void {
+function registerLiveStateTests(options: PublishContractOptions, releaseTag: string): void {
   const commit = "0123456789abcdef0123456789abcdef01234567";
   const environment = {
     GITHUB_SHA: commit,
     GITHUB_REPOSITORY: "zaks-io/splitch",
     GITHUB_TOKEN: "ephemeral-github-token",
-    RELEASE_TAG: options.tag,
+    RELEASE_TAG: releaseTag,
   };
   const fetcher = (repository: object, release: object) => async (url: string) => ({
     ok: true,
     status: 200,
     text: async () =>
-      JSON.stringify(url.endsWith(`/releases/tags/${options.tag}`) ? release : repository),
+      JSON.stringify(url.endsWith(`/releases/tags/${releaseTag}`) ? release : repository),
   });
   const validRelease = {
-    tag_name: options.tag,
+    tag_name: releaseTag,
     draft: false,
     prerelease: false,
     immutable: true,
@@ -180,18 +187,18 @@ function registerLiveStateTests(options: PublishContractOptions): void {
   });
 }
 
-function registerContextTests(options: PublishContractOptions): void {
+function registerContextTests(options: PublishContractOptions, releaseTag: string): void {
   const commit = "0123456789abcdef0123456789abcdef01234567";
   const otherCommit = "fedcba9876543210fedcba9876543210fedcba98";
   const environment = {
     REPOSITORY_PRIVATE: "false",
-    RELEASE_TAG: options.tag,
+    RELEASE_TAG: releaseTag,
     RELEASE_TARGET_COMMITISH: commit,
-    GITHUB_REF: `refs/tags/${options.tag}`,
+    GITHUB_REF: `refs/tags/${releaseTag}`,
     GITHUB_SHA: commit,
   };
   const resolveCommit = (ref: string) =>
-    ref === `refs/tags/${options.tag}` || ref === "HEAD" || ref === commit ? commit : otherCommit;
+    ref === `refs/tags/${releaseTag}` || ref === "HEAD" || ref === commit ? commit : otherCommit;
 
   describe(`${options.label} trusted-publish validation behavior`, () => {
     it("requires the release target to resolve to the immutable tag commit", () => {
@@ -199,8 +206,8 @@ function registerContextTests(options: PublishContractOptions): void {
         validatePublishContext(options.targetKey, repoRoot, environment, resolveCommit),
       ).toMatchObject({
         packageName: options.packageName,
-        version: "0.1.0",
-        releaseTag: options.tag,
+        version: releaseTag.split("-v")[1],
+        releaseTag: releaseTag,
         tagSha: commit,
       });
       expect(() =>
@@ -233,8 +240,8 @@ function registerContextTests(options: PublishContractOptions): void {
           repoRoot,
           {
             ...environment,
-            RELEASE_TAG: `${options.targetKey}-v0.1.1`,
-            GITHUB_REF: `refs/tags/${options.targetKey}-v0.1.1`,
+            RELEASE_TAG: `${options.targetKey}-v9.9.9`,
+            GITHUB_REF: `refs/tags/${options.targetKey}-v9.9.9`,
           },
           resolveCommit,
         ),

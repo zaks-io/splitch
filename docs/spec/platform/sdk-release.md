@@ -7,8 +7,19 @@ tag/release rules.
 
 ## Release model
 
-Each package manifest is the source of truth for its version. The shared helpers under
-`scripts/release/` take a required `sdk` or `cli` target and currently accept only `0.1.0`.
+Each package manifest is the source of truth for its version: the release workflows release
+exactly the version checked into the target's `package.json`, and the version bump PR is the
+reviewed act of cutting a release. Dispatching a release workflow for a version whose tag already
+has a published release is a deliberate no-op, not a failure: the validate job green-skips with a
+step summary and annotation telling you to bump the manifest, and nothing is validated or
+drafted. Every unexpected state (a tag that moved, a published release being mutated, mismatched
+commit evidence) still fails loudly.
+
+`cli-v0.1.0` is a burned release: it was published targeting a commit whose manifest npm's
+publish-time fixer would strip the `bin` from, its publish run failed before npm was reachable,
+and the published release/tag are immutable. Never re-run its failed `cli-publish` run; it would
+consume npm version `0.1.0` with a binary-less package. The CLI's first stable version is
+`0.1.1`.
 
 | Target | Manifest                    | Tag              | Draft workflow                                              | Trusted-publish workflow                                    |
 | ------ | --------------------------- | ---------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
@@ -77,7 +88,7 @@ Use this only after a human approves the package release.
 
 ### 1. Candidate and metadata
 
-- [ ] The target manifest has the expected package name and version `0.1.0`.
+- [ ] The target manifest has the expected package name and the target's `allowedVersion`.
 - [ ] Description, Apache-2.0 SPDX license, repository directory, ESM export, Node engine, public
       access, and dist-only files whitelist are correct.
 - [ ] The consumer README and license appear in the actual package tarball.

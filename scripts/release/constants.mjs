@@ -4,7 +4,6 @@ export const RELEASE_TARGETS = Object.freeze({
     packagePath: "packages/sdk/package.json",
     packageDir: "packages/sdk",
     tagPrefix: "sdk-v",
-    allowedVersion: "0.1.0",
     buildDependencies: Object.freeze([]),
   }),
   cli: Object.freeze({
@@ -12,7 +11,6 @@ export const RELEASE_TARGETS = Object.freeze({
     packagePath: "apps/cli/package.json",
     packageDir: "apps/cli",
     tagPrefix: "cli-v",
-    allowedVersion: "0.1.0",
     // The CLI bundle inlines @splitch/sdk from its built dist.
     buildDependencies: Object.freeze(["sdk"]),
   }),
