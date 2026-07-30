@@ -90,6 +90,7 @@ function bindings(sessionStore: KVNamespace): ControlPanelBindings {
     WORKOS_API_KEY: "workos-api-key",
     WORKOS_CLIENT_ID: "client_123",
     AUTH_API_ORIGIN: "https://auth.splitch.dev",
+    EVALUATION_API_ORIGIN: "https://edge.splitch.dev",
   };
 }
 

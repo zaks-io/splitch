@@ -81,6 +81,26 @@ const guardrailRunHash = runConfigHash(guardrailRunSalt, checkoutAllocation, gua
 const endedRunHash = runConfigHash(endedRunSalt, checkoutAllocation, endedVariants);
 const srmRunHash = runConfigHash(srmRunSalt, checkoutAllocation, srmVariants);
 
+/**
+ * One empty App per onboarding test. Flags are App-scoped, so a test that creates
+ * a Flag destroys the teaching empty state for anything that runs after it — and
+ * a retry re-runs a test against an App its own first attempt already wrote to.
+ * Giving each test its own App makes the onboarding spec order- and
+ * retry-independent instead of merely order-lucky.
+ */
+export const LOCAL_E2E_ONBOARDING_APP_SLUGS = Object.freeze({
+  emptyState: "onboarding-api",
+  connect: "onboarding-connect",
+  verify: "onboarding-verify",
+  exposure: "onboarding-exposure",
+});
+
+const onboardingApps = Object.values(LOCAL_E2E_ONBOARDING_APP_SLUGS).map((slug) => ({
+  slug,
+  appId: `app_${slug.replaceAll("-", "_")}_e2e`,
+  environmentId: `env_${slug.replaceAll("-", "_")}_prod_e2e`,
+}));
+
 export function localE2eSession(expiresAt = Math.floor(Date.now() / 1000) + 3_600) {
   return {
     version: 2,
@@ -97,6 +117,7 @@ export function localE2eSession(expiresAt = Math.floor(Date.now() / 1000) + 3_60
         apps: [
           { appId: "app_checkout_e2e", appSlug: "checkout-api", role: "owner" },
           { appId: "app_billing_e2e", appSlug: "billing-api", role: "admin" },
+          ...onboardingApps.map((app) => ({ appId: app.appId, appSlug: app.slug, role: "admin" })),
         ],
       },
       {
@@ -203,6 +224,30 @@ INSERT INTO runs (id, app_id, environment_id, experiment_id, run_number, status,
   ('run_checkout_ended_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_ended_e2e', 1, 'ended', 'targetingKey', 'user', '${endedRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(endedVariants)}', 'variant_ended_control_e2e', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[]', '[]', '${endedRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e');
 UPDATE runs SET ended_at = '2026-07-17T12:00:00.000Z', end_reason = 'Prepared a larger treatment allocation' WHERE id = 'run_checkout_dev_previous_e2e';
 UPDATE runs SET start_reason = 'Increase treatment traffic' WHERE id = 'run_checkout_dev_e2e';
+
+-- Apps reserved for the onboarding journey. They must stay empty: the teaching
+-- empty states can only be asserted somewhere no other spec writes, and Flags are
+-- App-scoped, so a shared App loses its empty state the moment another spec
+-- creates a Flag in it. One per onboarding test, so the spec does not depend on
+-- its own execution order (see LOCAL_E2E_ONBOARDING_APP_SLUGS).
+INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, created_by) VALUES
+${onboardingApps
+  .map(
+    (app) =>
+      `  ('${app.appId}', 'org_acme_e2e', '${app.slug}', '${app.slug}', '${createdAt}', '${createdAt}', 'user_local_e2e')`,
+  )
+  .join(",\n")};
+INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at, created_by) VALUES
+${onboardingApps
+  .map(
+    (app) =>
+      `  ('${app.environmentId}', '${app.appId}', 'prod', 'Production', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e')`,
+  )
+  .join(",\n")};
+INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES
+${onboardingApps
+  .map((app) => `  ('${app.appId}', 'user_local_e2e', 'admin', '${createdAt}')`)
+  .join(",\n")};
 `;
 
 function runConfigHash(salt, allocation = checkoutAllocation, variantSet = checkoutVariants) {

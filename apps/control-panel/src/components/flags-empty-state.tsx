@@ -1,5 +1,7 @@
 import { EmptyState } from "@splitch/ui/state/empty-state";
+import { parityHint } from "#lib/parity-hints";
 import { CreateFlagDialog } from "./create-flag-dialog";
+import { ParityNote } from "./parity-note";
 
 export function FlagsEmptyState({
   appId,
@@ -12,12 +14,8 @@ export function FlagsEmptyState({
     <EmptyState
       action={<CreateFlagDialog appId={appId} environmentId={environmentId} />}
       className="min-h-72"
-      description={
-        <span>
-          A Flag is a named toggle with Variants. Start here, or use{" "}
-          <code>splitch flags create</code> / <code>flags_create</code>.
-        </span>
-      }
+      description="A Flag is a named toggle with Variants. Create one here, then wire it into your code with the Client Key and snippet handed to you next."
+      secondaryAction={<ParityNote hint={parityHint("flags_create")} />}
       title="Create your first Flag"
     />
   );

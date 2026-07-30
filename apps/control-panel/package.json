@@ -17,6 +17,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 8793",
     "test": "vitest run --config vitest.config.ts",
     "test:e2e": "playwright test --config playwright.config.ts",
+    "test:connect-snippet": "node scripts/connect-snippet-compile.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "wrangler:types": "wrangler types src/worker-configuration.d.ts"
   },
@@ -27,6 +28,7 @@
     "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/db": "workspace:*",
     "@splitch/observability": "workspace:*",
+    "@splitch/sdk": "workspace:*",
     "@splitch/ui": "workspace:*",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-router": "^1.170.17",
