@@ -15,7 +15,6 @@ test("documentation and non-deployable application changes skip production mutat
       "docs/spec/platform/deployment-pipeline.md",
       ".github/workflows/deploy-production.yml",
       "apps/cli/src/index.ts",
-      "packages/sdk/src/index.ts",
     ]),
     {
       d1: false,
@@ -27,6 +26,24 @@ test("documentation and non-deployable application changes skip production mutat
       workers: false,
     },
   );
+});
+
+/**
+ * `packages/sdk` was in the case above until SPL-123 made `@splitch/sdk` a
+ * runtime dependency of the Control Panel: `apps/control-panel/src/lib/panel-verify.ts`
+ * imports `createSplitchClient` and the built Worker bundle inlines it. An SDK
+ * source change now genuinely ships new Panel code, so "SDK is not deployable"
+ * stopped being true. Asserting the real edge is worth more than the old
+ * assumption, and it fails loudly if the dependency is ever dropped.
+ */
+test("SDK source changes deploy the Worker that bundles the SDK", () => {
+  const plan = classifyProductionChanges(["packages/sdk/src/index.ts"]);
+
+  assert.equal(plan.shouldDeploy, true);
+  assert.equal(plan.workers, true);
+  assert.deepEqual(plan.workerPackages, ["@splitch/control-panel"]);
+  assert.equal(plan.tinybird, false);
+  assert.equal(plan.d1, false);
 });
 
 test("embedded agent resources deploy only the MCP Worker", () => {

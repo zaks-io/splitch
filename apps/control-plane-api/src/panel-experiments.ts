@@ -15,9 +15,9 @@ import {
   srmFiring,
 } from "@splitch/control-plane-sdk/panel-experiments";
 import { appScope, envScope, type Repository } from "@splitch/db";
-import { renderError } from "@splitch/worker-runtime";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
 import { experimentResponse, jsonObject } from "./experiment-model";
+import { panelScopeAccessError } from "./panel-scope-access";
 
 interface PanelExperimentsDeps {
   repo: Repository;
@@ -43,7 +43,7 @@ export async function panelExperimentsList(
   input: PanelExperimentsInput,
 ): Promise<Response> {
   const requestId = crypto.randomUUID();
-  const accessError = await panelAccessError(deps.repo, input, requestId);
+  const accessError = await panelScopeAccessError(deps.repo, input, requestId);
   if (accessError) return accessError;
 
   const scope = envScope(input.appId, input.environmentId);
@@ -75,7 +75,7 @@ export async function panelExperimentDetail(
   input: PanelExperimentDetailInput,
 ): Promise<Response> {
   const requestId = crypto.randomUUID();
-  const accessError = await panelAccessError(deps.repo, input, requestId);
+  const accessError = await panelScopeAccessError(deps.repo, input, requestId);
   if (accessError) return accessError;
 
   const scope = envScope(input.appId, input.environmentId);
@@ -133,7 +133,7 @@ export async function panelExperimentResults(
   input: PanelExperimentResultsRequestInput,
 ): Promise<Response> {
   const requestId = crypto.randomUUID();
-  const accessError = await panelAccessError(deps.repo, input, requestId);
+  const accessError = await panelScopeAccessError(deps.repo, input, requestId);
   if (accessError) return accessError;
 
   const scope = envScope(input.appId, input.environmentId);
@@ -186,22 +186,6 @@ export async function panelExperimentResults(
   return Response.json(output);
 }
 
-async function panelAccessError(
-  repo: Repository,
-  input: PanelExperimentsInput,
-  requestId: string,
-): Promise<Response | null> {
-  const app = await repo.identity.getApp(input.appId);
-  if (!app) return notFound("App not found", requestId);
-  const [orgMembership, appMembership, environment] = await Promise.all([
-    repo.identity.getOrgMembership(app.organizationId, input.actorId),
-    repo.identity.getAppMembership(appScope(input.appId), input.actorId),
-    repo.identity.getEnvironment(appScope(input.appId), input.environmentId),
-  ]);
-  if (!orgMembership || !appMembership) return forbidden(requestId);
-  return environment ? null : notFound("Environment not found", requestId);
-}
-
 async function runningHealth(
   analysis: Fetcher,
   actorId: string,
@@ -233,15 +217,4 @@ async function runningHealth(
     srmFiring: srmFiring(stats),
     guardrailBreached: guardrailBreached(stats),
   };
-}
-
-function forbidden(requestId: string): Response {
-  return renderError(
-    { code: "FORBIDDEN", message: "live App membership is required", details: {} },
-    { requestId },
-  );
-}
-
-function notFound(message: string, requestId: string): Response {
-  return renderError({ code: "APP_NOT_FOUND", message, details: {} }, { requestId });
 }

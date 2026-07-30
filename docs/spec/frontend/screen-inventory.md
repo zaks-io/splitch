@@ -420,16 +420,34 @@ Each step names the CLI/MCP parity it mirrors. No step is panel-only.
    state teaches "a Flag is a named toggle with Variants." (Parity: `flags_create`.)
 4. **Get your SDK key + install snippet** — the handoff that was the missing link. On flag create,
    a **"Connect your code" card** shows: the active Environment's **Client Key** (public, copyable),
-   an `npm i @splitch/sdk` line, and a **pre-filled copy-paste snippet** with the user's real `appId`,
-   `clientKey`, and the new `flagKey` already substituted:
+   an `npm i @splitch/sdk` line, and a **pre-filled copy-paste snippet** with the user's real
+   `clientKey` and the new `flagKey` already substituted. The snippet carries no `appId`: App and
+   Environment scope come from the credential alone (ADR-0018), and `SplitchClientOptions` has no
+   such field.
+
+   The block below is what `renderConnectSnippet` emits, character for character, with the two
+   substituted values shown as placeholders. It declares `userId` rather than leaving it free: the
+   card promises a copy-paste snippet, so a paste must not throw `ReferenceError`.
 
    ```ts
    import { createSplitchClient } from "@splitch/sdk";
-   const splitch = createSplitchClient({ appId: "app_…", clientKey: "ck_…" });
-   const value = await splitch.evaluate("your-flag-key", { targetingKey: user.id });
+
+   const splitch = createSplitchClient({ clientKey: "ck_…" });
+
+   // Whoever you are deciding for. Swap in your own user id.
+   const userId = "user-1";
+
+   // One stable id per logical Evaluation. Reuse it when you retry that call,
+   // so a retry is not counted as a second Evaluation.
+   const evaluationId = crypto.randomUUID();
+
+   const value = await splitch.evaluate("your-flag-key", {
+     targetingKey: userId,
+     idempotencyKey: evaluationId,
+   });
    ```
 
-   (`idType` defaults to `'user'`, so the snippet is two lines, ADR-0036.) The card links to the
+   (`idType` defaults to `'user'`, so the snippet stays short, ADR-0036.) The card links to the
    API-Key flow for server runtimes (provisioned-and-shown-once, ADR-0022). (Parity: `client_key_get`.)
 
 5. **Verify it resolves** — the first green check. An inline **"Test this Flag"** panel on the card

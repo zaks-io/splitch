@@ -21,6 +21,7 @@
   },
   "vars": {
     "AUTH_API_ORIGIN": "http://localhost:8791",
+    "EVALUATION_API_ORIGIN": "http://localhost:8788",
     "CONTROL_PANEL_DELEGATION_SECRET": "local-control-panel-delegation-secret",
     "SPLITCH_PLATFORM_TARGET": "local",
     "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
@@ -78,6 +79,7 @@
       "routes": [{ "pattern": "app.preview.splitch.dev", "custom_domain": true }],
       "vars": {
         "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
+        "EVALUATION_API_ORIGIN": "https://edge.preview.splitch.dev",
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
         "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
       },
@@ -134,6 +136,7 @@
       "routes": [{ "pattern": "app.splitch.dev", "custom_domain": true }],
       "vars": {
         "AUTH_API_ORIGIN": "https://auth.splitch.dev",
+        "EVALUATION_API_ORIGIN": "https://edge.splitch.dev",
         "SPLITCH_PLATFORM_TARGET": "production",
         "SENTRY_DSN": "https://3ab6a31eedba4a3aff8720d2b4442368@o4509987229859840.ingest.us.sentry.io/4511677909762048"
       },

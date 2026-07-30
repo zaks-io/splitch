@@ -58,7 +58,9 @@ test.describe("per-Environment Flags", () => {
     await dialog.getByLabel("Flag key").fill(flagKey);
     await dialog.getByRole("button", { name: "Create Flag" }).click();
     await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();
-    await expect(dialog.getByText(flagKey)).toBeVisible();
+    // Exact: the Connect card and the verify hint also substitute the Flag Key
+    // into the snippet and the CLI equivalent, so a substring match is ambiguous.
+    await expect(dialog.getByText(flagKey, { exact: true })).toBeVisible();
     await captureThemeScreenshots(page, testInfo, "flags-create-success");
 
     await dialog

@@ -18,6 +18,7 @@ export type ControlPanelOperation =
       id:
         | "metrics_list"
         | "metrics_create"
+        | "overview_get"
         | "settings_get"
         | "environment_update"
         | "client_key_update"
@@ -71,6 +72,7 @@ const METRIC_RESOURCE_METHODS = {
   PATCH: "metrics_update",
   DELETE: "metrics_delete",
 } as const;
+const OVERVIEW_PATH = /^\/control-panel\/apps\/([^/]+)\/envs\/([^/]+)\/overview\/?$/;
 const SETTINGS_PATH = /^\/control-panel\/apps\/([^/]+)\/envs\/([^/]+)\/settings\/?$/;
 const ENVIRONMENT_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/?$/;
 const CLIENT_KEY_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/client-key\/?$/;
@@ -81,6 +83,7 @@ const SCOPED_OPERATION_IDS = [
   "flags_create",
   "metrics_list",
   "metrics_create",
+  "overview_get",
   "settings_get",
   "environment_update",
   "client_key_update",
@@ -277,6 +280,7 @@ function parseScopedSettingsOperation(
   pathname: string,
 ): ControlPanelOperation | null {
   for (const [pattern, expectedMethod, id] of [
+    [OVERVIEW_PATH, "GET", "overview_get"],
     [SETTINGS_PATH, "GET", "settings_get"],
     [ENVIRONMENT_PATH, "PATCH", "environment_update"],
     [CLIENT_KEY_PATH, "PATCH", "client_key_update"],

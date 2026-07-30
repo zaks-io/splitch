@@ -153,8 +153,8 @@ export {
   membershipRoles,
   scopeSatisfiesMembershipGate,
 } from "./mcp-tool-membership-gates";
-export type { McpProtocolToolDefinition, McpToolDefinition } from "./mcp-tools";
-export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped CLI/MCP parity-skin API
+export * from "./barrels/parity-skins";
 export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
 export { defineApiRoute } from "./openapi-route";
@@ -167,6 +167,29 @@ export {
   OrganizationSlugSchema,
   RESERVED_ORGANIZATION_SLUGS,
 } from "./organization-slug";
+export type {
+  AppOverviewResponse,
+  OverviewDecisionExperiment,
+  OverviewDecisionReason,
+  OverviewExperiments,
+  OverviewExperimentsUnavailableReason,
+  OverviewFailingExperiment,
+  OverviewFailureReason,
+  OverviewFlagConfigChange,
+} from "./panel-overview-contract";
+export {
+  AppOverviewResponseSchema,
+  OverviewDecisionExperimentSchema,
+  OverviewDecisionReasonSchema,
+  OverviewExperimentsSchema,
+  OverviewExperimentsUnavailableReasonSchema,
+  OverviewFailingExperimentSchema,
+  OverviewFailureReasonSchema,
+  OverviewFlagConfigChangeSchema,
+  overviewDecisionReasons,
+  overviewExperimentsUnavailableReasons,
+  overviewFailureReasons,
+} from "./panel-overview-contract";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped resource envelope API
 export * from "./resource-envelopes";
 export type {

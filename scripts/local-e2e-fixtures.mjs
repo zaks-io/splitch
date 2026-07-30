@@ -36,7 +36,29 @@ export const LOCAL_E2E_FIXTURE_CONTRACT = Object.freeze({
   },
 });
 
+/**
+ * The Environments the App Overview is proven against, one per attention state.
+ * Each state gets its own Environment and its own Flag Configuration rows, so a
+ * card that reads another state's rows shows up as the wrong card rather than as
+ * a coincidentally matching one.
+ */
+export const LOCAL_E2E_OVERVIEW_STATES = Object.freeze({
+  experimentsUnavailable: { environmentKey: "dev", environmentId: "env_checkout_dev_e2e" },
+  flagChanges: {
+    environmentKey: "overview-changes",
+    environmentId: "env_checkout_overview_e2e",
+    recentFlagKey: "new-checkout",
+    staleFlagKey: "checkout-srm",
+  },
+  calm: { environmentKey: "calm", environmentId: "env_checkout_calm_e2e" },
+});
+
 const createdAt = "2026-07-18T00:00:00.000Z";
+// The Overview's recently-changed window is relative to now, so the Flag
+// Configuration that must land inside it needs a relative timestamp; a frozen
+// one silently ages out of the window and the fixture stops proving anything.
+const recentlyChangedAt = new Date(Date.now() - 2 * 60 * 60 * 1_000).toISOString();
+const staleChangedAt = "2026-06-01T00:00:00.000Z";
 const checkoutVariants = [
   { id: "variant_checkout_control_e2e", name: "control", value: false },
   { id: "variant_checkout_treatment_e2e", name: "treatment", value: true },
@@ -81,6 +103,26 @@ const guardrailRunHash = runConfigHash(guardrailRunSalt, checkoutAllocation, gua
 const endedRunHash = runConfigHash(endedRunSalt, checkoutAllocation, endedVariants);
 const srmRunHash = runConfigHash(srmRunSalt, checkoutAllocation, srmVariants);
 
+/**
+ * One empty App per onboarding test. Flags are App-scoped, so a test that creates
+ * a Flag destroys the teaching empty state for anything that runs after it — and
+ * a retry re-runs a test against an App its own first attempt already wrote to.
+ * Giving each test its own App makes the onboarding spec order- and
+ * retry-independent instead of merely order-lucky.
+ */
+export const LOCAL_E2E_ONBOARDING_APP_SLUGS = Object.freeze({
+  emptyState: "onboarding-api",
+  connect: "onboarding-connect",
+  verify: "onboarding-verify",
+  exposure: "onboarding-exposure",
+});
+
+const onboardingApps = Object.values(LOCAL_E2E_ONBOARDING_APP_SLUGS).map((slug) => ({
+  slug,
+  appId: `app_${slug.replaceAll("-", "_")}_e2e`,
+  environmentId: `env_${slug.replaceAll("-", "_")}_prod_e2e`,
+}));
+
 export function localE2eSession(expiresAt = Math.floor(Date.now() / 1000) + 3_600) {
   return {
     version: 2,
@@ -97,6 +139,7 @@ export function localE2eSession(expiresAt = Math.floor(Date.now() / 1000) + 3_60
         apps: [
           { appId: "app_checkout_e2e", appSlug: "checkout-api", role: "owner" },
           { appId: "app_billing_e2e", appSlug: "billing-api", role: "admin" },
+          ...onboardingApps.map((app) => ({ appId: app.appId, appSlug: app.slug, role: "admin" })),
         ],
       },
       {
@@ -141,6 +184,8 @@ INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, create
 INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at, created_by) VALUES
   ('env_checkout_dev_e2e', 'app_checkout_e2e', 'dev', 'Development', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_checkout_settings_retry_e2e', 'app_checkout_e2e', 'settings-retry', 'Settings Retry', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_checkout_overview_e2e', 'app_checkout_e2e', 'overview-changes', 'Overview Changes', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"confirm","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_checkout_calm_e2e', 'app_checkout_e2e', 'calm', 'Overview Calm', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_checkout_prod_e2e', 'app_checkout_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_billing_prod_e2e', 'app_billing_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_agent_prod_e2e', 'app_agent_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e');
@@ -180,7 +225,9 @@ INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, availabl
   ('config_guardrail_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_guardrail_e2e', 1, '["control","treatment"]', 'variant_guardrail_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_draft_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_draft_e2e', 1, '["control"]', 'variant_draft_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_ended_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_ended_e2e', 1, '["control"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}'),
-  ('config_srm_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'flag_checkout_srm_e2e', 1, '["control","treatment"]', 'variant_srm_control_e2e', '${createdAt}', '${createdAt}');
+  ('config_srm_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'flag_checkout_srm_e2e', 1, '["control","treatment"]', 'variant_srm_control_e2e', '${createdAt}', '${createdAt}'),
+  ('config_checkout_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_e2e', 1, '["control","treatment"]', 'variant_checkout_control_e2e', '${createdAt}', '${recentlyChangedAt}'),
+  ('config_srm_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_srm_e2e', 0, '["control"]', 'variant_srm_control_e2e', '${createdAt}', '${staleChangedAt}');
 INSERT INTO metrics (id, app_id, key, name, kind, event_name, created_at, created_by) VALUES
   ('checkout-conversion', 'app_checkout_e2e', 'checkout-conversion', 'Checkout conversion', 'binomial', 'checkout_completed', '${createdAt}', 'user_local_e2e'),
   ('checkout-reliability', 'app_checkout_e2e', 'checkout-reliability', 'Checkout reliability', 'binomial', 'checkout_succeeded', '${createdAt}', 'user_local_e2e');
@@ -203,6 +250,30 @@ INSERT INTO runs (id, app_id, environment_id, experiment_id, run_number, status,
   ('run_checkout_ended_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'experiment_checkout_ended_e2e', 1, 'ended', 'targetingKey', 'user', '${endedRunSalt}', '${JSON.stringify(checkoutAllocation)}', '${JSON.stringify(endedVariants)}', 'variant_ended_control_e2e', '${JSON.stringify(checkoutTargetingRules)}', 0.95, '[]', '[]', '${endedRunHash}', '${createdAt}', '${createdAt}', 'user_local_e2e');
 UPDATE runs SET ended_at = '2026-07-17T12:00:00.000Z', end_reason = 'Prepared a larger treatment allocation' WHERE id = 'run_checkout_dev_previous_e2e';
 UPDATE runs SET start_reason = 'Increase treatment traffic' WHERE id = 'run_checkout_dev_e2e';
+
+-- Apps reserved for the onboarding journey. They must stay empty: the teaching
+-- empty states can only be asserted somewhere no other spec writes, and Flags are
+-- App-scoped, so a shared App loses its empty state the moment another spec
+-- creates a Flag in it. One per onboarding test, so the spec does not depend on
+-- its own execution order (see LOCAL_E2E_ONBOARDING_APP_SLUGS).
+INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, created_by) VALUES
+${onboardingApps
+  .map(
+    (app) =>
+      `  ('${app.appId}', 'org_acme_e2e', '${app.slug}', '${app.slug}', '${createdAt}', '${createdAt}', 'user_local_e2e')`,
+  )
+  .join(",\n")};
+INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at, created_by) VALUES
+${onboardingApps
+  .map(
+    (app) =>
+      `  ('${app.environmentId}', '${app.appId}', 'prod', 'Production', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e')`,
+  )
+  .join(",\n")};
+INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES
+${onboardingApps
+  .map((app) => `  ('${app.appId}', 'user_local_e2e', 'admin', '${createdAt}')`)
+  .join(",\n")};
 `;
 
 function runConfigHash(salt, allocation = checkoutAllocation, variantSet = checkoutVariants) {

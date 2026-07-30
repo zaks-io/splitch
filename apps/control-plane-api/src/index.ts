@@ -13,9 +13,9 @@ import {
   makeMcpDelegationAuthResolver,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
+import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { authJwksUri } from "./auth-jwks-config";
 import { type ControlPlaneAuthOptions, makeControlPlaneAuthResolver } from "./auth-resolver";
-import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
 import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
@@ -34,6 +34,7 @@ import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { handleSignedPanelExperiments } from "./panel-experiments-route";
 import { makePanelDelegationReplayStore } from "./panel-identity-replay";
+import { panelOverviewRead } from "./panel-overview";
 import { makePanelSessionAccess } from "./panel-session-access";
 import { panelSettingsRead } from "./panel-settings";
 import { rateLimiterForTarget } from "./rate-limit";
@@ -177,7 +178,30 @@ async function handleSignedControlPanelRequest(
 ): Promise<Response | null> {
   return (
     (await handleSignedPanelExperiments(request, env, protocol, authResolver)) ??
+    (await handleSignedPanelOverview(request, env, protocol, authResolver, repo)) ??
     handleSignedPanelSettings(request, env, protocol, authResolver, repo)
+  );
+}
+
+async function handleSignedPanelOverview(
+  request: Request,
+  env: ControlPlaneApiEnv,
+  protocol: PanelProtocol,
+  authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
+  repo: ReturnType<typeof createRepository>,
+): Promise<Response | null> {
+  if (protocol !== "signed") return null;
+  const operation = parseControlPanelBindingOperation(request);
+  if (operation?.id !== "overview_get") return null;
+  const auth = await authResolver(request);
+  if (!auth.ok) return unauthorized();
+  return panelOverviewRead(
+    { repo, analysisResults: createAnalysisResultsReader(env.ANALYSIS_API) },
+    {
+      actorId: auth.principal.id,
+      appId: operation.appId,
+      environmentId: operation.environmentId,
+    },
   );
 }
 
