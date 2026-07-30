@@ -25,6 +25,13 @@ There is no generic `sdk.web.enable()` method.
 Metric Events and Web Events have separate public accessors:
 
 ```typescript
+const sdk = createSplitchClient({
+  clientKey,
+  web: {
+    sessionId: consentAwareSessionId, // optional canonical UUID
+  },
+});
+
 sdk.track(eventName, metricEvent);
 sdk.web.track(eventName, webEvent);
 const stop = sdk.web.instrument({ captures });
@@ -47,6 +54,12 @@ validation at ingest.
 Application code does not pass an `eventId` to `sdk.web.track()`. The SDK generates one
 cryptographically random UUID for each logical manual or automatic Web Event before buffering or
 transport and retains that UUID across every retry.
+
+The browser-only `web.sessionId` client option is the sole application-supplied Web Session entry
+point. It is validated as a canonical lowercase UUID during client construction, retained in memory,
+and used by both `sdk.web.track()` and `sdk.web.instrument()`. It has no setter, cannot be supplied
+per event or capture entry, and does not activate Web Analytics. When omitted, the first emitted Web
+Event creates or reads the default tab-scoped `sessionStorage` UUID.
 
 ## Route and family isolation
 
@@ -421,7 +434,6 @@ payload:
 ```typescript
 type WebVitalAdapterPayload = {
   fields: {
-    metricId: string;
     value: number;
     delta: number;
   };
@@ -441,11 +453,11 @@ type WebVitalAdapterPayload = {
 };
 ```
 
-`CLS` uses `unitless`; the other four metrics use `milliseconds`. The adapter preserves the
-library's metric ID, cumulative value, and delta so append-only consumers can group reports by
-`metricId`, sum deltas, or select the latest value. It normalizes the library's bounded navigation
-type into the shared snake-case values above and emits `unknown` rather than forwarding an
-unrecognized string.
+`CLS` uses `unitless`; the other four metrics use `milliseconds`. With
+`reportAllChanges: false`, each callback contributes one logical report, so the adapter keeps only
+the cumulative value and delta and drops the library's free-form metric ID. It normalizes the
+library's bounded navigation type into the shared snake-case values above and emits `unknown` rather
+than forwarding an unrecognized string.
 
 The adapter does not enable soft-navigation reporting. It drops raw `PerformanceEntry` objects,
 attribution data, navigation URLs, DOM targets, and every undeclared library value before queueing.
@@ -515,8 +527,10 @@ automatic capture does not include them.
 The SDK creates or reads the default tab-scoped Web Session only when the first manual or automatic
 Web Event is produced. Calling `sdk.web.instrument()` may register selected instrumentation, but it
 does not touch `sessionStorage` until an event is emitted. A normal SDK client therefore has no
-browser analytics storage side effect. Session generation and optional application-supplied
-continuity are defined in [web-event-identity.md](../pipeline/web-event-identity.md).
+browser analytics storage side effect. Supplying `web.sessionId` validates and retains only the
+caller-provided UUID; it never reads or writes browser storage. Session generation and optional
+application-supplied continuity are defined in
+[web-event-identity.md](../pipeline/web-event-identity.md).
 
 ## Sources
 

@@ -54,7 +54,7 @@ type MetricEventDefinitionVersionRequest = {
     name: string;
     type: "boolean" | "string" | "number" | "json";
     required: boolean;
-    allowed_values?: Array<boolean | string | number>;
+    allowed_values?: Array<boolean | string | number>; // required when type = "string"
     minimum?: number;
     maximum?: number;
     json_schema?: ClosedJsonSchema;
@@ -63,7 +63,7 @@ type MetricEventDefinitionVersionRequest = {
     name: string;
     type: "boolean" | "string" | "number";
     required: boolean;
-    allowed_values?: Array<boolean | string | number>;
+    allowed_values?: Array<boolean | string | number>; // required when type = "string"
     minimum?: number;
     maximum?: number;
   }>;
@@ -78,8 +78,12 @@ type WebEventDefinitionVersionRequest = {
 
 The Worker enforces unique field names, unique Dimension names, disjoint sets, a JSON Schema only for
 `type = "json"`, and `additionalProperties: false` at every object node. An `allowed_values` list
-must be non-empty, unique, and exactly match its scalar declaration; it is prohibited on a JSON
-field, which uses JSON Schema `enum`. Allowlists participate in `schema_hash`.
+must be non-empty, unique, and exactly match its scalar declaration; it is required for every string
+field or Dimension and prohibited on a JSON field, whose every string node requires a JSON Schema
+`enum`. String values must be bounded machine tokens, and top-level or nested property names matching
+the direct-PII denylist fail publication. The exact token and denylist rules live in
+[leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md#closed-json-schema). Allowlists
+participate in `schema_hash`.
 
 `ClosedJsonSchema` is the exact recursive subset defined in
 [leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md#closed-json-schema). Unknown schema

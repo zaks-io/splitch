@@ -107,7 +107,7 @@ privacy boundary from omitted input.
 | `name`          | `string`                                      | yes      | Stable top-level name referenced by Metrics                            |
 | `type`          | `'boolean' \| 'string' \| 'number' \| 'json'` | yes      | Accepted value family                                                  |
 | `required`      | `boolean`                                     | yes      | Whether every event must carry the field                               |
-| `allowedValues` | matching scalar array                         | no       | Immutable non-empty allowlist; scalar types only                       |
+| `allowedValues` | matching scalar array                         | cond.    | Required for string; optional for boolean/number                       |
 | `minimum`       | finite `number`                               | no       | Inclusive lower bound; number type only                                |
 | `maximum`       | finite `number`                               | no       | Inclusive upper bound; number type only                                |
 | `jsonSchema`    | closed JSON Schema                            | cond.    | Required only when `type = 'json'`; root and nested objects are closed |
@@ -119,7 +119,7 @@ privacy boundary from omitted input.
 | `name`          | `string`                            | yes      | Stable top-level Dimension name                      |
 | `type`          | `'boolean' \| 'string' \| 'number'` | yes      | Scalar only; JSON Dimensions are not supported in V1 |
 | `required`      | `boolean`                           | yes      | Whether every event must carry the Dimension         |
-| `allowedValues` | matching scalar array               | no       | Immutable non-empty allowlist                        |
+| `allowedValues` | matching scalar array               | cond.    | Required for string; optional for boolean/number     |
 | `minimum`       | finite `number`                     | no       | Inclusive lower bound; number type only              |
 | `maximum`       | finite `number`                     | no       | Inclusive upper bound; number type only              |
 
@@ -127,6 +127,22 @@ JSON is accepted only for a field declared as `type = 'json'`. Its `jsonSchema` 
 `additionalProperties: false` for every object node, including nested objects. Schemaless JSON,
 unknown field names, unknown Dimensions, unknown nested keys, and undeclared Entity Profile fields
 fail before any write.
+
+Telemetry payloads never accept free-form strings. Every top-level string field or Dimension requires
+a non-empty immutable `allowedValues` list, and every string node in a closed JSON Schema requires a
+non-empty `enum`. An allowlist or string enum contains at most 256 values. Each permitted string is a
+machine token of 1 to 64 ASCII characters matching `[A-Za-z0-9][A-Za-z0-9_.:-]*`; whitespace, `@`,
+URL path/query delimiters, arbitrary text, and values matching email, phone, IP address, URL, or UUID
+shapes are invalid. Definition and JSON property names are case-insensitively rejected when they are
+direct-PII names, including `email`, `email_address`, `name`, `full_name`, `first_name`, `last_name`,
+`phone`, `phone_number`, `address`, `street_address`, `ip`, `ip_address`, `user_agent`, `cookie`, and
+`token`. The same checks apply recursively to JSON property names.
+
+This structural rule is the enforceable no-direct-PII boundary. It prevents an event caller from
+placing an email, person name, address, raw URL, token, or other unconstrained identifier into an
+otherwise innocuous string field. Event Definition publishers must still choose non-personal machine
+tokens; disguising personal data under a misleading allowed value is a contract violation and is
+covered by definition review and privacy fixtures.
 
 ### Closed JSON Schema
 
@@ -149,9 +165,7 @@ type ClosedJsonSchema =
     }
   | {
       type: "string";
-      enum?: string[];
-      minLength?: number;
-      maxLength?: number;
+      enum: string[];
     }
   | {
       type: "number" | "integer";
@@ -170,10 +184,11 @@ type ClosedJsonSchema =
 
 Every node is strict and rejects unknown schema keywords. Object nodes must declare `properties`
 and literal `additionalProperties: false`; `required`, when present, contains unique names that
-exist in `properties`. Array nodes must declare one `items` schema. Length and item-count bounds are
+exist in `properties`. Array nodes must declare one `items` schema. Item-count bounds are
 non-negative finite integers. Numeric bounds are finite values and may be negative. Each minimum
 must be less than or equal to its matching maximum. Every `enum` is non-empty, unique, and matches
-the node's declared type.
+the node's declared type. String enums and property names also pass the telemetry token and
+direct-PII-name rules above.
 
 V1 rejects `$ref`, `$defs`, remote references, recursive schemas, `patternProperties`,
 `unevaluatedProperties`, schema-valued `additionalProperties`, unions, intersections, conditionals,
@@ -186,10 +201,11 @@ value recursively against the stamped schema without coercion. A schema-definiti
 `VALIDATION_ERROR`; an event-value failure returns `EVENT_SCHEMA_MISMATCH`. Neither failure writes
 an Event Definition Version, event claim, outbox payload, queue message, or Tinybird row.
 
-When present, `allowedValues` contains unique JSON scalar values that exactly match the declared
-scalar type. It is invalid on a `json` field, whose JSON Schema uses `enum` instead. Ingest rejects a
-value outside the published allowlist with `EVENT_SCHEMA_MISMATCH`. Allowlists participate in
-`schemaHash`; changing one requires a new immutable Event Definition Version.
+`allowedValues` contains unique JSON scalar values that exactly match the declared scalar type. It is
+required for a string declaration, optional for boolean and number declarations, and invalid on a
+`json` field, whose JSON Schema uses `enum` instead. Ingest rejects a value outside the published
+allowlist with `EVENT_SCHEMA_MISMATCH`. Allowlists participate in `schemaHash`; changing one requires
+a new immutable Event Definition Version.
 
 `minimum` and `maximum` are valid only for a number declaration and are inclusive. Both values must
 be finite, and publication rejects `minimum > maximum`. Ingest rejects out-of-range values with
@@ -209,11 +225,11 @@ Each template contains only:
 
 The templates are:
 
-| Source          | Fields                                                                                             | Dimensions                                                                                                       |
-| --------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `page_view`     | none                                                                                               | required string `navigationType`                                                                                 |
-| `web_vital`     | required string `metricId`; required number `value`, minimum 0; required number `delta`, minimum 0 | required string `metricName`; required string `rating`; required string `unit`; required string `navigationType` |
-| `browser_error` | none                                                                                               | required string `signal`; required string `exceptionType`                                                        |
+| Source          | Fields                                                                 | Dimensions                                                                                                       |
+| --------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `page_view`     | none                                                                   | required string `navigationType`                                                                                 |
+| `web_vital`     | required number `value`, minimum 0; required number `delta`, minimum 0 | required string `metricName`; required string `rating`; required string `unit`; required string `navigationType` |
+| `browser_error` | none                                                                   | required string `signal`; required string `exceptionType`                                                        |
 
 The templates apply these closed scalar allowlists:
 
@@ -267,7 +283,7 @@ The Event Ingest Worker constructs this shape only after the complete request va
 | `eventDefinitionVersionId` | `string`                                      | yes      | Current immutable version that accepted the row      |
 | `eventName`                | `string`                                      | yes      | Denormalized stable definition name                  |
 | `idType`                   | `string`                                      | yes      | Validated Entity type                                |
-| `targetingKeyHash`         | `string`                                      | yes      | App-salt HMAC; raw Targeting Key is never persisted  |
+| `targetingKeyHash`         | `string`                                      | yes      | Stable App Entity HMAC; raw Targeting Key is absent  |
 | `fields`                   | `Record<string, JsonValue>`                   | yes      | Validated values serialized canonically              |
 | `dimensions`               | `Record<string, boolean \| string \| number>` | yes      | Validated scalar Dimensions                          |
 | `serverReceivedAt`         | `string` (ISO 8601)                           | yes      | Canonical Metric event time                          |
@@ -347,7 +363,7 @@ The Event Ingest Worker constructs this shape only after the complete request va
 | `traceId`                  | `string`                                      | no       | Validated W3C trace ID                                   |
 | `spanId`                   | `string`                                      | no       | Validated W3C span ID                                    |
 | `idType`                   | `string`                                      | no       | Explicit Entity type                                     |
-| `targetingKeyHash`         | `string`                                      | no       | App-salt HMAC; absent for anonymous events               |
+| `targetingKeyHash`         | `string`                                      | no       | Stable App Entity HMAC; absent for anonymous events      |
 | `fields`                   | `Record<string, JsonValue>`                   | yes      | Values validated against the accepting immutable version |
 | `dimensions`               | `Record<string, boolean \| string \| number>` | yes      | Validated scalar Dimensions                              |
 | `serverReceivedAt`         | `string` (ISO 8601)                           | yes      | Canonical Web Event time                                 |

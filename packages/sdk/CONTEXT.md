@@ -105,7 +105,9 @@ with ordered per-item results; an empty queue resolves without network I/O.
 
 **Web Session**:
 The bounded browser activity scope carried by every Web Event; it may accompany optional explicit
-Entity identity but never replaces the Targeting Key for experiment measurement.
+Entity identity but never replaces the Targeting Key for experiment measurement. The sole
+application-supplied entry point is the browser client option
+`createSplitchClient({ clientKey, web: { sessionId } })`; there is no setter or per-event override.
 
 **Web Analytics**:
 Opt-in browser instrumentation that emits only explicitly configured Web Events.
@@ -128,7 +130,7 @@ Opt-in browser instrumentation that emits only explicitly configured Web Events.
   it survives same-tab navigation but not tab close.
 - The SDK never creates Web Sessions with cookies, `localStorage`, browser fingerprinting, or
   cross-site identity. Applications may explicitly supply an opaque, consent-aware Web Session
-  identifier for broader continuity.
+  identifier for broader continuity through the `web.sessionId` client option.
 - Creating a normal client does not touch the DOM, browser performance APIs, or `sessionStorage`.
   Manual collection starts with the first `web.track()` call; automatic collection starts only
   through `web.instrument({ captures })`. There is no generic `web.enable()`.
@@ -163,9 +165,9 @@ Opt-in browser instrumentation that emits only explicitly configured Web Events.
   is the required `navigationType` Dimension. It never derives a page name from a URL, title, DOM, or
   framework route; SPA transitions use explicit `web.track()`.
 - `web_vital` registers the standard `CLS`, `FCP`, `INP`, `LCP`, and `TTFB` callbacks without
-  all-change or soft-navigation reporting. It emits only metric ID, value, delta, rating, unit,
-  metric name, and normalized navigation type. Raw entries, attribution, URLs, and DOM targets are
-  dropped.
+  all-change or soft-navigation reporting. It emits only value, delta, rating, unit, metric name, and
+  normalized navigation type. The library's free-form metric ID, raw entries, attribution, URLs, and
+  DOM targets are dropped.
 - `web_vital` uses one lazy module-level collector per page because the library does not expose
   teardown. Handles subscribe and unsubscribe without duplicate collector registration. With no
   subscribers, it creates no Web Events, storage access, queued data, or network I/O.

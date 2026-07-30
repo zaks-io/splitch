@@ -121,8 +121,9 @@ Body:
 }
 ```
 
-The Worker computes `targeting_key_hash` for every active salt version and exports matching Assignment
-Store records, raw events, deduped snapshots, Metric rows, and source/category/purpose metadata.
+The Worker computes the App's one stable `targeting_key_hash` and exports matching Assignment Store
+records, raw events, deduped snapshots, Metric rows, Entity-identified Web Events, and
+source/category/purpose metadata.
 
 Returns: `{ request: PrivacyRequest, job: PrivacyJob }`
 
@@ -137,9 +138,9 @@ Body:
 }
 ```
 
-The Worker computes `targeting_key_hash` for every active salt version, inserts `entity_deletions`
-tombstones, and queues physical purge across KV, Assignment Store DO, Tinybird raw rows, snapshots,
-and rollups.
+The Worker computes the App's one stable `targeting_key_hash`, inserts the `entity_deletions`
+tombstone, and queues physical purge across KV, Assignment Store DO, Tinybird raw rows, Metric Events,
+Entity-identified Web Events, snapshots, and rollups.
 
 The Analysis Worker MUST exclude rows where `server_received_at <= delete_before_ts` immediately after the
 tombstone commits. New events after `delete_before_ts` are newly collected data.

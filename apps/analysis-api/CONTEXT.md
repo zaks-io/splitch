@@ -20,11 +20,13 @@ Entity. It is what an Experiment moves or guards.
 **Metric Event**:
 An App/Environment/Entity fact validated against an immutable Event Definition Version. Metric
 Events contribute values for named typed fields. They never replace or narrow the first-touch
-Exposure denominator.
+Exposure denominator. Analysis collapses at-least-once physical retries to one logical Metric Event
+per `dedup_key` before any statistical aggregation.
 
 **Web Analytics**:
 Exploratory analysis of Web Events by Web Session and optional Entity identity, separate from
-Experiment measurement.
+Experiment measurement. Counts, journeys, and percentiles operate on one logical Web Event per
+`dedup_key`.
 
 **Ambiguous Web Session**:
 A Web Session containing Web Events from more than one distinct explicit Entity. Exploratory

@@ -128,7 +128,10 @@ value after creation.
   recompute over the existing Run.
 - Event Definitions are App-level and have one immutable `metric` or `web` family. Each accepted
   Metric Event or Web Event is stamped with one immutable published Event Definition Version.
-- Metric Events carry explicit Entity identity. The raw Targeting Key is never stored.
+- Event payload strings are immutable definition-time machine-token allowlists; free-form strings and
+  direct-PII property names are not valid Event Definitions.
+- Metric Events carry explicit Entity identity. The raw Targeting Key is never stored, and the
+  App-scoped pseudonym remains stable under routine key rewrapping.
 - Metrics reference only `metric` Event Definitions; Web Events remain outside experiment
   measurement.
 - Every Web Event belongs to one Web Session and may also carry explicit Entity identity.
@@ -137,6 +140,8 @@ value after creation.
   attributed to none.
 - Web Session stitching never creates an Entity, Assignment, Exposure, or Metric Event.
 - Web Analytics reads Web Events and never changes Experiment results.
+- Metric and Web Event reads collapse physical retries to one logical row per `dedup_key` before any
+  count, journey, percentile, or statistical aggregation.
 - Metrics are computed over first-touch unique Entities per Run. SRM uses the same denominator.
 
 ## Reserved language

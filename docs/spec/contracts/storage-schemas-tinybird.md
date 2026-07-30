@@ -63,16 +63,18 @@ Primary sorting key:
 | `event_definition_version_id` | String                 | Immutable version that validated and accepted the row               |
 | `event_name`                  | String                 | Denormalized stable Event Definition name                           |
 | `id_type`                     | LowCardinality(String) | Validated against the accepting Event Definition Version            |
-| `targeting_key_hash`          | String                 | App-salt HMAC; raw Targeting Key is not persisted                   |
+| `targeting_key_hash`          | String                 | Stable App Entity HMAC; raw Targeting Key is not persisted          |
 | `fields`                      | String                 | Canonical JSON object validated against declared named typed fields |
 | `dimensions`                  | String                 | Canonical JSON object validated against declared scalar Dimensions  |
 | `server_received_at`          | DateTime64(3)          | Canonical Metric Event time                                         |
 | `ingest_ts`                   | DateTime64(3)          | Raw append watermark                                                |
 
-The datasource configures `dedup_key` as its Tinybird deduplication key. The sharded ingest
-idempotency seam rejects a reused `event_id` with a different canonical payload before append.
-Accepted rows are retained for the configured replay window, default 90 days, and must never expire
-before the longest promised Conversion Window or analysis replay window.
+The datasource configures `dedup_key` as its Tinybird deduplication key. That setting is an ingest
+optimization only: every statistical query still collapses its bounded source to one row per
+`dedup_key` before aggregation. The sharded ingest idempotency seam rejects a reused `event_id` with
+a different canonical payload before append. Accepted rows are retained for the configured replay
+window, default 90 days, and must never expire before the longest promised Conversion Window or
+analysis replay window.
 
 ### `web_events` (Web Event log)
 
@@ -97,14 +99,15 @@ Primary sorting key:
 | `trace_id`                    | Nullable(String)                 | Validated W3C trace ID; paired with `span_id`                                  |
 | `span_id`                     | Nullable(String)                 | Validated W3C span ID; paired with `trace_id`                                  |
 | `id_type`                     | Nullable(LowCardinality(String)) | Explicit Entity type; null for anonymous events                                |
-| `targeting_key_hash`          | Nullable(String)                 | App-salt HMAC; null for anonymous events                                       |
+| `targeting_key_hash`          | Nullable(String)                 | Stable App Entity HMAC; null for anonymous events                              |
 | `fields`                      | String                           | Canonical JSON validated against declared named typed fields                   |
 | `dimensions`                  | String                           | Canonical JSON validated against declared scalar Dimensions                    |
 | `server_received_at`          | DateTime64(3)                    | Canonical Web Event time                                                       |
 | `ingest_ts`                   | DateTime64(3)                    | Raw append watermark                                                           |
 
-The datasource configures `dedup_key` as its Tinybird deduplication key. Reusing an `event_id` with
-different canonical content fails before append. Trace context is correlation metadata only;
+The datasource configures `dedup_key` as its Tinybird deduplication key. Web Analytics reads still
+collapse physical retries by `dedup_key` before aggregation. Reusing an `event_id` with different
+canonical content fails before append. Trace context is correlation metadata only;
 OpenTelemetry span status, duration, resource attributes, instrumentation scope, and arbitrary
 attributes remain absent unless explicitly mapped into schema-governed `fields` or `dimensions`.
 Accepted rows have an independent configurable retention, default 30 days. No Experiment Conversion

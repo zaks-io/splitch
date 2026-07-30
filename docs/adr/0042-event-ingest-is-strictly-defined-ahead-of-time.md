@@ -4,13 +4,20 @@
 
 Metric Event and Web Event ingest is strict: event names and field names must be declared in one App-level Event Definition catalog before production rows are accepted. Each Event Definition has an immutable `metric` or `web` family selected at creation. Published Event Definition Versions are immutable, and event rows store the version that accepted them. JSON fields are allowed only when the Event Definition Version includes their JSON Schema. JSON object schemas are closed by default. Unknown event names, wrong-family routes, unknown Dimensions, schemaless JSON, unknown nested JSON keys, JSON that does not match schema, and Entity Profile fields fail loud and are not written to raw logs.
 
-Scalar fields and Dimensions may declare immutable typed allowlists. Values outside an allowlist fail loud before any write, and changing an allowlist requires a new Event Definition Version. JSON fields express the equivalent through JSON Schema `enum`.
+Boolean and number fields and Dimensions may declare immutable typed allowlists. String fields and
+Dimensions must declare one, and every JSON string node must declare an `enum`. Permitted strings are
+bounded machine tokens; free-form strings and direct-PII property names are invalid definitions.
+Values outside an allowlist fail loud before any write, and changing an allowlist requires a new
+Event Definition Version.
 
 Number fields and Dimensions may also declare immutable inclusive minimum and maximum bounds. Non-finite or inverted bounds fail publication; out-of-range event values fail before any write.
 
 ## Considered options
 
 - **Accept arbitrary events and infer the catalog later**: rejected because it creates noisy data, raises PII risk, and makes agent operation guess which facts are valid.
+- **Allow declared free-form strings**: rejected because a schema can constrain a string's type
+  without preventing event callers from placing emails, names, raw URLs, tokens, or profile values in
+  it. Definition-time machine-token allowlists make the no-direct-PII boundary enforceable at ingest.
 - **Require immutable Event Definition Versions before ingest**: accepted because it keeps analysis inputs intentional, validates browser Client Key writes at the edge, supports explicitly shaped JSON, gives agents a discoverable contract, and lets every event row trace back to the exact schema that accepted it.
 
 ## Consequences

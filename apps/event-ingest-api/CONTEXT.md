@@ -52,6 +52,8 @@ See [`../analysis-api/CONTEXT.md`](../analysis-api/CONTEXT.md) for Activation Me
 
 **Event Definition**:
 An App-level schema for one named Metric Event or Web Event whose family is immutable after creation.
+String values are definition-time machine-token allowlists, JSON string leaves are enums, and
+direct-PII property names are invalid.
 
 **Metric Event**:
 An App/Environment/Entity product fact submitted through `track()`. It is validated against the
@@ -85,10 +87,14 @@ See [`../evaluation-api/CONTEXT.md`](../evaluation-api/CONTEXT.md#assignment-sto
   permits anonymous Web Events or a complete matching identity pair.
 - Web Session stitching is exploratory and never participates in Experiment measurement.
 - Dedup and analysis are downstream query behavior, not ingest mutation.
+- Tinybird's datasource deduplication key is only an ingest optimization. Metric and Web Event reads
+  collapse physical retries to one logical row per `dedup_key` before aggregation.
 - Event ingest must preserve enough raw evidence for SRM, `__multiple__`, Activation Metrics, and
   Conversion Windows.
 - Event ingest never stores a raw Targeting Key and never accepts client-selected Event Definition
   versions.
+- One stable App Entity HMAC joins Exposures, Assignments, Metric Events, and Entity-identified Web
+  Events across routine secret-key rewrapping.
 
 ## Related context
 

@@ -10,6 +10,11 @@ acknowledged within 10 business days and answered within 45 calendar days, with 
 after notice. Opt-out and limit requests must be honored as soon as feasible, no later than 15 business
 days.
 
+**Implementation status:** the current `@splitch/privacy` package still emits version-prefixed hashes
+from a rotating salt store. Before Metric Event or Entity-identified Web Event implementation ships,
+it must migrate to the stable App Entity identity-key contract in ADR-0044. Until that refactor,
+cross-version identity joins and idempotent retries are not claimed.
+
 ## Privacy roles
 
 | Data class              | Examples                                                                                 | Role                                                       | Durable stores                                               |
@@ -82,22 +87,28 @@ discovers or imports an identifier from application cookies or storage automatic
 The public API still accepts the **Targeting Key**. Durable Entity stores MUST use a derived
 `targeting_key_hash`, not the raw value:
 
-```
-targeting_key_hash = key_version + ":" + HMAC_SHA256(app_privacy_salt[key_version], id_type + ":" + targetingKey)
+```text
+targeting_key_hash = HMAC_SHA256(app_entity_identity_key, id_type + ":" + targetingKey)
 ```
 
 Rules:
 
-- `app_privacy_salt` is secret, App-scoped, versioned, and stored outside Tinybird.
-- New Entity rows use the latest salt version. Historical rows keep their original hash version.
-- Entity export/delete computes one `targeting_key_hash` per active salt version and operates on all
-  matches. Old salt versions are kept until every row using that version has expired or been purged.
+- `app_entity_identity_key` is random, secret, App-scoped, and stored outside Tinybird.
+- The identity key is immutable for the App lifetime so Exposures, Assignments, Metric Events, and
+  Entity-identified Web Events continue to join across retries and retention windows.
+- Routine secret rotation rotates or rewraps the key-encryption key while preserving the underlying
+  App identity key and therefore the pseudonym.
+- Replacing a compromised App identity key is an explicit destructive privacy operation. It Ends
+  active Runs, clears Assignment Store rows and ingest idempotency claims, and creates a new
+  non-joining identity epoch for future data. Historical rows cannot be rekeyed because Splitch does
+  not retain raw Targeting Keys.
+- Entity export/delete computes the one stable `targeting_key_hash` and operates on all matches.
 - The raw Targeting Key is used in memory for `assign()`, Condition matching, or Metric/Web Event
   HMAC derivation, then discarded.
 - KV keys, DO names, Tinybird rows, Axiom fields, Sentry payloads, and audit details never contain the
   raw Targeting Key or raw Evaluation Context attributes.
 - Data subject requests take `{ app_id, id_type, targetingKey }`; the Control Plane API Worker computes
-  `targeting_key_hash` server-side.
+  the stable `targeting_key_hash` server-side.
 
 ## Privacy request ledger
 

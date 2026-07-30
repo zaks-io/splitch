@@ -29,18 +29,22 @@ browser tab closes. The SDK does not use cookies, `localStorage`, browser finger
 cross-site or cross-device identifier.
 
 An application may explicitly supply an opaque Web Session identifier when it needs consent-aware
-cross-tab or cross-domain continuity. A supplied identifier must use the same canonical lowercase
-UUID shape; arbitrary strings are rejected before a claim or write. The SDK never discovers or
-imports an identifier from application cookies or storage automatically.
+cross-tab or cross-domain continuity through
+`createSplitchClient({ clientKey, web: { sessionId } })`. A supplied identifier must use the same
+canonical lowercase UUID shape and is validated during client construction; arbitrary strings are
+rejected before instrumentation, a claim, or a write. There is no setter or per-event override. The
+SDK never discovers or imports an identifier from application cookies or storage automatically.
 
 All events in one Web Session carry the same logical identifier and events from different Web
 Sessions do not stitch. The session source, SDK-generated or application-supplied, does not change
 the exploratory-only boundary.
 
 The Event Ingest Worker never persists the wire `sessionId`. After validation, it computes
-`session_id_hash` with a domain-separated HMAC scoped to the authenticated App and Environment and
-uses only that pseudonym in the durable outbox, queue, Tinybird row, logs, and read APIs. The raw
-identifier exists only while validating and canonicalizing the request.
+`session_id_hash` with the App's stable secret identity key, domain-separated by `web-session` and
+the authenticated Environment, and uses only that pseudonym in the durable outbox, queue, Tinybird
+row, logs, and read APIs. Routine secret rotation preserves the underlying identity key, so one
+retained Web Session does not split during rotation. The raw identifier exists only while validating
+and canonicalizing the request.
 
 ## Event retry identity
 

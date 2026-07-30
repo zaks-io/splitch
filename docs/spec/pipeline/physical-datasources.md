@@ -98,6 +98,29 @@ version. Analysis reads values through the Event Definition Version's declared n
 through caller-authored JSON paths. This datasource has no Experiment, Run, or Variant column:
 those are joined from the first-touch Exposure set only when Entity scope is compatible.
 
+### Logical Metric Event source
+
+`metric_events` is an append-only physical log. Every Analysis Worker query must create a bounded
+logical source before extracting values or aggregating:
+
+```sql
+SELECT *
+FROM metric_events
+WHERE app_id = {{String(app_id)}}
+  AND environment_id = {{String(environment_id)}}
+  AND server_received_at >= {{DateTime64(from)}}
+  AND server_received_at < {{DateTime64(to)}}
+QUALIFY row_number() OVER (
+  PARTITION BY dedup_key
+  ORDER BY ingest_ts ASC
+) = 1
+```
+
+The real pipe selects only required columns and may push additional fixed Event Definition filters
+into the first node. The invariant is one logical row per `dedup_key` before JSON extraction,
+Conversion Window filtering, per-Entity aggregation, winsorization, or Ratio operand formation.
+`DEDUP_KEY` may reduce duplicate inserts but never replaces this query-time correctness boundary.
+
 ## Web Events datasource (`web_events`)
 
 ```text
@@ -138,6 +161,11 @@ They provide correlation with an external trace store; they do not make `web_eve
 for an explicitly Entity-identified event. The raw Targeting Key is never stored. `fields` and
 `dimensions` are canonical JSON objects validated against the immutable accepting Event Definition
 Version.
+
+Every Web Analytics read similarly collapses its bounded physical row set to one row per `dedup_key`
+before counts, session association, journey ordering, or percentile aggregation. The exact read
+ordering is defined in
+[endpoints-web-analytics.md](../control-plane/endpoints-web-analytics.md#tinybird-query-contract).
 
 The sorting key follows the Web Analytics read path: mandatory App and Environment scope first,
 low-cardinality capture source next, then canonical time. High-cardinality Event Definition and Web

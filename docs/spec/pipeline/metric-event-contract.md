@@ -84,8 +84,9 @@ The Worker performs these steps in order:
    cannot select a version or family.
 7. `idType` must equal the published version's `entityType`.
 8. The complete `fields` and `dimensions` objects are validated against that version. Unknown field
-   names, unknown Dimensions, missing required values, type mismatches, schemaless JSON, and unknown
-   nested JSON keys fail.
+   names, unknown Dimensions, missing required values, type mismatches, schemaless JSON, unknown
+   nested JSON keys, and string values outside definition-time machine-token allowlists fail. Metric
+   Events have no free-form string or direct-PII payload path.
 9. The Worker charges one new canonical row and its serialized queue-payload bytes through the
    Ingest Admission Gate for `(app_id, environment_id, metric_events)`. Rejection returns
    `429 RATE_LIMITED` before any new claim, outbox write, or queue publication.
@@ -129,8 +130,11 @@ attempts.
   does not append a second logical row.
 - Reusing the key with a different fingerprint returns `409 EVENT_ID_CONFLICT` and writes nothing.
 
-At-least-once queue and Tinybird delivery may still produce duplicate physical rows. `dedup_key` is
-the datasource idempotency key, so consumers observe one logical Metric Event.
+At-least-once queue and Tinybird delivery may still produce duplicate physical rows. Tinybird's
+datasource deduplication key is an ingestion optimization, not the statistical correctness
+authority. Every Metric query first collapses `metric_events` to exactly one row per `dedup_key`
+before field extraction, Conversion Window filtering, Entity aggregation, or Ratio operand
+formation. No statistical aggregate may read physical `metric_events` rows directly.
 
 ## Response
 
@@ -161,6 +165,10 @@ Every row stores both `event_definition_id` and `event_definition_version_id`.
 
 A Metric references an App-level Event Definition in the `metric` family and, when it consumes a
 value, a declared named typed field. It never stores an ad hoc JSON path.
+
+The Analysis Worker reads the bounded logical Metric Event relation defined in
+[physical-datasources.md](./physical-datasources.md#logical-metric-event-source), which performs the
+mandatory query-time `dedup_key` collapse. This applies to replay and live-tail queries alike.
 
 A Metric Event can join an Experiment Run only when all of these match:
 

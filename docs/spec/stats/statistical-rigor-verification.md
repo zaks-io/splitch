@@ -24,6 +24,10 @@ These names are package scripts and CI jobs. Math slices add their own fixtures 
 - Retrying the same raw row with the same `event_id` yields the same `dedup_key`.
 - Exposure and Activation rows with the same identity and `event_id` do not collide because `type` is
   included in the key.
+- Two physical `metric_events` rows with the same `dedup_key` produce one logical Metric Event before
+  Binomial, Count, Revenue, or Ratio aggregation and therefore cannot inflate a result.
+- Metric queries that aggregate directly from physical `metric_events` without the logical
+  `dedup_key` collapse fail contract tests.
 - `server_received_at` controls first-touch ordering.
 - `ingest_ts` controls snapshot/tail boundaries only.
 - Late-arriving events with old `server_received_at` but new `ingest_ts` appear in the real-time tail and then
