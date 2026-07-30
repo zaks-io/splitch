@@ -46,4 +46,47 @@ describe("Control Panel Experiments transport", () => {
       ),
     ).resolves.toMatchObject({ actorId: ACTOR.actorId, operation: { id: "experiments_list" } });
   });
+
+  it("signs the exact Experiment detail operation and request body", async () => {
+    let capturedRequest: Request | undefined;
+    const client = createControlPanelExperimentsClient(
+      {
+        fetch: vi.fn(async (request: Request) => {
+          capturedRequest = request;
+          return Response.json({
+            experiment: {
+              id: "exp_1",
+              name: "Checkout",
+              status: "draft",
+              flagId: "flag_1",
+              liveRunId: null,
+            },
+            flag: { id: "flag_1", name: "Checkout Flag" },
+            runs: [],
+          });
+        }),
+      } as unknown as Fetcher,
+      ACTOR,
+      DELEGATION_SECRET,
+      {
+        nowSeconds: () => NOW,
+        nonce: () => "nonce_experiment_detail_123456",
+      },
+    );
+
+    await expect(
+      client.detail({ appId: "app_acme", environmentId: "env_dev", experimentId: "exp_1" }),
+    ).resolves.toMatchObject({ ok: true, data: { experiment: { id: "exp_1" } } });
+
+    const request = capturedRequest;
+    await expect(
+      verifyControlPanelDelegation(
+        request?.headers.get(CONTROL_PANEL_DELEGATION_HEADER) ?? null,
+        request?.clone() as Request,
+        { id: "experiments_detail" },
+        DELEGATION_SECRET,
+        NOW,
+      ),
+    ).resolves.toMatchObject({ actorId: ACTOR.actorId, operation: { id: "experiments_detail" } });
+  });
 });

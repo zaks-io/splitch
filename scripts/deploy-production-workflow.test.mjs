@@ -23,3 +23,16 @@ test("production deploy reuses successful CI instead of rerunning validation", (
   assert.doesNotMatch(validateJob, /name: Install/);
   assert.doesNotMatch(validateJob, /Check Turbo remote cache inputs/);
 });
+
+test("production deploy exposes each ordered mutation as its own timed step", () => {
+  assert.match(workflow, /name: Deploy Tinybird[\s\S]*run: pnpm tinybird:deploy:production/);
+  assert.match(workflow, /name: Apply D1 migrations[\s\S]*run: pnpm d1:migrate:production/);
+  assert.match(
+    workflow,
+    /name: Deploy Cloudflare Workers[\s\S]*run: pnpm deploy:cloudflare:production/,
+  );
+  assert.doesNotMatch(workflow, /run: pnpm deploy:production/);
+  assert.match(workflow, /TINYBIRD_OUTCOME: \$\{\{ steps\.tinybird\.outcome \}\}/);
+  assert.match(workflow, /D1_OUTCOME: \$\{\{ steps\.d1\.outcome \}\}/);
+  assert.match(workflow, /WORKERS_OUTCOME: \$\{\{ steps\.workers\.outcome \}\}/);
+});

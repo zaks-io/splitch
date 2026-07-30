@@ -21,8 +21,19 @@ export async function provisionClientKey(
   deps: ClientKeyDeps,
   ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
 ): Promise<ClientKeyRow> {
-  const key = await ensureActiveClientKey(deps, ctx);
+  const { key } = await ensureActiveClientKeyState(deps, ctx);
   await writeClientKeyCache(deps, key, false, ctx.organizationId, true);
+  return key;
+}
+
+export async function readOrProvisionClientKey(
+  deps: ClientKeyDeps,
+  ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
+): Promise<ClientKeyRow> {
+  const { created, key } = await ensureActiveClientKeyState(deps, ctx);
+  if (created) {
+    await writeClientKeyCache(deps, key, false, ctx.organizationId, true);
+  }
   return key;
 }
 
@@ -30,14 +41,21 @@ export async function ensureActiveClientKey(
   deps: ClientKeyDeps,
   ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
 ): Promise<ClientKeyRow> {
+  return (await ensureActiveClientKeyState(deps, ctx)).key;
+}
+
+async function ensureActiveClientKeyState(
+  deps: ClientKeyDeps,
+  ctx: { appId: string; environmentId: string; organizationId: string; scope: EnvScopeValue },
+): Promise<{ created: boolean; key: ClientKeyRow }> {
   const active = await findActiveClientKey(deps, ctx);
-  if (active) return active;
+  if (active) return { created: false, key: active };
 
   try {
-    return await createClientKey(deps, ctx);
+    return { created: true, key: await createClientKey(deps, ctx) };
   } catch (error) {
     const winner = await findActiveClientKey(deps, ctx);
-    if (winner) return winner;
+    if (winner) return { created: false, key: winner };
     throw error;
   }
 }

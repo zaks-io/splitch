@@ -1,6 +1,6 @@
 # Agent Config
 
-Last updated: 2026-07-05
+Last updated: 2026-07-29
 
 Scaffold is in place. The repo is now a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
@@ -33,9 +33,10 @@ in this config; refresh them from Linear during each workflow run.
   scale `0`, `1`, `2`, `4`, `8`, `16`.
 - GitHub read-only checks: `gh repo view`, `gh workflow list`, `gh pr list`,
   `gh pr checks`, `gh run list`, and environment/branch-protection API reads.
-- Verified hosted PR check names: `Control Panel E2E`, `Verify`, `Spec Lint`,
-  and `Stats Simulation Smoke` from the `ci` workflow. Secret scanning is a step
-  inside `Verify`; the standalone `gitleaks` workflow was removed. See
+- Configured hosted PR check names: `Verify`, `Spec Lint`, and
+  `Stats Simulation Smoke` from the `ci` workflow. `Control Panel E2E` runs on
+  pushes to `main` and manual dispatches, not pull requests. Secret scanning is
+  a step inside `Verify`; the standalone `gitleaks` workflow was removed. See
   `Pull Requests`.
 - Critical unknowns: friction-intake fields remain unverified. Branch protection
   is absent on `main`. The GitHub `production` environment currently has no
@@ -61,9 +62,10 @@ in this config; refresh them from Linear during each workflow run.
 - CI gate: `.github/workflows/ci.yml` job `Verify` runs `pnpm verify:ci`
   (`format:check`, `lint`, `typecheck`, `knip`, `spec:lint`, `test:scripts`,
   `test`, `stats:golden`, `stats:property`, `build`) and then `pnpm secrets:range`.
-- Separate hosted PR checks: `Control Panel E2E` runs the local full-stack
-  Playwright harness, `Spec Lint` runs `pnpm spec:lint`, and `Stats Simulation
-Smoke` runs package `stats:simulation -- --mode=smoke`.
+- Separate hosted checks: `Control Panel E2E` runs the local full-stack
+  Playwright harness on pushes to `main` and manual dispatches. On pull requests,
+  `Spec Lint` runs `pnpm spec:lint`, and `Stats Simulation Smoke` runs package
+  `stats:simulation -- --mode=smoke`.
 - Gate parity gap: `pnpm verify:push` runs `tinybird:local` and
   `d1:migrate:local`, but `pnpm verify:ci` currently does not. Fix the repo
   gate entrypoints before treating CI and pre-push as equivalent.
@@ -255,7 +257,7 @@ real package API boundary.
   `--match-head-commit <sha>` after refreshing PR head, base, checks, reviews,
   Linear state, and local refs. Do not use merge commits.
 - Required-check enforcement: require the hosted `Verify` check from the `ci`
-  workflow and `Control Panel E2E` for Control Panel changes to pass on the current PR head. Also require any package-specific
+  workflow to pass on the current PR head. Also require any package-specific
   checks named in the issue handoff and a clean exact-head `ziw-code-review`
   verdict recorded as `code-review-passed`.
 - Active PR/preview cap defaults to 3. Friction-intake fields remain unverified.
@@ -266,10 +268,12 @@ real package API boundary.
 - Issue-assigned agents: Linear team `Splitch` exists; discover assignable agents
   live from Linear at dispatch time (do not hardcode). `remote-cursor` env label
   and `zaks-io/splitch` repo-route label are set up.
-- Claude: this repo has no Claude Code integration yet. Adapters created this
-  setup: `AGENTS.md` (workflow pointer) and `CLAUDE.md` (`@AGENTS.md` import).
+- Claude: repo-local integration uses `AGENTS.md` as the workflow pointer and
+  `CLAUDE.md` as its `@AGENTS.md` import.
 - Claude Code source of truth: `AGENTS.md`, imported by `CLAUDE.md`.
-- Claude Code symlinks: none required (no `.claude` skill paths to link).
+- Claude Code skill registration: tracked `.claude/skills/ziw-*` relative
+  symlinks point to the generated `.agents/skills/ziw-*` source tree so every
+  Git worktree registers the same skills without duplicating their content.
 - Workflow skill distribution: project skills, committed generated copies from
   `zaks-io/skills`.
 - Workflow skill lockfile: `skills-lock.json`.
@@ -280,8 +284,8 @@ real package API boundary.
 
 ## Pull Requests
 
-- PR CI workflow source: `.github/workflows/ci.yml`; verified hosted check names:
-  `Control Panel E2E`, `Verify`, `Spec Lint`, `Stats Simulation Smoke`.
+- PR CI workflow source: `.github/workflows/ci.yml`; configured hosted check names:
+  `Verify`, `Spec Lint`, `Stats Simulation Smoke`.
 - Secret scanning lives in the `ci` workflow as dedicated `Install gitleaks` +
   `Scan for secrets` steps (the `Scan` step runs `pnpm secrets:range`, scoped to
   the PR/push commit range, not the whole tree). The standalone `gitleaks`
@@ -309,8 +313,8 @@ real package API boundary.
 - Automation merge gate for low/normal-risk PRs:
   1. PR is open, non-draft, mergeable/clean, and based on current `origin/main`.
   2. Current PR head matches the reviewed head SHA recorded in Linear.
-  3. Hosted `Verify` and every applicable package-specific check, including
-     `Control Panel E2E` for Control Panel changes, pass on the current PR head.
+  3. Hosted `Verify` and every applicable package-specific check pass on the
+     current PR head.
   4. Worker-required local checks passed and are recorded in the handoff.
   5. Exact-head `ziw-code-review` is clean and `code-review-passed` is applied
      with PR URL plus reviewed head SHA.
@@ -347,8 +351,10 @@ real package API boundary.
 - Git hooks: wired with Lefthook. `pre-commit` runs `pnpm verify:commit`;
   `pre-push` runs `pnpm verify:push`.
 - PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
-  Blacksmith plus separate `Control Panel E2E`, `Spec Lint`, and `Stats Simulation Smoke` jobs. See
-  the gate parity gap above for Tinybird Local and D1 local validators.
+  Blacksmith plus separate `Spec Lint` and `Stats Simulation Smoke` jobs.
+  `Control Panel E2E` runs after merge on pushes to `main` and on manual
+  dispatches. See the gate parity gap above for Tinybird Local and D1 local
+  validators.
 - Shared Preview / Production: workflows are wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
   resources plus one Tinybird Branch. Production starts automatically after
@@ -389,9 +395,10 @@ real package API boundary.
       Low/normal-risk automation merge authority, squash merge method, hosted
       required-check enforcement, and CodeRabbit-on-demand behavior are now set
       in `Pull Requests`.
-- [x] Hosted CI check names verified: `Control Panel E2E`, `Verify`, `Spec Lint`,
-      and `Stats Simulation Smoke`; secret scanning is a step inside `Verify`. See
-      `Pull Requests`.
+- [x] Hosted PR check names configured: `Verify`, `Spec Lint`, and
+      `Stats Simulation Smoke`; secret scanning is a step inside `Verify`.
+      `Control Panel E2E` is limited to pushes to `main` and manual dispatches.
+      See `Pull Requests`.
 - [x] Tinybird datasource project files exist under `infra/tinybird`.
       `pnpm tinybird:local` validates datasource contracts and builds against
       Tinybird Local. Pipes, fixtures, and endpoint tests remain future work.

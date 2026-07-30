@@ -146,6 +146,7 @@ function config(input: { version: number; enabled: boolean }): FlagConfigGetOutp
     availableVariantNames: ["control", "treatment"],
     targetingRules: [],
     rollout: null,
+    experiment: null,
     ...input,
   };
 }

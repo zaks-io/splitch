@@ -113,9 +113,18 @@ test("compatibility deploy enables predecessor sessions with a self-expiring dea
   });
 
   assert.equal(result.status, 0, result.stderr);
-  const [call] = readCalls(fixture.callsPath);
-  assert.equal(call.includes("CONTROL_PANEL_LEGACY_SESSION_MODE:bounded-rollout"), true);
-  const expiry = call.find((arg) => arg.startsWith("CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT:"));
+  const calls = readCalls(fixture.callsPath);
+  assert.deepEqual(calls[0], ["turbo", "run", "build", "--filter=@splitch/control-plane-api"]);
+  assert.deepEqual(calls[1].slice(0, 6), [
+    "turbo",
+    "run",
+    "deploy",
+    "--only",
+    "--filter=@splitch/control-plane-api",
+    "--",
+  ]);
+  assert.equal(calls[1].includes("CONTROL_PANEL_LEGACY_SESSION_MODE:bounded-rollout"), true);
+  const expiry = calls[1].find((arg) => arg.startsWith("CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT:"));
   const expiresAt = Number(expiry?.split(":", 2)[1]);
   assert.ok(expiresAt >= before + 30 * 60);
   assert.ok(expiresAt <= Math.floor(Date.now() / 1000) + 30 * 60);
@@ -128,11 +137,13 @@ test("completed rollback keeps self-expiring compatibility authority active", ()
 
   assert.equal(result.status, 0, result.stderr);
   const calls = readCalls(fixture.callsPath);
-  assert.equal(calls.length, 2);
-  assert.deepEqual(calls[0].slice(0, 10), [
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls[0], ["turbo", "run", "build", "--filter=@splitch/control-plane-api"]);
+  assert.deepEqual(calls[1].slice(0, 11), [
     "turbo",
     "run",
     "deploy",
+    "--only",
     "--filter=@splitch/control-plane-api",
     "--",
     "--env",
@@ -141,11 +152,11 @@ test("completed rollback keeps self-expiring compatibility authority active", ()
     "--var",
     "CONTROL_PANEL_LEGACY_SESSION_MODE:bounded-rollout",
   ]);
-  const expiry = calls[0].find((arg) => arg.startsWith("CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT:"));
+  const expiry = calls[1].find((arg) => arg.startsWith("CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT:"));
   const expiresAt = Number(expiry?.split(":", 2)[1]);
   assert.ok(expiresAt >= before + 30 * 60);
   assert.ok(expiresAt <= Math.floor(Date.now() / 1000) + 30 * 60);
-  assert.deepEqual(calls[1].slice(0, 7), [
+  assert.deepEqual(calls[2].slice(0, 7), [
     "--dir",
     "apps/control-panel",
     "exec",
@@ -158,20 +169,29 @@ test("completed rollback keeps self-expiring compatibility authority active", ()
 });
 
 test("rollback leaves compatibility authority active if the Panel cannot be activated", () => {
-  const fixture = makeFakePnpm("2");
+  const fixture = makeFakePnpm("3");
   const result = runRollback(fixture);
 
   assert.equal(result.status, 19);
-  assert.equal(readCalls(fixture.callsPath).length, 2);
+  assert.equal(readCalls(fixture.callsPath).length, 3);
   assertProtocolAvailable("signed", "compat");
 });
 
-test("rollback leaves signed V2 active if compatibility deployment fails", () => {
+test("rollback leaves signed V2 active if the compatibility build fails", () => {
   const fixture = makeFakePnpm("1");
   const result = runRollback(fixture);
 
   assert.equal(result.status, 19);
   assert.equal(readCalls(fixture.callsPath).length, 1);
+  assertProtocolAvailable("signed", "final");
+});
+
+test("rollback leaves signed V2 active if the compatibility deploy fails", () => {
+  const fixture = makeFakePnpm("2");
+  const result = runRollback(fixture);
+
+  assert.equal(result.status, 19);
+  assert.equal(readCalls(fixture.callsPath).length, 2);
   assertProtocolAvailable("signed", "final");
 });
 

@@ -23,6 +23,8 @@ export interface FlagConfigResult {
   availableVariantNames: string[];
   targetingRules: TargetingRule[];
   rollout: PercentageRollout | null;
+  /** Controlling Experiment, or null when none controls this Flag here. */
+  experiment: { id: string; name: string } | null;
 }
 
 export interface PatchFlagConfigInput {
@@ -90,4 +92,13 @@ export interface Snapshot {
   experiment: ExperimentConfigKV | null;
   run: RunConfigKV | null;
   version: number;
+  /**
+   * The RUNNING Experiment that owns part of this Flag Configuration, or null.
+   *
+   * Carried separately from `experiment` for two reasons: ExperimentConfigKV
+   * deliberately holds only what the edge evaluate path needs (no display name),
+   * and `experiment` is also populated for draft and ended Experiments, which own
+   * nothing. Control-plane-only: never written to KV.
+   */
+  controllingExperiment: { id: string; name: string } | null;
 }

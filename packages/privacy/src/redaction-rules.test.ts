@@ -47,6 +47,7 @@ describe("redaction key policy", () => {
       "secret",
       "client_secret",
       "api-key",
+      "keyMaterial",
       "token",
       "accessToken",
       "refresh_token",

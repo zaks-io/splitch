@@ -25,6 +25,14 @@ for (const environment of ["production", "shared-preview"]) {
       scripts[`deploy:cloudflare:remaining:${environment}`],
       /--filter=!@splitch\/analysis-api/,
     );
+    assert.match(
+      scripts[`deploy:cloudflare:control-panel:${environment}`],
+      new RegExp(`CLOUDFLARE_ENV=${environment} SPLITCH_GENERATED_WRANGLER_ENV=${environment}`),
+    );
+    assert.match(
+      scripts[`deploy:cloudflare:remaining:${environment}`],
+      new RegExp(`CLOUDFLARE_ENV=${environment} SPLITCH_GENERATED_WRANGLER_ENV=${environment}`),
+    );
   });
 
   test(`${environment} backfills credentials before deploying the schema-v2 Evaluation Worker`, async () => {

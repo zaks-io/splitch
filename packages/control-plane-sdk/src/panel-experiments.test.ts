@@ -39,6 +39,36 @@ describe("panel experiments binding transport", () => {
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
   });
 
+  it("parses one Experiment with its ordered frozen Run snapshots", async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      Response.json({
+        experiment: {
+          id: "exp_1",
+          name: "Checkout",
+          status: "running",
+          flagId: "flag_1",
+          liveRunId: "run_2",
+        },
+        flag: { id: "flag_1", name: "Checkout Flag" },
+        runs: [panelRun()],
+      }),
+    );
+
+    const result = await createPanelExperimentsClient({ fetch: fetcher }).detail({
+      appId: "app_1",
+      environmentId: "env_1",
+      experimentId: "exp_1",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { experiment: { id: "exp_1" }, runs: [{ runNumber: 2 }] },
+    });
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://control-plane.internal/control-panel/experiments/detail",
+    );
+  });
+
   it("binds the downstream identity to the exact operation, resources, and Run", async () => {
     const identity = {
       operation: "experiment_results_post" as const,
@@ -58,3 +88,28 @@ describe("panel experiments binding transport", () => {
     expect(request.headers.get("x-splitch-panel-session")).toBeNull();
   });
 });
+
+function panelRun() {
+  return {
+    id: "run_2",
+    experimentId: "exp_1",
+    environmentId: "env_1",
+    runNumber: 2,
+    status: "running",
+    targetingKey: "userId",
+    targetingKeyType: "user",
+    salt: "salt-2",
+    allocation: { control: 70, treatment: 30 },
+    variantsJson: JSON.stringify([
+      { id: "variant_control", name: "control", value: false },
+      { id: "variant_treatment", name: "treatment", value: true },
+    ]),
+    targetingRulesJson: "[]",
+    configHash: "sha256:two",
+    startedAt: "2026-07-19T00:00:00.000Z",
+    endedAt: null,
+    startReason: "Increase treatment traffic",
+    endReason: null,
+    createdAt: "2026-07-19T00:00:00.000Z",
+  };
+}

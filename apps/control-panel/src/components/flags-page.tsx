@@ -8,6 +8,8 @@ type FlagsPageProps = {
   env: string;
   environmentId: string;
   items: FlagsPageItem[];
+  /** Scope root for the Flag detail links, e.g. `/acme/checkout-api/dev`. */
+  scopeHref: string;
 };
 
 export function FlagsPage(props: FlagsPageProps) {
@@ -33,7 +35,7 @@ export function FlagsPage(props: FlagsPageProps) {
       {props.items.length === 0 ? (
         <FlagsEmptyState appId={props.appId} environmentId={props.environmentId} />
       ) : (
-        <FlagsTable env={props.env} items={props.items} />
+        <FlagsTable env={props.env} items={props.items} scopeHref={props.scopeHref} />
       )}
     </section>
   );

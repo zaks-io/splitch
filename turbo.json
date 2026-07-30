@@ -36,6 +36,40 @@
         "TINYBIRD_API_URL"
       ]
     },
+    "@splitch/control-panel#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".output/**", "build/**"],
+      "inputs": ["$TURBO_DEFAULT$"],
+      "env": [
+        "SPLITCH_PLATFORM_TARGET",
+        "AUTH_API_ORIGIN",
+        "AUTH_JWKS_URI",
+        "CONTROL_PLANE_ORIGIN",
+        "TINYBIRD_API_URL",
+        "CLOUDFLARE_ENV",
+        "SPLITCH_GENERATED_WRANGLER_ENV",
+        "SENTRY_DSN",
+        "SENTRY_RELEASE",
+        "SENTRY_RELEASE_BASE",
+        "VITE_SENTRY_DSN",
+        "VITE_SENTRY_RELEASE",
+        "VITE_SPLITCH_PLATFORM_TARGET"
+      ]
+    },
+    "@splitch/marketing#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".output/**", "build/**"],
+      "inputs": ["$TURBO_DEFAULT$"],
+      "env": [
+        "SPLITCH_PLATFORM_TARGET",
+        "AUTH_API_ORIGIN",
+        "AUTH_JWKS_URI",
+        "CONTROL_PLANE_ORIGIN",
+        "TINYBIRD_API_URL",
+        "CLOUDFLARE_ENV",
+        "SPLITCH_GENERATED_WRANGLER_ENV"
+      ]
+    },
     "clean": {
       "cache": false
     },

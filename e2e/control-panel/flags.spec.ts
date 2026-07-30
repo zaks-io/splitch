@@ -18,9 +18,7 @@ test.describe("per-Environment Flags", () => {
     await expect(row).toContainText("Enabled");
     await expect(row).toContainText("2 of 2");
     await expect(row).toContainText("No percentage rollout");
-    await expect(row.getByRole("link", { name: "new-checkout" })).toHaveCount(0);
-    await row.getByText("new-checkout", { exact: true }).click();
-    await expect(page).toHaveURL("/acme-labs/checkout-api/dev/flags");
+    await expect(row.getByRole("link", { name: "new-checkout" })).toHaveCount(1);
     await captureThemeScreenshots(page, testInfo, "flags-list-dev");
 
     await chooseEnvironment(page, "/acme-labs/checkout-api/prod/flags");
@@ -68,7 +66,7 @@ test.describe("per-Environment Flags", () => {
       .getByRole("button", { name: "Close" })
       .click();
     await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("Disabled");
-    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("0 of 2");
+    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("All 2, not narrowed");
     await captureThemeScreenshots(page, testInfo, "flags-list");
 
     await page.getByRole("button", { name: "Create Flag" }).click();
@@ -112,7 +110,132 @@ test.describe("per-Environment Flags", () => {
       .locator("[data-slot='dialog-footer']")
       .getByRole("button", { name: "Close" })
       .click();
-    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("0 of 3");
+    await expect(page.locator(`[data-flag-key='${flagKey}']`)).toContainText("All 3, not narrowed");
+  });
+});
+
+test.describe("Flag detail", () => {
+  test.beforeEach(async ({ context }) => {
+    await context.addCookies([{ name: "__session", value: LOCAL_E2E_SESSION_TOKEN, url: origin }]);
+  });
+
+  test("shows the same Flag's divergent Configuration in each Environment", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/acme-labs/checkout-api/dev/flags");
+    await page.locator("[data-flag-key='new-checkout']").getByRole("link").click();
+    await expect(page).toHaveURL("/acme-labs/checkout-api/dev/flags/new-checkout");
+
+    // The list is replaced, not stacked above: the detail is the section's view now.
+    await expect(page.getByRole("heading", { level: 1, name: "New Checkout" })).toBeVisible();
+    await expect(page.locator("[data-flag-key='new-checkout']")).toHaveCount(0);
+
+    const devConfig = page.locator("[data-flag-env-config='dev']");
+    await expect(devConfig).toContainText("Enabled");
+    await expect(devConfig).toContainText("2 of 2 catalog Variants available here");
+    // Both Variants are promoted into dev, so neither is marked unavailable here.
+    await expect(page.locator("[data-variant-availability='unavailable']")).toHaveCount(0);
+    // The salt behind a percentage rollout is server-minted and never operator-facing.
+    await expect(page.locator("body")).not.toContainText("salt");
+    await captureThemeScreenshots(page, testInfo, "flag-detail-dev");
+
+    await chooseEnvironment(page, "/acme-labs/checkout-api/prod/flags/new-checkout");
+    await expect(page).toHaveURL("/acme-labs/checkout-api/prod/flags/new-checkout");
+
+    const prodConfig = page.locator("[data-flag-env-config='prod']");
+    await expect(prodConfig).toContainText("Disabled");
+    await expect(prodConfig).toContainText("1 of 2 catalog Variants available here");
+    await captureThemeScreenshots(page, testInfo, "flag-detail-prod");
+  });
+
+  test("marks a Variant that was never promoted into this Environment", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/acme-labs/checkout-api/prod/flags/new-checkout");
+
+    const treatment = page.locator("[data-variant-name='treatment']");
+    await expect(treatment).toHaveAttribute("data-variant-availability", "unavailable");
+    await expect(treatment).toContainText("Not available");
+    // The toggle STATE is rendered so the App-level/per-Environment split is legible,
+    // but nothing on this read-only screen is togglable.
+    const toggle = treatment.getByRole("switch");
+    await expect(toggle).toBeDisabled();
+    await expect(toggle).not.toBeChecked();
+
+    const control = page.locator("[data-variant-name='control']");
+    await expect(control).toHaveAttribute("data-variant-availability", "available");
+    await expect(control.getByRole("switch")).toBeChecked();
+    await expect(control.getByRole("switch")).toBeDisabled();
+
+    await expect(page.getByText("Definition — shared across all environments")).toBeVisible();
+    await captureThemeScreenshots(page, testInfo, "flag-detail-variant-availability");
+  });
+
+  test("banners the running Experiment and never locks the kill switch", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/acme-labs/checkout-api/dev/flags/new-checkout");
+
+    const banner = page.locator("[data-flag-experiment-banner]");
+    await expect(banner).toContainText("Controlled by Experiment");
+    await expect(banner.getByRole("link", { name: "Checkout Copy Dev" })).toBeVisible();
+    await expect(page.locator("[data-flag-lock='true']").first()).toContainText(
+      "owned by Experiment Checkout Copy Dev while it runs",
+    );
+    await expect(page.locator("[data-flag-kill-switch='true']")).toContainText("Never locked");
+    await expect(
+      page.locator("[data-flag-kill-switch='true'] [data-flag-lock='true']"),
+    ).toHaveCount(0);
+    await captureThemeScreenshots(page, testInfo, "flag-detail-experiment-locked");
+  });
+
+  test("does not claim control for a draft or an ended Experiment", async ({ page }) => {
+    for (const flagKey of ["checkout-draft", "checkout-ended"]) {
+      await page.goto(`/acme-labs/checkout-api/dev/flags/${flagKey}`);
+
+      await expect(page.locator("[data-flag-env-config='dev']")).toBeVisible();
+      await expect(page.locator("[data-flag-experiment-banner]")).toHaveCount(0);
+      await expect(page.locator("[data-flag-lock='true']")).toHaveCount(0);
+    }
+  });
+
+  test("renders a normally created Flag with no fixture-seeded Configuration", async ({
+    page,
+  }, testInfo) => {
+    const flagKey = `detail-honest-${testInfo.retry}`;
+    await page.goto("/acme-labs/billing-api/prod/flags");
+    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+
+    await page.getByRole("button", { name: "Create Flag" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Flag key").fill(flagKey);
+    await dialog.getByRole("button", { name: "Create Flag" }).click();
+    await expect(dialog.getByRole("heading", { name: "Connect your code" })).toBeVisible();
+    await dialog
+      .locator("[data-slot='dialog-footer']")
+      .getByRole("button", { name: "Close" })
+      .click();
+
+    await page.locator(`[data-flag-key='${flagKey}']`).getByRole("link").click();
+    await expect(page).toHaveURL(`/acme-labs/billing-api/prod/flags/${flagKey}`);
+
+    const config = page.locator("[data-flag-env-config='prod']");
+    await expect(config).toContainText("Disabled");
+    // An untouched availability set means "not narrowed", which is the opposite of
+    // "nothing can serve here". The screen has to say which one it is.
+    await expect(page.locator("[data-flag-availability='not-narrowed']")).toContainText(
+      "every Variant in the catalog is a candidate",
+    );
+    await expect(page.locator("[data-flag-experiment-banner]")).toHaveCount(0);
+    await expect(config).toContainText("No Targeting Rules in this Environment.");
+    await captureThemeScreenshots(page, testInfo, "flag-detail-newly-created");
+  });
+
+  test("does not invent a Flag for an unknown key", async ({ page }) => {
+    await page.goto("/acme-labs/checkout-api/dev/flags/no-such-flag");
+
+    await expect(page.getByText("Flag not found")).toBeVisible();
+    await expect(page.locator("[data-flag-env-config='dev']")).toHaveCount(0);
   });
 });
 

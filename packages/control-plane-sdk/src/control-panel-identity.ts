@@ -1,14 +1,40 @@
+import { CONTROL_PANEL_DELEGATION_HEADER } from "@splitch/contracts";
+
 const MAX_DELEGATION_LIFETIME_SECONDS = 30;
 const MIN_SECRET_BYTES = 32;
 
-export const CONTROL_PANEL_DELEGATION_HEADER = "x-splitch-panel-delegation";
+export { CONTROL_PANEL_DELEGATION_HEADER };
 export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 
 export type ControlPanelOperation =
   | { id: "apps_create"; orgId: string }
+  | { id: "experiments_detail" }
   | { id: "experiments_list" }
   | { id: "flags_list" | "flags_create"; appId: string; environmentId: string }
-  | { id: "flag_config_get"; appId: string; environmentId: string; flagId: string };
+  | { id: "flag_config_get"; appId: string; environmentId: string; flagId: string }
+  | {
+      id:
+        | "metrics_list"
+        | "metrics_create"
+        | "settings_get"
+        | "environment_update"
+        | "client_key_update"
+        | "api_keys_create";
+      appId: string;
+      environmentId: string;
+    }
+  | {
+      id: "metrics_get" | "metrics_update" | "metrics_delete";
+      appId: string;
+      environmentId: string;
+      metricId: string;
+    }
+  | {
+      id: "api_key_revoke";
+      appId: string;
+      environmentId: string;
+      keyId: string;
+    };
 
 export interface ControlPanelDelegationClaims {
   version: 1;
@@ -26,9 +52,36 @@ interface DelegationOptions {
 }
 
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
+const EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
 const EXPERIMENTS_PATH = "/control-panel/experiments/list";
 const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
+const METRICS_PATH = /^\/apps\/([^/]+)\/metrics\/?$/;
+const METRIC_PATH = /^\/apps\/([^/]+)\/metrics\/([^/]+)\/?$/;
+const METRIC_COLLECTION_METHODS = {
+  GET: "metrics_list",
+  POST: "metrics_create",
+} as const;
+const METRIC_RESOURCE_METHODS = {
+  GET: "metrics_get",
+  PATCH: "metrics_update",
+  DELETE: "metrics_delete",
+} as const;
+const SETTINGS_PATH = /^\/control-panel\/apps\/([^/]+)\/envs\/([^/]+)\/settings\/?$/;
+const ENVIRONMENT_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/?$/;
+const CLIENT_KEY_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/client-key\/?$/;
+const API_KEYS_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/api-keys\/?$/;
+const API_KEY_REVOKE_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/api-keys\/([^/]+)\/revoke\/?$/;
+const SCOPED_OPERATION_IDS = [
+  "flags_list",
+  "flags_create",
+  "metrics_list",
+  "metrics_create",
+  "settings_get",
+  "environment_update",
+  "client_key_update",
+  "api_keys_create",
+] as const;
 const NONCE = /^[A-Za-z0-9_-]{16,128}$/;
 const BODY_DIGEST = /^sha256:[A-Za-z0-9_-]{43}$/;
 
@@ -41,12 +94,17 @@ export function parseControlPanelOperation(
     parseAppsCreate(method, pathname) ??
     parseExperimentsList(method, pathname) ??
     parseFlags(method, pathname, panelEnvironmentId) ??
-    parseConfig(method, pathname)
+    parseConfig(method, pathname) ??
+    parseEnvironmentSettings(method, pathname) ??
+    parseMetrics(method, pathname, panelEnvironmentId)
   );
 }
 
 function parseExperimentsList(method: string, pathname: string): ControlPanelOperation | null {
-  return method === "POST" && pathname === EXPERIMENTS_PATH ? { id: "experiments_list" } : null;
+  if (method !== "POST") return null;
+  if (pathname === EXPERIMENTS_PATH) return { id: "experiments_list" };
+  if (pathname === EXPERIMENT_DETAIL_PATH) return { id: "experiments_detail" };
+  return null;
 }
 
 export async function issueControlPanelDelegation(
@@ -147,6 +205,81 @@ function parseConfig(method: string, pathname: string): ControlPanelOperation | 
   return appId && environmentId && flagId
     ? { id: "flag_config_get", appId, environmentId, flagId }
     : null;
+}
+
+function parseMetrics(
+  method: string,
+  pathname: string,
+  environmentValue?: string,
+): ControlPanelOperation | null {
+  const environmentId = environmentValue ? decodeSegment(environmentValue) : null;
+  if (!environmentId) return null;
+  return (
+    parseMetricCollection(method, pathname, environmentId) ??
+    parseMetricResource(method, pathname, environmentId)
+  );
+}
+
+function parseMetricCollection(
+  method: string,
+  pathname: string,
+  environmentId: string,
+): ControlPanelOperation | null {
+  const id = METRIC_COLLECTION_METHODS[method as keyof typeof METRIC_COLLECTION_METHODS];
+  const appId = decodeMatch(pathname.match(METRICS_PATH), 1);
+  return id && appId ? { id, appId, environmentId } : null;
+}
+
+function parseMetricResource(
+  method: string,
+  pathname: string,
+  environmentId: string,
+): ControlPanelOperation | null {
+  const id = METRIC_RESOURCE_METHODS[method as keyof typeof METRIC_RESOURCE_METHODS];
+  const resource = pathname.match(METRIC_PATH);
+  const appId = decodeMatch(resource, 1);
+  const metricId = decodeMatch(resource, 2);
+  return id && appId && metricId ? { id, appId, environmentId, metricId } : null;
+}
+
+function decodeMatch(match: RegExpMatchArray | null, index: number): string | null {
+  return match?.[index] ? decodeSegment(match[index]) : null;
+}
+
+function parseEnvironmentSettings(method: string, pathname: string): ControlPanelOperation | null {
+  return parseApiKeyRevoke(method, pathname) ?? parseScopedSettingsOperation(method, pathname);
+}
+
+function parseApiKeyRevoke(method: string, pathname: string): ControlPanelOperation | null {
+  if (method !== "POST") return null;
+  const revoke = pathname.match(API_KEY_REVOKE_PATH);
+  if (!revoke?.[1] || !revoke[2] || !revoke[3]) return null;
+  const [appId, environmentId, keyId] = decodedSegments(revoke.slice(1, 4));
+  return appId && environmentId && keyId
+    ? { id: "api_key_revoke", appId, environmentId, keyId }
+    : null;
+}
+
+function parseScopedSettingsOperation(
+  method: string,
+  pathname: string,
+): ControlPanelOperation | null {
+  for (const [pattern, expectedMethod, id] of [
+    [SETTINGS_PATH, "GET", "settings_get"],
+    [ENVIRONMENT_PATH, "PATCH", "environment_update"],
+    [CLIENT_KEY_PATH, "PATCH", "client_key_update"],
+    [API_KEYS_PATH, "POST", "api_keys_create"],
+  ] as const) {
+    const match = pathname.match(pattern);
+    if (method !== expectedMethod || !match?.[1] || !match[2]) continue;
+    const [appId, environmentId] = decodedSegments(match.slice(1, 3));
+    return appId && environmentId ? { id, appId, environmentId } : null;
+  }
+  return null;
+}
+
+function decodedSegments(values: string[]): Array<string | null> {
+  return values.map(decodeSegment);
 }
 
 function parseCompactDelegation(
@@ -254,26 +387,66 @@ function isControlPanelDelegationClaims(value: unknown): value is ControlPanelDe
 
 function isControlPanelOperation(value: unknown): value is ControlPanelOperation {
   if (!isRecord(value) || typeof value.id !== "string") return false;
-  if (value.id === "apps_create") {
-    return hasKeys(value, ["id", "orgId"]) && isNonEmptyString(value.orgId);
-  }
-  if (value.id === "experiments_list") return hasKeys(value, ["id"]);
-  if (value.id === "flag_config_get") {
-    return (
-      hasKeys(value, ["id", "appId", "environmentId", "flagId"]) &&
-      isNonEmptyString(value.appId) &&
-      isNonEmptyString(value.environmentId) &&
-      isNonEmptyString(value.flagId)
-    );
-  }
-  if (value.id === "flags_list" || value.id === "flags_create") {
-    return (
-      hasKeys(value, ["id", "appId", "environmentId"]) &&
-      isNonEmptyString(value.appId) &&
-      isNonEmptyString(value.environmentId)
-    );
+  if (value.id === "apps_create") return isAppCreateOperation(value);
+  if (isExperimentsOperation(value.id)) return hasKeys(value, ["id"]);
+  if (value.id === "flag_config_get") return isFlagConfigOperation(value);
+  if (isScopedOperationId(value.id)) return isAppCollectionOperation(value);
+  if (isMetricResourceOperationId(value.id)) return isMetricResourceOperation(value);
+  if (value.id === "api_key_revoke") {
+    return isApiKeyRevokeOperation(value);
   }
   return false;
+}
+
+function isExperimentsOperation(value: string): boolean {
+  return value === "experiments_list" || value === "experiments_detail";
+}
+
+function isAppCreateOperation(value: Record<string, unknown>): boolean {
+  return hasKeys(value, ["id", "orgId"]) && isNonEmptyString(value.orgId);
+}
+
+function isFlagConfigOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "flagId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.flagId)
+  );
+}
+
+function isAppCollectionOperation(value: Record<string, unknown>): boolean {
+  return hasKeys(value, ["id", "appId", "environmentId"]) && hasAppEnvironment(value);
+}
+
+function isMetricResourceOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "metricId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.metricId)
+  );
+}
+
+function hasAppEnvironment(value: Record<string, unknown>): boolean {
+  return isNonEmptyString(value.appId) && isNonEmptyString(value.environmentId);
+}
+
+function isMetricResourceOperationId(
+  id: string,
+): id is "metrics_get" | "metrics_update" | "metrics_delete" {
+  return id === "metrics_get" || id === "metrics_update" || id === "metrics_delete";
+}
+
+function isApiKeyRevokeOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "keyId"]) &&
+    isNonEmptyString(value.appId) &&
+    isNonEmptyString(value.environmentId) &&
+    isNonEmptyString(value.keyId)
+  );
+}
+
+function isScopedOperationId(value: string): value is (typeof SCOPED_OPERATION_IDS)[number] {
+  return (SCOPED_OPERATION_IDS as readonly string[]).includes(value);
 }
 
 function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation): boolean {
@@ -282,6 +455,7 @@ function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation
     case "apps_create":
       return right.id === "apps_create" && left.orgId === right.orgId;
     case "experiments_list":
+    case "experiments_detail":
       return true;
     case "flag_config_get":
       return (
@@ -290,9 +464,26 @@ function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation
         left.environmentId === right.environmentId &&
         left.flagId === right.flagId
       );
+    case "metrics_get":
+    case "metrics_update":
+    case "metrics_delete":
+      return (
+        "metricId" in right &&
+        left.appId === right.appId &&
+        left.environmentId === right.environmentId &&
+        left.metricId === right.metricId
+      );
+    case "api_key_revoke":
+      return (
+        "keyId" in right &&
+        left.appId === right.appId &&
+        left.environmentId === right.environmentId &&
+        left.keyId === right.keyId
+      );
     default:
       return (
-        (right.id === "flags_list" || right.id === "flags_create") &&
+        "appId" in right &&
+        "environmentId" in right &&
         left.appId === right.appId &&
         left.environmentId === right.environmentId
       );

@@ -2,13 +2,16 @@ import { Badge } from "@splitch/ui/components/badge";
 import { TableCell, TableRow } from "@splitch/ui/components/table";
 import type { FlagsPageItem } from "#lib/flags-page-data";
 
-export function FlagsTableRow({ item }: { item: FlagsPageItem }) {
+export function FlagsTableRow({ item, scopeHref }: { item: FlagsPageItem; scopeHref: string }) {
   const config = item.configuration;
+  const href = `${scopeHref}/flags/${encodeURIComponent(item.definition.key)}`;
 
   return (
     <TableRow data-flag-key={item.definition.key}>
       <TableCell className="px-4 font-mono font-medium text-foreground">
-        {item.definition.key}
+        <a className="underline underline-offset-4 hover:no-underline" href={href}>
+          {item.definition.key}
+        </a>
       </TableCell>
       <TableCell>
         {config ? (
@@ -23,10 +26,23 @@ export function FlagsTableRow({ item }: { item: FlagsPageItem }) {
         {config ? rolloutSummary(config.rolloutPercentages) : "—"}
       </TableCell>
       <TableCell className="pr-4 text-right text-muted-foreground">
-        {config ? `${config.availableVariantCount} of ${item.definition.variantCount}` : "—"}
+        {config
+          ? availabilitySummary(config.availableVariantCount, item.definition.variantCount)
+          : "—"}
       </TableCell>
     </TableRow>
   );
+}
+
+/**
+ * An empty available set means the Configuration was never narrowed, so the whole
+ * catalog is a candidate (flag-editing-ux.md). Reporting it as "0 of 2" reads as
+ * "nothing can serve here", the exact reverse, and contradicts the Flag detail
+ * screen this row links to.
+ */
+function availabilitySummary(availableCount: number, catalogCount: number): string {
+  if (availableCount === 0) return `All ${catalogCount}, not narrowed`;
+  return `${availableCount} of ${catalogCount}`;
 }
 
 function rolloutSummary(percentages: number[]): string {

@@ -119,4 +119,10 @@ test("fixture App has explicit Environments and Run-scoped Experiment health sta
   assert.match(LOCAL_E2E_D1_SEED, /experiment_checkout_prod_e2e[\s\S]*'running'/);
   assert.match(LOCAL_E2E_D1_SEED, /experiment_checkout_draft_e2e[\s\S]*'draft'/);
   assert.match(LOCAL_E2E_D1_SEED, /experiment_checkout_ended_e2e[\s\S]*'ended'/);
+  assert.match(LOCAL_E2E_D1_SEED, /env_checkout_dev_e2e[\s\S]*variantAvailability":"allow"/);
+  assert.match(
+    LOCAL_E2E_D1_SEED,
+    /env_checkout_settings_retry_e2e[\s\S]*variantAvailability":"allow"/,
+  );
+  assert.match(LOCAL_E2E_D1_SEED, /env_checkout_prod_e2e[\s\S]*variantAvailability":"confirm"/);
 });

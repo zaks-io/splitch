@@ -1,4 +1,9 @@
-import type { APIKey } from "@splitch/contracts";
+import {
+  type APIKey,
+  CONTROL_PANEL_DELEGATION_HEADER,
+  normalizeClientOrigins,
+  PANEL_API_KEY_SCOPES,
+} from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
@@ -27,6 +32,7 @@ interface CredentialHandlerDeps {
 }
 
 type ApiKeyRow = Awaited<ReturnType<Repository["credentials"]["listApiKeys"]>>[number];
+const PANEL_API_KEY_SCOPE_SET = new Set<string>(PANEL_API_KEY_SCOPES);
 
 export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
   return {
@@ -103,7 +109,12 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       return Response.json({ items: rows.map(apiKeyResponse) });
     },
 
-    async createApiKey({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> {
+    async createApiKey({
+      input,
+      principal,
+      request,
+      requestId,
+    }: HandlerArgs<unknown>): Promise<Response> {
       const adminError = await requireCredentialAdmin(deps, input, principal, requestId);
       if (adminError) return adminError;
       const ctx = await credentialContext(deps, input, requestId);
@@ -111,6 +122,8 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
 
       const body = objectBody(input);
       const scopes = body.scopes as string[];
+      const panelScopeError = validatePanelApiKeyScopes(request, scopes, requestId);
+      if (panelScopeError) return panelScopeError;
       const secret = `sk_${randomHex(32)}`;
       const keyHash = await sha256Hex(secret);
       const row = await deps.repo.credentials.apiKeys.insert(ctx.scope, {
@@ -147,6 +160,31 @@ export function makeCredentialHandlers(deps: CredentialHandlerDeps) {
       return Response.json({ keyId: revoked.keyId, revokedAt: revoked.revokedAt });
     },
   };
+}
+
+function validatePanelApiKeyScopes(
+  request: Request,
+  scopes: string[],
+  requestId: string,
+): Response | null {
+  if (request.headers.get(CONTROL_PANEL_DELEGATION_HEADER) === null) return null;
+  const refused = scopes.filter((scope) => !PANEL_API_KEY_SCOPE_SET.has(scope));
+  if (refused.length === 0) return null;
+  return renderError(
+    {
+      code: "VALIDATION_ERROR",
+      message: "Control Panel API Key scopes are not allowed",
+      details: {
+        issues: [
+          {
+            path: ["scopes"],
+            message: `allowed scopes: ${PANEL_API_KEY_SCOPES.join(", ")}`,
+          },
+        ],
+      },
+    },
+    { requestId },
+  );
 }
 
 function requireCredentialAdmin(
@@ -208,7 +246,9 @@ function clientKeyPatchValues(body: Record<string, unknown>): Partial<ClientKeyR
   const updates: Partial<ClientKeyRow> = {};
   if ("originAllowlist" in body) {
     updates.originAllowlist =
-      body.originAllowlist === null ? null : JSON.stringify(body.originAllowlist);
+      body.originAllowlist === null
+        ? null
+        : JSON.stringify(normalizeClientOrigins(body.originAllowlist as string[]));
   }
   if ("rateLimitRps" in body) {
     updates.rateLimitRps = body.rateLimitRps as number;

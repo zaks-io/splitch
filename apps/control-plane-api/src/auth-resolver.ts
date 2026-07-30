@@ -198,7 +198,7 @@ async function resolvePanelPrincipal(
       },
     };
   }
-  if (operation.id === "experiments_list") {
+  if (operation.id === "experiments_list" || operation.id === "experiments_detail") {
     return {
       ok: true as const,
       principal: {
@@ -213,7 +213,7 @@ async function resolvePanelPrincipal(
     };
   }
 
-  return resolvePanelFlagsPrincipal(operation, delegation.actorId, panelAccess);
+  return resolvePanelResourcePrincipal(operation, delegation.actorId, panelAccess);
 }
 
 async function resolveBoundedPanelSessionPrincipal(
@@ -243,10 +243,10 @@ async function resolveBoundedPanelSessionPrincipal(
   };
 }
 
-async function resolvePanelFlagsPrincipal(
+async function resolvePanelResourcePrincipal(
   operation: Exclude<
     ReturnType<typeof parseControlPanelBindingOperation>,
-    { id: "apps_create" | "experiments_list" } | null
+    { id: "apps_create" | "experiments_detail" | "experiments_list" } | null
   >,
   actorId: string,
   panelAccess?: PanelSessionAccess,

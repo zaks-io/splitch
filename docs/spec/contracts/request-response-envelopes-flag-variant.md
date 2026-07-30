@@ -49,6 +49,43 @@ no storage internals (`version`, `createdBy`).
 
 ---
 
+## Flag Configuration endpoint
+
+The per-Environment counterpart to the App-level Flag endpoints above. One envelope,
+`FlagConfigResponse`, is returned by every route that reads or writes a Flag Configuration
+(`flag_config_get`, `flag_config_update`, `flag_targeting_rules_replace`, and both sides of the
+`flags_promote` diff), so a caller never has to reconcile two shapes for the same resource.
+
+### FlagConfigResponse
+
+| Field                   | Required | Notes                                                                              |
+| ----------------------- | -------- | ---------------------------------------------------------------------------------- |
+| `flagId`                | yes      | The App-level Flag this Configuration belongs to                                   |
+| `environmentId`         | yes      | The Environment grain; `experiment` and availability are scoped to it              |
+| `version`               | yes      | Monotonic Configuration version                                                    |
+| `enabled`               | yes      | The kill switch for this Environment                                               |
+| `availableVariantNames` | yes      | Catalog subset servable here, by Variant NAME; empty = never narrowed              |
+| `targetingRules`        | yes      | Ordered, first-match-wins                                                          |
+| `rollout`               | yes      | Baseline PercentageRollout for traffic matching no rule, or `null`                 |
+| `experiment`            | yes      | `{ id, name }` of the controlling Experiment, or `null` when none controls it here |
+
+`experiment` is **nullable-not-absent**, mirroring `FlagConfigKV.experimentId` in
+[storage-schemas-kv.md](./storage-schemas-kv.md): a reader is told "no Experiment controls this"
+rather than left to infer it from a missing key. It is resolved inside the same read from the
+Experiment row the Configuration snapshot already loads, so a caller rendering the
+"Controlled by Experiment X" lock affordance never issues a second lookup that could disagree with
+the Configuration it is locking. It is non-null only for a **running** Experiment — a draft or ended
+Experiment attached to this Flag locks nothing. It is derived from D1, the authoritative store the
+write guards themselves consult, and from the same `status === "running"` test that sets
+`FlagConfigKV.experimentId`, so the lock and the pointer cannot disagree. A lagging KV read replica
+therefore cannot report a lock the write path would refuse to enforce, nor wedge the read.
+
+`rollout` is the full PercentageRollout leaf, so it carries the server-minted `salt`. The salt is
+never operator-facing: no editor surface displays or accepts it
+([frontend/flag-editing-ux.md](../frontend/flag-editing-ux.md)).
+
+---
+
 ## Variant sub-resource endpoints
 
 ### CreateVariantRequest

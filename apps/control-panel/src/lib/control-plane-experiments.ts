@@ -5,7 +5,7 @@ import {
   panelDelegationFetch,
 } from "./control-plane-apps";
 
-/** Server-only binding client for the SPL-111 composite list operation. */
+/** Server-only binding client for Experiment list and detail reads. */
 export function createControlPanelExperimentsClient(
   controlPlane: Fetcher,
   actor: ControlPanelActor,

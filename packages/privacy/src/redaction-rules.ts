@@ -37,6 +37,7 @@ const LEAF_PII_KEYS = [
   "secret",
   "clientsecret",
   "apikey",
+  "keymaterial",
   "token",
   "accesstoken",
   "refreshtoken",

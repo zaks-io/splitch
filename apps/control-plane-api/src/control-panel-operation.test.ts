@@ -14,6 +14,31 @@ describe("Control Panel binding operation allowlist", () => {
       "/apps/app_1/envs/env_1/flags/flag_1/config",
       { id: "flag_config_get", appId: "app_1", environmentId: "env_1", flagId: "flag_1" },
     ],
+    [
+      "GET",
+      "/control-panel/apps/app_1/envs/env_1/settings",
+      { id: "settings_get", appId: "app_1", environmentId: "env_1" },
+    ],
+    [
+      "PATCH",
+      "/apps/app_1/envs/env_1",
+      { id: "environment_update", appId: "app_1", environmentId: "env_1" },
+    ],
+    [
+      "PATCH",
+      "/apps/app_1/envs/env_1/client-key",
+      { id: "client_key_update", appId: "app_1", environmentId: "env_1" },
+    ],
+    [
+      "POST",
+      "/apps/app_1/envs/env_1/api-keys",
+      { id: "api_keys_create", appId: "app_1", environmentId: "env_1" },
+    ],
+    [
+      "POST",
+      "/apps/app_1/envs/env_1/api-keys/ak_1/revoke",
+      { id: "api_key_revoke", appId: "app_1", environmentId: "env_1", keyId: "ak_1" },
+    ],
   ])("allows %s %s", (method, pathname, expected) => {
     expect(parseControlPanelOperation(method, pathname, "env_1")).toEqual(expected);
   });
@@ -23,6 +48,8 @@ describe("Control Panel binding operation allowlist", () => {
     ["PATCH", "/apps/app_1/flags/flag_1"],
     ["PATCH", "/apps/app_1/envs/env_1/flags/flag_1/config"],
     ["GET", "/apps/app_1/environments"],
+    ["GET", "/apps/app_1/envs/env_1/api-keys"],
+    ["POST", "/apps/app_1/envs/env_1/client-key/revoke"],
     ["GET", "/health"],
   ])("rejects unsupported %s %s", (method, pathname) => {
     expect(parseControlPanelOperation(method, pathname)).toBeNull();

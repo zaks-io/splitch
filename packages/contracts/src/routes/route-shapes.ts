@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { OriginAllowlistSchema } from "../client-origin";
 import {
   ConditionSchema,
   PercentageRolloutSchema,
@@ -109,6 +110,13 @@ export const FlagConfigResponseSchema = z.object({
   targetingRules: z.array(TargetingRuleSchema),
   // Baseline rollout for traffic that matches no Targeting Rule; null = none.
   rollout: PercentageRolloutSchema.nullable(),
+  // The Experiment controlling this Flag in this Environment, or null when none
+  // does. NULLABLE-NOT-ABSENT, mirroring FlagConfigKV.experimentId: a reader must
+  // be told "no Experiment controls this" rather than infer it from a missing key.
+  // Resolved inside this same read from the Experiment row the snapshot already
+  // loaded, so a consumer rendering the lock affordance never issues a second
+  // lookup that could disagree with the configuration it is locking.
+  experiment: z.object({ id: z.string(), name: z.string() }).strict().nullable(),
 });
 
 export const PatchFlagConfigRequestSchema = z
@@ -181,7 +189,7 @@ export const PatchSegmentRequestSchema = z
 
 export const PatchClientKeyRequestSchema = z
   .object({
-    originAllowlist: z.array(z.string()).nullable().optional(),
+    originAllowlist: OriginAllowlistSchema.nullable().optional(),
     rateLimitRps: z.number().optional(),
   })
   .strict();

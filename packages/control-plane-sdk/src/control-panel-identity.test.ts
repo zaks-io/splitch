@@ -127,14 +127,19 @@ describe("Control Panel delegation", () => {
       verifyControlPanelDelegation(delegation, request, otherFlagOperation, SECRET, NOW),
     ).resolves.toBeNull();
   });
+});
 
-  it("parses only the binding allowlist", () => {
+describe("Control Panel operation allowlist", () => {
+  it("parses the existing App, Experiment, and Flag operations", () => {
     expect(parseControlPanelOperation("POST", "/orgs/org_1/apps")).toEqual({
       id: "apps_create",
       orgId: "org_1",
     });
     expect(parseControlPanelOperation("POST", "/control-panel/experiments/list")).toEqual({
       id: "experiments_list",
+    });
+    expect(parseControlPanelOperation("POST", "/control-panel/experiments/detail")).toEqual({
+      id: "experiments_detail",
     });
     expect(parseControlPanelOperation("GET", "/apps/app_1/flags", "env_1")).toEqual({
       id: "flags_list",
@@ -150,6 +155,39 @@ describe("Control Panel delegation", () => {
         flagId: "flag_1",
       },
     );
+  });
+
+  it("parses only the five scoped Metric operations", () => {
+    expect(parseControlPanelOperation("GET", "/apps/app_1/metrics", "env_1")).toEqual({
+      id: "metrics_list",
+      appId: "app_1",
+      environmentId: "env_1",
+    });
+    expect(parseControlPanelOperation("POST", "/apps/app_1/metrics", "env_1")).toEqual({
+      id: "metrics_create",
+      appId: "app_1",
+      environmentId: "env_1",
+    });
+    expect(parseControlPanelOperation("GET", "/apps/app_1/metrics/metric_1", "env_1")).toEqual({
+      id: "metrics_get",
+      appId: "app_1",
+      environmentId: "env_1",
+      metricId: "metric_1",
+    });
+    expect(parseControlPanelOperation("PATCH", "/apps/app_1/metrics/metric_1", "env_1")).toEqual({
+      id: "metrics_update",
+      appId: "app_1",
+      environmentId: "env_1",
+      metricId: "metric_1",
+    });
+    expect(parseControlPanelOperation("DELETE", "/apps/app_1/metrics/metric_1", "env_1")).toEqual({
+      id: "metrics_delete",
+      appId: "app_1",
+      environmentId: "env_1",
+      metricId: "metric_1",
+    });
+    expect(parseControlPanelOperation("GET", "/apps/app_1/metrics")).toBeNull();
+    expect(parseControlPanelOperation("PUT", "/apps/app_1/metrics/metric_1", "env_1")).toBeNull();
   });
 });
 

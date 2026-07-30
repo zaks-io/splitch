@@ -24,6 +24,7 @@ const config = {
   availableVariantNames: ["off", "on"],
   targetingRules: [],
   rollout: null,
+  experiment: null,
 };
 
 function sdkWith(response: () => Response) {
