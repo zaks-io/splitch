@@ -66,8 +66,14 @@ describe("App attention rollup contract", () => {
   // attention-rollup-errors.ts) -- appNotFound, forbidden,
   // fanoutLimitExceeded, analysisUnavailable, and experimentIntegrityFault
   // (the ExperimentIntegrityError path, a genuine INTERNAL_SERVER_ERROR).
-  // A future refusal added to the handler without a matching route.errors
-  // entry must fail this test, not just an added-code check.
+  //
+  // This side is a literal list because packages/contracts cannot import
+  // apps/control-plane-api (contracts-stays-schema-only,
+  // .dependency-cruiser.cjs). The structural half lives in
+  // apps/control-plane-api/src/attention-rollup-error-codes.test.ts, which
+  // invokes the actual renderer functions and asserts their emitted codes
+  // against this same route metadata -- a renderer drifting from this list,
+  // or a new refusal added without one, fails that test.
   it("declares exactly the errors the attention rollup can return in its route metadata", () => {
     const declared = new Set(getRoute("app_attention_rollup_get")?.errors);
     const emittedByHandler = new Set([

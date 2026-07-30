@@ -230,7 +230,7 @@ naming the next step, so the agent's recovery branch is a token lookup, not pros
 - `ALLOCATION_INVALID` → `details.got` (the actual sum; fix allocation to sum to 100)
 - `INSUFFICIENT_SCOPES` → `details.requiredScopes` (re-authenticate with broader scopes)
 - `CONFIRMATION_REQUIRED` → `details.gate` + `recommendedAction: 'RETRY_WITH_CONFIRMATION'` (the Environment Policy gates this change type; resend the **same** tool call with `confirm: true`)
-- `ATTENTION_FANOUT_LIMIT_EXCEEDED` → `details.limit` / `details.environments` + `recommendedAction: 'READ_PER_ENVIRONMENT'` (the App-wide rollup is over a fan-out budget; call `experiments_list` per Environment instead, and do **not** retry the rollup)
+- `ATTENTION_FANOUT_LIMIT_EXCEEDED` → `details.limit` / `details.environments` + `recommendedAction: 'READ_PER_ENVIRONMENT'` (the App-wide rollup is over a fan-out budget; call `experiments_list` per Environment to find the running Experiments, then `experiment_results_get` on each for SRM/Guardrail health — `experiments_list` alone carries no health signal — and do **not** retry the rollup)
 
 No per-tool ad-hoc error shapes. (ADR-0025 "one canonical ErrorResponse".)
 
