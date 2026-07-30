@@ -36,6 +36,15 @@ export interface OrgMembership {
 export interface SessionPrincipal {
   userId: string;
   orgs: Array<OrgMembership>;
+  /**
+   * True when the User belongs to more Organizations than the session snapshot
+   * is allowed to hold, so `orgs` is a prefix rather than the whole set.
+   *
+   * It travels with the list because a capped list that claims completeness is
+   * the "healthy because unknown" shape ADR-0036 forbids: every surface that
+   * renders `orgs` has to be able to say so out loud.
+   */
+  orgsTruncated?: boolean;
 }
 
 export interface StoredSession extends SessionPrincipal {
@@ -55,6 +64,7 @@ export function publicSession(session: StoredSession): SessionPrincipal {
   return {
     userId: session.userId,
     orgs: session.orgs,
+    orgsTruncated: session.orgsTruncated ?? false,
   };
 }
 

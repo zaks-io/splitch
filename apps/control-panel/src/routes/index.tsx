@@ -37,7 +37,7 @@ function IndexRoute() {
         </div>
       </header>
 
-      <OrganizationChooser orgs={session.orgs} />
+      <OrganizationChooser orgs={session.orgs} truncated={session.orgsTruncated ?? false} />
     </main>
   );
 }

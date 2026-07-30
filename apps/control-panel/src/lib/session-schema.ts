@@ -6,6 +6,7 @@ const APP_ROLES = new Set(["owner", "admin", "member", "viewer"]);
 const STORED_SESSION_KEYS = new Set([
   "userId",
   "orgs",
+  "orgsTruncated",
   "expiresAt",
   "workosSessionId",
   "workosAccessToken",
@@ -71,6 +72,7 @@ function isStoredSession(value: Partial<StoredSession>): value is StoredSession 
     (value.version === 1 || value.version === 2) &&
     (value.workosSessionId === undefined || isNonEmptyString(value.workosSessionId)) &&
     (value.workosAccessToken === undefined || isNonEmptyString(value.workosAccessToken)) &&
+    (value.orgsTruncated === undefined || typeof value.orgsTruncated === "boolean") &&
     Array.isArray(value.orgs) &&
     value.orgs.every(isOrgMembership)
   );

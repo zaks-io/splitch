@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CreateOrganizationDialog } from "#components/create-organization-dialog";
 import { OrganizationCard } from "#components/organization-card";
 import { OrganizationsEmptyState } from "#components/organizations-empty-state";
+import { OrganizationsTruncatedNotice } from "#components/organizations-truncated-notice";
 import { StaleSessionNotice } from "#components/stale-session-notice";
 import type { OrgMembership } from "#lib/session";
 
@@ -15,7 +16,14 @@ import type { OrgMembership } from "#lib/session";
  * who just signed in has nothing to be a member of yet, so the only useful thing
  * this screen can do is teach what an Organization is and create one (SPL-205).
  */
-export function OrganizationChooser({ orgs }: { orgs: readonly OrgMembership[] }) {
+export function OrganizationChooser({
+  orgs,
+  truncated = false,
+}: {
+  orgs: readonly OrgMembership[];
+  /** The snapshot is a prefix, not the whole set. Stated, never implied. */
+  truncated?: boolean;
+}) {
   const [staleOrgSlug, setStaleOrgSlug] = useState<string | null>(null);
   // Create Organization is server-driven and inert until hydration, so the
   // screen publishes when it is actually usable rather than leaving a
@@ -36,6 +44,7 @@ export function OrganizationChooser({ orgs }: { orgs: readonly OrgMembership[] }
       data-org-chooser="ready"
     >
       {staleOrgSlug ? <StaleSessionNotice orgSlug={staleOrgSlug} /> : null}
+      {truncated ? <OrganizationsTruncatedNotice limit={orgs.length} /> : null}
       {orgs.length === 0 ? (
         <OrganizationsEmptyState onCreated={enterOrganization} onStaleSession={setStaleOrgSlug} />
       ) : (
