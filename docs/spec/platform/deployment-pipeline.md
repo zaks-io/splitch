@@ -92,15 +92,15 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 
 ## Required GitHub workflows
 
-| Workflow                | Trigger                                             | Concurrency                      | Required result                                                                                                                                                                                                                      |
-| ----------------------- | --------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ci`                    | PR and push to main                                 | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks, and a post-Verify main-only production Vite cache warmer                                              |
-| `deploy-shared-preview` | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                                                                            |
-| `reset-shared-preview`  | manual dispatch                                     | `shared-preview-deploy`, queued  | wired: rebuild the Tinybird Branch, migrate and clear preview-only D1/KV state, reseed fixtures, run Copy Pipe on demand, and verify hosted smoke                                                                                    |
-| `deploy-production`     | successful `ci` workflow on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, successful CI verification for manual dispatches, affected-phase and Worker planning from the latest successful production deployment, conditional Tinybird/D1/Worker mutation, and Linear release sync |
-| `rollback-production`   | manual dispatch                                     | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                                                                                                         |
-| `sdk-release`           | manual dispatch                                     | `sdk-release`, queued            | wired: validate `@splitch/sdk`, prepare release artifacts, create or update draft GitHub Release for `sdk-v<version>`; does not publish to npm                                                                                       |
-| `sdk-publish`           | published GitHub Release                            | `sdk-publish`, queued            | wired: validate fresh public repository/release/remote-tag SHA evidence immediately before GitHub-hosted npm trusted publishing with provenance, or skip an existing version                                                         |
+| Workflow                | Trigger                                                  | Concurrency                      | Required result                                                                                                                                                                                                  |
+| ----------------------- | -------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci`                    | PR and push to main                                      | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks, an in-job main-only production Vite cache warm, and exact-SHA production dispatch |
+| `deploy-shared-preview` | manual dispatch                                          | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                                                        |
+| `reset-shared-preview`  | manual dispatch                                          | `shared-preview-deploy`, queued  | wired: rebuild the Tinybird Branch, migrate and clear preview-only D1/KV state, reseed fixtures, run Copy Pipe on demand, and verify hosted smoke                                                                |
+| `deploy-production`     | dispatch from successful `ci` on `main`, manual dispatch | `production-deploy`, queued      | wired: exact-SHA validation, successful CI verification, affected-phase and Worker planning from the latest successful production deployment, conditional Tinybird/D1/Worker mutation, and Linear release sync   |
+| `rollback-production`   | manual dispatch                                          | `production-deploy`, queued      | not wired: Worker rollback or roll-forward runbook execution                                                                                                                                                     |
+| `sdk-release`           | manual dispatch                                          | `sdk-release`, queued            | wired: validate `@splitch/sdk`, prepare release artifacts, create or update draft GitHub Release for `sdk-v<version>`; does not publish to npm                                                                   |
+| `sdk-publish`           | published GitHub Release                                 | `sdk-publish`, queued            | wired: validate fresh public repository/release/remote-tag SHA evidence immediately before GitHub-hosted npm trusted publishing with provenance, or skip an existing version                                     |
 
 External fork PRs run CI only. Deploying any branch to shared preview requires a maintainer-triggered
 workflow that runs trusted workflow code with repository secrets.
@@ -348,8 +348,9 @@ demand for smoke tests only; it does not schedule its own hourly snapshot job by
 
 ## Production deploy order
 
-Production deployments run from the default branch only. The `deploy-production` workflow starts after
-the `ci` workflow succeeds on `main` and can also be manually dispatched from `main`. It validates the
+Production deployments run from the default branch only. The final successful `ci` job dispatches
+`deploy-production` on `main`; failed or canceled CI runs create no production workflow run. The
+workflow can also be manually dispatched from `main`. It validates the
 exact CI head SHA, then diffs it against the latest successful GitHub `production` deployment before
 the environment gate. Releases limited to non-runtime documentation, workflows, CLI, repository-lint,
 or the public SDK finish without creating a production deployment. The generated MCP copies of
@@ -360,10 +361,10 @@ Worker fleet. Selected phases retain the order below and use the gated job's env
 Cloudflare and Tinybird credentials. Manual dispatch exposes `force_full_deploy` for an intentional
 same-SHA redeploy or drift repair.
 
-1. Verify successful `ci` evidence for the exact release SHA. Automatic runs use the successful
-   `workflow_run` payload; manual runs query the `ci` workflow's successful `main` push runs.
-   Main CI has already warmed the signed production cache for target-specific Vite builds without
-   entering the GitHub `production` environment or creating a deployment record.
+1. Verify successful `ci` evidence for the exact release SHA. Automatic runs verify the dispatching
+   CI run ID; manual runs query the `ci` workflow's successful `main` push runs. Main CI has already
+   warmed the signed production cache for target-specific Vite builds on its existing Verify runner,
+   without entering the GitHub `production` environment or creating a deployment record.
 2. Resolve the latest successful `production` deployment SHA, compute the exact changed path set, and
    stop when no production deploy input changed.
 3. Wait for GitHub `production` environment approval. Required reviewers and prevent-self-review should
