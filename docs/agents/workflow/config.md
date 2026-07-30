@@ -91,8 +91,13 @@ in this config; refresh them from Linear during each workflow run.
   Domain DNS/cert activation can lag after first deploy. See
   `docs/spec/platform/deployment-pipeline.md`.
 - Production deploy path: auto-starts after `ci` succeeds on `main` and can also be manually
-  dispatched from `main`; Tinybird, D1, and Cloudflare Worker deploy legs are wired through
-  Turborepo package tasks. See
+  dispatched from `main`; it diffs the exact release SHA against the latest successful GitHub
+  `production` deployment, skips non-runtime documentation, workflow, CLI, repository-lint, and
+  public-SDK-only releases before the environment gate, and runs only affected Tinybird, D1, and
+  Cloudflare Worker phases/packages. Root `CONTEXT.md` and `docs/spec/quickstart.md` remain MCP Worker
+  inputs. Missing or ambiguous baseline evidence fails closed to the full deployment. Cloudflare deploy
+  legs remain wired through Turborepo package tasks. Manual dispatch can set `force_full_deploy` for
+  intentional same-SHA redeploys. See
   `docs/spec/platform/deployment-pipeline.md`.
 - Merge authority: Orchestrator may merge low/normal-risk PRs when the automation
   merge gate in `Pull Requests` passes. Human approval is required for the high-risk

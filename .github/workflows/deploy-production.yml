@@ -8,10 +8,17 @@ on:
     types:
       - completed
   workflow_dispatch:
+    inputs:
+      force_full_deploy:
+        description: Redeploy every production phase and Worker
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   actions: read
   contents: read
+  deployments: read
 
 concurrency:
   group: production-deploy
@@ -29,6 +36,14 @@ jobs:
     name: Validate Production Deploy
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 30
+    outputs:
+      base_sha: ${{ steps.plan.outputs.base_sha }}
+      d1: ${{ steps.plan.outputs.d1 }}
+      reason: ${{ steps.plan.outputs.reason }}
+      should_deploy: ${{ steps.plan.outputs.should_deploy }}
+      tinybird: ${{ steps.plan.outputs.tinybird }}
+      worker_packages: ${{ steps.plan.outputs.worker_packages }}
+      workers: ${{ steps.plan.outputs.workers }}
     if: >-
       ${{
         github.event_name == 'workflow_dispatch' ||
@@ -40,11 +55,6 @@ jobs:
         )
       }}
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
       - name: Validate deploy source
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -67,15 +77,6 @@ jobs:
           test "$WORKFLOW_RUN_EVENT" = "push"
           test "$WORKFLOW_RUN_HEAD_BRANCH" = "main"
           test "$WORKFLOW_RUN_HEAD_REPOSITORY" = "$GITHUB_REPOSITORY"
-
-      - name: Check release credentials
-        env:
-          LINEAR_ACCESS_KEY: ${{ secrets.LINEAR_ACCESS_KEY }}
-        run: |
-          if [ -z "$LINEAR_ACCESS_KEY" ]; then
-            echo "::error::LINEAR_ACCESS_KEY is required for production deploys"
-            exit 1
-          fi
 
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -122,11 +123,52 @@ jobs:
           fi
           echo "Verified CI: $run_url"
 
+      - name: Plan production deploy
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPLITCH_FORCE_FULL_DEPLOY: ${{ inputs.force_full_deploy && '1' || '0' }}
+        run: node scripts/plan-production-deploy.mjs
+
+      - name: Check release credentials
+        if: steps.plan.outputs.should_deploy == 'true'
+        env:
+          LINEAR_ACCESS_KEY: ${{ secrets.LINEAR_ACCESS_KEY }}
+        run: |
+          if [ -z "$LINEAR_ACCESS_KEY" ]; then
+            echo "::error::LINEAR_ACCESS_KEY is required for production deploys"
+            exit 1
+          fi
+
+      - name: Summary
+        env:
+          BASE_SHA: ${{ steps.plan.outputs.base_sha }}
+          D1: ${{ steps.plan.outputs.d1 }}
+          PLAN_REASON: ${{ steps.plan.outputs.reason }}
+          SHOULD_DEPLOY: ${{ steps.plan.outputs.should_deploy }}
+          TINYBIRD: ${{ steps.plan.outputs.tinybird }}
+          WORKER_PACKAGES: ${{ steps.plan.outputs.worker_packages }}
+          WORKERS: ${{ steps.plan.outputs.workers }}
+        run: |
+          {
+            echo "## Production deploy plan"
+            echo
+            echo "- Baseline: \`${BASE_SHA:-none}\`"
+            echo "- Release: \`$SENTRY_RELEASE\`"
+            echo "- Deploy: \`$SHOULD_DEPLOY\`"
+            echo "- Tinybird: \`$TINYBIRD\`"
+            echo "- D1: \`$D1\`"
+            echo "- Workers: \`$WORKERS\`"
+            echo "- Worker packages: \`${WORKER_PACKAGES:-none}\`"
+            echo "- Reason: $PLAN_REASON"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   deploy:
     name: Deploy Production
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 30
     needs: validate
+    if: needs.validate.outputs.should_deploy == 'true'
     environment: production
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -158,11 +200,6 @@ jobs:
       WORKOS_ISSUER: ${{ vars.WORKOS_ISSUER }}
       WORKOS_JWKS_URI: ${{ vars.WORKOS_JWKS_URI }}
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -187,29 +224,49 @@ jobs:
           corepack prepare pnpm@11.8.0 --activate
 
       - name: Setup Node
+        if: needs.validate.outputs.d1 == 'true' || needs.validate.outputs.workers == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.17.0
           cache: pnpm
 
       - name: Install
+        if: needs.validate.outputs.d1 == 'true' || needs.validate.outputs.workers == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Check deploy credentials
+        env:
+          DEPLOY_D1: ${{ needs.validate.outputs.d1 }}
+          DEPLOY_TINYBIRD: ${{ needs.validate.outputs.tinybird }}
+          DEPLOY_WORKERS: ${{ needs.validate.outputs.workers }}
         run: |
           set -euo pipefail
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID TB_TOKEN TB_HOST ACCESS_TOKEN_SECRET ASSERTION_SIGNING_SECRET CONTROL_PANEL_DELEGATION_SECRET SENTRY_DSN SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT EVALUATION_PRIVACY_SALT SPLITCH_EVENT_INGEST_TOKEN SPLITCH_DEPLOY_GATE_TOKEN TINYBIRD_COPY_TOKEN TINYBIRD_INGEST_TOKEN TINYBIRD_READ_TOKEN TURNSTILE_SECRET WORKOS_CLIENT_ID WORKOS_API_KEY WORKOS_ISSUER WORKOS_JWKS_URI; do
+          required=()
+          if [ "$DEPLOY_TINYBIRD" = "true" ]; then
+            required+=(TB_TOKEN TB_HOST)
+          fi
+          if [ "$DEPLOY_D1" = "true" ] || [ "$DEPLOY_WORKERS" = "true" ]; then
+            required+=(CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID)
+          fi
+          if [ "$DEPLOY_WORKERS" = "true" ]; then
+            required+=(ACCESS_TOKEN_SECRET ASSERTION_SIGNING_SECRET CONTROL_PANEL_DELEGATION_SECRET SENTRY_DSN SENTRY_AUTH_TOKEN SENTRY_ORG SENTRY_PROJECT EVALUATION_PRIVACY_SALT SPLITCH_EVENT_INGEST_TOKEN SPLITCH_DEPLOY_GATE_TOKEN TINYBIRD_COPY_TOKEN TINYBIRD_INGEST_TOKEN TINYBIRD_READ_TOKEN TURNSTILE_SECRET WORKOS_CLIENT_ID WORKOS_API_KEY WORKOS_ISSUER WORKOS_JWKS_URI)
+          fi
+          for name in "${required[@]}"; do
             if [ -z "${!name}" ]; then
               echo "::error::$name is required for production deploys"
               exit 1
             fi
           done
-          node scripts/validate-hosted-worker-secret-env.mjs production
+          if [ "$DEPLOY_WORKERS" = "true" ]; then
+            node scripts/validate-hosted-worker-secret-env.mjs production
+          fi
 
       - name: Check Turbo remote cache inputs
+        if: needs.validate.outputs.d1 == 'true' || needs.validate.outputs.workers == 'true'
         run: node scripts/check-turbo-remote-cache-env.mjs
 
       - name: Install Tinybird CLI
+        if: needs.validate.outputs.tinybird == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -217,22 +274,29 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Deploy Tinybird
+        if: needs.validate.outputs.tinybird == 'true'
         id: tinybird
         run: pnpm tinybird:deploy:production
 
       - name: Apply D1 migrations
+        if: needs.validate.outputs.d1 == 'true'
         id: d1
         run: pnpm d1:migrate:production
 
       - name: Deploy Cloudflare Workers
+        if: needs.validate.outputs.workers == 'true'
         id: workers
-        run: pnpm deploy:cloudflare:production
+        env:
+          WORKER_PACKAGES: ${{ needs.validate.outputs.worker_packages }}
+        run: node scripts/deploy-cloudflare-workers.mjs production "$WORKER_PACKAGES"
 
       - name: Summary
         if: always()
         env:
           TINYBIRD_OUTCOME: ${{ steps.tinybird.outcome }}
           D1_OUTCOME: ${{ steps.d1.outcome }}
+          PLAN_BASE_SHA: ${{ needs.validate.outputs.base_sha }}
+          PLAN_REASON: ${{ needs.validate.outputs.reason }}
           WORKERS_OUTCOME: ${{ steps.workers.outcome }}
         run: |
           {
@@ -241,6 +305,8 @@ jobs:
             echo "- Ref: \`$(git rev-parse HEAD)\`"
             echo "- Release ID: \`$SENTRY_RELEASE\`"
             echo "- Trigger: \`${{ github.event_name }}\`"
+            echo "- Baseline: \`$PLAN_BASE_SHA\`"
+            echo "- Plan: $PLAN_REASON"
             echo "- Tinybird: \`$TINYBIRD_OUTCOME\`"
             echo "- D1: \`$D1_OUTCOME\`"
             echo "- Workers: \`$WORKERS_OUTCOME\`"
@@ -252,11 +318,6 @@ jobs:
     timeout-minutes: 10
     needs: deploy
     steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
