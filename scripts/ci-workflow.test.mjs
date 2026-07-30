@@ -3,8 +3,16 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
-const verifyJob = workflow.match(/\n {2}verify:\n([\s\S]*?)\n {2}dispatch-production:\n/)?.[1];
-const productionDispatch = workflow.match(/\n {2}dispatch-production:\n([\s\S]*)/)?.[1];
+const verifyJob = workflow.match(/\n {2}verify:\n([\s\S]*?)\n {2}deploy-production:\n/)?.[1];
+const productionCall = workflow.match(/\n {2}deploy-production:\n([\s\S]*)/)?.[1];
+
+test("new main pushes cannot cancel or coalesce an in-flight production call", () => {
+  assert.match(
+    workflow,
+    /group: ci-\$\{\{ github\.workflow \}\}-\$\{\{ github\.ref == 'refs\/heads\/main' && github\.run_id/,
+  );
+  assert.match(workflow, /cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}/);
+});
 
 test("main CI warms the production build cache on the existing Verify runner", () => {
   assert.ok(verifyJob);
@@ -39,16 +47,22 @@ test("verification remains isolated to the pr-ci platform target", () => {
   assert.match(verifyJob, /SPLITCH_PLATFORM_TARGET: pr-ci/);
 });
 
-test("successful main CI dispatches one exact production release", () => {
-  assert.ok(productionDispatch);
+test("successful main CI calls and waits for one exact production release", () => {
+  assert.ok(productionCall);
   assert.match(
-    productionDispatch,
+    productionCall,
     /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/,
   );
-  assert.match(productionDispatch, /actions: write/);
-  assert.match(productionDispatch, /release_sha: \$release_sha/);
-  assert.match(productionDispatch, /ci_run_id: \$ci_run_id/);
-  assert.match(productionDispatch, /actions\/workflows\/deploy-production\.yml\/dispatches/);
+  assert.match(productionCall, /uses: \.\/\.github\/workflows\/deploy-production\.yml/);
+  assert.match(productionCall, /actions: read/);
+  assert.match(productionCall, /deployments: read/);
+  assert.match(productionCall, /release_sha: \$\{\{ github\.sha \}\}/);
+  assert.match(productionCall, /ci_run_id: \$\{\{ github\.run_id \}\}/);
+  assert.match(productionCall, /force_full_deploy: false/);
+  assert.match(productionCall, /allow_stale_release: false/);
+  assert.match(productionCall, /secrets: inherit/);
+  assert.doesNotMatch(productionCall, /actions: write/);
+  assert.doesNotMatch(productionCall, /\/dispatches|curl /);
   assert.doesNotMatch(workflow, /workflow_run:/);
 });
 

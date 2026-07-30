@@ -161,3 +161,29 @@ test("every seeded Run freezes a Variant set containing its Experiment's control
     assert.ok(names.includes(control), `${runId} froze a set without ${control}`);
   }
 });
+
+/**
+ * D1's `runs.decision_family` and Tinybird's `analysis_run_inputs.decision_family`
+ * are different columns in different stores that happen to share a name, and they
+ * hold different shapes: `MetricRef[]` here, snake_case `DecisionFamilyMember[]`
+ * there (pinned by the test above). Three seed Runs held the Tinybird shape in the
+ * D1 column. Nothing read it, so nothing complained, until the Setup tab read it
+ * and `metricIds` produced `[undefined]` — which fails `isStringArray` and takes
+ * the whole Experiment-detail parse down with it, one bad Run at a time.
+ */
+test("D1 Run decisions hold MetricRef, never the Tinybird stats shape", () => {
+  assert.equal(
+    LOCAL_E2E_D1_SEED.includes('"metric_id"'),
+    false,
+    "a D1 seed row holds the Tinybird snake_case decision shape",
+  );
+
+  const decisions = [...LOCAL_E2E_D1_SEED.matchAll(/'(\[\{"metricId":[^']*\])'/g)];
+  assert.ok(decisions.length >= 6);
+  for (const [, json] of decisions) {
+    for (const ref of JSON.parse(json)) {
+      assert.deepEqual(Object.keys(ref), ["metricId"]);
+      assert.equal(typeof ref.metricId, "string");
+    }
+  }
+});

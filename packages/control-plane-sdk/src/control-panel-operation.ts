@@ -25,6 +25,12 @@ export type ControlPanelOperation =
   | { id: "experiments_list" }
   | { id: "experiments_results" }
   | { id: "organizations_create" }
+  | {
+      id: "experiments_update" | "experiments_start";
+      appId: string;
+      environmentId: string;
+      experimentId: string;
+    }
   | { id: "flags_list" | "flags_create"; appId: string; environmentId: string }
   | { id: "flag_config_get"; appId: string; environmentId: string; flagId: string }
   | {
@@ -57,6 +63,8 @@ const APP_ATTENTION_PATH = /^\/apps\/([^/]+)\/attention-rollup\/?$/;
 const EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
 const EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
 const EXPERIMENTS_PATH = "/control-panel/experiments/list";
+const EXPERIMENT_MUTATION_PATH =
+  /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/([^/]+)(\/start)?\/?$/;
 const ORGANIZATIONS_PATH = /^\/orgs\/?$/;
 const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
@@ -87,6 +95,7 @@ export function parseControlPanelOperation(
     parseAppAttention(method, pathname) ??
     parseOrganizationsCreate(method, pathname) ??
     parseExperimentsList(method, pathname) ??
+    parseExperimentMutation(method, pathname) ??
     parseFlags(method, pathname, panelEnvironmentId) ??
     parseConfig(method, pathname) ??
     parseEnvironmentSettings(method, pathname) ??
@@ -118,6 +127,27 @@ function parseExperimentsList(method: string, pathname: string): ControlPanelOpe
   if (pathname === EXPERIMENT_DETAIL_PATH) return { id: "experiments_detail" };
   if (pathname === EXPERIMENT_RESULTS_PATH) return { id: "experiments_results" };
   return null;
+}
+
+/**
+ * `PATCH /apps/:appId/envs/:envId/experiments/:experimentId` and its `/start`
+ * sibling. Unlike the `experiments_*` reads these DO name a resource, so the
+ * resolver binds the delegation to that exact Experiment.
+ */
+function parseExperimentMutation(method: string, pathname: string): ControlPanelOperation | null {
+  const match = pathname.match(EXPERIMENT_MUTATION_PATH);
+  if (!match?.[1] || !match[2] || !match[3]) return null;
+  const isStart = match[4] === "/start";
+  if (isStart ? method !== "POST" : method !== "PATCH") return null;
+  const [appId, environmentId, experimentId] = decodedSegments(match.slice(1, 4));
+  return appId && environmentId && experimentId
+    ? {
+        id: isStart ? "experiments_start" : "experiments_update",
+        appId,
+        environmentId,
+        experimentId,
+      }
+    : null;
 }
 
 function parseAppsCreate(method: string, pathname: string): ControlPanelOperation | null {

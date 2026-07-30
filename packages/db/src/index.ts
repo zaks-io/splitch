@@ -15,19 +15,26 @@
  * not a query handle.
  */
 
+export type {
+  ApprovalCommit,
+  ApprovalDisposition,
+  ApprovalFailure,
+  Repository,
+} from "./repo/index";
 // The tenant-isolation seam: the only public way to reach D1. The scope
 // constructors come straight from the internal scope module (this root barrel
 // is INSIDE packages/db, so reaching repo/* is allowed; outside code cannot).
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the seam + schema surface is intentionally aggregated here
 export { createRepository } from "./repo/index";
-export type { Repository } from "./repo/index";
-export { appScope, envScope } from "./repo/scope";
 export type { EnvScope, TenantScope } from "./repo/scope";
+export { appScope, envScope } from "./repo/scope";
 export type { ScopedTable } from "./repo/scoped-table";
 
 export {
   apiKeys,
   appMemberships,
+  approvalRequests,
+  approvalReviews,
   apps,
   clientKeys,
   deviceRefreshSessions,

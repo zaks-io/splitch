@@ -25,7 +25,11 @@ function assertDirectNpmPack(packageRoot) {
     const { stdout, stderr, status, error } = spawnSync(
       "npm",
       ["pack", "--pack-destination", destination],
-      { cwd: packageRoot, encoding: "utf8" },
+      {
+        cwd: packageRoot,
+        encoding: "utf8",
+        env: { ...process.env, npm_config_cache: join(destination, ".npm-cache") },
+      },
     );
     if (error) {
       throw error;

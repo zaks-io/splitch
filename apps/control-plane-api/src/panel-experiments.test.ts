@@ -8,6 +8,7 @@ import {
   experimentRow,
   type PanelExperimentIds,
   runRow,
+  statsOutput,
 } from "./panel-experiments-test-fixtures";
 
 const APP_ID = "app_panel_list";
@@ -30,7 +31,7 @@ const ids: PanelExperimentIds = {
 describe("panel Experiments composite read", () => {
   it("rechecks live scope and requests health for the exact live Run", async () => {
     const analysis = vi.fn(async (_request: Request) =>
-      Response.json(analysisEnvelope(RUN_ID, statsOutput() as StatsOutput)),
+      Response.json(analysisEnvelope(RUN_ID, allHealthFlagsFiring())),
     );
     const response = await panelExperimentsList(
       { repo: repository(), analysis: { fetch: analysis } as unknown as Fetcher },
@@ -76,7 +77,7 @@ describe("panel Experiments composite read", () => {
     ["secondary", false],
   ] as const)("reads a significant %s Dimension slice as reached=%s", async (cls, reached) => {
     const analysis = vi.fn(async (_request: Request) =>
-      Response.json(analysisEnvelope(RUN_ID, sliceOnlySignificance(cls) as StatsOutput)),
+      Response.json(analysisEnvelope(RUN_ID, sliceOnlySignificance(cls))),
     );
 
     const response = await panelExperimentsList(
@@ -200,8 +201,18 @@ function repository(
     },
     flags: {
       flags: { findMany: vi.fn(async () => [{ id: "flag_panel_list", name: "Checkout Flag" }]) },
+      listVariants: vi.fn(async () => [
+        { id: "variant_control", name: "control" },
+        { id: "variant_treatment", name: "treatment" },
+      ]),
+      getFlagConfig: vi.fn(async () => ({
+        availableVariantNames: JSON.stringify(["control", "treatment"]),
+      })),
     },
     experiments: {
+      metrics: {
+        findMany: vi.fn(async () => [{ id: "metric_signup", name: "Signup" }]),
+      },
       listExperiments: vi.fn(async () => [experimentRow(ids)]),
       getExperiment: vi.fn(async () => experimentRow(ids)),
       listRunsForExperiment: vi.fn(async () => [runRow(ids, 1), runRow(ids, 2)]),
@@ -209,36 +220,14 @@ function repository(
   } as unknown as Repository;
 }
 
-function statsOutput() {
-  return {
-    arm_results: [
-      {
-        variant: "treatment",
-        metric_id: "conversion",
-        sample_size_n: 100,
-        point_estimate: 0.8,
-        relative_lift_pct: 100,
-        ci_lower: 50,
-        ci_upper: 150,
-        p_value: 0.001,
-        is_significant: true,
-        in_bh_family: true,
-        exploratory: false,
-        decision_valid: true,
-        status: "ready",
-        variance_techniques: {
-          winsorized: false,
-          winsorize_pct: null,
-          winsorize_cap: null,
-          cuped_applied: false,
-          cuped_method: null,
-          cuped_attribute: null,
-          cuped_attribute_source: null,
-          cuped_coverage_pct: null,
-          delta_method: false,
-        },
-      },
-    ],
+/**
+ * Every health flag firing at once, so a test that asserts all three cannot pass
+ * on a handler that reads only one of them. Only the branches that differ from
+ * the clean `statsOutput` fixture are spelled out — a hand-rolled copy of the
+ * whole envelope drifts from the shared one and stops proving anything.
+ */
+function allHealthFlagsFiring(): StatsOutput {
+  return statsOutput({
     srm: {
       srm_p_value: 0.001,
       srm_is_mismatch: true,
@@ -260,21 +249,11 @@ function statsOutput() {
         breach_reason: "threshold crossed",
       },
     ],
-    health: {
-      multiple_rate: 0,
-      multiple_count: 0,
-      activation_rates: null,
-      activation_balance_p_value: null,
-      activation_balance_mismatch: null,
-      exposure_counts: { control: 100, treatment: 10 },
-      deduped_counts: { control: 100, treatment: 10 },
-      low_n_warning: false,
-    },
-  };
+  });
 }
 
 /** Nothing significant at the top level; the only significant arm is in a slice. */
-function sliceOnlySignificance(dimensionClass: "primary" | "secondary") {
+function sliceOnlySignificance(dimensionClass: "primary" | "secondary"): StatsOutput {
   const base = statsOutput();
   const [arm] = base.arm_results;
   return {

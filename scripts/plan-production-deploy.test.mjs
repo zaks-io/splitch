@@ -13,6 +13,7 @@ test("documentation and non-deployable application changes skip production mutat
   assert.deepEqual(
     classifyProductionChanges([
       "docs/spec/platform/deployment-pipeline.md",
+      "docs/spec/quickstart.md",
       ".github/workflows/deploy-production.yml",
       "apps/cli/src/index.ts",
     ]),
@@ -46,12 +47,23 @@ test("SDK source changes deploy the Worker that bundles the SDK", () => {
   assert.equal(plan.d1, false);
 });
 
-test("embedded agent resources deploy only the MCP Worker", () => {
-  const plan = classifyProductionChanges(["CONTEXT.md", "docs/spec/quickstart.md"]);
+test("embedded runtime agent resources deploy only the MCP Worker", () => {
+  const plan = classifyProductionChanges(["CONTEXT.md"]);
 
   assert.equal(plan.shouldDeploy, true);
   assert.equal(plan.workers, true);
   assert.deepEqual(plan.workerPackages, ["@splitch/mcp-server"]);
+});
+
+test("spec-only changes never trigger production deployment", () => {
+  const plan = classifyProductionChanges([
+    "docs/spec/quickstart.md",
+    "docs/spec/platform/deployment-pipeline.md",
+  ]);
+
+  assert.equal(plan.shouldDeploy, false);
+  assert.equal(plan.workers, false);
+  assert.deepEqual(plan.workerPackages, []);
 });
 
 test("selects only the Tinybird phase for Tinybird datafiles", () => {

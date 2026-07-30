@@ -1,5 +1,11 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index";
+import {
+  appliedRequestUpdate,
+  appliedReviewInsert,
+  approvalPendingCondition,
+} from "./approval-atomic";
+import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
 import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
 import { type FlagInScope, makeVariantOps } from "./flag-variant-ops";
@@ -143,29 +149,50 @@ export function makeFlagRepo(db: Db) {
 }
 
 function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
+  /**
+   * When an Approval Review authorizes the delete, EVERY statement in the
+   * cascade is guarded by that Review's Request still being pending. Guarding
+   * only the parent row would let a resolved or stale Request still wipe a
+   * `confirm` Environment's Configurations and targeting rules.
+   */
   return async function deleteFlagCascade(
     scope: TenantScope,
     flagId: string,
     environmentIds: readonly string[],
+    options?: { approval?: ApprovalCommit },
   ): Promise<boolean> {
     const flag = await flagInScope(scope, flagId);
     if (!flag) return false;
 
+    const approval = options?.approval;
+    const pending = approval ? [approvalPendingCondition(db, scope, approval)] : [];
     const batch = [
       ...environmentIds.flatMap((environmentId) => {
         const env = envScope(scope.appId, environmentId);
         return [
-          db.delete(targetingRules).where(scopedTargetingRule(env, flagId)).returning(),
-          db.delete(flagConfigs).where(scopedFlagConfig(env, flagId)).returning(),
+          db
+            .delete(targetingRules)
+            .where(and(scopedTargetingRule(env, flagId), ...pending))
+            .returning(),
+          db
+            .delete(flagConfigs)
+            .where(and(scopedFlagConfig(env, flagId), ...pending))
+            .returning(),
         ];
       }),
-      db.delete(variants).where(eq(variants.flagId, flagId)).returning(),
+      db
+        .delete(variants)
+        .where(and(eq(variants.flagId, flagId), ...pending))
+        .returning(),
       db
         .delete(flags)
-        .where(and(eq(flags.appId, scope.appId), eq(flags.id, flagId)))
+        .where(and(eq(flags.appId, scope.appId), eq(flags.id, flagId), ...pending))
         .returning(),
+      ...(approval
+        ? [appliedReviewInsert(db, scope, approval), appliedRequestUpdate(db, scope, approval)]
+        : []),
     ];
     await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
-    return true;
+    return approval ? (await flagInScope(scope, flagId)) === null : true;
   };
 }

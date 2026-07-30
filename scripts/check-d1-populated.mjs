@@ -21,6 +21,8 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dbDir = join(repoRoot, "packages", "db");
 const D1_BINDING = "DB";
+// Bounds a wedged wrangler/workerd process; each call takes seconds when healthy.
+const WRANGLER_TIMEOUT_MS = 5 * 60 * 1000;
 
 // The first migration that rebuilds a table referenced by a foreign key. Every
 // migration from here on is withheld from the first pass so the seed lands in
@@ -100,12 +102,17 @@ function wrangler(args) {
       "--persist-to",
       persistDir,
     ],
-    { cwd: dbDir, encoding: "utf8" },
+    { cwd: dbDir, encoding: "utf8", timeout: WRANGLER_TIMEOUT_MS },
   );
 }
 
 function execSql(sql, label) {
   const result = wrangler(["execute", "--command", sql]);
+  if (result.signal) {
+    fail(
+      `${label}: wrangler was killed with ${result.signal} (timed out after ${WRANGLER_TIMEOUT_MS / 60000}m?).`,
+    );
+  }
   if (result.status !== 0) {
     fail(`${label} failed:\n${result.stderr || result.stdout}`);
   }

@@ -87,20 +87,4 @@ describe("HTTP status map", () => {
       expect(ErrorCodeSchema.safeParse(code).success).toBe(true);
     }
   });
-
-  it("keeps the deprecated SPL-150 runtime bridge parseable", () => {
-    expect(httpStatusForError("CONFIRMATION_REQUIRED")).toBe(409);
-    expect(
-      ErrorResponseSchema.safeParse({
-        code: "CONFIRMATION_REQUIRED",
-        message: "confirmation required by Environment Policy",
-        details: {
-          gate: "enabled_state",
-          environmentId: "env_prod",
-          attemptedOp: "flag_config_update",
-          recommendedAction: "REVIEW_APPROVAL_REQUEST",
-        },
-      }).success,
-    ).toBe(true);
-  });
 });

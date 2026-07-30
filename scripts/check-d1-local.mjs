@@ -21,6 +21,8 @@ const dbDir = join(repoRoot, "packages", "db");
 const configPath = join(dbDir, "wrangler.jsonc");
 const migrationsDir = join(dbDir, "migrations");
 const D1_BINDING = "DB";
+// Bounds a wedged wrangler/workerd process; a clean apply takes seconds.
+const WRANGLER_TIMEOUT_MS = 5 * 60 * 1000;
 
 function fail(message) {
   console.error(`✖ d1:migrate:local: ${message}`);
@@ -56,9 +58,15 @@ try {
       "--persist-to",
       persistDir,
     ],
-    { cwd: dbDir, stdio: "inherit" },
+    { cwd: dbDir, stdio: "inherit", timeout: WRANGLER_TIMEOUT_MS },
   );
 
+  // Timeout sets both error (ETIMEDOUT) and signal, so check signal first.
+  if (result.signal) {
+    fail(
+      `wrangler was killed with ${result.signal} (timed out after ${WRANGLER_TIMEOUT_MS / 60000}m?).`,
+    );
+  }
   if (result.error) {
     fail(`failed to launch wrangler: ${result.error.message}`);
   }

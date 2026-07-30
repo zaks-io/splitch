@@ -1,6 +1,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { ApiRouteContract } from "./openapi-route";
 import { accountRoutes } from "./routes/routes-account";
+import { approvalRoutes } from "./routes/routes-approvals";
 import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { experimentRoutes } from "./routes/routes-experiments";
@@ -87,6 +88,8 @@ const credentialsSdkRoutes = [
   credentialRoutes[5],
 ] as const;
 
+const approvalsSdkRoutes = [approvalRoutes[0], approvalRoutes[1], approvalRoutes[2]] as const;
+
 const flagsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: flagsSdkRoutes[0].openapi, handler: emitOnlyHandler(flagsSdkRoutes[0]) },
   { route: flagsSdkRoutes[1].openapi, handler: emitOnlyHandler(flagsSdkRoutes[1]) },
@@ -141,6 +144,12 @@ const credentialsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
   { route: credentialsSdkRoutes[5].openapi, handler: emitOnlyHandler(credentialsSdkRoutes[5]) },
 ] as const);
 
+const approvalsControlPlaneClientApp = new OpenAPIHono().openapiRoutes([
+  { route: approvalsSdkRoutes[0].openapi, handler: emitOnlyHandler(approvalsSdkRoutes[0]) },
+  { route: approvalsSdkRoutes[1].openapi, handler: emitOnlyHandler(approvalsSdkRoutes[1]) },
+  { route: approvalsSdkRoutes[2].openapi, handler: emitOnlyHandler(approvalsSdkRoutes[2]) },
+] as const);
+
 /** `hc<FlagsControlPlaneClientApp>()` — flag route group client type. */
 export type FlagsControlPlaneClientApp = typeof flagsControlPlaneClientApp;
 
@@ -158,6 +167,7 @@ export type EnvironmentsControlPlaneClientApp = typeof environmentsControlPlaneC
 
 /** `hc<CredentialsControlPlaneClientApp>()` — SDK credential route group client type. */
 export type CredentialsControlPlaneClientApp = typeof credentialsControlPlaneClientApp;
+export type ApprovalsControlPlaneClientApp = typeof approvalsControlPlaneClientApp;
 
 /** Union of SDK emit-only apps; prefer domain-specific types for `hc`. */
 export type ControlPlaneClientApp =
@@ -166,7 +176,8 @@ export type ControlPlaneClientApp =
   | OrganizationsControlPlaneClientApp
   | AppsControlPlaneClientApp
   | EnvironmentsControlPlaneClientApp
-  | CredentialsControlPlaneClientApp;
+  | CredentialsControlPlaneClientApp
+  | ApprovalsControlPlaneClientApp;
 
 export function createFlagsControlPlaneClientApp(): FlagsControlPlaneClientApp {
   return flagsControlPlaneClientApp;
@@ -186,6 +197,10 @@ export function createEnvironmentsControlPlaneClientApp(): EnvironmentsControlPl
 
 export function createCredentialsControlPlaneClientApp(): CredentialsControlPlaneClientApp {
   return credentialsControlPlaneClientApp;
+}
+
+export function createApprovalsControlPlaneClientApp(): ApprovalsControlPlaneClientApp {
+  return approvalsControlPlaneClientApp;
 }
 
 /** @deprecated Use {@link createFlagsControlPlaneClientApp} or {@link createExperimentsControlPlaneClientApp}. */

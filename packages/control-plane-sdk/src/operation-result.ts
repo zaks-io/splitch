@@ -26,39 +26,12 @@ export async function parseControlPlaneResponse<T>(
     throw new Error(`control-plane-sdk: ${operationId} failed with HTTP ${response.status}`);
   }
 
-  const parsed = output.safeParse(approvalTransitionResponse(operationId, body));
+  const parsed = output.safeParse(body);
   if (!parsed.success) {
     throw new Error(`control-plane-sdk: ${operationId} returned an invalid response body`);
   }
 
   return { ok: true, data: parsed.data, status: response.status };
-}
-
-/**
- * Deprecated SPL-150 bridge for successful responses from the legacy Approval
- * mutation paths. Remove when the Approval runtime emits the final envelopes.
- */
-function approvalTransitionResponse(operationId: string, body: unknown): unknown {
-  if (!isRecord(body) || "approvalRequest" in body) {
-    return body;
-  }
-
-  switch (operationId) {
-    case "flag_variants_update":
-      return { flag: body, approvalRequest: null };
-    case "flag_config_update":
-    case "flag_targeting_rules_replace":
-      return { config: body, approvalRequest: null };
-    case "flags_promote":
-    case "experiments_start":
-      return { ...body, approvalRequest: null };
-    default:
-      return body;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function readJson(response: Response): Promise<unknown> {

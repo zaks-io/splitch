@@ -7,27 +7,49 @@ const validateJob = workflow.match(/\n {2}validate:\n([\s\S]*?)\n {2}deploy:\n/)
 
 test("production deploy reuses successful CI instead of rerunning validation", () => {
   assert.ok(validateJob);
+  assert.match(workflow, /workflow_call:/);
   assert.match(workflow, /actions: read/);
   assert.match(workflow, /deployments: read/);
   assert.doesNotMatch(workflow, /workflow_run:/);
   assert.match(workflow, /SENTRY_RELEASE: \$\{\{ inputs\.release_sha \|\| github\.sha \}\}/);
   assert.match(workflow, /CI_RUN_ID: \$\{\{ inputs\.ci_run_id \}\}/);
   assert.match(workflow, /force_full_deploy:/);
+  assert.match(workflow, /allow_stale_release:/);
   assert.match(workflow, /SPLITCH_FORCE_FULL_DEPLOY:/);
   assert.match(validateJob, /actions\/workflows\/ci\.yml\/runs/);
-  assert.match(validateJob, /actions\/runs\/\$CI_RUN_ID/);
-  assert.match(validateJob, /run_sha.*RELEASE_SHA/);
-  assert.match(validateJob, /run_conclusion.*success/);
+  assert.match(validateJob, /TRIGGER_EVENT: \$\{\{ github\.event_name \}\}/);
+  assert.match(validateJob, /CURRENT_RUN_ID: \$\{\{ github\.run_id \}\}/);
+  assert.match(validateJob, /if \[ "\$TRIGGER_EVENT" = "push" \]; then/);
+  assert.match(validateJob, /CI_RUN_ID.*CURRENT_RUN_ID/);
+  assert.match(validateJob, /RELEASE_SHA.*GITHUB_SHA/);
   assert.match(validateJob, /--data-urlencode "head_sha=\$RELEASE_SHA"/);
   assert.match(validateJob, /\.head_sha == \$sha/);
   assert.match(validateJob, /\.event == "push"/);
   assert.match(validateJob, /\.conclusion == "success"/);
+  assert.doesNotMatch(validateJob, /repos\/\$GITHUB_REPOSITORY\/actions\/runs\/\$CI_RUN_ID/);
+  assert.doesNotMatch(validateJob, /sleep 5/);
   assert.doesNotMatch(validateJob, /Verify manual deploy/);
   assert.doesNotMatch(validateJob, /run: pnpm verify:ci/);
   assert.doesNotMatch(validateJob, /name: Setup pnpm/);
   assert.doesNotMatch(validateJob, /name: Setup Node/);
   assert.doesNotMatch(validateJob, /name: Install/);
   assert.doesNotMatch(validateJob, /Check Turbo remote cache inputs/);
+});
+
+test("production deploy rejects stale releases unless recovery is explicit", () => {
+  assert.ok(validateJob);
+  assert.match(validateJob, /name: Reject stale release without explicit recovery/);
+  assert.match(validateJob, /ALLOW_STALE_RELEASE: \$\{\{ inputs\.allow_stale_release/);
+  assert.match(validateJob, /git\/ref\/heads\/main/);
+  assert.match(validateJob, /RELEASE_SHA.*current_main_sha/);
+  assert.match(validateJob, /ALLOW_STALE_RELEASE.*"1"/);
+  assert.match(validateJob, /This does not roll back D1, KV, Durable Objects, Queues, or Tinybird/);
+  assert.match(workflow, /name: Revalidate current release after production gate/);
+  assert.equal(workflow.match(/git\/ref\/heads\/main/g)?.length, 2);
+  assert.ok(
+    workflow.indexOf("Revalidate current release after production gate") <
+      workflow.indexOf("Deploy Tinybird"),
+  );
 });
 
 test("the unstable nightly E2E never blocks production deploys", () => {

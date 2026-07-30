@@ -46,8 +46,8 @@ in this config; refresh them from Linear during each workflow run.
 
 ## Repo
 
-- Name: `splitch-monorepo` (workspace packages use `@splitch/*`; `sdk-publish` is the token-free
-  trusted-publish path for `@splitch/sdk` after its human-approved npm bootstrap)
+- Name: `splitch-monorepo` (workspace packages use `@splitch/*`; package-specific publish
+  workflows are the token-free trusted-publish paths for `@splitch/sdk` and `@splitch/cli`)
 - Default branch: `main`
 - Branch prefix: `codex/` for Codex-created branches unless the user asks for
   another prefix
@@ -57,9 +57,10 @@ in this config; refresh them from Linear during each workflow run.
   `lefthook`, `sharp`, and `workerd`.
 - Install: `pnpm install`
 - Lockfile: `pnpm-lock.yaml`
-- Full local pre-push gate: `pnpm verify:push` (`format:check`, `lint`,
-  `typecheck`, `knip`, `secrets:range`, `tinybird:local`,
-  `d1:migrate:local`).
+- Full local pre-push gate: `pnpm verify:push` (`knip` as a serial prefix, then
+  one parallel Turbo graph: `format:check`, `lint`, `typecheck`,
+  `secrets:range`, `tinybird:local`, `d1:migrate:local`,
+  `d1:migrate:populated`).
 - CI gate: `.github/workflows/ci.yml` job `Verify` runs `pnpm verify:ci`
   (`format:check`, `lint`, `typecheck`, `knip`, `spec:lint`, `test:scripts`,
   `test`, `stats:golden`, `stats:property`, `build`) and then `pnpm secrets:range`.
@@ -73,7 +74,8 @@ in this config; refresh them from Linear during each workflow run.
   `d1:migrate:local`, but `pnpm verify:ci` currently does not. Fix the repo
   gate entrypoints before treating CI and pre-push as equivalent.
 - Commit gate: Lefthook runs `node scripts/check-file-size.mjs` and
-  `CI=true pnpm verify:commit`.
+  `CI=true pnpm verify:commit` (`knip` as a serial prefix, then one parallel
+  Turbo graph: `format:check`, `lint`, `typecheck`, `secrets:staged`).
 - Build: `pnpm build`
 - Test: `pnpm test`
 - Lint / format / typecheck / Knip / Gitleaks: wired through root scripts,
@@ -84,23 +86,30 @@ in this config; refresh them from Linear during each workflow run.
   coverage, `.turbo/`, and `.wrangler/` are ignored.
 - PR CI: `.github/workflows/ci.yml` on Blacksmith, running `pnpm verify:ci` plus
   a range-scoped Gitleaks secret scan.
-- npm SDK publish: the OIDC `.github/workflows/sdk-publish.yml` workflow is wired as the explicit
-  Blacksmith exception. It runs
-  only after an SDK GitHub Release is published, on GitHub-hosted `ubuntu-24.04` because npm trusted
-  publishing does not support Blacksmith, and carries no long-lived npm token. The package bootstrap,
-  trusted-publisher configuration, and provider-side verification remain human-owned and unverified.
+- npm package publish: the OIDC `.github/workflows/sdk-publish.yml` and
+  `.github/workflows/cli-publish.yml` workflows are explicit Blacksmith exceptions. Each runs only
+  after its namespaced GitHub Release is published, on GitHub-hosted `ubuntu-24.04` because npm
+  trusted publishing does not support Blacksmith, and carries no long-lived npm token. CLI
+  bootstrap, trusted-publisher configuration, and provider-side verification remain human-owned
+  and unverified.
 - Shared preview deploy: workflow and hosted smoke wired, Cloudflare D1/KV resources are provisioned, the Tinybird
   `shared_preview` Branch exists, and Worker secret sync is wired before deploy. Cloudflare Custom
   Domain DNS/cert activation can lag after first deploy. See
   `docs/spec/platform/deployment-pipeline.md`.
-- Production deploy path: auto-starts after `ci` succeeds on `main` and can also be manually
-  dispatched from `main`; it diffs the exact release SHA against the latest successful GitHub
+- Production deploy path: the successful `ci` job on `main` calls and waits for the reusable
+  production workflow; main CI uses per-run concurrency so a newer push cannot cancel an active
+  production mutation. It can also be manually dispatched from `main`. It rejects releases that are
+  no longer current `main` unless `allow_stale_release` is explicitly enabled for code-only incident
+  recovery, then diffs the exact release SHA against the latest successful GitHub
   `production` deployment, skips non-runtime documentation, workflow, CLI, repository-lint, and
   public-SDK-only releases before the environment gate, and runs only affected Tinybird, D1, and
-  Cloudflare Worker phases/packages. Root `CONTEXT.md` and `docs/spec/quickstart.md` remain MCP Worker
-  inputs. Missing or ambiguous baseline evidence fails closed to the full deployment. Cloudflare deploy
+  Cloudflare Worker phases/packages. Spec-only changes never deploy. Root `CONTEXT.md` remains an MCP
+  Worker input; `docs/spec/quickstart.md` refreshes only when an MCP runtime change next deploys.
+  Missing or ambiguous baseline evidence fails closed to the full deployment. Cloudflare deploy
   legs remain wired through Turborepo package tasks. Manual dispatch can set `force_full_deploy` for
-  intentional same-SHA redeploys. See
+  intentional same-SHA redeploys. The stale-release override does not roll back D1, KV, Durable
+  Objects, Queues, or Tinybird. Current main is rechecked after the production environment gate and
+  immediately before mutation. See
   `docs/spec/platform/deployment-pipeline.md`.
 - Merge authority: Orchestrator may merge low/normal-risk PRs when the automation
   merge gate in `Pull Requests` passes. Human approval is required for the high-risk
@@ -119,7 +128,7 @@ real package API boundary.
 
 | Path                         | Name                         | Status                                      |
 | ---------------------------- | ---------------------------- | ------------------------------------------- |
-| `apps/cli`                   | `@splitch/cli`               | CLI app scaffold, `bin: splitch`            |
+| `apps/cli`                   | `@splitch/cli`               | public ESM CLI package, `bin: splitch`      |
 | `apps/control-panel`         | `@splitch/control-panel`     | Control Panel Worker-shaped scaffold        |
 | `apps/marketing`             | `@splitch/marketing`         | Marketing Worker-shaped scaffold            |
 | `apps/control-plane-api`     | `@splitch/control-plane-api` | Control Plane API Worker scaffold           |
@@ -135,11 +144,10 @@ real package API boundary.
 | `packages/ui`                | `@splitch/ui`                | shared UI primitive scaffold                |
 | `infra/tinybird`             | (not a pnpm workspace)       | Tinybird analytics project files            |
 
-- Internal workspace packages remain `version: 0.0.0`; `@splitch/sdk` is the versioned public package
-  at `version: 0.1.0`.
-- Apps and internal packages are private. `@splitch/sdk` is a public package scaffold with
-  `publishConfig.access = public`; its OIDC `sdk-publish` workflow is wired, but npm bootstrap and
-  provider setup remain human-owned and unverified.
+- Internal workspace packages remain `version: 0.0.0`; `@splitch/sdk` and `@splitch/cli` are
+  versioned public packages at `version: 0.1.0`.
+- Other Apps and internal packages are private. Both public packages set
+  `publishConfig.access = public` and use package-specific OIDC publish workflows.
 
 ## Issue Tracker
 
@@ -361,12 +369,13 @@ real package API boundary.
 - PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
   Blacksmith; `spec:lint` runs inside its `verify:ci` graph.
   `Control Panel E2E` runs nightly in the `e2e` workflow and on manual
-  dispatch; production deploys are gated on its latest completed run. See the
+  dispatch as a signal-only check and does not gate production deploys. See the
   gate parity gap above for Tinybird Local and D1 local validators.
 - Shared Preview / Production: workflows are wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
   resources plus one Tinybird Branch. Production starts automatically after
-  `ci` succeeds on a same-repository push to `main`, validates the exact CI
+  `ci` succeeds on a same-repository push to `main`, stays visible as a reusable
+  job in that CI run, validates the current-main exact CI
   commit, then deploys Tinybird, D1 migrations, and Workers through the GitHub
   `production` environment.
 - Planned backing services not yet wired: Cloudflare Flagship and Queues. Cloudflare D1/KV resources
@@ -415,12 +424,11 @@ real package API boundary.
       runs a real `wrangler d1 migrations apply --local` and is wired into
       `verify:push`; a malformed/duplicate-column migration fails the gate
       non-zero.
-- [ ] npm bootstrap and provider setup are unverified. The OIDC `sdk-publish` workflow is wired as a
-      GitHub-hosted workflow, but
-      `@splitch/sdk` does not yet exist on npm, so a human must bootstrap only
-      `0.1.0-bootstrap.0`, configure the trusted publisher for `sdk-publish.yml`, remove temporary
-      bootstrap publishing access, and verify the provider before the provenance-bearing `0.1.0`
-      release. Do not add a long-lived npm token to close this gap.
+- [ ] CLI npm bootstrap and provider setup are unverified. The OIDC `cli-publish` workflow is wired
+      as a GitHub-hosted workflow, but a human must bootstrap only
+      `@splitch/cli@0.1.0-bootstrap.0`, configure the trusted publisher for `cli-publish.yml`,
+      remove temporary bootstrap publishing access, and verify the provider before the
+      provenance-bearing `0.1.0` release. Do not add a long-lived npm token to close this gap.
 - [x] Shared-preview deploy/reset and production deploy workflows are wired, Cloudflare
       D1/KV resource IDs are provisioned and committed, Worker secret sync is wired, hosted
       shared-preview smoke verifies deployed revision evidence, and the `shared_preview` Tinybird

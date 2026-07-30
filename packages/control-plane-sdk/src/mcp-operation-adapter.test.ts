@@ -64,7 +64,7 @@ describe("mcp operation adapter", () => {
     );
   });
 
-  it("normalizes a legacy Approval response without rewriting the canonical request", async () => {
+  it("rejects a legacy Approval Request response without rewriting the canonical request", async () => {
     let forwardedRequest: Request | undefined;
     const adapter = createMcpOperationAdapter({
       baseUrl: "https://control-plane.test",
@@ -74,24 +74,21 @@ describe("mcp operation adapter", () => {
       },
     });
 
-    const result = await adapter.callOperationById("flag_config_update", {
-      appId: "app_local",
-      environmentId: "env_local",
-      flagId: "flag_checkout",
-      enabled: true,
-      review: { action: "approve_and_apply" },
-      idempotency_key: "config-update-legacy-response",
-    });
+    await expect(
+      adapter.callOperationById("flag_config_update", {
+        appId: "app_local",
+        environmentId: "env_local",
+        flagId: "flag_checkout",
+        enabled: true,
+        review: { action: "approve_and_apply" },
+        idempotency_key: "config-update-legacy-response",
+      }),
+    ).rejects.toThrow("returned an invalid response body");
 
     await expect(forwardedRequest?.json()).resolves.toEqual({
       enabled: true,
       review: { action: "approve_and_apply" },
       idempotency_key: "config-update-legacy-response",
-    });
-    expect(result).toEqual({
-      ok: true,
-      status: 200,
-      data: { config: flagConfig, approvalRequest: null },
     });
   });
 

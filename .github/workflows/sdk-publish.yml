@@ -50,7 +50,7 @@ jobs:
         id: target
         run: |
           set -euo pipefail
-          target="$(node scripts/sdk-release/resolve-version.mjs "$GITHUB_WORKSPACE")"
+          target="$(node scripts/release/resolve-version.mjs sdk "$GITHUB_WORKSPACE")"
           {
             echo "sdk_version=$(printf '%s' "$target" | jq -r '.version')"
             echo "sdk_tag=$(printf '%s' "$target" | jq -r '.tag')"
@@ -61,13 +61,13 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           RELEASE_TARGET_COMMITISH: ${{ github.event.release.target_commitish }}
           REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
-        run: node scripts/sdk-release/validate-publish-context.mjs "$GITHUB_WORKSPACE"
+        run: node scripts/release/validate-publish-context.mjs sdk "$GITHUB_WORKSPACE"
 
       - name: Refresh live release state before npm version check
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/sdk-release/validate-live-publish-state.mjs "$GITHUB_WORKSPACE"
+        run: node scripts/release/validate-live-publish-state.mjs sdk "$GITHUB_WORKSPACE"
 
       - name: Check whether SDK version is already published
         id: npm-version
@@ -76,7 +76,7 @@ jobs:
         working-directory: packages/sdk
         run: |
           set -euo pipefail
-          already_published="$(node "$GITHUB_WORKSPACE/scripts/sdk-release/check-published-version.mjs" "$SDK_VERSION")"
+          already_published="$(node "$GITHUB_WORKSPACE/scripts/release/check-published-version.mjs" sdk "$SDK_VERSION")"
           echo "already_published=$already_published" >> "$GITHUB_OUTPUT"
           if [ "$already_published" = "true" ]; then
             echo "Skipping immutable npm version @splitch/sdk@$SDK_VERSION: it already exists"

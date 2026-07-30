@@ -1,5 +1,6 @@
-import { createDb } from "./client";
+import { makeApprovalRepo } from "./approvals";
 import { makeClaimStateRepo } from "./claim-state";
+import { createDb } from "./client";
 import { makeCredentialRepo } from "./credentials";
 import { makeExperimentRepo } from "./experiments";
 import { makeFlagRepo } from "./flags";
@@ -29,7 +30,13 @@ export function createRepository(d1: D1Database) {
     claim: makeClaimStateRepo(d1),
     identity: makeIdentityRepo(db, d1),
     privacy: makePrivacyRepo(db),
+    approvals: makeApprovalRepo(db),
   };
 }
 
 export type Repository = ReturnType<typeof createRepository>;
+export type {
+  ApprovalCommit,
+  ApprovalDisposition,
+  ApprovalFailure,
+} from "./approval-types";

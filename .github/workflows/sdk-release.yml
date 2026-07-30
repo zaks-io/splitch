@@ -82,7 +82,7 @@ jobs:
         id: resolve
         run: |
           set -euo pipefail
-          target="$(node scripts/sdk-release/resolve-version.mjs "$GITHUB_WORKSPACE")"
+          target="$(node scripts/release/resolve-version.mjs sdk "$GITHUB_WORKSPACE")"
           sdk_version="$(printf '%s' "$target" | jq -r '.version')"
           sdk_tag="$(printf '%s' "$target" | jq -r '.tag')"
           {
@@ -100,7 +100,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Validate SDK candidate
-        run: node scripts/sdk-release/validate-candidate.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts"
+        run: node scripts/release/validate-candidate.mjs sdk "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts"
 
       - name: Upload validation artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
@@ -166,7 +166,7 @@ jobs:
           COMMIT_SHA: ${{ needs.validate.outputs.commit_sha }}
         run: |
           set -euo pipefail
-          manifest="$(node scripts/sdk-release/prepare-artifacts.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts" "$COMMIT_SHA")"
+          manifest="$(node scripts/release/prepare-artifacts.mjs sdk "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts" "$COMMIT_SHA")"
           echo "$manifest" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload release artifacts
@@ -223,7 +223,7 @@ jobs:
           GITHUB_SHA: ${{ needs.validate.outputs.commit_sha }}
         run: |
           set -euo pipefail
-          result="$(node scripts/sdk-release/publish-draft-release.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts" "$COMMIT_SHA")"
+          result="$(node scripts/release/publish-draft-release.mjs sdk "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts" "$COMMIT_SHA")"
           release_url="$(printf '%s' "$result" | jq -r '.url')"
           {
             echo "## Draft SDK release"

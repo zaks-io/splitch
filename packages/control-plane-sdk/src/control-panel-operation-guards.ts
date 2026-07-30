@@ -37,6 +37,7 @@ export function isControlPanelOperation(value: unknown): value is ControlPanelOp
   // An unbound claim carries the id and NOTHING else. `hasKeys` is exact-length,
   // so a forged claim cannot smuggle an extra resource field past this.
   if (isUnboundOperationId(value.id)) return hasKeys(value, ["id"]);
+  if (isExperimentMutationOperationId(value.id)) return isExperimentMutationOperation(value);
   if (value.id === "flag_config_get") return isFlagConfigOperation(value);
   if (isScopedOperationId(value.id)) return isAppCollectionOperation(value);
   if (isMetricResourceOperationId(value.id)) return isMetricResourceOperation(value);
@@ -53,6 +54,20 @@ function isUnboundOperationId(value: string): boolean {
 /** Operations named by exactly one resource id: apps_create (Org) and the App rollup. */
 function isResourceOperation(value: Record<string, unknown>, key: string): boolean {
   return hasKeys(value, ["id", key]) && isNonEmptyString(value[key]);
+}
+
+function isExperimentMutationOperationId(
+  id: string,
+): id is "experiments_update" | "experiments_start" {
+  return id === "experiments_update" || id === "experiments_start";
+}
+
+function isExperimentMutationOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "environmentId", "experimentId"]) &&
+    hasAppEnvironment(value) &&
+    isNonEmptyString(value.experimentId)
+  );
 }
 
 function isFlagConfigOperation(value: Record<string, unknown>): boolean {
@@ -98,49 +113,34 @@ function isScopedOperationId(value: string): value is (typeof SCOPED_OPERATION_I
   return (SCOPED_OPERATION_IDS as readonly string[]).includes(value);
 }
 
+/**
+ * Every operation is a flat record of its id plus the exact resource ids that
+ * scope it, and `isControlPanelOperation` rejects any claim whose key set does
+ * not match its id. So identity is structural equality over that key set.
+ *
+ * This deliberately replaces a per-variant `switch`. That switch was correct
+ * for the vocabulary it was written against — its default arm compared appId
+ * and environmentId, and every member that reached it carried exactly those two
+ * fields. It is the *extension* that is unsafe: a new member with a third
+ * scoping field, added without a matching case, silently falls through and gets
+ * compared on a subset of its scope, which reads as "same operation" for two
+ * different resources. `experiments_update` is exactly such a member. An arm
+ * that cannot be extended safely should not exist, so identity is compared
+ * structurally and stays total by construction.
+ *
+ * Members that carry no scope fields (`experiments_list`, `experiments_detail`,
+ * `experiments_results`, `organizations_create`) still match on the id alone,
+ * as they did under the switch: their key set is `["id"]`, so equal ids compare
+ * equal. That is deliberate and documented in `control-panel-operation.ts`.
+ */
 export function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation): boolean {
-  if (left.id !== right.id) return false;
-  switch (left.id) {
-    case "apps_create":
-      return right.id === "apps_create" && left.orgId === right.orgId;
-    case "app_attention_rollup_get":
-      return right.id === "app_attention_rollup_get" && left.appId === right.appId;
-    case "experiments_list":
-    case "experiments_detail":
-    case "experiments_results":
-    case "organizations_create":
-      return true;
-    case "flag_config_get":
-      return (
-        right.id === "flag_config_get" &&
-        left.appId === right.appId &&
-        left.environmentId === right.environmentId &&
-        left.flagId === right.flagId
-      );
-    case "metrics_get":
-    case "metrics_update":
-    case "metrics_delete":
-      return (
-        "metricId" in right &&
-        left.appId === right.appId &&
-        left.environmentId === right.environmentId &&
-        left.metricId === right.metricId
-      );
-    case "api_key_revoke":
-      return (
-        "keyId" in right &&
-        left.appId === right.appId &&
-        left.environmentId === right.environmentId &&
-        left.keyId === right.keyId
-      );
-    default:
-      return (
-        "appId" in right &&
-        "environmentId" in right &&
-        left.appId === right.appId &&
-        left.environmentId === right.environmentId
-      );
-  }
+  const claimed = left as Record<string, unknown>;
+  const presented = right as Record<string, unknown>;
+  const keys = Object.keys(claimed);
+  return (
+    keys.length === Object.keys(presented).length &&
+    keys.every((key) => claimed[key] === presented[key])
+  );
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

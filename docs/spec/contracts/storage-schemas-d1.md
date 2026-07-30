@@ -92,26 +92,26 @@ value edit, and Experiment Run Start. `allow` does not create an Approval Reques
 same validated application seam directly. `confirm` and future `approve` both create this row and
 differ only in who may Review it.
 
-| Column                     | Type        | Constraints                                                             |
-| -------------------------- | ----------- | ----------------------------------------------------------------------- |
-| `id`                       | text        | PK; `apr_` + 26-character ULID                                          |
-| `app_id`                   | text        | FK → apps, not null                                                     |
-| `operation`                | text        | not null; canonical route `operationId`                                 |
-| `target_type`              | text        | not null; `flag_configuration \| flag_variant \| experiment_draft`      |
-| `target_id`                | text        | not null                                                                |
-| `target_version`           | text        | not null; RFC 8785 JCS SHA-256 token for the complete target projection |
-| `policy_contexts`          | text        | not null; immutable JSON `ApprovalPolicyContext[]`                      |
-| `diff`                     | text        | not null; immutable canonical JSON `ApprovalDiff`                       |
-| `status`                   | text        | not null; `pending \| applied \| declined \| stale`                     |
-| `proposed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone             |
-| `proposed_via`             | text        | not null; resolved auth door                                            |
-| `proposed_at`              | timestamptz | not null                                                                |
-| `resolved_at`              | timestamptz | nullable; set once on `applied`, `declined`, or `stale`                 |
-| `resulting_target_version` | text        | nullable; set only on `applied`                                         |
-| `resulting_resource_type`  | text        | nullable; canonical applied resource type, set only on `applied`        |
-| `resulting_resource_id`    | text        | nullable; canonical applied resource ID, set only on `applied`          |
-| `idempotency_key`          | text        | not null                                                                |
-| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS proposal input                  |
+| Column                     | Type        | Constraints                                                                |
+| -------------------------- | ----------- | -------------------------------------------------------------------------- |
+| `id`                       | text        | PK; `apr_` + 26-character ULID                                             |
+| `app_id`                   | text        | FK → apps, not null                                                        |
+| `operation`                | text        | not null; canonical route `operationId`                                    |
+| `target_type`              | text        | not null; `flag \| flag_configuration \| flag_variant \| experiment_draft` |
+| `target_id`                | text        | not null                                                                   |
+| `target_version`           | text        | not null; RFC 8785 JCS SHA-256 token for the complete target projection    |
+| `policy_contexts`          | text        | not null; immutable JSON `ApprovalPolicyContext[]`                         |
+| `diff`                     | text        | not null; immutable canonical JSON `ApprovalDiff`                          |
+| `status`                   | text        | not null; `pending \| applied \| declined \| stale`                        |
+| `proposed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone                |
+| `proposed_via`             | text        | not null; resolved auth door                                               |
+| `proposed_at`              | timestamptz | not null                                                                   |
+| `resolved_at`              | timestamptz | nullable; set once on `applied`, `declined`, or `stale`                    |
+| `resulting_target_version` | text        | nullable; set only on `applied`                                            |
+| `resulting_resource_type`  | text        | nullable; canonical applied resource type, set only on `applied`           |
+| `resulting_resource_id`    | text        | nullable; canonical applied resource ID, set only on `applied`             |
+| `idempotency_key`          | text        | not null                                                                   |
+| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS proposal input                     |
 
 UNIQUE constraint: `(app_id, proposed_by, idempotency_key)`. Reusing the key with the same
 `request_hash` returns the existing Approval Request. Reusing it with a different hash fails with

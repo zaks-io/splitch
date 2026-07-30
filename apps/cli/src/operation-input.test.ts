@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findCommand, type CliCommandDefinition } from "./command-registry.js";
+import { type CliCommandDefinition, findCommand } from "./command-registry.js";
 import { buildOperationInput } from "./operation-input.js";
 import { parseInvocation } from "./parse-args.js";
 
@@ -141,6 +141,30 @@ describe("buildOperationInput", () => {
 });
 
 describe("canonical approval input", () => {
+  it("keeps an explicit --idempotency-key stable", () => {
+    const command = requireCommand(["flag-config", "update"]);
+    const invocation = parseInvocation([
+      "flag-config",
+      "update",
+      "--app",
+      "app_cli",
+      "--env",
+      "env_cli",
+      "--idempotency-key",
+      "idem_user_selected",
+      "flag_cli",
+      "--enabled",
+      "true",
+    ]);
+
+    const input = buildOperationInput(command, invocation, {
+      appId: "app_cli",
+      environmentId: "env_cli",
+    });
+
+    expect(input.idempotency_key).toBe("idem_user_selected");
+  });
+
   it("maps --confirm to the canonical inline review", () => {
     const command = requireCommand(["experiments", "start"]);
     const invocation = parseInvocation([

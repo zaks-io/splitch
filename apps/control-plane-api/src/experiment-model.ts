@@ -22,8 +22,10 @@ export function experimentResponse(row: ExperimentRow): Experiment {
     key: row.key,
     flagId: row.flagId,
     name: row.name,
-    ...(row.description ? { description: row.description } : {}),
-    ...(row.hypothesis ? { hypothesis: row.hypothesis } : {}),
+    ...(row.description !== null ? { description: row.description } : {}),
+    ...(row.hypothesis !== null ? { hypothesis: row.hypothesis } : {}),
+    ...(row.owner !== null ? { owner: row.owner } : {}),
+    tags: jsonArray<string>(row.tags),
     status: row.status,
     targetingKey: row.targetingKeyField,
     targetingKeyType: row.targetingKeyType,
@@ -51,6 +53,7 @@ export function runResponse(row: RunRow): Run {
     environmentId: row.environmentId,
     status: row.status,
     targetingKeyType: row.targetingKeyType,
+    activationMetricId: row.activationMetricId,
     salt: row.salt,
     allocation: jsonObject<Record<string, number>>(row.allocation) ?? {},
     variantSet: jsonArray<Variant>(row.variantSet),
@@ -81,16 +84,6 @@ export function jsonObject<T extends Record<string, unknown>>(raw: string | null
 
 export function json(value: unknown): string {
   return JSON.stringify(value);
-}
-
-export function equalAllocation(names: string[]): Record<string, number> {
-  if (names.length === 0) return {};
-  const base = Math.floor((100 / names.length) * 100) / 100;
-  const allocation = Object.fromEntries(names.map((name) => [name, base]));
-  const remainder = 100 - Object.values(allocation).reduce((sum, value) => sum + value, 0);
-  const last = names.at(-1);
-  if (last) allocation[last] = (allocation[last] ?? 0) + remainder;
-  return allocation;
 }
 
 export async function runConfigHash(input: {

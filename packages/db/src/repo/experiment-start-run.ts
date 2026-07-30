@@ -1,5 +1,14 @@
 import { and, eq } from "drizzle-orm";
 import { experiments, runs } from "../schema/index";
+import type { ApprovalCommit } from "./approval-types";
+import { approvalAppliedStatements } from "./experiment-start-approval";
+import {
+  endCurrentRunStatement,
+  hasExpectedDraft,
+  insertRunStatement,
+  startGuardParams,
+  updateExperimentStartedStatement,
+} from "./experiment-start-run-sql";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 import type { ScopedTable } from "./scoped-table";
@@ -8,7 +17,7 @@ type ExperimentRow = typeof experiments.$inferSelect;
 type RunRow = typeof runs.$inferSelect;
 type RunInsert = typeof runs.$inferInsert;
 
-type StartRunExpectedDraft = Pick<
+export type StartRunExpectedDraft = Pick<
   ExperimentRow,
   "draftAllocation" | "draftSalt" | "draftTargetingRules" | "draftSegmentIds" | "liveRunId"
 > & { defaultVariantId: string };
@@ -24,6 +33,7 @@ export type StartRunInput = {
   endedAt: string;
   updatedAt: string;
   updatedBy?: string | null;
+  approval?: ApprovalCommit;
 };
 
 export type StartRunResult =
@@ -111,6 +121,7 @@ async function runStartBatch(
     endCurrentRunStatement(d1, scope, input, guardParams),
     insertRunStatement(d1, scope, input, guardParams),
     updateExperimentStartedStatement(d1, input, guardParams),
+    ...(input.approval ? approvalAppliedStatements(d1, scope, input.approval, input.run.id) : []),
   ]);
   const inserted = batch[1]?.results ?? [];
   const updated = batch[2]?.results ?? [];
@@ -118,179 +129,13 @@ async function runStartBatch(
   if (inserted.length !== 1 || updated.length !== 1) {
     throw new Error("startRun: guarded D1 batch produced an inconsistent result");
   }
+  // The Approval statements are appended to this same batch but were never
+  // inspected, so a Run could start while its Approval Request stayed pending
+  // and the caller was still told `ok`. This is the `approvalReviewLanded`
+  // equivalent every other Approval write path already has; here the Review
+  // insert RETURNs its id, so the evidence is in the batch result itself.
+  if (input.approval && (batch[3]?.results ?? []).length !== 1) {
+    throw new Error("startRun: the Run started but its Approval Review did not land");
+  }
   return true;
-}
-
-function endCurrentRunStatement(
-  d1: D1Database,
-  scope: EnvScope,
-  input: StartRunInput,
-  guardParams: readonly unknown[],
-) {
-  return d1
-    .prepare(
-      `
-      UPDATE runs
-      SET status = 'ended', ended_at = ?
-      WHERE app_id = ? AND environment_id = ? AND experiment_id = ? AND status = 'running'
-        AND EXISTS (SELECT 1 FROM experiments WHERE ${START_GUARD_SQL})
-      RETURNING id
-    `,
-    )
-    .bind(input.endedAt, scope.appId, scope.environmentId, input.experimentId, ...guardParams);
-}
-
-function insertRunStatement(
-  d1: D1Database,
-  scope: EnvScope,
-  input: StartRunInput,
-  guardParams: readonly unknown[],
-) {
-  return d1
-    .prepare(
-      `
-      INSERT INTO runs (
-        id, app_id, environment_id, experiment_id, run_number, status,
-        targeting_key_field, targeting_key_type, salt, allocation, variant_set, control_variant_id,
-        targeting_rules,
-        confidence_level, decision_family, guardrail_decisions, config_hash,
-        started_at, start_reason, created_at, created_by
-      )
-      SELECT
-        ?, ?, ?, ?,
-        (
-          SELECT COALESCE(MAX(run_number), 0) + 1
-          FROM runs
-          WHERE app_id = ? AND environment_id = ? AND experiment_id = ?
-        ),
-        'running',
-        ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?,
-        ?, ?, ?, ?
-      WHERE EXISTS (SELECT 1 FROM experiments WHERE ${START_GUARD_SQL})
-      RETURNING id
-    `,
-    )
-    .bind(...insertRunParams(scope, input), ...guardParams);
-}
-
-function updateExperimentStartedStatement(
-  d1: D1Database,
-  input: StartRunInput,
-  guardParams: readonly unknown[],
-) {
-  return d1
-    .prepare(
-      `
-      UPDATE experiments
-      SET
-        status = 'running',
-        live_run_id = ?,
-        draft_allocation = NULL,
-        draft_salt = NULL,
-        draft_targeting_rules = NULL,
-        draft_segment_ids = NULL,
-        updated_at = ?,
-        updated_by = ?
-      WHERE ${START_GUARD_SQL}
-      RETURNING id
-    `,
-    )
-    .bind(input.run.id, input.updatedAt, input.updatedBy ?? null, ...guardParams);
-}
-
-function hasExpectedDraft(experiment: ExperimentRow, expected: StartRunExpectedDraft): boolean {
-  return (
-    expected.draftAllocation !== null &&
-    experiment.draftAllocation === expected.draftAllocation &&
-    experiment.draftSalt === expected.draftSalt &&
-    experiment.draftTargetingRules === expected.draftTargetingRules &&
-    experiment.draftSegmentIds === expected.draftSegmentIds &&
-    experiment.defaultVariantId === expected.defaultVariantId &&
-    experiment.liveRunId === expected.liveRunId
-  );
-}
-
-const DRAFT_GUARD_SQL = `
-  app_id = ?
-  AND environment_id = ?
-  AND id = ?
-  AND draft_allocation = ?
-  AND (draft_salt = ? OR (draft_salt IS NULL AND ? IS NULL))
-  AND (draft_targeting_rules = ? OR (draft_targeting_rules IS NULL AND ? IS NULL))
-  AND (draft_segment_ids = ? OR (draft_segment_ids IS NULL AND ? IS NULL))
-  AND default_variant_id = ?
-  AND (live_run_id = ? OR (live_run_id IS NULL AND ? IS NULL))
-`;
-
-const START_GUARD_SQL = `
-  ${DRAFT_GUARD_SQL}
-  AND NOT EXISTS (
-    SELECT 1
-    FROM experiments AS blocker
-    WHERE blocker.app_id = ?
-      AND blocker.environment_id = ?
-      AND blocker.flag_id = ?
-      AND blocker.status = 'running'
-      AND blocker.id <> ?
-  )
-`;
-
-function startGuardParams(scope: EnvScope, input: StartRunInput): unknown[] {
-  return [
-    ...draftGuardParams(scope, input.experimentId, input.expectedDraft),
-    scope.appId,
-    scope.environmentId,
-    input.flagId,
-    input.experimentId,
-  ];
-}
-
-function draftGuardParams(
-  scope: EnvScope,
-  experimentId: string,
-  expected: StartRunExpectedDraft,
-): unknown[] {
-  return [
-    scope.appId,
-    scope.environmentId,
-    experimentId,
-    expected.draftAllocation,
-    expected.draftSalt,
-    expected.draftSalt,
-    expected.draftTargetingRules,
-    expected.draftTargetingRules,
-    expected.draftSegmentIds,
-    expected.draftSegmentIds,
-    expected.defaultVariantId,
-    expected.liveRunId,
-    expected.liveRunId,
-  ];
-}
-
-function insertRunParams(scope: EnvScope, input: StartRunInput): unknown[] {
-  return [
-    input.run.id,
-    scope.appId,
-    scope.environmentId,
-    input.experimentId,
-    scope.appId,
-    scope.environmentId,
-    input.experimentId,
-    input.run.targetingKeyField,
-    input.run.targetingKeyType,
-    input.run.salt,
-    input.run.allocation,
-    input.run.variantSet,
-    input.expectedDraft.defaultVariantId,
-    input.run.targetingRules,
-    input.run.confidenceLevel,
-    input.run.decisionFamily,
-    input.run.guardrailDecisions,
-    input.run.configHash,
-    input.run.startedAt,
-    input.run.startReason ?? null,
-    input.run.createdAt,
-    input.run.createdBy ?? null,
-  ];
 }

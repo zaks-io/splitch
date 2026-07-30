@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
 import {
-  ApprovalDiffSchema,
   ApprovalRequestSchema,
   ApprovalReviewSchema,
   InlineApproveAndApplyReviewSchema,
   ReviewApprovalRequestSchema,
-} from "./routes/route-shapes";
+} from "./routes/route-shapes-approval-request";
+import { ApprovalDiffSchema } from "./routes/route-shapes-approvals";
 
 const actor = { userId: "user_1", authDoor: "id_jag" };
 const approvalRequestId = "apr_01J00000000000000000000000";

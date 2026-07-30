@@ -52,6 +52,7 @@ export function packStagingDir(stagingDir, { dryRun = false, destination } = {})
   const { stdout, stderr, status, error } = spawnSync("npm", args, {
     cwd: stagingDir,
     encoding: "utf8",
+    env: { ...process.env, npm_config_cache: join(stagingDir, ".npm-cache") },
   });
   if (error) {
     throw error;
@@ -163,7 +164,7 @@ export function assertDryRunListing(packOutput) {
       continue;
     }
     const withoutNotice = line.replace(/^npm notice\s+/, "");
-    const match = /^(.+?)(?:\s+\d+(?:\.\d+)?[kMG]?B)?$/.exec(withoutNotice);
+    const match = /^(?:\d+(?:\.\d+)?[kMG]?B\s+)?(.+)$/.exec(withoutNotice);
     if (match) {
       listing.push(match[1]);
     }

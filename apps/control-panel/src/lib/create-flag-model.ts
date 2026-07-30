@@ -145,9 +145,15 @@ export function issueFor(issues: DraftIssue[], path: string): string | undefined
 
 /**
  * Builds the `flags_create` body. Callers must check `draftIssues` first — this
- * throws rather than emitting a payload the contract would reject.
+ * throws rather than emitting a payload the contract would reject. The
+ * Idempotency Key is the caller's because it identifies one submission of the
+ * form, not one rendering of the draft.
  */
-export function flagCreateInput(appId: string, draft: FlagDraft): FlagsCreateInput {
+export function flagCreateInput(
+  appId: string,
+  draft: FlagDraft,
+  idempotencyKey: string,
+): FlagsCreateInput {
   const issues = draftIssues(draft);
   if (issues.length > 0) {
     throw new Error(`create-flag-model: refusing to build an invalid Flag: ${issues[0]?.message}`);
@@ -157,6 +163,7 @@ export function flagCreateInput(appId: string, draft: FlagDraft): FlagsCreateInp
   return {
     appId,
     key,
+    idempotency_key: idempotencyKey,
     name: flagName(key),
     schema: { type: draft.valueType },
     variants: draft.variants.map((variant, index) => ({

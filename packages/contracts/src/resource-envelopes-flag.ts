@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { FlagSchema, VariantSchema } from "./leaf-schemas-flag";
-import { ApprovalRequestSchema, InlineApproveAndApplyReviewSchema } from "./routes/route-shapes";
+import {
+  ApprovalRequestSchema,
+  InlineApproveAndApplyReviewSchema,
+} from "./routes/route-shapes-approval-request";
 
 /**
  * Create/patch/response wire envelopes for App-level Flag definition and
@@ -18,6 +21,12 @@ import { ApprovalRequestSchema, InlineApproveAndApplyReviewSchema } from "./rout
 //
 // Seeds the App-level DEFINITION (key, schema, Variant catalog, Default
 // Variant). Per-Environment Configuration is deliberately absent here.
+//
+// `idempotency_key` is required because a Flag create is now an Idempotency-Key
+// route: creating a Flag re-establishes a key that a gated delete just refused
+// to free, so a retried create must never mint a second definition. Callers that
+// speak JSON only (MCP tools, the CLI) carry the key here and the SDK lifts it
+// into the `Idempotency-Key` header the Worker enforces.
 // ---------------------------------------------------------------------------
 
 const CreateVariantCatalogEntrySchema = z
@@ -38,6 +47,7 @@ export const CreateFlagRequestSchema = z
     schema: FlagSchema.shape.schema,
     variants: z.array(CreateVariantCatalogEntrySchema).min(1),
     description: z.string().optional(),
+    idempotency_key: z.string().min(1),
   })
   .strict();
 export type CreateFlagRequest = z.infer<typeof CreateFlagRequestSchema>;
@@ -92,9 +102,10 @@ export type FlagListResponse = z.infer<typeof FlagListResponseSchema>;
 // ---------------------------------------------------------------------------
 // CreateVariantRequest (Variant sub-resource)
 //
-// `idempotency_key` is optional on this non-idempotent create so a retried
-// `flag_variants_create` after a timeout never double-creates (mcp-tool-derivation
-// "Idempotency on retried creates"). Worker computes the Variant `id`.
+// `flag_variants_create` is an Idempotency-Key route, so `idempotency_key` is
+// REQUIRED: a retried create after a timeout replays instead of adding a second
+// Variant (mcp-tool-derivation "Idempotency on retried creates"). Worker
+// computes the Variant `id`.
 // ---------------------------------------------------------------------------
 
 export const CreateVariantRequestSchema = z
@@ -105,7 +116,7 @@ export const CreateVariantRequestSchema = z
     value: VariantSchema.shape.value,
     isDefault: z.boolean().optional(),
     description: z.string().optional(),
-    idempotency_key: z.string().optional(),
+    idempotency_key: z.string().min(1),
   })
   .strict();
 export type CreateVariantRequest = z.infer<typeof CreateVariantRequestSchema>;

@@ -48,6 +48,7 @@ describe("control plane sdk Variant catalog operations", () => {
       flagId: "flag_checkout",
       name: "on",
       value: true,
+      idempotency_key: "variant-create-1",
     });
 
     expect(requests[0]?.url).toBe(
@@ -58,6 +59,7 @@ describe("control plane sdk Variant catalog operations", () => {
       flagId: "flag_checkout",
       name: "on",
       value: true,
+      idempotency_key: "variant-create-1",
     });
     expect(result).toEqual({ ok: true, status: 200, data: flag });
   });

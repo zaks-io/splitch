@@ -30,6 +30,7 @@ describe("Create Flag Variant catalog", () => {
   it("creates a three-Variant string catalog authored in the panel's Variant editor", async () => {
     const response = await createFlag({
       appId: APP_ID,
+      idempotency_key: "idem-panel-variant-catalog",
       key: "checkout-copy",
       name: "Checkout Copy",
       schema: { type: "string" },

@@ -1,10 +1,9 @@
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the contracts surface is intentionally aggregated here
 export { accessTokenRevocationKey, accessTokenRevocationTtl } from "./access-token-revocation";
 export type { ApprovalRequestId, ApprovalReviewId } from "./approval-identifiers";
-export {
-  ApprovalRequestIdSchema,
-  ApprovalReviewIdSchema,
-} from "./approval-identifiers";
+export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped CLI/MCP parity-skin API
+export * from "./barrels/parity-skins";
 export type { CanonicalJsonSha256 } from "./canonical-hash";
 export { CanonicalJsonSha256Schema } from "./canonical-hash";
 export {
@@ -20,6 +19,7 @@ export { errorStatusByCode, httpStatusForError } from "./error-status";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
 export {
   ErrorCodeSchema,
+  ErrorDetailsSchema,
   ErrorResponseSchema,
   errorCodes,
   PolicyChangeTypeSchema,
@@ -153,8 +153,6 @@ export {
   membershipRoles,
   scopeSatisfiesMembershipGate,
 } from "./mcp-tool-membership-gates";
-// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped CLI/MCP parity-skin API
-export * from "./barrels/parity-skins";
 export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
 export { defineApiRoute } from "./openapi-route";
@@ -218,43 +216,45 @@ export {
   routeOwners,
 } from "./route-contract";
 export { getRoute, operationIds, routeRegistry } from "./route-registry";
-export type {
-  ApprovalActor,
-  ApprovalApplicationResult,
-  ApprovalAppliedResourceType,
-  ApprovalDiff,
-  ApprovalDiffEntry,
-  ApprovalOperation,
-  ApprovalPolicyContext,
-  ApprovalRequest,
-  ApprovalRequestListQuery,
-  ApprovalRequestStatus,
-  ApprovalReview,
-  ApprovalReviewAction,
-  ApprovalReviewError,
-  ApprovalReviewOutcome,
-  ApprovalTarget,
-  ApprovalTargetType,
-  ApprovalTargetVersion,
-  ReviewApprovalRequest,
-} from "./routes/route-shapes";
 export {
-  ApprovalActorSchema,
+  type ApprovalApplicationResult,
   ApprovalApplicationResultSchema,
-  ApprovalAppliedResourceTypeSchema,
-  ApprovalDiffEntrySchema,
-  ApprovalDiffSchema,
-  ApprovalOperationSchema,
-  ApprovalPolicyContextSchema,
+  type ApprovalRequest,
+  type ApprovalRequestListQuery,
   ApprovalRequestListQuerySchema,
   ApprovalRequestSchema,
-  ApprovalRequestStatusSchema,
-  ApprovalReviewActionSchema,
+  type ApprovalReview,
+  type ApprovalReviewError,
   ApprovalReviewErrorSchema,
-  ApprovalReviewOutcomeSchema,
   ApprovalReviewSchema,
+  InlineApproveAndApplyReviewSchema,
+  type ReviewApprovalRequest,
+  ReviewApprovalRequestSchema,
+} from "./routes/route-shapes-approval-request";
+export {
+  type ApprovalActor,
+  ApprovalActorSchema,
+  type ApprovalAppliedResourceType,
+  ApprovalAppliedResourceTypeSchema,
+  type ApprovalDiff,
+  type ApprovalDiffEntry,
+  ApprovalDiffEntrySchema,
+  ApprovalDiffSchema,
+  type ApprovalOperation,
+  ApprovalOperationSchema,
+  type ApprovalPolicyContext,
+  ApprovalPolicyContextSchema,
+  type ApprovalRequestStatus,
+  ApprovalRequestStatusSchema,
+  type ApprovalReviewAction,
+  ApprovalReviewActionSchema,
+  type ApprovalReviewOutcome,
+  ApprovalReviewOutcomeSchema,
+  type ApprovalTarget,
   ApprovalTargetSchema,
+  type ApprovalTargetType,
   ApprovalTargetTypeSchema,
+  type ApprovalTargetVersion,
   ApprovalTargetVersionSchema,
   approvalAppliedResourceTypes,
   approvalOperations,
@@ -262,9 +262,7 @@ export {
   approvalReviewActions,
   approvalReviewOutcomes,
   approvalTargetTypes,
-  InlineApproveAndApplyReviewSchema,
-  ReviewApprovalRequestSchema,
-} from "./routes/route-shapes";
+} from "./routes/route-shapes-approvals";
 export type {
   ActivationRow,
   CupedCovariateRow,

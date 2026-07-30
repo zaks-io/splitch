@@ -30,7 +30,6 @@ import type {
   ApiKeyParams,
   ApiKeyRevokeResponseSchema,
   AppParams,
-  ApprovalRequestListQuerySchema,
   ApprovalRequestParams,
   ClientKeyRotateResponseSchema,
   CreateApiKeyRequestSchema,
@@ -50,9 +49,12 @@ import type {
   PromoteRequestSchema,
   PromoteResponseSchema,
   ReplaceTargetingRulesRequestSchema,
-  ReviewApprovalRequestSchema,
 } from "./routes/route-shapes";
-import { ApprovalRequestSchema } from "./routes/route-shapes";
+import {
+  ApprovalRequestListQuerySchema,
+  ApprovalRequestSchema,
+  ReviewApprovalRequestSchema,
+} from "./routes/route-shapes-approval-request";
 import { paginatedResponse } from "./wire-envelopes-core";
 
 /**

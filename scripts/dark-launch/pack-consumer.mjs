@@ -30,7 +30,11 @@ export function installPackedSdkConsumer() {
     throw new Error(`pack-release did not report a tarball path:\n${packOutput}`);
   }
   const tarballPath = resolve(packDir, tarballName);
-  execFileSync("npm", ["install", tarballPath], { cwd: consumerRoot, stdio: "inherit" });
+  execFileSync("npm", ["install", tarballPath], {
+    cwd: consumerRoot,
+    stdio: "inherit",
+    env: { ...process.env, npm_config_cache: join(consumerRoot, ".npm-cache") },
+  });
 
   const packedManifest = JSON.parse(
     readFileSync(join(consumerRoot, "node_modules/@splitch/sdk/package.json"), "utf8"),

@@ -2,15 +2,16 @@ import {
   DeltaNudgeSchema,
   ExperimentConfigKVSchema,
   FlagConfigKVSchema,
-  RunConfigKVSchema,
-  TargetingRuleSchema,
   flagConfigKey,
+  RunConfigKVSchema,
   type TargetingRule,
+  TargetingRuleSchema,
   type Variant,
 } from "@splitch/contracts";
 import { appScope, type EnvScope, type Repository } from "@splitch/db";
 import { parseFlagConfigEnvelope, writeSnapshot } from "./config-store-kv";
 import type {
+  ApplyApprovedFlagConfigInput,
   ConfigStoreDeps,
   FlagConfigResult,
   FlagConfigWriteResult,
@@ -23,6 +24,7 @@ import type {
 import { parseStoredRollout } from "./flag-config-rollout";
 
 export type {
+  ApplyApprovedFlagConfigInput,
   ConfigStoreDeps,
   FlagConfigResult,
   FlagConfigWriteResult,

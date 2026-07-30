@@ -68,6 +68,7 @@ async function typeChecks() {
     flagId: "flag_local",
     name: "treatment",
     value: true,
+    idempotency_key: "idem_create_variant",
   });
   await sdk.flags.updateVariant({
     appId: "app_local",

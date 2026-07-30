@@ -9,6 +9,7 @@ import { dataPlaneRoutes } from "./routes/routes-data-plane";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagRoutes } from "./routes/routes-flags";
 import { privacyRoutes } from "./routes/routes-privacy";
+import { segmentRoutes } from "./routes/routes-segments";
 
 /**
  * THE single route registry every Worker mounts, the SDK infers from, and MCP
@@ -72,6 +73,7 @@ export const routeRegistry = assertRegistry([
   ...approvalRoutes,
   ...attentionRoutes,
   ...flagRoutes,
+  ...segmentRoutes,
   ...experimentRoutes,
   ...credentialRoutes,
   ...analysisRoutes,

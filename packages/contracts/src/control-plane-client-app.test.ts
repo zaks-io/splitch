@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { accountRoutes } from "./routes/routes-account";
+import { approvalRoutes } from "./routes/routes-approvals";
 import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { experimentRoutes } from "./routes/routes-experiments";
@@ -42,6 +43,7 @@ const APPS_SDK_INDICES = sdkIndices("appsSdkRoutes", "account");
 const ATTENTION_SDK_INDICES = sdkIndices("appsSdkRoutes", "attention");
 const ENVIRONMENTS_SDK_INDICES = sdkIndices("environmentsSdkRoutes");
 const CREDENTIALS_SDK_INDICES = sdkIndices("credentialsSdkRoutes");
+const APPROVALS_SDK_INDICES = sdkIndices("approvalsSdkRoutes");
 
 function operationIdsAt(
   routes: readonly { operationId: string }[],
@@ -113,6 +115,14 @@ describe("control plane SDK route selection", () => {
     ]);
   });
 
+  it("selects exactly the Approval Request operations the SDK exposes", () => {
+    expect(operationIdsAt(approvalRoutes, APPROVALS_SDK_INDICES)).toEqual([
+      "approval_requests_list",
+      "approval_requests_get",
+      "approval_request_reviews_create",
+    ]);
+  });
+
   it("reads the indices the SDK app actually selects", () => {
     // Proves the coupling: these come from the source, so dropping a route from
     // the SDK app changes them here and fails the by-name assertions above.
@@ -122,6 +132,7 @@ describe("control plane SDK route selection", () => {
     expect(ATTENTION_SDK_INDICES).toEqual([0]);
     expect(ENVIRONMENTS_SDK_INDICES).toEqual([14, 15, 16, 17, 18]);
     expect(CREDENTIALS_SDK_INDICES).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(APPROVALS_SDK_INDICES).toEqual([0, 1, 2]);
   });
 
   it("fails loudly when the SDK app tuple cannot be found", () => {

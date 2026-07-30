@@ -1,0 +1,241 @@
+name: cli-release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cli-release
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+
+jobs:
+  validate:
+    name: Validate CLI Candidate
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 30
+    outputs:
+      cli_version: ${{ steps.resolve.outputs.cli_version }}
+      cli_tag: ${{ steps.resolve.outputs.cli_tag }}
+      commit_sha: ${{ steps.resolve.outputs.commit_sha }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+      GITLEAKS_VERSION: 8.30.1
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Turbo remote cache inputs
+        run: node scripts/check-turbo-remote-cache-env.mjs
+
+      - name: Install Tinybird CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://tinybird.co | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          checksums="gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+
+          curl -fsSLO "${base}/${asset}"
+          curl -fsSLO "${base}/${checksums}"
+          grep " ${asset}$" "${checksums}" > checksums.txt
+          sha256sum -c checksums.txt
+          tar -xzf "${asset}" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+
+      - name: Resolve CLI release target
+        id: resolve
+        run: |
+          set -euo pipefail
+          target="$(node scripts/release/resolve-version.mjs cli "$GITHUB_WORKSPACE")"
+          cli_version="$(printf '%s' "$target" | jq -r '.version')"
+          cli_tag="$(printf '%s' "$target" | jq -r '.tag')"
+          {
+            echo "cli_version=$cli_version"
+            echo "cli_tag=$cli_tag"
+            echo "commit_sha=$GITHUB_SHA"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## CLI release target"
+            echo
+            echo "- Package: \`@splitch/cli\`"
+            echo "- Version: \`$cli_version\`"
+            echo "- Tag: \`$cli_tag\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate CLI candidate
+        run: node scripts/release/validate-candidate.mjs cli "$GITHUB_WORKSPACE" "$RUNNER_TEMP/cli-release-artifacts"
+
+      - name: Upload validation artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: cli-release-validation-${{ steps.resolve.outputs.cli_tag }}
+          path: ${{ runner.temp }}/cli-release-artifacts/
+          retention-days: 30
+
+  prepare:
+    name: Prepare CLI Release Artifacts
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 20
+    needs: validate
+    outputs:
+      cli_tag: ${{ needs.validate.outputs.cli_tag }}
+      commit_sha: ${{ needs.validate.outputs.commit_sha }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Turbo remote cache inputs
+        run: node scripts/check-turbo-remote-cache-env.mjs
+
+      - name: Download validation artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: cli-release-validation-${{ needs.validate.outputs.cli_tag }}
+          path: ${{ runner.temp }}/cli-release-artifacts
+
+      # The CLI bundle inlines @splitch/sdk from its built dist.
+      - name: Build @splitch/sdk dependency
+        run: pnpm --filter @splitch/sdk build
+
+      - name: Build @splitch/cli for release packaging
+        run: pnpm --filter @splitch/cli build
+
+      - name: Prepare release artifacts
+        id: prepare
+        env:
+          CLI_TAG: ${{ needs.validate.outputs.cli_tag }}
+          COMMIT_SHA: ${{ needs.validate.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          manifest="$(node scripts/release/prepare-artifacts.mjs cli "$GITHUB_WORKSPACE" "$RUNNER_TEMP/cli-release-artifacts" "$COMMIT_SHA")"
+          echo "$manifest" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: cli-release-package-${{ needs.validate.outputs.cli_tag }}
+          path: ${{ runner.temp }}/cli-release-artifacts/
+          retention-days: 90
+
+  draft-release:
+    name: Create Or Update Draft Release
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    needs: [validate, prepare]
+    env:
+      CLI_TAG: ${{ needs.validate.outputs.cli_tag }}
+      CLI_VERSION: ${{ needs.validate.outputs.cli_version }}
+      COMMIT_SHA: ${{ needs.validate.outputs.commit_sha }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      # The cli-v* tag ruleset restricts creation/update/deletion, and the
+      # standard Actions token cannot be a ruleset bypass actor. This dedicated
+      # App (contents:write only, installed on this repo) is the sole bypass
+      # actor; the step fails loudly if its credentials are absent.
+      - name: Mint CLI release App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.SDK_RELEASE_APP_ID }}
+          private-key: ${{ secrets.SDK_RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.validate.outputs.commit_sha }}
+          persist-credentials: true
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: cli-release-package-${{ needs.validate.outputs.cli_tag }}
+          path: ${{ runner.temp }}/cli-release-artifacts
+
+      - name: Create or update draft GitHub Release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_SHA: ${{ needs.validate.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          result="$(node scripts/release/publish-draft-release.mjs cli "$GITHUB_WORKSPACE" "$RUNNER_TEMP/cli-release-artifacts" "$COMMIT_SHA")"
+          release_url="$(printf '%s' "$result" | jq -r '.url')"
+          {
+            echo "## Draft CLI release"
+            echo
+            echo "- Tag: \`$CLI_TAG\`"
+            echo "- Version: \`$CLI_VERSION\`"
+            echo "- Commit: \`$COMMIT_SHA\`"
+            echo "- Release: $release_url"
+            echo
+            echo "This workflow does not publish to npm."
+          } >> "$GITHUB_STEP_SUMMARY"
