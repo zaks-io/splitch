@@ -13,13 +13,14 @@
  *   devDependencies?: Record<string, string>;
  *   peerDependencies?: Record<string, string>;
  *   optionalDependencies?: Record<string, string>;
+ *   bin?: Record<string, string>;
  * }} PackageManifest */
 
 /** @typedef {{ packagePath: string; manifest: PackageManifest }} WorkspacePackage */
 
 /** @typedef {{ packagePath: string; message: string }} PolicyViolation */
 
-export const ALLOWED_PUBLISHABLE_PACKAGE = "@splitch/sdk";
+export const ALLOWED_PUBLISHABLE_PACKAGES = new Set(["@splitch/sdk", "@splitch/cli"]);
 export const FORBIDDEN_PUBLISHABLE_PACKAGES = new Set(["@splitch/contracts"]);
 export const WORKSPACE_SCOPE = "@splitch/";
 export const WORKSPACE_PROTOCOL = "workspace:";

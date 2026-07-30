@@ -26,7 +26,11 @@ function run(command, args, options = {}) {
   execFileSync(command, args, {
     cwd: options.cwd ?? consumerRoot,
     stdio: options.stdio ?? "inherit",
-    env: { ...process.env, ...options.env },
+    env: {
+      ...process.env,
+      npm_config_cache: join(consumerRoot, ".npm-cache"),
+      ...options.env,
+    },
   });
 }
 

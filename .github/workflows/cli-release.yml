@@ -1,4 +1,4 @@
-name: sdk-release
+name: cli-release
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: sdk-release
+  group: cli-release
   cancel-in-progress: false
 
 env:
@@ -15,12 +15,12 @@ env:
 
 jobs:
   validate:
-    name: Validate SDK Candidate
+    name: Validate CLI Candidate
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
     outputs:
-      sdk_version: ${{ steps.resolve.outputs.sdk_version }}
-      sdk_tag: ${{ steps.resolve.outputs.sdk_tag }}
+      cli_version: ${{ steps.resolve.outputs.cli_version }}
+      cli_tag: ${{ steps.resolve.outputs.cli_tag }}
       commit_sha: ${{ steps.resolve.outputs.commit_sha }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -78,44 +78,44 @@ jobs:
           tar -xzf "${asset}" gitleaks
           sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
 
-      - name: Resolve SDK release target
+      - name: Resolve CLI release target
         id: resolve
         run: |
           set -euo pipefail
-          target="$(node scripts/release/resolve-version.mjs sdk "$GITHUB_WORKSPACE")"
-          sdk_version="$(printf '%s' "$target" | jq -r '.version')"
-          sdk_tag="$(printf '%s' "$target" | jq -r '.tag')"
+          target="$(node scripts/release/resolve-version.mjs cli "$GITHUB_WORKSPACE")"
+          cli_version="$(printf '%s' "$target" | jq -r '.version')"
+          cli_tag="$(printf '%s' "$target" | jq -r '.tag')"
           {
-            echo "sdk_version=$sdk_version"
-            echo "sdk_tag=$sdk_tag"
+            echo "cli_version=$cli_version"
+            echo "cli_tag=$cli_tag"
             echo "commit_sha=$GITHUB_SHA"
           } >> "$GITHUB_OUTPUT"
           {
-            echo "## SDK release target"
+            echo "## CLI release target"
             echo
-            echo "- Package: \`@splitch/sdk\`"
-            echo "- Version: \`$sdk_version\`"
-            echo "- Tag: \`$sdk_tag\`"
+            echo "- Package: \`@splitch/cli\`"
+            echo "- Version: \`$cli_version\`"
+            echo "- Tag: \`$cli_tag\`"
             echo "- Commit: \`$GITHUB_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Validate SDK candidate
-        run: node scripts/release/validate-candidate.mjs sdk "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts"
+      - name: Validate CLI candidate
+        run: node scripts/release/validate-candidate.mjs cli "$GITHUB_WORKSPACE" "$RUNNER_TEMP/cli-release-artifacts"
 
       - name: Upload validation artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: sdk-release-validation-${{ steps.resolve.outputs.sdk_tag }}
-          path: ${{ runner.temp }}/sdk-release-artifacts/
+          name: cli-release-validation-${{ steps.resolve.outputs.cli_tag }}
+          path: ${{ runner.temp }}/cli-release-artifacts/
           retention-days: 30
 
   prepare:
-    name: Prepare SDK Release Artifacts
+    name: Prepare CLI Release Artifacts
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 20
     needs: validate
     outputs:
-      sdk_tag: ${{ needs.validate.outputs.sdk_tag }}
+      cli_tag: ${{ needs.validate.outputs.cli_tag }}
       commit_sha: ${{ needs.validate.outputs.commit_sha }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -153,27 +153,31 @@ jobs:
       - name: Download validation artifacts
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
-          name: sdk-release-validation-${{ needs.validate.outputs.sdk_tag }}
-          path: ${{ runner.temp }}/sdk-release-artifacts
+          name: cli-release-validation-${{ needs.validate.outputs.cli_tag }}
+          path: ${{ runner.temp }}/cli-release-artifacts
 
-      - name: Build @splitch/sdk for release packaging
+      # The CLI bundle inlines @splitch/sdk from its built dist.
+      - name: Build @splitch/sdk dependency
         run: pnpm --filter @splitch/sdk build
+
+      - name: Build @splitch/cli for release packaging
+        run: pnpm --filter @splitch/cli build
 
       - name: Prepare release artifacts
         id: prepare
         env:
-          SDK_TAG: ${{ needs.validate.outputs.sdk_tag }}
+          CLI_TAG: ${{ needs.validate.outputs.cli_tag }}
           COMMIT_SHA: ${{ needs.validate.outputs.commit_sha }}
         run: |
           set -euo pipefail
-          manifest="$(node scripts/release/prepare-artifacts.mjs sdk "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts" "$COMMIT_SHA")"
+          manifest="$(node scripts/release/prepare-artifacts.mjs cli "$GITHUB_WORKSPACE" "$RUNNER_TEMP/cli-release-artifacts" "$COMMIT_SHA")"
           echo "$manifest" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: sdk-release-package-${{ needs.validate.outputs.sdk_tag }}
-          path: ${{ runner.temp }}/sdk-release-artifacts/
+          name: cli-release-package-${{ needs.validate.outputs.cli_tag }}
+          path: ${{ runner.temp }}/cli-release-artifacts/
           retention-days: 90
 
   draft-release:
@@ -182,8 +186,8 @@ jobs:
     timeout-minutes: 15
     needs: [validate, prepare]
     env:
-      SDK_TAG: ${{ needs.validate.outputs.sdk_tag }}
-      SDK_VERSION: ${{ needs.validate.outputs.sdk_version }}
+      CLI_TAG: ${{ needs.validate.outputs.cli_tag }}
+      CLI_VERSION: ${{ needs.validate.outputs.cli_version }}
       COMMIT_SHA: ${{ needs.validate.outputs.commit_sha }}
     steps:
       - name: Harden runner
@@ -191,11 +195,11 @@ jobs:
         with:
           egress-policy: audit
 
-      # The sdk-v* tag ruleset restricts creation/update/deletion, and the
+      # The cli-v* tag ruleset restricts creation/update/deletion, and the
       # standard Actions token cannot be a ruleset bypass actor. This dedicated
       # App (contents:write only, installed on this repo) is the sole bypass
       # actor; the step fails loudly if its credentials are absent.
-      - name: Mint SDK release App token
+      - name: Mint CLI release App token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -214,8 +218,8 @@ jobs:
       - name: Download release artifacts
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
-          name: sdk-release-package-${{ needs.validate.outputs.sdk_tag }}
-          path: ${{ runner.temp }}/sdk-release-artifacts
+          name: cli-release-package-${{ needs.validate.outputs.cli_tag }}
+          path: ${{ runner.temp }}/cli-release-artifacts
 
       - name: Create or update draft GitHub Release
         env:
@@ -223,13 +227,13 @@ jobs:
           GITHUB_SHA: ${{ needs.validate.outputs.commit_sha }}
         run: |
           set -euo pipefail
-          result="$(node scripts/release/publish-draft-release.mjs sdk "$GITHUB_WORKSPACE" "$RUNNER_TEMP/sdk-release-artifacts" "$COMMIT_SHA")"
+          result="$(node scripts/release/publish-draft-release.mjs cli "$GITHUB_WORKSPACE" "$RUNNER_TEMP/cli-release-artifacts" "$COMMIT_SHA")"
           release_url="$(printf '%s' "$result" | jq -r '.url')"
           {
-            echo "## Draft SDK release"
+            echo "## Draft CLI release"
             echo
-            echo "- Tag: \`$SDK_TAG\`"
-            echo "- Version: \`$SDK_VERSION\`"
+            echo "- Tag: \`$CLI_TAG\`"
+            echo "- Version: \`$CLI_VERSION\`"
             echo "- Commit: \`$COMMIT_SHA\`"
             echo "- Release: $release_url"
             echo
