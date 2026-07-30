@@ -49,20 +49,15 @@ function RootDocument({ children }: { children: ReactNode }) {
                   to="/"
                   activeOptions={{ exact: true }}
                   activeProps={{ className: "text-primary" }}
-                  className="font-semibold text-lg"
+                  className="rounded-md font-semibold text-lg focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
                 >
                   splitch
                 </Link>
+                {/* Product destinations only. The Kitchen Sink is a local
+                    visual-development surface, never a hosted destination. */}
                 <div className="flex items-center gap-2">
-                  <Link
-                    to="/kitchen-sink"
-                    activeProps={{ className: "border-primary/40 text-primary" }}
-                    className="rounded-md border border-border px-3 py-2 text-sm"
-                  >
-                    kitchen sink
-                  </Link>
                   <a
-                    className="rounded-md border border-border px-3 py-2 text-sm"
+                    className="rounded-md border border-border px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
                     href="/auth/logout"
                   >
                     sign out

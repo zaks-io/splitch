@@ -23,6 +23,11 @@ test.describe("Control Panel local full-stack harness", () => {
     await expect(page.locator("[data-org-slug='orbit-tools']")).toBeVisible();
     await expect(page.getByText("checkout-api")).toBeVisible();
     await expect(page.getByText("agent-console")).toBeVisible();
+    // The hosted product header carries product destinations only; the Kitchen
+    // Sink stays a local visual-development surface.
+    const header = page.locator("body > div > header").first();
+    await expect(header.locator("a[href='/kitchen-sink']")).toHaveCount(0);
+    await expect(header.getByRole("link", { name: /kitchen/i })).toHaveCount(0);
 
     await captureThemeScreenshots(page, testInfo, "template-shell");
   });
@@ -171,12 +176,10 @@ test.describe("Control Panel local full-stack harness", () => {
     await expect(shell).toHaveAttribute("data-hydrated", "true");
     await expect(shell).toHaveAttribute("data-app-id", "app_checkout_e2e");
     await expect(shell).toHaveAttribute("data-environment-id", "env_checkout_dev_e2e");
-    await expect(page.getByRole("navigation", { name: "App sections" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Segments App-level" })).toBeVisible();
+    const nav = page.getByRole("navigation", { name: "App sections" });
+    await expect(nav).toBeVisible();
+    await expect(nav.getByRole("link", { name: /Segments/ })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Metrics App-level" })).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Segments App-level" }).getByText("App-level"),
-    ).toBeVisible();
     await expect(
       page.getByRole("link", { name: "Metrics App-level" }).getByText("App-level"),
     ).toBeVisible();
