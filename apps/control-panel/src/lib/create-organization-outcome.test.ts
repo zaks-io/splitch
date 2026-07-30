@@ -3,12 +3,18 @@ import {
   type CreateControlPanelOrganizationResult,
   createOrganizationEffect,
   createOrganizationFailure,
+  settleAfterCreate,
 } from "./create-organization-outcome";
 
 type Refusal = Extract<CreateControlPanelOrganizationResult, { outcome: "refused" }>;
 
 function refused(status: number, error: Refusal["error"]): CreateControlPanelOrganizationResult {
   return { outcome: "refused", status, error };
+}
+
+/** Mirrors `session.ts`'s `RemediableSessionError` without importing it. */
+class FakeRemediableSessionError extends Error {
+  readonly remedy = "reauth" as const;
 }
 
 describe("Create Organization failure surface", () => {
@@ -91,6 +97,43 @@ describe("Create Organization failure surface", () => {
   });
 });
 
+describe("settleAfterCreate", () => {
+  it("reports the reauth remedy for a session-identity throw", async () => {
+    const result = await settleAfterCreate("kiln-works", () =>
+      Promise.reject(
+        new FakeRemediableSessionError(
+          "control-panel session is missing its WorkOS session identifier",
+        ),
+      ),
+    );
+
+    expect(result).toEqual({
+      outcome: "created-session-stale",
+      orgSlug: "kiln-works",
+      reason: "control-panel session is missing its WorkOS session identifier",
+      remedy: "reauth",
+    });
+  });
+
+  // The review's blocker (post-#226): a deterministic membership-materialization
+  // fault (an unknown role, a duplicate handle) reproduces identically on
+  // `/auth/callback`'s re-run, so it must default to "retry", never "reauth".
+  it("reports the retry remedy for an ordinary throw", async () => {
+    const result = await settleAfterCreate("kiln-works", () =>
+      Promise.reject(new Error("duplicate organization URL handle for authenticated user")),
+    );
+
+    expect(result.outcome).toBe("created-session-stale");
+    expect(result).toMatchObject({ remedy: "retry" });
+  });
+
+  it("reports plain success when resync also succeeds", async () => {
+    const result = await settleAfterCreate("kiln-works", () => Promise.resolve());
+
+    expect(result).toEqual({ outcome: "created", orgSlug: "kiln-works" });
+  });
+});
+
 describe("Create Organization effect", () => {
   it("treats a created Organization as created", () => {
     expect(createOrganizationEffect({ outcome: "created", orgSlug: "kiln-works" })).toEqual({
@@ -101,14 +144,26 @@ describe("Create Organization effect", () => {
 
   // SPL-203: the sibling App path folds a failed session resync into "could not
   // create", which tells the user to retry a mutation that already succeeded.
-  it("treats a created Organization with a failed session resync as created, not failed", () => {
+  it("treats a created Organization with a failed session resync as created, not failed, and carries the reason and remedy through", () => {
     const effect = createOrganizationEffect({
       outcome: "created-session-stale",
       orgSlug: "kiln-works-eu",
       reason: "control-panel session is missing its WorkOS session identifier",
+      remedy: "reauth",
     });
 
-    expect(effect).toEqual({ kind: "session-stale", orgSlug: "kiln-works-eu" });
+    expect(effect).toEqual({
+      kind: "session-stale",
+      orgSlug: "kiln-works-eu",
+      reason: "control-panel session is missing its WorkOS session identifier",
+      remedy: "reauth",
+    });
+  });
+
+  it("treats a stale outcome with a missing or invalid remedy as failed rather than guessing one", () => {
+    expect(createOrganizationEffect({ outcome: "created-session-stale", orgSlug: "x" }).kind).toBe(
+      "failed",
+    );
   });
 
   it("treats a refusal as failed", () => {

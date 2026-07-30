@@ -7,6 +7,7 @@ import { CreateAppForm } from "#components/create-app-form";
 import { StaleSessionNotice } from "#components/stale-session-notice";
 import { canCreateApp } from "#lib/org-app-list";
 import type { OrgRole } from "#lib/session";
+import type { StaleSession } from "#lib/stale-session";
 
 /**
  * The one Create App path. A `member` gets the affordance rendered locked with
@@ -17,9 +18,12 @@ export function CreateAppDialog({ orgId, orgRole }: { orgId: string; orgRole: Or
   const router = useRouter();
   const [open, setOpen] = useState(false);
   // Not cleared on the next open: the notice below the dialog is the only place
-  // this App's create is ever surfaced, since the session list it would appear
-  // in is exactly what is stale (SPL-203).
-  const [staleAppSlug, setStaleAppSlug] = useState<string | null>(null);
+  // this App's create is ever surfaced *for this tab*, since the session list
+  // it would appear in is exactly what is stale (SPL-203). A reload replaces
+  // this with the durable, server-read `view.pendingAppResync` notice in
+  // `org-app-list-page.tsx` instead — that one survives navigation, this one
+  // only bridges the moment between submit and the next server read.
+  const [staleApp, setStaleApp] = useState<StaleSession | null>(null);
 
   if (!canCreateApp(orgRole)) {
     return (
@@ -44,7 +48,14 @@ export function CreateAppDialog({ orgId, orgRole }: { orgId: string; orgRole: Or
 
   return (
     <div className="grid gap-3">
-      {staleAppSlug ? <StaleSessionNotice resource="App" slug={staleAppSlug} /> : null}
+      {staleApp ? (
+        <StaleSessionNotice
+          reason={staleApp.reason}
+          remedy={staleApp.remedy}
+          resource="App"
+          slug={staleApp.slug}
+        />
+      ) : null}
       <Dialog onOpenChange={changeOpen} open={open}>
         <DialogTrigger render={<Button data-testid="create-app" />}>Create App</DialogTrigger>
         <DialogContent className="sm:max-w-lg">
@@ -53,9 +64,9 @@ export function CreateAppDialog({ orgId, orgRole }: { orgId: string; orgRole: Or
               setOpen(false);
               void router.invalidate();
             }}
-            onStaleSession={(appSlug) => {
+            onStaleSession={(stale) => {
               setOpen(false);
-              setStaleAppSlug(appSlug);
+              setStaleApp(stale);
             }}
             orgId={orgId}
           />

@@ -1,5 +1,6 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { type MutationErrorSurface, mutationErrorSurface } from "./api";
+import { resyncRemedy, type ResyncRemedy } from "./resync-remedy";
 
 /**
  * Three outcomes, not two (mirrors `create-organization-outcome.ts`).
@@ -20,13 +21,19 @@ export type CreateControlPanelAppResult =
       readonly outcome: "created-session-stale";
       readonly appSlug: string;
       readonly reason: string;
+      readonly remedy: ResyncRemedy;
     }
   | { readonly outcome: "refused"; readonly status: number; readonly error: ErrorResponse };
 
 /** What the form should do next. One decision table, so it can be read at once. */
 export type CreateAppEffect =
   | { readonly kind: "created"; readonly appSlug: string }
-  | { readonly kind: "session-stale"; readonly appSlug: string }
+  | {
+      readonly kind: "session-stale";
+      readonly appSlug: string;
+      readonly reason: string;
+      readonly remedy: ResyncRemedy;
+    }
   | { readonly kind: "failed"; readonly failure: MutationErrorSurface };
 
 /**
@@ -39,20 +46,38 @@ export type CreateAppEffect =
  * that may not have happened.
  */
 export function createAppEffect(input: unknown): CreateAppEffect {
-  if (isOutcome(input, "created")) return { kind: "created", appSlug: input.appSlug };
-  if (isOutcome(input, "created-session-stale")) {
-    return { kind: "session-stale", appSlug: input.appSlug };
+  if (isCreated(input)) return { kind: "created", appSlug: input.appSlug };
+  const stale = asStale(input);
+  if (stale) {
+    return {
+      kind: "session-stale",
+      appSlug: stale.appSlug,
+      reason: stale.reason,
+      remedy: stale.remedy,
+    };
   }
   return { kind: "failed", failure: createAppFailure(input) };
 }
 
-function isOutcome<K extends CreateControlPanelAppResult["outcome"]>(
+function isCreated(
   input: unknown,
-  outcome: K,
-): input is Extract<CreateControlPanelAppResult, { outcome: K }> {
+): input is Extract<CreateControlPanelAppResult, { outcome: "created" }> {
   if (typeof input !== "object" || input === null) return false;
   const candidate = input as { outcome?: unknown; appSlug?: unknown };
-  return candidate.outcome === outcome && typeof candidate.appSlug === "string";
+  return candidate.outcome === "created" && typeof candidate.appSlug === "string";
+}
+
+type Stale = Extract<CreateControlPanelAppResult, { outcome: "created-session-stale" }>;
+
+function asStale(input: unknown): Stale | null {
+  if (typeof input !== "object" || input === null) return null;
+  const candidate = input as Partial<Stale>;
+  return candidate.outcome === "created-session-stale" &&
+    typeof candidate.appSlug === "string" &&
+    typeof candidate.reason === "string" &&
+    (candidate.remedy === "reauth" || candidate.remedy === "retry")
+    ? (candidate as Stale)
+    : null;
 }
 
 type Refusal = Extract<CreateControlPanelAppResult, { outcome: "refused" }>;
@@ -94,6 +119,7 @@ export async function settleAfterCreate(
       outcome: "created-session-stale",
       appSlug,
       reason: cause instanceof Error ? cause.message : String(cause),
+      remedy: resyncRemedy(cause),
     };
   }
   return { outcome: "created", appSlug };

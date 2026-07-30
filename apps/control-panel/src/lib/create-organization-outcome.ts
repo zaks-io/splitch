@@ -1,4 +1,5 @@
 import type { ErrorResponse } from "@splitch/contracts";
+import { resyncRemedy, type ResyncRemedy } from "./resync-remedy";
 
 /**
  * Three outcomes, not two.
@@ -19,6 +20,7 @@ export type CreateControlPanelOrganizationResult =
       readonly outcome: "created-session-stale";
       readonly orgSlug: string;
       readonly reason: string;
+      readonly remedy: ResyncRemedy;
     }
   | { readonly outcome: "refused"; readonly status: number; readonly error: ErrorResponse };
 
@@ -37,7 +39,12 @@ type Refusal = Extract<CreateControlPanelOrganizationResult, { outcome: "refused
 /** What the form should do next. One decision table, so it can be read at once. */
 export type CreateOrganizationEffect =
   | { readonly kind: "created"; readonly orgSlug: string }
-  | { readonly kind: "session-stale"; readonly orgSlug: string }
+  | {
+      readonly kind: "session-stale";
+      readonly orgSlug: string;
+      readonly reason: string;
+      readonly remedy: ResyncRemedy;
+    }
   | { readonly kind: "failed"; readonly failure: CreateOrganizationFailure };
 
 /**
@@ -50,20 +57,38 @@ export type CreateOrganizationEffect =
  * reporting a create that may not have happened.
  */
 export function createOrganizationEffect(input: unknown): CreateOrganizationEffect {
-  if (isOutcome(input, "created")) return { kind: "created", orgSlug: input.orgSlug };
-  if (isOutcome(input, "created-session-stale")) {
-    return { kind: "session-stale", orgSlug: input.orgSlug };
+  if (isCreated(input)) return { kind: "created", orgSlug: input.orgSlug };
+  const stale = asStale(input);
+  if (stale) {
+    return {
+      kind: "session-stale",
+      orgSlug: stale.orgSlug,
+      reason: stale.reason,
+      remedy: stale.remedy,
+    };
   }
   return { kind: "failed", failure: createOrganizationFailure(input) };
 }
 
-function isOutcome<K extends CreateControlPanelOrganizationResult["outcome"]>(
+function isCreated(
   input: unknown,
-  outcome: K,
-): input is Extract<CreateControlPanelOrganizationResult, { outcome: K }> {
+): input is Extract<CreateControlPanelOrganizationResult, { outcome: "created" }> {
   if (typeof input !== "object" || input === null) return false;
   const candidate = input as { outcome?: unknown; orgSlug?: unknown };
-  return candidate.outcome === outcome && typeof candidate.orgSlug === "string";
+  return candidate.outcome === "created" && typeof candidate.orgSlug === "string";
+}
+
+type Stale = Extract<CreateControlPanelOrganizationResult, { outcome: "created-session-stale" }>;
+
+function asStale(input: unknown): Stale | null {
+  if (typeof input !== "object" || input === null) return null;
+  const candidate = input as Partial<Stale>;
+  return candidate.outcome === "created-session-stale" &&
+    typeof candidate.orgSlug === "string" &&
+    typeof candidate.reason === "string" &&
+    (candidate.remedy === "reauth" || candidate.remedy === "retry")
+    ? (candidate as Stale)
+    : null;
 }
 
 /**
@@ -140,4 +165,26 @@ function asRefusal(input: unknown): Refusal | null {
   return candidate.outcome === "refused" && candidate.error && typeof candidate.status === "number"
     ? (candidate as Refusal)
     : null;
+}
+
+/**
+ * The exact decision SPL-203 fixes, mirrored from `create-app-outcome.ts`:
+ * once `create` has returned ok, a resync failure settles as
+ * `created-session-stale`, never as a refusal.
+ */
+export async function settleAfterCreate(
+  orgSlug: string,
+  resync: () => Promise<void>,
+): Promise<CreateControlPanelOrganizationResult> {
+  try {
+    await resync();
+  } catch (cause) {
+    return {
+      outcome: "created-session-stale",
+      orgSlug,
+      reason: cause instanceof Error ? cause.message : String(cause),
+      remedy: resyncRemedy(cause),
+    };
+  }
+  return { outcome: "created", orgSlug };
 }

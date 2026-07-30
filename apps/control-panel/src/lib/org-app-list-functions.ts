@@ -5,7 +5,8 @@ import { getRequest } from "@tanstack/react-start/server";
 import { type ControlPanelBindings, controlPanelBindings } from "./bindings";
 import { createControlPanelAppsClient } from "./control-plane-apps";
 import { createEnvironmentResolver, rehydrateLegacySession } from "./membership";
-import type { AppAttention, OrgAppListView } from "./org-app-list";
+import type { AppAttention, OrgAppListView, PendingAppResync } from "./org-app-list";
+import { readPendingResync } from "./pending-resync";
 import { loadSessionFromRequest } from "./session";
 
 export type OrgAppListResult =
@@ -55,9 +56,28 @@ export const loadOrgAppList = createServerFn({ method: "GET" })
             attention: await readAttention(bindings, actor, app.appId),
           })),
         ),
+        pendingAppResync: await readPendingAppResync(
+          bindings.SESSION_STORE,
+          loaded.tokenHash,
+          organization.orgId,
+        ),
       },
     };
   });
+
+/**
+ * Read fresh on every render, and scoped to this Organization only: a pending
+ * App create in a different Organization must not surface a notice here.
+ */
+async function readPendingAppResync(
+  kv: KVNamespace,
+  tokenHash: string,
+  orgId: string,
+): Promise<PendingAppResync | null> {
+  const pending = await readPendingResync(kv, tokenHash);
+  if (!pending || pending.resource !== "app" || pending.orgId !== orgId) return null;
+  return { appSlug: pending.slug, reason: pending.reason, remedy: pending.remedy };
+}
 
 /**
  * A rollup failure is reported, never swallowed: every non-success path returns

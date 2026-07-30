@@ -18,6 +18,7 @@ import {
   suggestAppKey,
 } from "#lib/create-app-model";
 import { type CreateAppEffect, createAppEffect } from "#lib/create-app-outcome";
+import type { StaleSession } from "#lib/stale-session";
 
 export function CreateAppForm({
   onCreated,
@@ -25,7 +26,7 @@ export function CreateAppForm({
   orgId,
 }: {
   onCreated: (appSlug: string) => void;
-  onStaleSession: (appSlug: string) => void;
+  onStaleSession: (stale: StaleSession) => void;
   orgId: string;
 }) {
   const [draft, setDraft] = useState<CreateAppDraft>(emptyAppDraft);
@@ -50,8 +51,9 @@ export function CreateAppForm({
   // an ok create can never produce — reaches `setMutationError`.
   function settle(effect: CreateAppEffect) {
     if (effect.kind === "created") onCreated(effect.appSlug);
-    else if (effect.kind === "session-stale") onStaleSession(effect.appSlug);
-    else setMutationError(effect.failure);
+    else if (effect.kind === "session-stale") {
+      onStaleSession({ slug: effect.appSlug, reason: effect.reason, remedy: effect.remedy });
+    } else setMutationError(effect.failure);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {

@@ -1,6 +1,7 @@
 import { EmptyState } from "@splitch/ui/state/empty-state";
 import { CreateOrganizationDialog } from "#components/create-organization-dialog";
 import { parityHint } from "#lib/parity-hints";
+import type { StaleSession } from "#lib/stale-session";
 import { ParityNote } from "./parity-note";
 
 /**
@@ -14,7 +15,7 @@ export function OrganizationsEmptyState({
   onStaleSession,
 }: {
   onCreated: (orgSlug: string) => void;
-  onStaleSession: (orgSlug: string) => void;
+  onStaleSession: (stale: StaleSession) => void;
 }) {
   return (
     <EmptyState

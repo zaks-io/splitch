@@ -60,6 +60,22 @@ export type SessionLoadResult =
   | { ok: true; session: StoredSession; tokenHash: string }
   | { ok: false; reason: "missing" | "tampered" | "expired" | "invalid" };
 
+/**
+ * Tags a resync failure that signing in again actually repairs: the callback
+ * (`authkit.ts`) reruns `buildSessionPrincipal` with a fresh session, so a
+ * fault that is about the session's own identity resolves there. Thrown only
+ * at the two sites where that is true (`session-resync.ts`'s missing
+ * `workosSessionId`, the TTL guard below) — everything else defaults to "not
+ * reauth-fixable" in `resync-remedy.ts`, which is the safe default.
+ */
+export class RemediableSessionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RemediableSessionError";
+  }
+  readonly remedy = "reauth" as const;
+}
+
 export function publicSession(session: StoredSession): SessionPrincipal {
   return {
     userId: session.userId,
@@ -154,7 +170,7 @@ export async function refreshSession(
   assertStoredSession(stored, now);
   const ttl = ttlSeconds(stored.expiresAt, now);
   if (ttl <= 0) {
-    throw new Error("control-panel session expired before it could be refreshed");
+    throw new RemediableSessionError("control-panel session expired before it could be refreshed");
   }
   await kv.put(sessionKey(tokenHash), JSON.stringify(stored), { expirationTtl: ttl });
 }

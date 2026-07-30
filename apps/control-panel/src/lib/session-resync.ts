@@ -1,7 +1,8 @@
 import { createRepository } from "@splitch/db";
 import type { ControlPanelBindings } from "./bindings";
 import { buildSessionPrincipal } from "./membership";
-import { refreshSession, type StoredSession } from "./session";
+import { clearPendingResync } from "./pending-resync";
+import { RemediableSessionError, refreshSession, type StoredSession } from "./session";
 
 /**
  * Narrowed to the two bindings this actually touches. The callers hold the full
@@ -32,11 +33,16 @@ export async function resyncSessionMemberships(
   session: StoredSession,
 ): Promise<void> {
   if (!session.workosSessionId) {
-    throw new Error("control-panel session is missing its WorkOS session identifier");
+    throw new RemediableSessionError(
+      "control-panel session is missing its WorkOS session identifier",
+    );
   }
   const principal = await buildSessionPrincipal(createRepository(bindings.DB), {
     userId: session.userId,
     workosSessionId: session.workosSessionId,
   });
   await refreshSession(bindings.SESSION_STORE, tokenHash, { ...session, ...principal });
+  // A resync that reaches here succeeded, so whatever earlier create left this
+  // marker behind (SPL-203) is resolved: the fresh principal now holds it.
+  await clearPendingResync(bindings.SESSION_STORE, tokenHash);
 }
