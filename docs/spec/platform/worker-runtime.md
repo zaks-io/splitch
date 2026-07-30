@@ -76,6 +76,15 @@ Rate limits run before scope checks so floods of unauthorized-but-authenticated 
 throttled. Route handlers do not render ad hoc guard errors and do not choose HTTP statuses for
 shared error codes.
 
+The Event Ingest Worker additionally owns a weighted Ingest Admission Gate after canonical event
+validation and idempotency lookup but before new claims or queue publication. That gate charges
+canonical row count and serialized bytes by `(app_id, environment_id, ingest_stream)`. It cannot use
+the generic route `RateLimiter`, which runs before the request has canonical rows and exposes no
+weighted cost or one strongly coordinated counter across Cloudflare locations. Event Ingest
+implements the gate as one SQLite Durable Object per scope with atomic row and byte token buckets.
+Both gates must pass; this capability-specific control and its binding stay in Event Ingest and do
+not move queue or Tinybird ownership into `@splitch/worker-runtime`.
+
 ## What the runtime owns
 
 - Hono path mounting from route contracts

@@ -41,7 +41,7 @@ The `__multiple__` rate is surfaced as a **health metric** per Run:
 
 ## Why not first-touch-wins
 
-First-touch-wins (`MIN(server_ts)` Variant) would:
+First-touch-wins (`MIN(server_received_at)` Variant) would:
 
 1. Silently bias whichever arm won the timestamp race
 2. Not be detected by SRM — the Entity still counts cleanly in one arm

@@ -14,25 +14,41 @@ conventions live in [request-response-envelopes-conventions.md](./request-respon
 
 ### CreateEventDefinitionRequest
 
-| Field         | Required | Notes                                  |
-| ------------- | -------- | -------------------------------------- |
-| `appId`       | yes      | —                                      |
-| `name`        | yes      | Stable SDK `eventName`; unique per App |
-| `displayName` | yes      | —                                      |
-| `description` | no       | —                                      |
+| Field         | Required | Notes                                       |
+| ------------- | -------- | ------------------------------------------- |
+| `appId`       | yes      | —                                           |
+| `name`        | yes      | Stable event name; unique per App           |
+| `family`      | yes      | Immutable `'metric' \| 'web'` selected once |
+| `displayName` | yes      | —                                           |
+| `description` | no       | —                                           |
 
 ### CreateEventDefinitionVersionRequest
 
-| Field               | Required | Notes                                                       |
-| ------------------- | -------- | ----------------------------------------------------------- |
-| `appId`             | yes      | —                                                           |
-| `eventDefinitionId` | yes      | Must belong to `appId`                                      |
-| `entityType`        | yes      | Required inbound Metric Event `idType`                      |
-| `fields`            | yes      | `EventFieldDefinition[]`; JSON fields require closed schema |
-| `dimensions`        | yes      | `DimensionDefinition[]`; scalar only                        |
+The parent Event Definition supplies immutable `family`; a version request cannot override it. The
+request is a family-discriminated branch:
+
+| Field               | Required | Notes                                                                             |
+| ------------------- | -------- | --------------------------------------------------------------------------------- |
+| `appId`             | yes      | —                                                                                 |
+| `eventDefinitionId` | yes      | Must belong to `appId`                                                            |
+| `entityType`        | yes      | `metric`: non-empty string; `web`: non-empty string or explicit null              |
+| `fields`            | yes      | `EventFieldDefinition[]`; strings require allowlists; JSON requires closed schema |
+| `dimensions`        | yes      | `DimensionDefinition[]`; strings require allowlists; numeric bounds are optional  |
 
 The Worker assigns the version and stamps publication metadata. No request can supply
 `version`, `schemaHash`, `publishedAt`, or `publishedBy`.
+
+For a `web` version, `entityType: null` prohibits Entity identity. A non-empty value allows either
+anonymous events or a complete identity pair whose `idType` matches. For a `metric` version, identity
+is always required.
+
+An `allowedValues` list is required for string fields and Dimensions, optional for boolean and
+number declarations, non-empty when present, unique, and type-matched. Every JSON string node
+requires an `enum`. String allowlists contain only bounded machine tokens, and direct-PII property
+names fail publication. These constraints participate in `schemaHash`.
+
+`minimum` and `maximum` are optional inclusive number constraints. They must be finite, are invalid
+on non-number declarations, reject `minimum > maximum`, and participate in `schemaHash`.
 
 ---
 

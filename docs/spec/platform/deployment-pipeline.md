@@ -148,17 +148,54 @@ record; they are not the default for splitch's public Workers.
 
 Per-Worker configs must declare only the bindings owned by that Worker:
 
-| Worker                   | Binding rule                                                                                                                                           |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update and D1-backed Durable Object bindings                                    |
-| MCP Worker               | No D1, KV, Tinybird, or Durable Object data bindings; calls public APIs by origin and Analysis by service binding through `@splitch/control-plane-sdk` |
-| Evaluation Worker        | Provider/config KV, Assignment Store KV/DO, Event Ingest service binding                                                                               |
-| Event Ingest Worker      | Queue, sharded ingest/dedup Durable Objects, Tinybird write secret                                                                                     |
-| Analysis Worker          | Tinybird read secret; no SDK evaluate or ingest bindings                                                                                               |
-| Auth API Worker          | D1 identity/session binding plus auth/session/token bindings; no post-create App management bindings                                                   |
-| Control Panel Worker     | D1 binding for server-side auth, session, and claim flows plus UI/session/client bindings; no direct KV/Tinybird access                                |
-| Marketing Worker         | Static/public bindings only; no authenticated App data                                                                                                 |
-| Scheduled jobs           | Cron triggers stay on owning Workers: Control Plane API demo cleanup and Analysis snapshot refresh                                                     |
+| Worker                   | Binding rule                                                                                                                                                                                                         |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update and D1-backed Durable Object bindings                                                                                                  |
+| MCP Worker               | No D1, KV, Tinybird, or Durable Object data bindings; calls public APIs by origin and Analysis by service binding through `@splitch/control-plane-sdk`                                                               |
+| Evaluation Worker        | Provider/config KV, Assignment Store KV/DO, Event Ingest service binding                                                                                                                                             |
+| Event Ingest Worker      | Four datasource-specific Queue producer/consumer bindings, four matching DLQ producer bindings, one SQLite Admission Gate Durable Object class binding, sharded ingest/outbox Durable Objects, Tinybird write secret |
+| Analysis Worker          | Tinybird read secret; no SDK evaluate or ingest bindings                                                                                                                                                             |
+| Auth API Worker          | D1 identity/session binding plus auth/session/token bindings; no post-create App management bindings                                                                                                                 |
+| Control Panel Worker     | D1 binding for server-side auth, session, and claim flows plus UI/session/client bindings; no direct KV/Tinybird access                                                                                              |
+| Marketing Worker         | Static/public bindings only; no authenticated App data                                                                                                                                                               |
+| Scheduled jobs           | Cron triggers stay on owning Workers: Control Plane API demo cleanup and Analysis snapshot refresh                                                                                                                   |
+
+Each Event Ingest queue consumer is checked into every Wrangler target with
+`max_concurrency = 1`, `max_batch_size = 100`, and `max_batch_timeout = 1` second. Preview and
+production may use different queue resource IDs, but may not weaken the drain governor. A capacity
+change is a reviewed config mutation, not an autoscaling response to backlog.
+
+Each consumer also configures its matching datasource dead-letter queue and `max_retries = 7`, which
+means at most eight total attempts including the initial delivery. Permanent failures are explicitly
+copied to the DLQ and acknowledged without consuming the retry budget. A deployment is incomplete
+if any primary queue lacks its matching DLQ binding or if shared preview and production reuse a queue
+resource.
+
+Queue publication contract tests and hosted smoke enforce the 120,000-byte per-message ceiling and
+the 100-message/240,000-byte `sendBatch` ceilings from
+[edge-ingest-contract.md](../pipeline/edge-ingest-contract.md). Boundary-size tests must prove an
+accepted canonical row remains publishable and an oversized row fails before acceptance.
+
+Event Ingest also declares one SQLite-backed `IngestAdmissionGateDurableObject` class binding and
+its monotonic `new_sqlite_classes` migration in every platform target. Runtime instances are routed
+with `idFromName(JSON.stringify([app_id, environment_id, ingest_stream]))`, producing one object per
+scope rather than one global object. Shared preview and production use separate Durable Object
+namespaces. Deployment smoke must prove same-scope calls share row and byte capacity, different
+scopes do not share capacity, and a missing or failed binding rejects intake before claims, outbox
+writes, or queue publication.
+
+Shared preview and production check in the complete launch profile from
+[edge-ingest-contract.md](../pipeline/edge-ingest-contract.md): one row refill, row burst, byte
+refill, and byte burst value for each of the four ingest streams. Both targets start with the same
+profile so shared preview exercises production admission behavior. Deployment fails closed when a
+stream or value is absent; deploy tooling must not supply hidden defaults, customer overrides, or
+runtime auto-tuning.
+
+Deployment smoke verifies the checked-in values and the 10-second burst capacities. A profile
+change requires a reviewed config mutation and load evidence showing stable queue age, no sustained
+Tinybird `429` responses, and recovery after a 2x burst. The per-scope profile is a fairness and
+spike-isolation control; the fixed per-datasource queue consumer remains the hard aggregate
+Tinybird protection boundary.
 
 ### Shared Cloudflare preview
 
@@ -266,9 +303,11 @@ or any Durable Object migration.
   GitHub environment variable, not a repository-committed Wrangler value.
 - Event Ingest declares `SPLITCH_EVENT_INGEST_TOKEN` and the least-privilege
   `TINYBIRD_INGEST_TOKEN` as required Worker secrets. Tinybird manages the latter as the
-  deployment-defined `raw_events_ingest` token with APPEND access to both `raw_events` and
-  `raw_evaluations`, the two datasources owned by that Worker. `TINYBIRD_API_URL` is non-secret Worker
-  config and points at the Tinybird region API.
+  deployment-defined `raw_events_ingest` token. The current token has APPEND access to the two
+  implemented datasources, `raw_events` and `raw_evaluations`. Before Metric Event or Web Event
+  intake ships, the Event Ingest token must have APPEND access to exactly all four owned
+  datasources: `raw_events`, `raw_evaluations`, `metric_events`, and `web_events`.
+  `TINYBIRD_API_URL` is non-secret Worker config and points at the Tinybird region API.
 - Secret rotation is its own release. Do not hide secret changes inside an unrelated code deploy.
 
 ### Sentry source maps

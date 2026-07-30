@@ -126,8 +126,9 @@ activation rows satisfy this invariant.
 | `winsorize_pct`         | `number`                                | yes      | Default `99.9`; ignored if winsorize=false                              |
 | `downside_threshold`    | `number \| null`                        | no       | Set to make this a Guardrail Metric                                     |
 
-The Analysis Worker reads from `metric_events`, not the Exposure/Activation `raw_events` log. For a
-non-Ratio Metric it selects only rows with the same App, Environment, `id_type`,
+The Analysis Worker reads the query-time-deduplicated logical `metric_events` source, not physical
+rows and not the Exposure/Activation `raw_events` log. For a non-Ratio Metric it selects only rows
+with the same App, Environment, `id_type`,
 `targeting_key_hash`, and `event_definition_id = metric.event_definition_id`. For Ratio Metrics it
 applies that Event Definition match independently to the numerator and denominator component Metrics
 before forming the per-Entity pair. `id_type` must equal the Run's `targeting_key_type`;

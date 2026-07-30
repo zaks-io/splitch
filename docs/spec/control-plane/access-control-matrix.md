@@ -119,8 +119,9 @@ deploying, and missing secrets or replay bindings fail closed.
 **Evaluation Worker** owns resolution:
 
 - Public SDK evaluate and peek endpoints (Client Key or API Key for evaluate; peek is API Key only,
-  ADR-0034). Metric Event `track` ingress is owned by the Event Ingest Worker; Evaluation does not
-  authenticate, validate, or persist `POST /api/sdk/events`.
+  ADR-0034). Metric Event and Web Event ingress are owned by the Event Ingest Worker; Evaluation
+  does not authenticate, validate, or persist `POST /api/sdk/events` or
+  `POST /api/sdk/web-events`.
 - Control-plane dry-run test-evaluation using the control-plane bearer token
 - Provider and Assignment Store read orchestration
 - No config writes, no analytics reads, and no direct result calculation
@@ -128,14 +129,18 @@ deploying, and missing secrets or replay bindings fail closed.
 **Event Ingest Worker** owns append-only intake:
 
 - Public SDK Metric Event `track` (`POST /api/sdk/events`) under Client Key or API Key
-- Assignment, Exposure, and Metric event validation
-- Queueing, sharded Durable Object dedup, and Tinybird delivery
+- Public SDK Web Event `web.track` (`POST /api/sdk/web-events`) under Client Key or API Key
+- Evaluation usage, Exposure, Activation, Metric Event, and Web Event validation
+- Per-scope Admission Gate Durable Objects, durable claim/outbox shards, datasource queues, DLQs,
+  and Tinybird microbatch delivery
 - No Variant resolution, no Experiment result calculation, and no control-plane CRUD
 
 **Analysis Worker** owns result reads:
 
-- Analytics proxy endpoints
-- Tinybird-backed SRM, Metric, and statistical result reads
+- Experiment and Web Analytics proxy endpoints
+- Tinybird-backed Web Session, Web Event, SRM, Metric, and statistical result reads
+- App `owner`, `admin`, and `member` roles may read Web Analytics under the existing **View
+  config/results** permission
 - `app_id` and `environment_id` injection from auth/path context
 - No SDK evaluate, no event ingest, and no config mutation
 

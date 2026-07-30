@@ -2,7 +2,7 @@
 
 **Status:** accepted
 
-Splitch stores hashed Entity identity plus event facts, not durable Entity Profiles. Email, name, phone, and similar profile fields remain in the customer's system; Metric Events and Web Events may carry event values and allowlisted Dimensions, but not profile fields.
+Splitch stores hashed Entity identity plus event facts, not durable Entity Profiles. Email, name, phone, and similar profile fields remain in the customer's system; Metric Events and Web Events may carry event values and allowlisted Dimensions, but not profile fields. A Web Session may correlate anonymous and Entity-identified Web Events for exploratory journeys, but that correlation does not create or backfill an Entity Profile.
 
 ## Considered options
 
@@ -11,4 +11,4 @@ Splitch stores hashed Entity identity plus event facts, not durable Entity Profi
 
 ## Consequences
 
-Splitch dashboards can inspect an Entity when a user provides the Targeting Key and Splitch hashes it server-side, but Splitch does not show email/name labels from stored profile data.
+Splitch dashboards can inspect an Entity when a user provides the Targeting Key and Splitch hashes it server-side, but Splitch does not show email/name labels from stored profile data. Pre-identity Web Events remain anonymous facts even when a later Web Event in the same Web Session carries explicit Entity identity. Web Session stitching never supplies a Metric Event or Experiment join.

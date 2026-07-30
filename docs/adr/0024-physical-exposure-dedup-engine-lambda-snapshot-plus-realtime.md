@@ -17,10 +17,10 @@ must stay identical: the Copy Pipe that builds the snapshot, and the real-time t
 generated from one shared definition, never hand-copied (this is ADR-0005's "one dedup, centralized"
 at the physical layer).
 
-The physical boundary is deliberately **not** `server_ts > last_snapshot_ts`. `server_ts` is the
+The physical boundary is deliberately **not** `server_received_at > last_snapshot_ts`. `server_received_at` is the
 analysis clock used for first-touch and Conversion Window anchoring; late-arriving rows can have an
-older `server_ts` than the snapshot. The Copy Pipe records an ingest-time `watermark_ts`, and the
-tail reads `raw_events.ingest_ts > watermark_ts`. The final UNION re-dedups by `MIN(server_ts)`, so
+older `server_received_at` than the snapshot. The Copy Pipe records an ingest-time `watermark_ts`, and the
+tail reads `raw_events.ingest_ts > watermark_ts`. The final UNION re-dedups by `MIN(server_received_at)`, so
 late arrivals still become first-touch when their event time is earliest.
 
 ## Considered options
@@ -52,7 +52,7 @@ late arrivals still become first-touch when their event time is earliest.
   cost of bounded query latency over unbounded data.
 - **Snapshot cadence is a freshness/cost dial, not a correctness one.** The real-time tail always
   covers rows after the snapshot ingest watermark, so a slower schedule never makes results wrong,
-  only the batch layer staler — and the tail absorbs late-arriving earlier-`server_ts` events on the
+  only the batch layer staler — and the tail absorbs late-arriving earlier-`server_received_at` events on the
   next read, exactly as ADR-0010 requires.
 - **Rollups hang off the snapshot.** Any AggregatingMergeTree rollup MV builds on the deduped
   snapshot datasource, never the raw log — this is the single rule that keeps redundant edge events

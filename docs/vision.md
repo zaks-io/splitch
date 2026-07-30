@@ -48,8 +48,10 @@ on, and a login handshake that happens in-band with zero install.
 
 Built to scale to enterprise volumes (millions of evaluation requests) on
 Cloudflare's edge. The hot path is a read-optimized data plane (KV reads,
-per-key Durable Objects serializing first-touch writes, raw append to Tinybird)
-kept entirely separate from the control plane
+per-key Durable Objects serializing first-touch writes, durable queue-backed
+Tinybird microbatches) kept entirely separate from the control plane. The
+current direct one-row Tinybird transport is known implementation debt tracked
+by [ADR-0043](./adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md)
 ([ADR-0017](./adr/0017-all-cloudflare-stack-workers-serving-and-control-tinybird-analytics.md),
 [ADR-0018](./adr/0018-identity-and-operational-state-in-d1-hot-validation-in-kv-audit-in-tinybird.md)).
 
@@ -66,9 +68,10 @@ statistics are not best-effort:
   ([ADR-0015](./adr/0015-variance-delta-method-aggregate-to-randomization-unit.md)).
 - **CUPED + winsorization on by default but conditional**, SRM and FDR built in
   ([ADR-0016](./adr/0016-cuped-and-winsorization-default-on-but-conditional.md)).
-- **Exposure is the only recorded event**, deduped first-touch, and _is_ the
-  analysis denominator. The result is computed from a raw, auditable,
-  append-only log, not a derived rollup you have to trust
+- **Exposure is the only experiment denominator**, deduped first-touch. Metric Events supply
+  values but never replace or narrow that denominator, and Web Events remain separate browser
+  telemetry. The result is computed from raw, auditable, append-only facts, not a derived rollup
+  you have to trust
   ([ADR-0010](./adr/0010-exposure-pipeline-is-a-raw-append-only-log-deduped-at-query-time.md)).
 - **Statistical rigor is an enforced product contract**, not a setting a user can
   silently defeat

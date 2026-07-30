@@ -83,12 +83,24 @@ lifecycle verbs. Do not use "publish" for Runs.
 **Exposure**: the event that an Entity actually encountered its assigned Variant. Analysis counts
 Exposures, not Assignments. See [`apps/event-ingest-api/CONTEXT.md`](./apps/event-ingest-api/CONTEXT.md).
 
-**Event Definition**: an App-level schema for one named Metric Event. Its immutable published
-versions are shared across Environments. The Event Ingest Worker resolves the current published
-version; callers never select one.
+**Event Definition**: an App-level schema for one named Metric Event or Web Event. Its immutable
+family is selected when created, and its immutable published versions are shared across
+Environments.
 
-**Metric Event**: an App/Environment/Entity fact submitted with `track()`. It supplies Metric values
-but never becomes the Exposure denominator.
+**Metric Event**: an App/Environment/Entity fact submitted with top-level `track()`. It supplies
+Metric values but never becomes the Exposure denominator.
+
+**Web Event**: an App/Environment browser telemetry fact used for exploratory web analytics, never
+as a Metric input or the Exposure denominator.
+
+**Web Session**: a bounded browser activity scope that correlates Web Events for exploratory
+analytics without creating Entity identity.
+
+**Ambiguous Web Session**: a Web Session containing Web Events from more than one distinct explicit
+Entity. Exploratory analysis attributes the session to no Entity.
+
+**Web Analytics**: exploratory analysis of Web Events by Web Session and optional Entity identity,
+separate from Experiment measurement.
 
 **Metric**: a fact plus an aggregation. Experiments move or guard Metrics. See
 [`apps/analysis-api/CONTEXT.md`](./apps/analysis-api/CONTEXT.md).
@@ -111,12 +123,25 @@ value after creation.
 - Targeting selects Variants using Evaluation Context keyed by the Targeting Key.
 - Experiment controls Flags while running. It does not own them.
 - Experiment randomizes Entities across Variants. One Variant is the Control; the rest are Treatments.
-- Assignment is pure. Exposure is the recorded event and analysis denominator.
+- Assignment is pure. Exposure is the assignment seam's recorded event and analysis denominator.
 - Experiment Runs freeze assignment config. Assignment edits open a new Run; measurement edits
   recompute over the existing Run.
-- Event Definitions are App-level. Each accepted Metric Event is stamped with one immutable
-  published Event Definition Version.
-- Metric Events carry explicit Entity identity. The raw Targeting Key is never stored.
+- Event Definitions are App-level and have one immutable `metric` or `web` family. Each accepted
+  Metric Event or Web Event is stamped with one immutable published Event Definition Version.
+- Event payload strings are immutable definition-time machine-token allowlists; free-form strings and
+  direct-PII property names are not valid Event Definitions.
+- Metric Events carry explicit Entity identity. The raw Targeting Key is never stored, and the
+  App-scoped pseudonym remains stable under routine key rewrapping.
+- Metrics reference only `metric` Event Definitions; Web Events remain outside experiment
+  measurement.
+- Every Web Event belongs to one Web Session and may also carry explicit Entity identity.
+- Exploratory analysis associates a Web Session with an Entity only when exactly one distinct Entity
+  appears in the session. A session containing multiple Entities is an Ambiguous Web Session and is
+  attributed to none.
+- Web Session stitching never creates an Entity, Assignment, Exposure, or Metric Event.
+- Web Analytics reads Web Events and never changes Experiment results.
+- Metric and Web Event reads collapse physical retries to one logical row per `dedup_key` before any
+  count, journey, percentile, or statistical aggregation.
 - Metrics are computed over first-touch unique Entities per Run. SRM uses the same denominator.
 
 ## Reserved language

@@ -45,6 +45,8 @@ App's first-class children plus settings:
 
 - **Flags** — definition (App-level catalog) + the active Environment's Flag Configuration
 - **Experiments** — scoped to the active Environment
+- **Web Analytics** — Environment-scoped exploratory browser telemetry, separate from Experiment
+  results
 - **Segments** — App-level (usable in any Environment)
 - **Metrics** — App-level (definitions usable in any Environment)
 - **Settings** — App config + per-Environment settings: the active Environment's SDK keys

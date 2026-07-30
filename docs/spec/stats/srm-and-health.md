@@ -16,7 +16,7 @@ Chi-square test over the full exposed population.
 
 **Denominator:** `COUNT DISTINCT targeting_key_hash` per arm, from the first-touch dedup query (ADR-0010).
 
-- First-touch per `(targeting_key_hash, run_id)`: `MIN(server_ts)`.
+- First-touch per `(targeting_key_hash, run_id)`: `MIN(server_received_at)`.
 - `__multiple__` Entities excluded from all arms (ADR-0011).
 - This is the **same denominator** Metrics and Conversion Window anchoring use. No secondary
   raw-count denominator exists.

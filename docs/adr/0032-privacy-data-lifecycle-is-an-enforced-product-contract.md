@@ -13,10 +13,11 @@ plane, SDK, CLI, MCP, observability, and analytics.
 
 ## Decision
 
-Every privacy-facing implementation must preserve seven guarantees:
+Every privacy-facing implementation must preserve eight guarantees:
 
 1. **Raw Entity identifiers are not durable state.** Public APIs accept the **Targeting Key**, but
-   durable Entity stores use versioned `targeting_key_hash`, derived from an App-scoped secret salt.
+   durable Entity stores use stable `targeting_key_hash`, derived from an App-scoped secret identity
+   key. Routine secret rotation rewraps the key without changing retained join identity (ADR-0044).
 2. **Evaluation Context values do not leave the request path.** Rule matching may use the values in
    memory. Logs, traces, audit details, errors, and durable rows may include field names and operators,
    never raw values.
@@ -32,6 +33,10 @@ Every privacy-facing implementation must preserve seven guarantees:
    use the same redaction rules.
 7. **No sale/share posture is structural.** Splitch does not sell or share customer Entity data. If
    that changes, a California privacy choices surface is required before launch.
+8. **Telemetry has no free-form personal-data channel.** Metric Event and Web Event string values are
+   definition-time machine-token allowlists, JSON string nodes are enums, and direct-PII property
+   names fail Event Definition publication. Ingest cannot accept an undeclared or unconstrained
+   string payload.
 
 ## Enforcement model
 
@@ -43,6 +48,8 @@ The contract is enforced in five layers:
    - D1 has `privacy_requests` and `entity_deletions` tables for workflow state and analysis
      exclusion.
    - Storage schemas do not include a D1 user profile table.
+   - Event Definition schemas reject free-form strings and direct-PII property names before an event
+     can use them.
 
 2. **Shared redaction primitives.**
    - One scrubber handles Targeting Key, Evaluation Context, common PII field names, nested objects,
@@ -76,6 +83,10 @@ Implementation must include:
   calls the scrubber before emission.
 - Schema tests proving durable Entity rows and keys use `targeting_key_hash` and reject raw
   `targeting_key` storage fields.
+- Event Definition tests proving free-form strings, direct-PII property names, and string values
+  outside immutable machine-token allowlists fail before publication or event acceptance.
+- Identity-key tests proving routine key-encryption-key rotation preserves `targeting_key_hash`,
+  Metric Event idempotency fingerprints, and retained Entity joins.
 - Golden leak tests with canary emails, phone-like strings, user IDs, workspace IDs, and custom
   attributes. No canary may appear in captured logs, traces, audit details, exports, or test
   snapshots unless the test explicitly models a user-facing export.

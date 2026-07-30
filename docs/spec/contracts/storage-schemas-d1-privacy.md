@@ -45,7 +45,7 @@ Analysis exclusion and physical purge ledger for customer Entity deletion reques
 
 Composite PK: `(app_id, id_type, targeting_key_hash, delete_before_ts)`.
 
-The Analysis Worker excludes matching rows where `server_ts <= delete_before_ts` immediately after
+The Analysis Worker excludes matching rows where `server_received_at <= delete_before_ts` immediately after
 the tombstone commits. Physical purge can finish asynchronously.
 
 ## Sources
