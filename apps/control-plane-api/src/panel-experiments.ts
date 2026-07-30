@@ -6,11 +6,13 @@ import {
   resolveFrozenControlIdentity,
 } from "@splitch/contracts";
 import {
+  guardrailBreached,
   type PanelExperimentHealth,
   type PanelExperimentListItem,
   type PanelExperimentResultsOutput,
   parseScopedAnalysisResults,
   scopedAnalysisResultsRequest,
+  srmFiring,
 } from "@splitch/control-plane-sdk/panel-experiments";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
@@ -228,11 +230,8 @@ async function runningHealth(
     // "Collecting data" while the gate is ready to ship it on a Primary
     // Dimension slice.
     significanceReached: lockedFamilyMembers(stats).some((member) => member.result.is_significant),
-    srmFiring:
-      stats.srm.srm_is_mismatch ||
-      stats.srm.activated_srm_mismatch === true ||
-      stats.health.activation_balance_mismatch === true,
-    guardrailBreached: stats.guardrail_results.some((result) => result.is_breached === true),
+    srmFiring: srmFiring(stats),
+    guardrailBreached: guardrailBreached(stats),
   };
 }
 
