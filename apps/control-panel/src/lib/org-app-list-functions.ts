@@ -75,7 +75,7 @@ async function readPendingAppResync(
   orgId: string,
 ): Promise<PendingAppResync | null> {
   const pending = await readPendingResync(kv, tokenHash);
-  if (!pending || pending.resource !== "app" || pending.orgId !== orgId) return null;
+  if (pending?.resource !== "app" || pending.orgId !== orgId) return null;
   return { appSlug: pending.slug, reason: pending.reason, remedy: pending.remedy };
 }
 
