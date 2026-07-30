@@ -100,18 +100,31 @@ export const AppOverviewResponseSchema = z
     environmentId: z.string().min(1),
     experiments: OverviewExperimentsSchema,
     /**
-     * `readTruncated` says the bounded scan of changed Flag Configurations hit its
-     * ceiling: more than `readLimit` of them changed inside the window, so what
-     * follows is the head of that list and not the whole of it. It rides on the
-     * wire because only the Worker that issued the bounded read can observe it,
-     * and a capped list rendered as a complete one is the silent fallback ADR-0036
-     * forbids. `readLimit` travels with it so a skin can state the ceiling without
+     * Two separate bounds sit between "what changed in this Environment" and
+     * "what this card shows", and both are reported rather than inferred, because
+     * a capped list rendered as a complete one is the silent fallback ADR-0036
+     * forbids.
+     *
+     * `changedCount` is how many changed Flag Configurations the Overview
+     * OBSERVED inside the window. `recentlyChanged` holds only the newest few, so
+     * `changedCount > recentlyChanged.length` means what follows is a head, not a
+     * list. The display cap itself is not on the wire because it is not needed:
+     * whenever it binds it equals `recentlyChanged.length`, and a skin that
+     * reported a cap it did not actually apply would be stating a number it
+     * cannot back.
+     *
+     * `readTruncated` says the bounded scan hit its own ceiling first: more than
+     * `readLimit` changed, the Overview stopped counting there, and
+     * `changedCount` is therefore a FLOOR rather than a total. Both bounds ride
+     * on the wire because only the Worker that issued the read can observe them,
+     * and their limits travel with them so a skin can state a ceiling without
      * holding its own copy of a server constant.
      */
     flagConfiguration: z
       .object({
         recentlyChanged: z.array(OverviewFlagConfigChangeSchema),
         windowDays: z.number().int().positive(),
+        changedCount: z.number().int().nonnegative(),
         readTruncated: z.boolean(),
         readLimit: z.number().int().positive(),
       })

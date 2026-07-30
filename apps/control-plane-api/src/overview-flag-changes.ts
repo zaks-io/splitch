@@ -27,6 +27,19 @@ export function flagChangeWindowStart(now: Date): string {
   return new Date(now.getTime() - FLAG_CHANGE_WINDOW_DAYS * DAY_MS).toISOString();
 }
 
+export interface OverviewFlagChanges {
+  /** At most `FLAG_CHANGE_LIMIT` changes, newest first. */
+  readonly recentlyChanged: OverviewFlagConfigChange[];
+  /**
+   * How many changes fell inside the window before the display cap was applied.
+   *
+   * Counted, never assumed. The caller pairs it with the display cap to decide
+   * whether the card is showing a head rather than a whole list, and with its own
+   * read bound to decide whether this number is a total or a floor.
+   */
+  readonly changedCount: number;
+}
+
 /**
  * The most recently changed Flag Configuration in this Environment.
  *
@@ -39,10 +52,10 @@ export function overviewFlagChanges(
   configs: readonly FlagConfigRow[],
   flags: readonly FlagRow[],
   now: Date,
-): OverviewFlagConfigChange[] {
+): OverviewFlagChanges {
   const byId = new Map(flags.map((flag) => [flag.id, flag]));
   const since = Date.parse(flagChangeWindowStart(now));
-  return configs
+  const inWindow = configs
     .flatMap((config) => {
       const changedAt = Date.parse(config.updatedAt);
       // An unparseable timestamp is a corrupt row, not a stale one. Dropping it
@@ -63,6 +76,8 @@ export function overviewFlagChanges(
         },
       ];
     })
-    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
-    .slice(0, FLAG_CHANGE_LIMIT);
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+  // The count is taken BEFORE the cap, which is the whole point: after the slice
+  // there is nothing left to distinguish "5 changed" from "40 changed, 5 shown".
+  return { recentlyChanged: inWindow.slice(0, FLAG_CHANGE_LIMIT), changedCount: inWindow.length };
 }

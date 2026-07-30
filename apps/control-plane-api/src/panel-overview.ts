@@ -77,13 +77,17 @@ export async function panelOverviewRead(
   );
 
   const environment = environmentResponse(access.environment);
+  const flagChanges = overviewFlagChanges(flagConfigs, flags, now);
   const response: AppOverviewResponse = {
     appId: input.appId,
     environmentId: input.environmentId,
     experiments,
     flagConfiguration: {
-      recentlyChanged: overviewFlagChanges(flagConfigs, flags, now),
+      recentlyChanged: flagChanges.recentlyChanged,
       windowDays: FLAG_CHANGE_WINDOW_DAYS,
+      // What the Overview saw, capped by the read bound above it. When
+      // `readTruncated` this is `readLimit`, which is a floor and not a total.
+      changedCount: flagChanges.changedCount,
       readTruncated,
       readLimit: FLAG_CHANGE_READ_LIMIT,
     },

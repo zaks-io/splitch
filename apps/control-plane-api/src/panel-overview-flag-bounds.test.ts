@@ -6,7 +6,7 @@ import {
   setupAttentionRollupFixture,
 } from "./attention-rollup-fixture";
 import { ids, NOW, NOW_MS } from "./config-store-fixture-data";
-import { FLAG_CHANGE_READ_LIMIT } from "./overview-thresholds";
+import { FLAG_CHANGE_LIMIT, FLAG_CHANGE_READ_LIMIT } from "./overview-thresholds";
 import { body, CALM, overview, readerFor } from "./panel-overview-fixture";
 
 /**
@@ -141,6 +141,47 @@ describe("panelOverviewRead Flag Configuration read bound", () => {
         "bulk-flag-47",
         "bulk-flag-46",
       ]);
+    },
+    ATTENTION_TEST_TIMEOUT,
+  );
+});
+
+/**
+ * The display cap is the bound an ordinary Environment hits. Well under the read
+ * ceiling, so these prove the second truncation on its own rather than riding on
+ * the first.
+ */
+describe("panelOverviewRead Flag Configuration display cap", () => {
+  it(
+    "reports how many changed, not just the few it shows",
+    async () => {
+      // Twelve in-window changes, counting the seeded one: more than the card
+      // displays, far fewer than the scan reads.
+      await seedChangedFlagConfigs(11, insideWindow);
+
+      const overviewBody = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
+
+      expect(overviewBody.flagConfiguration.changedCount).toBe(12);
+      expect(overviewBody.flagConfiguration.recentlyChanged).toHaveLength(FLAG_CHANGE_LIMIT);
+      // The read bound never fired, so the count is a total and the Panel is free
+      // to render it as one.
+      expect(overviewBody.flagConfiguration.readTruncated).toBe(false);
+    },
+    ATTENTION_TEST_TIMEOUT,
+  );
+
+  it(
+    "counts only the window, so an old Flag catalog cannot invent changes",
+    async () => {
+      // More rows than the card shows, all changed long before the window.
+      await seedChangedFlagConfigs(FLAG_CHANGE_LIMIT + 5, (index) =>
+        new Date(NOW_MS - (30 + index) * DAY_MS).toISOString(),
+      );
+
+      const overviewBody = await body(await overview(readerFor({ [ids.liveRunId]: CALM })));
+
+      // Only the seeded Flag Configuration, stamped at NOW.
+      expect(overviewBody.flagConfiguration.changedCount).toBe(1);
     },
     ATTENTION_TEST_TIMEOUT,
   );

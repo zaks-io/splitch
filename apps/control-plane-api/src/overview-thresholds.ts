@@ -17,7 +17,16 @@ export const MULTIPLE_ASSIGNMENT_RATE_THRESHOLD = 0.01;
 /** How far back "recently changed" Flag Configuration looks. */
 export const FLAG_CHANGE_WINDOW_DAYS = 7;
 
-/** Most recently-changed Flag Configurations shown; the card is a pointer, not a log. */
+/**
+ * Most recently-changed Flag Configurations SHOWN; the card is a pointer, not a
+ * log, so this stays small on purpose.
+ *
+ * Being small it gets hit routinely, which is why the count of what actually
+ * changed travels with the list rather than being discarded by the slice.
+ * Raising the number would hide that rather than fix it: at any cap, a card that
+ * renders its head as though it were the whole set is the disguised-complete-
+ * result ADR-0036 forbids.
+ */
 export const FLAG_CHANGE_LIMIT = 5;
 
 /**
