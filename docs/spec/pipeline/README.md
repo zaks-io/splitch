@@ -1,12 +1,19 @@
 # Pipeline area spec
 
-**Spine:** Raw Exposure and Activation events flow from five edge runtimes into an append-only log (Tinybird). First-touch dedup is a replayable query at analysis time, never a collapse at ingest. The dedup output is the single denominator for SRM, Metrics, and the Conversion Window anchor. The Activation gate composes onto the dedup as a JOIN. The Assignment Store DO write is driven eagerly on apparent first-touch for sticky experience, while the raw log is the authority for analysis.
+**Spine:** Raw Exposure and Activation events flow from five edge runtimes into an append-only log
+(Tinybird). Metric Events flow through the same Event Ingest Worker into a separate App/Environment/
+Entity fact log. First-touch dedup is a replayable query at analysis time, never a collapse at
+ingest. The dedup output is the single denominator for SRM, Metrics, and the Conversion Window
+anchor. Metric Events supply values, never the denominator. The Activation gate composes onto the
+dedup as a JOIN. The Assignment Store DO write is driven eagerly on apparent first-touch for sticky
+experience, while the raw log is the authority for analysis.
 
 ## Files
 
 | File                                                                     | Purpose                                                                                                                                                                                     |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [exposure-event-contract.md](./exposure-event-contract.md)               | Canonical field list for Exposure and Activation rows on the unified `raw_events` log; dedup key definition; non-exposing paths (peek, test-eval)                                           |
+| [metric-event-contract.md](./metric-event-contract.md)                   | SDK `track()` and `POST /api/sdk/events`; Event Definition Version resolution; validation/no-write ordering; idempotency; analysis compatibility; Web Event deferral                        |
 | [dedup-query-contract.md](./dedup-query-contract.md)                     | The one canonical first-touch dedup query; `__multiple__` quarantine rule; SRM denominator shape; stats engine handoff contract                                                             |
 | [activation-gate-query-contract.md](./activation-gate-query-contract.md) | Activation gate JOIN query; ordering invariant (`activation_ts > first_exposure_ts`); window anchor re-definition; two bias guardrails (activated-population SRM + per-arm activation rate) |
 | [edge-ingest-contract.md](./edge-ingest-contract.md)                     | Five-runtime ingest contract; at-least-once delivery; timestamp sourcing; `run_id`/`id_type`/`app_id` injection rules; holdover write trigger; ingest failure modes                         |

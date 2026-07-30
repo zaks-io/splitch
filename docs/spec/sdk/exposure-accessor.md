@@ -79,8 +79,10 @@ distinctly named — `peekVariant` is not a variant of `evaluate` with a suppres
 that resolves a Variant while firing no Exposure leaves no SRM trace, which under a public
 Client Key is a silent allocation oracle: sweep Targeting Keys, read each variant, and
 reconstruct the rollout without polluting analysis or tripping SRM. So `peekVariant` requires
-an **API Key** (trusted server runtime). The public Client Key keeps exactly one capability —
-Exposure-bearing `evaluate`. Client-side below-the-fold deferral is served by firing
+an **API Key** (trusted server runtime). The public Client Key has no silent allocation-read
+capability: Variant resolution is Exposure-bearing `evaluate`. Its separate write-only event-ingest
+capabilities from ADR-0040 return no allocation or configuration. Client-side below-the-fold
+deferral is served by firing
 `evaluate` when the element scrolls into view, not by a silent client peek. Peek still returns
 only the Variant value; resolution reasons live on the control-plane test-evaluation endpoint.
 

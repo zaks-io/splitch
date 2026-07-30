@@ -118,13 +118,16 @@ deploying, and missing secrets or replay bindings fail closed.
 
 **Evaluation Worker** owns resolution:
 
-- Public SDK evaluate endpoint (Client Key or API Key); peek endpoint (API Key only, ADR-0034)
+- Public SDK evaluate and peek endpoints (Client Key or API Key for evaluate; peek is API Key only,
+  ADR-0034). Metric Event `track` ingress is owned by the Event Ingest Worker; Evaluation does not
+  authenticate, validate, or persist `POST /api/sdk/events`.
 - Control-plane dry-run test-evaluation using the control-plane bearer token
 - Provider and Assignment Store read orchestration
 - No config writes, no analytics reads, and no direct result calculation
 
 **Event Ingest Worker** owns append-only intake:
 
+- Public SDK Metric Event `track` (`POST /api/sdk/events`) under Client Key or API Key
 - Assignment, Exposure, and Metric event validation
 - Queueing, sharded Durable Object dedup, and Tinybird delivery
 - No Variant resolution, no Experiment result calculation, and no control-plane CRUD

@@ -15,6 +15,7 @@ This file pins exactly what is deferred so implementing agents do not guess.
 - **Fail-loud** fallback behavior: `evaluate`/`verify` failure fallbacks return the Default Variant with `reason: ERROR` + `errorCode`; peek failures and Default Variant fallbacks return the canonical error envelope instead (ADR-0036).
 - Single-flag-per-call; batch evaluation is deferred
 - In-memory seen-set (LRU, per-instance)
+- `sdk.track(eventName, { targetingKey, idType, eventId, fields, dimensions })` for Metric Events
 - Client Key / API Key auth (runtime-appropriate)
 
 The SDK speaks the OpenFeature `ResolutionDetails` shape (`value`, `variantName`, `reason`,
@@ -61,9 +62,9 @@ Per-Flag / per-Experiment **attribute-type** validation (e.g. enforcing `plan: s
 deferred. (The `ResolutionDetails` _output_ shape and the `reason`/error enums are **not**
 deferred — they are in scope per ADR-0036.)
 
-**7. OpenFeature `track()` method**
-OpenFeature defines a `track(eventName, context, details)` method for metric events. The thin SDK
-fires Exposures automatically on `evaluate`; no explicit tracking surface is defined.
+**7. Full OpenFeature `track()` compatibility**
+The thin SDK defines a standalone, stateless `track()` surface for Metric Events. Adapting it to
+OpenFeature's client/context/details lifecycle remains deferred with the full Provider surface.
 
 ## Why deferred
 
@@ -82,7 +83,7 @@ Create an ADR titled "OpenFeature provider contract for the data-plane SDK" that
 1. Standard OF SDK library or standalone splitch SDK?
 2. Which language first?
 3. Hook lifecycle: which stages, what do they enable?
-4. `track()` surface: separate from `evaluate` or unified?
+4. How does the existing standalone `track()` surface map to OpenFeature context/details?
 5. Batch evaluation: endpoint contract + SDK ergonomics.
 
 The new ADR supersedes this file for the items it resolves.

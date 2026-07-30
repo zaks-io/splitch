@@ -31,6 +31,8 @@ ErrorCode =
   | 'ACTIVATION_TIMESTAMP_INVALID'// activation_ts <= first_exposure_ts
   | 'INVALID_PAGINATION'          // bad cursor or limit
   | 'INVALID_SORT'                // unrecognized sort field
+  | 'EVENT_SCHEMA_MISMATCH'       // Metric Event fields/Dimensions do not match accepting version
+  | 'ENTITY_TYPE_MISMATCH'        // Metric Event or Metric/Run join uses incompatible Entity type
 
   // Run / Experiment invariants
   | 'RUN_FROZEN'                  // attempted assignment edit on a running Run
@@ -41,6 +43,9 @@ ErrorCode =
   | 'EXPERIMENT_NO_DRAFT'        // Start attempted when the draft has no changes from the current Run
   | 'VARIANT_NOT_AVAILABLE'      // a referenced Variant is not in the Flag's available set for this Environment (ADR-0028)
   | 'RESOURCE_NOT_EMPTY'         // destructive delete blocked because non-cascaded child resources remain
+  | 'EVENT_DEFINITION_UNPUBLISHED'// Event Definition has no version available for ingest
+  | 'EVENT_DEFINITION_IMMUTABLE' // attempted patch/delete of a published Event Definition Version
+  | 'EVENT_ID_CONFLICT'          // caller reused Metric Event eventId with a different payload
 
   // Not found
   | 'EXPERIMENT_NOT_FOUND'
@@ -48,6 +53,8 @@ ErrorCode =
   | 'FLAG_NOT_FOUND'
   | 'VARIANT_NOT_FOUND'
   | 'METRIC_NOT_FOUND'
+  | 'EVENT_DEFINITION_NOT_FOUND'
+  | 'EVENT_DEFINITION_VERSION_NOT_FOUND'
   | 'APP_NOT_FOUND'
   | 'ORGANIZATION_NOT_FOUND'
   | 'USER_NOT_FOUND'
@@ -89,6 +96,8 @@ ErrorCode =
 | `ACTIVATION_TIMESTAMP_INVALID`  | `{ activationTs: string, firstExposureTs: string, message: 'activation must occur after first exposure' }`                                                                                                                                                |
 | `INVALID_PAGINATION`            | `{ field: 'cursor' \| 'limit', reason: string }`                                                                                                                                                                                                          |
 | `INVALID_SORT`                  | `{ field: string, allowedFields: string[] }`                                                                                                                                                                                                              |
+| `EVENT_SCHEMA_MISMATCH`         | `{ eventName: string, eventDefinitionVersionId: string, issues: Array<{ path: string[], message: string }> }` — paths identify unknown/missing/type-invalid fields, Dimensions, or nested JSON keys                                                       |
+| `ENTITY_TYPE_MISMATCH`          | `{ expectedIdType: string, receivedIdType: string, eventDefinitionId: string, metricId?: string, runId?: string }`                                                                                                                                        |
 | `RUN_FROZEN`                    | `{ frozenFields: string[], currentRunId: string, attemptedChange: string, recommendedAction: RecommendedAction }`                                                                                                                                         |
 | `DECISION_LOCKED`               | `{ lockedFields: string[], currentRunId: string, attemptedChange: string, recommendedAction: RecommendedAction }`                                                                                                                                         |
 | `TARGETING_KEY_MISMATCH`        | `{ currentTargetingKey: string, attemptedTargetingKey: string, experimentId: string, recommendedAction: RecommendedAction }`                                                                                                                              |
@@ -97,6 +106,9 @@ ErrorCode =
 | `EXPERIMENT_NO_DRAFT`           | `{ experimentId: string, currentRunId: string \| null, recommendedAction: RecommendedAction }`                                                                                                                                                            |
 | `VARIANT_NOT_AVAILABLE`         | `{ flagId: string, environmentId: string, missingVariants: string[], recommendedAction: RecommendedAction }`                                                                                                                                              |
 | `RESOURCE_NOT_EMPTY`            | `{ resourceType: 'app' \| 'environment', resourceId: string, childType: string, childCount: number, attemptedOp: string }`                                                                                                                                |
+| `EVENT_DEFINITION_UNPUBLISHED`  | `{ eventDefinitionId: string, eventName: string }`                                                                                                                                                                                                        |
+| `EVENT_DEFINITION_IMMUTABLE`    | `{ eventDefinitionId: string, eventDefinitionVersionId: string, attemptedOp: string }`                                                                                                                                                                    |
+| `EVENT_ID_CONFLICT`             | `{ eventId: string }`                                                                                                                                                                                                                                     |
 | `INSUFFICIENT_SCOPES`           | `{ requiredScopes: string[], heldScopes: string[] }`                                                                                                                                                                                                      |
 | `LAST_OWNER_REQUIRED`           | `{ orgId: string }`                                                                                                                                                                                                                                       |
 | `LAST_ENVIRONMENT_REQUIRED`     | `{ appId: string }`                                                                                                                                                                                                                                       |
@@ -285,20 +297,34 @@ under an API Key `verify` returns the full reason (ADR-0037). The mapping from H
 - `APP_NOT_FOUND` / `FLAG_NOT_FOUND` / `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `APP_MISMATCH` / `ORIGIN_NOT_ALLOWED` / `RATE_LIMITED`
   — Note: never fires an Exposure. Returns `ResolutionDetails`; under a Client Key the `reason` is the non-revealing set (never names the rule), under an API Key it returns the full reason. Fail-loud like evaluate.
 
+**POST /api/sdk/events** (data-plane Metric Event intake, Client Key or API Key)
+
+- `UNAUTHORIZED` / `CREDENTIAL_REVOKED` / `ORIGIN_NOT_ALLOWED` / `RATE_LIMITED`
+- `VALIDATION_ERROR` — malformed request or unknown strict top-level field, including Entity
+  Profile/version selectors
+- `EVENT_DEFINITION_NOT_FOUND` — unknown `eventName` within the credential's App
+- `EVENT_DEFINITION_UNPUBLISHED` — definition exists but has no published version
+- `EVENT_SCHEMA_MISMATCH` — unknown/missing/type-invalid field, Dimension, or nested JSON key
+- `ENTITY_TYPE_MISMATCH` — request `idType` does not equal the accepting version's `entityType`
+- `EVENT_ID_CONFLICT` — same App/Environment/`eventId` was already claimed by a different payload
+
+Every failure is no-write. The route returns an error before claiming idempotency or appending
+`metric_events`; an exact idempotent retry returns `202` with `duplicate: true`.
+
 ---
 
 ## HTTP status mapping
 
-| code group                                                                                                                                                                                                                                                                                                          | HTTP status |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `VALIDATION_ERROR`, `ALLOCATION_INVALID`, `ACTIVATION_TIMESTAMP_INVALID`, `INVALID_*`                                                                                                                                                                                                                               | 400         |
-| `UNAUTHORIZED`                                                                                                                                                                                                                                                                                                      | 401         |
-| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`, `ORIGIN_NOT_ALLOWED`, `APP_MISMATCH`                                                                                                                                                                                                                      | 403         |
-| `*_NOT_FOUND`                                                                                                                                                                                                                                                                                                       | 404         |
-| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `RUN_NOT_RUNNING`, `EXPERIMENT_RUNNING`, `EXPERIMENT_NO_DRAFT`, `VARIANT_NOT_AVAILABLE`, `RESOURCE_NOT_EMPTY`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `LAST_ENVIRONMENT_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED`, `CONFIRMATION_REQUIRED` | 409         |
-| `RATE_LIMITED`                                                                                                                                                                                                                                                                                                      | 429         |
-| `PRIVACY_JOB_FAILED`, `INTERNAL_SERVER_ERROR`                                                                                                                                                                                                                                                                       | 500         |
-| `SERVICE_UNAVAILABLE`                                                                                                                                                                                                                                                                                               | 503         |
+| code group                                                                                                                                                                                                                                                                                                                                                                                             | HTTP status |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
+| `VALIDATION_ERROR`, `ALLOCATION_INVALID`, `ACTIVATION_TIMESTAMP_INVALID`, `INVALID_*`, `EVENT_SCHEMA_MISMATCH`, `ENTITY_TYPE_MISMATCH`                                                                                                                                                                                                                                                                 | 400         |
+| `UNAUTHORIZED`                                                                                                                                                                                                                                                                                                                                                                                         | 401         |
+| `CREDENTIAL_REVOKED`, `FORBIDDEN`, `INSUFFICIENT_SCOPES`, `ORIGIN_NOT_ALLOWED`, `APP_MISMATCH`                                                                                                                                                                                                                                                                                                         | 403         |
+| `*_NOT_FOUND`                                                                                                                                                                                                                                                                                                                                                                                          | 404         |
+| `RUN_FROZEN`, `DECISION_LOCKED`, `TARGETING_KEY_MISMATCH`, `RUN_NOT_RUNNING`, `EXPERIMENT_RUNNING`, `EXPERIMENT_NO_DRAFT`, `VARIANT_NOT_AVAILABLE`, `RESOURCE_NOT_EMPTY`, `MULTIPLE_VARIANT_CONFLICT`, `LAST_OWNER_REQUIRED`, `LAST_ENVIRONMENT_REQUIRED`, `PRIVACY_CONFIRMATION_REQUIRED`, `CONFIRMATION_REQUIRED`, `EVENT_DEFINITION_UNPUBLISHED`, `EVENT_DEFINITION_IMMUTABLE`, `EVENT_ID_CONFLICT` | 409         |
+| `RATE_LIMITED`                                                                                                                                                                                                                                                                                                                                                                                         | 429         |
+| `PRIVACY_JOB_FAILED`, `INTERNAL_SERVER_ERROR`                                                                                                                                                                                                                                                                                                                                                          | 500         |
+| `SERVICE_UNAVAILABLE`                                                                                                                                                                                                                                                                                                                                                                                  | 503         |
 
 ## Sources
 

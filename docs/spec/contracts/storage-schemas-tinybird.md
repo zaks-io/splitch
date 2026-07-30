@@ -2,8 +2,9 @@
 
 Tinybird datasource schemas (append-only; raw rows never mutated).
 
-Storage shapes carry internals (dedup keys, audit) that wire shapes must not expose. The exposures and
-audit_log datasources are unbounded append-only workloads. (ADR-0025 "reuse at the leaf, not the envelope".)
+Storage shapes carry internals (dedup keys, audit) that wire shapes must not expose. Exposure,
+Metric Event, and audit datasources are append-only workloads. (ADR-0025 "reuse at the leaf, not the
+envelope".)
 
 ---
 
@@ -42,6 +43,37 @@ distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency 
 The `type` column discriminates Exposures from Activations on the same log. Activations additionally
 carry `counterfactual = 0` by default; future counterfactual triggering sets `counterfactual = 1` with
 no schema change. (ADR-0013.)
+
+### `metric_events` (Metric Event log)
+
+Metric Events live in their own datasource. They do not add a discriminator to `raw_events` and
+cannot enter first-touch Exposure dedup.
+
+Primary sorting key:
+`(app_id, environment_id, event_definition_id, server_received_at, id_type, targeting_key_hash)`.
+
+| Column                        | Type                   | Notes                                                               |
+| ----------------------------- | ---------------------- | ------------------------------------------------------------------- |
+| `dedup_key`                   | String                 | SHA-256 over App, Environment, and caller-stable `event_id`         |
+| `event_id`                    | String                 | Caller-stable logical fact/retry ID                                 |
+| `app_id`                      | String                 | Isolation; injected from credential; always first in WHERE          |
+| `environment_id`              | String                 | Co-scoped with `app_id`; injected from credential                   |
+| `event_definition_id`         | String                 | Resolved App-level Event Definition                                 |
+| `event_definition_version_id` | String                 | Immutable version that validated and accepted the row               |
+| `event_name`                  | String                 | Denormalized stable Event Definition name                           |
+| `id_type`                     | LowCardinality(String) | Validated against the accepting Event Definition Version            |
+| `targeting_key_hash`          | String                 | App-salt HMAC; raw Targeting Key is not persisted                   |
+| `fields`                      | String                 | Canonical JSON object validated against declared named typed fields |
+| `dimensions`                  | String                 | Canonical JSON object validated against declared scalar Dimensions  |
+| `server_received_at`          | DateTime64(3)          | Canonical Metric Event time                                         |
+| `ingest_ts`                   | DateTime64(3)          | Raw append watermark                                                |
+
+The datasource configures `dedup_key` as its Tinybird deduplication key. The sharded ingest
+idempotency seam rejects a reused `event_id` with a different canonical payload before append.
+Accepted rows are retained for the configured replay window, default 90 days, and must never expire
+before the longest promised Conversion Window or analysis replay window.
+
+Web Events are deferred to a separate future datasource. They are never stored in `metric_events`.
 
 ### `audit_log` (Tinybird, unbounded append)
 

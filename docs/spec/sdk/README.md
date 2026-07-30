@@ -1,7 +1,8 @@
 # SDK area spec index
 
-Spine: the SDK is a thin JS/TS HTTP client. `evaluate`/`evaluateDetails` fire an Exposure;
-`peekVariant` and `verify` resolve without one. Every accessor speaks the OpenFeature
+Spine: the SDK is a thin JS/TS HTTP client. `evaluate`/`evaluateDetails` fire an Exposure,
+`peekVariant` and `verify` resolve without one, and `track()` submits a strictly validated Metric
+Event. Every evaluation accessor speaks the OpenFeature
 `ResolutionDetails` shape and is **fail-loud** — a failure-fallback always carries
 `reason: ERROR` + `errorCode`, never a silent default (ADR-0036). `idType` defaults to `'user'`.
 The evaluate endpoint is safe under a public Client Key (returns only the resolved Variant and a
@@ -10,18 +11,19 @@ deferred; the `ResolutionDetails` _shape_ is not.
 
 ## Files
 
-| File                                                                 | One-line purpose                                                                                                                       |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| [credentials.md](./credentials.md)                                   | Client Key vs API Key: which credential, what it can do, lifecycle                                                                     |
-| [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)         | `POST /api/sdk/evaluate` contract: request/response shapes, safety invariants, edge binding                                            |
-| [exposure-accessor.md](./exposure-accessor.md#peek-endpoint-shape)   | `POST /api/sdk/peek` contract: API-Key-only non-exposing Variant resolution                                                            |
-| [verify-endpoint.md](./verify-endpoint.md)                           | `POST /api/sdk/verify` contract: non-exposing setup confirmation, reason tiered by credential (ADR-0037)                               |
-| [exposure-accessor.md](./exposure-accessor.md)                       | `evaluate` (fires Exposure), `peekVariant` + `verify` (no Exposure)                                                                    |
-| [seen-set.md](./seen-set.md)                                         | SDK-local per-instance exposure dedup cache (hot-path optimization only)                                                               |
-| [assignment-store-integration.md](./assignment-store-integration.md) | How the SDK consumes the Assignment Store (holdover pre-load, evaluate-path ordering)                                                  |
-| [five-runtimes.md](./five-runtimes.md)                               | SDK invariants across five Cloudflare edge runtimes                                                                                    |
-| [test-evaluation-endpoint.md](./test-evaluation-endpoint.md)         | Control-plane dry-run: `POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval` — resolves without Exposure (per-Env, ADR-0027) |
-| [openfeature-deferred.md](./openfeature-deferred.md)                 | Explicitly deferred full OpenFeature provider surface                                                                                  |
+| File                                                                         | One-line purpose                                                                                                                       |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| [credentials.md](./credentials.md)                                           | Client Key vs API Key: which credential, what it can do, lifecycle                                                                     |
+| [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)                 | `POST /api/sdk/evaluate` contract: request/response shapes, safety invariants, edge binding                                            |
+| [exposure-accessor.md](./exposure-accessor.md#peek-endpoint-shape)           | `POST /api/sdk/peek` contract: API-Key-only non-exposing Variant resolution                                                            |
+| [verify-endpoint.md](./verify-endpoint.md)                                   | `POST /api/sdk/verify` contract: non-exposing setup confirmation, reason tiered by credential (ADR-0037)                               |
+| [exposure-accessor.md](./exposure-accessor.md)                               | `evaluate` (fires Exposure), `peekVariant` + `verify` (no Exposure)                                                                    |
+| [seen-set.md](./seen-set.md)                                                 | SDK-local per-instance exposure dedup cache (hot-path optimization only)                                                               |
+| [assignment-store-integration.md](./assignment-store-integration.md)         | How the SDK consumes the Assignment Store (holdover pre-load, evaluate-path ordering)                                                  |
+| [five-runtimes.md](./five-runtimes.md)                                       | SDK invariants across five Cloudflare edge runtimes                                                                                    |
+| [test-evaluation-endpoint.md](./test-evaluation-endpoint.md)                 | Control-plane dry-run: `POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval` — resolves without Exposure (per-Env, ADR-0027) |
+| [../pipeline/metric-event-contract.md](../pipeline/metric-event-contract.md) | `track()` and `POST /api/sdk/events`: strict Metric Event validation, identity, version stamping, and idempotency                      |
+| [openfeature-deferred.md](./openfeature-deferred.md)                         | Explicitly deferred full OpenFeature provider surface                                                                                  |
 
 ## Sources
 

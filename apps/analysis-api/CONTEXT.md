@@ -16,6 +16,11 @@ experiment health.
 A fact, the event or action measured, combined with an aggregation that says how it is summarized per
 Entity. It is what an Experiment moves or guards.
 
+**Metric Event**:
+An App/Environment/Entity fact validated against an immutable Event Definition Version. Metric
+Events contribute values for named typed fields. They never replace or narrow the first-touch
+Exposure denominator.
+
 **Binomial Metric** (Proportion Metric):
 A yes/no Metric. The Entity either did the thing or did not. Conversion is a colloquial alias for a
 Binomial Metric event, not a first-class separate concept.
@@ -120,6 +125,9 @@ Entities per arm per Run, excluding `__multiple__`, against the Run's declared a
 - Exposure counts, not Assignment counts, are the analysis denominator.
 - Analysis is scoped to one Experiment Run.
 - First-touch unique Entity per Run is the denominator for Metrics and SRM.
+- Metric Events join a Run only when App, Environment, Entity type, and Targeting Key hash match.
+- Exposed Entities with no matching Metric Event remain in the denominator with zero-valued
+  Binomial, Count, or Revenue aggregates.
 - Activation Metrics re-anchor the Conversion Window.
 - Dimension slicing never changes the underlying Run or Exposure facts.
 

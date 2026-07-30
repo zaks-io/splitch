@@ -154,9 +154,10 @@ SRM-invisible read under a public key is an allocation oracle. This public endpo
 
 Client Key requests pass through Cloudflare WAF before reaching the Worker (ADR-0018, ADR-0034):
 
-- Origin/referrer allow-list enforcement (per-key, WAF-level). New Client Keys are **origin-closed
-  by default** — allow-all is an explicit, loud choice, never the silent default
-  (see [credentials-and-keys.md](../control-plane/credentials-and-keys.md)).
+- Origin/referrer allow-list enforcement (per-key, WAF-level). Auto-provisioned Client Keys start
+  **open** (`origin_allowlist = null`) with loud open-state surfacing; locking to origins is an
+  explicit one-action choice (see [credentials-and-keys.md](../control-plane/credentials-and-keys.md)
+  and ADR-0034 §1).
 - Per-key rate limiting (WAF-level), counter keyed on the Client Key value
 - Progressive rules (challenge before block) layered over the per-key counter
 

@@ -22,7 +22,8 @@ A "Conversion" is informal language for a Binomial Metric event. It is not a fir
 y_i = 1 if entity_i had >= 1 qualifying event in Conversion Window, else 0
 ```
 
-- Input: event log filtered to `[window_anchor, window_anchor + window_duration)`.
+- Input: Metric Events for the Metric's Event Definition filtered to
+  `[window_anchor, window_anchor + window_duration)`.
 - Aggregation: one boolean fold per Entity per Run.
 - Denominator for variance: unique Entities in the arm (deduped, first-touch).
 - Winsorization: **never applied** (0/1 has no tail).
@@ -33,7 +34,7 @@ y_i = 1 if entity_i had >= 1 qualifying event in Conversion Window, else 0
 y_i = SUM(event_value) for entity_i in Conversion Window
 ```
 
-- Input: numeric event values (e.g., pages viewed = 1 per pageview event).
+- Input: the Metric's declared named numeric field from matching Metric Events.
 - Aggregation: per-Entity sum.
 - Denominator: unique Entities.
 - Winsorization: **applied by default** at 99.9th percentile before variance (ADR-0016).
@@ -112,18 +113,26 @@ activation rows satisfy this invariant.
 
 ## Metric definition fields
 
-| Field                | Type                                    | Required | Meaning                                                                 |
-| -------------------- | --------------------------------------- | -------- | ----------------------------------------------------------------------- |
-| `metric_id`          | `string`                                | yes      | Unique within App                                                       |
-| `metric_type`        | `binomial \| count \| revenue \| ratio` | yes      |                                                                         |
-| `event_name`         | `string`                                | yes      | Event type to match in log                                              |
-| `event_value_field`  | `string \| null`                        | cond.    | Required for count/revenue/ratio num                                    |
-| `denom_event_name`   | `string \| null`                        | cond.    | Required for ratio denominator                                          |
-| `denom_value_field`  | `string \| null`                        | cond.    | Required for ratio denominator                                          |
-| `window_duration`    | `duration`                              | yes      | Per-Metric window override                                              |
-| `winsorize`          | `boolean`                               | yes      | Default `true` for count/revenue/ratio, `false` for binomial (ADR-0016) |
-| `winsorize_pct`      | `number`                                | yes      | Default `99.9`; ignored if winsorize=false                              |
-| `downside_threshold` | `number \| null`                        | no       | Set to make this a Guardrail Metric                                     |
+| Field                   | Type                                    | Required | Meaning                                                                 |
+| ----------------------- | --------------------------------------- | -------- | ----------------------------------------------------------------------- |
+| `metric_id`             | `string`                                | yes      | Unique within App                                                       |
+| `metric_type`           | `binomial \| count \| revenue \| ratio` | yes      |                                                                         |
+| `event_definition_id`   | `string \| null`                        | cond.    | Required for non-Ratio Metrics                                          |
+| `event_field_name`      | `string \| null`                        | cond.    | Declared number field; required for Count and Revenue                   |
+| `numerator_metric_id`   | `string \| null`                        | cond.    | Ratio-only, same-App non-Ratio Metric                                   |
+| `denominator_metric_id` | `string \| null`                        | cond.    | Ratio-only, same-App non-Ratio Metric                                   |
+| `window_duration`       | `duration`                              | yes      | Per-Metric window override                                              |
+| `winsorize`             | `boolean`                               | yes      | Default `true` for count/revenue/ratio, `false` for binomial (ADR-0016) |
+| `winsorize_pct`         | `number`                                | yes      | Default `99.9`; ignored if winsorize=false                              |
+| `downside_threshold`    | `number \| null`                        | no       | Set to make this a Guardrail Metric                                     |
+
+The Analysis Worker reads from `metric_events`, not the Exposure/Activation `raw_events` log. For a
+non-Ratio Metric it selects only rows with the same App, Environment, `id_type`,
+`targeting_key_hash`, and `event_definition_id = metric.event_definition_id`. For Ratio Metrics it
+applies that Event Definition match independently to the numerator and denominator component Metrics
+before forming the per-Entity pair. `id_type` must equal the Run's `targeting_key_type`;
+incompatible configuration fails loud. Field values for Count and Revenue resolve from each row's
+accepting Event Definition Version using `event_field_name`.
 
 ## Measurement edits (no new Run)
 

@@ -2,9 +2,12 @@
 
 Every Exposure and Activation event appended to the unified raw log must conform to this contract. The raw log is the system of record (ADR-0010); shape changes here cascade to every downstream consumer.
 
-## Unified event log
+## Unified Exposure/Activation event log
 
-One Tinybird datasource (`raw_events`) holds all event types. The `type` discriminator distinguishes row types. A peek or test-evaluation (dry-run) MUST NOT write any row — those paths never touch the ingest endpoint.
+One Tinybird datasource (`raw_events`) holds Exposure and Activation row types. The `type`
+discriminator distinguishes those two types. Metric Events use the separate `metric_events`
+datasource and contract; future Web Events use another separate family. A peek or test-evaluation
+(dry-run) MUST NOT write any row because those paths never touch ingest.
 
 ## Exposure row (`type = 'exposure'`)
 
@@ -81,3 +84,4 @@ The peek and test-evaluation paths are structurally separate from the ingest end
 - [ADR-0024](../../adr/0024-physical-exposure-dedup-engine-lambda-snapshot-plus-realtime.md) — Tinybird physical ingest
 - [ADR-0026](../../adr/0026-test-evaluation-endpoint-dry-run-never-exposes.md) — test-evaluation non-exposing
 - [../platform/privacy-data-lifecycle.md](../platform/privacy-data-lifecycle.md)
+- [metric-event-contract.md](./metric-event-contract.md)

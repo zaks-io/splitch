@@ -6,16 +6,19 @@ A **Metric** = a fact (the event/action measured) combined with an aggregation (
 
 ## ExperimentMetric shape
 
-| Field              | Type                                   | Req | Meaning                                                |
-| ------------------ | -------------------------------------- | --- | ------------------------------------------------------ |
-| `metric_id`        | `string` (ULID)                        | ✓   | Internal identifier                                    |
-| `app_id`           | `string`                               | ✓   | Owning App                                             |
-| `name`             | `string`                               | ✓   | Display name                                           |
-| `event_name`       | `string`                               | ✓   | The event/action tracked in the log                    |
-| `metric_type`      | `MetricType`                           | ✓   | See below                                              |
-| `aggregation`      | `AggregationConfig`                    | ✓   | Per-Entity aggregation spec (sum, binary, mean, ratio) |
-| `role`             | `"goal" \| "guardrail" \| "secondary"` | ✓   | Role in this Experiment's analysis                     |
-| `guardrail_config` | `GuardrailConfig \| null`              | ✗   | Required when `role = "guardrail"`                     |
+| Field                   | Type                                   | Req   | Meaning                                                |
+| ----------------------- | -------------------------------------- | ----- | ------------------------------------------------------ |
+| `metric_id`             | `string` (ULID)                        | ✓     | Internal identifier                                    |
+| `app_id`                | `string`                               | ✓     | Owning App                                             |
+| `name`                  | `string`                               | ✓     | Display name                                           |
+| `metric_type`           | `MetricType`                           | ✓     | See below                                              |
+| `event_definition_id`   | `string \| null`                       | cond. | Required for non-Ratio Metrics                         |
+| `event_field_name`      | `string \| null`                       | cond. | Named number field; required for Count and Revenue     |
+| `numerator_metric_id`   | `string \| null`                       | cond. | Ratio-only reference to a same-App non-Ratio Metric    |
+| `denominator_metric_id` | `string \| null`                       | cond. | Ratio-only reference to a same-App non-Ratio Metric    |
+| `aggregation`           | `AggregationConfig`                    | ✓     | Per-Entity aggregation spec (sum, binary, mean, ratio) |
+| `role`                  | `"goal" \| "guardrail" \| "secondary"` | ✓     | Role in this Experiment's analysis                     |
+| `guardrail_config`      | `GuardrailConfig \| null`              | ✗     | Required when `role = "guardrail"`                     |
 
 ## Metric types
 
@@ -52,12 +55,12 @@ One Metric divided by another; numerator and denominator are aggregated independ
 
 `MetricType = "ratio"`
 
-`AggregationConfig` for Ratio:
+Ratio Metrics reference two non-Ratio Metrics:
 
 ```
 {
-  numerator:   { event_name: string; aggregation: "sum" | "count" }
-  denominator: { event_name: string; aggregation: "sum" | "count" }
+  numerator_metric_id: string
+  denominator_metric_id: string
 }
 ```
 
@@ -80,6 +83,11 @@ See [activation-event.md](./activation-event.md). A gate rather than a measured 
 ## Analysis unit invariant
 
 Variance is **always** computed over per-Entity aggregates. The denominator is always `COUNT(DISTINCT Entity)`, never events or sessions. Session is a Dimension, not a denominator unit. (CONTEXT.md, ADR-0015)
+
+Every non-Ratio Metric references one Event Definition. The Event Definition's current published
+version must have `entity_type` equal to the Run's `targeting_key_type`. Count and Revenue Metrics
+reference a declared top-level number field by name; arbitrary JSON paths and expressions are not
+Metric contracts.
 
 ## BH FDR family
 

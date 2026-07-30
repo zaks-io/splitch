@@ -8,29 +8,32 @@ D1 holds bounded mutable relational state. Not on the per-request hot path — h
 
 **What lives in D1:**
 
-| table              | purpose                                                                                             |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
-| `organizations`    | Org records (see [organization-and-membership.md](organization-and-membership.md))                  |
-| `apps`             | App records                                                                                         |
-| `org_memberships`  | Org-level user roles                                                                                |
-| `app_memberships`  | App-level user roles                                                                                |
-| `privacy_requests` | Bounded privacy request ledger (IDs/hashes only; no raw Targeting Keys)                             |
-| `entity_deletions` | Entity deletion tombstones for immediate analysis exclusion                                         |
-| `trusted_idps`     | Trusted IdP allow-list for ID-JAG validation                                                        |
-| `client_keys`      | Client Key records (public key material + revocation; per `(app_id, environment_id)`)               |
-| `api_keys`         | API Key records (hash only; secret never stored; per `(app_id, environment_id)`)                    |
-| `environments`     | Environment records (per App; the live axis under App, ADR-0027)                                    |
-| `flags`            | Flag **definitions** (App-level: key, schema, Variant catalog as JSON)                              |
-| `flag_configs`     | Flag **Configuration** per Environment (available Variants, targeting, rollout, enabled)            |
-| `experiments`      | Experiment records + draft assignment config (per `(app_id, environment_id)`)                       |
-| `runs`             | Run records (frozen assignment config snapshot, status, timestamps; per `(app_id, environment_id)`) |
-| `segments`         | Segment definitions (Conditions as JSON)                                                            |
-| `metrics`          | Metric definitions                                                                                  |
+| table                       | purpose                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `organizations`             | Org records (see [organization-and-membership.md](organization-and-membership.md))                  |
+| `apps`                      | App records                                                                                         |
+| `org_memberships`           | Org-level user roles                                                                                |
+| `app_memberships`           | App-level user roles                                                                                |
+| `privacy_requests`          | Bounded privacy request ledger (IDs/hashes only; no raw Targeting Keys)                             |
+| `entity_deletions`          | Entity deletion tombstones for immediate analysis exclusion                                         |
+| `trusted_idps`              | Trusted IdP allow-list for ID-JAG validation                                                        |
+| `client_keys`               | Client Key records (public key material + revocation; per `(app_id, environment_id)`)               |
+| `api_keys`                  | API Key records (hash only; secret never stored; per `(app_id, environment_id)`)                    |
+| `environments`              | Environment records (per App; the live axis under App, ADR-0027)                                    |
+| `flags`                     | Flag **definitions** (App-level: key, schema, Variant catalog as JSON)                              |
+| `flag_configs`              | Flag **Configuration** per Environment (available Variants, targeting, rollout, enabled)            |
+| `experiments`               | Experiment records + draft assignment config (per `(app_id, environment_id)`)                       |
+| `runs`                      | Run records (frozen assignment config snapshot, status, timestamps; per `(app_id, environment_id)`) |
+| `segments`                  | Segment definitions (Conditions as JSON)                                                            |
+| `event_definitions`         | App-level Event Definition identity and current published version pointer                           |
+| `event_definition_versions` | Immutable published Event Definition schemas shared across Environments                             |
+| `metrics`                   | Metric definitions referencing Event Definitions and named typed fields                             |
 
 **What does NOT live in D1:**
 
 - Audit events (unbounded; Tinybird)
 - Exposure log (unbounded; Tinybird)
+- Metric Event log (unbounded; Tinybird)
 - Assignment Store (KV + Durable Object — different seam entirely)
 - High-frequency usage counters (Durable Object counter, periodic D1 rollup only)
 
