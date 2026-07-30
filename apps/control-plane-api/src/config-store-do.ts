@@ -77,6 +77,30 @@ export class ConfigStoreDurableObject
     return this.store().promoteFlagConfig(input);
   }
 
+  previewFlagConfig(
+    input: Parameters<ConfigStoreWriter["previewFlagConfig"]>[0],
+  ): ReturnType<ConfigStoreWriter["previewFlagConfig"]> {
+    return this.store().previewFlagConfig(input);
+  }
+
+  previewTargetingRules(
+    input: Parameters<ConfigStoreWriter["previewTargetingRules"]>[0],
+  ): ReturnType<ConfigStoreWriter["previewTargetingRules"]> {
+    return this.store().previewTargetingRules(input);
+  }
+
+  previewPromotion(
+    input: Parameters<ConfigStoreWriter["previewPromotion"]>[0],
+  ): ReturnType<ConfigStoreWriter["previewPromotion"]> {
+    return this.store().previewPromotion(input);
+  }
+
+  applyApprovedFlagConfig(
+    input: Parameters<ConfigStoreWriter["applyApprovedFlagConfig"]>[0],
+  ): ReturnType<ConfigStoreWriter["applyApprovedFlagConfig"]> {
+    return this.store().applyApprovedFlagConfig(input);
+  }
+
   syncExperimentConfig(
     input: Parameters<ConfigStoreWriter["syncExperimentConfig"]>[0],
   ): ReturnType<ConfigStoreWriter["syncExperimentConfig"]> {

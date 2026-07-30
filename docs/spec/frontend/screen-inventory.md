@@ -44,8 +44,9 @@ The panel has two nested shells, matching the two URL scope roots:
   (environments live under an App). The org switcher (present only for multi-org users) and the
   user menu live in its top bar.
 - **App shell** — `/{orgSlug}/{appSlug}/{env}/...`. The persistent left sidebar (Flags, Experiments,
-  Segments, Metrics, Settings) and a top bar carrying all **three switchers** (org, app, environment).
-  Everything below the App root is scoped to `(appId, environmentId)` resolved from the URL.
+  Web Analytics, Segments, Metrics, Settings) and a top bar carrying all **three switchers** (org,
+  app, environment). Everything below the App root is scoped to `(appId, environmentId)` resolved
+  from the URL.
 
 ## Org-level screens
 
@@ -354,6 +355,44 @@ reusable traffic slice). Segments are **App-level** (usable in any Environment) 
 sidebar hangs off `/{env}`, so the section is labeled **"Segments (App-level)"** and an edit visibly
 applies across all Environments — the same defined-once honesty device the Flag catalog uses, so a
 user never thinks they are editing just this env's Segment.
+
+## Web Analytics
+
+Web Analytics is an Environment-scoped read-only surface, separate from Experiment results. Every App
+role may view it under the existing **View config/results** permission.
+
+Its view state is URL-addressable:
+
+- `/{orgSlug}/{appSlug}/{env}/web-analytics` — **Overview** tab;
+- `/{orgSlug}/{appSlug}/{env}/web-analytics/sessions` — **Sessions** tab;
+- `/{orgSlug}/{appSlug}/{env}/web-analytics/sessions/{sessionIdHash}` — one paginated Web Session
+  journey;
+- `/{orgSlug}/{appSlug}/{env}/web-analytics/vitals` — **Web Vitals** tab.
+
+The selected time window is explicit in `from` and `to` URL query parameters. Overview also carries
+`interval=hour|day`. Sessions carries its optional exact `eventName` and `association` filters in
+the URL. Preset controls rewrite those parameters to concrete UTC timestamps; no tab, window, or
+filter lives only in component state.
+
+Each explicit `from`/`to` pair is a stable Web Analytics snapshot. The panel does not poll it and
+Web Event ingest does not push a per-event WebSocket nudge. **Refresh** reruns the exact same window.
+**Latest** advances `to` to the current UTC instant, preserves the selected duration by moving
+`from`, updates the URL, and then loads that new snapshot.
+
+- **Overview** shows logical Web Event count, Web Session count, anonymous/associated/ambiguous
+  session counts, associated Entity count, the UTC event/session trend, and per-event-name counts.
+- **Sessions** shows the cursor-paginated session summaries. Selecting a row navigates to its stable
+  detail URL, which pages forward through the complete windowed journey without truncation.
+- **Web Vitals** shows p50/p75/p95, exact sample/session counts, and rating counts grouped by Event
+  Definition, metric, unit, and navigation type. It labels the percentiles as t-digest estimates.
+
+The screen never presents Web Events as Metric inputs, joins them to Experiment results, or displays
+raw Targeting Keys. Empty aggregate and collection reads render a zero state. An unavailable
+retention window and a missing session detail render their canonical fail-loud errors with controls
+to select a valid window or return to the Sessions list.
+
+Panel loaders call the same `@splitch/control-plane-sdk` operations used by CLI and MCP. The panel
+never queries Tinybird directly.
 
 ## Metrics — App-level definitions; role is set per-Experiment
 

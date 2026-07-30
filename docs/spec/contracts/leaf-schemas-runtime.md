@@ -1,9 +1,9 @@
 # Leaf schemas: runtime events and identity/credential leaves
 
 Canonical field lists for the runtime/identity glossary nouns: EvaluationContext, Exposure,
-Event Definition, Metric Event, and the Organization/App/User/credential block. Every noun is ONE
-Zod schema in `@splitch/contracts`; request, response, and storage shapes compose these leaves and
-never redefine them.
+Event Definition, Metric Event, Web Event, and the Organization/App/User/credential block. Every
+noun is ONE Zod schema in `@splitch/contracts`; request, response, and storage shapes compose these
+leaves and never redefine them.
 
 Any field addition here propagates to every envelope automatically.
 
@@ -53,13 +53,15 @@ resolved by `MIN(serverReceivedAt)` — the earliest wins. Distinct from the wir
 ## Event Definition
 
 An Event Definition is App-level and shared by every Environment. `name` is the developer-facing
-`eventName` used by `sdk.track(...)` and is unique within the App.
+event name and is unique within the App. `family` selects the Metric Event or Web Event contract and
+cannot change after creation.
 
 | Field                       | Type                | Required | Meaning                                                             |
 | --------------------------- | ------------------- | -------- | ------------------------------------------------------------------- |
 | `id`                        | `string`            | yes      | Stable ID (`evtdef_<ulid>`)                                         |
 | `appId`                     | `string`            | yes      | Owning App                                                          |
 | `name`                      | `string`            | yes      | Stable event name, unique within the App                            |
+| `family`                    | `'metric' \| 'web'` | yes      | Immutable event family selected at creation                         |
 | `displayName`               | `string`            | yes      | Human-readable label                                                |
 | `description`               | `string`            | no       | —                                                                   |
 | `currentPublishedVersionId` | `string \| null`    | yes      | Version the Event Ingest Worker resolves; null before first publish |
@@ -72,40 +74,177 @@ Creating a version atomically publishes it and advances `currentPublishedVersion
 version is immutable and cannot be patched or deleted independently. A breaking contract change
 creates a new version; accepted rows retain the exact version that validated them.
 
-| Field               | Type                     | Required | Meaning                                                         |
-| ------------------- | ------------------------ | -------- | --------------------------------------------------------------- |
-| `id`                | `string`                 | yes      | Stable ID (`evtver_<ulid>`)                                     |
-| `appId`             | `string`                 | yes      | Owning App; must match the Event Definition                     |
-| `eventDefinitionId` | `string`                 | yes      | Parent Event Definition                                         |
-| `version`           | positive integer         | yes      | Dense, server-assigned ordinal within the Event Definition      |
-| `entityType`        | `string`                 | yes      | Required inbound `idType`; the Entity type this event describes |
-| `fields`            | `EventFieldDefinition[]` | yes      | Named typed fact fields; names unique                           |
-| `dimensions`        | `DimensionDefinition[]`  | yes      | Declared slice fields; names unique and disjoint from `fields`  |
-| `schemaHash`        | `string` (sha256)        | yes      | Hash of the canonical fields/dimensions/entityType contract     |
-| `publishedAt`       | `string` (ISO 8601)      | yes      | Server timestamp                                                |
-| `publishedBy`       | `string`                 | yes      | WorkOS user ID or deleted-user tombstone                        |
+The parent Event Definition supplies the family. A version request never carries `family`.
+`entityType` is family-dependent; all other fields share one shape.
+
+| Field               | Type                     | Required | Meaning                                                        |
+| ------------------- | ------------------------ | -------- | -------------------------------------------------------------- |
+| `id`                | `string`                 | yes      | Stable ID (`evtver_<ulid>`)                                    |
+| `appId`             | `string`                 | yes      | Owning App; must match the Event Definition                    |
+| `eventDefinitionId` | `string`                 | yes      | Parent Event Definition                                        |
+| `version`           | positive integer         | yes      | Dense, server-assigned ordinal within the Event Definition     |
+| `entityType`        | `string \| null`         | yes      | Family-specific Entity identity contract, defined below        |
+| `fields`            | `EventFieldDefinition[]` | yes      | Named typed fact fields; names unique                          |
+| `dimensions`        | `DimensionDefinition[]`  | yes      | Declared slice fields; names unique and disjoint from `fields` |
+| `schemaHash`        | `string` (sha256)        | yes      | Hash of the canonical fields/dimensions/entityType contract    |
+| `publishedAt`       | `string` (ISO 8601)      | yes      | Server timestamp                                               |
+| `publishedBy`       | `string`                 | yes      | WorkOS user ID or deleted-user tombstone                       |
+
+For a `metric` Event Definition, `entityType` must be a non-empty string and every inbound Metric
+Event must carry a matching `idType`. For a `web` Event Definition:
+
+- `entityType: null` makes the definition anonymous-only and rejects any supplied Entity identity;
+- a non-empty `entityType` permits either an anonymous Web Event or a complete
+  `targetingKey`/matching `idType` pair.
+
+The request always includes `entityType`, including explicit `null`, so publication never infers the
+privacy boundary from omitted input.
 
 `EventFieldDefinition`:
 
-| Field        | Type                                          | Required | Meaning                                                            |
-| ------------ | --------------------------------------------- | -------- | ------------------------------------------------------------------ |
-| `name`       | `string`                                      | yes      | Stable top-level name referenced by Metrics                        |
-| `type`       | `'boolean' \| 'string' \| 'number' \| 'json'` | yes      | Accepted value family                                              |
-| `required`   | `boolean`                                     | yes      | Whether every event must carry the field                           |
-| `jsonSchema` | closed JSON Schema                            | cond.    | Required only when `type = 'json'`; root and nested objects closed |
+| Field           | Type                                          | Required | Meaning                                                                |
+| --------------- | --------------------------------------------- | -------- | ---------------------------------------------------------------------- |
+| `name`          | `string`                                      | yes      | Stable top-level name referenced by Metrics                            |
+| `type`          | `'boolean' \| 'string' \| 'number' \| 'json'` | yes      | Accepted value family                                                  |
+| `required`      | `boolean`                                     | yes      | Whether every event must carry the field                               |
+| `allowedValues` | matching scalar array                         | cond.    | Required for string; optional for boolean/number                       |
+| `minimum`       | finite `number`                               | no       | Inclusive lower bound; number type only                                |
+| `maximum`       | finite `number`                               | no       | Inclusive upper bound; number type only                                |
+| `jsonSchema`    | closed JSON Schema                            | cond.    | Required only when `type = 'json'`; root and nested objects are closed |
 
 `DimensionDefinition`:
 
-| Field      | Type                                | Required | Meaning                                              |
-| ---------- | ----------------------------------- | -------- | ---------------------------------------------------- |
-| `name`     | `string`                            | yes      | Stable top-level Dimension name                      |
-| `type`     | `'boolean' \| 'string' \| 'number'` | yes      | Scalar only; JSON Dimensions are not supported in V1 |
-| `required` | `boolean`                           | yes      | Whether every event must carry the Dimension         |
+| Field           | Type                                | Required | Meaning                                              |
+| --------------- | ----------------------------------- | -------- | ---------------------------------------------------- |
+| `name`          | `string`                            | yes      | Stable top-level Dimension name                      |
+| `type`          | `'boolean' \| 'string' \| 'number'` | yes      | Scalar only; JSON Dimensions are not supported in V1 |
+| `required`      | `boolean`                           | yes      | Whether every event must carry the Dimension         |
+| `allowedValues` | matching scalar array               | cond.    | Required for string; optional for boolean/number     |
+| `minimum`       | finite `number`                     | no       | Inclusive lower bound; number type only              |
+| `maximum`       | finite `number`                     | no       | Inclusive upper bound; number type only              |
 
 JSON is accepted only for a field declared as `type = 'json'`. Its `jsonSchema` must set
 `additionalProperties: false` for every object node, including nested objects. Schemaless JSON,
 unknown field names, unknown Dimensions, unknown nested keys, and undeclared Entity Profile fields
 fail before any write.
+
+Telemetry payloads never accept free-form strings. Every top-level string field or Dimension requires
+a non-empty immutable `allowedValues` list, and every string node in a closed JSON Schema requires a
+non-empty `enum`. An allowlist or string enum contains at most 256 values. Each permitted string is a
+machine token of 1 to 64 ASCII characters matching `[A-Za-z0-9][A-Za-z0-9_.:-]*`; whitespace, `@`,
+URL path/query delimiters, arbitrary text, and values matching email, phone, IP address, URL, or UUID
+shapes are invalid. Definition and JSON property names are case-insensitively rejected when they are
+direct-PII names, including `email`, `email_address`, `name`, `full_name`, `first_name`, `last_name`,
+`phone`, `phone_number`, `address`, `street_address`, `ip`, `ip_address`, `user_agent`, `cookie`, and
+`token`. The same checks apply recursively to JSON property names.
+
+This structural rule is the enforceable no-direct-PII boundary. It prevents an event caller from
+placing an email, person name, address, raw URL, token, or other unconstrained identifier into an
+otherwise innocuous string field. Event Definition publishers must still choose non-personal machine
+tokens; disguising personal data under a misleading allowed value is a contract violation and is
+covered by definition review and privacy fixtures.
+
+### Closed JSON Schema
+
+`ClosedJsonSchema` is a recursive, strict project schema rather than an arbitrary JSON Schema
+document. It supports exactly these node shapes:
+
+```typescript
+type ClosedJsonSchema =
+  | {
+      type: "object";
+      properties: Record<string, ClosedJsonSchema>;
+      required?: string[];
+      additionalProperties: false;
+    }
+  | {
+      type: "array";
+      items: ClosedJsonSchema;
+      minItems?: number;
+      maxItems?: number;
+    }
+  | {
+      type: "string";
+      enum: string[];
+    }
+  | {
+      type: "number" | "integer";
+      enum?: number[];
+      minimum?: number;
+      maximum?: number;
+    }
+  | {
+      type: "boolean";
+      enum?: boolean[];
+    }
+  | {
+      type: "null";
+    };
+```
+
+Every node is strict and rejects unknown schema keywords. Object nodes must declare `properties`
+and literal `additionalProperties: false`; `required`, when present, contains unique names that
+exist in `properties`. Array nodes must declare one `items` schema. Item-count bounds are
+non-negative finite integers. Numeric bounds are finite values and may be negative. Each minimum
+must be less than or equal to its matching maximum. Every `enum` is non-empty, unique, and matches
+the node's declared type. String enums and property names also pass the telemetry token and
+direct-PII-name rules above.
+
+V1 rejects `$ref`, `$defs`, remote references, recursive schemas, `patternProperties`,
+`unevaluatedProperties`, schema-valued `additionalProperties`, unions, intersections, conditionals,
+regular-expression patterns, formats, defaults, coercion, and unknown keywords. Nullability is
+explicit through a `type: "null"` node; V1 does not accept a union with null. Changing any accepted
+schema node changes `schemaHash` and requires a new immutable Event Definition Version.
+
+Event Definition publication validates the schema itself. Event ingest validates the complete JSON
+value recursively against the stamped schema without coercion. A schema-definition failure returns
+`VALIDATION_ERROR`; an event-value failure returns `EVENT_SCHEMA_MISMATCH`. Neither failure writes
+an Event Definition Version, event claim, outbox payload, queue message, or Tinybird row.
+
+`allowedValues` contains unique JSON scalar values that exactly match the declared scalar type. It is
+required for a string declaration, optional for boolean and number declarations, and invalid on a
+`json` field, whose JSON Schema uses `enum` instead. Ingest rejects a value outside the published
+allowlist with `EVENT_SCHEMA_MISMATCH`. Allowlists participate in `schemaHash`; changing one requires
+a new immutable Event Definition Version.
+
+`minimum` and `maximum` are valid only for a number declaration and are inclusive. Both values must
+be finite, and publication rejects `minimum > maximum`. Ingest rejects out-of-range values with
+`EVENT_SCHEMA_MISMATCH`. Bounds participate in `schemaHash`; changing either requires a new
+immutable Event Definition Version.
+
+## Built-in Web Instrumentation Adapter templates
+
+`@splitch/contracts` exports a canonical immutable manifest used by the SDK, control panel, and CLI.
+Each template contains only:
+
+| Field        | Type                                            | Required | Meaning                                  |
+| ------------ | ----------------------------------------------- | -------- | ---------------------------------------- |
+| `source`     | `'page_view' \| 'web_vital' \| 'browser_error'` | yes      | Built-in adapter key                     |
+| `fields`     | `EventFieldDefinition[]`                        | yes      | Exact source-owned field definitions     |
+| `dimensions` | `DimensionDefinition[]`                         | yes      | Exact source-owned Dimension definitions |
+
+The templates are:
+
+| Source          | Fields                                                                 | Dimensions                                                                                                       |
+| --------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `page_view`     | none                                                                   | required string `navigationType`                                                                                 |
+| `web_vital`     | required number `value`, minimum 0; required number `delta`, minimum 0 | required string `metricName`; required string `rating`; required string `unit`; required string `navigationType` |
+| `browser_error` | none                                                                   | required string `signal`; required string `exceptionType`                                                        |
+
+The templates apply these closed scalar allowlists:
+
+- `navigationType`: `navigate`, `reload`, `back_forward`, `back_forward_cache`, `prerender`,
+  `restore`, `unknown`;
+- `metricName`: `CLS`, `FCP`, `INP`, `LCP`, `TTFB`;
+- `rating`: `good`, `needs-improvement`, `poor`;
+- `unit`: `milliseconds`, `unitless`;
+- `signal`: `error`, `unhandled_rejection`;
+- `exceptionType`: `Error`, `EvalError`, `RangeError`, `ReferenceError`, `SyntaxError`, `TypeError`,
+  `URIError`, `AggregateError`, `DOMException`, `non_error`, `unknown`.
+
+The manifest does not contain `eventName`, display metadata, description, or `entityType`; those are
+application-owned publication choices. Authoring tools expand a template into the ordinary strict
+Event Definition Version request. The API never accepts a template selector.
 
 ---
 
@@ -118,13 +257,17 @@ The strict wire input for `POST /api/sdk/events`:
 | `eventName`    | `string`                                                   | yes      | App-level Event Definition name                                |
 | `targetingKey` | `string`                                                   | yes      | Raw Entity identifier; used in memory and never stored         |
 | `idType`       | `string`                                                   | yes      | Must equal the current Event Definition Version's `entityType` |
-| `eventId`      | `string`                                                   | yes      | Caller-stable logical fact/retry identity                      |
+| `eventId`      | `string` (UUID)                                            | yes      | Caller-stable logical fact/retry identity                      |
 | `fields`       | `Record<string, boolean \| string \| number \| JsonValue>` | yes      | Complete fact payload; validated against declared fields       |
 | `dimensions`   | `Record<string, boolean \| string \| number>`              | yes      | Complete Dimension payload; validated against declarations     |
 
 The object is strict. It has no App, Environment, hash, Entity Profile, Event Definition ID, or
-version selector. `JsonValue` is accepted only after the named field's closed JSON Schema validates
-the complete value.
+version selector. `eventId` must use the canonical lowercase UUID shape. `JsonValue` is accepted
+only after the named field's closed JSON Schema validates the complete value.
+
+The complete UTF-8 encoded Metric Event request body may not exceed 32 KiB (32,768 bytes). The
+Worker enforces the byte limit before Event Definition resolution, admission, a claim, or an outbox
+write.
 
 ## Accepted Metric Event row
 
@@ -133,14 +276,14 @@ The Event Ingest Worker constructs this shape only after the complete request va
 | Field                      | Type                                          | Required | Meaning                                              |
 | -------------------------- | --------------------------------------------- | -------- | ---------------------------------------------------- |
 | `dedupKey`                 | `string` (sha256)                             | yes      | Idempotency key over App, Environment, and `eventId` |
-| `eventId`                  | `string`                                      | yes      | Caller-stable logical fact ID                        |
+| `eventId`                  | `string` (UUID)                               | yes      | Caller-stable logical fact ID                        |
 | `appId`                    | `string`                                      | yes      | Injected from authenticated credential               |
 | `environmentId`            | `string`                                      | yes      | Injected from authenticated credential               |
 | `eventDefinitionId`        | `string`                                      | yes      | Resolved by `eventName` within the App               |
 | `eventDefinitionVersionId` | `string`                                      | yes      | Current immutable version that accepted the row      |
 | `eventName`                | `string`                                      | yes      | Denormalized stable definition name                  |
 | `idType`                   | `string`                                      | yes      | Validated Entity type                                |
-| `targetingKeyHash`         | `string`                                      | yes      | App-salt HMAC; raw Targeting Key is never persisted  |
+| `targetingKeyHash`         | `string`                                      | yes      | Stable App Entity HMAC; raw Targeting Key is absent  |
 | `fields`                   | `Record<string, JsonValue>`                   | yes      | Validated values serialized canonically              |
 | `dimensions`               | `Record<string, boolean \| string \| number>` | yes      | Validated scalar Dimensions                          |
 | `serverReceivedAt`         | `string` (ISO 8601)                           | yes      | Canonical Metric event time                          |
@@ -148,6 +291,106 @@ The Event Ingest Worker constructs this shape only after the complete request va
 
 The authoritative delivery, idempotency, validation, and response contract is
 [metric-event-contract.md](../pipeline/metric-event-contract.md).
+
+---
+
+## Web Event batch request
+
+`POST /api/sdk/web-events` accepts only this strict outer envelope:
+
+| Field    | Type                     | Required | Meaning                                      |
+| -------- | ------------------------ | -------- | -------------------------------------------- |
+| `events` | `WebEventTrackRequest[]` | yes      | 1 to 25 items; one-item batches are accepted |
+
+A bare `WebEventTrackRequest` is invalid. The SDK always sends the batch envelope, including when a
+flush contains one Web Event. Each item has an independent retry identity and this strict shape:
+
+| Field           | Type                                                       | Required | Meaning                                                                         |
+| --------------- | ---------------------------------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| `eventName`     | `string`                                                   | yes      | App-level `web` Event Definition name                                           |
+| `eventId`       | `string` (UUID)                                            | yes      | Logical retry identity generated by the browser SDK                             |
+| `sessionId`     | `string` (UUID)                                            | yes      | Opaque Web Session identifier; SDK-generated by default                         |
+| `captureSource` | `string`                                                   | yes      | Supported source key; `manual`, `page_view`, `web_vital`, or `browser_error` V1 |
+| `sdkVersion`    | `string` (bounded SemVer)                                  | yes      | Splitch browser SDK version                                                     |
+| `traceId`       | `string` (32 lowercase hex)                                | cond.    | Optional W3C trace ID; present exactly when `spanId` is                         |
+| `spanId`        | `string` (16 lowercase hex)                                | cond.    | Optional W3C span ID; present exactly when `traceId` is                         |
+| `targetingKey`  | `string`                                                   | cond.    | Explicit Entity identifier; present exactly when `idType` is                    |
+| `idType`        | `string`                                                   | cond.    | Explicit Entity type; present exactly when `targetingKey` is                    |
+| `fields`        | `Record<string, boolean \| string \| number \| JsonValue>` | yes      | Complete fact payload; validated against declared fields                        |
+| `dimensions`    | `Record<string, boolean \| string \| number>`              | yes      | Complete Dimension payload; validated against declarations                      |
+
+`targetingKey` and `idType` are optional as a pair. Supplying only one fails strict validation.
+`sessionId` must use the canonical lowercase UUID shape. `sdkVersion` must be at most 32 characters
+and match `MAJOR.MINOR.PATCH` or the bounded prerelease forms `-alpha.N`, `-beta.N`, or `-rc.N`.
+`traceId` and `spanId` are optional as a pair and must both be non-zero when present. The source key
+must be supported by the deployed SDK contract; there is no caller-defined source namespace. App
+and Environment come from the authenticated SDK credential. The fragment has no Entity Profile,
+Experiment, Run, Variant, Exposure, Metric Event, Event Definition ID, or version selector.
+Application code does not supply `eventId` to `sdk.web.track()`; the SDK adds it to the wire request
+and retains it across retries. It also stamps `captureSource` and `sdkVersion`; the public manual
+event input cannot override them. Direct HTTP callers can report any supported capture source and
+bounded SDK version, so those values are advisory rather than authenticated provenance.
+
+After resolving the current `web` Event Definition Version, the Worker rejects identity when
+`entityType` is null. When it is non-null, the identity pair remains optional, but a supplied
+`idType` must match.
+
+The complete UTF-8 encoded JSON request body may not exceed 32 KiB (32,768 bytes). The Worker
+measures bytes, not JavaScript string length. The outer envelope validates authentication, the
+per-credential rate limit, strict top-level fields, the 1-to-25 item count, the byte limit, and a
+valid UUID `eventId` on every item before processing any item. Once those gates pass, item schema
+validation and existing-claim lookup are independent. The aggregate Ingest Admission Gate then
+charges all remaining new canonical items as one batch; failure rejects the complete request before
+new claims or outbox writes. After admission passes, new item claims and canonical payloads are
+sealed independently.
+
+## Accepted Web Event row
+
+The Event Ingest Worker constructs this shape only after the complete request validates:
+
+| Field                      | Type                                          | Required | Meaning                                                  |
+| -------------------------- | --------------------------------------------- | -------- | -------------------------------------------------------- |
+| `dedupKey`                 | `string` (sha256)                             | yes      | Family-scoped idempotency key                            |
+| `eventId`                  | `string`                                      | yes      | SDK-generated logical fact ID                            |
+| `appId`                    | `string`                                      | yes      | Injected from authenticated credential                   |
+| `environmentId`            | `string`                                      | yes      | Injected from authenticated credential                   |
+| `eventDefinitionId`        | `string`                                      | yes      | Resolved by `eventName` within the App                   |
+| `eventDefinitionVersionId` | `string`                                      | yes      | Current immutable version that accepted the row          |
+| `eventName`                | `string`                                      | yes      | Denormalized stable definition name                      |
+| `sessionIdHash`            | `string`                                      | yes      | App/Environment-scoped HMAC of the wire Web Session ID   |
+| `captureSource`            | `string`                                      | yes      | Validated advisory capture source                        |
+| `sdkVersion`               | `string`                                      | yes      | Splitch browser SDK version                              |
+| `traceId`                  | `string`                                      | no       | Validated W3C trace ID                                   |
+| `spanId`                   | `string`                                      | no       | Validated W3C span ID                                    |
+| `idType`                   | `string`                                      | no       | Explicit Entity type                                     |
+| `targetingKeyHash`         | `string`                                      | no       | Stable App Entity HMAC; absent for anonymous events      |
+| `fields`                   | `Record<string, JsonValue>`                   | yes      | Values validated against the accepting immutable version |
+| `dimensions`               | `Record<string, boolean \| string \| number>` | yes      | Validated scalar Dimensions                              |
+| `serverReceivedAt`         | `string` (ISO 8601)                           | yes      | Canonical Web Event time                                 |
+| `ingestTs`                 | `string` (ISO 8601)                           | yes      | Append watermark                                         |
+
+`WebEventBatchResult` is the route response and the return type of `sdk.web.flush()`. The route
+returns it with `202`; an empty SDK queue returns the same shape locally without network I/O:
+
+| Field                                | Type                                      | Required | Meaning                                  |
+| ------------------------------------ | ----------------------------------------- | -------- | ---------------------------------------- |
+| `results[].eventId`                  | `string` (UUID)                           | yes      | Matches one input item                   |
+| `results[].status`                   | `'accepted' \| 'duplicate' \| 'rejected'` | yes      | Independent logical result               |
+| `results[].eventDefinitionId`        | `string`                                  | cond.    | Present for accepted and duplicate items |
+| `results[].eventDefinitionVersionId` | `string`                                  | cond.    | Originally accepting immutable version   |
+| `results[].error`                    | `ErrorResponse`                           | cond.    | Present only for a rejected item         |
+
+Results preserve input order. A rejected item creates no idempotency claim and no `web_events` row;
+valid sibling items remain independently accepted.
+
+A Web Session may correlate events before and after explicit Entity identity appears. Earlier rows
+remain anonymous facts and are not rewritten, promoted into Entity facts, or admitted to Experiment
+measurement. Exploratory queries derive one session association from distinct non-null `(idType,
+targetingKeyHash)` pairs across retained rows. Zero pairs remains anonymous, one pair associates the
+journey with that Entity, and more than one pair produces an Ambiguous Web Session attributed to no
+Entity. This projection never mutates accepted rows. The authoritative boundary is
+[web-event-identity.md](../pipeline/web-event-identity.md). The route and capture boundary are
+defined in [web-analytics-capture.md](../sdk/web-analytics-capture.md).
 
 ---
 

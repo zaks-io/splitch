@@ -99,6 +99,10 @@ NudgePayload {
 
 The DO never sends the config body. It sends only "something changed, go look."
 
+Web Event ingest does not broadcast a nudge. Web Analytics uses explicit immutable time-window
+snapshots with manual Refresh and Latest controls, so a high-volume event stream cannot turn the
+control-plane socket into a per-event invalidation channel.
+
 ## Nudge handler
 
 ```

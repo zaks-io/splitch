@@ -1,40 +1,5 @@
-import type { AppOverviewResponse } from "@splitch/contracts";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { OverviewPage } from "./overview-page";
-
-const SCOPE_HREF = "/acme-labs/checkout-api/production";
-
-const ENVIRONMENT: AppOverviewResponse["environment"] = {
-  id: "env_prod",
-  key: "production",
-  name: "Production",
-  policy: {
-    variantAvailability: "confirm",
-    targetingRolloutValue: "confirm",
-    enabledState: "allow",
-    startExperimentRun: "confirm",
-  },
-};
-
-function render(overrides: Partial<AppOverviewResponse>): string {
-  const overview: AppOverviewResponse = {
-    appId: "app_checkout",
-    environmentId: "env_prod",
-    experiments: { status: "ok", needingDecision: [], failing: [], noData: [] },
-    flagConfiguration: { recentlyChanged: [], windowDays: 7 },
-    environment: ENVIRONMENT,
-    ...overrides,
-  };
-  return renderToStaticMarkup(
-    <OverviewPage
-      env="production"
-      onRetry={() => undefined}
-      overview={overview}
-      scopeHref={SCOPE_HREF}
-    />,
-  );
-}
+import { renderOverview as render, SCOPE_HREF } from "./overview-page-test-fixtures";
 
 describe("Overview page", () => {
   it("shows the calm state only when every section was read and is empty", () => {
@@ -138,6 +103,9 @@ describe("Overview page", () => {
     const html = render({
       flagConfiguration: {
         windowDays: 7,
+        changedCount: 1,
+        readTruncated: false,
+        readLimit: 50,
         recentlyChanged: [
           {
             flagId: "flag_checkout",

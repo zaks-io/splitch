@@ -22,6 +22,7 @@ export function OverviewPage({
   // to have been read successfully and to be empty (ADR-0036).
   const calm = isCalmOverview({
     experiments: overview.experiments,
+    flagChangesTruncated: overview.flagConfiguration.readTruncated,
     recentlyChanged: overview.flagConfiguration.recentlyChanged,
   });
 
@@ -54,6 +55,9 @@ export function OverviewPage({
               scopeHref={scopeHref}
             />
             <OverviewFlagChangesCard
+              changedCount={overview.flagConfiguration.changedCount}
+              readLimit={overview.flagConfiguration.readLimit}
+              readTruncated={overview.flagConfiguration.readTruncated}
               recentlyChanged={overview.flagConfiguration.recentlyChanged}
               scopeHref={scopeHref}
               windowDays={overview.flagConfiguration.windowDays}

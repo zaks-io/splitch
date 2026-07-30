@@ -1,8 +1,8 @@
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { deleteEnvironmentCredentials } from "./app-environment-credentials";
 import type { AppEnvironmentDeps } from "./app-environment-model";
-import { randomHex } from "./credential-cache";
 import type { ConfigStoreAccess } from "./config-store-do";
+import { randomHex } from "./credential-cache";
 
 export interface FlagConfigLifecycleDeps {
   repo: Repository;
@@ -61,10 +61,23 @@ export async function purgeFlagConfigsKvForFlag(
 ): Promise<void> {
   const flag = await deps.repo.flags.getFlag(appScope(appId), flagId);
   if (!flag) return;
+  await purgeFlagConfigsKvForKey(deps, appId, flagId, flag.key);
+}
 
+/**
+ * The same purge with the Flag key supplied by the caller, for the path that
+ * deletes the D1 rows first (an approved delete) and so cannot look the key up
+ * afterwards.
+ */
+export async function purgeFlagConfigsKvForKey(
+  deps: FlagConfigLifecycleDeps,
+  appId: string,
+  flagId: string,
+  flagKey: string,
+): Promise<void> {
   const environments = await deps.repo.identity.listEnvironments(appScope(appId));
   for (const environment of environments) {
-    await purgeFlagConfigKv(deps, appId, environment.id, flagId, flag.key);
+    await purgeFlagConfigKv(deps, appId, environment.id, flagId, flagKey);
   }
 }
 

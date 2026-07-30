@@ -4,6 +4,7 @@ import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { expect } from "vitest";
 import { createApp } from "./app";
+import { ALLOW_POLICY } from "./app-environment-model";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
@@ -118,8 +119,11 @@ export async function request(
   path: string,
   jwt: string,
   body?: Record<string, unknown>,
+  // DELETE carries no body, so a bodyless route that requires an Idempotency
+  // Key has to be given one directly.
+  headerIdempotencyKey?: string,
 ): Promise<Response> {
-  const idempotencyKey = body?.idempotency_key;
+  const idempotencyKey = headerIdempotencyKey ?? body?.idempotency_key;
   return h.app.request(path, {
     method,
     headers: {
@@ -144,9 +148,25 @@ export async function createDefaultApp(h: FlagDefinitionHarness) {
   };
 }
 
+/**
+ * Drop every Environment of an App to `allow`. Catalog membership is gated on
+ * `variant_availability`, and a freshly created App's prod Environment ships
+ * `confirm`, so any test that is not about the Approval gate has to opt out of
+ * it explicitly rather than silently depend on the default.
+ */
+export async function allowAllPolicies(h: FlagDefinitionHarness, appId: string) {
+  await h.bindings.d1
+    .prepare("UPDATE environments SET policy = ? WHERE app_id = ?")
+    .bind(JSON.stringify(ALLOW_POLICY), appId)
+    .run();
+}
+
 export function baseFlag(appId: string) {
   return {
     appId,
+    // `flags_create` is an Idempotency-Key route, so the body carries the key the
+    // request will also send as the `Idempotency-Key` header.
+    idempotency_key: `idem-create-flag-${crypto.randomUUID()}`,
     key: "checkout-redesign",
     name: "Checkout redesign",
     schema: { type: "boolean" },
@@ -163,7 +183,17 @@ export async function createFlag(
   jwt: string,
   body = baseFlag(appId),
 ) {
-  const res = await request(h, "POST", `/apps/${appId}/flags`, jwt, body);
+  const idempotencyKey =
+    (body as { idempotency_key?: string }).idempotency_key ??
+    `idem-create-flag-${crypto.randomUUID()}`;
+  const res = await request(
+    h,
+    "POST",
+    `/apps/${appId}/flags`,
+    jwt,
+    { ...body, idempotency_key: idempotencyKey },
+    idempotencyKey,
+  );
   if (res.status !== 200) {
     throw new Error(`create flag failed ${res.status}: ${await res.text()}`);
   }

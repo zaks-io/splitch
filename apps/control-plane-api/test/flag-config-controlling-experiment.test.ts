@@ -64,8 +64,11 @@ describe("Flag Configuration controlling Experiment", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
-      availableVariantNames: ["control"],
-      experiment: { id: ids.experimentId, name: "Checkout experiment" },
+      approvalRequest: null,
+      config: {
+        availableVariantNames: ["control"],
+        experiment: { id: ids.experimentId, name: "Checkout experiment" },
+      },
     });
   });
 });

@@ -92,26 +92,26 @@ value edit, and Experiment Run Start. `allow` does not create an Approval Reques
 same validated application seam directly. `confirm` and future `approve` both create this row and
 differ only in who may Review it.
 
-| Column                     | Type        | Constraints                                                             |
-| -------------------------- | ----------- | ----------------------------------------------------------------------- |
-| `id`                       | text        | PK; `apr_` + 26-character ULID                                          |
-| `app_id`                   | text        | FK → apps, not null                                                     |
-| `operation`                | text        | not null; canonical route `operationId`                                 |
-| `target_type`              | text        | not null; `flag_configuration \| flag_variant \| experiment_draft`      |
-| `target_id`                | text        | not null                                                                |
-| `target_version`           | text        | not null; RFC 8785 JCS SHA-256 token for the complete target projection |
-| `policy_contexts`          | text        | not null; immutable JSON `ApprovalPolicyContext[]`                      |
-| `diff`                     | text        | not null; immutable canonical JSON `ApprovalDiff`                       |
-| `status`                   | text        | not null; `pending \| applied \| declined \| stale`                     |
-| `proposed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone             |
-| `proposed_via`             | text        | not null; resolved auth door                                            |
-| `proposed_at`              | timestamptz | not null                                                                |
-| `resolved_at`              | timestamptz | nullable; set once on `applied`, `declined`, or `stale`                 |
-| `resulting_target_version` | text        | nullable; set only on `applied`                                         |
-| `resulting_resource_type`  | text        | nullable; canonical applied resource type, set only on `applied`        |
-| `resulting_resource_id`    | text        | nullable; canonical applied resource ID, set only on `applied`          |
-| `idempotency_key`          | text        | not null                                                                |
-| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS proposal input                  |
+| Column                     | Type        | Constraints                                                                |
+| -------------------------- | ----------- | -------------------------------------------------------------------------- |
+| `id`                       | text        | PK; `apr_` + 26-character ULID                                             |
+| `app_id`                   | text        | FK → apps, not null                                                        |
+| `operation`                | text        | not null; canonical route `operationId`                                    |
+| `target_type`              | text        | not null; `flag \| flag_configuration \| flag_variant \| experiment_draft` |
+| `target_id`                | text        | not null                                                                   |
+| `target_version`           | text        | not null; RFC 8785 JCS SHA-256 token for the complete target projection    |
+| `policy_contexts`          | text        | not null; immutable JSON `ApprovalPolicyContext[]`                         |
+| `diff`                     | text        | not null; immutable canonical JSON `ApprovalDiff`                          |
+| `status`                   | text        | not null; `pending \| applied \| declined \| stale`                        |
+| `proposed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone                |
+| `proposed_via`             | text        | not null; resolved auth door                                               |
+| `proposed_at`              | timestamptz | not null                                                                   |
+| `resolved_at`              | timestamptz | nullable; set once on `applied`, `declined`, or `stale`                    |
+| `resulting_target_version` | text        | nullable; set only on `applied`                                            |
+| `resulting_resource_type`  | text        | nullable; canonical applied resource type, set only on `applied`           |
+| `resulting_resource_id`    | text        | nullable; canonical applied resource ID, set only on `applied`             |
+| `idempotency_key`          | text        | not null                                                                   |
+| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS proposal input                     |
 
 UNIQUE constraint: `(app_id, proposed_by, idempotency_key)`. Reusing the key with the same
 `request_hash` returns the existing Approval Request. Reusing it with a different hash fails with
@@ -235,13 +235,15 @@ CONFIGURATION (enabled state, available Variant subset, targeting, rollout) live
 ### `event_definitions` (App-level)
 
 Event Definitions are shared by every Environment in one App. The stable `name` is the
-developer-facing `eventName`. The client names it but cannot choose a version.
+developer-facing event name. The client names it but cannot choose a version. `family` is selected
+once and cannot be updated.
 
 | Column                         | Type        | Constraints                                                                           |
 | ------------------------------ | ----------- | ------------------------------------------------------------------------------------- |
 | `id`                           | text        | PK                                                                                    |
 | `app_id`                       | text        | FK → apps, not null                                                                   |
 | `name`                         | text        | not null, unique per `(app_id)`                                                       |
+| `family`                       | text        | not null; immutable `metric \| web`                                                   |
 | `display_name`                 | text        | not null                                                                              |
 | `description`                  | text        | nullable                                                                              |
 | `current_published_version_id` | text        | nullable, FK → event_definition_versions; must belong to this definition and `app_id` |
@@ -254,7 +256,7 @@ developer-facing `eventName`. The client names it but cannot choose a version.
 
 Creating a version and advancing `current_published_version_id` is one D1 transaction. There is no
 UPDATE or independent DELETE path for a published version. App deletion removes definitions and
-versions only after the normal App data purge has removed dependent Metric Event rows.
+versions only after the normal App data purge has removed dependent Metric Event and Web Event rows.
 
 | Column                | Type        | Constraints                                                      |
 | --------------------- | ----------- | ---------------------------------------------------------------- |
@@ -262,7 +264,7 @@ versions only after the normal App data purge has removed dependent Metric Event
 | `app_id`              | text        | FK → apps, not null                                              |
 | `event_definition_id` | text        | FK → event_definitions, not null; must match this row's `app_id` |
 | `version`             | integer     | not null, positive, unique per `(event_definition_id)`           |
-| `entity_type`         | text        | not null; required `id_type` for accepted Metric Events          |
+| `entity_type`         | text        | nullable only for anonymous-only `web` Event Definition Versions |
 | `fields`              | text        | not null; JSON `EventFieldDefinition[]`                          |
 | `dimensions`          | text        | not null; JSON `DimensionDefinition[]`                           |
 | `schema_hash`         | text        | not null; SHA-256 of canonical Entity/field/Dimension contract   |
@@ -271,6 +273,10 @@ versions only after the normal App data purge has removed dependent Metric Event
 
 UNIQUE constraints: `(event_definition_id, version)` and `(event_definition_id, schema_hash)`.
 Every repository query carries `app_id` first even when it also has `event_definition_id`.
+
+The Worker rejects null `entity_type` for a `metric` parent. For a `web` parent, null prohibits Entity
+identity; a non-null value permits anonymous events or a matching optional identity pair. The
+explicit nullable value participates in `schema_hash`.
 
 D1 does not enforce composite/co-scoped foreign keys across `event_definitions` and
 `event_definition_versions`. The Worker data-access seam must reject any write where:

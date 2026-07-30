@@ -12,7 +12,7 @@ COPY_SCHEDULE: @hourly              -- freshness/cost dial; not a correctness di
 SOURCE QUERY (the canonical dedup definition):
   SELECT
     app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
-    MIN(server_ts)                                        AS first_exposure_ts,
+    MIN(server_received_at)                                        AS first_exposure_ts,
     CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
          ELSE MAX(variant) END                           AS variant,
     now64(3)                                              AS snapshot_ts,
@@ -28,9 +28,9 @@ TARGET: deduped_exposures
 The schedule is hourly by default. The real-time tail covers the window since the last snapshot, so a slower schedule never produces incorrect results, only a larger tail at query time.
 
 `copy_watermark_ts` is captured at the start of the Copy Pipe run. It is an ingest-time watermark,
-not an event-time watermark. `server_ts` remains the analysis clock; `ingest_ts` only answers
+not an event-time watermark. `server_received_at` remains the analysis clock; `ingest_ts` only answers
 "was this raw row already included in the snapshot?" This prevents a late-arriving row with an
-old `server_ts` from falling between the snapshot and the tail.
+old `server_received_at` from falling between the snapshot and the tail.
 
 **COPY_MODE `replace` vs incremental:** start with `replace` (simpler, always correct). Switch to incremental (append only rows since `MAX(snapshot_ts)`) when full-rebuild scan time grows measurable. The `snapshot_ts` column enables this transition.
 
@@ -47,7 +47,7 @@ NODE tail_layer:
   -- dedup query applied only to raw rows since the last snapshot
   SELECT
     app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
-    MIN(server_ts)                                        AS first_exposure_ts,
+    MIN(server_received_at)                                        AS first_exposure_ts,
     CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
          ELSE MAX(variant) END                           AS variant
   FROM raw_events
@@ -70,9 +70,9 @@ NODE union_and_final_dedup:
   GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
 ```
 
-The tail uses `ingest_ts`, not `server_ts`, so events that arrive after the snapshot ran but
-carry an earlier `server_ts` still appear in the tail. The final union re-dedup then lets
-`MIN(server_ts)` choose the first-touch row. This is the correct behavior per ADR-0010.
+The tail uses `ingest_ts`, not `server_received_at`, so events that arrive after the snapshot ran but
+carry an earlier `server_received_at` still appear in the tail. The final union re-dedup then lets
+`MIN(server_received_at)` choose the first-touch row. This is the correct behavior per ADR-0010.
 
 **Shared definition rule (ADR-0024, seam finding):** The dedup logic in the Copy Pipe and the tail node is identical. Both are generated from one shared Jinja template at build time — never hand-copied. Drift between the two is a correctness failure.
 

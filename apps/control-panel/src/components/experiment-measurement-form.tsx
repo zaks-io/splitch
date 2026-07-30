@@ -110,7 +110,7 @@ export function ExperimentMeasurementForm({
                 }}
                 step={1}
                 type="number"
-                value={conversionHours}
+                value={Number.isFinite(conversionHours) ? conversionHours : ""}
               />
               <FieldDescription>
                 Hours after first Exposure included in measurement.

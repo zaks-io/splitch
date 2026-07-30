@@ -95,6 +95,13 @@ describe("Control Panel delegation secret", () => {
       expect(config.env?.[target]?.secrets?.required).toContain("CONTROL_PANEL_DELEGATION_SECRET");
     });
   }
+
+  it("keeps the local Control Panel delegation value out of committed vars", () => {
+    const config = readWranglerConfig(join(repoRoot, WORKER_WRANGLER_PATHS["control-panel"]));
+
+    expect(config.secrets?.required).toContain("CONTROL_PANEL_DELEGATION_SECRET");
+    expect(config.vars?.CONTROL_PANEL_DELEGATION_SECRET).toBeUndefined();
+  });
 });
 
 describe("Deploy workflow observability secrets", () => {

@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@splitch/ui/components/dialog";
 import { Input } from "@splitch/ui/components/input";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { type MutationErrorSurface, mutationErrorSurface } from "#lib/api";
 import { createControlPanelFlag } from "#lib/control-plane-flag-functions";
 import {
@@ -38,6 +38,10 @@ export function CreateFlagForm({
   const [submitted, setSubmitted] = useState(false);
   const [mutationError, setMutationError] = useState<MutationErrorSurface | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Minted here, at the submission boundary, so a double-click or a retry after a
+  // failed response replays the SAME create instead of minting a second Flag.
+  // Editing the draft or a successful create ends the attempt series.
+  const idempotencyKey = useRef<string | null>(null);
 
   const issues = draftIssues(draft);
   const shown = submitted ? issues : [];
@@ -47,6 +51,7 @@ export function CreateFlagForm({
   function edit(next: typeof draft) {
     setDraft(next);
     setMutationError(null);
+    idempotencyKey.current = null;
   }
 
   function changeValueType(valueType: VariantValueType) {
@@ -68,9 +73,14 @@ export function CreateFlagForm({
     setMutationError(null);
     setIsSubmitting(true);
     try {
-      const result = await createControlPanelFlag({ data: { appId, environmentId, draft } });
-      if (result.ok) onCreated(result.data.key);
-      else setMutationError(mutationErrorSurface(result));
+      idempotencyKey.current ??= crypto.randomUUID();
+      const result = await createControlPanelFlag({
+        data: { appId, environmentId, draft, idempotencyKey: idempotencyKey.current },
+      });
+      if (result.ok) {
+        idempotencyKey.current = null;
+        onCreated(result.data.key);
+      } else setMutationError(mutationErrorSurface(result));
     } catch {
       setMutationError({
         kind: "form",

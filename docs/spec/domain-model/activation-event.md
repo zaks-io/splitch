@@ -20,7 +20,7 @@ Activation is its own row type on the same append-only Exposure log (ADR-0010, A
 | `run_id`             | `string`          | ✓   | Experiment Run at activation time                                                                       |
 | `targeting_key_hash` | `string`          | ✓   | HMAC-derived Entity identifier                                                                          |
 | `id_type`            | `string`          | ✓   | Entity type; always explicit                                                                            |
-| `server_ts`          | `timestamp`       | ✓   | Server-received-at                                                                                      |
+| `server_received_at` | `timestamp`       | ✓   | Server-received-at                                                                                      |
 | `type`               | `"activation"`    | ✓   | Discriminator                                                                                           |
 | `counterfactual`     | `boolean \| null` | ✗   | `null` unless emitted by Control-arm would-have-activated events (additive extension, no schema change) |
 
@@ -52,8 +52,8 @@ The anchor for **CUPED pre-period** stays fixed at `first_exposure_ts` even when
 ```
 activated_entities = (
   SELECT e.targeting_key_hash, e.id_type, e.run_id,
-         MIN(e.server_ts) AS first_exposure_ts,
-         MIN(a.server_ts) AS activation_ts
+         MIN(e.server_received_at) AS first_exposure_ts,
+         MIN(a.server_received_at) AS activation_ts
   FROM   deduped_exposures e
   JOIN   raw_events a
     ON   a.experiment_id = e.experiment_id
@@ -61,7 +61,7 @@ activated_entities = (
     AND  a.targeting_key_hash = e.targeting_key_hash
     AND  a.id_type = e.id_type
     AND  a.type = 'activation'
-    AND  a.server_ts > e.first_exposure_ts  -- ordering constraint
+    AND  a.server_received_at > e.first_exposure_ts  -- ordering constraint
   GROUP BY e.targeting_key_hash, e.id_type, e.run_id
 )
 ```

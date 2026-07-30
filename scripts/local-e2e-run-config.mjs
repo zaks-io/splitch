@@ -56,6 +56,24 @@ export const LOCAL_E2E_RUN_CONFIG = Object.freeze({
   }),
 });
 
+/**
+ * D1's `runs.decision_family` / `runs.guardrail_decisions` hold `MetricRef[]`
+ * — `[{"metricId": "..."}]` — which is what `experiment-start.ts` writes.
+ *
+ * Tinybird's `analysis_run_inputs` has columns with the SAME TWO NAMES holding a
+ * different, snake_case shape (`metric_id`, `variant`, `downside_threshold`, …),
+ * because that one feeds `StatsInputSchema`. Two stores, two shapes, one pair of
+ * names. Three seed rows had the Tinybird shape in the D1 column, which nothing
+ * read until the Setup tab did, and then `metricIds` returned `[undefined]` and
+ * failed the whole Experiment-detail parse.
+ *
+ * So D1 Run decisions are built here and only here. The Tinybird side has its own
+ * builder in `local-e2e-analysis-inputs.mjs`; do not cross them.
+ */
+export function d1RunDecisions(...metricIds) {
+  return JSON.stringify(metricIds.map((metricId) => ({ metricId })));
+}
+
 function variantPair(flag) {
   return [
     { id: `variant_${flag}_control_e2e`, name: "control", value: false },

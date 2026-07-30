@@ -13,8 +13,9 @@ import {
 import { ExperimentIntegrityError } from "./attention-rollup-errors";
 import { mapWithConcurrency } from "./bounded-map";
 import { classifyOverviewExperiments, type OverviewExperimentReading } from "./overview-attention";
-import { overviewFlagChanges } from "./overview-flag-changes";
+import { flagChangeWindowStart, overviewFlagChanges } from "./overview-flag-changes";
 import {
+  FLAG_CHANGE_READ_LIMIT,
   FLAG_CHANGE_WINDOW_DAYS,
   OVERVIEW_ANALYSIS_READ_CONCURRENCY,
   OVERVIEW_ANALYSIS_READ_LIMIT,
@@ -52,20 +53,43 @@ export async function panelOverviewRead(
   if (!access.ok) return access.response;
 
   const scope = envScope(input.appId, input.environmentId);
-  const [experiments, flagConfigs, flags] = await Promise.all([
+  const now = (deps.now ?? (() => new Date()))();
+  const [experiments, scanned] = await Promise.all([
     overviewExperiments(deps, input),
-    deps.repo.flags.flagConfigs.findMany(scope),
-    deps.repo.flags.flags.findMany(appScope(input.appId)),
+    // One row past the ceiling, so truncation is OBSERVED rather than inferred
+    // from a full page. The scan is also cut to the window the card renders, so
+    // hitting the ceiling means "more changed here than we will look at" — not
+    // merely "this App has a lot of Flags".
+    deps.repo.flags.listRecentFlagConfigs(
+      scope,
+      flagChangeWindowStart(now),
+      FLAG_CHANGE_READ_LIMIT + 1,
+    ),
   ]);
+  const readTruncated = scanned.length > FLAG_CHANGE_READ_LIMIT;
+  const flagConfigs = readTruncated ? scanned.slice(0, FLAG_CHANGE_READ_LIMIT) : scanned;
+  // Only the Flags the bounded scan actually referenced. Reading the App's whole
+  // Flag catalog to resolve keys and names would put the unbounded read straight
+  // back, one table over.
+  const flags = await deps.repo.flags.listFlagsByIds(
+    appScope(input.appId),
+    flagConfigs.map((config) => config.flagId),
+  );
 
   const environment = environmentResponse(access.environment);
+  const flagChanges = overviewFlagChanges(flagConfigs, flags, now);
   const response: AppOverviewResponse = {
     appId: input.appId,
     environmentId: input.environmentId,
     experiments,
     flagConfiguration: {
-      recentlyChanged: overviewFlagChanges(flagConfigs, flags, (deps.now ?? (() => new Date()))()),
+      recentlyChanged: flagChanges.recentlyChanged,
       windowDays: FLAG_CHANGE_WINDOW_DAYS,
+      // What the Overview saw, capped by the read bound above it. When
+      // `readTruncated` this is `readLimit`, which is a floor and not a total.
+      changedCount: flagChanges.changedCount,
+      readTruncated,
+      readLimit: FLAG_CHANGE_READ_LIMIT,
     },
     environment: {
       id: environment.id,

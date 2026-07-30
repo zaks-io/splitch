@@ -17,7 +17,7 @@ const flags = [
 
 describe("overviewFlagChanges", () => {
   it("drops Flag Configuration changed before the window", () => {
-    const changes = overviewFlagChanges(
+    const result = overviewFlagChanges(
       [
         { flagId: "flag_a", enabled: true, updatedAt: isoDaysAgo(1) },
         { flagId: "flag_b", enabled: false, updatedAt: isoDaysAgo(FLAG_CHANGE_WINDOW_DAYS + 1) },
@@ -26,10 +26,13 @@ describe("overviewFlagChanges", () => {
       NOW,
     );
 
-    expect(changes.map((change) => change.flagKey)).toEqual(["checkout-redesign"]);
+    expect(result.recentlyChanged.map((change) => change.flagKey)).toEqual(["checkout-redesign"]);
+    // Out-of-window rows are not changes in this window, so they must not inflate
+    // the count the card reports.
+    expect(result.changedCount).toBe(1);
   });
 
-  it("orders by most recent and caps the list", () => {
+  it("counts every change in the window, then caps what it returns", () => {
     const configs = Array.from({ length: FLAG_CHANGE_LIMIT + 2 }, (_unused, index) => ({
       flagId: `flag_${index}`,
       enabled: index % 2 === 0,
@@ -41,10 +44,13 @@ describe("overviewFlagChanges", () => {
       name: `Flag ${index}`,
     }));
 
-    const changes = overviewFlagChanges(configs, manyFlags, NOW);
+    const result = overviewFlagChanges(configs, manyFlags, NOW);
 
-    expect(changes).toHaveLength(FLAG_CHANGE_LIMIT);
-    expect(changes.map((change) => change.flagKey)).toEqual([
+    expect(result.recentlyChanged).toHaveLength(FLAG_CHANGE_LIMIT);
+    // The cap is what makes this card a pointer; the count is what keeps the cap
+    // from being silent (ADR-0036). Taken before the slice, so it survives it.
+    expect(result.changedCount).toBe(FLAG_CHANGE_LIMIT + 2);
+    expect(result.recentlyChanged.map((change) => change.flagKey)).toEqual([
       "flag-key-0",
       "flag-key-1",
       "flag-key-2",
@@ -54,13 +60,13 @@ describe("overviewFlagChanges", () => {
   });
 
   it("carries the Configuration's enabled state, not the Flag definition's", () => {
-    const changes = overviewFlagChanges(
+    const result = overviewFlagChanges(
       [{ flagId: "flag_c", enabled: false, updatedAt: isoDaysAgo(2) }],
       flags,
       NOW,
     );
 
-    expect(changes[0]).toEqual({
+    expect(result.recentlyChanged[0]).toEqual({
       flagId: "flag_c",
       flagKey: "pricing-page",
       flagName: "Pricing page",

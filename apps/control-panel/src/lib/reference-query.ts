@@ -1,3 +1,4 @@
+import type { ApprovalRequest } from "@splitch/contracts";
 import type { FlagConfigGetOutput } from "@splitch/control-plane-sdk";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import type { ApiResult, MutationErrorSurface } from "./api";
@@ -33,7 +34,11 @@ export function loadReferenceFlagConfig(
 }
 
 export type ReferenceMutationResult =
-  | { readonly ok: true; readonly data: FlagConfigGetOutput }
+  | {
+      readonly ok: true;
+      readonly data: FlagConfigGetOutput;
+      readonly approvalRequest: ApprovalRequest | null;
+    }
   | { readonly ok: false; readonly error: MutationErrorSurface };
 
 /**
@@ -55,7 +60,11 @@ export async function updateReferenceFlagConfig(
   await queryClient.invalidateQueries({
     queryKey: queryKeys.flag.prefix(scope.appId, scope.environmentId),
   });
-  return { ok: true, data: result.data };
+  return {
+    ok: true,
+    data: result.data.config,
+    approvalRequest: result.data.approvalRequest,
+  };
 }
 
 class ReferenceQueryError extends Error {

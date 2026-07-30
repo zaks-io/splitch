@@ -309,11 +309,19 @@
         "SPLITCH_SMOKE_CLIENT_SECRET"
       ]
     },
-    "d1:migrate:local": {
+    "//#d1:migrate:local": {
       "cache": false
     },
-    "d1:migrate:populated": {
+    "//#d1:migrate:populated": {
+      "cache": false,
+      "dependsOn": ["//#d1:migrate:local"]
+    },
+    "//#secrets:range": {
       "cache": false
+    },
+    "//#knip": {
+      "cache": false,
+      "dependsOn": ["@splitch/sdk#build"]
     },
     "migrate": {
       "cache": false,
@@ -342,7 +350,7 @@
     "tinybird:deploy:production": {
       "cache": false
     },
-    "tinybird:local": {
+    "//#tinybird:local": {
       "cache": false
     },
     "wrangler": {
@@ -365,6 +373,18 @@
       "dependsOn": ["build"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/contracts/src/**"],
       "outputs": []
+    },
+    "@splitch/sdk#pack:dry-run": {
+      "dependsOn": ["build", "//#knip"],
+      "cache": false
+    },
+    "@splitch/sdk#pack:check": {
+      "dependsOn": ["pack:dry-run"],
+      "cache": false
+    },
+    "@splitch/sdk#test:consumer-smoke": {
+      "dependsOn": ["pack:check"],
+      "cache": false
     }
   }
 }

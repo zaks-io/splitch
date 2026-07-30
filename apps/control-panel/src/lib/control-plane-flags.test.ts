@@ -94,7 +94,7 @@ describe("Control Panel Flags transport", () => {
     );
 
     const result = await flags.create(
-      flagCreateInput("app_checkout", { ...booleanPresetDraft(), key: "new-checkout" }),
+      flagCreateInput("app_checkout", { ...booleanPresetDraft(), key: "new-checkout" }, "idem-1"),
     );
     const request = capturedRequest;
 
@@ -124,6 +124,9 @@ describe("Control Panel Flags transport", () => {
     await expect(request?.clone().json()).resolves.toMatchObject({
       appId: "app_checkout",
       key: "new-checkout",
+      // The caller's key reaches the Control Plane verbatim, which is what makes
+      // a retried submission replay instead of minting a second Flag.
+      idempotency_key: "idem-1",
       schema: { type: "boolean" },
       variants: [
         { name: "disabled", value: false, isDefault: true },

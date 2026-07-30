@@ -13,13 +13,21 @@ Do not collapse MCP, Evaluation, Event Ingest, Analysis, Auth API, or Control Pl
 generic `api` or `edge` Worker. Shared code moves into `packages/` only when it passes the deletion
 test. Worker-specific bindings and orchestration stay inside the owning Worker.
 
+The diagram shows the accepted target architecture. In the current checkout, Event Ingest still
+writes implemented `raw_events` and `raw_evaluations` rows directly to Tinybird one row per request
+and has no Queue or Ingest Admission Gate Durable Object binding. Metric Event and Web Event intake
+are not implemented. ADR-0043 owns the pending ingest refactor.
+
 ```mermaid
 flowchart LR
   SDK["Public SDK<br/>Client Key or API Key"] --> Eval["Evaluation Worker"]
   Eval --> Provider["Provider config<br/>KV"]
   Eval --> Store["Assignment Store<br/>KV read, DO write"]
   Eval --> Ingest["Event Ingest Worker"]
-  Ingest --> Tinybird["Tinybird raw log"]
+  Ingest --> Admission["Per-App, Environment, and stream<br/>Admission Gate DOs"]
+  Ingest --> Queue["Four datasource-specific<br/>durable ingest queues"]
+  Queue --> Ingest
+  Ingest --> Tinybird["Tinybird append-only logs"]
   Tinybird --> Analysis["Analysis Worker"]
   Analysis --> Results["Results, SRM, Metric reads"]
 
@@ -37,16 +45,16 @@ flowchart LR
 
 ## Worker boundaries
 
-| Worker                   | Trust boundary               | Owns                                                                                                                                                                       | Must not own                                                               |
-| ------------------------ | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Control Plane API Worker | Authenticated management API | Organization, App, Environment, Flag definition, Flag Configuration, Promotion, Experiment, Run, Event Definition, Metric, Segment, Client Key, API Key, generated OpenAPI | MCP transport, public SDK evaluate, event ingest, Tinybird result reads    |
-| MCP Worker               | Agent protocol adapter       | Remote MCP OAuth PRM/auth.md handshake, tool registry, schema derivation, calls through `@splitch/control-plane-sdk`                                                       | D1/KV/Tinybird bindings, domain invariants, direct Worker imports          |
-| Evaluation Worker        | Data-plane resolution        | Public Client Key evaluate, API-Key-only peek (ADR-0034), control-plane dry-run test-eval, Provider reads, Assignment Store reads/writes, Exposure creation                | Config mutation, Tinybird result reads, Metric/statistical calculation     |
-| Event Ingest Worker      | Append-only intake           | Exposure, Activation, and Metric Event validation; Event Definition version stamping; queueing; sharded Durable Object dedup; Tinybird delivery                            | Variant resolution, Run lifecycle, results calculation, control-plane CRUD |
-| Analysis Worker          | Results read model           | Tinybird proxy reads, SRM, Metric and statistical result contracts, `app_id` and `environment_id` injection from auth/path context                                         | SDK evaluate, event ingest, config mutation                                |
-| Auth API Worker          | Identity and token surface   | OAuth metadata, ID-JAG/device/anonymous doors, token issuance, token revocation, provisional create handoff                                                                | Post-create Organization/App management, SDK credentials, analytics        |
-| Control Panel Worker     | Authenticated UI             | SSR routes, loader session validation, TanStack Query cache, live-update socket lifecycle                                                                                  | Domain invariants, direct storage access, direct Worker code imports       |
-| Marketing Worker         | Public UI                    | Static/prerendered marketing surface, shared design system usage                                                                                                           | Authenticated App data, control-plane SDK transport, Worker bindings       |
+| Worker                   | Trust boundary               | Owns                                                                                                                                                                                                                  | Must not own                                                               |
+| ------------------------ | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Control Plane API Worker | Authenticated management API | Organization, App, Environment, Flag definition, Flag Configuration, Promotion, Experiment, Run, Event Definition, Metric, Segment, Client Key, API Key, generated OpenAPI                                            | MCP transport, public SDK evaluate, event ingest, Tinybird result reads    |
+| MCP Worker               | Agent protocol adapter       | Remote MCP OAuth PRM/auth.md handshake, tool registry, schema derivation, calls through `@splitch/control-plane-sdk`                                                                                                  | D1/KV/Tinybird bindings, domain invariants, direct Worker imports          |
+| Evaluation Worker        | Data-plane resolution        | Public Client Key evaluate, API-Key-only peek (ADR-0034), control-plane dry-run test-eval, Provider reads, Assignment Store reads/writes, Exposure creation                                                           | Config mutation, Tinybird result reads, Metric/statistical calculation     |
+| Event Ingest Worker      | Append-only intake           | Evaluation usage, Exposure, Activation, Metric Event, and Web Event validation; Event Definition version stamping; per-scope Admission Gate DOs; queueing; sharded Durable Object dedup and outbox; Tinybird delivery | Variant resolution, Run lifecycle, results calculation, control-plane CRUD |
+| Analysis Worker          | Results read model           | Tinybird proxy reads, Web Analytics, SRM, Metric and statistical result contracts, `app_id` and `environment_id` injection from auth/path context                                                                     | SDK evaluate, event ingest, config mutation                                |
+| Auth API Worker          | Identity and token surface   | OAuth metadata, ID-JAG/device/anonymous doors, token issuance, token revocation, provisional create handoff                                                                                                           | Post-create Organization/App management, SDK credentials, analytics        |
+| Control Panel Worker     | Authenticated UI             | SSR routes, loader session validation, TanStack Query cache, live-update socket lifecycle                                                                                                                             | Domain invariants, direct storage access, direct Worker code imports       |
+| Marketing Worker         | Public UI                    | Static/prerendered marketing surface, shared design system usage                                                                                                                                                      | Authenticated App data, control-plane SDK transport, Worker bindings       |
 
 ## Runtime flows
 
@@ -57,15 +65,31 @@ flowchart LR
    from the Assignment Store.
 3. Evaluation Worker resolves the Variant and creates the Exposure row when the accessor is `evaluate`.
    `peek` and dry-run test-eval are structurally non-exposing paths.
-4. Evaluation Worker hands the raw event to Event Ingest Worker. It does not import ingest code.
+4. Evaluation Worker hands its Evaluation usage row and any raw Exposure or Activation row to Event
+   Ingest Worker. It does not import ingest code.
 
 ### Event and analysis flow
 
-1. Event Ingest Worker validates event envelopes and owns queueing, sharded dedup, and Tinybird delivery.
-2. Tinybird remains the append-only system of record.
-3. Analysis Worker is the only Worker that proxies Tinybird result reads to users or agents.
-4. Analysis Worker injects `app_id` and `environment_id`; clients and agents never supply Tinybird
+1. SDK Metric Events enter the Event Ingest Worker at `POST /api/sdk/events`; Web Events enter the
+   same Worker at the distinct `POST /api/sdk/web-events` route.
+2. Event Ingest Worker validates the route-specific event envelope, resolves exact duplicates, and
+   atomically charges row and byte capacity through one SQLite Admission Gate Durable Object per
+   `(app_id, environment_id, ingest_stream)`.
+3. After admission, the Worker owns durable queueing, family-scoped dedup and outbox persistence,
+   and Tinybird delivery to the separate `raw_events`, `raw_evaluations`, `metric_events`, and
+   `web_events` logs. Admission Gate objects remain separate from event-id outbox shards.
+4. Intake handlers never post rows directly to Tinybird. The same Worker consumes delivery batches
+   from Cloudflare Queues and writes datasource-specific gzip-compressed NDJSON microbatches.
+5. Tinybird remains the append-only system of record.
+6. Analysis Worker is the only Worker that proxies Tinybird Experiment and Web Analytics reads to
+   users or agents.
+7. Analysis Worker injects `app_id` and `environment_id`; clients and agents never supply Tinybird
    scope directly.
+8. Panel, CLI, and MCP consume the same Zod-first Web Analytics routes through
+   `@splitch/control-plane-sdk`; no consumer receives Tinybird credentials or a direct query surface.
+
+The queue steps above are the ADR-0043 target. Until that refactor lands, the implemented
+`raw_events` and `raw_evaluations` paths use the known non-scalable direct transport.
 
 ### Control-plane flow
 

@@ -61,9 +61,12 @@ describe("flag configuration onboarding path", () => {
     );
     expect(configured.status).toBe(200);
     expect(await configured.json()).toMatchObject({
-      enabled: true,
-      availableVariantNames: ["control"],
-      version: 2,
+      approvalRequest: null,
+      config: {
+        enabled: true,
+        availableVariantNames: ["control"],
+        version: 2,
+      },
     });
 
     const clientKeyRes = await request(

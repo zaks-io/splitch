@@ -1,6 +1,17 @@
+/**
+ * Starting an Experiment Run is the one Experiment write that publishes traffic
+ * allocation to the edge, so it carries the `start_experiment_run` Approval gate,
+ * the Approval replay path, and the draft-staleness resync. It lives apart from
+ * the Experiment CRUD handlers because none of that machinery is shared with them.
+ */
+
 import { type EnvScope, envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import { nowIso } from "./app-environment-model";
+import { appNotFound, nowIso } from "./app-environment-model";
+import { makeOtherApprovalApplication } from "./approval-application";
+import { createApproval, replayApprovalIfExists } from "./approval-service";
+import { environmentPolicyContexts } from "./approval-target";
+import { experimentTargetProjection } from "./approval-target-experiment";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { randomHex } from "./credential-cache";
 import {
@@ -13,18 +24,16 @@ import {
   blockingRunningExperimentForStart,
   type ExperimentDeps,
   experimentFromPath,
+  requireWritableEnvironment,
   syncExperimentConfigFromD1,
 } from "./experiment-handler-shared";
 import { type ExperimentRow, json, runResponse } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
 import { validateStartRequest } from "./experiment-start-request";
-import { pathParam } from "./handler-input";
+import { readEnvironmentPolicy } from "./flag-config-policy";
+import { objectBody, pathParam } from "./handler-input";
 
-/**
- * Start is the only Experiment operation that freezes a Run, so it carries its
- * own validation, draft-snapshot commit, and post-commit KV projection. It lives
- * apart from the CRUD handlers because none of that is shared with them.
- */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: start validation and Approval gating must precede every state mutation
 export async function startExperiment(
   deps: ExperimentDeps,
   args: HandlerArgs<unknown>,
@@ -34,6 +43,14 @@ export async function startExperiment(
   const scope = envScope(pathParam(args.input, "appId"), pathParam(args.input, "environmentId"));
   const experiment = await experimentFromPath(deps, args.input);
   if (!experiment) return experimentNotFound(args.requestId);
+  const body = objectBody(args.input);
+  const writeError = await requireWritableEnvironment(deps, scope, args.principal, args.requestId);
+  if (writeError) return writeError;
+  const proposalInput = {
+    ...(typeof body.reason === "string" ? { reason: body.reason } : {}),
+  };
+  const replay = await replayExperimentStart(deps, args, scope, experiment.id, body, proposalInput);
+  if (replay) return replay;
   const startContext = await validateStartRequest(deps, args, scope, experiment);
   if (!startContext.ok) return startContext.response;
 
@@ -45,6 +62,43 @@ export async function startExperiment(
     args.requestId,
   );
   if (!prepared.ok) return prepared.response;
+
+  const policy = await readEnvironmentPolicy(deps.repo, scope.appId, scope.environmentId);
+  if (!policy) return appNotFound(args.requestId);
+  const contexts = environmentPolicyContexts(scope.environmentId, policy, ["start_experiment_run"]);
+  if (contexts.some((context) => context.level !== "allow")) {
+    const current = {
+      ...experimentTargetProjection(experiment as unknown as Record<string, unknown>),
+      status: "draft",
+      startReason: null,
+    };
+    const proposed = {
+      ...current,
+      status: "running",
+      startReason: typeof startContext.body.reason === "string" ? startContext.body.reason : null,
+    };
+    const approval = await createApproval(
+      {
+        ...deps,
+        applyOther: makeOtherApprovalApplication(deps),
+      },
+      {
+        appId: scope.appId,
+        operation: "experiments_start",
+        target: { type: "experiment_draft", id: experiment.id },
+        policyContexts: contexts,
+        current,
+        proposed,
+        proposalInput,
+        principal: args.principal,
+        idempotencyKey: startContext.body.idempotency_key as string,
+        inlineReview: startContext.body.review !== undefined,
+        requestId: args.requestId,
+      },
+    );
+    if (!approval.ok) return approval.response;
+    return appliedExperimentStartResponse(deps, scope, experiment.id, approval.approvalRequest);
+  }
 
   const now = nowIso(deps);
   const committed = await deps.repo.experiments.startRun(scope, {
@@ -99,6 +153,68 @@ export async function startExperiment(
     experimentId: experiment.id,
     run: runResponse(committed.run),
     previousRunId: committed.previous?.id ?? null,
+    approvalRequest: null,
+  });
+}
+
+async function replayExperimentStart(
+  deps: ExperimentDeps,
+  args: HandlerArgs<unknown>,
+  scope: EnvScope,
+  experimentId: string,
+  body: Record<string, unknown>,
+  proposalInput: Record<string, unknown>,
+): Promise<Response | null> {
+  const replay = await replayApprovalIfExists(
+    {
+      ...deps,
+      applyOther: makeOtherApprovalApplication(deps),
+    },
+    {
+      appId: scope.appId,
+      operation: "experiments_start",
+      target: { type: "experiment_draft", id: experimentId },
+      proposalInput,
+      principal: args.principal,
+      idempotencyKey: body.idempotency_key as string,
+      inlineReview: body.review !== undefined,
+      requestId: args.requestId,
+    },
+    { ignoreMismatch: true },
+  );
+  if (!replay) return null;
+  if (!replay.ok) return replay.response;
+  return appliedExperimentStartResponse(deps, scope, experimentId, replay.approvalRequest);
+}
+
+/**
+ * Only reached for an `applied` Approval Request, so the application result and
+ * the Run it names both have to exist. A 404 here would blame a missing
+ * Experiment for what is really a broken applied record, so it fails loud
+ * instead (ADR-0036).
+ */
+async function appliedExperimentStartResponse(
+  deps: ExperimentDeps,
+  scope: EnvScope,
+  experimentId: string,
+  approvalRequest: import("@splitch/contracts").ApprovalRequest,
+) {
+  const result = approvalRequest.applicationResult;
+  if (!result) {
+    throw new Error(`applied Approval Request ${approvalRequest.id} carries no application result`);
+  }
+  const run = await deps.repo.experiments.getRun(scope, result.resourceId);
+  if (!run) {
+    throw new Error(
+      `applied Approval Request ${approvalRequest.id} names Run ${result.resourceId}, which does not exist`,
+    );
+  }
+  const previousRunId = approvalRequest.diff.current.liveRunId;
+  return Response.json({
+    experimentId,
+    run: runResponse(run),
+    previousRunId: typeof previousRunId === "string" ? previousRunId : null,
+    approvalRequest,
   });
 }
 

@@ -1,12 +1,11 @@
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import { paginatedResponse } from "../wire-envelopes-core";
+import { AppParams, ApprovalRequestParams } from "./route-shapes";
 import {
-  AppParams,
   ApprovalRequestListQuerySchema,
-  ApprovalRequestParams,
   ApprovalRequestSchema,
   ReviewApprovalRequestSchema,
-} from "./route-shapes";
+} from "./route-shapes-approval-request";
 
 /**
  * Approval Request reads and Review creation. The routes expose durable,

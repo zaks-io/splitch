@@ -134,6 +134,7 @@ splitch flags promote [--app <app_id>] [--env <environment_id>] <flag_id>   # [c
 splitch event-definitions list [--app <app_id>]                              # [ctx] App-level
 splitch event-definitions create [--app <app_id>] --name <event_name> ...    # [ctx]
 splitch event-definitions versions create [--app <app_id>] <event_definition_id> --schema <file> # [ctx] immutable publish
+splitch event-definitions versions create [--app <app_id>] <event_definition_id> --web-adapter <page_view|web_vital|browser_error> --entity-type <type|none> # [ctx] expand canonical template, immutable publish
 splitch metrics list [--app <app_id>]                                        # [ctx]
 splitch metrics create [--app <app_id>] --event-definition <id> [--field <name>] ... # [ctx]
 splitch env-policy get [--app <app_id>] [--env <environment_id>]            # [ctx]
@@ -143,6 +144,10 @@ splitch experiments start [--app <app_id>] [--env <environment_id>] <experiment_
 splitch runs end [--app <app_id>] [--env <environment_id>] <run_id>         # [ctx]
 splitch flags test-eval [--app <app_id>] [--env <environment_id>] <flag_id> --targeting-key <key> [--context-json <json>]  # [ctx] control-plane, full reason
 splitch flags verify [--app <app_id>] [--env <environment_id>] <flag_id> --targeting-key <key> [--context-json <json>]     # [ctx] setup confirmation (ADR-0037)
+splitch web-analytics overview [--app <app_id>] [--env <environment_id>] --from <timestamp> --to <timestamp> --interval <hour|day> # [ctx]
+splitch web-analytics sessions list [--app <app_id>] [--env <environment_id>] --from <timestamp> --to <timestamp> [--event-name <name>] [--association <anonymous|associated|ambiguous>] # [ctx]
+splitch web-analytics sessions events [--app <app_id>] [--env <environment_id>] <session_id_hash> --from <timestamp> --to <timestamp> # [ctx]
+splitch web-analytics vitals [--app <app_id>] [--env <environment_id>] --from <timestamp> --to <timestamp>        # [ctx]
 splitch client-key get [--app <app_id>] [--env <environment_id>]            # [ctx]
 splitch api-keys create [--app <app_id>] [--env <environment_id>]           # [ctx]
 splitch api-keys revoke [--app <app_id>] [--env <environment_id>] <key_id>  # [ctx]
@@ -150,8 +155,9 @@ splitch api-keys revoke [--app <app_id>] [--env <environment_id>] <key_id>  # [c
 
 One command per endpoint. CLI/MCP author and discover Event Definitions and Metrics and manage Flags,
 Environments, Experiments, policies, evaluations, and credentials, but they do not impersonate an SDK
-producer for Metric Event ingestion: the SDK's `track()` data-plane call is not a control-plane
-CLI/MCP command. No composite multi-step commands unless agent ergonomics demand them.
+producer for Metric Event or Web Event ingestion: the SDK's `track()` and `web.track()` data-plane
+calls are not control-plane CLI/MCP commands. No composite multi-step commands unless agent
+ergonomics demand them.
 Experiments, Experiment Runs, and SDK credentials are per-Environment (ADR-0027), so their commands
 need an Environment (from `[ctx]` or `--env`); Flag definition, Environment CRUD, and policy reads
 are App/Env scoped accordingly. Environment-level writes that the Environment Policy gates may

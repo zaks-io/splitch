@@ -6,6 +6,7 @@ configuration mutations.
 ## Owns
 
 - App, Environment, and Flag Configuration authoring.
+- App-level Event Definition and immutable version authoring.
 - Promotion and Environment Policy gates.
 - Approval Request, Review, and Confirmation.
 - Credential provisioning and revocation semantics.
@@ -43,6 +44,13 @@ headline flow is build and tune in dev, then promote to prod. Promotion is deplo
 measurement. Promotion is subject to the target Environment's Policy.
 
 Avoid: deploy; ship; publish; push.
+
+**Event Definition**:
+An App-level schema for one named Metric Event or Web Event with an immutable family selected at
+creation.
+
+Avoid: separate Metric Event and Web Event definition catalogs; changing an Event Definition's
+family after creation.
 
 ## Policy and review terms
 
@@ -106,11 +114,11 @@ Avoid: using it as the client-side SDK credential.
 
 **Client Key**:
 The public, non-secret identifier a client-side SDK presents. Safe to embed in shipped client code.
-It can evaluate Flags and submit strictly validated, write-only Metric Events for its App and
-Environment. It cannot read full flag config, Targeting Rules, Event Definitions, Metric Events,
-mint keys, or reach another App. Abuse is bounded at the edge by controls such as origin/referrer
-allow-listing and rate limiting, not by hiding the value. Control-plane surfaces may retrieve and
-share it freely.
+It can evaluate Flags and submit strictly validated, write-only Metric Events and Web Events for
+its App and Environment. It cannot read full flag config, Targeting Rules, Event Definitions,
+Metric Events, Web Events, mint keys, or reach another App. Abuse is bounded at the edge by controls
+such as origin/referrer allow-listing and rate limiting, not by hiding the value. Control-plane
+surfaces may retrieve and share it freely.
 
 Avoid: treating it as secret; using it for server-side full access.
 

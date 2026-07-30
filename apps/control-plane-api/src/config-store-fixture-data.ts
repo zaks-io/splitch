@@ -96,7 +96,10 @@ export async function seedConfigGraph(d1: D1Database): Promise<void> {
     environmentId: ids.environmentId,
     flagId: ids.flagId,
     enabled: false,
-    availableVariantNames: JSON.stringify(["control", "treatment"]),
+    // `ensureInitialFlagConfig` ships `[]` (never narrowed = whole catalog
+    // servable), so the fixture ships it too. A fixture that pre-narrows every
+    // Configuration hides the default the code actually writes.
+    availableVariantNames: JSON.stringify([]),
     defaultVariantId: ids.controlVariantId,
     createdAt: NOW,
     updatedAt: NOW,
@@ -107,7 +110,7 @@ export async function seedConfigGraph(d1: D1Database): Promise<void> {
     environmentId: ids.devEnvironmentId,
     flagId: ids.flagId,
     enabled: true,
-    availableVariantNames: JSON.stringify(["control", "treatment"]),
+    availableVariantNames: JSON.stringify([]),
     defaultVariantId: ids.controlVariantId,
     createdAt: NOW,
     updatedAt: NOW,
@@ -143,6 +146,24 @@ export async function seedConfigGraph(d1: D1Database): Promise<void> {
   });
   await insertRun(repo, ids.liveRunId, 1, "2026-07-01T19:00:00.000Z");
   await insertRun(repo, ids.newerRunId, 2, "2026-07-01T19:30:00.000Z");
+}
+
+/**
+ * Spell out the seeded Configurations' available Variant set. The fixture ships
+ * `[]` because that is what `ensureInitialFlagConfig` writes, so a suite that
+ * exercises availability ITSELF has to narrow explicitly: the rollout-ambiguity
+ * gate, promotion diffs, the KV read projection, and targeting-rule writes,
+ * which still read the column literally rather than through the
+ * empty-means-all rule (SPL-201).
+ */
+export async function narrowSeededAvailability(
+  d1: D1Database,
+  names: string[] = ["control", "treatment"],
+): Promise<void> {
+  await d1
+    .prepare("UPDATE flag_configs SET available_variant_names = ? WHERE app_id = ?")
+    .bind(JSON.stringify(names), ids.appId)
+    .run();
 }
 
 async function insertRun(repo: Repository, runId: string, runNumber: number, startedAt: string) {

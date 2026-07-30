@@ -21,7 +21,14 @@ describe("allocationError", () => {
     expect(message).toBe("Every Variant needs a number. Enter 0 to remove one from the next Run.");
   });
 
-  it("reports blankness before arithmetic, even when the finite shares total 100", () => {
+  /**
+   * Names the blank rather than the total. It does NOT pin the order of the two
+   * checks: `Math.abs(NaN - 100) > 1e-6` is false, so the arithmetic branch falls
+   * through to the finite check either way and moving the check past it changes
+   * nothing observable. What is load-bearing is that the check exists at all —
+   * delete it and this fails, because a blank would otherwise report no error.
+   */
+  it("names the blank share, not the total, when the rest already sum to 100", () => {
     expect(allocationError({ control: 100, treatment: Number.NaN })).toContain("needs a number");
   });
 

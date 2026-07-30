@@ -1,13 +1,9 @@
 import type { HandlerArgs } from "@splitch/worker-runtime";
-import {
-  createFlag,
-  deleteFlag,
-  getFlag,
-  listFlags,
-  updateFlag,
-} from "./flag-definition-flag-handlers";
-import { createVariant, deleteVariant, updateVariant } from "./flag-definition-variant-handlers";
+import { deleteFlag } from "./flag-definition-flag-delete";
+import { createFlag, getFlag, listFlags, updateFlag } from "./flag-definition-flag-handlers";
 import type { FlagDefinitionDeps } from "./flag-definition-handler-utils";
+import { createVariant, deleteVariant } from "./flag-definition-variant-catalog";
+import { updateVariant } from "./flag-definition-variant-handlers";
 
 export function makeFlagDefinitionHandlers(deps: FlagDefinitionDeps) {
   return {

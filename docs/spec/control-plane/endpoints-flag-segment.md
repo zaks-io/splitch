@@ -32,9 +32,14 @@ Body:
   schema?: JSONSchema,       // supported subset the Variant values must satisfy
   variants: [                // the App-level Variant catalog
     { name: string, value: boolean|string|number|object, isDefault: boolean }
-  ]
+  ],
+  idempotency_key: string    // also sent as the `Idempotency-Key` header
 }
 ```
+
+Requires an `Idempotency-Key` header. A Flag create re-establishes a key that a
+gated delete may have just refused to free, so a retried create must never mint a
+second definition for the same key.
 
 Returns: `{ id, appId, key, name, schema, variants, defaultVariantId, createdAt, updatedAt }`
 Invariant: exactly one Variant is the Default Variant; every Variant `value` satisfies `schema`.
@@ -84,6 +89,13 @@ Auto-provisioned per-Environment Flag Configurations are **cascade-deleted** wit
 (SPL-164). Blocked if the Flag is referenced by any Experiment in any Environment. A **running**
 Experiment returns `EXPERIMENT_RUNNING`; draft or ended Experiments return `RESOURCE_NOT_EMPTY`
 with `childType: "experiment"`.
+
+Requires an `Idempotency-Key` header. Because the delete destroys every Environment's available
+Variant set and frees the Flag key for immediate re-creation, it is a `variant_availability` change:
+if any Environment serving the Flag is not `allow`, the delete opens an Approval Request
+(`target.type = "flag"`) instead of applying. The target version covers `flags.version` plus the
+sorted vector of configured Environments, their Flag Configuration versions, and their Policy
+levels, so any of those moving before Review renders the request terminal `stale`.
 
 ## Flag Configuration endpoints (per-Environment)
 
@@ -216,7 +228,7 @@ other pending request for the prior version subsequently renders `stale`.
 
 Lists full Approval Request wire projections in the App. `status` optionally filters
 `pending | applied | declined | stale`; `target_kind` optionally filters
-`flag_configuration | flag_variant | experiment_draft`. The response uses the standard cursor page:
+`flag | flag_configuration | flag_variant | experiment_draft`. The response uses the standard cursor page:
 `{ items: ApprovalRequest[], cursor: string | null, limit: number, total: number | null }`.
 
 ### `GET /apps/{app_id}/approval-requests/{id}`

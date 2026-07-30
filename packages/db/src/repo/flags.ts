@@ -1,7 +1,14 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index";
+import {
+  appliedRequestUpdate,
+  appliedReviewInsert,
+  approvalPendingCondition,
+} from "./approval-atomic";
+import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
 import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
+import { type FlagInScope, makeVariantOps } from "./flag-variant-ops";
 import type { TenantScope } from "./scope";
 import { envScope } from "./scope";
 import { scopedTable } from "./scoped-table";
@@ -60,6 +67,17 @@ export function makeFlagRepo(db: Db) {
 
     ...makeFlagConfigOps(db, flagConfigsTable, targetingRulesTable),
 
+    /**
+     * App-scoped Flag fetch by a set of IDs, for callers that already hold a
+     * bounded set of `flag_id`s and only need to resolve them to keys and names.
+     * Reading the App's whole Flag catalog to build that lookup makes the caller's
+     * cost scale with the App instead of with its own bound.
+     */
+    listFlagsByIds(scope: TenantScope, ids: readonly string[]) {
+      if (ids.length === 0) return Promise.resolve([] as (typeof flags.$inferSelect)[]);
+      return flagsTable.findMany(scope, inArray(flags.id, [...ids]));
+    },
+
     /** App-scoped Segment fetch by a set of IDs (e.g. for a draft Run snapshot). */
     listSegmentsByIds(scope: TenantScope, ids: readonly string[]) {
       if (ids.length === 0) return Promise.resolve([] as (typeof segments.$inferSelect)[]);
@@ -89,106 +107,50 @@ export function makeFlagRepo(db: Db) {
 }
 
 function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
+  /**
+   * When an Approval Review authorizes the delete, EVERY statement in the
+   * cascade is guarded by that Review's Request still being pending. Guarding
+   * only the parent row would let a resolved or stale Request still wipe a
+   * `confirm` Environment's Configurations and targeting rules.
+   */
   return async function deleteFlagCascade(
     scope: TenantScope,
     flagId: string,
     environmentIds: readonly string[],
+    options?: { approval?: ApprovalCommit },
   ): Promise<boolean> {
     const flag = await flagInScope(scope, flagId);
     if (!flag) return false;
 
+    const approval = options?.approval;
+    const pending = approval ? [approvalPendingCondition(db, scope, approval)] : [];
     const batch = [
       ...environmentIds.flatMap((environmentId) => {
         const env = envScope(scope.appId, environmentId);
         return [
-          db.delete(targetingRules).where(scopedTargetingRule(env, flagId)).returning(),
-          db.delete(flagConfigs).where(scopedFlagConfig(env, flagId)).returning(),
+          db
+            .delete(targetingRules)
+            .where(and(scopedTargetingRule(env, flagId), ...pending))
+            .returning(),
+          db
+            .delete(flagConfigs)
+            .where(and(scopedFlagConfig(env, flagId), ...pending))
+            .returning(),
         ];
       }),
-      db.delete(variants).where(eq(variants.flagId, flagId)).returning(),
+      db
+        .delete(variants)
+        .where(and(eq(variants.flagId, flagId), ...pending))
+        .returning(),
       db
         .delete(flags)
-        .where(and(eq(flags.appId, scope.appId), eq(flags.id, flagId)))
+        .where(and(eq(flags.appId, scope.appId), eq(flags.id, flagId), ...pending))
         .returning(),
+      ...(approval
+        ? [appliedReviewInsert(db, scope, approval), appliedRequestUpdate(db, scope, approval)]
+        : []),
     ];
     await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
-    return true;
-  };
-}
-
-type FlagInScope = (
-  scope: TenantScope,
-  flagId: string,
-) => Promise<typeof flags.$inferSelect | null>;
-
-function makeVariantOps(db: Db, flagInScope: FlagInScope) {
-  async function variantByName(scope: TenantScope, flagId: string, name: string) {
-    const flag = await flagInScope(scope, flagId);
-    if (!flag) return null;
-    const rows = await db
-      .select()
-      .from(variants)
-      .where(and(eq(variants.flagId, flagId), eq(variants.name, name)))
-      .limit(1);
-    return rows[0] ?? null;
-  }
-
-  return {
-    async listVariants(
-      scope: TenantScope,
-      flagId: string,
-    ): Promise<(typeof variants.$inferSelect)[]> {
-      const flag = await flagInScope(scope, flagId);
-      if (!flag) return [];
-      return db.select().from(variants).where(eq(variants.flagId, flagId));
-    },
-
-    async addVariant(
-      scope: TenantScope,
-      flagId: string,
-      values: Omit<typeof variants.$inferInsert, "flagId">,
-    ): Promise<typeof variants.$inferSelect> {
-      const flag = await flagInScope(scope, flagId);
-      if (!flag) throw new Error("addVariant: flag is not in this App scope");
-      const rows = await db
-        .insert(variants)
-        .values({ ...values, flagId })
-        .returning();
-      const inserted = rows[0];
-      if (!inserted) throw new Error("addVariant: no row returned");
-      return inserted;
-    },
-
-    getVariantByName: variantByName,
-
-    async updateVariant(
-      scope: TenantScope,
-      flagId: string,
-      name: string,
-      patch: Partial<Pick<typeof variants.$inferInsert, "name" | "value" | "description">>,
-    ): Promise<typeof variants.$inferSelect | null> {
-      const variant = await variantByName(scope, flagId, name);
-      if (!variant) return null;
-      const rows = await db
-        .update(variants)
-        .set(patch)
-        .where(eq(variants.id, variant.id))
-        .returning();
-      return rows[0] ?? null;
-    },
-
-    async removeVariant(scope: TenantScope, flagId: string, name: string): Promise<number> {
-      const variant = await variantByName(scope, flagId, name);
-      if (!variant) return 0;
-      const rows = await db.delete(variants).where(eq(variants.id, variant.id)).returning();
-      return rows.length;
-    },
-
-    async removeVariantsForFlag(scope: TenantScope, flagId: string): Promise<number> {
-      const flag = await flagInScope(scope, flagId);
-      if (!flag) return 0;
-      const rows = await db.delete(variants).where(eq(variants.flagId, flagId)).returning();
-      return rows.length;
-    },
+    return approval ? (await flagInScope(scope, flagId)) === null : true;
   };
 }

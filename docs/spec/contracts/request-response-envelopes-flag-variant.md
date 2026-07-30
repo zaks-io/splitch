@@ -18,14 +18,15 @@ not accepted by these App-level endpoints.
 
 ### CreateFlagRequest
 
-| Field         | Required | Notes                                                                     |
-| ------------- | -------- | ------------------------------------------------------------------------- |
-| `appId`       | yes      | Duplicates the path for route-derived MCP tool input; must match path     |
-| `name`        | yes      | — (DEFINITION)                                                            |
-| `key`         | yes      | Unique per App; immutable after create (DEFINITION)                       |
-| `schema`      | no       | Supported JSON Schema subset or null; every Variant value must satisfy it |
-| `variants`    | yes      | `{ name, value, isDefault, description? }[]`; exactly one default         |
-| `description` | no       | —                                                                         |
+| Field             | Required | Notes                                                                            |
+| ----------------- | -------- | -------------------------------------------------------------------------------- |
+| `appId`           | yes      | Duplicates the path for route-derived MCP tool input; must match path            |
+| `name`            | yes      | — (DEFINITION)                                                                   |
+| `key`             | yes      | Unique per App; immutable after create (DEFINITION)                              |
+| `schema`          | no       | Supported JSON Schema subset or null; every Variant value must satisfy it        |
+| `variants`        | yes      | `{ name, value, isDefault, description? }[]`; exactly one default                |
+| `description`     | no       | —                                                                                |
+| `idempotency_key` | yes      | `flags_create` is an Idempotency-Key route; sent as the `Idempotency-Key` header |
 
 Worker computes: `id`, `defaultVariantId`, `createdAt`, `updatedAt`.
 
