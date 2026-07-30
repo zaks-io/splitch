@@ -94,8 +94,11 @@ describe("control-plane Experiment Setup edit taxonomy", () => {
       fx.jwt,
       { idempotency_key: "idem_setup_gate" },
     );
+    // A `confirm` policy no longer bounces the Start with a bare flag; it opens an
+    // Approval Request and names it, so the operator confirms a specific pending
+    // proposal rather than re-sending the same call with a confirmation bit set.
     expect(gated.status).toBe(409);
-    expect((await errorBody(gated)).code).toBe("CONFIRMATION_REQUIRED");
+    expect((await errorBody(gated)).code).toBe("APPROVAL_REVIEW_REQUIRED");
 
     const secondStart = await startExperiment(ctx, fx, experiment.id, {
       idempotency_key: "idem_setup_run_2",

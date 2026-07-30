@@ -118,6 +118,9 @@ describe("Control Panel Experiment mutation transport", () => {
                 experimentId: "exp_1",
                 run: runResponse(),
                 previousRunId: "run_1",
+                // What the Worker returns when the Environment Policy allows the
+                // Start outright, i.e. no Approval Request was ever created.
+                approvalRequest: null,
               })
             : Response.json(experimentResponse());
         }),
