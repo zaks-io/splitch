@@ -1,7 +1,7 @@
 import { SCOPED_SERVICE_IDENTITY_HEADER } from "@splitch/control-plane-sdk/panel-experiments";
 import type { Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
-import { panelExperimentsList } from "./panel-experiments";
+import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
 
 const APP_ID = "app_panel_list";
 const ENVIRONMENT_ID = "env_panel_list";
@@ -81,6 +81,54 @@ describe("panel Experiments composite read", () => {
     expect(response.status).toBe(404);
     expect(analysis).not.toHaveBeenCalled();
   });
+
+  it("returns newest-first frozen Run snapshots and operator reasons", async () => {
+    const response = await panelExperimentDetail(
+      { repo: repository() },
+      {
+        actorId: ACTOR_ID,
+        appId: APP_ID,
+        environmentId: ENVIRONMENT_ID,
+        experimentId: EXPERIMENT_ID,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      experiment: { id: EXPERIMENT_ID, status: "running", liveRunId: RUN_ID },
+      flag: { id: "flag_panel_list", name: "Checkout Flag" },
+      runs: [
+        {
+          id: RUN_ID,
+          runNumber: 2,
+          allocation: { control: 70, treatment: 30 },
+          variantsJson: JSON.stringify([
+            { id: "variant_control", name: "control", value: false },
+            { id: "variant_treatment", name: "treatment", value: true },
+          ]),
+          startReason: "Increase treatment traffic",
+        },
+        { id: "run_panel_previous", runNumber: 1 },
+      ],
+    });
+  });
+
+  it("does not return a same-scope Run list for a missing Experiment", async () => {
+    const repo = repository();
+    vi.mocked(repo.experiments.getExperiment).mockResolvedValue(null);
+
+    const response = await panelExperimentDetail(
+      { repo },
+      {
+        actorId: ACTOR_ID,
+        appId: APP_ID,
+        environmentId: ENVIRONMENT_ID,
+        experimentId: "experiment_missing",
+      },
+    );
+
+    expect(response.status).toBe(404);
+  });
 });
 
 function repository(
@@ -111,6 +159,8 @@ function repository(
     },
     experiments: {
       listExperiments: vi.fn(async () => [experimentRow()]),
+      getExperiment: vi.fn(async () => experimentRow()),
+      listRunsForExperiment: vi.fn(async () => [runRow(1), runRow(2)]),
     },
   } as unknown as Repository;
 }
@@ -142,6 +192,42 @@ function experimentRow() {
     liveRunId: RUN_ID,
     createdAt: "2026-07-18T00:00:00.000Z",
     updatedAt: "2026-07-18T00:00:00.000Z",
+  };
+}
+
+function runRow(runNumber: 1 | 2) {
+  const latest = runNumber === 2;
+  return {
+    id: latest ? RUN_ID : "run_panel_previous",
+    appId: APP_ID,
+    environmentId: ENVIRONMENT_ID,
+    experimentId: EXPERIMENT_ID,
+    runNumber,
+    status: latest ? "running" : "ended",
+    targetingKeyField: "userId",
+    targetingKeyType: "user",
+    salt: latest ? "salt-2" : "salt-1",
+    allocation: JSON.stringify(
+      latest ? { control: 70, treatment: 30 } : { control: 50, treatment: 50 },
+    ),
+    variantSet: JSON.stringify([
+      { id: "variant_control", name: "control", value: false },
+      { id: "variant_treatment", name: "treatment", value: true },
+    ]),
+    targetingRules: "[]",
+    confidenceLevel: 0.95,
+    horizon: "sequential",
+    targetN: null,
+    sampleSizeLocked: null,
+    decisionFamily: "[]",
+    guardrailDecisions: "[]",
+    configHash: latest ? "sha256:two" : "sha256:one",
+    startedAt: latest ? "2026-07-19T00:00:00.000Z" : "2026-07-18T00:00:00.000Z",
+    endedAt: latest ? null : "2026-07-18T23:00:00.000Z",
+    startReason: latest ? "Increase treatment traffic" : null,
+    endReason: latest ? null : "Prepared a larger treatment allocation",
+    createdAt: latest ? "2026-07-19T00:00:00.000Z" : "2026-07-18T00:00:00.000Z",
+    createdBy: ACTOR_ID,
   };
 }
 

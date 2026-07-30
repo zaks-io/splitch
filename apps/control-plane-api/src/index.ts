@@ -28,7 +28,7 @@ import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { makePanelDelegationReplayStore } from "./panel-identity-replay";
 import { makePanelSessionAccess } from "./panel-session-access";
-import { panelExperimentsList } from "./panel-experiments";
+import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
 import { rateLimiterForTarget } from "./rate-limit";
 import { makePanelSessionStore, makeSessionStore } from "./session-store";
 
@@ -82,15 +82,33 @@ async function handlePanelExperimentsRequest(
   request: Request,
   env: ControlPlaneApiEnv,
   actorId: string,
+  operation: "experiments_detail" | "experiments_list",
 ): Promise<Response> {
   const input = await request.json().catch(() => null);
   if (!isPanelExperimentsInput(input)) {
     return Response.json(
-      { code: "VALIDATION_ERROR", message: "appId and environmentId are required", details: {} },
+      {
+        code: "VALIDATION_ERROR",
+        message: "appId and environmentId are required",
+        details: {},
+      },
       { status: 400 },
     );
   }
   try {
+    if (operation === "experiments_detail") {
+      if (!isPanelExperimentDetailInput(input)) {
+        return Response.json(
+          {
+            code: "VALIDATION_ERROR",
+            message: "appId, environmentId, and experimentId are required",
+            details: {},
+          },
+          { status: 400 },
+        );
+      }
+      return await panelExperimentDetail({ repo: createRepository(env.DB) }, { actorId, ...input });
+    }
     return await panelExperimentsList(
       { repo: createRepository(env.DB), analysis: env.ANALYSIS_API },
       { actorId, ...input },
@@ -99,12 +117,23 @@ async function handlePanelExperimentsRequest(
     return Response.json(
       {
         code: "SERVICE_UNAVAILABLE",
-        message: "Experiment Run health is unavailable",
+        message: "Experiment data is unavailable",
         details: { retryAfterMs: 30_000 },
       },
       { status: 503 },
     );
   }
+}
+
+function isPanelExperimentDetailInput(value: {
+  appId: string;
+  environmentId: string;
+}): value is { appId: string; environmentId: string; experimentId: string } {
+  return (
+    "experimentId" in value &&
+    typeof value.experimentId === "string" &&
+    value.experimentId.length > 0
+  );
 }
 
 function isPanelExperimentsInput(
@@ -216,10 +245,11 @@ async function handleSignedPanelExperiments(
   authResolver: ReturnType<typeof makeControlPlaneAuthResolver>,
 ): Promise<Response | null> {
   if (protocol !== "signed") return null;
-  if (parseControlPanelBindingOperation(request)?.id !== "experiments_list") return null;
+  const operation = parseControlPanelBindingOperation(request)?.id;
+  if (operation !== "experiments_list" && operation !== "experiments_detail") return null;
   const auth = await authResolver(request);
   if (!auth.ok) return unauthorized();
-  return handlePanelExperimentsRequest(request, env, auth.principal.id);
+  return handlePanelExperimentsRequest(request, env, auth.principal.id, operation);
 }
 
 async function runDemoReaper(

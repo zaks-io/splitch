@@ -198,7 +198,7 @@ async function resolvePanelPrincipal(
       },
     };
   }
-  if (operation.id === "experiments_list") {
+  if (operation.id === "experiments_list" || operation.id === "experiments_detail") {
     return {
       ok: true as const,
       principal: {
@@ -246,7 +246,7 @@ async function resolveBoundedPanelSessionPrincipal(
 async function resolvePanelFlagsPrincipal(
   operation: Exclude<
     ReturnType<typeof parseControlPanelBindingOperation>,
-    { id: "apps_create" | "experiments_list" } | null
+    { id: "apps_create" | "experiments_detail" | "experiments_list" } | null
   >,
   actorId: string,
   panelAccess?: PanelSessionAccess,

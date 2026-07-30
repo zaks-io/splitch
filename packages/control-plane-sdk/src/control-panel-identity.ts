@@ -6,6 +6,7 @@ export const CONTROL_PANEL_ENVIRONMENT_HEADER = "x-splitch-panel-environment";
 
 export type ControlPanelOperation =
   | { id: "apps_create"; orgId: string }
+  | { id: "experiments_detail" }
   | { id: "experiments_list" }
   | { id: "flags_list" | "flags_create"; appId: string; environmentId: string }
   | { id: "flag_config_get"; appId: string; environmentId: string; flagId: string };
@@ -26,6 +27,7 @@ interface DelegationOptions {
 }
 
 const APPS_PATH = /^\/orgs\/([^/]+)\/apps\/?$/;
+const EXPERIMENT_DETAIL_PATH = "/control-panel/experiments/detail";
 const EXPERIMENTS_PATH = "/control-panel/experiments/list";
 const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
@@ -46,7 +48,10 @@ export function parseControlPanelOperation(
 }
 
 function parseExperimentsList(method: string, pathname: string): ControlPanelOperation | null {
-  return method === "POST" && pathname === EXPERIMENTS_PATH ? { id: "experiments_list" } : null;
+  if (method !== "POST") return null;
+  if (pathname === EXPERIMENTS_PATH) return { id: "experiments_list" };
+  if (pathname === EXPERIMENT_DETAIL_PATH) return { id: "experiments_detail" };
+  return null;
 }
 
 export async function issueControlPanelDelegation(
@@ -257,7 +262,9 @@ function isControlPanelOperation(value: unknown): value is ControlPanelOperation
   if (value.id === "apps_create") {
     return hasKeys(value, ["id", "orgId"]) && isNonEmptyString(value.orgId);
   }
-  if (value.id === "experiments_list") return hasKeys(value, ["id"]);
+  if (isExperimentsOperation(value.id)) {
+    return hasKeys(value, ["id"]);
+  }
   if (value.id === "flag_config_get") {
     return (
       hasKeys(value, ["id", "appId", "environmentId", "flagId"]) &&
@@ -276,12 +283,17 @@ function isControlPanelOperation(value: unknown): value is ControlPanelOperation
   return false;
 }
 
+function isExperimentsOperation(value: string): boolean {
+  return value === "experiments_list" || value === "experiments_detail";
+}
+
 function sameOperation(left: ControlPanelOperation, right: ControlPanelOperation): boolean {
   if (left.id !== right.id) return false;
   switch (left.id) {
     case "apps_create":
       return right.id === "apps_create" && left.orgId === right.orgId;
     case "experiments_list":
+    case "experiments_detail":
       return true;
     case "flag_config_get":
       return (
