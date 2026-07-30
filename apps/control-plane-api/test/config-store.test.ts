@@ -46,11 +46,14 @@ describe("config store write path", () => {
     const res = await patchFlagConfig(h, { enabled: true, availableVariantNames: ["control"] });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
-      flagId: ids.flagId,
-      environmentId: ids.environmentId,
-      version: 2,
-      enabled: true,
-      availableVariantNames: ["control"],
+      approvalRequest: null,
+      config: {
+        flagId: ids.flagId,
+        environmentId: ids.environmentId,
+        version: 2,
+        enabled: true,
+        availableVariantNames: ["control"],
+      },
     });
 
     expect(h.events.slice(0, 2)).toEqual(["d1-before-kv:true", "kv:flag"]);
@@ -310,8 +313,16 @@ describe("flag configuration and promotion routes", () => {
     const blocked = await replaceTargetingRules(h, body);
     expect(blocked.status).toBe(409);
     expect(await blocked.json()).toMatchObject({
-      code: "CONFIRMATION_REQUIRED",
-      details: { attemptedOp: "PUT_TARGETING_RULES" },
+      code: "APPROVAL_REVIEW_REQUIRED",
+      details: {
+        approvalRequestId: expect.stringMatching(/^apr_/),
+        policyContexts: [
+          expect.objectContaining({
+            environmentId: ids.environmentId,
+            changeTypes: ["targeting_rollout_value"],
+          }),
+        ],
+      },
     });
 
     const legacyConfirm = await replaceTargetingRules(h, { ...body, confirm: true });
@@ -324,30 +335,37 @@ describe("flag configuration and promotion routes", () => {
     });
     expect(approved.status).toBe(200);
     expect(await approved.json()).toMatchObject({
-      version: 2,
-      targetingRules: [
-        expect.objectContaining({
-          id: "rule_prod_treatment",
-          variantId: ids.treatmentVariantId,
-        }),
-      ],
+      approvalRequest: { status: "applied" },
+      config: {
+        version: 2,
+        targetingRules: [
+          expect.objectContaining({
+            id: "rule_prod_treatment",
+            variantId: ids.treatmentVariantId,
+          }),
+        ],
+      },
     });
     expect(h.events.slice(0, 2)).toEqual(["d1-before-kv:false", "kv:flag"]);
     expect(h.events.at(-1)).toBe("broadcast");
   });
 
-  it("returns CONFIRMATION_REQUIRED for a Policy-gated PATCH without review", async () => {
+  it("returns APPROVAL_REVIEW_REQUIRED for a Policy-gated PATCH without review", async () => {
     await setProdPolicy(h, confirmPolicy);
 
     const res = await patchFlagConfig(h, { availableVariantNames: ["control"] });
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      code: "CONFIRMATION_REQUIRED",
+      code: "APPROVAL_REVIEW_REQUIRED",
       details: {
-        gate: "variant_availability",
-        environmentId: ids.environmentId,
-        attemptedOp: "PATCH_FLAG_CONFIG",
+        approvalRequestId: expect.stringMatching(/^apr_/),
+        policyContexts: [
+          expect.objectContaining({
+            environmentId: ids.environmentId,
+            changeTypes: ["variant_availability"],
+          }),
+        ],
         recommendedAction: "REVIEW_APPROVAL_REQUEST",
       },
     });
@@ -370,7 +388,10 @@ describe("flag configuration and promotion routes", () => {
     const disable = await patchFlagConfig(h, { enabled: false });
 
     expect(disable.status).toBe(200);
-    expect(await disable.json()).toMatchObject({ enabled: false });
+    expect(await disable.json()).toMatchObject({
+      approvalRequest: null,
+      config: { enabled: false },
+    });
   });
 
   it("promotes selected config field-groups and returns a before/after diff", async () => {

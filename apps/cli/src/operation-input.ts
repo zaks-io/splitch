@@ -21,8 +21,18 @@ export function buildOperationInput(
   applyPositionalFields(command, invocation, input);
   applyNamedFlags(command, invocation.flags, input);
   applyCommandSpecificFields(command, invocation, input);
+  applyExplicitIdempotencyKey(invocation.flags, input);
   applyRequiredIdempotencyKey(command, input);
   return input;
+}
+
+function applyExplicitIdempotencyKey(
+  flags: ParsedGlobalFlags,
+  input: Record<string, unknown>,
+): void {
+  if (flags.idempotencyKey) {
+    input.idempotency_key = flags.idempotencyKey;
+  }
 }
 
 function applyBodyJson(flags: ParsedGlobalFlags, input: Record<string, unknown>): void {

@@ -1,5 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, exists, inArray, sql } from "drizzle-orm";
 import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index";
+import type { ApprovalCommit } from "./approval-types";
+import { appliedReviewQueries, approvalPendingCondition } from "./approval-atomic";
 import type { Db } from "./client";
 import { makeFlagConfigOps, scopedFlagConfig, scopedTargetingRule } from "./flag-config-ops";
 import type { TenantScope } from "./scope";
@@ -161,20 +163,84 @@ function makeVariantOps(db: Db, flagInScope: FlagInScope) {
 
     getVariantByName: variantByName,
 
+    async getVariantById(scope: TenantScope, variantId: string) {
+      const rows = await db
+        .select({
+          id: variants.id,
+          flagId: variants.flagId,
+          name: variants.name,
+          value: variants.value,
+          description: variants.description,
+          createdAt: variants.createdAt,
+        })
+        .from(variants)
+        .innerJoin(flags, eq(flags.id, variants.flagId))
+        .where(and(eq(flags.appId, scope.appId), eq(variants.id, variantId)))
+        .limit(1);
+      return rows[0] ?? null;
+    },
+
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the guarded Variant and parent Flag writes form one atomic Approval batch
     async updateVariant(
       scope: TenantScope,
       flagId: string,
       name: string,
       patch: Partial<Pick<typeof variants.$inferInsert, "name" | "value" | "description">>,
+      options?: {
+        updatedAt?: string;
+        updatedBy?: string;
+        approval?: ApprovalCommit;
+      },
     ): Promise<typeof variants.$inferSelect | null> {
       const variant = await variantByName(scope, flagId, name);
       if (!variant) return null;
-      const rows = await db
-        .update(variants)
-        .set(patch)
-        .where(eq(variants.id, variant.id))
+      const flag = await flagInScope(scope, flagId);
+      if (!flag) return null;
+      const variantWhere = options?.approval
+        ? and(eq(variants.id, variant.id), approvalPendingCondition(db, options.approval))
+        : eq(variants.id, variant.id);
+      const variantUpdate = db.update(variants).set(patch).where(variantWhere).returning();
+      const flagUpdate = db
+        .update(flags)
+        .set({
+          version: flag.version + 1,
+          updatedAt: options?.approval?.reviewedAt ?? options?.updatedAt ?? flag.updatedAt,
+          updatedBy: options?.updatedBy ?? flag.updatedBy,
+        })
+        .where(
+          and(
+            eq(flags.appId, scope.appId),
+            eq(flags.id, flagId),
+            eq(flags.version, flag.version),
+            ...(options?.approval
+              ? [approvalPendingCondition(db, options.approval), sql`changes() = 1`]
+              : []),
+          ),
+        )
         .returning();
-      return rows[0] ?? null;
+      const approvalQueries = options?.approval
+        ? appliedReviewQueries(
+            db,
+            options.approval,
+            exists(
+              db
+                .select({ one: sql<number>`1` })
+                .from(flags)
+                .where(
+                  and(
+                    eq(flags.appId, scope.appId),
+                    eq(flags.id, flagId),
+                    eq(flags.version, flag.version + 1),
+                    eq(flags.updatedAt, options.approval.reviewedAt),
+                  ),
+                ),
+            ),
+          )
+        : [];
+      await db.batch([variantUpdate, flagUpdate, ...approvalQueries] as unknown as Parameters<
+        Db["batch"]
+      >[0]);
+      return variantByName(scope, flagId, (patch.name as string | undefined) ?? name);
     },
 
     async removeVariant(scope: TenantScope, flagId: string, name: string): Promise<number> {

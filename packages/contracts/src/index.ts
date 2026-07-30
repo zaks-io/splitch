@@ -20,6 +20,7 @@ export { errorStatusByCode, httpStatusForError } from "./error-status";
 export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
 export {
   ErrorCodeSchema,
+  ErrorDetailsSchema,
   ErrorResponseSchema,
   errorCodes,
   PolicyChangeTypeSchema,

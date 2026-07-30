@@ -60,11 +60,15 @@ describe("flag configuration Promotion routes", () => {
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      code: "CONFIRMATION_REQUIRED",
+      code: "APPROVAL_REVIEW_REQUIRED",
       details: {
-        gate: "enabled_state",
-        environmentId: ids.environmentId,
-        attemptedOp: "PROMOTE_FLAG_CONFIG",
+        approvalRequestId: expect.stringMatching(/^apr_/),
+        policyContexts: [
+          expect.objectContaining({
+            environmentId: ids.environmentId,
+            changeTypes: ["enabled_state"],
+          }),
+        ],
         recommendedAction: "REVIEW_APPROVAL_REQUEST",
       },
     });
@@ -84,6 +88,36 @@ describe("flag configuration Promotion routes", () => {
       review: { action: "approve_and_apply" },
     });
     expect(approved.status).toBe(200);
+    const approvedBody = await approved.json();
+
+    const approvedReplay = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { enabled: true },
+      review: { action: "approve_and_apply" },
+    });
+    expect(approvedReplay.status).toBe(200);
+    expect(await approvedReplay.json()).toEqual(approvedBody);
+  });
+
+  it("replays a pending rollout Promotion with its deterministic target salt", async () => {
+    await setProdPolicy(h, confirmPolicy);
+    await h.repo.flags.updateFlagConfig(envScope(ids.appId, ids.devEnvironmentId), ids.flagId, {
+      rollout: JSON.stringify({ percentage: 25, salt: "source-salt" }),
+      updatedAt: NOW,
+    });
+
+    const first = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { rollout: true },
+    });
+    const replay = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { rollout: true },
+    });
+
+    expect(first.status).toBe(409);
+    expect(replay.status).toBe(409);
+    expect(await replay.json()).toEqual(await first.json());
   });
 
   /**

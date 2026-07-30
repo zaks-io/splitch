@@ -1,9 +1,12 @@
+import type { Repository } from "@splitch/db";
+import { appScope, envScope } from "@splitch/db";
+import type { HandlerArgs } from "@splitch/worker-runtime";
 import { nowIso } from "./app-environment-model";
+import { makeOtherApprovalApplication } from "./approval-application";
+import { createApproval, replayApprovalIfExists } from "./approval-service";
+import { environmentPolicyContexts, requiresReview } from "./approval-target";
 import { randomHex } from "./credential-cache";
-import {
-  availableVariantReferenceCount,
-  runningExperimentForVariant,
-} from "./flag-definition-guards";
+import { readEnvironmentPolicy } from "./flag-config-policy";
 import {
   flagNotFound,
   resourceNotEmpty,
@@ -14,19 +17,21 @@ import {
   variantNotFound,
 } from "./flag-definition-errors";
 import {
+  availableVariantReferenceCount,
+  runningExperimentForVariant,
+} from "./flag-definition-guards";
+import {
   type FlagDefinitionDeps,
-  type LoadedFlag,
-  type Result,
   fail,
+  type LoadedFlag,
   loadWritableFlag,
   ok,
+  type Result,
   resyncFlagSnapshots,
 } from "./flag-definition-handler-utils";
 import { flagResponse, parseStoredSchema, pathBodyMismatch } from "./flag-definition-model";
 import { validateJsonSchema } from "./flag-definition-schema";
 import { objectBody, pathParam } from "./handler-input";
-import type { Repository } from "@splitch/db";
-import type { HandlerArgs } from "@splitch/worker-runtime";
 
 type VariantRow = NonNullable<Awaited<ReturnType<Repository["flags"]["getVariantByName"]>>>;
 type VariantPatch = Parameters<Repository["flags"]["updateVariant"]>[3];
@@ -64,6 +69,7 @@ export async function createVariant(
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validation and multi-Environment Approval contexts must be resolved before mutation
 export async function updateVariant(
   deps: FlagDefinitionDeps,
   args: HandlerArgs<unknown>,
@@ -80,6 +86,32 @@ export async function updateVariant(
   if (!variant) return variantNotFound(args.requestId);
 
   const body = objectBody(args.input);
+  const replay = await replayApprovalIfExists(
+    {
+      ...deps,
+      applyOther: makeOtherApprovalApplication(deps),
+    },
+    {
+      appId: loaded.value.appId,
+      operation: "flag_variants_update",
+      target: { type: "flag_variant", id: variant.id },
+      proposalInput: variantProposalInput(body),
+      principal: args.principal,
+      idempotencyKey: body.idempotency_key as string,
+      inlineReview: body.review !== undefined,
+      requestId: args.requestId,
+    },
+    { ignoreMismatch: true },
+  );
+  if (replay) {
+    if (!replay.ok) return replay.response;
+    const applied = await deps.repo.flags.getFlag(loaded.value.scope, loaded.value.flag.id);
+    if (!applied) return flagNotFound(args.requestId);
+    return Response.json({
+      flag: await flagResponse(deps.repo, loaded.value.appId, applied),
+      approvalRequest: replay.approvalRequest,
+    });
+  }
   const prepared = await prepareUpdateVariant(
     deps,
     loaded.value,
@@ -90,19 +122,109 @@ export async function updateVariant(
   );
   if (!prepared.ok) return prepared.response;
 
+  const contexts =
+    prepared.value.patch.value === undefined
+      ? []
+      : await variantPolicyContexts(
+          deps.repo,
+          loaded.value.appId,
+          loaded.value.flag.id,
+          variantName,
+        );
+  if (requiresReview(contexts)) {
+    const current = variantProjection(loaded.value.flag.id, variant);
+    const proposed = {
+      ...current,
+      ...prepared.value.patch,
+      ...(prepared.value.patch.value !== undefined
+        ? { value: JSON.parse(prepared.value.patch.value) }
+        : {}),
+    };
+    const approval = await createApproval(
+      {
+        ...deps,
+        applyOther: makeOtherApprovalApplication(deps),
+      },
+      {
+        appId: loaded.value.appId,
+        operation: "flag_variants_update",
+        target: { type: "flag_variant", id: variant.id },
+        policyContexts: contexts,
+        current,
+        proposed,
+        proposalInput: variantProposalInput(body),
+        principal: args.principal,
+        idempotencyKey: body.idempotency_key as string,
+        inlineReview: body.review !== undefined,
+        requestId: args.requestId,
+      },
+    );
+    if (!approval.ok) return approval.response;
+    const applied = await deps.repo.flags.getFlag(loaded.value.scope, loaded.value.flag.id);
+    if (!applied) return flagNotFound(args.requestId);
+    return Response.json({
+      flag: await flagResponse(deps.repo, loaded.value.appId, applied),
+      approvalRequest: approval.approvalRequest,
+    });
+  }
+
   if (Object.keys(prepared.value.patch).length > 0) {
+    const now = nowIso(deps);
     await deps.repo.flags.updateVariant(
       loaded.value.scope,
       loaded.value.flag.id,
       variantName,
       prepared.value.patch,
+      { updatedAt: now, updatedBy: args.principal.id },
     );
     await resyncFlagSnapshots(deps, loaded.value.appId, loaded.value.flag.id);
   }
 
   const updated = await deps.repo.flags.getFlag(loaded.value.scope, loaded.value.flag.id);
   if (!updated) return flagNotFound(args.requestId);
-  return Response.json(await flagResponse(deps.repo, loaded.value.appId, updated));
+  return Response.json({
+    flag: await flagResponse(deps.repo, loaded.value.appId, updated),
+    approvalRequest: null,
+  });
+}
+
+async function variantPolicyContexts(
+  repo: Repository,
+  appId: string,
+  flagId: string,
+  variantName: string,
+) {
+  const contexts = [];
+  const environments = await repo.identity.listEnvironments(appScope(appId));
+  for (const environment of environments) {
+    const config = await repo.flags.getFlagConfig(envScope(appId, environment.id), flagId);
+    if (!config) continue;
+    const available = JSON.parse(config.availableVariantNames) as string[];
+    if (available.length > 0 && !available.includes(variantName)) continue;
+    const policy = await readEnvironmentPolicy(repo, appId, environment.id);
+    if (!policy) continue;
+    contexts.push(
+      ...environmentPolicyContexts(environment.id, policy, ["targeting_rollout_value"]),
+    );
+  }
+  return contexts;
+}
+
+function variantProjection(flagId: string, variant: VariantRow): Record<string, unknown> {
+  return {
+    flagId,
+    name: variant.name,
+    value: JSON.parse(variant.value),
+    description: variant.description,
+  };
+}
+
+function variantProposalInput(body: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...(body.name !== undefined ? { name: body.name } : {}),
+    ...(body.value !== undefined ? { value: body.value } : {}),
+    ...(body.description !== undefined ? { description: body.description } : {}),
+  };
 }
 
 export async function deleteVariant(

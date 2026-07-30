@@ -91,9 +91,8 @@ ErrorCode =
   | 'INTERNAL_SERVER_ERROR'       // includes corrupted KV blob (fail-loud per ADR-0025)
 ```
 
-During the contracts-first transition, deprecated `CONFIRMATION_REQUIRED` remains emitted only by
-the legacy `flag-config-policy` runtime path until SPL-150 replaces it with the Approval runtime and
-removes the code, status mapping, and `REVIEW_APPROVAL_REQUEST` details token.
+Policy-gated mutations create durable Approval Requests and return
+`APPROVAL_REVIEW_REQUIRED`. The former `CONFIRMATION_REQUIRED` code is not part of the contract.
 
 ---
 

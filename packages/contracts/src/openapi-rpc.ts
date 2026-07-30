@@ -1,6 +1,7 @@
 import { OpenAPIHono, type RouteConfig } from "@hono/zod-openapi";
 import { accountRoutes } from "./routes/routes-account";
 import { analysisRoutes } from "./routes/routes-analysis";
+import { approvalRoutes } from "./routes/routes-approvals";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { dataPlaneRoutes } from "./routes/routes-data-plane";
 import { experimentRoutes } from "./routes/routes-experiments";
@@ -36,6 +37,7 @@ function buildRpcAppFromRoutes<const T extends readonly { openapi: RouteConfig }
 }
 
 const accountRpcApp = buildRpcAppFromRoutes(accountRoutes);
+const approvalRpcApp = buildRpcAppFromRoutes(approvalRoutes);
 const flagRpcApp = buildRpcAppFromRoutes(flagRoutes);
 const experimentRpcApp = buildRpcAppFromRoutes(experimentRoutes);
 const credentialRpcApp = buildRpcAppFromRoutes(credentialRoutes);
@@ -46,6 +48,7 @@ const dataPlaneRpcApp = buildRpcAppFromRoutes(dataPlaneRoutes);
 /** Emit-only OpenAPIHono carrying the full Control Plane route schema for `hc`. */
 export const controlPlaneRpcApp = new OpenAPIHono()
   .route("/", accountRpcApp)
+  .route("/", approvalRpcApp)
   .route("/", flagRpcApp)
   .route("/", experimentRpcApp)
   .route("/", credentialRpcApp)

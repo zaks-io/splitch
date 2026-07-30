@@ -51,6 +51,7 @@ function supportsConfirm(operationId: string): boolean {
     operationId === "flags_promote" ||
     operationId === "flag_config_update" ||
     operationId === "flag_targeting_rules_replace" ||
+    operationId === "flag_variants_update" ||
     operationId === "experiments_start"
   );
 }

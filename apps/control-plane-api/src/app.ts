@@ -9,6 +9,8 @@ import {
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
+import { makeOtherApprovalApplication } from "./approval-application";
+import { makeApprovalHandlers } from "./approval-handlers";
 import type { ConfigStoreAccess } from "./config-store-do";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
@@ -63,6 +65,7 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
   return createRegistrar(registrarDeps);
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: route mounting stays explicit so no operation can be silently omitted
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
   const handlers = makeHandlers({
@@ -100,6 +103,15 @@ export function createApp(deps: AppDeps): Hono {
     nowIso: deps.nowIso,
   });
   const registrar = controlPlaneRegistrar(deps);
+  const approvalHandlers = makeApprovalHandlers({
+    repo: deps.repo,
+    configStore: deps.configStore,
+    nowIso: deps.nowIso,
+    applyOther: makeOtherApprovalApplication({
+      repo: deps.repo,
+      configStore: deps.configStore,
+    }),
+  });
 
   app.get("/.well-known/openapi.json", (c) => c.json(buildOpenApiDocument()));
 
@@ -177,6 +189,13 @@ export function createApp(deps: AppDeps): Hono {
     handlers.replaceTargetingRules,
   );
   registrar.mount(app, controlPlaneRoute("flags_promote"), handlers.promoteFlagConfig);
+  registrar.mount(app, controlPlaneRoute("approval_requests_list"), approvalHandlers.list);
+  registrar.mount(app, controlPlaneRoute("approval_requests_get"), approvalHandlers.get);
+  registrar.mount(
+    app,
+    controlPlaneRoute("approval_request_reviews_create"),
+    approvalHandlers.review,
+  );
   registrar.mount(app, controlPlaneRoute("segments_list"), metricSegmentHandlers.listSegments);
   registrar.mount(app, controlPlaneRoute("segments_create"), metricSegmentHandlers.createSegment);
   registrar.mount(app, controlPlaneRoute("segments_get"), metricSegmentHandlers.getSegment);

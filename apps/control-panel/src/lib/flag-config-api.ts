@@ -19,7 +19,7 @@ export interface FlagConfigApi {
     scope: AppEnvironmentScope,
     flagId: string,
     patch: FlagConfigPatch,
-  ): Promise<ControlPlaneOperationResult<FlagConfigGetOutput>>;
+  ): Promise<ControlPlaneOperationResult<FlagConfigUpdateOutput>>;
 }
 
 /** Thin Control Panel adapter over the contract-derived typed SDK route group. */
@@ -29,12 +29,15 @@ export function createFlagConfigApi(
 ): FlagConfigApi {
   return {
     read: (scope, flagId) => flags.getConfig({ ...scope, flagId }, options),
-    update: async (scope, flagId, patch) => {
-      const result: ControlPlaneOperationResult<FlagConfigUpdateOutput> = await flags.updateConfig(
-        { ...scope, flagId, ...patch },
+    update: (scope, flagId, patch) =>
+      flags.updateConfig(
+        {
+          ...scope,
+          flagId,
+          ...patch,
+          review: patch.review ?? { action: "approve_and_apply" },
+        },
         options,
-      );
-      return result.ok ? { ...result, data: result.data.config } : result;
-    },
+      ),
   };
 }

@@ -12,6 +12,8 @@
  * the deletes respect the real foreign keys.
  */
 const RESET_TABLES = [
+  "approval_reviews",
+  "approval_requests",
   "api_keys",
   "client_keys",
   "runs",

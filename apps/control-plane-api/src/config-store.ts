@@ -1,24 +1,26 @@
 import { DeltaNudgeSchema } from "@splitch/contracts";
-import { appScope, envScope, type EnvScope } from "@splitch/db";
+import { appScope, type EnvScope, envScope } from "@splitch/db";
 import { deleteFlagConfigSnapshot } from "./config-store-kv";
 import { promoteFlagConfig, replaceTargetingRules } from "./config-store-mutations";
 import {
+  type ApplyApprovedFlagConfigInput,
   buildExperimentSnapshotFromD1,
   buildSnapshotFromD1,
-  json,
-  missingAvailableVariants,
-  missingRuleVariantNames,
-  readFlagSnapshot,
-  responseFromSnapshot,
-  writeSnapshotAndBroadcast,
   type ConfigStoreDeps,
   type FlagConfigResult,
   type FlagConfigWriteResult,
+  json,
+  missingAvailableVariants,
+  missingRuleVariantNames,
   type PatchFlagConfigInput,
   type PromoteFlagConfigInput,
   type PromoteFlagConfigResult,
   type ReplaceTargetingRulesInput,
+  readFlagSnapshot,
+  responseFromSnapshot,
   type Snapshot,
+  targetingRuleRows,
+  writeSnapshotAndBroadcast,
 } from "./config-store-shared";
 import { baselineIsUnresolvable, nextBaselineRollout } from "./flag-config-rollout";
 
@@ -31,6 +33,10 @@ export interface ConfigStoreWriter {
   writeFlagConfig(input: PatchFlagConfigInput): Promise<FlagConfigWriteResult>;
   replaceTargetingRules(input: ReplaceTargetingRulesInput): Promise<FlagConfigWriteResult>;
   promoteFlagConfig(input: PromoteFlagConfigInput): Promise<PromoteFlagConfigResult>;
+  previewFlagConfig(input: PatchFlagConfigInput): Promise<FlagConfigWriteResult>;
+  previewTargetingRules(input: ReplaceTargetingRulesInput): Promise<FlagConfigWriteResult>;
+  previewPromotion(input: PromoteFlagConfigInput): Promise<PromoteFlagConfigResult>;
+  applyApprovedFlagConfig(input: ApplyApprovedFlagConfigInput): Promise<FlagConfigWriteResult>;
   syncExperimentConfig(input: ExperimentConfigSyncInput): Promise<FlagConfigWriteResult>;
   /**
    * Rebuild one Environment's KV Flag snapshot from D1 without mutating D1.
@@ -90,6 +96,35 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
 
     async promoteFlagConfig(input) {
       return promoteFlagConfig(deps, input);
+    },
+
+    async previewFlagConfig(input) {
+      return previewFlagConfig(deps, input);
+    },
+
+    async previewTargetingRules(input) {
+      const scope = envScope(input.appId, input.environmentId);
+      const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
+      if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
+      const missingVariants = missingRuleVariantNames(
+        input.targetingRules,
+        snapshot.flag.variants,
+        snapshot.flag.availableVariantNames,
+      );
+      if (missingVariants.length > 0) {
+        return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants };
+      }
+      return previewSnapshotResult(snapshot, {
+        targetingRules: input.targetingRules,
+      });
+    },
+
+    async previewPromotion(input) {
+      return promoteFlagConfig(deps, { ...input, preview: true });
+    },
+
+    async applyApprovedFlagConfig(input) {
+      return applyApprovedFlagConfig(deps, input);
     },
 
     async syncExperimentConfig(input) {
@@ -193,6 +228,153 @@ async function writeFlagConfig(
   return writeSnapshotAndBroadcast(deps, scope, input.flagId, commit);
 }
 
+async function previewFlagConfig(
+  deps: ConfigStoreDeps,
+  input: PatchFlagConfigInput,
+): Promise<FlagConfigWriteResult> {
+  const scope = envScope(input.appId, input.environmentId);
+  const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
+  if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
+  const validation = validateFlagConfigPatch(snapshot, input);
+  if (validation) return validation;
+  const rollout = nextBaselineRollout(
+    snapshot.flag.rollout,
+    input.rollout,
+    input.approvalRolloutSalt ? () => input.approvalRolloutSalt as string : undefined,
+  );
+  return previewSnapshotResult(snapshot, {
+    ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+    ...(input.availableVariantNames !== undefined
+      ? { availableVariantNames: input.availableVariantNames }
+      : {}),
+    ...(rollout !== undefined ? { rollout } : {}),
+  });
+}
+
+async function applyApprovedFlagConfig(
+  deps: ConfigStoreDeps,
+  input: ApplyApprovedFlagConfigInput,
+): Promise<FlagConfigWriteResult> {
+  const scope = envScope(input.appId, input.environmentId);
+  const current = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
+  if (!current) return { ok: false, reason: "FLAG_NOT_FOUND" };
+  const missingVariants = missingAvailableVariants(
+    input.proposed.availableVariantNames,
+    current.flag.variants,
+  );
+  const missingRuleVariants = missingRuleVariantNames(
+    input.proposed.targetingRules,
+    current.flag.variants,
+    input.proposed.availableVariantNames,
+  );
+  if (missingVariants.length + missingRuleVariants.length > 0) {
+    return {
+      ok: false,
+      reason: "VARIANT_NOT_AVAILABLE",
+      missingVariants: [...new Set([...missingVariants, ...missingRuleVariants])],
+    };
+  }
+  const defaultVariant = current.flag.variants.find(
+    (variant) => variant.id === current.flag.defaultVariantId,
+  );
+  if (
+    baselineIsUnresolvable(
+      input.proposed.rollout,
+      input.proposed.availableVariantNames,
+      defaultVariant?.name,
+      current.flag.variants.map((variant) => variant.name),
+    )
+  ) {
+    return {
+      ok: false,
+      reason: "ROLLOUT_AMBIGUOUS",
+      availableVariantNames: input.proposed.availableVariantNames,
+    };
+  }
+
+  const patch = {
+    enabled: input.proposed.enabled,
+    availableVariantNames: json(input.proposed.availableVariantNames),
+    rollout: input.proposed.rollout ? json(input.proposed.rollout) : null,
+    updatedAt: input.approval.reviewedAt,
+  };
+  const rulesChanged =
+    JSON.stringify(current.flag.targetingRules) !== JSON.stringify(input.proposed.targetingRules);
+  const updated = rulesChanged
+    ? await deps.repo.flags.replaceTargetingRules(
+        scope,
+        input.flagId,
+        targetingRuleRows(input.proposed.targetingRules, new Date(input.approval.reviewedAt)),
+        patch,
+        input.approval,
+      )
+    : await deps.repo.flags.updateFlagConfig(scope, input.flagId, patch, input.approval);
+  if (!updated) return { ok: false, reason: "FLAG_NOT_FOUND" };
+  const committed = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
+  if (!committed) return { ok: false, reason: "FLAG_NOT_FOUND" };
+  return writeSnapshotAndBroadcast(deps, scope, input.flagId, committed);
+}
+
+function previewSnapshotResult(
+  current: Snapshot,
+  patch: Partial<
+    Pick<Snapshot["flag"], "enabled" | "availableVariantNames" | "targetingRules" | "rollout">
+  >,
+): FlagConfigWriteResult {
+  const proposed: Snapshot = {
+    ...current,
+    version: current.version + 1,
+    flag: {
+      ...current.flag,
+      ...patch,
+    },
+  };
+  return {
+    ok: true,
+    config: responseFromSnapshot(proposed),
+    nudge: DeltaNudgeSchema.parse({
+      type: "config.changed",
+      entity: "flag",
+      id: current.flag.id,
+      version: proposed.version,
+    }),
+  };
+}
+
+function validateFlagConfigPatch(
+  snapshot: Snapshot,
+  input: PatchFlagConfigInput,
+): Extract<FlagConfigWriteResult, { ok: false }> | null {
+  const missingVariants = missingAvailableVariants(
+    input.availableVariantNames,
+    snapshot.flag.variants,
+  );
+  if (missingVariants.length > 0) {
+    return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants };
+  }
+  const available = input.availableVariantNames ?? snapshot.flag.availableVariantNames;
+  const missingRuleVariants = missingRuleVariantNames(
+    snapshot.flag.targetingRules,
+    snapshot.flag.variants,
+    available,
+  );
+  if (missingRuleVariants.length > 0) {
+    return { ok: false, reason: "VARIANT_NOT_AVAILABLE", missingVariants: missingRuleVariants };
+  }
+  const rollout = input.rollout === undefined ? snapshot.flag.rollout : input.rollout;
+  const defaultVariant = snapshot.flag.variants.find(
+    (variant) => variant.id === snapshot.flag.defaultVariantId,
+  );
+  return baselineIsUnresolvable(
+    rollout,
+    available,
+    defaultVariant?.name,
+    snapshot.flag.variants.map((variant) => variant.name),
+  )
+    ? { ok: false, reason: "ROLLOUT_AMBIGUOUS", availableVariantNames: available }
+    : null;
+}
+
 async function commitFlagConfigPatch(
   deps: ConfigStoreDeps,
   scope: EnvScope,
@@ -202,13 +384,18 @@ async function commitFlagConfigPatch(
   // Resolved against the CURRENT stored rollout so an existing salt survives a
   // percentage change (see flag-config-rollout.ts); `undefined` leaves it alone.
   const rollout = nextBaselineRollout(current.flag.rollout, input.rollout);
-  const updated = await deps.repo.flags.updateFlagConfig(scope, input.flagId, {
-    ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
-    ...(input.availableVariantNames !== undefined
-      ? { availableVariantNames: json(input.availableVariantNames) }
-      : {}),
-    ...(rollout !== undefined ? { rollout: rollout === null ? null : json(rollout) } : {}),
-    updatedAt: (deps.now?.() ?? new Date()).toISOString(),
-  });
+  const updated = await deps.repo.flags.updateFlagConfig(
+    scope,
+    input.flagId,
+    {
+      ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+      ...(input.availableVariantNames !== undefined
+        ? { availableVariantNames: json(input.availableVariantNames) }
+        : {}),
+      ...(rollout !== undefined ? { rollout: rollout === null ? null : json(rollout) } : {}),
+      updatedAt: input.approval?.reviewedAt ?? (deps.now?.() ?? new Date()).toISOString(),
+    },
+    input.approval,
+  );
   return updated ? buildSnapshotFromD1(deps.repo, scope, input.flagId) : null;
 }

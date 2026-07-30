@@ -225,16 +225,6 @@ const errorMembers = [
     "PRIVACY_CONFIRMATION_REQUIRED",
     z.object({ confirmationRequired: z.literal(true), confirmationExpiresAt: z.string() }),
   ),
-  // Deprecated: emitted by the legacy flag-config-policy runtime path and removed by SPL-150 when the Approval runtime replaces it.
-  member(
-    "CONFIRMATION_REQUIRED",
-    z.object({
-      gate: PolicyChangeTypeSchema,
-      environmentId: z.string(),
-      attemptedOp: z.string(),
-      recommendedAction: z.literal("REVIEW_APPROVAL_REQUEST"),
-    }),
-  ),
   member(
     "APPROVAL_REVIEW_FORBIDDEN",
     z.object({

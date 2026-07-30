@@ -4,6 +4,7 @@ import { appAdminScope } from "./scope-binding";
 
 const APP_WRITE_ROLES = ["owner", "admin"] as const;
 const APP_DELETE_ROLES = ["owner"] as const;
+const APP_MEMBER_ROLES = ["owner", "admin", "member"] as const;
 
 type AppRole = "owner" | "admin" | "member";
 interface AppAuthzDeps {
@@ -28,6 +29,15 @@ export async function requireAppAdmin(
   requestId: string,
 ): Promise<Response | null> {
   return requireAppRole(deps, appId, actor, APP_WRITE_ROLES, requestId);
+}
+
+export async function requireAppMember(
+  deps: AppAuthzDeps,
+  appId: string,
+  actor: ScopedActor,
+  requestId: string,
+): Promise<Response | null> {
+  return requireAppRole(deps, appId, actor, APP_MEMBER_ROLES, requestId);
 }
 
 export async function requireAppWrite(

@@ -1,5 +1,7 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, exists, sql } from "drizzle-orm";
 import { flagConfigs, targetingRules } from "../schema/index";
+import type { ApprovalCommit } from "./approval-types";
+import { appliedReviewQueries, approvalPendingCondition } from "./approval-atomic";
 import type { Db } from "./client";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
@@ -11,6 +13,7 @@ import type { ScopedTable } from "./scoped-table";
  * Every operation takes an `EnvScope`, so the tenant boundary is the same one
  * `scopedTable` enforces for the rest of the domain.
  */
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: these operations share the same scoped config and targeting-rule tables
 export function makeFlagConfigOps(
   db: Db,
   flagConfigsTable: ScopedTable<typeof flagConfigs>,
@@ -19,6 +22,10 @@ export function makeFlagConfigOps(
   return {
     getFlagConfig(scope: EnvScope, flagId: string) {
       return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
+    },
+
+    getFlagConfigById(scope: EnvScope, configId: string) {
+      return flagConfigsTable.findOne(scope, eq(flagConfigs.id, configId));
     },
 
     /**
@@ -69,9 +76,40 @@ export function makeFlagConfigOps(
           | "version"
         >
       >,
+      approval?: ApprovalCommit,
     ): Promise<typeof flagConfigs.$inferSelect | null> {
       const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       if (!current) return null;
+      if (approval) {
+        const mutation = db
+          .update(flagConfigs)
+          .set({ ...patch, version: current.version + 1 })
+          .where(
+            and(
+              scopedFlagConfig(scope, flagId),
+              eq(flagConfigs.version, current.version),
+              approvalPendingCondition(db, approval),
+            ),
+          )
+          .returning({ id: flagConfigs.id });
+        const evidence = exists(
+          db
+            .select({ one: sql<number>`1` })
+            .from(flagConfigs)
+            .where(
+              and(
+                scopedFlagConfig(scope, flagId),
+                eq(flagConfigs.version, current.version + 1),
+                eq(flagConfigs.updatedAt, approval.reviewedAt),
+              ),
+            ),
+        );
+        await db.batch([
+          mutation,
+          ...appliedReviewQueries(db, approval, evidence),
+        ] as unknown as Parameters<Db["batch"]>[0]);
+        return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
+      }
       const rows = await flagConfigsTable.update(
         scope,
         { ...patch, version: current.version + 1 },
@@ -94,10 +132,70 @@ export function makeFlagConfigOps(
           "enabled" | "availableVariantNames" | "rollout" | "updatedAt"
         >
       >,
+      approval?: ApprovalCommit,
     ): Promise<typeof flagConfigs.$inferSelect | null> {
       assertMintedScope(scope);
       const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       if (!current) return null;
+
+      if (approval) {
+        const evidence = exists(
+          db
+            .select({ one: sql<number>`1` })
+            .from(flagConfigs)
+            .where(
+              and(
+                scopedFlagConfig(scope, flagId),
+                eq(flagConfigs.version, current.version + 1),
+                eq(flagConfigs.updatedAt, approval.reviewedAt),
+              ),
+            ),
+        );
+        const guardedDelete = db
+          .delete(targetingRules)
+          .where(and(scopedTargetingRule(scope, flagId), evidence))
+          .returning();
+        const guardedInserts = rows.map((row) =>
+          db.insert(targetingRules).select(
+            db
+              .select({
+                id: sql<string>`${row.id}`.as("id"),
+                appId: sql<string>`${scope.appId}`.as("app_id"),
+                environmentId: sql<string>`${scope.environmentId}`.as("environment_id"),
+                flagId: sql<string>`${flagId}`.as("flag_id"),
+                priority: sql<number>`${row.priority}`.as("priority"),
+                conditions: sql<string>`${row.conditions}`.as("conditions"),
+                variantId: sql<string | null>`${row.variantId ?? null}`.as("variant_id"),
+                percentageRollout: sql<string | null>`${row.percentageRollout ?? null}`.as(
+                  "percentage_rollout",
+                ),
+                createdAt: sql<string>`${row.createdAt}`.as("created_at"),
+                updatedAt: sql<string>`${row.updatedAt}`.as("updated_at"),
+              })
+              .from(flagConfigs)
+              .where(evidence)
+              .limit(1),
+          ),
+        );
+        const guardedUpdate = db
+          .update(flagConfigs)
+          .set({ ...configPatch, version: current.version + 1 })
+          .where(
+            and(
+              scopedFlagConfig(scope, flagId),
+              eq(flagConfigs.version, current.version),
+              approvalPendingCondition(db, approval),
+            ),
+          )
+          .returning();
+        await db.batch([
+          guardedUpdate,
+          guardedDelete,
+          ...guardedInserts,
+          ...appliedReviewQueries(db, approval, evidence),
+        ] as unknown as Parameters<Db["batch"]>[0]);
+        return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
+      }
 
       const batch = [
         db.delete(targetingRules).where(scopedTargetingRule(scope, flagId)).returning(),

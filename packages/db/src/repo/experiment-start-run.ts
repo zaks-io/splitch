@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { experiments, runs } from "../schema/index";
+import type { ApprovalCommit } from "./approval-types";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
 import type { ScopedTable } from "./scoped-table";
@@ -24,6 +25,7 @@ export type StartRunInput = {
   endedAt: string;
   updatedAt: string;
   updatedBy?: string | null;
+  approval?: ApprovalCommit;
 };
 
 export type StartRunResult =
@@ -111,6 +113,7 @@ async function runStartBatch(
     endCurrentRunStatement(d1, scope, input, guardParams),
     insertRunStatement(d1, scope, input, guardParams),
     updateExperimentStartedStatement(d1, input, guardParams),
+    ...(input.approval ? approvalAppliedStatements(d1, input.approval, input.run.id) : []),
   ]);
   const inserted = batch[1]?.results ?? [];
   const updated = batch[2]?.results ?? [];
@@ -133,7 +136,7 @@ function endCurrentRunStatement(
       UPDATE runs
       SET status = 'ended', ended_at = ?
       WHERE app_id = ? AND environment_id = ? AND experiment_id = ? AND status = 'running'
-        AND EXISTS (SELECT 1 FROM experiments WHERE ${START_GUARD_SQL})
+        AND EXISTS (SELECT 1 FROM experiments WHERE ${startGuardSql(input.approval)})
       RETURNING id
     `,
     )
@@ -167,7 +170,7 @@ function insertRunStatement(
         ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?
-      WHERE EXISTS (SELECT 1 FROM experiments WHERE ${START_GUARD_SQL})
+      WHERE EXISTS (SELECT 1 FROM experiments WHERE ${startGuardSql(input.approval)})
       RETURNING id
     `,
     )
@@ -192,7 +195,7 @@ function updateExperimentStartedStatement(
         draft_segment_ids = NULL,
         updated_at = ?,
         updated_by = ?
-      WHERE ${START_GUARD_SQL}
+      WHERE ${startGuardSql(input.approval)}
       RETURNING id
     `,
     )
@@ -223,7 +226,8 @@ const DRAFT_GUARD_SQL = `
   AND (live_run_id = ? OR (live_run_id IS NULL AND ? IS NULL))
 `;
 
-const START_GUARD_SQL = `
+function startGuardSql(approval?: ApprovalCommit): string {
+  return `
   ${DRAFT_GUARD_SQL}
   AND NOT EXISTS (
     SELECT 1
@@ -234,7 +238,21 @@ const START_GUARD_SQL = `
       AND blocker.status = 'running'
       AND blocker.id <> ?
   )
+  ${
+    approval
+      ? `AND EXISTS (
+    SELECT 1 FROM approval_requests
+    WHERE app_id = ? AND id = ? AND status = 'pending'
+  )
+  AND EXISTS (
+    SELECT 1 FROM app_memberships
+    WHERE app_id = ? AND user_id = ? AND role IN ('owner', 'admin')
+  )
+  ${approval.policyContexts.map(policyGuardSql).join("\n  ")}`
+      : ""
+  }
 `;
+}
 
 function startGuardParams(scope: EnvScope, input: StartRunInput): unknown[] {
   return [
@@ -243,7 +261,118 @@ function startGuardParams(scope: EnvScope, input: StartRunInput): unknown[] {
     scope.environmentId,
     input.flagId,
     input.experimentId,
+    ...(input.approval
+      ? [
+          input.approval.appId,
+          input.approval.requestId,
+          input.approval.appId,
+          input.approval.reviewedBy,
+          ...input.approval.policyContexts.flatMap((context) =>
+            policyGuardParams(input.approval?.appId ?? "", context),
+          ),
+        ]
+      : []),
   ];
+}
+
+function policyGuardSql(context: ApprovalCommit["policyContexts"][number]): string {
+  return `AND EXISTS (
+    SELECT 1 FROM environments
+    WHERE app_id = ? AND id = ?
+      ${context.changeTypes.map((changeType) => `AND json_extract(policy, '${policyPath(changeType)}') = ?`).join("\n      ")}
+  )`;
+}
+
+function policyGuardParams(
+  appId: string,
+  context: ApprovalCommit["policyContexts"][number],
+): unknown[] {
+  return [appId, context.environmentId, ...context.changeTypes.flatMap(() => [context.level])];
+}
+
+function policyPath(changeType: ApprovalCommit["policyContexts"][number]["changeTypes"][number]) {
+  switch (changeType) {
+    case "variant_availability":
+      return "$.variantAvailability";
+    case "targeting_rollout_value":
+      return "$.targetingRolloutValue";
+    case "enabled_state":
+      return "$.enabledState";
+    case "start_experiment_run":
+      return "$.startExperimentRun";
+  }
+}
+
+function approvalAppliedStatements(
+  d1: D1Database,
+  approval: ApprovalCommit,
+  runId: string,
+): D1PreparedStatement[] {
+  const review = d1
+    .prepare(
+      `
+      INSERT INTO approval_reviews (
+        id, app_id, approval_request_id, action, outcome,
+        reviewed_by, reviewed_via, reviewed_at, reason,
+        idempotency_key, request_hash, resulting_target_version,
+        resulting_resource_type, resulting_resource_id, error_code, error_details
+      )
+      SELECT
+        ?, app_id, id, 'approve_and_apply', 'applied',
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL
+      FROM approval_requests
+      WHERE app_id = ? AND id = ? AND status = 'pending'
+        AND EXISTS (
+          SELECT 1 FROM runs
+          WHERE app_id = ? AND id = ? AND status = 'running' AND started_at = ?
+        )
+    `,
+    )
+    .bind(
+      approval.reviewId,
+      approval.reviewedBy,
+      approval.reviewedVia,
+      approval.reviewedAt,
+      approval.reason,
+      approval.idempotencyKey,
+      approval.requestHash,
+      approval.resultingTargetVersion,
+      approval.resultingResourceType,
+      approval.resultingResourceId,
+      approval.appId,
+      approval.requestId,
+      approval.appId,
+      runId,
+      approval.reviewedAt,
+    );
+  const request = d1
+    .prepare(
+      `
+      UPDATE approval_requests
+      SET status = 'applied',
+          resolved_at = ?,
+          resulting_target_version = ?,
+          resulting_resource_type = ?,
+          resulting_resource_id = ?
+      WHERE app_id = ? AND id = ? AND status = 'pending'
+        AND EXISTS (
+          SELECT 1 FROM approval_reviews
+          WHERE app_id = ? AND id = ? AND approval_request_id = ?
+        )
+    `,
+    )
+    .bind(
+      approval.reviewedAt,
+      approval.resultingTargetVersion,
+      approval.resultingResourceType,
+      approval.resultingResourceId,
+      approval.appId,
+      approval.requestId,
+      approval.appId,
+      approval.reviewId,
+      approval.requestId,
+    );
+  return [review, request];
 }
 
 function draftGuardParams(

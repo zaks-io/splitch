@@ -148,13 +148,17 @@ describe("control-plane Flag Variant updates", () => {
         value: false,
         description: "renamed catalog entry",
         idempotency_key: "idem_variant_update_success",
+        review: { action: "approve_and_apply" },
       },
     );
 
     expect(res.status).toBe(200);
-    const updated = (await res.json()) as {
-      variants: Array<{ name: string; value: unknown; description?: string }>;
+    const body = (await res.json()) as {
+      approvalRequest: { status: string };
+      flag: { variants: Array<{ name: string; value: unknown; description?: string }> };
     };
+    expect(body.approvalRequest.status).toBe("applied");
+    const updated = body.flag;
     expect("enabled" in updated).toBe(false);
     expect(updated.variants).toContainEqual(
       expect.objectContaining({
