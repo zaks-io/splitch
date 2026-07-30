@@ -1,21 +1,13 @@
-import { spawnSync } from "node:child_process";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import test from "node:test";
+import {
+  createFixture,
+  deployedCommitSha,
+  readCalls,
+  runDeploy,
+} from "./lib/deploy-worker-with-sentry-test-support.mjs";
 import { PLACEHOLDER_KV_ID } from "./lib/hosted-bindings.mjs";
-
-const repoRoot = new URL("..", import.meta.url).pathname;
-const scriptPath = join(repoRoot, "scripts/deploy-worker-with-sentry.mjs");
-const deployedCommitSha = "a".repeat(40);
 
 test("passes required Worker secrets to wrangler deploy as a temporary secrets file", () => {
   const fixture = createFixture({
@@ -91,6 +83,54 @@ test("removes the deploy secrets file when wrangler deploy fails", () => {
 
   const [call] = readCalls(fixture.callsPath);
   assert.equal(existsSync(call.secretsFile), false);
+});
+
+test("uploads validated Sentry source maps before the live Worker deploy", () => {
+  const fixture = createFixture();
+
+  const result = runDeploy(fixture, ["--env", "production"], {
+    SENTRY_AUTH_TOKEN: "fake-auth-token",
+    SENTRY_ORG: "fake-org",
+    SENTRY_PROJECT: "fake-project",
+  });
+
+  assert.equal(result.status, 0, result.stderr);
+
+  const calls = readCalls(fixture.callsPath);
+  assert.deepEqual(
+    calls.map((call) => call.args.slice(0, 3)),
+    [
+      ["exec", "wrangler", "deploy"],
+      ["exec", "sentry-cli", "releases"],
+      ["exec", "sentry-cli", "sourcemaps"],
+      ["exec", "wrangler", "deploy"],
+    ],
+  );
+  assert.equal(calls[0].args.includes("--dry-run"), true);
+  assert.equal(calls[2].args.includes("--validate"), true);
+  assert.equal(calls[2].args.includes("--wait"), false);
+  assert.equal(calls[2].args.includes("--wait-for"), false);
+  assert.equal(calls[3].args.includes("--dry-run"), false);
+});
+
+test("does not deploy the live Worker when Sentry processing reports the prior timeout", () => {
+  const fixture = createFixture();
+
+  const result = runDeploy(fixture, ["--env", "production"], {
+    SENTRY_AUTH_TOKEN: "fake-auth-token",
+    SENTRY_ORG: "fake-org",
+    SENTRY_PROJECT: "fake-project",
+    SPLITCH_FAKE_SENTRY_UPLOAD_EXIT: "1",
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Failed to process files in 60s/);
+
+  const wranglerDeploys = readCalls(fixture.callsPath).filter(
+    (call) => call.args[1] === "wrangler" && call.args[2] === "deploy",
+  );
+  assert.equal(wranglerDeploys.length, 1);
+  assert.equal(wranglerDeploys[0].args.includes("--dry-run"), true);
 });
 
 test("fails before wrangler deploy when CI requires a missing Worker secret", () => {
@@ -174,96 +214,4 @@ for (const missingVerifierBinding of ["WORKOS_JWKS_URI", "WORKOS_ISSUER", "WORKO
     assert.match(result.stderr, new RegExp(missingVerifierBinding));
     assert.equal(existsSync(fixture.callsPath), false);
   });
-}
-
-function createFixture({
-  requiredSecrets = [],
-  bindings = {},
-  workerName = "splitch-evaluation-api",
-  vars = {},
-  targetVars = {},
-} = {}) {
-  const root = mkdtempSync(join(tmpdir(), "splitch-worker-deploy-test-"));
-  const binDir = join(root, "bin");
-  const callsPath = join(root, "wrangler-deploy-calls.jsonl");
-
-  mkdirSync(binDir, { recursive: true });
-  writeFileSync(
-    join(root, "wrangler.jsonc"),
-    JSON.stringify({
-      name: workerName,
-      vars,
-      env: {
-        production: {
-          ...bindings,
-          vars: targetVars,
-          secrets: {
-            required: requiredSecrets,
-          },
-        },
-      },
-    }),
-  );
-  writeFileSync(
-    join(binDir, "pnpm"),
-    `#!/usr/bin/env node
-const { appendFileSync, readFileSync } = require("node:fs");
-const args = process.argv.slice(2);
-const secretsFileIndex = args.indexOf("--secrets-file");
-const secretsFile = secretsFileIndex === -1 ? undefined : args[secretsFileIndex + 1];
-appendFileSync(process.env.SPLITCH_FAKE_WRANGLER_CALLS, JSON.stringify({
-  cwd: process.cwd(),
-  args,
-  secretsFile,
-  secrets: secretsFile ? JSON.parse(readFileSync(secretsFile, "utf8")) : undefined
-}) + "\\n");
-process.exit(Number(process.env.SPLITCH_FAKE_WRANGLER_EXIT || 0));
-`,
-  );
-  chmodSync(join(binDir, "pnpm"), 0o755);
-
-  return { binDir, callsPath, root };
-}
-
-function runDeploy(fixture, args, extraEnv = {}, fakeWranglerExit = "0") {
-  const env = {
-    ...process.env,
-  };
-  for (const name of [
-    "SENTRY_AUTH_TOKEN",
-    "SENTRY_DSN",
-    "SENTRY_ORG",
-    "SENTRY_PROJECT",
-    "SPLITCH_EVENT_INGEST_TOKEN",
-    "SPLITCH_DEPLOYED_COMMIT_SHA",
-    "TINYBIRD_INGEST_TOKEN",
-    "SPLITCH_GENERATED_WRANGLER_ENV",
-    "SPLITCH_PLATFORM_TARGET",
-    "SPLITCH_REQUIRE_SENTRY_SOURCE_MAP_ENV",
-    "SPLITCH_REQUIRE_WORKER_SECRET_ENV",
-    "CLOUDFLARE_ENV",
-  ]) {
-    delete env[name];
-  }
-  Object.assign(env, {
-    PATH: `${fixture.binDir}:${process.env.PATH}`,
-    SENTRY_RELEASE: "test-release",
-    SPLITCH_DEPLOYED_COMMIT_SHA: deployedCommitSha,
-    SPLITCH_FAKE_WRANGLER_CALLS: fixture.callsPath,
-    SPLITCH_FAKE_WRANGLER_EXIT: fakeWranglerExit,
-  });
-  Object.assign(env, extraEnv);
-
-  return spawnSync(process.execPath, [scriptPath, ...args], {
-    cwd: fixture.root,
-    encoding: "utf8",
-    env,
-  });
-}
-
-function readCalls(path) {
-  return readFileSync(path, "utf8")
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line));
 }

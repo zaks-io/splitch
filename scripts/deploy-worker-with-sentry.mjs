@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  assertNoPlaceholderHostedBindings,
   assertHostedAuthOrigins,
   assertHostedAuthVerifierBindings,
+  assertNoPlaceholderHostedBindings,
   isHostedWranglerEnv,
   requireHostedWranglerEnvTarget,
 } from "./lib/hosted-bindings.mjs";
@@ -39,6 +39,8 @@ if (!isDryRun && REQUIRE_SENTRY_ENV && missingSentryEnv.length > 0) {
   fail(`missing Sentry source map upload env: ${missingSentryEnv.join(", ")}`);
 }
 
+if (!isDryRun) prepareSentrySourceMaps(release, missingSentryEnv, wranglerArgs);
+
 const workerSecrets = isDryRun ? undefined : writeWorkerSecretsFile(cloudflareEnv);
 if (workerSecrets) {
   wranglerArgs.push("--secrets-file", workerSecrets.path);
@@ -59,9 +61,7 @@ if (isDryRun) {
   process.exit(0);
 }
 
-uploadSentrySourceMaps(release, missingSentryEnv);
-
-function uploadSentrySourceMaps(releaseName, missing) {
+function prepareSentrySourceMaps(releaseName, missing, deployArgs) {
   if (missing.length > 0) {
     console.warn(
       `deploy-worker-with-sentry: missing Sentry source map upload env: ${missing.join(
@@ -71,6 +71,8 @@ function uploadSentrySourceMaps(releaseName, missing) {
     return;
   }
 
+  // Upload first so a required Sentry failure cannot happen after production changes.
+  run("pnpm", [...deployArgs, "--dry-run"]);
   ensureSentryRelease(releaseName);
   run("pnpm", [
     "exec",
@@ -85,8 +87,6 @@ function uploadSentrySourceMaps(releaseName, missing) {
     releaseName,
     "--strip-common-prefix",
     "--validate",
-    "--wait-for",
-    "60",
     OUT_DIR,
   ]);
 }
