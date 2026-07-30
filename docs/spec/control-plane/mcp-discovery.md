@@ -105,7 +105,9 @@ START_A_RUN                → experiments_start (or experiments_create then sta
 EDIT_DRAFT_THEN_START      → apply a draft change → experiments_start
 ADD_VARIANT_TO_ENV         → flags_promote (or variant promotion) → retry the original op
 RETRY_AFTER                → wait details.retryAfterMs → retry
-RETRY_WITH_CONFIRMATION    → resend the same call with confirm: true (Environment Policy gate, ADR-0029)
+REVIEW_APPROVAL_REQUEST    → review details.approvalRequestId with the canonical Review action
+REFRESH_AND_REPROPOSE      → read current target state and create a new Approval Request
+RETRY_REVIEW               → retry the pending request with a new Review idempotency key
 ```
 
 The token is the contract; the prompt is the convenience. An agent that already knows the token

@@ -113,13 +113,18 @@ not a partial resolution.
 
 When `POST /apps/{app_id}/envs/{environment_id}/experiments/:id/start` fires:
 
-1. Worker validates the optional lifecycle request body (Zod): `confirm`, `reason`, and
-   `idempotency_key` only. Assignment config is rejected here and must already be staged on the
-   Experiment draft via create/patch.
+1. Worker validates the lifecycle request body (Zod): optional
+   `review: { action: 'approve_and_apply' }`, optional `reason`, and required `idempotency_key` only.
+   Assignment config is rejected here and must already be staged on the Experiment draft via
+   create/patch. The CLI `--confirm` affordance derives the inline canonical Review; there is no
+   stateless confirmation-retry body.
 2. Worker validates the staged draft assignment config: allocation sums to 100, Variants are
    available in this Environment, and draft Segment ids resolve to frozen `targetingRules`.
-3. D1 transaction: end any running Run (set `ended_at`, `status = 'ended'`), insert the new Run,
-   update `experiments.live_run_id`, and consume the draft assignment fields.
+3. Under `allow`, enter the canonical application transaction directly. Under `confirm` or future
+   `approve`, persist/resolve the Approval Request, authorize Review, and validate the target
+   version first. The D1 transaction then ends any running Run (set `ended_at`,
+   `status = 'ended'`), inserts the new Run, updates `experiments.live_run_id`, consumes the draft
+   assignment fields, and atomically records the successful Review and Approval Request transition.
 4. KV sync: write the D1-derived reader set: `app:{appId}:{environmentId}:experiment:{experimentId}`
    with `ExperimentConfigKV.liveRunId`, `app:{appId}:{environmentId}:run:{newRunId}` with
    `RunConfigKV`, and `live_run:{appId}:{environmentId}:{experimentId}` with `LiveRunKV`.

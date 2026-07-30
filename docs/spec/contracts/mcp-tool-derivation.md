@@ -74,8 +74,9 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 **Reading the Environment Policy.** There is no separate policy endpoint or tool: the Environment
 Policy (the per-change-type `allow | confirm` map, ADR-0029) is returned inline by `environments_get`
 and written by `environments_update` (endpoints-org-app.md). An agent reads `environments_get` and
-inspects `policy` **before** a gated write so it can pass `confirm: true` on the first attempt rather
-than round-tripping through a `409 CONFIRMATION_REQUIRED`. The CLI `splitch env-policy get` / `set`
+inspects `policy` **before** a gated write so it can send
+`review: { action: "approve_and_apply" }` on the first attempt under `confirm`. The CLI
+`splitch env-policy get` / `set`
 are presentation aliases that project the `policy` field of those same calls — same endpoint, friendlier
 surface, no second route (one way to do one thing).
 
@@ -228,20 +229,24 @@ naming the next step, so the agent's recovery branch is a token lookup, not pros
 - `VARIANT_NOT_AVAILABLE` → `details.missingVariants`, `details.recommendedAction: 'ADD_VARIANT_TO_ENV'`
 - `ALLOCATION_INVALID` → `details.got` (the actual sum; fix allocation to sum to 100)
 - `INSUFFICIENT_SCOPES` → `details.requiredScopes` (re-authenticate with broader scopes)
-- `CONFIRMATION_REQUIRED` → `details.gate` + `recommendedAction: 'RETRY_WITH_CONFIRMATION'` (the Environment Policy gates this change type; resend the **same** tool call with `confirm: true`)
+- `APPROVAL_REVIEW_REQUIRED` → `details.approvalRequestId` + `recommendedAction: 'REVIEW_APPROVAL_REQUEST'`
+- `APPROVAL_REQUEST_STALE` → `details.currentTargetVersion` + `recommendedAction: 'REFRESH_AND_REPROPOSE'`
+- `APPROVAL_APPLICATION_FAILED` → `details.reviewId` + `recommendedAction: 'RETRY_REVIEW'`
 
 No per-tool ad-hoc error shapes. (ADR-0025 "one canonical ErrorResponse".)
 
-## Confirmation gate over MCP
+## Approval Request and Review over MCP
 
-Gated writes (`experiments_start`, `flag_config_update`, `flags_promote`, the enabled-state toggle)
-derive a `confirm?: boolean` input from the same Zod request body the Worker validates, so the field
-is exposed on the tool by construction — there is no separate confirmation ceremony. If the
-Environment Policy gates the change type (ADR-0029) and `confirm` is omitted/false, the Worker
-returns `409 CONFIRMATION_REQUIRED` naming `details.gate`; the agent resends the identical call with
-`confirm: true`. To avoid the round-trip, an agent reads the Policy from `environments_get` first and
-sets `confirm` up front. `confirm: true` satisfies the gate but does not widen authorization (full Worker validation
-still applies). Canonical shape in [error-responses.md](./error-responses.md#confirmation_required-the-environment-policy-confirmation-handshake).
+Policy-controlled writes derive `review?: { action: "approve_and_apply" }` from the same Zod request
+body the Worker validates. Under `allow`, no Review is required. Under `confirm`, the proposer may
+send the action inline. Future `approve` changes only Review authority and requires a distinct
+principal to submit that same action.
+
+If required Review is omitted, the Worker persists the immutable Approval Request and returns
+`409 APPROVAL_REVIEW_REQUIRED`. The agent invokes the route-derived Approval Review tool with the
+returned ID and a new `idempotency_key`; it does not resend the mutation or create a second
+confirmation pipeline. Canonical shape in
+[error-responses.md](./error-responses.md#approval-request-and-review-errors).
 
 ## Pagination inputs
 
@@ -253,12 +258,18 @@ Tinybird-backed lists. Canonical contract in
 
 ## Idempotency on retried creates
 
-Non-idempotent control-plane creates (`apps_create`, `experiments_create`, `experiments_start`,
+Non-idempotent control-plane creates (`apps_create`, `experiments_create`,
 `flag_variants_create`, `metrics_create`, `segments_create`, `api_keys_create`) accept an optional
 `idempotency_key` (caller-supplied, derived from the route body schema). The Worker records the key
 and returns the **same** resource on a retry with the same key, so an agent retrying after a network
 timeout never double-creates. Omitting the key preserves at-most-once-per-call semantics only; agents
 that retry should always supply one. (Mirrors the auth-claim idempotency key, auth-doors.md.)
+
+Approval-controlled mutations (`experiments_start`, `flag_config_update`,
+`flag_targeting_rules_replace`, `flags_promote`, and App-level Variant value updates) require
+`idempotency_key`. It owns durable Approval Request creation and any inline Review. Review calls
+also require their own key. Exact retries return the stored result; a key reused with a different
+payload fails with `IDEMPOTENCY_KEY_CONFLICT`.
 
 ## Authorization
 

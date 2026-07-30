@@ -6,10 +6,7 @@ export {
   normalizeClientOrigins,
   OriginAllowlistSchema,
 } from "./client-origin";
-export {
-  CONTROL_PANEL_DELEGATION_HEADER,
-  PANEL_API_KEY_SCOPES,
-} from "./control-panel-binding";
+export { CONTROL_PANEL_DELEGATION_HEADER, PANEL_API_KEY_SCOPES } from "./control-panel-binding";
 export { errorStatusByCode, httpStatusForError } from "./error-status";
 export {
   ErrorCodeSchema,
@@ -48,6 +45,49 @@ export type {
   RouteContract,
   RouteOwner,
 } from "./route-contract";
+export {
+  ApprovalActorSchema,
+  ApprovalAppliedResourceTypeSchema,
+  ApprovalApplicationResultSchema,
+  ApprovalDiffEntrySchema,
+  ApprovalDiffSchema,
+  ApprovalOperationSchema,
+  approvalOperations,
+  ApprovalPolicyContextSchema,
+  ApprovalRequestSchema,
+  ApprovalRequestStatusSchema,
+  approvalRequestStatuses,
+  ApprovalReviewActionSchema,
+  approvalReviewActions,
+  ApprovalReviewErrorSchema,
+  ApprovalReviewOutcomeSchema,
+  approvalReviewOutcomes,
+  ApprovalReviewSchema,
+  ApprovalTargetSchema,
+  ApprovalTargetTypeSchema,
+  approvalTargetTypes,
+  approvalAppliedResourceTypes,
+  InlineApproveAndApplyReviewSchema,
+  ReviewApprovalRequestSchema,
+} from "./routes/route-shapes";
+export type {
+  ApprovalActor,
+  ApprovalAppliedResourceType,
+  ApprovalApplicationResult,
+  ApprovalDiff,
+  ApprovalDiffEntry,
+  ApprovalOperation,
+  ApprovalPolicyContext,
+  ApprovalRequest,
+  ApprovalRequestStatus,
+  ApprovalReview,
+  ApprovalReviewAction,
+  ApprovalReviewError,
+  ApprovalReviewOutcome,
+  ApprovalTarget,
+  ApprovalTargetType,
+  ReviewApprovalRequest,
+} from "./routes/route-shapes";
 export { defineApiRoute } from "./openapi-route";
 export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
 export { controlPlaneRpcApp, type ControlPlaneRpcApp } from "./openapi-rpc";

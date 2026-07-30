@@ -31,18 +31,29 @@ new Entities from being assigned) without closing the Run.
 ### draft → running: `POST /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}/start`
 
 Triggered by: explicit user/agent Start action. **Subject to the Environment Policy** (ADR-0029): if
-this Environment gates "Start an Experiment Run" at `confirm`, the call must carry the Confirmation
-before it commits.
+this Environment gates "Start an Experiment Run" at `confirm`, the proposer must perform the
+canonical `approve_and_apply` Review before it commits. The Confirmation UI is the proposer
+self-reviewing the durable Approval Request, not a separate pipeline.
 
-What happens (atomic in the Control Plane API Worker, ordered):
+What happens, ordered:
 
 1. Validate all draft config is valid (allocation sums to 100%, at least one Variant, Targeting Key set,
    every Variant available in this Environment per ADR-0028)
-2. If a `running` Run exists: transition it to `ended`, set `ended_at = now()`
-3. Create a new Run row in D1 with `status = running`, `started_at = now()`, `run_id = ulid()`
-4. Copy frozen assignment config from Experiment draft fields into the Run row
-5. Write `live_run_id = run_id` to KV for the edge (key: `live_run:{app_id}:{environment_id}:{experiment_id}`)
-6. Return the new Run object inline in the response (no separate GET needed)
+2. Under `allow`, enter the application seam directly. Under `confirm` or future `approve`, resolve
+   the `pending` Approval Request and authorize the Review from current membership and Policy.
+3. Recompute the Experiment-draft target version, including `live_run_id` and the relevant
+   Environment Policy projection; a mismatch records `stale` and applies nothing.
+4. In one D1 transaction, end the existing running Run if present, create the new `running` Run with
+   its frozen draft config, update the Experiment's canonical `live_run_id`, record the successful
+   Review and resulting version, and move the Approval Request to `applied`.
+5. After D1 commit, project the new Run config and
+   `live_run:{app_id}:{environment_id}:{experiment_id}` pointer to KV.
+6. Return the new Run object and applied Approval Request inline (no separate GET needed).
+
+Review authorization and target-version validation precede any canonical mutation. If application
+inside step 4 fails, D1 rolls back the Run and Approval Request changes; a failed Review attempt is
+recorded separately and the request remains `pending`. A KV failure in step 5 is a loud, retryable
+projection failure, not an application rollback: D1 has already committed the canonical mutation.
 
 **KV propagation:** ~60s until all POPs see the new `live_run_id` (accepted; self-healing per
 ADR-0009). The Worker returns the new Run immediately; the edge catches up within the window.

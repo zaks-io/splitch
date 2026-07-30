@@ -256,10 +256,11 @@ The UI realizes this structurally, not with an "are you sure?":
   cannot type into a frozen field, so there is no edit gesture to misfire.
 - **Changing them is a separate, deliberate flow** — not an edit but **configuring the next Run**.
   It opens a **draft of the next Run** (the _same_ draft→**Start** flow a brand-new Experiment uses
-  — one mechanism, not two). The action is named for what it does to the data: the confirm makes
+  — one mechanism, not two). The action is named for what it does to the data: the Review makes
   plain that **Run N is abandoned and a fresh sample starts from zero** — Runs are independent and
   never pooled (ADR-0006), so the prior Run does not extend, it stops accumulating and becomes a
-  frozen archive. This confirm is the Environment Policy "Start a Run" gate (ADR-0029).
+  frozen archive. Under `confirm`, this is the proposer performing the Environment Policy
+  `approve_and_apply` Review (ADR-0029).
 - **Measurement edits stay inline-editable** — they genuinely do not touch the frozen config, so
   they save plainly (server 200 → refetch). The UI does not gate what is safe; gating everything
   breeds "are you sure" blindness and would bury the one edit that actually matters.
@@ -275,10 +276,10 @@ the same invariant on all three skins:
   error (ADR-0002/0003), so `splitch experiment edit --allocation ...` on a running Experiment is
   rejected, not silently obeyed — the same refusal the panel renders as a locked field.
 - Opening Run N+1 is its own explicit command (e.g. `splitch experiment start-run`), the terminal
-  analogue of the draft→Start flow, and it requires confirmation: an interactive
-  `--confirm`/prompt that names the data loss ("Run N abandoned, fresh sample from zero"), with a
-  non-interactive `--yes` for scripts that exists _only_ because the destructive intent is stated
-  explicitly in the command itself. The MCP tool returns the same gate as a structured confirm.
+  analogue of the draft→Start flow. When Policy requires Review, an interactive `--confirm`/prompt
+  names the data loss ("Run N abandoned, fresh sample from zero") and maps to
+  `review.action = "approve_and_apply"`. The non-interactive form requires that same action
+  explicitly. The MCP tool exposes the same typed Review action.
 - Measurement edits succeed plainly on every skin (no gate), matching the panel's inline save.
 
 So "make it hard to nuke a Run" holds whether the operator is in the panel, at a terminal, or an
@@ -453,13 +454,13 @@ The **Client Key** is shown for copy-paste (public); the **API Key** is provisio
 "see it resolve without firing an Exposure" first moment (ADR-0026/0037); and the active Environment
 starts on **`dev`** so the first move never touches production.
 
-## Promotion & the prod-change approval workflow
+## Promotion & the Policy-gated Approval workflow
 
-The governing requirement: **mistakes against production are hard.** Any production-affecting change
-— a Promotion, a direct prod Flag edit, a Variant/value change, or starting a Run — does not commit
-silently. It becomes an **[[Approval Request]]** (the industry-standard pending-change object;
-LaunchDarkly's term, Statsig's "submit for review") carrying a **diff** of proposed-vs-current
-config, and it commits only when **[[Reviewed]]**.
+The governing requirement: **mistakes against a careful Environment are hard.** Any change whose
+Environment Policy requires Review, including Promotion, a direct Flag Configuration edit, a
+Variant/value change, or starting an Experiment Run, does not commit silently. It becomes an
+**[[Approval Request]]** carrying an immutable proposed-vs-current diff, target version, proposer,
+Policy context, and lifecycle state. It commits only through an authorized Review.
 
 ### Built for confirm now, grows into second-person approval
 
@@ -467,14 +468,19 @@ This workflow ships at the `confirm` Policy level (single operator) but is **str
 future `approve` level without a rewrite** (ADR-0029):
 
 - The **Approval Request object exists from day one**, even under `confirm`. Under `confirm` the
-  proposer self-reviews in the same step — feels like one action, but a proposal-was-approved
-  record is written.
+  proposer invokes `approve_and_apply` in the same step — feels like one action, but the durable
+  Approval Request and successful Review are written.
 - Growing to `approve` (a known future direction — reviewer roles, multi-user) is then a
   **permission change** (self-review disallowed → a second principal must Review), not a new
   pipeline. The diff screen, the Approval Request, the audit trail are already there.
 
 This is the explicit "build a system we grow into" choice: confirm-by-default on prod today,
 second-person approval slots in later.
+
+The positive action is always `approve_and_apply`. There is no approve-only state or deferred
+application. `decline` is terminal. A changed target version moves the request to terminal `stale`.
+Application failure applies nothing, records a failed Review attempt with a machine-stable error,
+and leaves the request `pending` for a new authorized attempt.
 
 ### The Promotion screen is the diff
 
@@ -507,18 +513,21 @@ friction removed, but never a silent side effect. If you submit anyway with the 
 the **Worker rejects** the Approval Request with a structured error naming the missing Variant. The
 strictness is the invariant; the nudge is the affordance.
 
-Ticking and submitting creates the Approval Request; the target env's Policy decides whether it
-self-confirms or (future) waits for a reviewer.
+Ticking and submitting creates the Approval Request. Under `allow`, no Review is required and the
+same validated application seam applies directly. Under `confirm`, the proposer self-reviews with
+`approve_and_apply`. Future `approve` changes only Review authority and waits for a distinct
+authorized principal.
 
 The cross-env "all Flags' dev-vs-prod drift at once" bulk view is a useful **secondary** power-user
 surface, not the primary promote flow.
 
 **CLI/MCP parity (ADR-0023, Worker-enforced).** Promotion and the approval gate are operations, not
 panel features. `splitch flag promote --from dev --to prod --flag checkout-model [--only availability]`
-creates the same Approval Request; when the target Policy is `confirm` it prompts (or takes `--yes`),
-and when it is `approve` (future) the command reports the request as pending a reviewer rather than
-applying. The MCP tool returns the Approval Request as a structured result. The diff, the request,
-and the gate live in the Worker; every skin inherits them.
+creates the same Approval Request; when the target Policy is `confirm` it prompts and sends
+`review.action = "approve_and_apply"`, and when it is `approve` (future) the command reports the
+request as pending a distinct reviewer rather than applying. The MCP tool returns the Approval
+Request as a structured result. The diff, target version, request, Review action, and application
+result live in the Worker; every skin inherits them.
 
 ## Sources
 

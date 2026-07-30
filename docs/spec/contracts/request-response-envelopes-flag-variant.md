@@ -84,6 +84,21 @@ therefore cannot report a lock the write path would refuse to enforce, nor wedge
 never operator-facing: no editor surface displays or accepts it
 ([frontend/flag-editing-ux.md](../frontend/flag-editing-ux.md)).
 
+### FlagConfigMutationResponse
+
+Flag Configuration patch and Targeting Rule replacement return:
+
+```
+{
+  config: FlagConfigResponse
+  approvalRequest: ApprovalRequest | null
+}
+```
+
+`approvalRequest` is null under `allow` and contains the applied request under `confirm`. Promotion
+uses the same field alongside its selected Configuration diff. A pending future `approve` or omitted
+required Review returns `APPROVAL_REVIEW_REQUIRED` instead of pretending the target changed.
+
 ---
 
 ## Variant sub-resource endpoints
@@ -101,11 +116,51 @@ never operator-facing: no editor surface displays or accepts it
 
 ### PatchVariantRequest
 
-| Field         | Required | Notes                                                                                           |
-| ------------- | -------- | ----------------------------------------------------------------------------------------------- |
-| `name`        | no       | —                                                                                               |
-| `value`       | no       | **Worker rejects if any running Run's `variantSet` includes this Variant** → `RUN_FROZEN` error |
-| `description` | no       | —                                                                                               |
+| Field             | Required | Notes                                                                                                 |
+| ----------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `name`            | no       | —                                                                                                     |
+| `value`           | no       | Worker rejects if any running Run's `variantSet` includes this Variant with `RUN_FROZEN`              |
+| `description`     | no       | —                                                                                                     |
+| `review`          | no       | `{ action: 'approve_and_apply' }`; inline canonical Review when an impacted Policy requires `confirm` |
+| `idempotency_key` | yes      | Owns the App-level Approval Request and any inline Review across retries                              |
+
+### App-level Variant value Approval target
+
+A Variant value is App-level, so a caller cannot choose one Environment whose Policy authorizes a
+change that affects others. For a `value` patch, the Worker computes every Environment where the
+Variant is effectively servable and evaluates each Environment's `targetingRolloutValue` Policy.
+The strictest required Review authority wins:
+
+- all `allow`: no Review is required; the value change enters the shared validated application
+  seam directly;
+- any `confirm`, no future `approve`: the proposer may invoke `approve_and_apply`;
+- any future `approve`: the proposer cannot self-review; an authorized distinct principal must
+  invoke that same action.
+
+The Approval target is `flag_variant`, keyed by the Variant ID. Its opaque `target.version` hashes
+the parent `flags.version` and a sorted vector of impacted
+`(environmentId, flagConfigVersion, targetingRolloutValue Policy level)` values. The proposal stores
+that policy context and the immutable current/proposed value diff. A parent Flag, availability,
+Configuration version, or relevant Policy change before Review makes the request `stale`. The
+request cannot be revived or applied.
+
+`name` and `description` remain ordinary App-level metadata edits. Only a `value` change uses the
+Policy and Approval contract. A mixed patch applies all fields atomically through the value-change
+Approval Request so metadata cannot land while the reviewed value fails.
+
+There is no Variant-specific confirmation pipeline. `review.action = 'approve_and_apply'` is the
+same Review action used by Flag Configuration changes, Promotion, and Experiment Run Start.
+
+Applied response:
+
+```
+{
+  flag: FlagResponse
+  approvalRequest: ApprovalRequest | null
+}
+```
+
+The request is null when no Review was required and contains the applied request otherwise.
 
 ## Sources
 
