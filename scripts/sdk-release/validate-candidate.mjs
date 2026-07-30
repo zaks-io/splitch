@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveSdkReleaseTarget } from "./resolve-version.mjs";
 
@@ -12,101 +12,95 @@ const validationSummaryPath = join(outputDir, "validation-summary.json");
 const validationStartedAt = Date.now();
 
 mkdirSync(outputDir, { recursive: true });
-writeFileSync(validationLogPath, "");
-writeFileSync(
-  validationSummaryPath,
-  `${JSON.stringify(
-    {
-      startedAt: new Date().toISOString(),
-      checks: [],
-    },
-    null,
-    2,
-  )}\n`,
-);
 
 const target = resolveSdkReleaseTarget(repoRoot);
-// Cacheable work goes through the turbo graph so warm caches replay instead
-// of re-running; each residual check runs exactly once (the old list ran
-// format/lint/typecheck twice via verify:push).
-const checks = [
-  {
-    name: "verify-graph",
-    command: ["pnpm", "exec", "turbo", "run", "//#format:check", "lint", "typecheck"],
-  },
-  {
-    name: "sdk-test-build",
-    command: ["pnpm", "exec", "turbo", "run", "test", "build", "--filter=@splitch/sdk"],
-  },
-  { name: "knip", command: ["pnpm", "knip"] },
-  { name: "secrets-range", command: ["pnpm", "secrets:range"] },
-  { name: "tinybird-local", command: ["pnpm", "tinybird:local"] },
-  { name: "d1-migrate-local", command: ["pnpm", "d1:migrate:local"] },
-  { name: "d1-migrate-populated", command: ["pnpm", "d1:migrate:populated"] },
-  {
-    name: "sdk-pack-dry-run",
-    command: ["pnpm", "--filter", "@splitch/sdk", "pack", "--dry-run"],
-  },
-  {
-    name: "sdk-pack-check",
-    command: ["pnpm", "--filter", "@splitch/sdk", "pack:check"],
-  },
-  {
-    name: "sdk-consumer-smoke",
-    command: ["pnpm", "--filter", "@splitch/sdk", "test:consumer-smoke"],
-  },
+
+// One turbo graph owns candidate validation: turbo schedules independent
+// tasks in parallel and replays warm caches. Tasks that write shared
+// artifacts are serialized by dependsOn edges in turbo.json, not here:
+// sdk build -> //#knip -> pack:dry-run -> pack:check -> test:consumer-smoke
+// all write packages/sdk dist/generated, and the populated D1 check runs
+// after the local migration check.
+const TASKS = [
+  "//#format:check",
+  "lint",
+  "typecheck",
+  "test",
+  "build",
+  "//#knip",
+  "//#secrets:range",
+  "//#tinybird:local",
+  "//#d1:migrate:local",
+  "//#d1:migrate:populated",
+  "pack:dry-run",
+  "pack:check",
+  "test:consumer-smoke",
 ];
 
-/** @type {{ name: string; status: "passed" | "failed"; durationMs: number; error?: string }[]} */
-const results = [];
+process.stdout.write(
+  `SDK release validation for ${target.packageName}@${target.version} (${target.tag})\n`,
+);
 
-function log(line) {
-  appendFileSync(validationLogPath, `${line}\n`);
-  process.stdout.write(`${line}\n`);
+let turboFailure;
+try {
+  execFileSync("pnpm", ["exec", "turbo", "run", ...TASKS, "--continue", "--summarize"], {
+    cwd: repoRoot,
+    stdio: ["ignore", "inherit", "inherit"],
+    env: { ...process.env, CI: "true" },
+  });
+} catch (error) {
+  turboFailure = error instanceof Error ? error.message : String(error);
 }
 
-log(`SDK release validation for ${target.packageName}@${target.version} (${target.tag})`);
-
-for (const check of checks) {
-  const startedAt = Date.now();
-  log(`\n==> ${check.name}`);
-  try {
-    execFileSync(check.command[0], check.command.slice(1), {
-      cwd: repoRoot,
-      stdio: ["ignore", "pipe", "pipe"],
-      encoding: "utf8",
-      env: { ...process.env, CI: "true" },
-    });
-    const durationMs = Date.now() - startedAt;
-    results.push({ name: check.name, status: "passed", durationMs });
-    log(`OK ${check.name} (${durationMs}ms)`);
-  } catch (error) {
-    const durationMs = Date.now() - startedAt;
-    const message =
-      error instanceof Error && "stdout" in error
-        ? `${error.message}\n${error.stdout ?? ""}\n${error.stderr ?? ""}`.trim()
-        : error instanceof Error
-          ? error.message
-          : String(error);
-    results.push({ name: check.name, status: "failed", durationMs, error: message });
-    log(`FAILED ${check.name} (${durationMs}ms)\n${message}`);
-    writeFileSync(
-      validationSummaryPath,
-      `${JSON.stringify(
-        {
-          target,
-          startedAt: new Date(validationStartedAt).toISOString(),
-          finishedAt: new Date().toISOString(),
-          checks: results,
-          status: "failed",
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    process.exit(1);
+function latestTurboRunSummary() {
+  const runsDir = join(repoRoot, ".turbo", "runs");
+  const files = readdirSync(runsDir)
+    .filter((name) => name.endsWith(".json"))
+    .sort();
+  const latest = files.at(-1);
+  if (!latest) {
+    throw new Error("turbo --summarize produced no run summary in .turbo/runs");
   }
+  return {
+    path: join(runsDir, latest),
+    summary: JSON.parse(readFileSync(join(runsDir, latest), "utf8")),
+  };
 }
+
+const { path: turboSummaryPath, summary: turboSummary } = latestTurboRunSummary();
+copyFileSync(turboSummaryPath, join(outputDir, "turbo-run-summary.json"));
+
+const checks = (turboSummary.tasks ?? []).map((task) => {
+  const exitCode = task.execution?.exitCode;
+  const startedAt = task.execution?.startTime;
+  const endedAt = task.execution?.endTime;
+  return {
+    name: task.taskId ?? `${task.package}#${task.task}`,
+    status: exitCode === 0 ? "passed" : "failed",
+    durationMs:
+      typeof startedAt === "number" && typeof endedAt === "number" ? endedAt - startedAt : 0,
+    cache: task.cache?.status ?? "unknown",
+  };
+});
+
+if (checks.length === 0) {
+  throw new Error("turbo run summary contained no tasks; validation evidence is empty");
+}
+
+const failed = checks.filter((check) => check.status === "failed");
+const status = turboFailure || failed.length > 0 ? "failed" : "passed";
+
+const logLines = [
+  `SDK release validation for ${target.packageName}@${target.version} (${target.tag})`,
+  "",
+  ...checks.map(
+    (check) =>
+      `${check.status === "passed" ? "OK" : "FAILED"} ${check.name} (${check.durationMs}ms, cache ${check.cache})`,
+  ),
+  "",
+  status === "passed" ? "SDK release validation passed" : "SDK release validation FAILED",
+];
+writeFileSync(validationLogPath, `${logLines.join("\n")}\n`);
 
 writeFileSync(
   validationSummaryPath,
@@ -115,12 +109,16 @@ writeFileSync(
       target,
       startedAt: new Date(validationStartedAt).toISOString(),
       finishedAt: new Date().toISOString(),
-      checks: results,
-      status: "passed",
+      checks,
+      status,
+      ...(turboFailure ? { error: turboFailure } : {}),
     },
     null,
     2,
   )}\n`,
 );
 
-log("\nSDK release validation passed");
+process.stdout.write(`\n${logLines.at(-1)}\n`);
+if (status === "failed") {
+  process.exit(1);
+}

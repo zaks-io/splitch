@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { acquireMachineLock } from "./machine-lock.mjs";
 
 const projectDir = ".";
 const projectConfigPath = "tinybird.config.json";
@@ -19,9 +20,12 @@ if (!existsSync(tinybirdRoot)) {
 
 validateSplitchDatasourceContracts(tinybirdRoot);
 await requireTinybirdCli(projectDir);
-const tokens = await generateTinybirdLocalTokens(projectDir);
 
+// The tinybird-local container is a machine-global singleton; serialize
+// against concurrent runs from other sessions/worktrees.
+const lock = await acquireMachineLock("tinybird-local");
 try {
+  const tokens = await generateTinybirdLocalTokens(projectDir);
   await resetTinybirdLocal(projectDir, tokens);
   await run("tb", ["--no-version-warning", "build"], projectDir);
   if (hasTinybirdTests(testsDir)) {
@@ -29,6 +33,7 @@ try {
   }
 } finally {
   await removeTinybirdLocal(projectDir);
+  lock.release();
 }
 
 function validateSplitchDatasourceContracts(root) {
