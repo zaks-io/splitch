@@ -33,9 +33,10 @@ in this config; refresh them from Linear during each workflow run.
   scale `0`, `1`, `2`, `4`, `8`, `16`.
 - GitHub read-only checks: `gh repo view`, `gh workflow list`, `gh pr list`,
   `gh pr checks`, `gh run list`, and environment/branch-protection API reads.
-- Configured hosted PR check names: `Verify`, `Spec Lint`, and
-  `Stats Simulation Smoke` from the `ci` workflow. `Control Panel E2E` runs on
-  pushes to `main` and manual dispatches, not pull requests. Secret scanning is
+- Configured hosted PR check name: `Verify` from the `ci` workflow (its
+  `verify:ci` graph includes `spec:lint`). `Control Panel E2E` runs
+  nightly in the standalone `e2e` workflow (plus manual dispatch), not in `ci`;
+  its latest completed run gates `deploy-production`. Secret scanning is
   a step inside `Verify`; the standalone `gitleaks` workflow was removed. See
   `Pull Requests`.
 - Critical unknowns: friction-intake fields remain unverified. Branch protection
@@ -63,9 +64,11 @@ in this config; refresh them from Linear during each workflow run.
   (`format:check`, `lint`, `typecheck`, `knip`, `spec:lint`, `test:scripts`,
   `test`, `stats:golden`, `stats:property`, `build`) and then `pnpm secrets:range`.
 - Separate hosted checks: `Control Panel E2E` runs the local full-stack
-  Playwright harness on pushes to `main` and manual dispatches. On pull requests,
-  `Spec Lint` runs `pnpm spec:lint`, and `Stats Simulation Smoke` runs package
-  `stats:simulation -- --mode=smoke`.
+  Playwright harness nightly in the `e2e` workflow and on manual dispatch; a
+  red or stale (>48h) latest run blocks `deploy-production`. The stats
+  simulation runs only nightly in `stats-simulation-audit` (`--mode=audit`);
+  there is no per-push smoke, and no standalone `Spec Lint` job (`spec:lint`
+  lives inside `Verify`).
 - Gate parity gap: `pnpm verify:push` runs `tinybird:local` and
   `d1:migrate:local`, but `pnpm verify:ci` currently does not. Fix the repo
   gate entrypoints before treating CI and pre-push as equivalent.
@@ -289,8 +292,8 @@ real package API boundary.
 
 ## Pull Requests
 
-- PR CI workflow source: `.github/workflows/ci.yml`; configured hosted check names:
-  `Verify`, `Spec Lint`, `Stats Simulation Smoke`.
+- PR CI workflow source: `.github/workflows/ci.yml`; configured hosted check name:
+  `Verify`.
 - Secret scanning lives in the `ci` workflow as dedicated `Install gitleaks` +
   `Scan for secrets` steps (the `Scan` step runs `pnpm secrets:range`, scoped to
   the PR/push commit range, not the whole tree). The standalone `gitleaks`
@@ -356,10 +359,10 @@ real package API boundary.
 - Git hooks: wired with Lefthook. `pre-commit` runs `pnpm verify:commit`;
   `pre-push` runs `pnpm verify:push`.
 - PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
-  Blacksmith plus separate `Spec Lint` and `Stats Simulation Smoke` jobs.
-  `Control Panel E2E` runs after merge on pushes to `main` and on manual
-  dispatches. See the gate parity gap above for Tinybird Local and D1 local
-  validators.
+  Blacksmith; `spec:lint` runs inside its `verify:ci` graph.
+  `Control Panel E2E` runs nightly in the `e2e` workflow and on manual
+  dispatch; production deploys are gated on its latest completed run. See the
+  gate parity gap above for Tinybird Local and D1 local validators.
 - Shared Preview / Production: workflows are wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
   resources plus one Tinybird Branch. Production starts automatically after
@@ -400,9 +403,10 @@ real package API boundary.
       Low/normal-risk automation merge authority, squash merge method, hosted
       required-check enforcement, and CodeRabbit-on-demand behavior are now set
       in `Pull Requests`.
-- [x] Hosted PR check names configured: `Verify`, `Spec Lint`, and
-      `Stats Simulation Smoke`; secret scanning is a step inside `Verify`.
-      `Control Panel E2E` is limited to pushes to `main` and manual dispatches.
+- [x] Hosted PR check name configured: `Verify`; secret scanning and
+      `spec:lint` are steps inside it.
+      `Control Panel E2E` is limited to the nightly `e2e` workflow and manual
+      dispatches.
       See `Pull Requests`.
 - [x] Tinybird datasource project files exist under `infra/tinybird`.
       `pnpm tinybird:local` validates datasource contracts and builds against

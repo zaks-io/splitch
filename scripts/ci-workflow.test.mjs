@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
-const verifyJob = workflow.match(/\n {2}verify:\n([\s\S]*?)\n {2}spec-lint:\n/)?.[1];
+const verifyJob = workflow.match(/\n {2}verify:\n([\s\S]*?)\n {2}dispatch-production:\n/)?.[1];
 const productionDispatch = workflow.match(/\n {2}dispatch-production:\n([\s\S]*)/)?.[1];
 
 test("main CI warms the production build cache on the existing Verify runner", () => {
@@ -50,4 +50,19 @@ test("successful main CI dispatches one exact production release", () => {
   assert.match(productionDispatch, /ci_run_id: \$ci_run_id/);
   assert.match(productionDispatch, /actions\/workflows\/deploy-production\.yml\/dispatches/);
   assert.doesNotMatch(workflow, /workflow_run:/);
+});
+
+test("the E2E harness stays out of the per-push hot path", () => {
+  assert.doesNotMatch(workflow, /control-panel-e2e/);
+  assert.doesNotMatch(workflow, /playwright/i);
+});
+
+test("the stats simulation stays out of the per-push hot path", () => {
+  assert.doesNotMatch(workflow, /stats-simulation-smoke/);
+  assert.doesNotMatch(workflow, /stats:simulation/);
+});
+
+test("spec lint runs only inside Verify, not as a duplicate job", () => {
+  assert.doesNotMatch(workflow, /\n {2}spec-lint:/);
+  assert.doesNotMatch(workflow, /run: pnpm spec:lint/);
 });
