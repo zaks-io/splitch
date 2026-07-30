@@ -12,7 +12,7 @@ import {
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const quickstartPath = join(repoRoot, "docs/spec/quickstart.md");
 
-test("extractQuickstartSdkSnippet returns the section 8 fenced block verbatim", () => {
+test("extractQuickstartSdkSnippet returns the SDK section fenced block verbatim", () => {
   const markdown = readFileSync(quickstartPath, "utf8");
   const snippet = extractQuickstartSdkSnippet(markdown);
 
