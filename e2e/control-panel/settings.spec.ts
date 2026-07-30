@@ -13,10 +13,11 @@ test.describe("per-Environment Settings", () => {
     page,
   }, testInfo) => {
     const environmentKey = testInfo.retry === 0 ? "dev" : "settings-retry";
+    const environmentName = testInfo.retry === 0 ? "Development" : "Settings Retry";
     await page.setViewportSize({ width: 1280, height: 1100 });
     await page.goto(`/acme-labs/checkout-api/${environmentKey}/settings`);
 
-    await expect(page.getByRole("heading", { name: "Development" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: environmentName })).toBeVisible();
     await expect(page.getByText("accepts requests from any origin")).toBeVisible();
     await captureThemeScreenshots(page, testInfo, "settings-environment-open");
     await expect(page.getByLabel("Variant availability: Approve coming soon")).toBeDisabled();
