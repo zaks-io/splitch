@@ -28,7 +28,7 @@ import {
   loadUpdateContext,
   prepareUpdatePatch,
   validateCreateExperiment,
-  validateRunningPatch,
+  validateExperimentPatch,
 } from "./experiment-update-plan";
 import { runningExperimentError } from "./flag-definition-errors";
 import { objectBody, pathParam } from "./handler-input";
@@ -116,7 +116,7 @@ async function updateExperiment(
   const context = await loadUpdateContext(deps, scope, args);
   if (!context.ok) return context.response;
 
-  const guardError = await validateRunningPatch(
+  const guardError = await validateExperimentPatch(
     deps,
     scope,
     context.experiment,

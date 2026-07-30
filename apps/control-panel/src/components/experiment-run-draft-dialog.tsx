@@ -81,6 +81,7 @@ function ExperimentRunDraftForm({
   onStarted: () => void;
 }) {
   const router = useRouter();
+  const hasRunningRun = data.runs.some((run) => run.status === "running");
   const initial = initialRunDraft(data, baseRun);
   const [allocation, setAllocation] = useState(initial.allocation);
   const [targetingKey, setTargetingKey] = useState(initial.targetingKey);
@@ -190,39 +191,51 @@ function ExperimentRunDraftForm({
           </div>
           <FieldError>{allocationError}</FieldError>
         </FieldSet>
-        <Field>
-          <FieldLabel htmlFor="next-run-targeting-key">Targeting Key</FieldLabel>
-          <Input
-            id="next-run-targeting-key"
-            onChange={(event) => setTargetingKey(event.target.value)}
-            value={targetingKey}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="next-run-entity-type">Entity type</FieldLabel>
-          <Input
-            id="next-run-entity-type"
-            onChange={(event) => setTargetingKeyType(event.target.value)}
-            value={targetingKeyType}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="next-run-activation-metric">Activation Metric ID</FieldLabel>
-          <Input
-            id="next-run-activation-metric"
-            list="experiment-metric-options"
-            onChange={(event) => setActivationMetricId(event.target.value)}
-            placeholder="None"
-            value={activationMetricId}
-          />
-          <datalist id="experiment-metric-options">
-            {data.metrics.map((metric) => (
-              <option key={metric.id} value={metric.id}>
-                {metric.name}
-              </option>
-            ))}
-          </datalist>
-        </Field>
+        <FieldSet>
+          <FieldLegend>Assignment identity</FieldLegend>
+          {hasRunningRun ? (
+            <FieldDescription>
+              Frozen until the current Run ends. The running Run's published config reads these off
+              the Experiment, so there is nowhere to stage a change to them.
+            </FieldDescription>
+          ) : null}
+          <Field>
+            <FieldLabel htmlFor="next-run-targeting-key">Targeting Key</FieldLabel>
+            <Input
+              disabled={hasRunningRun}
+              id="next-run-targeting-key"
+              onChange={(event) => setTargetingKey(event.target.value)}
+              value={targetingKey}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="next-run-entity-type">Entity type</FieldLabel>
+            <Input
+              disabled={hasRunningRun}
+              id="next-run-entity-type"
+              onChange={(event) => setTargetingKeyType(event.target.value)}
+              value={targetingKeyType}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="next-run-activation-metric">Activation Metric ID</FieldLabel>
+            <Input
+              disabled={hasRunningRun}
+              id="next-run-activation-metric"
+              list="experiment-metric-options"
+              onChange={(event) => setActivationMetricId(event.target.value)}
+              placeholder="None"
+              value={activationMetricId}
+            />
+            <datalist id="experiment-metric-options">
+              {data.metrics.map((metric) => (
+                <option key={metric.id} value={metric.id}>
+                  {metric.name}
+                </option>
+              ))}
+            </datalist>
+          </Field>
+        </FieldSet>
         <Field data-invalid={Boolean(targetingError)}>
           <FieldLabel htmlFor="next-run-targeting-rules">Targeting Rules</FieldLabel>
           <Textarea

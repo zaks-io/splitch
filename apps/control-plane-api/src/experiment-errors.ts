@@ -148,6 +148,50 @@ export function runFrozen(
   );
 }
 
+/**
+ * `stageForNextRun` only reaches fields the Experiment holds a draft column for.
+ * The rest have to fail loud rather than land on the live row, which is exactly
+ * what the running Run's published ExperimentConfig reads from.
+ */
+export function runFrozenUnstageable(runId: string, fields: string[], requestId: string): Response {
+  return renderError(
+    {
+      code: "RUN_FROZEN",
+      message: `${fields.join(", ")} cannot be staged for the next Run because the Experiment stores no draft for them; writing them now would repoint running Run ${runId}. End that Run, then PATCH these fields, then Start the next Run. allocation, salt, targetingRules and segmentIds can still be staged while the Run is running.`,
+      details: {
+        frozenFields: fields,
+        currentRunId: runId,
+        attemptedChange: "PATCH_EXPERIMENT_STAGE_FOR_NEXT_RUN",
+        recommendedAction: "END_RUNNING_RUN_FIRST",
+      },
+    },
+    { requestId },
+  );
+}
+
+/**
+ * A Run's variantSet is derived at Start from the Flag's Variant catalog and the
+ * staged allocation. Accepting it here would 200 an edit that lands nowhere.
+ */
+export function variantSetNotPatchable(requestId: string): Response {
+  return renderError(
+    {
+      code: "VALIDATION_ERROR",
+      message: "request failed schema validation",
+      details: {
+        issues: [
+          {
+            path: ["body", "variantSet"],
+            message:
+              "variantSet is not an editable Experiment field. A Run's Variant set is derived at Start from the Flag's Variant catalog and the staged allocation. Edit the Variants on the Flag (/flags/:flagId/variants) and set allocation here instead.",
+          },
+        ],
+      },
+    },
+    { requestId },
+  );
+}
+
 export function decisionLocked(
   runId: string,
   fields: string[],
