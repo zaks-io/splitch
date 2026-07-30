@@ -33,8 +33,8 @@ in this config; refresh them from Linear during each workflow run.
   scale `0`, `1`, `2`, `4`, `8`, `16`.
 - GitHub read-only checks: `gh repo view`, `gh workflow list`, `gh pr list`,
   `gh pr checks`, `gh run list`, and environment/branch-protection API reads.
-- Configured hosted PR check names: `Verify`, `Spec Lint`, and
-  `Stats Simulation Smoke` from the `ci` workflow. `Control Panel E2E` runs
+- Configured hosted PR check names: `Verify` and `Spec Lint` from the `ci`
+  workflow. `Control Panel E2E` runs
   nightly in the standalone `e2e` workflow (plus manual dispatch), not in `ci`;
   its latest completed run gates `deploy-production`. Secret scanning is
   a step inside `Verify`; the standalone `gitleaks` workflow was removed. See
@@ -66,8 +66,8 @@ in this config; refresh them from Linear during each workflow run.
 - Separate hosted checks: `Control Panel E2E` runs the local full-stack
   Playwright harness nightly in the `e2e` workflow and on manual dispatch; a
   red or stale (>48h) latest run blocks `deploy-production`. On pull requests,
-  `Spec Lint` runs `pnpm spec:lint`, and `Stats Simulation Smoke` runs package
-  `stats:simulation -- --mode=smoke`.
+  `Spec Lint` runs `pnpm spec:lint`. The stats simulation runs only nightly in
+  `stats-simulation-audit` (`--mode=audit`); there is no per-push smoke.
 - Gate parity gap: `pnpm verify:push` runs `tinybird:local` and
   `d1:migrate:local`, but `pnpm verify:ci` currently does not. Fix the repo
   gate entrypoints before treating CI and pre-push as equivalent.
@@ -292,7 +292,7 @@ real package API boundary.
 ## Pull Requests
 
 - PR CI workflow source: `.github/workflows/ci.yml`; configured hosted check names:
-  `Verify`, `Spec Lint`, `Stats Simulation Smoke`.
+  `Verify`, `Spec Lint`.
 - Secret scanning lives in the `ci` workflow as dedicated `Install gitleaks` +
   `Scan for secrets` steps (the `Scan` step runs `pnpm secrets:range`, scoped to
   the PR/push commit range, not the whole tree). The standalone `gitleaks`
@@ -358,7 +358,7 @@ real package API boundary.
 - Git hooks: wired with Lefthook. `pre-commit` runs `pnpm verify:commit`;
   `pre-push` runs `pnpm verify:push`.
 - PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
-  Blacksmith plus separate `Spec Lint` and `Stats Simulation Smoke` jobs.
+  Blacksmith plus a separate `Spec Lint` job.
   `Control Panel E2E` runs nightly in the `e2e` workflow and on manual
   dispatch; production deploys are gated on its latest completed run. See the
   gate parity gap above for Tinybird Local and D1 local validators.
@@ -402,8 +402,8 @@ real package API boundary.
       Low/normal-risk automation merge authority, squash merge method, hosted
       required-check enforcement, and CodeRabbit-on-demand behavior are now set
       in `Pull Requests`.
-- [x] Hosted PR check names configured: `Verify`, `Spec Lint`, and
-      `Stats Simulation Smoke`; secret scanning is a step inside `Verify`.
+- [x] Hosted PR check names configured: `Verify` and `Spec Lint`; secret
+      scanning is a step inside `Verify`.
       `Control Panel E2E` is limited to the nightly `e2e` workflow and manual
       dispatches.
       See `Pull Requests`.

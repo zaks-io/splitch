@@ -56,3 +56,8 @@ test("the E2E harness stays out of the per-push hot path", () => {
   assert.doesNotMatch(workflow, /control-panel-e2e/);
   assert.doesNotMatch(workflow, /playwright/i);
 });
+
+test("the stats simulation stays out of the per-push hot path", () => {
+  assert.doesNotMatch(workflow, /stats-simulation-smoke/);
+  assert.doesNotMatch(workflow, /stats:simulation/);
+});
