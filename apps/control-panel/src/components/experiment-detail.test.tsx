@@ -87,6 +87,7 @@ function experiment(): PanelExperimentDetailOutput["experiment"] {
     draftAllocation: null,
     draftSalt: null,
     draftTargetingRulesJson: null,
+    draftSegmentIds: [],
     liveRunId: "run_2",
   };
 }

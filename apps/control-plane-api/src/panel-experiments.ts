@@ -110,6 +110,10 @@ export async function panelExperimentDetail(
       draftAllocation: jsonObject<Record<string, number>>(row.draftAllocation),
       draftSalt: row.draftSalt,
       draftTargetingRulesJson: row.draftTargetingRules,
+      // A frozen Run stores resolved Targeting Rules, never the Segment
+      // references they came from, so this staged list is the only place the
+      // Panel can read what the next Run will resolve against.
+      draftSegmentIds: jsonArray<string>(row.draftSegmentIds),
       liveRunId: row.liveRunId,
     },
     flag: { id: row.flagId, name: flagName },

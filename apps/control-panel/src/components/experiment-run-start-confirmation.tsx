@@ -16,6 +16,7 @@ export function ExperimentRunStartConfirmation({
   nextRunNumber,
   onBack,
   onStart,
+  segmentIds,
 }: {
   baseRun: PanelExperimentRun | undefined;
   error: string | undefined;
@@ -23,6 +24,7 @@ export function ExperimentRunStartConfirmation({
   nextRunNumber: number;
   onBack: () => void;
   onStart: () => void;
+  segmentIds: string[];
 }) {
   const title = baseRun
     ? `Run ${baseRun.runNumber} will be abandoned`
@@ -46,6 +48,15 @@ export function ExperimentRunStartConfirmation({
         <AlertTitle>{title}</AlertTitle>
         <AlertDescription>{description}</AlertDescription>
       </Alert>
+      {segmentIds.length > 0 ? (
+        <Alert data-testid="staged-segment-references">
+          <AlertTitle>Segment references carry into Run {nextRunNumber}</AlertTitle>
+          <AlertDescription>
+            {segmentIds.join(", ")} resolve to Targeting Rules at Start. A Run freezes the resolved
+            Rules, so these references are not visible on the Run afterwards.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {error ? (
         <Alert variant="destructive">
           <AlertTitle>Run not started</AlertTitle>

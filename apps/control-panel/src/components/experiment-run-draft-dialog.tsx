@@ -43,7 +43,10 @@ export function ExperimentRunDraftDialog({
   environmentId: string;
 }) {
   const baseRun = data.runs.find((run) => run.status === "running") ?? data.runs[0];
-  const nextRunNumber = (baseRun?.runNumber ?? 0) + 1;
+  // The Control Plane assigns max(runNumber) + 1 across every Run. Deriving it
+  // from `baseRun` would show a number the server will not assign whenever the
+  // response is not ordered highest-first.
+  const nextRunNumber = data.runs.reduce((max, run) => Math.max(max, run.runNumber), 0) + 1;
   const [open, setOpen] = useState(false);
 
   return (
@@ -150,6 +153,7 @@ function ExperimentRunDraftForm({
         nextRunNumber={nextRunNumber}
         onBack={() => setStep("configure")}
         onStart={start}
+        segmentIds={data.experiment.draftSegmentIds}
       />
     );
   }

@@ -59,6 +59,7 @@ describe("panel experiments binding transport", () => {
           draftAllocation: null,
           draftSalt: null,
           draftTargetingRulesJson: null,
+          draftSegmentIds: ["segment_paid"],
           liveRunId: "run_2",
         },
         flag: { id: "flag_1", name: "Checkout Flag" },
@@ -79,7 +80,13 @@ describe("panel experiments binding transport", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      data: { experiment: { id: "exp_1" }, runs: [{ runNumber: 2 }] },
+      data: {
+        // A Run freezes resolved Targeting Rules, never the Segment references
+        // behind them, so dropping this here would make staged references
+        // unreadable everywhere in the Panel.
+        experiment: { id: "exp_1", draftSegmentIds: ["segment_paid"] },
+        runs: [{ runNumber: 2 }],
+      },
     });
     expect(String(fetcher.mock.calls[0]?.[0])).toBe(
       "https://control-plane.internal/control-panel/experiments/detail",

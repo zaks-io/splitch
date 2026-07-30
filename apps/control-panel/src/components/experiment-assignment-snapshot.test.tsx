@@ -41,6 +41,7 @@ function detail(): PanelExperimentDetailOutput {
       draftAllocation: null,
       draftSalt: null,
       draftTargetingRulesJson: null,
+      draftSegmentIds: [],
       liveRunId: "run_3",
     },
     flag: { id: "flag_1", name: "Checkout" },

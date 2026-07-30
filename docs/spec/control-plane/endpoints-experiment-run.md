@@ -64,9 +64,15 @@ Returns: Experiment including `live_run_id` (null if no running Run), draft allo
 
 While a Run is running, assignment fields require `stageForNextRun: true` in the PATCH body. The
 marker is the explicit distinction between configuring the next Run and attempting to mutate the
-live Run. Without it, the Worker returns `409 RUN_FROZEN`; with it, omitted draft fields are carried
-forward from the running Run's frozen snapshot and Start remains the only operation that ends the
-current Run.
+live Run. Without it, the Worker returns `409 RUN_FROZEN`; with it, the edit accumulates into the single
+next-Run draft the Experiment holds. An omitted field keeps whatever that draft already holds, and
+only a field the draft has no value for is carried forward from the running Run's frozen snapshot —
+so a later staged PATCH never reverts an allocation, salt, Targeting Rule set, or Segment reference
+staged by an earlier one. Start remains the only operation that ends the current Run.
+
+`targeting_key_field` and `activation_metric_id` have no draft column of their own. While a Run is
+running they are rejected with `409 RUN_FROZEN` even under `stageForNextRun: true`; only
+`allocation`, `salt`, `targeting_rules`, and `segment_ids` can be staged.
 
 **Measurement-config fields** (apply to live Run in place, no reset):
 

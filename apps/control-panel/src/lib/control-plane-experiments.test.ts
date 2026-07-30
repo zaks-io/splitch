@@ -71,6 +71,7 @@ describe("Control Panel Experiments transport", () => {
               draftAllocation: null,
               draftSalt: null,
               draftTargetingRulesJson: null,
+              draftSegmentIds: [],
               liveRunId: null,
             },
             flag: { id: "flag_1", name: "Checkout Flag" },

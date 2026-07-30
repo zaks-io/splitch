@@ -116,19 +116,19 @@ async function updateExperiment(
   const context = await loadUpdateContext(deps, scope, args);
   if (!context.ok) return context.response;
 
-  const guardError = await validateExperimentPatch(
+  const guard = await validateExperimentPatch(
     deps,
     scope,
     context.experiment,
     body,
     args.requestId,
   );
-  if (guardError) return guardError;
+  if (guard.response) return guard.response;
 
-  const runningRun =
-    body.stageForNextRun === true
-      ? await runningRunForExperiment(deps.repo, scope, context.experiment)
-      : null;
+  // The same Run the guard ruled on. A second read could return a different
+  // answer, and then the patch would be built under rules the guard never
+  // applied to it.
+  const runningRun = body.stageForNextRun === true ? guard.runningRun : null;
   const patch = await prepareUpdatePatch(deps, scope, context.experiment, body, args, runningRun);
   if (!patch.ok) return patch.response;
 

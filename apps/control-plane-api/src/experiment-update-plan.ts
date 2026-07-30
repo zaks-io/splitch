@@ -79,27 +79,48 @@ export async function loadUpdateContext(
   return { ok: true as const, experiment };
 }
 
+/**
+ * The guard verdict plus the Run it was decided against.
+ *
+ * The caller needs the same Run to build the patch. Re-reading it would let the
+ * guard and the write disagree about whether a Run is running, so the row could
+ * be written under rules that were never checked against it.
+ */
+export interface ExperimentPatchGuard {
+  response: Response | null;
+  runningRun: RunRow | null;
+}
+
 export async function validateExperimentPatch(
   deps: ExperimentDeps,
   scope: EnvScope,
   experiment: ExperimentRow,
   body: Record<string, unknown>,
   requestId: string,
-): Promise<Response | null> {
-  if (body.variantSet !== undefined) return variantSetNotPatchable(requestId);
+): Promise<ExperimentPatchGuard> {
+  if (body.variantSet !== undefined) {
+    return { response: variantSetNotPatchable(requestId), runningRun: null };
+  }
   const runningRun = await runningRunForExperiment(deps.repo, scope, experiment);
-  if (!runningRun) return null;
+  if (!runningRun) return { response: null, runningRun: null };
   const assignmentFields = presentFields(body, ASSIGNMENT_FIELDS);
   if (assignmentFields.length > 0 && body.stageForNextRun !== true) {
-    return runFrozen(runningRun.id, assignmentFields, "PATCH_EXPERIMENT", requestId);
+    return {
+      response: runFrozen(runningRun.id, assignmentFields, "PATCH_EXPERIMENT", requestId),
+      runningRun,
+    };
   }
   const unstageable = changedRunFrozenFields(experiment, body);
   if (unstageable.length > 0) {
-    return runFrozenUnstageable(runningRun.id, unstageable, requestId);
+    return { response: runFrozenUnstageable(runningRun.id, unstageable, requestId), runningRun };
   }
-  return body.confidenceLevel !== undefined
-    ? decisionLocked(runningRun.id, ["confidenceLevel"], "PATCH_EXPERIMENT", requestId)
-    : null;
+  return {
+    response:
+      body.confidenceLevel !== undefined
+        ? decisionLocked(runningRun.id, ["confidenceLevel"], "PATCH_EXPERIMENT", requestId)
+        : null,
+    runningRun,
+  };
 }
 
 /**

@@ -2,6 +2,7 @@ import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createExperimentDraft,
+  endRun,
   type ExperimentRunHarness,
   experimentFixture,
   type Fixture,
@@ -11,6 +12,7 @@ import {
   type StartResponse,
 } from "../src/experiment-run-test-fixture";
 import { baseFlag, createFlag, errorBody, NOW_ISO } from "../src/flag-definition-test-harness";
+import { callPanelExperimentDetail } from "./panel-detail-request";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";
 
 let ctx: ExperimentRunHarness;
@@ -152,6 +154,60 @@ describe("stageForNextRun never mutates the live Experiment row", () => {
       draftSalt: "staged-salt",
       draftSegmentIds: JSON.stringify([fx.segmentId]),
       draftTargetingRules: "[]",
+    });
+  });
+
+  // A Run freezes the Targeting Rules its Segment references resolved to and
+  // stores no reference list of its own, so if the Panel's detail response drops
+  // `draftSegmentIds` the staged references become unreadable and unrenderable.
+  it("returns staged Segment references through the Panel detail contract", async () => {
+    const { fx, experimentId } = await runningExperiment("stage-segments-roundtrip");
+
+    const staged = await patchExperiment(ctx, fx, experimentId, {
+      stageForNextRun: true,
+      segmentIds: [fx.segmentId],
+    });
+    expect(staged.status).toBe(200);
+
+    const response = await callPanelExperimentDetail({
+      appId: fx.appId,
+      environmentId: fx.environmentId,
+      experimentId,
+    });
+    expect(response.status).toBe(200);
+
+    // The Panel's own parser is asserted on this field in
+    // packages/control-plane-sdk/src/panel-experiments.test.ts; this end asserts
+    // the Worker actually emits it.
+    const body = (await response.json()) as { experiment: { draftSegmentIds: string[] } };
+    expect(body.experiment.draftSegmentIds).toEqual([fx.segmentId]);
+  });
+
+  // The handler used to read the running Run a second time to decide how to
+  // build the patch. If the Run ended in between, the two reads disagreed and
+  // the write ran under rules the guard never applied to it.
+  it("keeps staged draft fields when the Run ends before the next stage", async () => {
+    const { fx, experimentId, run } = await runningExperiment("stage-after-end");
+
+    const first = await patchExperiment(ctx, fx, experimentId, {
+      stageForNextRun: true,
+      salt: "staged-salt",
+      segmentIds: [fx.segmentId],
+    });
+    expect(first.status).toBe(200);
+
+    expect((await endRun(ctx, fx, run.id)).status).toBe(200);
+
+    const second = await patchExperiment(ctx, fx, experimentId, {
+      stageForNextRun: true,
+      allocation: { control: 10, treatment: 90 },
+    });
+    expect(second.status).toBe(200);
+
+    expect(await liveRow(fx, experimentId)).toMatchObject({
+      draftAllocation: JSON.stringify({ control: 10, treatment: 90 }),
+      draftSalt: "staged-salt",
+      draftSegmentIds: JSON.stringify([fx.segmentId]),
     });
   });
 

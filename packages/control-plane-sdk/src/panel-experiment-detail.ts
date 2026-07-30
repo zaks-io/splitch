@@ -47,6 +47,12 @@ export interface PanelExperimentDetail {
   draftAllocation: Record<string, number> | null;
   draftSalt: string | null;
   draftTargetingRulesJson: string | null;
+  /**
+   * Segment references staged for the next Run. A Run freezes the Targeting
+   * Rules these resolve to, not the references themselves, so the Experiment's
+   * staged list is the only readable record of them.
+   */
+  draftSegmentIds: string[];
   liveRunId: string | null;
 }
 
@@ -167,6 +173,7 @@ function parsePanelExperimentDetail(input: unknown): PanelExperimentDetail | nul
     !isNullableAllocation(input.draftAllocation) ||
     !isNullableString(input.draftSalt) ||
     !isNullableJsonArray(input.draftTargetingRulesJson) ||
+    !isStringArray(input.draftSegmentIds) ||
     !(input.liveRunId === null || isNonEmptyString(input.liveRunId))
   ) {
     return null;
@@ -188,6 +195,7 @@ function parsePanelExperimentDetail(input: unknown): PanelExperimentDetail | nul
     draftAllocation: input.draftAllocation,
     draftSalt: input.draftSalt,
     draftTargetingRulesJson: input.draftTargetingRulesJson,
+    draftSegmentIds: input.draftSegmentIds,
     liveRunId: input.liveRunId,
   };
 }
