@@ -1,17 +1,18 @@
 import { z } from "@hono/zod-openapi";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
+import {
+  CreateMetricRequestSchema,
+  MetricResponseSchema,
+  PatchMetricRequestSchema,
+} from "../resource-envelopes-account";
 import {
   CreateExperimentRequestSchema,
   ExperimentResponseSchema,
   PatchExperimentRequestSchema,
   RunResponseSchema,
   StartRunRequestSchema,
+  StartRunResponseSchema,
 } from "../resource-envelopes-experiment";
-import {
-  CreateMetricRequestSchema,
-  MetricResponseSchema,
-  PatchMetricRequestSchema,
-} from "../resource-envelopes-account";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   AppParams,
   EnvParams,
@@ -36,12 +37,14 @@ const RunListResponse = z.object({ items: z.array(RunResponseSchema) });
 const MetricListResponse = z.object({ items: z.array(MetricResponseSchema) });
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 
-// experiments_start returns the new Run plus the previous Run id (present-with-null).
-const StartRunResponseSchema = z.object({
-  experimentId: z.string(),
-  run: RunResponseSchema,
-  previousRunId: z.string().nullable(),
-});
+const APPROVAL_WRITE_ERRORS = [
+  "APPROVAL_REVIEW_REQUIRED",
+  "APPROVAL_REVIEW_FORBIDDEN",
+  "APPROVAL_REQUEST_STALE",
+  "APPROVAL_REQUEST_RESOLVED",
+  "APPROVAL_APPLICATION_FAILED",
+  "IDEMPOTENCY_KEY_CONFLICT",
+] as const;
 
 export const experimentRoutes = [
   defineApiRoute({
@@ -115,11 +118,11 @@ export const experimentRoutes = [
     method: "POST",
     path: "/apps/:appId/envs/:environmentId/experiments/:experimentId/start",
     summary: "Start the draft as a new Run; ends any running Run (Policy-gated).",
-    request: { params: ExperimentParams, body: StartRunRequestSchema.optional() },
+    request: { params: ExperimentParams, body: StartRunRequestSchema },
     response: StartRunResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "optional",
+    idempotency: "required",
     errors: [
       "EXPERIMENT_NOT_FOUND",
       "FORBIDDEN",
@@ -127,7 +130,7 @@ export const experimentRoutes = [
       "EXPERIMENT_NO_DRAFT",
       "ALLOCATION_INVALID",
       "VARIANT_NOT_AVAILABLE",
-      "CONFIRMATION_REQUIRED",
+      ...APPROVAL_WRITE_ERRORS,
       "VALIDATION_ERROR",
     ],
   }),

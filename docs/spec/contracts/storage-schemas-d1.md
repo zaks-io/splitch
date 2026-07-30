@@ -92,28 +92,37 @@ value edit, and Experiment Run Start. `allow` does not create an Approval Reques
 same validated application seam directly. `confirm` and future `approve` both create this row and
 differ only in who may Review it.
 
-| Column                     | Type        | Constraints                                                           |
-| -------------------------- | ----------- | --------------------------------------------------------------------- |
-| `id`                       | text        | PK                                                                    |
-| `app_id`                   | text        | FK → apps, not null                                                   |
-| `operation`                | text        | not null; canonical route `operationId`                               |
-| `target_type`              | text        | not null; `flag_configuration \| flag_variant \| experiment_draft`    |
-| `target_id`                | text        | not null                                                              |
-| `target_version`           | text        | not null; opaque concurrency token for the complete target projection |
-| `policy_contexts`          | text        | not null; immutable JSON `ApprovalPolicyContext[]`                    |
-| `diff`                     | text        | not null; immutable canonical JSON `ApprovalDiff`                     |
-| `status`                   | text        | not null; `pending \| applied \| declined \| stale`                   |
-| `proposed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone           |
-| `proposed_via`             | text        | not null; resolved auth door                                          |
-| `proposed_at`              | timestamptz | not null                                                              |
-| `resolved_at`              | timestamptz | nullable; set once on `applied`, `declined`, or `stale`               |
-| `resulting_target_version` | text        | nullable; set only on `applied`                                       |
-| `idempotency_key`          | text        | not null                                                              |
-| `request_hash`             | text        | not null; SHA-256 of canonical proposal input                         |
+| Column                     | Type        | Constraints                                                             |
+| -------------------------- | ----------- | ----------------------------------------------------------------------- |
+| `id`                       | text        | PK; `apr_` + 26-character ULID                                          |
+| `app_id`                   | text        | FK → apps, not null                                                     |
+| `operation`                | text        | not null; canonical route `operationId`                                 |
+| `target_type`              | text        | not null; `flag_configuration \| flag_variant \| experiment_draft`      |
+| `target_id`                | text        | not null                                                                |
+| `target_version`           | text        | not null; RFC 8785 JCS SHA-256 token for the complete target projection |
+| `policy_contexts`          | text        | not null; immutable JSON `ApprovalPolicyContext[]`                      |
+| `diff`                     | text        | not null; immutable canonical JSON `ApprovalDiff`                       |
+| `status`                   | text        | not null; `pending \| applied \| declined \| stale`                     |
+| `proposed_by`              | text        | not null; resolved WorkOS user ID or deleted-user tombstone             |
+| `proposed_via`             | text        | not null; resolved auth door                                            |
+| `proposed_at`              | timestamptz | not null                                                                |
+| `resolved_at`              | timestamptz | nullable; set once on `applied`, `declined`, or `stale`                 |
+| `resulting_target_version` | text        | nullable; set only on `applied`                                         |
+| `idempotency_key`          | text        | not null                                                                |
+| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS proposal input                  |
 
 UNIQUE constraint: `(app_id, proposed_by, idempotency_key)`. Reusing the key with the same
 `request_hash` returns the existing Approval Request. Reusing it with a different hash fails with
 `IDEMPOTENCY_KEY_CONFLICT`.
+
+Both `request_hash` and `target_version` are encoded as `sha256:` plus 64 lowercase hexadecimal
+digits. Their preimage is UTF-8 RFC 8785 JSON Canonicalization Scheme output, not
+implementation-dependent object serialization. `diff.entries` is strictly lexicographic by its
+RFC 6901 JSON Pointer `path`, so equal projections produce byte-identical request hashes.
+
+Multiple `pending` rows may name the same target. They are independent proposals and there is no
+unique target/status constraint. Applying one advances the target version, making every sibling
+proposal for the old version effectively stale. V1 has no staleness TTL.
 
 `target_version` covers everything whose change could invalidate the proposal. Every token includes
 the sorted current Policy projection for its `policy_contexts`: `(environment_id, change_type,
@@ -131,6 +140,9 @@ authority.
 
 The Worker recomputes the same token immediately before application. Any mismatch atomically moves
 the request from `pending` to `stale`; no field on a stale request can be edited to revive it.
+Single and list reads also recompute the token, but only render effective `stale`; they do not
+mutate this row, set `resolved_at`, or append a Review. A later Review materializes that terminal
+state transactionally.
 
 `policy_contexts` records the immutable policy evidence used at proposal time:
 `{ environmentId, changeTypes[], level }[]`. Review authorization is re-evaluated against current
@@ -146,7 +158,7 @@ approve-only or deferred-application state. `decline` is the terminal negative d
 
 | Column                     | Type        | Constraints                                                       |
 | -------------------------- | ----------- | ----------------------------------------------------------------- |
-| `id`                       | text        | PK                                                                |
+| `id`                       | text        | PK; `rev_` + 26-character ULID                                    |
 | `app_id`                   | text        | FK → apps, not null                                               |
 | `approval_request_id`      | text        | FK → approval_requests, not null                                  |
 | `action`                   | text        | not null; `approve_and_apply \| decline`                          |
@@ -156,7 +168,7 @@ approve-only or deferred-application state. `decline` is the terminal negative d
 | `reviewed_at`              | timestamptz | not null                                                          |
 | `reason`                   | text        | nullable; bounded human or agent Review rationale                 |
 | `idempotency_key`          | text        | not null                                                          |
-| `request_hash`             | text        | not null; SHA-256 of canonical Review input                       |
+| `request_hash`             | text        | not null; SHA-256 of UTF-8 RFC 8785 JCS Review input              |
 | `resulting_target_version` | text        | nullable; populated only for `outcome = applied`                  |
 | `error_code`               | text        | nullable; machine-stable application error for `outcome = failed` |
 | `error_details`            | text        | nullable; bounded JSON matching the error code's detail contract  |

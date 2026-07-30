@@ -18,7 +18,7 @@ describe("request-error Sentry classification", () => {
     "FLAG_NOT_FOUND",
     "RUN_FROZEN",
     "RATE_LIMITED",
-    "CONFIRMATION_REQUIRED",
+    "APPROVAL_REVIEW_REQUIRED",
   ] as const)("does not report expected domain code %s to Sentry", (code) => {
     expect(shouldReportRequestErrorToSentry({ requestId: "req-1", code, status: 0 })).toBe(false);
   });

@@ -61,6 +61,7 @@ ErrorCode =
   | 'CREDENTIAL_NOT_FOUND'
   | 'SEGMENT_NOT_FOUND'
   | 'PRIVACY_JOB_NOT_FOUND'
+  | 'APPROVAL_REQUEST_NOT_FOUND'
 
   // Auth / authz
   | 'UNAUTHORIZED'                // no valid credential
@@ -122,7 +123,7 @@ ErrorCode =
 | `APPROVAL_REVIEW_FORBIDDEN`     | `{ approvalRequestId: string, action: ReviewAction, reason: 'SELF_REVIEW_NOT_ALLOWED' \| 'ROLE_NOT_ALLOWED' }`                                                                                      |
 | `APPROVAL_REQUEST_STALE`        | `{ approvalRequestId: string, targetVersion: string, currentTargetVersion: string, recommendedAction: 'REFRESH_AND_REPROPOSE' }`                                                                    |
 | `APPROVAL_REQUEST_RESOLVED`     | `{ approvalRequestId: string, status: 'applied' \| 'declined' \| 'stale', reviewId: string \| null }`                                                                                               |
-| `APPROVAL_APPLICATION_FAILED`   | `{ approvalRequestId: string, reviewId: string, applicationError: { code: string, details: object }, recommendedAction: 'RETRY_REVIEW' }`                                                           |
+| `APPROVAL_APPLICATION_FAILED`   | `{ approvalRequestId: string, reviewId: string, applicationError: { code: ErrorCode, details: object }, recommendedAction: 'RETRY_REVIEW' }`                                                        |
 | `IDEMPOTENCY_KEY_CONFLICT`      | `{ scope: 'approval_request' \| 'review', idempotencyKey: string }`                                                                                                                                 |
 | `PRIVACY_JOB_FAILED`            | `{ requestId: string, failedStores: string[] }`                                                                                                                                                     |
 | `MULTIPLE_VARIANT_CONFLICT`     | `{ experimentId: string, runId: string, idType: string, targetingKeyHash: string }`                                                                                                                 |
@@ -208,7 +209,7 @@ Canonical wire projection:
 
 ```
 ApprovalRequest = {
-  id: string
+  id: `apr_${ULID}`
   appId: string
   policyContexts: Array<{
     environmentId: string
@@ -224,7 +225,7 @@ ApprovalRequest = {
   target: {
     type: 'flag_configuration' | 'flag_variant' | 'experiment_draft'
     id: string
-    version: string
+    version: `sha256:${lowercaseHex}`
   }
   diff: {
     current: Record<string, unknown>
@@ -241,7 +242,7 @@ ApprovalRequest = {
   proposedAt: string
   resolvedAt: string | null
   applicationResult: {
-    targetVersion: string
+    targetVersion: `sha256:${lowercaseHex}`
     resourceType: 'flag_configuration' | 'flag_variant' | 'experiment_run'
     resourceId: string
     appliedAt: string
@@ -250,27 +251,35 @@ ApprovalRequest = {
 }
 
 Review = {
-  id: string
-  approvalRequestId: string
+  id: `rev_${ULID}`
+  approvalRequestId: `apr_${ULID}`
   action: 'approve_and_apply' | 'decline'
   outcome: 'applied' | 'declined' | 'stale' | 'failed'
   actor: { userId: string, authDoor: string }
   reviewedAt: string
   reason: string | null
   idempotencyKey: string
-  resultingTargetVersion: string | null
-  error: { code: string, details: Record<string, unknown> } | null
+  resultingTargetVersion: `sha256:${lowercaseHex}` | null
+  error: { code: ErrorCode, details: Record<string, unknown> } | null
 }
 ```
 
 `PolicyChangeType` is
 `'variant_availability' | 'targeting_rollout_value' | 'enabled_state' | 'start_experiment_run'`.
 
+Approval Request IDs are `apr_` plus a 26-character ULID; Review IDs are `rev_` plus a
+26-character ULID, matching the service's monotonic `ulid()` convention.
+
 `diff.current` and `diff.proposed` are immutable canonical snapshots of the mutation's complete
 target projection, excluding server-generated result fields such as IDs and timestamps. Entries are
-sorted by RFC 6901 JSON Pointer `path`: `add` requires only `proposed`, `remove` only `current`, and
-`replace` both. The server computes entries from the snapshots; callers cannot submit their own
-diff. `applicationResult` is non-null only for `status = applied`.
+strictly lexicographic by RFC 6901 JSON Pointer `path`: `add` requires only `proposed`, `remove` only
+`current`, and `replace` both. The server computes entries from the snapshots; callers cannot submit
+their own diff. `applicationResult` is non-null only for `status = applied`.
+
+`target.version`, `applicationResult.targetVersion`, and `resultingTargetVersion` are lowercase
+SHA-256 tokens over UTF-8 RFC 8785 JSON Canonicalization Scheme bytes. The same canonicalization
+rule binds Approval Request and Review idempotency payloads. Application error codes use the
+machine-stable `ErrorCode` set, never an open string.
 
 Policy changes only the required Review authority:
 
@@ -298,6 +307,14 @@ POST /apps/{app_id}/approval-requests/{approval_request_id}/reviews
 
 `decline` is a terminal negative Review. V1 has no approve-only action, no approved-but-unapplied
 state, and no deferred application job.
+
+Multiple pending requests for one target are allowed and independent. A write that advances the
+target version makes every sibling proposal for the old version effectively stale.
+
+Single and list reads compute effective staleness against the live target without mutating D1. A
+stored pending request can therefore render `status: stale` with `resolvedAt: null` and no stale
+Review. V1 has no TTL. A later Review rechecks the target and materializes the stale Review and
+terminal timestamp before returning `APPROVAL_REQUEST_STALE`.
 
 Review authorization and target-version validation happen before mutation. A version mismatch
 atomically records the stale attempt, moves `pending -> stale`, and returns

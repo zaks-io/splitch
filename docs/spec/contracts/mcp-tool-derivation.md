@@ -84,6 +84,19 @@ surface, no second route (one way to do one thing).
 first connection, an agent calls it to discover the Organizations the token can reach, then proceeds
 to `apps_create` / `onboard_new_app`.
 
+### Approval Requests
+
+| Tool                              | Method | Path                                         |
+| --------------------------------- | ------ | -------------------------------------------- |
+| `approval_requests_list`          | GET    | `/apps/:appId/approval-requests`             |
+| `approval_requests_get`           | GET    | `/apps/:appId/approval-requests/:id`         |
+| `approval_request_reviews_create` | POST   | `/apps/:appId/approval-requests/:id/reviews` |
+
+The list input derives the optional `status` and `target_kind` filters plus standard `limit` and
+`cursor` pagination. The single read returns the full wire projection. Review creation derives the
+canonical Review action and required idempotency key. Registering these routes is sufficient for all
+three tools to exist.
+
 ### Flags
 
 | Tool           | Method | Path                         |

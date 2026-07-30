@@ -126,26 +126,33 @@ const variantControl = { id: "var_1", name: "control", value: false };
 const variantTreatment = { id: "var_2", name: "treatment", value: "on" };
 
 describe("StartRunRequestSchema (the only path to open a Run)", () => {
-  it("parses an empty lifecycle body", () => {
-    const req = StartRunRequestSchema.parse({});
-    expect(req).toEqual({});
-  });
-
-  it("exposes an optional confirm gate (gated write, ADR-0029)", () => {
-    const req = StartRunRequestSchema.parse({ confirm: true });
-    expect(req.confirm).toBe(true);
-  });
-
-  it("accepts optional reason and idempotency_key", () => {
+  it("requires an idempotency key and accepts an optional inline review", () => {
     const req = StartRunRequestSchema.parse({
+      review: { action: "approve_and_apply" },
       reason: "higher exposure to v2",
       idempotency_key: "idem-1",
     });
+    expect(req.review?.action).toBe("approve_and_apply");
     expect(req.reason).toBe("higher exposure to v2");
   });
 
+  it("rejects the removed confirm gate", () => {
+    expect(
+      StartRunRequestSchema.safeParse({ confirm: true, idempotency_key: "idem-1" }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a missing idempotency key", () => {
+    expect(StartRunRequestSchema.safeParse({ reason: "start it" }).success).toBe(false);
+  });
+
   it("rejects assignment config in the Start body", () => {
-    expect(StartRunRequestSchema.safeParse({ allocation: { control: 100 } }).success).toBe(false);
+    expect(
+      StartRunRequestSchema.safeParse({
+        allocation: { control: 100 },
+        idempotency_key: "idem-1",
+      }).success,
+    ).toBe(false);
   });
 });
 

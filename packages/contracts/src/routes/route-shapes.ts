@@ -1,13 +1,20 @@
 import { z } from "@hono/zod-openapi";
+import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "../approval-identifiers";
+import { CanonicalJsonSha256Schema } from "../canonical-hash";
 import { OriginAllowlistSchema } from "../client-origin";
+import { ErrorCodeSchema, PolicyChangeTypeSchema } from "../errors";
 import {
   ConditionSchema,
   PercentageRolloutSchema,
   TargetingRuleSchema,
 } from "../leaf-schemas-flag";
-import { PolicyChangeTypeSchema } from "../errors";
-import { EnvironmentPolicySchema, UserRoleSchema } from "../leaf-schemas-runtime";
+import {
+  ApprovalPolicyLevelSchema,
+  EnvironmentPolicySchema,
+  UserRoleSchema,
+} from "../leaf-schemas-runtime";
 import { AuthDoorSchema } from "../route-contract";
+import { PaginationQuerySchema } from "../wire-envelopes-core";
 
 /**
  * Path-param and route-local request/response shapes that have NO dedicated
@@ -68,6 +75,10 @@ export const PromoteParams = z.object({
   targetEnvironmentId: z.string(),
   flagId: z.string(),
 });
+export const ApprovalRequestParams = z.object({
+  appId: z.string(),
+  id: ApprovalRequestIdSchema,
+});
 export const PrivacyRequestParams = z.object({ requestId: z.string() });
 
 // ---------------------------------------------------------------------------
@@ -121,15 +132,17 @@ export const ApprovalPolicyContextSchema = z
   .object({
     environmentId: z.string(),
     changeTypes: z.array(PolicyChangeTypeSchema).min(1),
-    level: z.enum(["allow", "confirm", "approve"]),
+    level: ApprovalPolicyLevelSchema,
   })
   .strict();
+
+export const ApprovalTargetVersionSchema = CanonicalJsonSha256Schema;
 
 export const ApprovalTargetSchema = z
   .object({
     type: ApprovalTargetTypeSchema,
     id: z.string(),
-    version: z.string(),
+    version: ApprovalTargetVersionSchema,
   })
   .strict();
 
@@ -191,7 +204,7 @@ export const InlineApproveAndApplyReviewSchema = z
 
 export const ApprovalApplicationResultSchema = z
   .object({
-    targetVersion: z.string(),
+    targetVersion: ApprovalTargetVersionSchema,
     resourceType: ApprovalAppliedResourceTypeSchema,
     resourceId: z.string(),
     appliedAt: z.string(),
@@ -200,22 +213,22 @@ export const ApprovalApplicationResultSchema = z
 
 export const ApprovalReviewErrorSchema = z
   .object({
-    code: z.string(),
+    code: ErrorCodeSchema,
     details: z.record(z.string(), z.unknown()),
   })
   .strict();
 
 export const ApprovalReviewSchema = z
   .object({
-    id: z.string(),
-    approvalRequestId: z.string(),
+    id: ApprovalReviewIdSchema,
+    approvalRequestId: ApprovalRequestIdSchema,
     action: ApprovalReviewActionSchema,
     outcome: ApprovalReviewOutcomeSchema,
     actor: ApprovalActorSchema,
     reviewedAt: z.string(),
     reason: z.string().nullable(),
     idempotencyKey: z.string().min(1),
-    resultingTargetVersion: z.string().nullable(),
+    resultingTargetVersion: ApprovalTargetVersionSchema.nullable(),
     error: ApprovalReviewErrorSchema.nullable(),
   })
   .strict()
@@ -254,7 +267,7 @@ export const ApprovalReviewSchema = z
 
 export const ApprovalRequestSchema = z
   .object({
-    id: z.string(),
+    id: ApprovalRequestIdSchema,
     appId: z.string(),
     policyContexts: z.array(ApprovalPolicyContextSchema).min(1),
     operation: ApprovalOperationSchema,
@@ -280,16 +293,25 @@ export const ApprovalRequestSchema = z
   })
   .superRefine((request, context) => {
     const isPending = request.status === "pending";
-    if ((request.resolvedAt === null) !== isPending) {
+    const isEffectiveStale = request.status === "stale" && request.resolvedAt === null;
+    if ((request.resolvedAt === null) !== (isPending || isEffectiveStale)) {
       context.addIssue({
         code: "custom",
         path: ["resolvedAt"],
-        message: "resolvedAt is null only while the Approval Request is pending",
+        message: "resolvedAt is null only while pending or stale-on-read",
       });
     }
   })
   .superRefine((request, context) => {
-    if (request.status === "pending") {
+    const isUnmaterialized = request.status === "pending" || request.resolvedAt === null;
+    if (isUnmaterialized) {
+      if (request.latestReview !== null && request.latestReview.outcome !== "failed") {
+        context.addIssue({
+          code: "custom",
+          path: ["latestReview"],
+          message: "an unresolved Approval Request can only expose a failed latest Review",
+        });
+      }
       return;
     }
     if (request.latestReview?.outcome !== request.status) {
@@ -330,6 +352,11 @@ export const ReviewApprovalRequestSchema = z
   })
   .strict();
 
+export const ApprovalRequestListQuerySchema = PaginationQuerySchema.extend({
+  status: ApprovalRequestStatusSchema.optional(),
+  target_kind: ApprovalTargetTypeSchema.optional(),
+});
+
 export type ApprovalRequestStatus = z.infer<typeof ApprovalRequestStatusSchema>;
 export type ApprovalReviewAction = z.infer<typeof ApprovalReviewActionSchema>;
 export type ApprovalReviewOutcome = z.infer<typeof ApprovalReviewOutcomeSchema>;
@@ -339,6 +366,7 @@ export type ApprovalOperation = z.infer<typeof ApprovalOperationSchema>;
 export type ApprovalActor = z.infer<typeof ApprovalActorSchema>;
 export type ApprovalPolicyContext = z.infer<typeof ApprovalPolicyContextSchema>;
 export type ApprovalTarget = z.infer<typeof ApprovalTargetSchema>;
+export type ApprovalTargetVersion = z.infer<typeof ApprovalTargetVersionSchema>;
 export type ApprovalDiffEntry = z.infer<typeof ApprovalDiffEntrySchema>;
 export type ApprovalDiff = z.infer<typeof ApprovalDiffSchema>;
 export type ApprovalApplicationResult = z.infer<typeof ApprovalApplicationResultSchema>;
@@ -346,6 +374,7 @@ export type ApprovalReviewError = z.infer<typeof ApprovalReviewErrorSchema>;
 export type ApprovalReview = z.infer<typeof ApprovalReviewSchema>;
 export type ApprovalRequest = z.infer<typeof ApprovalRequestSchema>;
 export type ReviewApprovalRequest = z.infer<typeof ReviewApprovalRequestSchema>;
+export type ApprovalRequestListQuery = z.infer<typeof ApprovalRequestListQuerySchema>;
 
 // ---------------------------------------------------------------------------
 // Environment Policy (ADR-0029) — per-change-type allow/confirm map, inline on
@@ -411,15 +440,25 @@ export const PatchFlagConfigRequestSchema = z
       .strict()
       .nullable()
       .optional(),
-    // Gated change types require an explicit confirm under the Env Policy.
-    confirm: z.boolean().optional(),
+    review: InlineApproveAndApplyReviewSchema.optional(),
+    idempotency_key: z.string().min(1),
   })
   .strict();
 
-export const ReplaceTargetingRulesRequestSchema = z.object({
-  targetingRules: z.array(TargetingRuleSchema),
-  confirm: z.boolean().optional(),
-});
+export const ReplaceTargetingRulesRequestSchema = z
+  .object({
+    targetingRules: z.array(TargetingRuleSchema),
+    review: InlineApproveAndApplyReviewSchema.optional(),
+    idempotency_key: z.string().min(1),
+  })
+  .strict();
+
+export const FlagConfigMutationResponseSchema = z
+  .object({
+    config: FlagConfigResponseSchema,
+    approvalRequest: ApprovalRequestSchema.nullable(),
+  })
+  .strict();
 
 // ---------------------------------------------------------------------------
 // Promotion (ADR-0028) — explicit ticked field-groups; absence = leave untouched.
@@ -435,12 +474,14 @@ export const PromoteRequestSchema = z.object({
       enabled: z.literal(true).optional(),
     })
     .strict(),
-  confirm: z.boolean().optional(),
+  review: InlineApproveAndApplyReviewSchema.optional(),
+  idempotency_key: z.string().min(1),
 });
 
 export const PromoteResponseSchema = z.object({
   config: FlagConfigResponseSchema,
   diff: z.object({ before: FlagConfigResponseSchema, after: FlagConfigResponseSchema }),
+  approvalRequest: ApprovalRequestSchema.nullable(),
 });
 
 // ---------------------------------------------------------------------------

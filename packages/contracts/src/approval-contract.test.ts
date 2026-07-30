@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
 import {
   ApprovalDiffSchema,
   ApprovalRequestSchema,
@@ -8,11 +9,17 @@ import {
 } from "./routes/route-shapes";
 
 const actor = { userId: "user_1", authDoor: "id_jag" };
+const approvalRequestId = "apr_01J00000000000000000000000";
+const secondApprovalRequestId = "apr_01J00000000000000000000001";
+const approvalReviewId = "rev_01J00000000000000000000000";
+const secondApprovalReviewId = "rev_01J00000000000000000000001";
+const targetVersion = `sha256:${"a".repeat(64)}`;
+const resultingTargetVersion = `sha256:${"b".repeat(64)}`;
 
 describe("Approval Request and Review contract", () => {
   it("parses a durable pending proposal with an immutable target diff", () => {
     const request = ApprovalRequestSchema.parse({
-      id: "apr_1",
+      id: approvalRequestId,
       appId: "app_1",
       policyContexts: [
         {
@@ -25,7 +32,7 @@ describe("Approval Request and Review contract", () => {
       target: {
         type: "flag_configuration",
         id: "fc_1",
-        version: "sha256:target-v3",
+        version: targetVersion,
       },
       diff: {
         current: { rollout: { percentage: 10 } },
@@ -48,13 +55,13 @@ describe("Approval Request and Review contract", () => {
     });
 
     expect(request.status).toBe("pending");
-    expect(request.target.version).toBe("sha256:target-v3");
+    expect(request.target.version).toBe(targetVersion);
   });
 
   it("records a failed Review without an application result", () => {
     const review = ApprovalReviewSchema.parse({
-      id: "rev_1",
-      approvalRequestId: "apr_1",
+      id: approvalReviewId,
+      approvalRequestId,
       action: "approve_and_apply",
       outcome: "failed",
       actor,
@@ -75,7 +82,7 @@ describe("Approval Request and Review contract", () => {
   it("requires an applied Review and typed application result for an applied request", () => {
     const reviewedAt = "2026-07-29T12:01:00.000Z";
     const request = ApprovalRequestSchema.parse({
-      id: "apr_2",
+      id: secondApprovalRequestId,
       appId: "app_1",
       policyContexts: [
         {
@@ -88,7 +95,7 @@ describe("Approval Request and Review contract", () => {
       target: {
         type: "experiment_draft",
         id: "exp_1",
-        version: "sha256:draft-and-policy-v4",
+        version: targetVersion,
       },
       diff: {
         current: { liveRunId: null },
@@ -107,26 +114,99 @@ describe("Approval Request and Review contract", () => {
       proposedAt: "2026-07-29T12:00:00.000Z",
       resolvedAt: reviewedAt,
       applicationResult: {
-        targetVersion: "sha256:run-v4",
+        targetVersion: resultingTargetVersion,
         resourceType: "experiment_run",
         resourceId: "run_4",
         appliedAt: reviewedAt,
       },
       latestReview: {
-        id: "rev_2",
-        approvalRequestId: "apr_2",
+        id: secondApprovalReviewId,
+        approvalRequestId: secondApprovalRequestId,
         action: "approve_and_apply",
         outcome: "applied",
         actor,
         reviewedAt,
         reason: "Ship the reviewed draft",
         idempotencyKey: "review-2",
-        resultingTargetVersion: "sha256:run-v4",
+        resultingTargetVersion,
         error: null,
       },
     });
 
     expect(request.applicationResult?.resourceType).toBe("experiment_run");
+  });
+});
+
+describe("Approval Request staleness projections", () => {
+  it("renders effective staleness without requiring a materialized Review", () => {
+    const request = ApprovalRequestSchema.parse({
+      id: approvalRequestId,
+      appId: "app_1",
+      policyContexts: [
+        {
+          environmentId: "env_prod",
+          changeTypes: ["enabled_state"],
+          level: "confirm",
+        },
+      ],
+      operation: "flag_config_update",
+      target: { type: "flag_configuration", id: "fc_1", version: targetVersion },
+      diff: {
+        current: { enabled: false },
+        proposed: { enabled: true },
+        entries: [{ path: "/enabled", operation: "replace", current: false, proposed: true }],
+      },
+      status: "stale",
+      proposer: actor,
+      proposedAt: "2026-07-29T12:00:00.000Z",
+      resolvedAt: null,
+      applicationResult: null,
+      latestReview: null,
+    });
+
+    expect(request.status).toBe("stale");
+    expect(request.resolvedAt).toBeNull();
+  });
+
+  it("accepts materialized staleness after a Review", () => {
+    const reviewedAt = "2026-07-29T12:01:00.000Z";
+    const request = ApprovalRequestSchema.parse({
+      id: approvalRequestId,
+      appId: "app_1",
+      policyContexts: [
+        {
+          environmentId: "env_prod",
+          changeTypes: ["enabled_state"],
+          level: "confirm",
+        },
+      ],
+      operation: "flag_config_update",
+      target: { type: "flag_configuration", id: "fc_1", version: targetVersion },
+      diff: {
+        current: { enabled: false },
+        proposed: { enabled: true },
+        entries: [{ path: "/enabled", operation: "replace", current: false, proposed: true }],
+      },
+      status: "stale",
+      proposer: actor,
+      proposedAt: "2026-07-29T12:00:00.000Z",
+      resolvedAt: reviewedAt,
+      applicationResult: null,
+      latestReview: {
+        id: approvalReviewId,
+        approvalRequestId,
+        action: "approve_and_apply",
+        outcome: "stale",
+        actor,
+        reviewedAt,
+        reason: null,
+        idempotencyKey: "review-stale",
+        resultingTargetVersion: null,
+        error: null,
+      },
+    });
+
+    expect(request.latestReview?.outcome).toBe("stale");
   });
 });
 
@@ -154,8 +234,8 @@ describe("Approval Review input and invariants", () => {
   it("rejects impossible Review outcomes and incomplete diff entries", () => {
     expect(
       ApprovalReviewSchema.safeParse({
-        id: "rev_invalid",
-        approvalRequestId: "apr_1",
+        id: approvalReviewId,
+        approvalRequestId,
         action: "decline",
         outcome: "failed",
         actor,
@@ -174,5 +254,12 @@ describe("Approval Review input and invariants", () => {
         entries: [{ path: "/value", operation: "replace", current: "old" }],
       }).success,
     ).toBe(false);
+  });
+
+  it("enforces prefixed ULID identifiers", () => {
+    expect(ApprovalRequestIdSchema.safeParse(approvalRequestId).success).toBe(true);
+    expect(ApprovalReviewIdSchema.safeParse(approvalReviewId).success).toBe(true);
+    expect(ApprovalRequestIdSchema.safeParse("apr_1").success).toBe(false);
+    expect(ApprovalReviewIdSchema.safeParse("rev_1").success).toBe(false);
   });
 });

@@ -1,17 +1,19 @@
 import { z } from "@hono/zod-openapi";
+import { SegmentSchema } from "../leaf-schemas-flag";
+import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   CreateFlagRequestSchema,
   CreateVariantRequestSchema,
+  FlagMutationResponseSchema,
   FlagResponseSchema,
   PatchFlagRequestSchema,
   PatchVariantRequestSchema,
 } from "../resource-envelopes-flag";
-import { SegmentSchema } from "../leaf-schemas-flag";
-import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   AppParams,
   CreateSegmentRequestSchema,
   EnvFlagParams,
+  FlagConfigMutationResponseSchema,
   FlagConfigResponseSchema,
   FlagParams,
   FlagVariantParams,
@@ -37,6 +39,14 @@ const RATE = "control-plane-actor" as const;
 const FlagListResponse = z.object({ items: z.array(FlagResponseSchema) });
 const SegmentListResponse = z.object({ items: z.array(SegmentSchema) });
 const DeletedResponse = z.object({ deleted: z.literal(true) });
+const APPROVAL_WRITE_ERRORS = [
+  "APPROVAL_REVIEW_REQUIRED",
+  "APPROVAL_REVIEW_FORBIDDEN",
+  "APPROVAL_REQUEST_STALE",
+  "APPROVAL_REQUEST_RESOLVED",
+  "APPROVAL_APPLICATION_FAILED",
+  "IDEMPOTENCY_KEY_CONFLICT",
+] as const;
 
 export const flagRoutes = [
   defineApiRoute({
@@ -124,11 +134,18 @@ export const flagRoutes = [
     path: "/apps/:appId/flags/:flagId/variants/:variantName",
     summary: "Update a catalog Variant (value is Run-frozen).",
     request: { params: FlagVariantParams, body: PatchVariantRequestSchema },
-    response: FlagResponseSchema,
+    response: FlagMutationResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "none",
-    errors: ["FLAG_NOT_FOUND", "VARIANT_NOT_FOUND", "FORBIDDEN", "RUN_FROZEN", "VALIDATION_ERROR"],
+    idempotency: "required",
+    errors: [
+      "FLAG_NOT_FOUND",
+      "VARIANT_NOT_FOUND",
+      "FORBIDDEN",
+      "RUN_FROZEN",
+      ...APPROVAL_WRITE_ERRORS,
+      "VALIDATION_ERROR",
+    ],
   }),
   defineApiRoute({
     operationId: "flag_variants_delete",
@@ -170,15 +187,15 @@ export const flagRoutes = [
     path: "/apps/:appId/envs/:environmentId/flags/:flagId/config",
     summary: "Update enabled state / available Variants (Policy-gated change types).",
     request: { params: EnvFlagParams, body: PatchFlagConfigRequestSchema },
-    response: FlagConfigResponseSchema,
+    response: FlagConfigMutationResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "none",
+    idempotency: "required",
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
       "FORBIDDEN",
-      "CONFIRMATION_REQUIRED",
+      ...APPROVAL_WRITE_ERRORS,
       "VALIDATION_ERROR",
     ],
   }),
@@ -189,15 +206,15 @@ export const flagRoutes = [
     path: "/apps/:appId/envs/:environmentId/flags/:flagId/targeting-rules",
     summary: "Full-replace this Environment's ordered Targeting Rule list.",
     request: { params: EnvFlagParams, body: ReplaceTargetingRulesRequestSchema },
-    response: FlagConfigResponseSchema,
+    response: FlagConfigMutationResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "none",
+    idempotency: "required",
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
       "FORBIDDEN",
-      "CONFIRMATION_REQUIRED",
+      ...APPROVAL_WRITE_ERRORS,
       "VALIDATION_ERROR",
     ],
   }),
@@ -211,12 +228,12 @@ export const flagRoutes = [
     response: PromoteResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "none",
+    idempotency: "required",
     errors: [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
       "FORBIDDEN",
-      "CONFIRMATION_REQUIRED",
+      ...APPROVAL_WRITE_ERRORS,
       "VALIDATION_ERROR",
     ],
   }),

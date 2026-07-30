@@ -206,6 +206,42 @@ back, records a failed Review attempt, and leaves the request `pending`. Exact r
 idempotency key; a later application retry uses a new Review key. Error details are canonical in
 [../contracts/error-responses.md](../contracts/error-responses.md#approval-request-and-review-errors).
 
+Multiple pending Approval Requests for the same target are allowed. Each is an independent immutable
+proposal against its captured target version. Applying one changes the live target version, so every
+other pending request for the prior version subsequently renders `stale`.
+
+## Approval Request endpoints
+
+### `GET /apps/{app_id}/approval-requests?status=&target_kind=&limit=&cursor=`
+
+Lists full Approval Request wire projections in the App. `status` optionally filters
+`pending | applied | declined | stale`; `target_kind` optionally filters
+`flag_configuration | flag_variant | experiment_draft`. The response uses the standard cursor page:
+`{ items: ApprovalRequest[], cursor: string | null, limit: number, total: number | null }`.
+
+### `GET /apps/{app_id}/approval-requests/{id}`
+
+Returns one full Approval Request wire projection, including immutable Policy contexts, target,
+diff, proposer, application result, and latest Review.
+
+Both reads compute effective staleness against the live target version. A stored `pending` request
+whose target moved is rendered with `status: stale` without mutating D1, setting `resolved_at`, or
+creating a Review. V1 has no staleness TTL. A subsequent Review of that request rechecks the target
+inside the transaction, materializes the stale Review and terminal state, and returns
+`APPROVAL_REQUEST_STALE`.
+
+### `POST /apps/{app_id}/approval-requests/{id}/reviews`
+
+Body:
+`{ action: "approve_and_apply" | "decline", reason?: string, idempotency_key: string }`.
+Returns the full Approval Request projection after the Review attempt. The Review idempotency key is
+required. The coarse route gate requires App membership; current membership and Policy determine
+the exact Review authority before target validation or mutation.
+
+These three registered routes mechanically derive the MCP tools `approval_requests_list`,
+`approval_requests_get`, and `approval_request_reviews_create`. No hand-written MCP schema is
+required.
+
 ## Segment endpoints
 
 ### `GET /apps/{app_id}/segments`

@@ -31,15 +31,21 @@ export class FakeCliTransport {
 }
 
 export function jsonError(code: ErrorResponse["code"], message: string): ErrorResponse {
-  if (code === "CONFIRMATION_REQUIRED") {
+  if (code === "APPROVAL_REVIEW_REQUIRED") {
     return {
       code,
       message,
       details: {
-        gate: "enabled_state",
-        environmentId: "env_1",
-        attemptedOp: "flag_config_update",
-        recommendedAction: "RETRY_WITH_CONFIRMATION",
+        approvalRequestId: "apr_01J00000000000000000000000",
+        status: "pending",
+        policyContexts: [
+          {
+            environmentId: "env_1",
+            changeTypes: ["enabled_state"],
+            level: "confirm",
+          },
+        ],
+        recommendedAction: "REVIEW_APPROVAL_REQUEST",
       },
     };
   }

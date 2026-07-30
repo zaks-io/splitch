@@ -183,7 +183,7 @@ describe("api and auth error exit codes", () => {
       {
         match: (request) => request.url.includes("/flags"),
         status: 409,
-        body: jsonError("CONFIRMATION_REQUIRED", "confirmation required"),
+        body: jsonError("APPROVAL_REVIEW_REQUIRED", "approval review required"),
       },
     ]);
 

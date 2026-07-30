@@ -140,11 +140,26 @@ describe("CreateVariantRequestSchema (non-idempotent create)", () => {
 });
 
 describe("PatchVariantRequestSchema (value is Run-frozen at the Worker)", () => {
-  it("parses a value patch (Run-frozen check is a Worker runtime guard)", () => {
-    expect(PatchVariantRequestSchema.parse({ value: 42 }).value).toBe(42);
+  it("parses a value patch with an optional inline review", () => {
+    const request = PatchVariantRequestSchema.parse({
+      value: 42,
+      review: { action: "approve_and_apply" },
+      idempotency_key: "idem-1",
+    });
+    expect(request.value).toBe(42);
+    expect(request.review?.action).toBe("approve_and_apply");
+  });
+
+  it("rejects a missing idempotency key", () => {
+    expect(PatchVariantRequestSchema.safeParse({ value: 42 }).success).toBe(false);
   });
 
   it("rejects an unknown field (strict)", () => {
-    expect(PatchVariantRequestSchema.safeParse({ flagId: "flag_1" }).success).toBe(false);
+    expect(
+      PatchVariantRequestSchema.safeParse({
+        flagId: "flag_1",
+        idempotency_key: "idem-1",
+      }).success,
+    ).toBe(false);
   });
 });
