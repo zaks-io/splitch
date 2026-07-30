@@ -195,40 +195,46 @@ export {
 } from "./route-contract";
 export { getRoute, operationIds, routeRegistry } from "./route-registry";
 export type {
-  ApprovalActor,
   ApprovalApplicationResult,
+  ApprovalRequest,
+  ApprovalRequestListQuery,
+  ApprovalReview,
+  ApprovalReviewError,
+  ReviewApprovalRequest,
+} from "./routes/route-shapes-approval-request";
+export {
+  ApprovalApplicationResultSchema,
+  ApprovalRequestListQuerySchema,
+  ApprovalRequestSchema,
+  ApprovalReviewErrorSchema,
+  ApprovalReviewSchema,
+  InlineApproveAndApplyReviewSchema,
+  ReviewApprovalRequestSchema,
+} from "./routes/route-shapes-approval-request";
+export type {
+  ApprovalActor,
   ApprovalAppliedResourceType,
   ApprovalDiff,
   ApprovalDiffEntry,
   ApprovalOperation,
   ApprovalPolicyContext,
-  ApprovalRequest,
-  ApprovalRequestListQuery,
   ApprovalRequestStatus,
-  ApprovalReview,
   ApprovalReviewAction,
-  ApprovalReviewError,
   ApprovalReviewOutcome,
   ApprovalTarget,
   ApprovalTargetType,
   ApprovalTargetVersion,
-  ReviewApprovalRequest,
-} from "./routes/route-shapes";
+} from "./routes/route-shapes-approvals";
 export {
   ApprovalActorSchema,
-  ApprovalApplicationResultSchema,
   ApprovalAppliedResourceTypeSchema,
   ApprovalDiffEntrySchema,
   ApprovalDiffSchema,
   ApprovalOperationSchema,
   ApprovalPolicyContextSchema,
-  ApprovalRequestListQuerySchema,
-  ApprovalRequestSchema,
   ApprovalRequestStatusSchema,
   ApprovalReviewActionSchema,
-  ApprovalReviewErrorSchema,
   ApprovalReviewOutcomeSchema,
-  ApprovalReviewSchema,
   ApprovalTargetSchema,
   ApprovalTargetTypeSchema,
   ApprovalTargetVersionSchema,
@@ -238,9 +244,7 @@ export {
   approvalReviewActions,
   approvalReviewOutcomes,
   approvalTargetTypes,
-  InlineApproveAndApplyReviewSchema,
-  ReviewApprovalRequestSchema,
-} from "./routes/route-shapes";
+} from "./routes/route-shapes-approvals";
 export type {
   ActivationRow,
   CupedCovariateRow,

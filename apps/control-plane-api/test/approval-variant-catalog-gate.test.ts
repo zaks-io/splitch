@@ -15,11 +15,11 @@ import { makePoolHarness } from "./config-store-pool-harness";
 
 /**
  * An EMPTY `available_variant_names` is the production default: a Configuration
- * that was never narrowed serves the Flag's whole catalog. Every other approval
- * fixture seeds an explicit list, which hid the fact that catalog membership
- * (POST / DELETE on `/variants`) was ungated: DELETE the Variant, POST it back
- * with a different value, and a value change the gate refuses head-on lands in
- * three calls with zero Reviews.
+ * that was never narrowed serves the Flag's whole catalog. While the fixtures
+ * all seeded an explicit list, that default hid the fact that catalog
+ * membership (POST / DELETE on `/variants`) was ungated: DELETE the Variant,
+ * POST it back with a different value, and a value change the gate refuses
+ * head-on lands in three calls with zero Reviews.
  */
 
 let h: Harness;

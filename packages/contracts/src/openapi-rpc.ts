@@ -7,6 +7,7 @@ import { dataPlaneRoutes } from "./routes/routes-data-plane";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagRoutes } from "./routes/routes-flags";
 import { privacyRoutes } from "./routes/routes-privacy";
+import { segmentRoutes } from "./routes/routes-segments";
 
 /**
  * Type-only OpenAPIHono app derived from THE route registry (ADR-0025). The
@@ -39,6 +40,7 @@ function buildRpcAppFromRoutes<const T extends readonly { openapi: RouteConfig }
 const accountRpcApp = buildRpcAppFromRoutes(accountRoutes);
 const approvalRpcApp = buildRpcAppFromRoutes(approvalRoutes);
 const flagRpcApp = buildRpcAppFromRoutes(flagRoutes);
+const segmentRpcApp = buildRpcAppFromRoutes(segmentRoutes);
 const experimentRpcApp = buildRpcAppFromRoutes(experimentRoutes);
 const credentialRpcApp = buildRpcAppFromRoutes(credentialRoutes);
 const analysisRpcApp = buildRpcAppFromRoutes(analysisRoutes);
@@ -50,6 +52,7 @@ export const controlPlaneRpcApp = new OpenAPIHono()
   .route("/", accountRpcApp)
   .route("/", approvalRpcApp)
   .route("/", flagRpcApp)
+  .route("/", segmentRpcApp)
   .route("/", experimentRpcApp)
   .route("/", credentialRpcApp)
   .route("/", analysisRpcApp)

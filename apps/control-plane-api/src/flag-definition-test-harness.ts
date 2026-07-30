@@ -164,6 +164,9 @@ export async function allowAllPolicies(h: FlagDefinitionHarness, appId: string) 
 export function baseFlag(appId: string) {
   return {
     appId,
+    // `flags_create` is an Idempotency-Key route, so the body carries the key the
+    // request will also send as the `Idempotency-Key` header.
+    idempotency_key: `idem-create-flag-${crypto.randomUUID()}`,
     key: "checkout-redesign",
     name: "Checkout redesign",
     schema: { type: "boolean" },
@@ -180,7 +183,17 @@ export async function createFlag(
   jwt: string,
   body = baseFlag(appId),
 ) {
-  const res = await request(h, "POST", `/apps/${appId}/flags`, jwt, body);
+  const idempotencyKey =
+    (body as { idempotency_key?: string }).idempotency_key ??
+    `idem-create-flag-${crypto.randomUUID()}`;
+  const res = await request(
+    h,
+    "POST",
+    `/apps/${appId}/flags`,
+    jwt,
+    { ...body, idempotency_key: idempotencyKey },
+    idempotencyKey,
+  );
   if (res.status !== 200) {
     throw new Error(`create flag failed ${res.status}: ${await res.text()}`);
   }

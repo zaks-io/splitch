@@ -31,7 +31,9 @@ describe("parseBooleanVariantsFlag", () => {
 
 describe("applyFlagsCreateConvenienceFields", () => {
   it("derives the quickstart FlagsCreateInput shape", () => {
-    const input: Record<string, unknown> = { appId: "app_checkout" };
+    // `flags_create` is an Idempotency-Key route, so the assembled input already
+    // carries the minted key by the time the convenience fields are derived.
+    const input: Record<string, unknown> = { appId: "app_checkout", idempotency_key: "cli_1" };
     applyFlagsCreateConvenienceFields(input, {
       key: " new-checkout ",
       variants: "on,off",
@@ -39,6 +41,7 @@ describe("applyFlagsCreateConvenienceFields", () => {
 
     expect(input).toEqual({
       appId: "app_checkout",
+      idempotency_key: "cli_1",
       key: "new-checkout",
       name: "New Checkout",
       schema: { type: "boolean" },
@@ -85,6 +88,7 @@ describe("assertContractValidFlagsCreateInput", () => {
       name: flagNameFromKey("new-checkout"),
       schema: { type: "boolean" },
       variants: parseBooleanVariantsFlag("on,off"),
+      idempotency_key: "cli_1",
     };
 
     expect(() => assertContractValidFlagsCreateInput(input)).not.toThrow();

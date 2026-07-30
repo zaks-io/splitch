@@ -52,6 +52,7 @@ describe("control plane sdk typed route groups", () => {
       key: "checkout",
       schema: null,
       variants: [{ name: "on", value: true, isDefault: true }],
+      idempotency_key: "idem-create-checkout",
     });
 
     expect(capturedBody).toMatchObject({ appId: "app_local", key: "checkout" });

@@ -1,5 +1,4 @@
 import { z } from "@hono/zod-openapi";
-import { SegmentSchema } from "../leaf-schemas-flag";
 import { type ApiRouteContract, defineApiRoute } from "../openapi-route";
 import {
   CreateFlagRequestSchema,
@@ -11,19 +10,16 @@ import {
 } from "../resource-envelopes-flag";
 import {
   AppParams,
-  CreateSegmentRequestSchema,
   EnvFlagParams,
   FlagConfigMutationResponseSchema,
   FlagConfigResponseSchema,
   FlagParams,
   FlagVariantParams,
   PatchFlagConfigRequestSchema,
-  PatchSegmentRequestSchema,
   PromoteParams,
   PromoteRequestSchema,
   PromoteResponseSchema,
   ReplaceTargetingRulesRequestSchema,
-  SegmentParams,
 } from "./route-shapes";
 
 /**
@@ -37,7 +33,6 @@ const AUTH = "control-plane-token" as const;
 const RATE = "control-plane-actor" as const;
 
 const FlagListResponse = z.object({ items: z.array(FlagResponseSchema) });
-const SegmentListResponse = z.object({ items: z.array(SegmentSchema) });
 const DeletedResponse = z.object({ deleted: z.literal(true) });
 const APPROVAL_WRITE_ERRORS = [
   "APPROVAL_REVIEW_REQUIRED",
@@ -72,7 +67,7 @@ export const flagRoutes = [
     response: FlagResponseSchema,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "none",
+    idempotency: "required",
     errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
@@ -111,8 +106,14 @@ export const flagRoutes = [
     response: DeletedResponse,
     auth: AUTH,
     rateLimit: RATE,
-    idempotency: "none",
-    errors: ["FLAG_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING", "RESOURCE_NOT_EMPTY"],
+    idempotency: "required",
+    errors: [
+      "FLAG_NOT_FOUND",
+      "FORBIDDEN",
+      "EXPERIMENT_RUNNING",
+      "RESOURCE_NOT_EMPTY",
+      ...APPROVAL_WRITE_ERRORS,
+    ],
   }),
   defineApiRoute({
     operationId: "flag_variants_create",
@@ -237,70 +238,5 @@ export const flagRoutes = [
       ...APPROVAL_WRITE_ERRORS,
       "VALIDATION_ERROR",
     ],
-  }),
-  defineApiRoute({
-    operationId: "segments_list",
-    owner: OWNER,
-    method: "GET",
-    path: "/apps/:appId/segments",
-    summary: "List Segments in an App.",
-    request: { params: AppParams },
-    response: SegmentListResponse,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN"],
-  }),
-  defineApiRoute({
-    operationId: "segments_create",
-    owner: OWNER,
-    method: "POST",
-    path: "/apps/:appId/segments",
-    summary: "Create a Segment.",
-    request: { params: AppParams, body: CreateSegmentRequestSchema },
-    response: SegmentSchema,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "optional",
-    errors: ["APP_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
-  }),
-  defineApiRoute({
-    operationId: "segments_get",
-    owner: OWNER,
-    method: "GET",
-    path: "/apps/:appId/segments/:segmentId",
-    summary: "Get a Segment.",
-    request: { params: SegmentParams },
-    response: SegmentSchema,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["SEGMENT_NOT_FOUND", "FORBIDDEN"],
-  }),
-  defineApiRoute({
-    operationId: "segments_update",
-    owner: OWNER,
-    method: "PATCH",
-    path: "/apps/:appId/segments/:segmentId",
-    summary: "Update a Segment.",
-    request: { params: SegmentParams, body: PatchSegmentRequestSchema },
-    response: SegmentSchema,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["SEGMENT_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
-  }),
-  defineApiRoute({
-    operationId: "segments_delete",
-    owner: OWNER,
-    method: "DELETE",
-    path: "/apps/:appId/segments/:segmentId",
-    summary: "Delete a Segment (blocked if referenced by a running Experiment).",
-    request: { params: SegmentParams },
-    response: DeletedResponse,
-    auth: AUTH,
-    rateLimit: RATE,
-    idempotency: "none",
-    errors: ["SEGMENT_NOT_FOUND", "FORBIDDEN", "EXPERIMENT_RUNNING"],
   }),
 ] as const satisfies readonly ApiRouteContract[];

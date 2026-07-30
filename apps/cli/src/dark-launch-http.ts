@@ -81,6 +81,7 @@ export async function controlPlanePost<T>(
     headers: {
       authorization: `Bearer ${token}`,
       "content-type": "application/json",
+      "idempotency-key": `dark-launch-${crypto.randomUUID()}`,
     },
     body: JSON.stringify(body),
   });
@@ -94,10 +95,52 @@ export async function controlPlaneDelete(
   harness: QuickstartHarness,
   path: string,
   token = harness.accessToken,
-): Promise<void> {
+): Promise<Response> {
   const response = await harness.routingFetch(`${quickstartOrigins.controlPlaneBaseUrl}${path}`, {
     method: "DELETE",
-    headers: { authorization: `Bearer ${token}` },
+    headers: {
+      authorization: `Bearer ${token}`,
+      "idempotency-key": `dark-launch-${crypto.randomUUID()}`,
+    },
   });
-  expect(response.ok).toBe(true);
+  return response;
+}
+
+/**
+ * A Flag delete is Policy-gated, and an App provisioned through `apps_create`
+ * ships its prod Environment at `confirm`, so the delete lands as a pending
+ * Approval Request that the same actor confirms. Driving the real two-step here
+ * is what keeps this integration proof honest about the gate.
+ */
+export async function deleteFlagThroughApproval(
+  harness: QuickstartHarness,
+  appId: string,
+  flagId: string,
+): Promise<void> {
+  const response = await controlPlaneDelete(harness, `/apps/${appId}/flags/${flagId}`);
+  if (response.ok) return;
+
+  expect(response.status).toBe(409);
+  const body = (await response.json()) as {
+    code?: string;
+    details?: { approvalRequestId?: string };
+  };
+  expect(body.code).toBe("APPROVAL_REVIEW_REQUIRED");
+  const requestId = body.details?.approvalRequestId;
+  expect(requestId).toBeTruthy();
+
+  const idempotencyKey = `dark-launch-review-${crypto.randomUUID()}`;
+  const review = await harness.routingFetch(
+    `${quickstartOrigins.controlPlaneBaseUrl}/apps/${appId}/approval-requests/${requestId}/reviews`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${harness.accessToken}`,
+        "content-type": "application/json",
+        "idempotency-key": idempotencyKey,
+      },
+      body: JSON.stringify({ action: "approve_and_apply", idempotency_key: idempotencyKey }),
+    },
+  );
+  expect(review.ok).toBe(true);
 }

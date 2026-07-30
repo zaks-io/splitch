@@ -80,7 +80,9 @@ export const createControlPanelFlag = createServerFn({ method: "POST" })
 
     const authorized = await authorizedFlagsClient(data.environmentId);
     if (!authorized.ok) return authorized.result;
-    const result = await authorized.flags.create(flagCreateInput(data.appId, data.draft));
+    const result = await authorized.flags.create(
+      flagCreateInput(data.appId, data.draft, crypto.randomUUID()),
+    );
     return result.ok ? { ok: true, status: result.status, data: { key: result.data.key } } : result;
   });
 

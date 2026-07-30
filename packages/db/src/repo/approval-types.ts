@@ -10,7 +10,7 @@ export interface ApprovalCommit {
   idempotencyKey: string;
   requestHash: string;
   resultingTargetVersion: string;
-  resultingResourceType: "flag_configuration" | "flag_variant" | "experiment_run";
+  resultingResourceType: "flag" | "flag_configuration" | "flag_variant" | "experiment_run";
   resultingResourceId: string;
   policyContexts: ApprovalPolicyContextGuard[];
 }

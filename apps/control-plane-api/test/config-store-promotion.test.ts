@@ -1,6 +1,7 @@
 import { CURRENT_KV_SCHEMA_VERSION, flagConfigKey } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { narrowSeededAvailability } from "../src/config-store-fixture-data";
 import {
   type Harness,
   ids,
@@ -15,6 +16,10 @@ let h: Harness;
 
 beforeEach(async () => {
   h = await makeHarness();
+  // The fixture ships `[]` (never narrowed), matching `ensureInitialFlagConfig`.
+  // This suite asserts on the available-Variant list itself, so it narrows
+  // explicitly instead of leaning on a fixture default.
+  await narrowSeededAvailability(h.d1);
 });
 
 afterEach(async () => {

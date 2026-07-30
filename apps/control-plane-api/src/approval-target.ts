@@ -7,6 +7,7 @@ import {
 } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { canonicalHash } from "./approval-canonical";
+import { experimentTargetProjection } from "./approval-target-experiment";
 import { policyLevel, readEnvironmentPolicy } from "./flag-config-policy";
 
 export function environmentPolicyContexts(
@@ -67,26 +68,41 @@ export async function servableVariantEnvironments(
   flagId: string,
   variantName: string,
 ): Promise<ServableEnvironment[]> {
-  const servable: ServableEnvironment[] = [];
+  const configured = await configuredFlagEnvironments(repo, appId, flagId);
+  return configured.filter((environment) =>
+    servesVariant(environment.availableVariantNames, variantName),
+  );
+}
+
+/**
+ * Every Environment that has a Configuration for this Flag, i.e. every
+ * Environment that serves it at all. Deleting the Flag destroys all of them, so
+ * a Flag-level gate has to consider the whole set rather than the subset that
+ * happens to name one Variant.
+ */
+export async function configuredFlagEnvironments(
+  repo: Repository,
+  appId: string,
+  flagId: string,
+): Promise<ServableEnvironment[]> {
+  const configured: ServableEnvironment[] = [];
   for (const environment of await repo.identity.listEnvironments(appScope(appId))) {
     const config = await repo.flags.getFlagConfig(envScope(appId, environment.id), flagId);
     if (!config) continue;
-    const available = JSON.parse(config.availableVariantNames) as string[];
-    if (!servesVariant(available, variantName)) continue;
     const policy = await readEnvironmentPolicy(repo, appId, environment.id);
     if (!policy) {
       throw new Error(
         `Environment ${environment.id} disappeared while resolving Approval Policy for ${appId}`,
       );
     }
-    servable.push({
+    configured.push({
       environmentId: environment.id,
       configVersion: config.version,
-      availableVariantNames: available,
+      availableVariantNames: JSON.parse(config.availableVariantNames) as string[],
       policy,
     });
   }
-  return servable.sort((left, right) => left.environmentId.localeCompare(right.environmentId));
+  return configured.sort((left, right) => left.environmentId.localeCompare(right.environmentId));
 }
 
 export async function currentPolicyProjection(
@@ -173,6 +189,15 @@ export async function approvalTargetVersion(
     });
   }
 
+  if (target.type === "flag") {
+    const flag = await repo.flags.getFlag(appScope(appId), target.id);
+    if (!flag) return absentTargetVersion(target);
+    return canonicalHash({
+      flagVersion: flag.version,
+      environmentVector: await flagEnvironmentVector(repo, appId, flag.id, contexts),
+    });
+  }
+
   if (target.type === "flag_variant") {
     const variant =
       (await repo.flags.getVariantById(appScope(appId), target.id)) ?? override?.absentVariant;
@@ -233,30 +258,26 @@ async function variantEnvironmentVector(
   }));
 }
 
-export function experimentTargetProjection(
-  experiment: Record<string, unknown>,
-): Record<string, unknown> {
-  return {
-    id: experiment.id,
-    flagId: experiment.flagId,
-    targetingKeyField: experiment.targetingKeyField,
-    targetingKeyType: experiment.targetingKeyType,
-    confidenceLevel: experiment.confidenceLevel,
-    defaultVariantId: experiment.defaultVariantId,
-    metrics: parseJson(experiment.metrics),
-    guardrailMetrics: parseJson(experiment.guardrailMetrics),
-    activationMetricId: experiment.activationMetricId,
-    conversionWindowMs: experiment.conversionWindowMs,
-    dimensions: parseJson(experiment.dimensions),
-    draftAllocation: parseJson(experiment.draftAllocation),
-    draftSalt: experiment.draftSalt,
-    draftTargetingRules: parseJson(experiment.draftTargetingRules),
-    draftSegmentIds: parseJson(experiment.draftSegmentIds),
-    liveRunId: experiment.liveRunId,
-  };
-}
-
-function parseJson(value: unknown): unknown {
-  if (typeof value !== "string") return value ?? null;
-  return JSON.parse(value) as unknown;
+/**
+ * The Flag-level analogue of `variantEnvironmentVector`: every Environment that
+ * serves the Flag, its Configuration version, and its Policy level for each
+ * change type under review. A Configuration appearing, vanishing, or moving
+ * version makes a pending Flag-level proposal stale.
+ */
+async function flagEnvironmentVector(
+  repo: Repository,
+  appId: string,
+  flagId: string,
+  contexts: readonly ApprovalPolicyContext[],
+) {
+  const changeTypes = [...new Set(contexts.flatMap((context) => context.changeTypes))].sort();
+  const configured = await configuredFlagEnvironments(repo, appId, flagId);
+  return configured.map((environment) => ({
+    environmentId: environment.environmentId,
+    configVersion: environment.configVersion,
+    levels: changeTypes.map((changeType) => ({
+      changeType,
+      level: policyLevel(environment.policy, changeType),
+    })),
+  }));
 }

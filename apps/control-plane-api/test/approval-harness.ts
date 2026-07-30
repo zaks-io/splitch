@@ -95,6 +95,33 @@ export async function deleteVariantRequest(
   return outcome(response);
 }
 
+export async function deleteFlagRequest(h: Harness, key: string): Promise<PatchOutcome> {
+  const jwt = await token(h.signer);
+  const response = await h.app.request(`/apps/${ids.appId}/flags/${ids.flagId}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${jwt}`, "idempotency-key": key },
+  });
+  return outcome(response);
+}
+
+export async function createFlagRequest(
+  h: Harness,
+  key: string,
+  body: Record<string, unknown>,
+): Promise<PatchOutcome> {
+  const jwt = await token(h.signer);
+  const response = await h.app.request(`/apps/${ids.appId}/flags`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${jwt}`,
+      "content-type": "application/json",
+      "idempotency-key": key,
+    },
+    body: JSON.stringify({ appId: ids.appId, ...body }),
+  });
+  return outcome(response);
+}
+
 async function outcome(response: Response): Promise<PatchOutcome> {
   const parsed = (await response.json()) as {
     code?: string;

@@ -1,6 +1,7 @@
 import { appScope, createRepository } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  allowAllPolicies,
   appToken,
   baseFlag,
   createDefaultApp,
@@ -24,6 +25,9 @@ describe("control-plane Flag definition CRUD", () => {
   it("round-trips App-level Flag CRUD and keeps enabled out of the response", async () => {
     const createdApp = await createDefaultApp(h);
     const jwt = await appToken(h, createdApp.app.id);
+    // CRUD round-trip, not the Approval gate: prod ships `confirm`, which would
+    // otherwise turn the DELETE below into an Approval Request.
+    await allowAllPolicies(h, createdApp.app.id);
 
     const createdFlag = await createFlag(h, createdApp.app.id, jwt);
     expect(createdFlag.key).toBe("checkout-redesign");
@@ -59,6 +63,8 @@ describe("control-plane Flag definition CRUD", () => {
       "DELETE",
       `/apps/${createdApp.app.id}/flags/${createdFlag.id}`,
       jwt,
+      undefined,
+      `idem-delete-flag-${crypto.randomUUID()}`,
     );
     expect(del.status).toBe(200);
     expect(await del.json()).toEqual({ deleted: true });
@@ -88,6 +94,7 @@ describe("control-plane Flag definition CRUD", () => {
       headers: {
         authorization: `Bearer ${jwt}`,
         "content-type": "application/json",
+        "idempotency-key": `idem-create-flag-${crypto.randomUUID()}`,
       },
       body: JSON.stringify(baseFlag(createdApp.app.id)),
     });

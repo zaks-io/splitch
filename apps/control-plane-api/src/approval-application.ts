@@ -4,6 +4,7 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import { syncExperimentConfigFromD1 } from "./experiment-handler-shared";
 import { json } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
+import { purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
 import { resyncFlagSnapshots } from "./flag-definition-handler-utils";
 
 interface ApprovalApplicationDeps {
@@ -26,6 +27,9 @@ export function makeOtherApprovalApplication(deps: ApprovalApplicationDeps) {
     }
     if (request.operation === "flag_variants_delete") {
       return applyVariantDelete(deps, request, commit);
+    }
+    if (request.operation === "flags_delete") {
+      return applyFlagDelete(deps, request, commit);
     }
     if (request.operation === "experiments_start") {
       return applyExperimentStart(deps, request, commit);
@@ -207,6 +211,36 @@ async function applyVariantDelete(
     return { ok: false as const, error: { code: "INTERNAL_SERVER_ERROR" as const, details: {} } };
   }
   await resyncFlagSnapshots(deps, request.appId, variant.flagId);
+  return { ok: true as const };
+}
+
+/**
+ * Deleting a Flag destroys every Environment's Configuration and targeting
+ * rules for it. D1 goes first and is guarded by the Review, so a lost race
+ * leaves KV untouched; purging KV first would leave a `confirm` Environment
+ * unserved on a delete that never legally applied.
+ */
+async function applyFlagDelete(
+  deps: ApprovalApplicationDeps,
+  request: ApprovalRequest,
+  commit: ApprovalCommit,
+) {
+  const flagId = request.target.id;
+  const flag = await deps.repo.flags.getFlag(appScope(request.appId), flagId);
+  if (!flag) {
+    return { ok: false as const, error: { code: "FLAG_NOT_FOUND" as const, details: {} } };
+  }
+  const environments = await deps.repo.identity.listEnvironments(appScope(request.appId));
+  const deleted = await deps.repo.flags.deleteFlagCascade(
+    appScope(request.appId),
+    flagId,
+    environments.map((environment) => environment.id),
+    { approval: commit },
+  );
+  if (!deleted) {
+    return { ok: false as const, error: { code: "INTERNAL_SERVER_ERROR" as const, details: {} } };
+  }
+  await purgeFlagConfigsKvForKey(deps, request.appId, flagId, flag.key);
   return { ok: true as const };
 }
 

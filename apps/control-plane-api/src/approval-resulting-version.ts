@@ -29,6 +29,10 @@ export async function resultingVersionFor(
   if (operation === "flag_variants_delete") {
     return absentTargetVersion({ type: "flag_variant", id: row.targetId });
   }
+  // Same rule one level up: an applied Flag delete leaves nothing behind.
+  if (operation === "flags_delete") {
+    return absentTargetVersion({ type: "flag", id: row.targetId });
+  }
   const experiment = await repo.experiments.getExperiment(
     envScope(row.appId, contexts[0]?.environmentId ?? ""),
     row.targetId,

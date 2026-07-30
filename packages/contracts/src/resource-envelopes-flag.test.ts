@@ -16,6 +16,7 @@ const validCreateFlag = {
   key: "feature-x",
   schema: null,
   variants: [variantControl, variantTreatment],
+  idempotency_key: "idem-create-flag",
 };
 
 describe("CreateFlagRequestSchema", () => {
@@ -23,6 +24,14 @@ describe("CreateFlagRequestSchema", () => {
     const req = CreateFlagRequestSchema.parse(validCreateFlag);
     expect(req.key).toBe("feature-x");
     expect(req.variants.filter((variant) => variant.isDefault)).toHaveLength(1);
+  });
+
+  // `flags_create` is an Idempotency-Key route, so a retried create cannot mint a
+  // second definition for a key a gated delete just refused to free.
+  it("rejects a request with no idempotency_key", () => {
+    const { idempotency_key, ...noKey } = validCreateFlag;
+    void idempotency_key;
+    expect(CreateFlagRequestSchema.safeParse(noKey).success).toBe(false);
   });
 
   it("parses with optional description", () => {

@@ -33,9 +33,10 @@ function rows(valueType: VariantValueType, ...values: string[]) {
 
 describe("Create Flag preset", () => {
   it("opens as the zero-configuration on/off pair with disabled as the Default", () => {
-    expect(flagCreateInput("app_checkout", draft({ key: " new-checkout " }))).toEqual({
+    expect(flagCreateInput("app_checkout", draft({ key: " new-checkout " }), "idem-1")).toEqual({
       appId: "app_checkout",
       key: "new-checkout",
+      idempotency_key: "idem-1",
       name: "New Checkout",
       schema: { type: "boolean" },
       variants: [
@@ -60,7 +61,7 @@ describe("Create Flag value types", () => {
 
   for (const { valueType, raw, parsed } of cases) {
     it(`round-trips ${valueType} Variant values into the create payload`, () => {
-      const input = flagCreateInput("app_checkout", draft(rows(valueType, ...raw)));
+      const input = flagCreateInput("app_checkout", draft(rows(valueType, ...raw)), "idem-1");
 
       expect(input.schema).toEqual({ type: valueType });
       expect(input.variants.map((variant) => variant.value)).toEqual(parsed);
@@ -130,7 +131,7 @@ describe("Create Flag catalog invariants", () => {
 
     expect(reordered.variants.map((row) => row.name)).toEqual(["enabled", "disabled"]);
     expect(reordered.defaultIndex).toBe(1);
-    expect(flagCreateInput("app_checkout", reordered).variants).toEqual([
+    expect(flagCreateInput("app_checkout", reordered, "idem-1").variants).toEqual([
       { name: "enabled", value: true, isDefault: false },
       { name: "disabled", value: false, isDefault: true },
     ]);
@@ -148,14 +149,14 @@ describe("Create Flag catalog invariants", () => {
       ],
     });
 
-    expect(flagCreateInput("app_checkout", described).variants).toEqual([
+    expect(flagCreateInput("app_checkout", described, "idem-1").variants).toEqual([
       { name: "disabled", value: false, isDefault: true, description: "off for everyone" },
       { name: "enabled", value: true, isDefault: false },
     ]);
   });
 
   it("refuses to build a payload the contract would reject", () => {
-    expect(() => flagCreateInput("app_checkout", draft({ key: "  " }))).toThrow(
+    expect(() => flagCreateInput("app_checkout", draft({ key: "  " }), "idem-1")).toThrow(
       "refusing to build an invalid Flag",
     );
   });

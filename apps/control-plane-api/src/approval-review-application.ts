@@ -228,10 +228,11 @@ function isFlagConfigurationOperation(operation: ApprovalOperation): boolean {
 function resultingResource(
   row: ApprovalRequestRow,
   operation: ApprovalOperation,
-): { type: "flag_configuration" | "flag_variant" | "experiment_run"; id: string } {
+): { type: "flag" | "flag_configuration" | "flag_variant" | "experiment_run"; id: string } {
   if (isFlagConfigurationOperation(operation)) {
     return { type: "flag_configuration", id: row.targetId };
   }
+  if (operation === "flags_delete") return { type: "flag", id: row.targetId };
   return operation === "experiments_start"
     ? { type: "experiment_run", id: `run_${row.id.slice(4)}` }
     : { type: "flag_variant", id: row.targetId };

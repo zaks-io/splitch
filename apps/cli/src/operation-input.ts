@@ -20,9 +20,12 @@ export function buildOperationInput(
   applyOrgFlag(invocation.flags, input);
   applyPositionalFields(command, invocation, input);
   applyNamedFlags(command, invocation.flags, input);
-  applyCommandSpecificFields(command, invocation, input);
+  // The Idempotency Key is minted before the command-specific step because that
+  // step validates the assembled input against the contract, and a required-key
+  // route carries `idempotency_key` as a contract field.
   applyExplicitIdempotencyKey(invocation.flags, input);
   applyRequiredIdempotencyKey(command, input);
+  applyCommandSpecificFields(command, invocation, input);
   return input;
 }
 

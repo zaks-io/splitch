@@ -6,6 +6,7 @@
  */
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { narrowSeededAvailability } from "../src/config-store-fixture-data";
 import { type Harness, ids, setProdPolicy, token, USER_ID } from "../src/config-store-harness-core";
 import { appAdminScope } from "../src/scope-binding";
 import { seedAppMember } from "../src/test-seeds";
@@ -17,6 +18,10 @@ let h: Harness;
 
 beforeEach(async () => {
   h = await makePoolHarness();
+  // The fixture ships `[]` (never narrowed), matching `ensureInitialFlagConfig`.
+  // This suite asserts on the available-Variant list itself, so it narrows
+  // explicitly instead of leaning on a fixture default.
+  await narrowSeededAvailability(h.d1);
   await setProdPolicy(h, confirmPolicy);
   await seedTenantB(h);
 });
