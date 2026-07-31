@@ -103,6 +103,34 @@ describe("attention rollup Analysis fan-out bounds", { timeout: ATTENTION_TEST_T
     expect(read).not.toHaveBeenCalled();
   });
 
+  // The bound exists so an Environment with more running Experiments than any
+  // read bound can still be DETECTED as truncated rather than materializing
+  // every row and reporting whatever that happens to total (see
+  // attention-rollup-plan-guard.test.ts for the completeness check this feeds).
+  // Spying on the real, unmocked read proves the bound is actually applied, not
+  // merely documented: without `{ limit: ANALYSIS_READ_LIMIT + 1 }` this read
+  // would return all 212 rows, not 201.
+  it("bounds the per-Environment materializing read to ANALYSIS_READ_LIMIT + 1 rows", async () => {
+    const repo = repository();
+    await seedRunningExperiments(repo, QA_ENVIRONMENT_ID, 210);
+    const read = vi.fn<AnalysisResultsReader["read"]>();
+    const { spied, listRunningExperiments } = spyOnPlanningReads(repo);
+    const app = harness({ read }, authFor(ids.appId, USER_ID), spied);
+
+    const response = await app.request(`/apps/${ids.appId}/attention-rollup`, {
+      headers: { authorization: "Bearer valid" },
+    });
+
+    expect(response.status).toBe(409);
+    // One call per Environment (dev, prod, qa); find QA's by its scope rather
+    // than assuming call order, since `mapWithConcurrency` does not guarantee it.
+    const qaCallIndex = listRunningExperiments.mock.calls.findIndex(
+      ([scope]) => scope.environmentId === QA_ENVIRONMENT_ID,
+    );
+    const rows = await listRunningExperiments.mock.results[qaCallIndex]?.value;
+    expect(rows).toHaveLength(ANALYSIS_READ_LIMIT + 1);
+  });
+
   it("refuses before planning when the Environment count alone is over budget", async () => {
     const repo = repository();
     // 200 bulk Environments on top of the three the fixture seeds: 203 > 200.

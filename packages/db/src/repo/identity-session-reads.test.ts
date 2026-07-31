@@ -124,13 +124,8 @@ describe("batched session membership reads", () => {
 });
 
 /**
- * `user_1` owns org_1 and is a member of org_2. `app_2` sits in org_1 but
- * `user_1` has NO membership on it, so a query that returned it would be
- * returning an App the User cannot see.
- */
-/**
  * One Organization, one App, and one membership on each, per index. Uses
- * literal SQL VALUES rows (as `seed` does above) rather than bound `?`
+ * literal SQL VALUES rows (as `seed` below does) rather than bound `?`
  * parameters, so the seeding statements themselves stay clear of the D1 cap
  * this test exists to exercise on the read path.
  */
@@ -169,6 +164,11 @@ async function seedManyOrgsWithApps(d1: D1Database, count: number): Promise<stri
   return orgIds;
 }
 
+/**
+ * `user_1` owns org_1 and is a member of org_2. `app_2` sits in org_1 but
+ * `user_1` has NO membership on it, so a query that returned it would be
+ * returning an App the User cannot see.
+ */
 async function seed(d1: D1Database): Promise<void> {
   const statements = [
     `INSERT INTO organizations (id, name, slug, plan, is_provisional, created_at, updated_at) VALUES

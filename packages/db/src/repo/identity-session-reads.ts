@@ -82,12 +82,26 @@ export function makeSessionReads(db: Db) {
       );
       // Each batch is sorted on its own; merging batches requires re-sorting so
       // the whole-set order the caller relies on holds regardless of batch count.
+      // Plain `<`/`>` (see `binaryCompare` below), not `localeCompare`: the SQL
+      // `ORDER BY` this replaces uses SQLite's BINARY collation, and
+      // `localeCompare` disagrees with it (locale collation is
+      // punctuation-insensitive and orders case differently). The divergence
+      // would only show up in the `id` tiebreak here, since `createdAt` is
+      // fixed-width ISO-8601, but ordering is load-bearing downstream
+      // (apps/control-panel/src/lib/membership.ts buckets by Organization and
+      // keeps within-bucket order), so it has to match exactly, not just usually.
       return pages
         .flat()
         .sort(
           (a, b) =>
-            a.app.createdAt.localeCompare(b.app.createdAt) || a.app.id.localeCompare(b.app.id),
+            binaryCompare(a.app.createdAt, b.app.createdAt) || binaryCompare(a.app.id, b.app.id),
         );
     },
   };
+}
+
+/** SQLite's BINARY collation: plain code-unit comparison, not locale-aware. */
+function binaryCompare(a: string, b: string): number {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
 }
