@@ -190,6 +190,7 @@ jobs:
           SPLITCH_SEED_OUTCOME: ${{ steps.seed.outcome }}
           SPLITCH_SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
           SPLITCH_DARK_LAUNCH_OUTCOME: ${{ steps.dark_launch.outcome }}
+          SPLITCH_SAFE_DELIVERY_OUTCOME: ${{ steps.safe_delivery.outcome }}
           SPLITCH_CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
           SPLITCH_ARTIFACT_OUTCOME: ${{ steps.artifact.outcome }}
         run: node scripts/render-shared-preview-summary.mjs smoke >> "$GITHUB_STEP_SUMMARY"

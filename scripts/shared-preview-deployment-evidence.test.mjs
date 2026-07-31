@@ -89,6 +89,7 @@ test("smoke and reset summaries retain the independently verified deployed SHA",
   assert.match(smoke.stdout, new RegExp(String.raw`Deployed commit SHA: \`${sha}\``));
   assert.match(smoke.stdout, /Seed outcome: `success`/);
   assert.match(smoke.stdout, /Dark-launch outcome: `success`/);
+  assert.match(smoke.stdout, /Safe-delivery outcome: `success`/);
   assert.match(smoke.stdout, /Failure artifact outcome: `skipped`/);
   assert.match(smoke.stdout, /Tinybird Branch/);
   assert.match(smoke.stdout, /Applied D1 migrations/);
@@ -124,7 +125,17 @@ test("shared-preview deploy keeps every post-deploy smoke phase non-blocking", (
     deployJob,
     /SPLITCH_SMOKE_COMMIT_SHA="\$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke/,
   );
+  assert.match(
+    deployJob,
+    /name: Safe-delivery tracer shared preview\n\s+id: safe_delivery\n\s+if: steps\.dark_launch\.outcome == 'success'\n\s+continue-on-error: true/,
+  );
   assert.match(deployJob, /pnpm smoke:dark-launch:shared-preview/);
+  assert.match(deployJob, /pnpm smoke:safe-delivery:shared-preview/);
+  // The tracer's outcome must reach the job summary, or a failure is invisible.
+  assert.match(
+    deployJob,
+    /SPLITCH_SAFE_DELIVERY_OUTCOME: \$\{\{ steps\.safe_delivery\.outcome \}\}/,
+  );
   assert.match(deployJob, /SPLITCH_SMOKE_RUNS: "2"/);
   assert.match(
     deployJob,
@@ -152,6 +163,7 @@ function summary(mode, evidencePath, workflowRef) {
       ...process.env,
       SPLITCH_CLEANUP_OUTCOME: "success",
       SPLITCH_DARK_LAUNCH_OUTCOME: "success",
+      SPLITCH_SAFE_DELIVERY_OUTCOME: "success",
       SPLITCH_ARTIFACT_OUTCOME: "skipped",
       SPLITCH_RESET_OUTCOME: "success",
       SPLITCH_SEED_OUTCOME: "success",

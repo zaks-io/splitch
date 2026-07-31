@@ -13,6 +13,7 @@ import {
   LAUNCH_VARIANT,
 } from "./constants.mjs";
 import {
+  createSegment,
   getFlagConfig,
   listApprovalRequests,
   patchFlagConfig,
@@ -20,6 +21,32 @@ import {
   requireOk,
 } from "./control-plane.mjs";
 import { waitForVariant } from "./evaluation.mjs";
+
+/** The cohort this tracer targets, as a reusable condition set. */
+function cohortConditions() {
+  return [{ attribute: COHORT_ATTRIBUTE, operator: "eq", value: COHORT_VALUE }];
+}
+
+/**
+ * Create the real Segment resource naming the cohort we target.
+ *
+ * CONTRACT NOTE: TargetingRuleSchema carries inline `conditions` and has no
+ * `segmentId`, so the contract offers no way to bind a Targeting Rule to a
+ * Segment. The Segment is therefore the named, reusable definition of the
+ * cohort, and the Rule restates the same conditions inline because that is the
+ * only shape the Flag targeting path accepts. Creating the Segment proves the
+ * resource is real and reachable in this loop rather than leaving the Segment
+ * leg of SPL-151 silently unexercised.
+ */
+export async function defineCohortSegment(deps, keys) {
+  const segment = await createSegment(deps, deps.appId, keys.segmentName, cohortConditions());
+  assert.deepEqual(
+    segment.conditions,
+    cohortConditions(),
+    "segments_create did not persist the cohort conditions",
+  );
+  return segment;
+}
 
 /** Verification context for the primary Flag against a given Environment. */
 function verifyContext(clientKey, keys, targetingKey, cohort) {
@@ -73,7 +100,7 @@ export async function tuneInDev(deps, flagId, variantId, ruleId, extra) {
           id: ruleId,
           flagId,
           priority: 0,
-          conditions: [{ attribute: COHORT_ATTRIBUTE, operator: "eq", value: COHORT_VALUE }],
+          conditions: cohortConditions(),
           variantId,
           percentageRollout: null,
         },

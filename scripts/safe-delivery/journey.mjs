@@ -32,7 +32,13 @@ import {
   assertOnlySelectedFieldGroupsMoved,
 } from "./diff-assertions.mjs";
 import { assertResolvesNow, assertVariantStable, waitForVariant } from "./evaluation.mjs";
-import { devVerify, prodVerify, proveKillSwitchUngated, tuneInDev } from "./journey-steps.mjs";
+import {
+  defineCohortSegment,
+  devVerify,
+  prodVerify,
+  proveKillSwitchUngated,
+  tuneInDev,
+} from "./journey-steps.mjs";
 import {
   proveDanglingVariantRejected,
   proveStaleReviewRejected,
@@ -48,11 +54,20 @@ const CATALOG = [
 export async function runSafeDeliveryJourney(deps) {
   const keys = syntheticKeys(deps.runId);
   const windowMs = deps.propagationWindowMs ?? PROPAGATION_WINDOW_MS;
-  const resources = { appId: deps.appId, flagIds: { primary: null, dangling: null, stale: null } };
+  const resources = {
+    appId: deps.appId,
+    flagIds: { primary: null, dangling: null, stale: null },
+    segmentId: null,
+  };
   const steps = [];
   const evidence = {};
 
   try {
+    const segment = await defineCohortSegment(deps, keys);
+    resources.segmentId = segment.id;
+    evidence.segmentId = segment.id;
+    steps.push("cohort_segment_defined");
+
     const primary = await createFlag(
       deps,
       deps.appId,
@@ -241,8 +256,21 @@ export async function runSafeDeliveryJourney(deps) {
     evidence.killSwitch = await proveKillSwitchUngated(deps, keys, primary.id, windowMs);
     steps.push("kill_switch_off_ungated");
 
+    await runCleanup();
     return { keys, steps, evidence };
-  } finally {
+  } catch (failure) {
+    // Cleanup still has to run, but a cleanup error must never replace the
+    // proof failure that got us here: the original is the diagnostic.
+    try {
+      await runCleanup();
+    } catch (cleanupError) {
+      if (failure instanceof Error) failure.cleanupError = cleanupError;
+    }
+    throw failure;
+  }
+
+  async function runCleanup() {
+    if (evidence.cleanup) return;
     await cleanupSafeDelivery(deps, resources);
     evidence.cleanup = await assertNoOrphans(deps, deps.appId, keys, deps.stableFlagKey);
   }

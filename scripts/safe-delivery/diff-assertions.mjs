@@ -10,13 +10,29 @@
 
 import assert from "node:assert/strict";
 
-/** The four field groups projected out of a FlagConfigResponse. */
+/**
+ * The four promotable field groups projected out of a FlagConfigResponse, plus
+ * the Experiment lock. The lock is not promotable, but it decides whether a
+ * field is Run-frozen, so a refusal that silently attached or dropped an
+ * Experiment would be invisible to assertTargetUnchanged if we projected it away.
+ */
 export function projectFieldGroups(config) {
   return {
     availability: [...(config.availableVariantNames ?? [])].sort(),
     targeting: config.targetingRules ?? [],
     rollout: config.rollout ?? null,
     enabled: config.enabled,
+    experiment: config.experiment ?? null,
+  };
+}
+
+/** A Targeting Rule stripped of per-row identity the target may reassign. */
+function ruleMeaning(rule) {
+  return {
+    priority: rule.priority,
+    conditions: rule.conditions,
+    variantId: rule.variantId,
+    percentageRollout: rule.percentageRollout ?? null,
   };
 }
 
@@ -51,6 +67,45 @@ export function assertDiffMatchesPreviewAndApplied(input) {
     appliedConfig,
     `${label}: persisted diff.proposed`,
   );
+  assertDiffEntries(approvalRequest.diff.entries, label);
+}
+
+/**
+ * `entries` is the per-field diff an operator actually reads before approving.
+ * ApprovalDiffSchema requires at least one entry with unique, sorted paths, so a
+ * gate whose entry list is empty or scrambled is unreviewable in practice even
+ * though `current`/`proposed` look right.
+ */
+function assertDiffEntries(entries, label) {
+  assert.ok(Array.isArray(entries), `${label}: persisted diff carried no entries array`);
+  assert.ok(entries.length > 0, `${label}: persisted diff.entries was empty`);
+  const paths = entries.map((entry) => entry.path);
+  assert.deepEqual(
+    paths,
+    [...paths].sort(),
+    `${label}: persisted diff.entries paths are not sorted: ${paths.join(", ")}`,
+  );
+  assert.equal(
+    new Set(paths).size,
+    paths.length,
+    `${label}: persisted diff.entries paths are not unique: ${paths.join(", ")}`,
+  );
+  for (const entry of entries) {
+    const required =
+      entry.operation === "add" ? "proposed" : entry.operation === "remove" ? "current" : null;
+    if (required) {
+      assert.ok(
+        required in entry,
+        `${label}: ${entry.operation} diff entry ${entry.path} omitted ${required}`,
+      );
+    } else {
+      assert.equal(entry.operation, "replace", `${label}: unknown diff operation`);
+      assert.ok(
+        "current" in entry && "proposed" in entry,
+        `${label}: replace diff entry ${entry.path} needs current and proposed`,
+      );
+    }
+  }
 }
 
 /**
@@ -78,9 +133,12 @@ export function assertOnlySelectedFieldGroupsMoved(input) {
   }
 
   if (select.targeting) {
-    assert.equal(
-      now.targeting.length,
-      from.targeting.length,
+    // Content, not length: promoting the right NUMBER of wrong rules is a bug a
+    // length check waves through. Rule `id` and `flagId` are per-row identity
+    // the target may legitimately reassign, so compare what the operator means.
+    assert.deepEqual(
+      now.targeting.map(ruleMeaning),
+      from.targeting.map(ruleMeaning),
       `${label}: selected targeting did not move`,
     );
   } else {

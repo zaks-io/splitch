@@ -32,9 +32,24 @@ export function requireOk(result, label) {
   return result.body;
 }
 
+/**
+ * A refusal must be a deliberate 4xx carrying a contract error code. Accepting
+ * any non-2xx would let a 5xx crash masquerade as a proven guard, which is the
+ * exact false green this tracer exists to rule out.
+ */
 export function requireRefused(result, label) {
   if (result.ok) {
     throw new Error(`${label}: expected a refusal, got HTTP ${result.status}`);
+  }
+  if (result.status < 400 || result.status >= 500) {
+    throw new Error(
+      `${label}: expected a 4xx refusal, got HTTP ${result.status}: ${JSON.stringify(result.body)}`,
+    );
+  }
+  if (typeof result.body?.code !== "string") {
+    throw new Error(
+      `${label}: refusal carried no contract error code: ${JSON.stringify(result.body)}`,
+    );
   }
   return result.body;
 }
@@ -156,8 +171,52 @@ export async function reviewApprovalRequest(deps, appId, approvalRequestId, acti
   );
 }
 
+/**
+ * flags_list is bounded and reports its own truncation. Cleanup proves a
+ * NEGATIVE ("no transient Flag survived"), and absence read off a truncated page
+ * is indistinguishable from absence off a complete one, so a truncated read is a
+ * failed proof rather than a passing one.
+ */
 export async function listFlags(deps, appId) {
-  return requireOk(await controlPlaneCall(deps, "GET", `/apps/${appId}/flags`), "flags_list");
+  const flags = requireOk(
+    await controlPlaneCall(deps, "GET", `/apps/${appId}/flags`),
+    "flags_list",
+  );
+  if (flags.readTruncated) {
+    throw new Error(
+      `flags_list truncated at readLimit ${flags.readLimit}: cannot prove Flag absence from a partial page`,
+    );
+  }
+  return flags;
+}
+
+export async function createSegment(deps, appId, name, conditions) {
+  const idempotencyKey = `safe-delivery-segment-create-${name}`;
+  return requireOk(
+    await controlPlaneCall(
+      deps,
+      "POST",
+      `/apps/${appId}/segments`,
+      {
+        name,
+        description: "Transient safe-delivery tracer Segment (SPL-151).",
+        conditions,
+        idempotency_key: idempotencyKey,
+      },
+      idempotencyKey,
+    ),
+    "segments_create",
+  );
+}
+
+export async function deleteSegment(deps, appId, segmentId) {
+  return controlPlaneCall(
+    deps,
+    "DELETE",
+    `/apps/${appId}/segments/${segmentId}`,
+    undefined,
+    `safe-delivery-segment-delete-${segmentId}-${deps.runId}`,
+  );
 }
 
 /** Approval-aware delete: a gated Environment refuses first, then we confirm. */

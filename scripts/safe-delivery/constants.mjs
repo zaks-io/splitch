@@ -37,6 +37,7 @@ export function syntheticKeys(runId) {
     primaryRuleId: `rule-safe-delivery-${slug}`,
     danglingRuleId: `rule-safe-delivery-dangling-${slug}`,
     staleRuleId: `rule-safe-delivery-stale-${slug}`,
+    segmentName: `safe-delivery-cohort-${slug}`,
   };
 }
 

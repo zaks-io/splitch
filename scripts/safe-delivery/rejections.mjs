@@ -109,10 +109,11 @@ export async function proveUnauthorizedPromotionRejected(deps, ctx) {
     }),
     "cross-App target Environment Promotion",
   );
+  // Deliberately excludes VALIDATION_ERROR: this leg proves TARGET containment,
+  // and a VALIDATION_ERROR here would mean the request died on source validation
+  // before the target was ever checked, leaving the guard unproven.
   assert.ok(
-    ["FORBIDDEN", "INSUFFICIENT_SCOPES", "FLAG_NOT_FOUND", "VALIDATION_ERROR"].includes(
-      crossAppTarget.code,
-    ),
+    ["FORBIDDEN", "INSUFFICIENT_SCOPES", "FLAG_NOT_FOUND"].includes(crossAppTarget.code),
     `cross-App target refusal returned an unexpected code: ${crossAppTarget.code}`,
   );
   codes.crossAppTarget = crossAppTarget.code;
@@ -155,6 +156,10 @@ export async function proveStaleReviewRejected(deps, ctx) {
   });
   assert.ok(intervening.ok, `intervening Promotion failed: ${JSON.stringify(intervening.body)}`);
 
+  // Baseline taken AFTER the intervening change: the stale Review must not move
+  // the target off the state the intervening Promotion legitimately left it in.
+  const before = await getFlagConfig(deps, ctx.appId, ctx.prodEnvironmentId, ctx.flagId);
+
   const staleReview = requireRefused(
     await reviewApprovalRequest(deps, ctx.appId, staleId, "approve_and_apply", "stale"),
     "stale Approval Request Review",
@@ -166,5 +171,8 @@ export async function proveStaleReviewRejected(deps, ctx) {
     staleReview.details?.targetVersion,
     "stale Review reported an unchanged target version",
   );
+
+  const after = await getFlagConfig(deps, ctx.appId, ctx.prodEnvironmentId, ctx.flagId);
+  assertTargetUnchanged(before, after, "stale Approval Request Review");
   return { approvalRequestId: staleId, code: staleReview.code };
 }

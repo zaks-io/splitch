@@ -71,7 +71,6 @@ const evidence = createFleetEvidence({
 const payload = {
   ...evidence,
   consecutiveRuns: runResults,
-  cleanup: { orphanedFlags: false, sweptFlags: swept },
   checks: {
     safeDeliveryJourney: true,
     consecutiveRuns: runResults.length === runs,

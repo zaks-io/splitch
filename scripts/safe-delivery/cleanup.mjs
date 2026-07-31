@@ -9,7 +9,7 @@
 
 import assert from "node:assert/strict";
 
-import { deleteFlag, listFlags } from "./control-plane.mjs";
+import { deleteFlag, deleteSegment, listFlags } from "./control-plane.mjs";
 import { transientFlagKeys } from "./constants.mjs";
 
 export async function cleanupSafeDelivery(deps, resources) {
@@ -21,6 +21,14 @@ export async function cleanupSafeDelivery(deps, resources) {
       resources.flagIds[label] = null;
     } catch (error) {
       failures.push(`${label}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (resources.segmentId) {
+    const removal = await deleteSegment(deps, resources.appId, resources.segmentId);
+    if (!removal.ok) {
+      failures.push(`segment: HTTP ${removal.status} ${JSON.stringify(removal.body)}`);
+    } else {
+      resources.segmentId = null;
     }
   }
   if (failures.length > 0) {
@@ -48,7 +56,16 @@ export async function assertNoOrphans(deps, appId, keys, stableFlagKey) {
   return { orphanedFlags: orphans.length > 0, stableFlagPreserved: true };
 }
 
-/** Sweep any safe-delivery Flag left behind by an earlier crashed run. */
+/**
+ * Sweep any safe-delivery Flag left behind by an earlier crashed run.
+ *
+ * SINGLE-RUN ASSUMPTION, read this before scheduling the tracer concurrently:
+ * the sweep matches every `safe-delivery-` Flag in the App, not just this run's
+ * slug, so two tracers running at once against the same App WILL delete each
+ * other's live transient Flags and fail in confusing ways. The tracer is
+ * deliberately serialized (one workflow step, runs looped in-process) and must
+ * stay that way unless this sweep is narrowed to the run slug.
+ */
 export async function sweepOrphanedSafeDeliveryFlags(deps, appId) {
   const flags = await listFlags(deps, appId);
   const stragglers = (flags.items ?? flags.flags ?? []).filter((flag) =>

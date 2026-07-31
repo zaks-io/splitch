@@ -16,9 +16,35 @@ export function fakeControlPlane(overrides = {}) {
   const flags = new Map();
   const configs = new Map();
   const approvals = new Map();
+  const segments = new Map();
   let nextApproval = 0;
   const key = (env, flagId) => `${env}:${flagId}`;
   const clone = (value) => JSON.parse(JSON.stringify(value));
+
+  /**
+   * Per-field diff entries, sorted by path and unique, matching ApprovalDiffSchema.
+   * Real operators read THIS, not the whole-config blobs.
+   */
+  function diffEntries(current, proposed) {
+    const fields = ["availableVariantNames", "enabled", "rollout", "targetingRules"];
+    return fields
+      .filter((field) => JSON.stringify(current[field]) !== JSON.stringify(proposed[field]))
+      .sort()
+      .map((field) => ({
+        path: `/${field}`,
+        operation: "replace",
+        current: current[field] ?? null,
+        proposed: proposed[field] ?? null,
+      }));
+  }
+
+  function buildDiff(current, proposed) {
+    return {
+      current: clone(current),
+      proposed: clone(proposed),
+      entries: diffEntries(current, proposed),
+    };
+  }
 
   const json = (body, status = 200) => Response.json(body, { status });
   const error = (code, message, details = {}) =>
@@ -150,7 +176,7 @@ export function fakeControlPlane(overrides = {}) {
           environmentId: targetEnv,
           select: body.select,
           fromEnvironmentId: body.fromEnvironmentId,
-          diff: { current: clone(target), proposed: clone(proposed) },
+          diff: buildDiff(target, proposed),
         });
         return error("APPROVAL_REVIEW_REQUIRED", "Approval Request is pending Review", {
           approvalRequestId: id,
@@ -163,14 +189,19 @@ export function fakeControlPlane(overrides = {}) {
         id,
         status: "applied",
         targetVersion: before.version,
-        diff: { current: before, proposed: clone(applied) },
+        diff: buildDiff(before, applied),
       };
       approvals.set(id, approval);
-      return json({
+      const response = {
         config: applied,
         diff: { before, after: clone(applied) },
         approvalRequest: approval,
-      });
+      };
+      // Corruption hooks exist so the diff-equality assertions can be proven to
+      // FAIL when the server lies. Without them the double is internally
+      // consistent and every equality check passes vacuously.
+      overrides.mutatePromoteResponse?.(response);
+      return json(response);
     },
 
     review(appId, approvalId) {
@@ -178,6 +209,17 @@ export function fakeControlPlane(overrides = {}) {
       if (!approval) return error("APPROVAL_REQUEST_NOT_FOUND", "not found");
       const current = configs.get(key(approval.environmentId, approval.flagId));
       if (current.version !== approval.targetVersion) {
+        // A refusal that still writes is the worst outcome: the operator is told
+        // "no" while the target moves anyway. Modelled so the tracer can prove
+        // it would catch it.
+        if (overrides.applyOnStaleRefusal) {
+          const source = configs.get(key(approval.fromEnvironmentId, approval.flagId));
+          apply(
+            approval.environmentId,
+            approval.flagId,
+            proposedFrom(approval.select, source, current),
+          );
+        }
         return error("APPROVAL_REQUEST_STALE", "Approval Request target changed before Review", {
           approvalRequestId: approvalId,
           targetVersion: `sha256:${approval.targetVersion}`,
@@ -241,11 +283,30 @@ export function fakeControlPlane(overrides = {}) {
     if (match) {
       const [, appId, approvalId, reviews] = match;
       if (reviews) return handlers.review(appId, approvalId);
-      if (approvalId) return json(approvals.get(approvalId));
+      if (approvalId) {
+        const persisted = clone(approvals.get(approvalId));
+        overrides.mutateApprovalResponse?.(persisted);
+        return json(persisted);
+      }
       const status = new URL(url).searchParams.get("status");
       return json({
         items: [...approvals.values()].filter((ar) => !status || ar.status === status),
       });
+    }
+    match = pathname.match(/^\/apps\/([^/]+)\/segments(?:\/([^/]+))?$/);
+    if (match) {
+      const [, , segmentId] = match;
+      if (method === "POST") {
+        const id = `seg-${segments.size + 1}`;
+        const segment = { id, name: body.name, conditions: clone(body.conditions) };
+        segments.set(id, segment);
+        return json(segment);
+      }
+      if (method === "DELETE") {
+        segments.delete(segmentId);
+        return json({ deleted: true });
+      }
+      return json({ items: [...segments.values()] });
     }
     match = pathname.match(/^\/apps\/([^/]+)\/flags(?:\/([^/]+))?$/);
     if (match) {
@@ -255,7 +316,11 @@ export function fakeControlPlane(overrides = {}) {
         flags.delete(flagId);
         return json({ deleted: true });
       }
-      return json({ items: [...flags.values(), { id: "stable", key: "shared-preview-smoke" }] });
+      return json({
+        items: [...flags.values(), { id: "stable", key: "shared-preview-smoke" }],
+        readTruncated: overrides.flagsListTruncated ?? false,
+        readLimit: 100,
+      });
     }
     throw new Error(`unexpected request: ${method} ${pathname}`);
   };
