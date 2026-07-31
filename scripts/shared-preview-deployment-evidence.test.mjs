@@ -87,7 +87,9 @@ test("smoke and reset summaries retain the independently verified deployed SHA",
   const smoke = summary("smoke", evidencePath, sha);
   assert.equal(smoke.status, 0, smoke.stderr);
   assert.match(smoke.stdout, new RegExp(String.raw`Deployed commit SHA: \`${sha}\``));
+  assert.match(smoke.stdout, /Seed outcome: `success`/);
   assert.match(smoke.stdout, /Dark-launch outcome: `success`/);
+  assert.match(smoke.stdout, /Failure artifact outcome: `skipped`/);
   assert.match(smoke.stdout, /Tinybird Branch/);
   assert.match(smoke.stdout, /Applied D1 migrations/);
 
@@ -150,7 +152,9 @@ function summary(mode, evidencePath, workflowRef) {
       ...process.env,
       SPLITCH_CLEANUP_OUTCOME: "success",
       SPLITCH_DARK_LAUNCH_OUTCOME: "success",
+      SPLITCH_ARTIFACT_OUTCOME: "skipped",
       SPLITCH_RESET_OUTCOME: "success",
+      SPLITCH_SEED_OUTCOME: "success",
       SPLITCH_SMOKE_EVIDENCE_FILE: evidencePath,
       SPLITCH_SMOKE_OUTCOME: "success",
       SPLITCH_WORKFLOW_REF: workflowRef,

@@ -21,10 +21,14 @@ export function renderSummary(input) {
     lines.push(`- Reset outcome: \`${input.resetOutcome}\``);
     lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
   } else {
+    lines.push(`- Seed outcome: \`${input.seedOutcome}\``);
     lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
     lines.push(`- Dark-launch outcome: \`${input.darkLaunchOutcome}\``);
   }
   lines.push(`- Cleanup outcome: \`${input.cleanupOutcome}\``);
+  if (input.mode === "smoke") {
+    lines.push(`- Failure artifact outcome: \`${input.artifactOutcome}\``);
+  }
 
   if (input.evidence) {
     lines.push(
@@ -60,9 +64,11 @@ function summaryInput(summaryMode) {
     mode: summaryMode,
     ref,
     resetOutcome: process.env.SPLITCH_RESET_OUTCOME ?? "unknown",
+    seedOutcome: process.env.SPLITCH_SEED_OUTCOME ?? "unknown",
     smokeOutcome,
     darkLaunchOutcome: process.env.SPLITCH_DARK_LAUNCH_OUTCOME ?? "unknown",
     cleanupOutcome: process.env.SPLITCH_CLEANUP_OUTCOME ?? "unknown",
+    artifactOutcome: process.env.SPLITCH_ARTIFACT_OUTCOME ?? "unknown",
     evidence,
     tinybirdBranch: "shared_preview",
     migrations: migrationNames(),
