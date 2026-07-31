@@ -1,10 +1,9 @@
 /**
  * A destination is `shipped` only when its route renders real product UI or an
- * honest teaching empty state. `deferred` and `development-only` destinations
- * stay registered so the reason they are hidden is reviewable, but they are
- * never rendered. Hiding a destination is a UI decision only: the route keeps
- * existing and the Worker stays authoritative for membership, scope, and
- * refusal on a direct deep link.
+ * honest teaching empty state. `deferred` destinations stay registered so the
+ * reason they are hidden is reviewable, but they are never rendered. Hiding a
+ * destination is a UI decision only: the route keeps existing and the Worker
+ * stays authoritative for membership, scope, and refusal on a direct deep link.
  */
 type NavigationStatus = "shipped" | "deferred";
 
