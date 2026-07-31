@@ -61,7 +61,7 @@ export function PromotionPage({
         <p className="font-mono text-muted-foreground text-xs uppercase tracking-[0.16em]">
           <a
             className="underline underline-offset-4 hover:no-underline"
-            href={`${scopeHref}/flags/${target.key}`}
+            href={`${scopeHref}/flags/${encodeURIComponent(target.key)}`}
           >
             {target.name}
           </a>{" "}
