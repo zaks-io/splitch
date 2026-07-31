@@ -40,18 +40,27 @@ Cached package tasks:
 | `typecheck` | yes   | depends on upstream build where generated types are consumed                                                           |
 | `test`      | yes   | deterministic unit/integration tests; coverage output declared only where stable                                       |
 
+Cached root guards (explicit input globs, so unrelated changes replay from cache):
+
+| Task                   | Cache | Contract                                                                       |
+| ---------------------- | ----- | ------------------------------------------------------------------------------ |
+| `spec:lint`            | yes   | inputs: `docs/spec/**` and the linter script                                   |
+| `check:cli-mcp-parity` | yes   | inputs: CLI/MCP/contracts source trees and the parity scripts                  |
+| `test:scripts`         | yes   | inputs: `scripts/**`, `.github/workflows/**`, and the files those tests assert |
+| `test:connect-snippet` | yes   | inputs: snippet source + compile guard; chains the `@splitch/sdk#build` hash   |
+
 Uncached or root-wide tasks:
 
-| Task                                  | Cache | Contract                                                               |
-| ------------------------------------- | ----- | ---------------------------------------------------------------------- |
-| `format:check` / `format:write`       | no    | repo-wide Biome formatting plus Prettier for Markdown only             |
-| `depcruise`                           | no    | root architecture import graph gate                                    |
-| `duplicates`                          | no    | root duplicate-code detection over source-bearing paths                |
-| `knip`                                | no    | root unused files, exports, dependencies, and config-hints gate        |
-| `secrets:*`                           | no    | Gitleaks scans working tree or git history; never cache security scans |
-| `d1:migrate:local` / `tinybird:local` | no    | local backing-resource validators                                      |
-| `dev`                                 | no    | persistent local dev task                                              |
-| `deploy:*`, `migrate:*`, `rollback:*` | no    | remote-state mutation; never served from cache                         |
+| Task                                  | Cache | Contract                                                                                                                                                                         |
+| ------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format:check` / `format:write`       | no    | repo-wide Biome formatting plus Prettier for Markdown only                                                                                                                       |
+| `depcruise`                           | no    | root architecture import graph gate                                                                                                                                              |
+| `duplicates`                          | no    | root duplicate-code detection over source-bearing paths                                                                                                                          |
+| `knip`                                | no    | root unused files/exports/deps gate; runs as `//#knip` inside the verify graph so it parallelizes with other tasks and `dependsOn` provides the SDK/CLI build artifacts it scans |
+| `secrets:*`                           | no    | Gitleaks scans working tree or git history; never cache security scans                                                                                                           |
+| `d1:migrate:local` / `tinybird:local` | no    | local backing-resource validators                                                                                                                                                |
+| `dev`                                 | no    | persistent local dev task                                                                                                                                                        |
+| `deploy:*`, `migrate:*`, `rollback:*` | no    | remote-state mutation; never served from cache                                                                                                                                   |
 
 CI uses Turborepo remote caching with `TURBO_TOKEN`, `TURBO_TEAM`, and
 `TURBO_REMOTE_CACHE_SIGNATURE_KEY`. Remote cache artifact signing is enabled in `turbo.json`. The
