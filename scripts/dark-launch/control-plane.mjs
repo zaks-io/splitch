@@ -48,19 +48,26 @@ export async function createDarkLaunchApp(deps, keys) {
 }
 
 export async function createDarkLaunchFlag(deps, appId, flagKey) {
+  const idempotencyKey = `dark-launch-flag-create-${deps.runId}`;
   return requireOk(
-    await controlPlaneCall(deps, "POST", `/apps/${appId}/flags`, {
-      appId,
-      key: flagKey,
-      name: flagKey,
-      schema: { type: "boolean" },
-      variants: [
-        { name: LAUNCH_VARIANT, value: true, isDefault: false },
-        { name: DEFAULT_VARIANT, value: false, isDefault: true },
-      ],
-      description: "Transient dark-launch smoke Flag (SPL-168).",
-      idempotency_key: `dark-launch-flag-create-${deps.runId}`,
-    }),
+    await controlPlaneCall(
+      deps,
+      "POST",
+      `/apps/${appId}/flags`,
+      {
+        appId,
+        key: flagKey,
+        name: flagKey,
+        schema: { type: "boolean" },
+        variants: [
+          { name: LAUNCH_VARIANT, value: true, isDefault: false },
+          { name: DEFAULT_VARIANT, value: false, isDefault: true },
+        ],
+        description: "Transient dark-launch smoke Flag (SPL-168).",
+        idempotency_key: idempotencyKey,
+      },
+      idempotencyKey,
+    ),
     "flags_create",
   );
 }
@@ -81,6 +88,7 @@ export async function rotateClientKey(deps, appId, environmentId) {
 
 export async function updateFlagConfig(deps, appId, environmentId, flagId, patch) {
   const state = patch.enabled === true ? "enable" : patch.enabled === false ? "disable" : "update";
+  const idempotencyKey = `dark-launch-flag-config-${state}-${deps.runId}`;
   return requireOk(
     await controlPlaneCall(
       deps,
@@ -88,14 +96,16 @@ export async function updateFlagConfig(deps, appId, environmentId, flagId, patch
       `/apps/${appId}/envs/${environmentId}/flags/${flagId}/config`,
       {
         ...patch,
-        idempotency_key: `dark-launch-flag-config-${state}-${deps.runId}`,
+        idempotency_key: idempotencyKey,
       },
+      idempotencyKey,
     ),
     "flag_config_update",
   );
 }
 
 export async function replaceTargetingRules(deps, appId, environmentId, flagId, targetingRules) {
+  const idempotencyKey = `dark-launch-targeting-rules-${deps.runId}`;
   return requireOk(
     await controlPlaneCall(
       deps,
@@ -103,8 +113,9 @@ export async function replaceTargetingRules(deps, appId, environmentId, flagId, 
       `/apps/${appId}/envs/${environmentId}/flags/${flagId}/targeting-rules`,
       {
         targetingRules,
-        idempotency_key: `dark-launch-targeting-rules-${deps.runId}`,
+        idempotency_key: idempotencyKey,
       },
+      idempotencyKey,
     ),
     "flag_targeting_rules_replace",
   );
@@ -128,6 +139,7 @@ export async function deleteFlag(deps, appId, flagId) {
   if (!approvalRequestId) {
     throw new Error("flags_delete approval response omitted details.approvalRequestId");
   }
+  const reviewKey = `dark-launch-flag-delete-review-${deps.runId}`;
   return requireOk(
     await controlPlaneCall(
       deps,
@@ -135,8 +147,9 @@ export async function deleteFlag(deps, appId, flagId) {
       `/apps/${appId}/approval-requests/${approvalRequestId}/reviews`,
       {
         action: "approve_and_apply",
-        idempotency_key: `dark-launch-flag-delete-review-${deps.runId}`,
+        idempotency_key: reviewKey,
       },
+      reviewKey,
     ),
     "approval_request_reviews_create",
   );

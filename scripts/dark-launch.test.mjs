@@ -119,8 +119,14 @@ test("dark-launch Flag mutations use current idempotency and deletion approval c
   await deleteFlag(deps, "app-123", "flag-123");
 
   assert.equal(requests[0].body.idempotency_key, "dark-launch-flag-create-run-123");
+  assert.equal(requests[0].init.headers["idempotency-key"], "dark-launch-flag-create-run-123");
   assert.equal(requests[1].body.idempotency_key, "dark-launch-flag-config-enable-run-123");
+  assert.equal(
+    requests[1].init.headers["idempotency-key"],
+    "dark-launch-flag-config-enable-run-123",
+  );
   assert.equal(requests[2].body.idempotency_key, "dark-launch-targeting-rules-run-123");
+  assert.equal(requests[2].init.headers["idempotency-key"], "dark-launch-targeting-rules-run-123");
   assert.equal(requests[3].init.headers["idempotency-key"], "dark-launch-flag-delete-run-123");
   assert.equal(
     requests[4].url,
@@ -130,4 +136,8 @@ test("dark-launch Flag mutations use current idempotency and deletion approval c
     action: "approve_and_apply",
     idempotency_key: "dark-launch-flag-delete-review-run-123",
   });
+  assert.equal(
+    requests[4].init.headers["idempotency-key"],
+    "dark-launch-flag-delete-review-run-123",
+  );
 });
