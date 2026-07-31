@@ -12,9 +12,9 @@ import {
   createApprovalsHcClient,
   hcRequestOptions,
   withAuthorization,
-  withIdempotencyHeader,
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
+import { withIdempotencyHeader } from "./idempotency-header";
 import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "./operation-result";
 
 export interface ApprovalsClient {
@@ -62,6 +62,7 @@ export function createApprovalsClient(
           hcClient.apps[":appId"]["approval-requests"][":id"].reviews.$post(
             { param: { appId, id }, json: body } as never,
             withIdempotencyHeader(
+              "approval_request_reviews_create",
               hcRequestOptions(withAuthorization(hcOptions, callOptions)),
               body.idempotency_key,
             ),

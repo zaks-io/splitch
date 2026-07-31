@@ -118,10 +118,11 @@ describe("panel experiments binding transport", () => {
   /**
    * The body → header mirror is applied per call site, so each call site needs
    * its own assertion: a single test on the shared helper stays green while any
-   * one of the three legs quietly stops passing the decorated options through.
-   * `experiments_start` declares idempotency "required" and the runtime guard
-   * reads the HEADER, not the body, so a Start without it is refused before the
-   * handler ever runs.
+   * one leg quietly stops passing the decorated options through. These drive the
+   * PANEL client, whose mutations delegate to `createExperimentsClient` — a path
+   * `idempotency-header.contract.test.ts` does not walk, and `experiments_create`
+   * declares "optional" so the contract test's required-route sweep never reaches
+   * it at all.
    */
   it("sends the Start idempotency key as the header the route requires", async () => {
     const request = await capturedRequest((client) =>
@@ -150,20 +151,6 @@ describe("panel experiments binding transport", () => {
     );
 
     expect(request.headers.get("idempotency-key")).toBe("create-exp-1");
-  });
-
-  it("sends the update idempotency key as a header, not body-only", async () => {
-    const request = await capturedRequest((client) =>
-      client.update({
-        appId: "app_1",
-        environmentId: "env_1",
-        experimentId: "exp_1",
-        confidenceLevel: 0.9,
-        idempotency_key: "update-exp-1",
-      } as never),
-    );
-
-    expect(request.headers.get("idempotency-key")).toBe("update-exp-1");
   });
 });
 

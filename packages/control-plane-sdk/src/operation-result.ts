@@ -3,6 +3,13 @@ import { ErrorResponseSchema } from "@splitch/contracts";
 
 export interface ControlPlaneOperationOptions {
   readonly authorization?: string | null;
+  /**
+   * Idempotency key for a route whose contract declares one but gives it no
+   * request body to travel in — the DELETE mutations. Body-carrying routes take
+   * the key from `idempotency_key` on the input instead, so there is exactly one
+   * key per call either way.
+   */
+  readonly idempotencyKey?: string;
 }
 
 export type ControlPlaneOperationResult<T = unknown> =

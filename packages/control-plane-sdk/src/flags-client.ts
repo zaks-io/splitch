@@ -30,9 +30,9 @@ import {
   type FlagsHcClient,
   hcRequestOptions,
   withAuthorization,
-  withIdempotencyHeader,
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
+import { withIdempotencyHeader } from "./idempotency-header";
 import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "./operation-result";
 
 export interface FlagsClient {
@@ -105,6 +105,7 @@ export function createFlagsClient(
         hcClient.apps[":appId"].flags.$post(
           { param: { appId: input.appId }, json: input } as never,
           withIdempotencyHeader(
+            "flags_create",
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
             input.idempotency_key,
           ),
@@ -130,7 +131,11 @@ export function createFlagsClient(
       invokeHcRoute<FlagsDeleteOutput>("flags_delete", () =>
         hcClient.apps[":appId"].flags[":flagId"].$delete(
           { param: { appId: input.appId, flagId: input.flagId } },
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+          withIdempotencyHeader(
+            "flags_delete",
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            callOptions?.idempotencyKey,
+          ),
         ),
       ),
     // CreateVariantRequestSchema is `.strict()` and itself requires appId/flagId,
@@ -141,6 +146,7 @@ export function createFlagsClient(
         hcClient.apps[":appId"].flags[":flagId"].variants.$post(
           { param: { appId: input.appId, flagId: input.flagId }, json: input } as never,
           withIdempotencyHeader(
+            "flag_variants_create",
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
             input.idempotency_key,
           ),
@@ -152,6 +158,7 @@ export function createFlagsClient(
         hcClient.apps[":appId"].flags[":flagId"].variants[":variantName"].$patch(
           { param: { appId, flagId, variantName }, json: body } as never,
           withIdempotencyHeader(
+            "flag_variants_update",
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
             body.idempotency_key,
           ),
@@ -168,7 +175,11 @@ export function createFlagsClient(
               variantName: input.variantName,
             },
           },
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+          withIdempotencyHeader(
+            "flag_variants_delete",
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            callOptions?.idempotencyKey,
+          ),
         ),
       ),
     getConfig: (input, callOptions) =>
@@ -190,6 +201,7 @@ export function createFlagsClient(
         hcClient.apps[":appId"].envs[":environmentId"].flags[":flagId"].config.$patch(
           { param: { appId, environmentId, flagId }, json: body } as never,
           withIdempotencyHeader(
+            "flag_config_update",
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
             body.idempotency_key,
           ),
@@ -202,6 +214,7 @@ export function createFlagsClient(
         hcClient.apps[":appId"].envs[":environmentId"].flags[":flagId"]["targeting-rules"].$put(
           { param: { appId, environmentId, flagId }, json: body } as never,
           withIdempotencyHeader(
+            "flag_targeting_rules_replace",
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
             body.idempotency_key,
           ),
@@ -214,6 +227,7 @@ export function createFlagsClient(
         hcClient.apps[":appId"].envs[":targetEnvironmentId"].flags[":flagId"].promote.$post(
           { param: { appId, targetEnvironmentId, flagId }, json: body } as never,
           withIdempotencyHeader(
+            "flags_promote",
             hcRequestOptions(withAuthorization(hcOptions, callOptions)),
             body.idempotency_key,
           ),
