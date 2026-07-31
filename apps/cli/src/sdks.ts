@@ -1,5 +1,10 @@
 import { createMcpOperationAdapter } from "@splitch/control-plane-sdk/mcp-operation-adapter";
-import { parsePlatformTarget, type RouteOwner } from "@splitch/contracts";
+import {
+  type PlatformTarget,
+  PlatformTargetSchema,
+  platformTargets,
+  type RouteOwner,
+} from "@splitch/contracts";
 import { SplitchCliError } from "./errors.js";
 
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
@@ -10,7 +15,7 @@ const defaultAuthBaseUrl = "http://127.0.0.1:8789";
 // The published binary defaults to hosted production; local development
 // opts in with SPLITCH_PLATFORM_TARGET=local. The analysis API has no
 // hosted hostname yet, so analysis commands fail loud until one exists.
-const defaultPlatformTarget = "production";
+const defaultPlatformTarget: PlatformTarget = "production";
 const productionOrigins: Readonly<Record<string, string>> = {
   CONTROL_PLANE_API_ORIGIN: "https://api.splitch.dev",
   AUTH_API_ORIGIN: "https://auth.splitch.dev",
@@ -30,10 +35,28 @@ export interface SdkFactoryOptions {
   readonly fetch?: typeof fetch;
 }
 
+// The contracts parsePlatformTarget helper silently falls back to "local";
+// in a published binary that would route an env-var typo to localhost, so
+// the CLI validates strictly instead (ADR-0036 fail-loud).
+function requirePlatformTarget(value: string | undefined): PlatformTarget {
+  if (value === undefined) {
+    return defaultPlatformTarget;
+  }
+  const parsed = PlatformTargetSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new SplitchCliError({
+      code: "CLI_VALIDATION_ERROR",
+      causeSummary: `SPLITCH_PLATFORM_TARGET "${value}" is not a platform target`,
+      remediation: `Use one of: ${platformTargets.join(", ")}`,
+    });
+  }
+  return parsed.data;
+}
+
 // Origins resolve lazily per route owner so a command only demands the
 // origin it actually routes to (the analysis API has no hosted hostname yet).
 export function createOperationSdks(options: SdkFactoryOptions = {}): OperationSdks {
-  const platformTarget = parsePlatformTarget(options.platformTarget ?? defaultPlatformTarget);
+  const platformTarget = requirePlatformTarget(options.platformTarget);
   const adapter = (envName: string, configured: string | undefined, localDefault: string) =>
     createMcpOperationAdapter({
       baseUrl: apiBaseUrl(envName, configured, localDefault, platformTarget),
@@ -68,7 +91,7 @@ export function sdkForOwner(sdks: OperationSdks, owner: RouteOwner): OperationSd
 }
 
 export function resolveControlPlaneBaseUrl(options: SdkFactoryOptions = {}): string {
-  const platformTarget = parsePlatformTarget(options.platformTarget ?? defaultPlatformTarget);
+  const platformTarget = requirePlatformTarget(options.platformTarget);
   return apiBaseUrl(
     "CONTROL_PLANE_API_ORIGIN",
     options.controlPlaneBaseUrl,
@@ -78,12 +101,12 @@ export function resolveControlPlaneBaseUrl(options: SdkFactoryOptions = {}): str
 }
 
 export function resolveAuthBaseUrl(options: SdkFactoryOptions = {}): string {
-  const platformTarget = parsePlatformTarget(options.platformTarget ?? defaultPlatformTarget);
+  const platformTarget = requirePlatformTarget(options.platformTarget);
   return apiBaseUrl("AUTH_API_ORIGIN", options.authBaseUrl, defaultAuthBaseUrl, platformTarget);
 }
 
 export function resolveDataPlaneBaseUrl(options: SdkFactoryOptions = {}): string {
-  const platformTarget = parsePlatformTarget(options.platformTarget ?? defaultPlatformTarget);
+  const platformTarget = requirePlatformTarget(options.platformTarget);
   return apiBaseUrl(
     "EVALUATION_API_ORIGIN",
     options.evaluationBaseUrl,
