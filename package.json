@@ -16,7 +16,7 @@
     "duplicates": "jscpd --config .jscpd.json --exit-code --no-tips --no-colors apps packages scripts",
     "format:check": "biome format . && prettier --check \"**/*.md\"",
     "format:write": "biome format --write . && prettier --write \"**/*.md\"",
-    "knip": "pnpm --filter @splitch/sdk generate && knip --treat-config-hints-as-errors",
+    "knip": "knip --treat-config-hints-as-errors",
     "lint": "turbo run lint",
     "prepare": "lefthook install",
     "audit": "pnpm audit --audit-level=high",
@@ -78,9 +78,9 @@
     "workers:secrets:production": "node scripts/sync-worker-secrets.mjs production",
     "workers:secrets:shared-preview": "node scripts/sync-worker-secrets.mjs shared-preview",
     "typecheck": "turbo run typecheck",
-    "verify:ci": "pnpm knip && turbo run //#format:check //#spec:lint //#check:cli-mcp-parity //#test:scripts lint typecheck test test:connect-snippet stats:golden stats:property build",
-    "verify:commit": "pnpm knip && turbo run //#format:check //#secrets:staged lint typecheck",
-    "verify:push": "pnpm knip && turbo run //#format:check //#secrets:range //#tinybird:local //#d1:migrate:local //#d1:migrate:populated lint typecheck"
+    "verify:ci": "turbo run //#knip //#format:check //#spec:lint //#check:cli-mcp-parity //#test:scripts lint typecheck test test:connect-snippet stats:golden stats:property build",
+    "verify:commit": "turbo run //#knip //#format:check //#secrets:staged lint typecheck",
+    "verify:push": "turbo run //#knip //#format:check //#secrets:range //#tinybird:local //#d1:migrate:local //#d1:migrate:populated lint typecheck"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",

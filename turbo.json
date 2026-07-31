@@ -98,17 +98,31 @@
       "cache": false
     },
     "//#spec:lint": {
-      "cache": false
+      "inputs": ["docs/spec/**", "scripts/spec-lint.mjs"],
+      "outputs": []
     },
     "//#check:cli-mcp-parity": {
-      "cache": false
+      "inputs": [
+        "scripts/check-cli-mcp-parity.ts",
+        "scripts/lib/**",
+        "apps/cli/src/**",
+        "apps/mcp-server/src/**",
+        "packages/contracts/src/**"
+      ],
+      "outputs": []
     },
     "//#test:scripts": {
-      "cache": false
+      "inputs": [
+        "scripts/**",
+        ".github/workflows/**",
+        "apps/control-panel/playwright.config.ts",
+        "package.json"
+      ],
+      "outputs": []
     },
     "@splitch/control-panel#test:connect-snippet": {
       "dependsOn": ["@splitch/sdk#build"],
-      "cache": false,
+      "inputs": ["scripts/connect-snippet-compile.mjs", "src/lib/connect-snippet.ts"],
       "outputs": []
     },
     "@splitch/mcp-server#generate": {
@@ -368,6 +382,11 @@
     },
     "wrangler:types": {
       "cache": false
+    },
+    "@splitch/stats#test": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/package.json"],
+      "outputs": []
     },
     "@splitch/sdk#build": {
       "dependsOn": ["^build"],

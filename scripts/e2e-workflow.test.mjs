@@ -13,6 +13,16 @@ test("E2E runs nightly and on manual dispatch only", () => {
   assert.doesNotMatch(workflow, /\n {2}push:/);
 });
 
+test("E2E reuses the Turbo remote cache for the ^build dependency graph", () => {
+  assert.match(workflow, /TURBO_TOKEN: \$\{\{ secrets\.TURBO_TOKEN \}\}/);
+  assert.match(workflow, /TURBO_TEAM: \$\{\{ vars\.TURBO_TEAM \}\}/);
+  assert.match(
+    workflow,
+    /TURBO_REMOTE_CACHE_SIGNATURE_KEY: \$\{\{ secrets\.TURBO_REMOTE_CACHE_SIGNATURE_KEY \}\}/,
+  );
+  assert.match(workflow, /run: node scripts\/check-turbo-remote-cache-env\.mjs/);
+});
+
 test("E2E keeps the full-stack Playwright harness and its evidence", () => {
   assert.match(workflow, /SPLITCH_PLATFORM_TARGET: pr-ci/);
   assert.match(workflow, /run: pnpm exec playwright install --with-deps chromium/);
