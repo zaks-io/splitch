@@ -24,6 +24,7 @@ export function renderSummary(input) {
     lines.push(`- Seed outcome: \`${input.seedOutcome}\``);
     lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
     lines.push(`- Dark-launch outcome: \`${input.darkLaunchOutcome}\``);
+    lines.push(`- Safe-delivery outcome: \`${input.safeDeliveryOutcome}\``);
   }
   lines.push(`- Cleanup outcome: \`${input.cleanupOutcome}\``);
   if (input.mode === "smoke") {
@@ -67,6 +68,7 @@ function summaryInput(summaryMode) {
     seedOutcome: process.env.SPLITCH_SEED_OUTCOME ?? "unknown",
     smokeOutcome,
     darkLaunchOutcome: process.env.SPLITCH_DARK_LAUNCH_OUTCOME ?? "unknown",
+    safeDeliveryOutcome: process.env.SPLITCH_SAFE_DELIVERY_OUTCOME ?? "unknown",
     cleanupOutcome: process.env.SPLITCH_CLEANUP_OUTCOME ?? "unknown",
     artifactOutcome: process.env.SPLITCH_ARTIFACT_OUTCOME ?? "unknown",
     evidence,

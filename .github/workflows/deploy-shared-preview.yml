@@ -150,6 +150,16 @@ jobs:
           SPLITCH_SMOKE_RUNS: "2"
         run: pnpm smoke:dark-launch:shared-preview
 
+      - name: Safe-delivery tracer shared preview
+        id: safe_delivery
+        if: steps.dark_launch.outcome == 'success'
+        continue-on-error: true
+        env:
+          SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
+          SPLITCH_SMOKE_COMMIT_SHA: ${{ env.SPLITCH_DEPLOYED_COMMIT_SHA }}
+          SPLITCH_SMOKE_RUNS: "2"
+        run: pnpm smoke:safe-delivery:shared-preview
+
       - name: Clean up shared preview smoke data
         id: cleanup
         if: always()
@@ -162,7 +172,8 @@ jobs:
           always() &&
           (steps.seed.outcome == 'failure' ||
           steps.smoke.outcome == 'failure' ||
-          steps.dark_launch.outcome == 'failure')
+          steps.dark_launch.outcome == 'failure' ||
+          steps.safe_delivery.outcome == 'failure')
         continue-on-error: true
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -179,6 +190,7 @@ jobs:
           SPLITCH_SEED_OUTCOME: ${{ steps.seed.outcome }}
           SPLITCH_SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
           SPLITCH_DARK_LAUNCH_OUTCOME: ${{ steps.dark_launch.outcome }}
+          SPLITCH_SAFE_DELIVERY_OUTCOME: ${{ steps.safe_delivery.outcome }}
           SPLITCH_CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
           SPLITCH_ARTIFACT_OUTCOME: ${{ steps.artifact.outcome }}
         run: node scripts/render-shared-preview-summary.mjs smoke >> "$GITHUB_STEP_SUMMARY"
