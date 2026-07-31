@@ -18,6 +18,7 @@ export function syntheticKeys(runId) {
   return {
     appKey: `dark-launch-app-${slug}`,
     flagKey: `${FLAG_KEY_PREFIX}-${slug}`,
+    experimentKey: `dark-launch-experiment-${slug}`,
     appName: `Dark Launch ${slug}`,
     targetedKey: `${TARGETED_KEY}-${slug}`,
     untargetedKey: `${UNTARGETED_KEY}-${slug}`,

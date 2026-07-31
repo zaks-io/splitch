@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
- * Shared-preview dark-launch smoke (SPL-168).
+ * Shared-preview hosted onboarding proof (SPL-148).
  *
  * Runs the external-product dark-launch journey twice consecutively against the
- * pre-authorized shared-preview smoke identity. Records one exact deployed commit
- * observed from Worker health and asserts cleanup leaves no orphans — using only
- * normal Control Plane operations (no D1/KV/Tinybird writes in the journey).
+ * pre-authorized shared-preview smoke identity through OAuth PRM and exact-resource
+ * MCP tokens. Each run owns a transient App and uses only product surfaces.
  *
  * Required env:
  *   SPLITCH_SMOKE_CLIENT_SECRET
@@ -23,8 +22,14 @@ import {
   createFleetEvidence,
   requireFullCommitSha,
 } from "../lib/shared-preview-deployment-evidence.mjs";
-import { listApps, listFlags, PROPAGATION_WINDOW_MS, runDarkLaunchJourney } from "./journey.mjs";
-import { getClientKey } from "./control-plane.mjs";
+import {
+  assertExposureHealth,
+  assertToolParity,
+  pollResults,
+  summarizeExposureHealth,
+} from "./hosted-results.mjs";
+import { listApps, PROPAGATION_WINDOW_MS, runDarkLaunchJourney } from "./journey.mjs";
+import { createMcpClient } from "./mcp-client.mjs";
 import { installPackedSdkConsumer, runExternalResolve, writeEvidence } from "./pack-consumer.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -45,45 +50,73 @@ const installCommand = consumer.installCommand.replace(
 );
 
 const runResults = [];
+const mcp = await createMcpClient(config);
+const tools = await mcp.listTools();
+assertToolParity(tools);
+const organizations = await mcp.callTool("organizations_list", {});
+const organizationItems = Array.isArray(organizations)
+  ? organizations
+  : (organizations.items ?? []);
+if (!organizationItems.some((organization) => organization.id === config.smokeOrgId)) {
+  throw new Error("organizations_list did not discover the seeded smoke Organization");
+}
 try {
   for (let index = 0; index < runs; index += 1) {
     const runId = `${config.runId}-r${index + 1}`;
-    const accessToken = await clientCredentialsToken(config);
+    let observedResults;
     const result = await runDarkLaunchJourney({
       fetch,
-      accessToken,
       orgId: config.smokeOrgId,
-      appId: config.smokeAppId,
-      environmentId: config.smokeEnvironmentId,
       controlPlaneBaseUrl: config.controlPlaneBaseUrl,
       evaluationBaseUrl: config.evaluationBaseUrl,
       runId,
       propagationWindowMs: PROPAGATION_WINDOW_MS,
-      wrongAppClientKey: config.wrongAppClientKey,
-      revokedClientKey: config.revokedClientKey,
+      callTool: mcp.callTool,
+      callToolResult: mcp.callToolResult,
       resolve: (action, options) => runExternalResolve(consumer, action, options),
-      assertVerifyClean: async () => {
-        // Hosted: verify is a non-exposing path by construction (no ingest call).
-        // Local integration tests assert recording sinks separately.
+      assertVerifyClean: async ({ appId, environmentId, experimentId, runId: liveRunId }) => {
+        const results = await pollResults(mcp, {
+          appId,
+          environmentId,
+          experimentId,
+          runId: liveRunId,
+        });
+        assertExposureHealth(results, 0);
       },
-      assertEvaluateObservation: async ({ first, retry }) => {
-        // Flag-only evaluate cannot produce an ExposureEvent (requires liveRunId).
-        // See PR report: SPL-168 scope/spec contradiction with Exposure contract.
+      assertEvaluateObservation: async ({
+        appId,
+        environmentId,
+        first,
+        retry,
+        experimentId,
+        runId: liveRunId,
+      }) => {
         if (first.reason === "ERROR" || retry.reason === "ERROR") {
           throw new Error("evaluate observation failed loud");
         }
         if (first.value !== retry.value) {
           throw new Error("retry-safe evaluate returned a different Variant");
         }
-      },
-      assertCleanup: async ({ keys, activeKeyBefore }) => {
-        await assertHostedCleanup(config, accessToken, keys, activeKeyBefore);
+        const results = await pollResults(
+          mcp,
+          {
+            appId,
+            environmentId,
+            experimentId,
+            runId: liveRunId,
+          },
+          1,
+        );
+        assertExposureHealth(results, 1);
+        observedResults = results;
       },
     });
     runResults.push({
       runId,
       appKey: result.keys.appKey,
       flagKey: result.keys.flagKey,
+      experimentKey: result.keys.experimentKey,
+      exposureHealth: summarizeExposureHealth(observedResults),
       steps: result.steps,
     });
   }
@@ -91,26 +124,9 @@ try {
   consumer.dispose();
 }
 
-const accessToken = await clientCredentialsToken(config);
-const orphanedApps = await findOrphanedDarkLaunchApps(config, accessToken);
-const orphanedFlags = await findOrphanedDarkLaunchFlags(config, accessToken, runResults);
-const activeKey = await getClientKey(
-  { fetch, accessToken, controlPlaneBaseUrl: config.controlPlaneBaseUrl },
-  config.smokeAppId,
-  config.smokeEnvironmentId,
-);
-if (orphanedApps.length > 0 || orphanedFlags.length > 0) {
-  throw new Error(
-    `cleanup assertion found orphans: apps=${JSON.stringify(orphanedApps)} flags=${JSON.stringify(orphanedFlags)}`,
-  );
-}
-if (activeKey.keyMaterial !== config.expectedActiveClientKey) {
-  throw new Error(
-    `smoke App Client Key material drifted (expected seeded active key, got different material)`,
-  );
-}
-if (activeKey.revokedAt) {
-  throw new Error("smoke App active Client Key is revoked after dark-launch runs");
+const orphanedApps = await findOrphanedDarkLaunchApps(config, mcp);
+if (orphanedApps.length > 0) {
+  throw new Error(`cleanup assertion found orphaned Apps: ${JSON.stringify(orphanedApps)}`);
 }
 
 const healthRoutes = config.healthRoutes;
@@ -137,11 +153,14 @@ const payload = {
     orphanedApps: false,
     orphanedFlags: false,
     orphanedCredentials: false,
-    activeClientKeyPreserved: true,
+    transientAppsDeleted: true,
   },
   checks: {
     packedSdkConsumer: true,
-    darkLaunchJourney: true,
+    oauthPrmDiscovery: true,
+    exactResourceMcpToken: true,
+    mcpOnboardingTools: true,
+    firstExposure: true,
     consecutiveRuns: runResults.length === runs,
   },
 };
@@ -170,17 +189,10 @@ function readConfig() {
     authBaseUrl,
     controlPlaneBaseUrl,
     evaluationBaseUrl,
+    mcpBaseUrl: originUrl("SPLITCH_SMOKE_MCP_BASE_URL", "https://mcp.preview.splitch.dev"),
     smokeClientId: process.env.SPLITCH_SMOKE_CLIENT_ID ?? "splitch-shared-preview-smoke",
     smokeClientSecret,
     smokeOrgId: process.env.SPLITCH_SMOKE_ORG_ID ?? "org_shared_preview_smoke",
-    smokeAppId: process.env.SPLITCH_SMOKE_APP_ID ?? "app_shared_preview_smoke",
-    smokeEnvironmentId: process.env.SPLITCH_SMOKE_ENVIRONMENT_ID ?? "env_shared_preview_smoke_dev",
-    expectedActiveClientKey:
-      process.env.SPLITCH_SMOKE_ACTIVE_CLIENT_KEY ?? "pk_shared_preview_smoke_dev",
-    wrongAppClientKey:
-      process.env.SPLITCH_SMOKE_WRONG_APP_CLIENT_KEY ?? "pk_shared_preview_smoke_other_dev",
-    revokedClientKey:
-      process.env.SPLITCH_SMOKE_REVOKED_CLIENT_KEY ?? "pk_shared_preview_smoke_dev_revoked",
     runId: (process.env.SPLITCH_SMOKE_RUN_ID ?? process.env.GITHUB_RUN_ID ?? String(Date.now()))
       .toLowerCase()
       .replaceAll(/[^a-z0-9-]/g, "-")
@@ -207,83 +219,14 @@ function route(surface, service, fallback) {
   return { surface, service, url: fallback };
 }
 
-async function clientCredentialsToken(cfg) {
-  const response = await fetch(`${cfg.authBaseUrl}/oauth2/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: cfg.smokeClientId,
-      client_secret: cfg.smokeClientSecret,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`smoke client_credentials token failed: HTTP ${response.status}`);
-  }
-  const body = await response.json();
-  if (typeof body.access_token !== "string") {
-    throw new Error("smoke client_credentials token response missing access_token");
-  }
-  return body.access_token;
-}
-
 function originUrl(name, fallback) {
   return new URL(process.env[name] ?? fallback).origin;
 }
 
-async function assertHostedCleanup(cfg, accessToken, keys, activeKeyBefore) {
-  const deps = { fetch, accessToken, controlPlaneBaseUrl: cfg.controlPlaneBaseUrl };
-  const flags = await listFlags(deps, cfg.smokeAppId);
-  const flagItems = Array.isArray(flags) ? flags : (flags.items ?? []);
-  if (flagItems.some((flag) => flag.key === keys.flagKey)) {
-    throw new Error(`cleanup left orphaned Flag key ${keys.flagKey}`);
-  }
-
-  const apps = await listApps(deps, cfg.smokeOrgId);
-  const appItems = Array.isArray(apps) ? apps : (apps.items ?? apps.apps ?? []);
-  const watched = new Set([
-    keys.appKey,
-    `${keys.appKey}-wrong`,
-    `${keys.appKey}-revoked`,
-    `${keys.appKey}-cross-org`,
-  ]);
-  const orphanApp = appItems.find((app) => watched.has(app.key));
-  if (orphanApp) {
-    throw new Error(`cleanup left orphaned App ${orphanApp.id} (${orphanApp.key})`);
-  }
-
-  const activeKey = await getClientKey(deps, cfg.smokeAppId, cfg.smokeEnvironmentId);
-  const expectedMaterial =
-    typeof activeKeyBefore === "string" && activeKeyBefore.length > 0
-      ? activeKeyBefore
-      : cfg.expectedActiveClientKey;
-  if (activeKey.keyMaterial !== expectedMaterial) {
-    throw new Error("cleanup left rotated or replaced smoke App Client Key");
-  }
-  if (activeKey.revokedAt) {
-    throw new Error("smoke App active Client Key is revoked after cleanup");
-  }
-}
-
-async function findOrphanedDarkLaunchApps(cfg, accessToken) {
-  const apps = await listApps(
-    { fetch, accessToken, controlPlaneBaseUrl: cfg.controlPlaneBaseUrl },
-    cfg.smokeOrgId,
-  );
+async function findOrphanedDarkLaunchApps(cfg, mcpClient) {
+  const apps = await listApps({ callTool: mcpClient.callTool }, cfg.smokeOrgId);
   const items = Array.isArray(apps) ? apps : (apps.items ?? apps.apps ?? []);
   return items
     .filter((app) => typeof app.key === "string" && app.key.startsWith("dark-launch-app-"))
     .map((app) => ({ id: app.id, key: app.key }));
-}
-
-async function findOrphanedDarkLaunchFlags(cfg, accessToken, results) {
-  const flags = await listFlags(
-    { fetch, accessToken, controlPlaneBaseUrl: cfg.controlPlaneBaseUrl },
-    cfg.smokeAppId,
-  );
-  const items = Array.isArray(flags) ? flags : (flags.items ?? []);
-  const watched = new Set(results.map((result) => result.flagKey));
-  return items
-    .filter((flag) => watched.has(flag.key))
-    .map((flag) => ({ id: flag.id, key: flag.key }));
 }

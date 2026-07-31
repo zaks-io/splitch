@@ -72,14 +72,8 @@ describe("startReadinessResponse", () => {
     expect(startReadinessResponse(experimentRow('[{"id":"met_1"}]'), REQUEST_ID)).toBeNull();
   });
 
-  it("refuses Start with an empty goal Metric family, naming the field", async () => {
-    const response = startReadinessResponse(experimentRow("[]"), REQUEST_ID);
-
-    expect(response).not.toBeNull();
-    const body = await errorBody(response as Response);
-    expect(body.code).toBe("VALIDATION_ERROR");
-    expect(body.details.issues[0]?.path).toEqual(["experiment", "metrics"]);
-    expect(body.details.issues[0]?.message).toMatch(/goal Metric/);
+  it("allows an exposure-only Run with no goal Metric family", () => {
+    expect(startReadinessResponse(experimentRow("[]"), REQUEST_ID)).toBeNull();
   });
 });
 

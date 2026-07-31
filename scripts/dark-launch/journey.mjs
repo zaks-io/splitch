@@ -11,8 +11,9 @@ export {
   syntheticKeys,
   variantName,
 } from "./constants.mjs";
-export { listApps, listFlags } from "./control-plane.mjs";
+export { listApps } from "./control-plane.mjs";
 
+import { cleanupDarkLaunch, runNegativeProofs } from "./cleanup.mjs";
 import {
   assertVariant,
   COHORT_ATTRIBUTE,
@@ -21,14 +22,16 @@ import {
   LAUNCH_VARIANT,
   PROPAGATION_WINDOW_MS,
   syntheticKeys,
+  variantName,
 } from "./constants.mjs";
-import { cleanupDarkLaunch, runNegativeProofs } from "./cleanup.mjs";
 import {
-  clientKeyMaterialFromCreate,
   createDarkLaunchApp,
   createDarkLaunchFlag,
+  createExperiment,
   getClientKey,
   replaceTargetingRules,
+  startExperiment,
+  testLiveRunVariant,
   updateFlagConfig,
 } from "./control-plane.mjs";
 
@@ -46,9 +49,11 @@ export async function runDarkLaunchJourney(deps) {
   const ownsApp = !deps.appId;
   const resources = {
     appId: deps.appId ?? null,
+    experimentId: null,
     flagId: null,
     clientKeyMaterial: null,
     environmentId: deps.environmentId ?? null,
+    runId: null,
     ownsApp,
     transientAppKeys: [],
   };
@@ -58,11 +63,20 @@ export async function runDarkLaunchJourney(deps) {
     if (ownsApp) {
       const created = await createDarkLaunchApp(deps, keys);
       resources.appId = created.app.id;
+      const environmentKeys = created.environments
+        .map((environment) => environment.key)
+        .sort()
+        .join(",");
+      if (environmentKeys !== "dev,prod") {
+        throw new Error(`apps_create expected dev+prod Environments, got ${environmentKeys}`);
+      }
       const dev = created.environments.find((environment) => environment.key === "dev");
       if (!dev) throw new Error("apps_create did not provision a dev Environment");
       resources.environmentId = dev.id;
-      resources.clientKeyMaterial = clientKeyMaterialFromCreate(created, dev.id);
       steps.push("apps_create");
+      const clientKey = await getClientKey(deps, resources.appId, resources.environmentId);
+      resources.clientKeyMaterial = clientKey.keyMaterial;
+      steps.push("client_key_get");
     } else {
       if (!resources.appId || !resources.environmentId) {
         throw new Error("existing App mode requires appId and environmentId");
@@ -111,10 +125,40 @@ export async function runDarkLaunchJourney(deps) {
     });
     steps.push("targeted_cohort_split");
 
-    if (deps.assertVerifyClean) await deps.assertVerifyClean();
+    const experiment = await createExperiment(deps, resources, keys);
+    resources.experimentId = experiment.id;
+    steps.push("experiments_create_metrics_empty");
+
+    const started = await startExperiment(deps, resources);
+    resources.runId = started.run.id;
+    steps.push("experiments_start");
+
+    const controlPlaneLiveVariant = await testLiveRunVariant(deps, resources, keys);
+    if (controlPlaneLiveVariant.liveRunId !== resources.runId) {
+      throw new Error(
+        `flags_test_eval expected live Run ${resources.runId}, got ${controlPlaneLiveVariant.liveRunId}`,
+      );
+    }
+    const expectedLiveVariant = variantName(controlPlaneLiveVariant);
+    const liveVariant = await waitForVariant(resolve, {
+      targetingKey: keys.targetedKey,
+      attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
+      expected: expectedLiveVariant,
+      label: "live Run verify",
+      windowMs,
+    });
+    if (deps.assertVerifyClean) {
+      await deps.assertVerifyClean({
+        experimentId: resources.experimentId,
+        appId: resources.appId,
+        environmentId: resources.environmentId,
+        runId: resources.runId,
+        liveVariant,
+      });
+    }
     steps.push("verify_zero_exposure_writes");
 
-    await proveEvaluateObservation(deps, resolve, keys);
+    await proveEvaluateObservation(deps, resources, resolve, keys, expectedLiveVariant);
     steps.push("evaluate_idempotent_observation");
 
     await updateFlagConfig(deps, resources.appId, resources.environmentId, resources.flagId, {
@@ -183,22 +227,30 @@ async function enableTargetedRule(deps, resources, keys, launchVariantId) {
   ]);
 }
 
-async function proveEvaluateObservation(deps, resolve, keys) {
+async function proveEvaluateObservation(deps, resources, resolve, keys, expectedVariant) {
   const idempotencyKey = `dark-launch-eval-${deps.runId}`;
   const first = await resolve("evaluate", {
     targetingKey: keys.targetedKey,
     attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
     idempotencyKey,
   });
-  assertVariant(first, LAUNCH_VARIANT, "first evaluate");
+  assertVariant(first, expectedVariant, "first evaluate");
   const retry = await resolve("evaluate", {
     targetingKey: keys.targetedKey,
     attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
     idempotencyKey,
   });
-  assertVariant(retry, LAUNCH_VARIANT, "retry evaluate");
+  assertVariant(retry, expectedVariant, "retry evaluate");
   if (deps.assertEvaluateObservation) {
-    await deps.assertEvaluateObservation({ idempotencyKey, first, retry });
+    await deps.assertEvaluateObservation({
+      idempotencyKey,
+      first,
+      retry,
+      experimentId: resources.experimentId,
+      appId: resources.appId,
+      environmentId: resources.environmentId,
+      runId: resources.runId,
+    });
   }
 }
 

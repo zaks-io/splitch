@@ -1,14 +1,18 @@
 import { writeFile } from "node:fs/promises";
 import { expect } from "vitest";
 import { runCli } from "./cli.js";
+import {
+  type DarkLaunchCliOptions,
+  proveLocalExperimentExposure,
+} from "./dark-launch-experiment.js";
 import { controlPlaneGet, expectVariant, type PackedSdk, variantId } from "./dark-launch-http.js";
 import { proveLocalNegativeAuth } from "./dark-launch-negative-auth.js";
 import { EXIT_OK } from "./exit-codes.js";
 import {
   findFlagByKey,
+  type QuickstartHarness,
   quickstartOrigins,
   storedHarnessCredential,
-  type QuickstartHarness,
 } from "./quickstart-local-harness.js";
 import { makeTempHome } from "./test-helpers.js";
 
@@ -17,14 +21,6 @@ const COHORT_ATTRIBUTE = "cohort";
 const COHORT_VALUE = "launch";
 const TARGETED_KEY = "dark-launch-user-targeted";
 const UNTARGETED_KEY = "dark-launch-user-untargeted";
-
-type CliOptions = {
-  credentialPath: string;
-  fetch: typeof fetch;
-  controlPlaneBaseUrl: string;
-  evaluationBaseUrl: string;
-};
-
 type PackedClient = ReturnType<PackedSdk["createSplitchClient"]>;
 
 export async function runLocalDarkLaunchScenario(
@@ -42,6 +38,10 @@ export async function runLocalDarkLaunchScenario(
     clientKey: activeKeyMaterial,
     endpoint: quickstartOrigins.evaluationBaseUrl,
     fetch: harness.routingFetch,
+    // Synthetic journey evidence is intentionally quiet: the SDK's structured
+    // ResolutionDetails remain the fail-loud assertion surface without printing
+    // credential material or unnecessary raw identifiers.
+    logger: { error() {}, debug() {} },
   });
 
   await expectVariant(client, TARGETED_KEY, { [COHORT_ATTRIBUTE]: COHORT_VALUE }, "off");
@@ -51,7 +51,7 @@ export async function runLocalDarkLaunchScenario(
   await expectVariant(client, TARGETED_KEY, { [COHORT_ATTRIBUTE]: COHORT_VALUE }, "on");
   await expectVariant(client, UNTARGETED_KEY, { [COHORT_ATTRIBUTE]: "other" }, "off");
 
-  await proveEvaluateObservation(harness, client);
+  await proveLocalExperimentExposure(harness, cli, client, flag.id);
   await killSwitchOff(harness, cli, flag.id, client);
   await proveLocalNegativeAuth(harness, packedSdk, flag.id);
 
@@ -63,7 +63,7 @@ export async function runLocalDarkLaunchScenario(
   expect(activeAfter.revokedAt ?? null).toBeNull();
 }
 
-async function openCli(harness: QuickstartHarness): Promise<CliOptions> {
+async function openCli(harness: QuickstartHarness): Promise<DarkLaunchCliOptions> {
   const { credentialPath } = await makeTempHome();
   await writeFile(credentialPath, `${JSON.stringify(storedHarnessCredential(harness))}\n`);
   return {
@@ -74,7 +74,7 @@ async function openCli(harness: QuickstartHarness): Promise<CliOptions> {
   };
 }
 
-async function createFlag(harness: QuickstartHarness, cli: CliOptions) {
+async function createFlag(harness: QuickstartHarness, cli: DarkLaunchCliOptions) {
   expect(
     await runCli(
       [
@@ -98,7 +98,7 @@ async function createFlag(harness: QuickstartHarness, cli: CliOptions) {
 
 async function enableTargetedRule(
   harness: QuickstartHarness,
-  cli: CliOptions,
+  cli: DarkLaunchCliOptions,
   flagId: string,
 ): Promise<void> {
   expect(
@@ -153,51 +153,9 @@ async function enableTargetedRule(
   harness.invalidateFlagCache();
 }
 
-/**
- * Verify is non-exposing. Flag-only evaluate commits usage with hasExposure=false:
- * ExposureEvent requires experimentId+runId, and assembleEvaluateExposures returns
- * [] when liveRunId is null. SPL-168 excludes experiments, so one observable
- * Exposure cannot be proven in-scope (scope/spec contradiction — reported, not fabricated).
- */
-async function proveEvaluateObservation(
-  harness: QuickstartHarness,
-  client: PackedClient,
-): Promise<void> {
-  expect(harness.evaluationCommitSink.writes.length).toBe(0);
-  expect(harness.exposureSink.writes.length).toBe(0);
-
-  const idempotencyKey = "dark-launch-eval-local-1";
-  const first = await client.evaluateDetails(FLAG_KEY, {
-    targetingKey: TARGETED_KEY,
-    attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
-    idempotencyKey,
-  });
-  expect(first.value).toBe(true);
-  expect(first.reason).not.toBe("ERROR");
-
-  const retry = await client.evaluateDetails(FLAG_KEY, {
-    targetingKey: TARGETED_KEY,
-    attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
-    idempotencyKey,
-  });
-  expect(retry.value).toBe(true);
-
-  const commits = harness.evaluationCommitSink.writes.filter(
-    (write) => write.usage.idempotencyKey === idempotencyKey,
-  );
-  // Flag-only evaluate has no liveRunId, so the SDK seen-set cannot cache and a
-  // retry re-contacts the server. Server-side usage sealing is out of band here;
-  // every commit for this key must still be non-exposing.
-  expect(commits.length).toBeGreaterThanOrEqual(1);
-  expect(commits.every((write) => write.usage.flagKey === FLAG_KEY)).toBe(true);
-  expect(commits.every((write) => write.usage.hasExposure === false)).toBe(true);
-  expect(commits.every((write) => write.exposures.length === 0)).toBe(true);
-  expect(harness.exposureSink.writes).toEqual([]);
-}
-
 async function killSwitchOff(
   harness: QuickstartHarness,
-  cli: CliOptions,
+  cli: DarkLaunchCliOptions,
   flagId: string,
   client: PackedClient,
 ): Promise<void> {

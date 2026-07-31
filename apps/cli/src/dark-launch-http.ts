@@ -1,11 +1,19 @@
-import { expect } from "vitest";
 import { appScope } from "@splitch/db";
-import { quickstartOrigins, type QuickstartHarness } from "./quickstart-local-harness.js";
+import { expect } from "vitest";
+import { type QuickstartHarness, quickstartOrigins } from "./quickstart-local-harness.js";
 
 const FLAG_KEY = "dark-launch-demo";
 
 export type PackedSdk = {
-  createSplitchClient(options: { clientKey: string; endpoint: string; fetch: typeof fetch }): {
+  createSplitchClient(options: {
+    clientKey: string;
+    endpoint: string;
+    fetch: typeof fetch;
+    logger?: {
+      error(message: string, detail: unknown): void;
+      debug(message: string, detail: unknown): void;
+    };
+  }): {
     verify(
       flagKey: string,
       context: { targetingKey: string; attributes?: Record<string, unknown> },

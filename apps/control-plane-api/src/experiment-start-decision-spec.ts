@@ -1,6 +1,4 @@
-import type { MetricRef } from "@splitch/contracts";
 import type { ExperimentRow } from "./experiment-model";
-import { jsonArray } from "./experiment-model";
 import { validationErrors } from "./flag-definition-errors";
 
 /**
@@ -76,23 +74,17 @@ export function runDecisionSpecFromBody(
 }
 
 /**
- * A Run with an empty goal Metric family freezes a decision spec that can decide
- * nothing: every Metric added afterwards is exploratory (ADR-0003), so the Run
- * can never produce a decision-valid result. Refusing at Start is the only point
- * where that is still fixable.
+ * Exposure collection is independently useful before a goal Metric exists. An
+ * empty family produces no decision-valid statistical result, but it remains a
+ * valid Run for first-touch Exposure integration and denominator verification.
+ * Statistical decision gates continue to reject attempts to decide without a
+ * frozen goal Metric family.
  */
 export function startReadinessResponse(
-  experiment: ExperimentRow,
-  requestId: string,
+  _experiment: ExperimentRow,
+  _requestId: string,
 ): Response | null {
-  if (jsonArray<MetricRef>(experiment.metrics).length > 0) return null;
-  return validationErrors(requestId, [
-    {
-      path: ["experiment", "metrics"],
-      message:
-        "Start freezes the goal Metric family into the Run and every later addition is exploratory, so an Experiment with no goal Metric can never produce a decision-valid result. Add at least one goal Metric before Start.",
-    },
-  ]);
+  return null;
 }
 
 /**

@@ -168,7 +168,11 @@ describe("MCP prompt plan shapes", () => {
       "context_use",
       "client_key_get",
       "flags_create",
+      "flag_config_update",
+      "experiments_create",
+      "experiments_start",
       "flags_test_eval",
+      "experiment_results_get",
     ]);
   });
 

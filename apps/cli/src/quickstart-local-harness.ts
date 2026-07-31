@@ -19,7 +19,6 @@ import {
 } from "../../control-plane-api/src/flag-definition-test-harness.js";
 import { makeLocalBindings } from "../../control-plane-api/src/test-fixtures.js";
 import { createApp as createEvaluationApp } from "../../evaluation-api/src/app.js";
-import { StaticSaltStore } from "../../evaluation-api/src/assignment/assignment-store-test-fixtures.js";
 import { makeDataPlaneAuthResolver } from "../../evaluation-api/src/data-plane-auth.js";
 import { RecordingAssignmentStore } from "../../evaluation-api/src/evaluate/evaluate-path-test-fixtures.js";
 import { KvProvider } from "../../evaluation-api/src/provider/kv-provider.js";
@@ -97,6 +96,7 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
   const exposureSink = new RecordingExposureSink();
   const evaluationCommitSink = new RecordingEvaluationCommitSink(exposureSink, evaluationUsageSink);
   const provider = new KvProvider(configKv);
+  const harnessSalt = new TextEncoder().encode(`quickstart-salt:${appId}`);
   const evaluationApp = createEvaluationApp({
     authResolver: () => ({ ok: false, reason: "UNAUTHORIZED" }),
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(flagHarness.bindings.credentialKv),
@@ -104,7 +104,15 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     provider,
     assignmentStore: new RecordingAssignmentStore(),
     exposureAssembly: {
-      saltStore: new StaticSaltStore(),
+      saltStore: {
+        currentKeyVersion: () => Promise.resolve("quickstart-v1"),
+        saltFor: (requestedAppId: string) => {
+          if (requestedAppId !== appId) {
+            throw new Error(`quickstart harness: missing salt for ${requestedAppId}`);
+          }
+          return Promise.resolve(harnessSalt);
+        },
+      },
       sourceId: "quickstart-drift-test",
       newEventId: () => "evt-quickstart-1",
       now: () => new Date(Date.parse(NOW_ISO)),

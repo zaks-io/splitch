@@ -52,7 +52,7 @@ afterEach(async () => ctx.h.bindings.dispose());
  * on: the Panel renders them, it does not decide them (ADR-0023).
  */
 describe("Experiment decision spec at Start", () => {
-  it("refuses Start with an empty goal Metric family, naming what is missing", async () => {
+  it("Starts an exposure-only Run with an empty goal Metric family", async () => {
     const fx = await experimentFixture(ctx);
     const experiment = await createExperimentDraft(ctx, fx, {
       key: "no-goal-metric",
@@ -62,11 +62,14 @@ describe("Experiment decision spec at Start", () => {
 
     const response = await startExperiment(ctx, fx, experiment.id);
 
-    expect(response.status).toBe(400);
-    const error = await errorBody(response);
-    expect(error.code).toBe("VALIDATION_ERROR");
-    expect(error.details.issues[0]?.path).toEqual(["experiment", "metrics"]);
-    expect(error.details.issues[0]?.message).toMatch(/goal Metric/);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as StartResponse;
+    expect(body.run).toMatchObject({ experimentId: experiment.id, status: "running" });
+    const run = await ctx.repo.experiments.getRun(
+      envScope(fx.appId, fx.environmentId),
+      body.run.id,
+    );
+    expect(run?.decisionFamily).toBe("[]");
   });
 
   it("refuses a fixed horizon with no pre-registered sample size and accepts one with it", async () => {

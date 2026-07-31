@@ -7,6 +7,7 @@ import {
   replaceTargetingRules,
   updateFlagConfig,
 } from "./dark-launch/control-plane.mjs";
+import { assertExposureHealth, summarizeExposureHealth } from "./dark-launch/hosted-results.mjs";
 import {
   assertVariant,
   DEFAULT_VARIANT,
@@ -20,8 +21,47 @@ test("syntheticKeys produces stable, lowercase App and Flag keys", () => {
   const keys = syntheticKeys("Run_ABC-123");
   assert.match(keys.appKey, /^dark-launch-app-/);
   assert.match(keys.flagKey, /^dark-launch-/);
+  assert.match(keys.experimentKey, /^dark-launch-experiment-/);
   assert.equal(keys.appKey, keys.appKey.toLowerCase());
   assert.equal(keys.flagKey, keys.flagKey.toLowerCase());
+});
+
+test("hosted result evidence requires exactly one raw and deduped Exposure", () => {
+  const result = {
+    run_id: "run-1",
+    stats: {
+      health: {
+        exposure_counts: { on: 1 },
+        deduped_counts: { on: 1 },
+        multiple_count: 0,
+      },
+    },
+  };
+  assert.doesNotThrow(() => assertExposureHealth(result, 1));
+  assert.deepEqual(summarizeExposureHealth(result), {
+    runId: "run-1",
+    exposureCounts: { on: 1 },
+    exposureTotal: 1,
+    dedupedCounts: { on: 1 },
+    dedupedTotal: 1,
+    multipleCount: 0,
+  });
+  assert.throws(
+    () =>
+      assertExposureHealth(
+        {
+          ...result,
+          stats: {
+            health: {
+              ...result.stats.health,
+              exposure_counts: { on: 2 },
+            },
+          },
+        },
+        1,
+      ),
+    /expected 1 raw Exposures/,
+  );
 });
 
 test("variantName maps boolean values and explicit variantName", () => {

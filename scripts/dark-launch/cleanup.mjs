@@ -6,7 +6,9 @@ import {
   controlPlaneCall,
   createDarkLaunchApp,
   deleteApp,
+  deleteExperiment,
   deleteFlag,
+  endRun,
   getClientKey,
   listApps,
   listFlags,
@@ -96,14 +98,17 @@ async function resolveRevokedClientKey(deps, resources, keys, probes) {
 
 async function proveCrossOrganizationWriteRejected(deps, keys) {
   const crossKey = `${keys.appKey}-cross-org`;
-  const crossOrg = await controlPlaneCall(deps, "POST", `/orgs/org_not_a_member/apps`, {
+  const body = {
     orgId: "org_not_a_member",
     organizationId: "org_not_a_member",
     name: "Should Fail",
     key: crossKey,
     description: "Unauthorized cross-Organization mutation probe.",
     idempotency_key: crossKey,
-  });
+  };
+  const crossOrg = deps.callToolResult
+    ? await deps.callToolResult("apps_create", body)
+    : await controlPlaneCall(deps, "POST", `/orgs/org_not_a_member/apps`, body);
   if (crossOrg.ok) {
     throw new Error("cross-Organization mutation unexpectedly succeeded");
   }
@@ -122,7 +127,9 @@ async function proveCrossOrganizationWriteRejected(deps, keys) {
     }
   }
 
-  const followUp = await controlPlaneCall(deps, "GET", `/orgs/org_not_a_member/apps`);
+  const followUp = deps.callToolResult
+    ? await deps.callToolResult("apps_list", { orgId: "org_not_a_member" })
+    : await controlPlaneCall(deps, "GET", `/orgs/org_not_a_member/apps`);
   if (followUp.ok) {
     throw new Error("cross-Organization follow-up list unexpectedly succeeded");
   }
@@ -152,6 +159,16 @@ export async function assertStructuredAuthFailure(action, expectedErrorCode, lab
 
 export async function cleanupDarkLaunch(deps, resources, keys) {
   const activeKeyBefore = resources.clientKeyMaterial;
+
+  if (resources.runId) {
+    await endRun(deps, resources);
+    resources.runId = null;
+  }
+
+  if (resources.experimentId) {
+    await deleteExperiment(deps, resources);
+    resources.experimentId = null;
+  }
 
   if (resources.appId && resources.flagId) {
     await deleteFlag(deps, resources.appId, resources.flagId);

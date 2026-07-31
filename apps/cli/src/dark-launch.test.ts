@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, it } from "vitest";
-import { runLocalDarkLaunchScenario } from "./dark-launch-scenario.js";
 import type { PackedSdk } from "./dark-launch-http.js";
+import { runLocalDarkLaunchScenario } from "./dark-launch-scenario.js";
 import { makeQuickstartHarness, type QuickstartHarness } from "./quickstart-local-harness.js";
 import { cleanupTempHomes } from "./test-helpers.js";
 
@@ -35,7 +35,7 @@ describe("CLI-to-SDK dark-launch integration", () => {
     await harness.dispose();
   });
 
-  it("proves disabled → targeted cohort → exposure-safe evaluate → kill-switch-off", async () => {
+  it("proves CLI setup → live Run → one packed-SDK Exposure → cleanup", async () => {
     await runLocalDarkLaunchScenario(harness, packedSdk);
   }, 60_000);
 });
