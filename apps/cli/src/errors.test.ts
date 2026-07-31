@@ -1,8 +1,17 @@
 import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SplitchSdkError } from "@splitch/sdk";
 import { runCli } from "./cli.js";
-import { cliClientErrorCodes, cliErrorCodes, formatCliError, SplitchCliError } from "./errors.js";
+import {
+  cliClientErrorCodes,
+  cliErrorCodes,
+  formatCliError,
+  normalizeCliError,
+  SplitchCliError,
+  writeCliError,
+} from "./errors.js";
 import { EXIT_API, EXIT_AUTH, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
+import { writeServerError } from "./execute-operations.js";
 import { FakeCliTransport, jsonError, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
@@ -22,7 +31,7 @@ describe("CLI actionable error catalog", () => {
   it("formats one line with code, cause, and remediation", () => {
     const line = formatCliError({
       code: "CLI_USAGE_INVALID",
-      cause: "A required value is absent",
+      causeSummary: "A required value is absent",
       remediation: "Pass the required value",
     });
     expect(line).toContain("CLI_USAGE_INVALID");
@@ -31,10 +40,43 @@ describe("CLI actionable error catalog", () => {
     expect(
       new SplitchCliError({
         code: "CLI_USAGE_INVALID",
-        cause: "A required value is absent",
+        causeSummary: "A required value is absent",
         remediation: "Pass the required value",
       }).docsUrl,
     ).toBeUndefined();
+  });
+
+  it("preserves an SDK error code and exception chain on stderr", () => {
+    const original = new Error("transport rejected the request");
+    const sdkError = new SplitchSdkError({
+      code: "UNAUTHORIZED",
+      causeSummary: "The data plane rejected the credential",
+      remediation: "Replace the credential and retry",
+      originalError: original,
+    });
+    const stderr = vi.fn();
+
+    const normalized = normalizeCliError(sdkError);
+    writeCliError({ error: stderr, log: vi.fn() }, normalized);
+
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("UNAUTHORIZED"));
+    expect(normalized.code).toBe("UNAUTHORIZED");
+    expect(normalized.cause).toBe(sdkError);
+    expect(sdkError.cause).toBe(original);
+  });
+
+  it("names an unrecognized server code instead of inventing a server failure", () => {
+    const stderr = vi.fn();
+
+    writeServerError({ error: stderr, log: vi.fn() }, {
+      code: "FUTURE_SERVER_CODE",
+      message: "The server knows about a newer failure",
+      details: {},
+    } as never);
+
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("CLI_SERVER_CODE_UNRECOGNIZED"));
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("FUTURE_SERVER_CODE"));
+    expect(stderr).not.toHaveBeenCalledWith(expect.stringContaining("INTERNAL_SERVER_ERROR"));
   });
 });
 

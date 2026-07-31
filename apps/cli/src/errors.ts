@@ -1,4 +1,5 @@
 import {
+  formatSdkErrorMessage,
   resolveErrorDocsUrl,
   sdkErrorCodes,
   SplitchSdkError,
@@ -20,6 +21,8 @@ export const cliClientErrorCodes = [
   "CLI_OPERATION_UNKNOWN",
   "CLI_CONFIG_READ_FAILED",
   "CLI_CREDENTIAL_STORE_FAILED",
+  "CLI_DATA_PLANE_ERROR_CODE_MISSING",
+  "CLI_SERVER_CODE_UNRECOGNIZED",
   "CLI_UNEXPECTED_ERROR",
 ] as const;
 
@@ -33,30 +36,29 @@ export const cliErrorCodes: readonly SplitchCliErrorCode[] = [
 
 export interface CliErrorDetail {
   readonly code: SplitchCliErrorCode;
-  readonly cause: string;
+  readonly causeSummary: string;
   readonly remediation: string;
+  readonly originalError?: unknown;
 }
+
+export const formatCliError = formatSdkErrorMessage;
 
 function sentence(value: string): string {
   const trimmed = value.trim();
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
-export function formatCliError(detail: CliErrorDetail): string {
-  return `${detail.code}: Cause: ${sentence(detail.cause)} Remediation: ${sentence(detail.remediation)}`;
-}
-
 export class SplitchCliError extends Error {
   readonly code: SplitchCliErrorCode;
-  override readonly cause: string;
+  readonly causeSummary: string;
   readonly remediation: string;
   readonly docsUrl: string | undefined;
 
   constructor(detail: CliErrorDetail) {
-    super(formatCliError(detail));
+    super(formatSdkErrorMessage(detail), { cause: detail.originalError });
     this.name = "SplitchCliError";
     this.code = detail.code;
-    this.cause = sentence(detail.cause);
+    this.causeSummary = sentence(detail.causeSummary);
     this.remediation = sentence(detail.remediation);
     this.docsUrl = resolveErrorDocsUrl(detail.code);
   }
@@ -69,17 +71,19 @@ export function normalizeCliError(error: unknown): SplitchCliError {
   if (error instanceof SplitchSdkError) {
     return new SplitchCliError({
       code: error.code,
-      cause: error.cause,
+      causeSummary: error.causeSummary,
       remediation: error.remediation,
+      originalError: error,
     });
   }
   return new SplitchCliError({
     code: "CLI_UNEXPECTED_ERROR",
-    cause: error instanceof Error ? error.message : String(error),
+    causeSummary: error instanceof Error ? error.message : String(error),
     remediation: "Retry the command and report the code if the failure persists",
+    originalError: error,
   });
 }
 
 export function writeCliError(io: CliIo, error: CliErrorDetail | SplitchCliError): void {
-  io.error(error instanceof SplitchCliError ? error.message : formatCliError(error));
+  io.error(error instanceof SplitchCliError ? error.message : formatSdkErrorMessage(error));
 }

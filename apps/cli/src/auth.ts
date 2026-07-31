@@ -27,7 +27,7 @@ export async function loginWithDeviceFlow(deps: AuthDeps, appId: string): Promis
   if (!auth.ok) {
     throw new SplitchCliError({
       code: "CLI_DEVICE_AUTHORIZATION_FAILED",
-      cause: `Device authorization failed with HTTP ${auth.status}`,
+      causeSummary: `Device authorization failed with HTTP ${auth.status}`,
       remediation: "Check the auth service and selected App, then run splitch login again",
     });
   }
@@ -94,14 +94,14 @@ async function pollDeviceApproval(
     if (pending.error !== "authorization_pending" && pending.error !== "slow_down") {
       throw new SplitchCliError({
         code: "CLI_DEVICE_TOKEN_EXCHANGE_FAILED",
-        cause: `Device token exchange failed with ${pending.error ?? `HTTP ${token.status}`}`,
+        causeSummary: `Device token exchange failed with ${pending.error ?? `HTTP ${token.status}`}`,
         remediation: "Restart splitch login and complete the new device authorization",
       });
     }
   }
   throw new SplitchCliError({
     code: "CLI_DEVICE_APPROVAL_TIMEOUT",
-    cause: "Device approval timed out",
+    causeSummary: "Device approval timed out",
     remediation: "Run splitch login again and approve the request before it expires",
   });
 }
@@ -246,7 +246,7 @@ function sleep(ms: number): Promise<void> {
 function notAuthenticatedError(): SplitchCliError {
   return new SplitchCliError({
     code: "CLI_NOT_AUTHENTICATED",
-    cause: "No CLI login session is available",
+    causeSummary: "No CLI login session is available",
     remediation: "Run splitch login before retrying the command",
   });
 }
@@ -254,7 +254,7 @@ function notAuthenticatedError(): SplitchCliError {
 function sessionExpiredError(): SplitchCliError {
   return new SplitchCliError({
     code: "CLI_SESSION_EXPIRED",
-    cause: "The CLI login session expired and could not be refreshed",
+    causeSummary: "The CLI login session expired and could not be refreshed",
     remediation: "Run splitch login again before retrying the command",
   });
 }

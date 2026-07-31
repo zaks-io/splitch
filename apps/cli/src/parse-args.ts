@@ -80,7 +80,7 @@ function parseFlagToken(
   if (!value || value.startsWith("--")) {
     throw new SplitchCliError({
       code: "CLI_USAGE_INVALID",
-      cause: `${key} requires a value`,
+      causeSummary: `${key} requires a value`,
       remediation: `Pass a value immediately after ${key}`,
     });
   }
@@ -139,7 +139,7 @@ function parseRolloutFlag(value: string | boolean | undefined): number | null | 
   if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
     throw new SplitchCliError({
       code: "CLI_USAGE_INVALID",
-      cause: `--rollout must be a number from 0 through 100 or "none", but received "${String(value)}"`,
+      causeSummary: `--rollout must be a number from 0 through 100 or "none", but received "${String(value)}"`,
       remediation: "Pass a percentage from 0 through 100 or use none to clear the rollout",
     });
   }
@@ -155,7 +155,7 @@ function parseEnabledFlag(value: string | boolean | undefined): boolean | undefi
   if (value === false || value === "false") return false;
   throw new SplitchCliError({
     code: "CLI_USAGE_INVALID",
-    cause: `--enabled must be "true" or "false", but received "${String(value)}"`,
+    causeSummary: `--enabled must be "true" or "false", but received "${String(value)}"`,
     remediation: "Pass either --enabled true or --enabled false",
   });
 }

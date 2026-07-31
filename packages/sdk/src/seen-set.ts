@@ -70,14 +70,14 @@ export class SeenSet {
       // Fail loud: a zero/negative cache is a misconfiguration, not a silent no-op.
       throw new SplitchSdkError({
         code: "SDK_SEEN_SET_MAX_SIZE_INVALID",
-        cause: `The seen-set maxSize must be at least 1 but received ${maxSize}`,
+        causeSummary: `The seen-set maxSize must be at least 1 but received ${maxSize}`,
         remediation: "Set seenSetMaxSize to a positive integer",
       });
     }
     if (ttlMs < 0) {
       throw new SplitchSdkError({
         code: "SDK_SEEN_SET_TTL_INVALID",
-        cause: `The seen-set ttlMs must be at least 0 but received ${ttlMs}`,
+        causeSummary: `The seen-set ttlMs must be at least 0 but received ${ttlMs}`,
         remediation: "Set revalidateMs to 0 or a positive duration in milliseconds",
       });
     }

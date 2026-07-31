@@ -65,7 +65,7 @@ function sdkErrorForFailure(operation: string, result: TransportFailure): Splitc
   const code = result.errorCode ?? errorCodeForStatus(result.status);
   return new SplitchSdkError({
     code,
-    cause: result.errorMessage ?? `${operation} failed with ${code}`,
+    causeSummary: result.errorMessage ?? `${operation} failed with ${code}`,
     remediation: SERVER_ERROR_REMEDIATION,
     status: result.status,
   });
@@ -120,12 +120,13 @@ export async function runEvaluate(
               ? cause
               : new SplitchSdkError({
                   code: "SDK_CACHED_TELEMETRY_FAILED",
-                  cause:
+                  causeSummary:
                     cause instanceof Error
                       ? cause.message
                       : "Cached Evaluation telemetry failed with a non-error rejection",
                   remediation:
                     "Check data-plane availability before retrying the logical Evaluation",
+                  originalError: cause,
                 });
           deps.logger.error(error.message, { flagKey, errorCode: error.code });
         },
@@ -148,7 +149,7 @@ export async function runEvaluate(
     deps.logger.error(
       formatSdkErrorMessage({
         code: details.errorCode ?? errorCodeForStatus(result.status),
-        cause: "Evaluation failed loud to the Default Variant",
+        causeSummary: "Evaluation failed loud to the Default Variant",
         remediation: SERVER_ERROR_REMEDIATION,
         status: result.status,
       }),
@@ -217,7 +218,7 @@ export async function runVerify(
     deps.logger.error(
       formatSdkErrorMessage({
         code: details.errorCode ?? errorCodeForStatus(result.status),
-        cause: "Verification failed loud to the Default Variant",
+        causeSummary: "Verification failed loud to the Default Variant",
         remediation: SERVER_ERROR_REMEDIATION,
         status: result.status,
       }),

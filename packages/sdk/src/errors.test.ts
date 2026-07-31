@@ -10,16 +10,19 @@ describe("SDK actionable error catalog", () => {
   });
 
   it("formats stable code and remediation without inventing a docs URL", () => {
+    const original = new Error("configuration source failed");
     const error = new SplitchSdkError({
       code: "SDK_RETRIES_INVALID",
-      cause: "Retries were enabled",
+      causeSummary: "Retries were enabled",
       remediation: "Set retries to 0",
+      originalError: original,
     });
 
     expect(error.code).toBe("SDK_RETRIES_INVALID");
     expect(error.message).toContain("SDK_RETRIES_INVALID");
     expect(error.message).toContain("Remediation:");
     expect(error.docsUrl).toBeUndefined();
+    expect(error.cause).toBe(original);
     expect(resolveErrorDocsUrl(error.code)).toBeUndefined();
   });
 });

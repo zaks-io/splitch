@@ -31,7 +31,7 @@ export async function executeInvocation(
   if (!command) {
     writeCliError(io, {
       code: "CLI_USAGE_INVALID",
-      cause: `Unknown command ${invocation.commandPath.join(" ")}`,
+      causeSummary: `Unknown command ${invocation.commandPath.join(" ")}`,
       remediation: "Run splitch without arguments to view the supported command paths",
     });
     return { exitCode: EXIT_USAGE };
@@ -62,7 +62,7 @@ async function executeMeta(
       if (!context.appId) {
         writeCliError(io, {
           code: "CLI_SCOPE_UNRESOLVED",
-          cause: "Login requires a selected App",
+          causeSummary: "Login requires a selected App",
           remediation: "Pass --app with an App ID or slug, or set SPLITCH_APP",
         });
         return { exitCode: EXIT_USAGE };
@@ -82,7 +82,7 @@ async function executeMeta(
       if (!invocation.flags.app && !invocation.flags.env) {
         writeCliError(io, {
           code: "CLI_USAGE_INVALID",
-          cause: "splitch use requires an App or Environment selection",
+          causeSummary: "splitch use requires an App or Environment selection",
           remediation: "Pass --app, --env, or both",
         });
         return { exitCode: EXIT_USAGE };

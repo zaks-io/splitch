@@ -30,7 +30,7 @@ export async function runCli(
   if (args.length === 0) {
     writeCliError(consoleIo(), {
       code: "CLI_USAGE_INVALID",
-      cause: "No command was provided",
+      causeSummary: "No command was provided",
       remediation: "Choose a command from the usage output",
     });
     printUsage();
@@ -58,7 +58,7 @@ export async function runCli(
     ) {
       writeCliError(consoleIo(), {
         code: "CLI_USAGE_INVALID",
-        cause: `Unknown command ${invocation.commandPath.join(" ")}`,
+        causeSummary: `Unknown command ${invocation.commandPath.join(" ")}`,
         remediation: "Choose a command from the usage output",
       });
       printUsage();
@@ -89,6 +89,7 @@ async function executeParsedInvocation(
     });
     return result.exitCode;
   } catch (error) {
+    cliObservability.captureException(error);
     const cliError = normalizeCliError(error);
     writeCliError(consoleIo(), cliError);
     return cliError.code === "CLI_NOT_AUTHENTICATED" || cliError.code === "CLI_SESSION_EXPIRED"

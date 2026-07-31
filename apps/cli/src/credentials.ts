@@ -67,8 +67,9 @@ export function createFileCredentialStore(path = CREDENTIALS_PATH): CredentialSt
 function credentialStoreError(error: unknown, operation: "read" | "clear"): SplitchCliError {
   return new SplitchCliError({
     code: "CLI_CREDENTIAL_STORE_FAILED",
-    cause: `The credential store could not ${operation}: ${error instanceof Error ? error.message : String(error)}`,
+    causeSummary: `The credential store could not ${operation}: ${error instanceof Error ? error.message : String(error)}`,
     remediation: "Check credential-file permissions and retry the command",
+    originalError: error,
   });
 }
 

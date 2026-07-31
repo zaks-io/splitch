@@ -21,7 +21,7 @@ export function validateCommandScope(
   if (!appScope.ok) {
     writeCliError(io, {
       code: "CLI_SCOPE_UNRESOLVED",
-      cause: appScope.message,
+      causeSummary: appScope.message,
       remediation: "Select an App with splitch use or pass --app",
     });
     return { exitCode: EXIT_SCOPE };
@@ -30,7 +30,7 @@ export function validateCommandScope(
   if (!envScope.ok) {
     writeCliError(io, {
       code: "CLI_SCOPE_UNRESOLVED",
-      cause: envScope.message,
+      causeSummary: envScope.message,
       remediation: "Select an Environment with splitch use or pass --env",
     });
     return { exitCode: EXIT_SCOPE };
@@ -49,7 +49,7 @@ export async function executeFlagsVerify(
   if (!flagId) {
     writeCliError(io, {
       code: "CLI_USAGE_INVALID",
-      cause: "flags verify requires a Flag ID",
+      causeSummary: "flags verify requires a Flag ID",
       remediation: "Pass the Flag ID as the first positional argument",
     });
     return { exitCode: EXIT_USAGE };
@@ -57,13 +57,14 @@ export async function executeFlagsVerify(
   if (!invocation.flags.targetingKey) {
     writeCliError(io, {
       code: "CLI_USAGE_INVALID",
-      cause: "flags verify requires --targeting-key",
+      causeSummary: "flags verify requires --targeting-key",
       remediation: "Pass the Entity Targeting Key with --targeting-key",
     });
     return { exitCode: EXIT_USAGE };
   }
 
   try {
+    let sdkVerifyError: string | undefined;
     const clientKeyResult = await withAuthorizationRetry(deps, async (authorization) => {
       const sdks = createOperationSdks(deps);
       const result = await sdks["control-plane-api"].callOperationById(
@@ -87,18 +88,27 @@ export async function executeFlagsVerify(
       clientKey: clientKey.keyMaterial,
       endpoint: resolveDataPlaneBaseUrl(deps),
       fetch: deps.fetch,
-      // The CLI renders the returned ERROR details once in its fatal stderr contract.
-      logger: { error: () => {}, debug: () => {} },
+      logger: {
+        error: (message) => {
+          sdkVerifyError = message;
+        },
+        debug: () => {},
+      },
     });
     const verifyDetails = await client.verify(flagId, evaluationContext);
     emit(io, invocation.flags.json, verifyDetails);
     if (verifyDetails.reason === "ERROR") {
+      // The CLI renders this SDK failure once with command-specific remediation.
       writeCliError(io, {
-        code: verifyDetails.errorCode ?? "SERVICE_UNAVAILABLE",
-        cause: verifyDetails.errorMessage ?? "Flag verification failed",
+        code: verifyDetails.errorCode ?? "CLI_DATA_PLANE_ERROR_CODE_MISSING",
+        causeSummary:
+          verifyDetails.errorMessage ?? "The data plane returned ERROR without an explanation",
         remediation: "Correct the reported data-plane failure and retry flags verify",
       });
       return { exitCode: EXIT_API, payload: verifyDetails };
+    }
+    if (sdkVerifyError) {
+      io.error(sdkVerifyError);
     }
     return { exitCode: EXIT_OK, payload: verifyDetails };
   } catch (error) {
@@ -131,7 +141,7 @@ export async function executeEnvPolicySet(
   if (!invocation.flags.bodyJson) {
     writeCliError(io, {
       code: "CLI_USAGE_INVALID",
-      cause: "env-policy set requires --body-json",
+      causeSummary: "env-policy set requires --body-json",
       remediation: "Pass the Environment Policy JSON object with --body-json",
     });
     return { exitCode: EXIT_USAGE };
@@ -161,7 +171,7 @@ export async function executeApiOperation(
       if (!route) {
         throw new SplitchCliError({
           code: "CLI_OPERATION_UNKNOWN",
-          cause: `The operation ${operationId} is not registered`,
+          causeSummary: `The operation ${operationId} is not registered`,
           remediation: "Use a command backed by a registered operation",
         });
       }
@@ -192,11 +202,19 @@ export function handleExecutionError(error: unknown, io: CliIo): CliResult {
   return { exitCode: EXIT_USAGE };
 }
 
-function writeServerError(io: CliIo, error: ErrorResponse): void {
+export function writeServerError(io: CliIo, error: ErrorResponse): void {
   const parsedCode = ErrorCodeSchema.safeParse(error.code);
+  if (!parsedCode.success) {
+    writeCliError(io, {
+      code: "CLI_SERVER_CODE_UNRECOGNIZED",
+      causeSummary: `The server returned unrecognized error code "${String(error.code)}": ${error.message}`,
+      remediation: "Update the CLI or report the server code before retrying the command",
+    });
+    return;
+  }
   writeCliError(io, {
-    code: parsedCode.success ? parsedCode.data : "INTERNAL_SERVER_ERROR",
-    cause: error.message,
+    code: parsedCode.data,
+    causeSummary: error.message,
     remediation: "Correct the reported API failure and retry the command",
   });
 }

@@ -59,7 +59,7 @@ export function sdkForOwner(sdks: OperationSdks, owner: RouteOwner): OperationSd
   }
   throw new SplitchCliError({
     code: "CLI_ROUTE_OWNER_UNSUPPORTED",
-    cause: `No API origin is configured for route owner "${owner}"`,
+    causeSummary: `No API origin is configured for route owner "${owner}"`,
     remediation: "Use an operation owned by a CLI-supported API",
   });
 }
@@ -93,7 +93,7 @@ function apiBaseUrl(
   }
   throw new SplitchCliError({
     code: "CLI_API_ORIGIN_MISSING",
-    cause: `${envName} is required for ${platformTarget}`,
+    causeSummary: `${envName} is required for ${platformTarget}`,
     remediation: `Set ${envName} to the API origin for ${platformTarget}`,
   });
 }

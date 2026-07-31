@@ -27,7 +27,7 @@ export class CliInputError extends SplitchCliError {
   constructor(payload: CliInputErrorPayload) {
     super({
       code: payload.code,
-      cause: payload.message,
+      causeSummary: payload.message,
       remediation: "Correct the named input field and run the command again",
     });
     this.name = "CliInputError";

@@ -151,8 +151,9 @@ async function readConfig(path: string): Promise<SplitchConfig | null> {
     }
     throw new SplitchCliError({
       code: "CLI_CONFIG_READ_FAILED",
-      cause: error instanceof Error ? error.message : String(error),
+      causeSummary: error instanceof Error ? error.message : String(error),
       remediation: "Fix or remove the unreadable .splitch/config.json file and retry the command",
+      originalError: error,
     });
   }
 }

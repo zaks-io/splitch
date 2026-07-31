@@ -144,6 +144,8 @@ describe("peekVariant: fail-loud errors without Default Variant fallback", () =>
       name: "SplitchSdkError",
       status: 403,
       code: "INSUFFICIENT_SCOPES",
+      causeSummary: "API Key required for this route.",
+      message: expect.stringContaining("API Key required for this route"),
       remediation: expect.stringMatching(/\.$/),
     });
   });

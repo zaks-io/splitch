@@ -100,7 +100,7 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
     // Fail loud: silently retrying an Exposure-bearing call would double-count.
     throw new SplitchSdkError({
       code: "SDK_RETRIES_INVALID",
-      cause: "Exposure-bearing evaluations require retries to be 0",
+      causeSummary: "Exposure-bearing evaluations require retries to be 0",
       remediation: "Remove the retries option or set it to 0",
     });
   }
@@ -143,7 +143,7 @@ function resolveCredential(options: SplitchClientOptions): string {
     // Exactly one credential; presenting both or neither is a setup bug.
     throw new SplitchSdkError({
       code: "SDK_CREDENTIAL_CONFIGURATION_INVALID",
-      cause: "The SDK requires exactly one of clientKey or apiKey",
+      causeSummary: "The SDK requires exactly one of clientKey or apiKey",
       remediation: "Provide one credential and remove the other credential option",
     });
   }

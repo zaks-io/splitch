@@ -125,7 +125,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
       if (!response.ok) {
         throw new SplitchSdkError({
           code: "SDK_CACHED_TELEMETRY_FAILED",
-          cause: `Cached Evaluation telemetry failed with HTTP ${response.status}`,
+          causeSummary: `Cached Evaluation telemetry failed with HTTP ${response.status}`,
           remediation: "Check data-plane availability before retrying the logical Evaluation",
           status: response.status,
         });

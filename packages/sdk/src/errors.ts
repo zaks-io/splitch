@@ -16,11 +16,12 @@ export const sdkErrorCodes: readonly SplitchSdkErrorCode[] = [
   ...sdkClientErrorCodes,
 ];
 
-export interface ActionableErrorDetail {
-  readonly code: SplitchSdkErrorCode;
-  readonly cause: string;
+export interface ActionableErrorDetail<Code extends string = SplitchSdkErrorCode> {
+  readonly code: Code;
+  readonly causeSummary: string;
   readonly remediation: string;
   readonly status?: number | null;
+  readonly originalError?: unknown;
 }
 
 function sentence(value: string): string {
@@ -28,8 +29,8 @@ function sentence(value: string): string {
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
-export function formatSdkErrorMessage(detail: ActionableErrorDetail): string {
-  return `${detail.code}: Cause: ${sentence(detail.cause)} Remediation: ${sentence(detail.remediation)}`;
+export function formatSdkErrorMessage(detail: ActionableErrorDetail<string>): string {
+  return `${detail.code}: Cause: ${sentence(detail.causeSummary)} Remediation: ${sentence(detail.remediation)}`;
 }
 
 /** Future per-code documentation seam. Keep undefined until real documentation URLs exist. */
@@ -39,16 +40,16 @@ export function resolveErrorDocsUrl(_code: string): string | undefined {
 
 export class SplitchSdkError extends Error {
   readonly code: SplitchSdkErrorCode;
-  override readonly cause: string;
+  readonly causeSummary: string;
   readonly remediation: string;
   readonly status: number | null;
   readonly docsUrl: string | undefined;
 
   constructor(detail: ActionableErrorDetail) {
-    super(formatSdkErrorMessage(detail));
+    super(formatSdkErrorMessage(detail), { cause: detail.originalError });
     this.name = "SplitchSdkError";
     this.code = detail.code;
-    this.cause = sentence(detail.cause);
+    this.causeSummary = sentence(detail.causeSummary);
     this.remediation = sentence(detail.remediation);
     this.status = detail.status ?? null;
     this.docsUrl = resolveErrorDocsUrl(detail.code);

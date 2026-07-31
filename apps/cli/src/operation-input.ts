@@ -167,7 +167,7 @@ export function parseEvaluationContext(
   if (!targetingKey) {
     throw new SplitchCliError({
       code: "CLI_USAGE_INVALID",
-      cause: "flags test-eval requires --targeting-key",
+      causeSummary: "flags test-eval requires --targeting-key",
       remediation: "Pass the Entity Targeting Key with --targeting-key",
     });
   }
