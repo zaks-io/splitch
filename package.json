@@ -35,6 +35,7 @@
     "sdk:release:validate": "node scripts/release/validate-candidate.mjs sdk",
     "shared-preview:smoke": "playwright test -c tests/shared-preview/playwright.config.ts",
     "smoke:dark-launch:shared-preview": "node scripts/dark-launch/shared-preview-smoke.mjs",
+    "smoke:safe-delivery:shared-preview": "node scripts/safe-delivery/shared-preview-smoke.mjs",
     "smoke:sdk-consumer": "pnpm --filter @splitch/sdk test:consumer-smoke",
     "smoke:connect-snippet": "pnpm --filter @splitch/control-panel test:connect-snippet",
     "claim:local-fleet": "playwright test -c tests/local-fleet/claim.playwright.config.ts",
