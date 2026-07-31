@@ -180,5 +180,26 @@ test("config defaults to the seeded allow/confirm Environment pair and runs twic
   assert.notEqual(cfg.devEnvironmentId, cfg.prodEnvironmentId);
   assert.equal(cfg.evidencePath, "test-results/shared-preview/safe-delivery-evidence.json");
   assert.equal(cfg.stableFlagKey, "shared-preview-smoke");
+  assert.equal(cfg.propagationWindowMs, 60_000);
   assert.equal(DANGLING_VARIANT, "holdout");
+});
+
+// A NaN `runs` silently skips every run and the tracer "passes" having proven
+// nothing; a NaN propagation window makes the poll loop never terminate.
+test("a malformed numeric override is refused instead of coerced to NaN", () => {
+  const base = { SPLITCH_SMOKE_CLIENT_SECRET: "s", SPLITCH_SMOKE_COMMIT_SHA: COMMIT };
+  for (const bad of ["abc", "0", "-1", "NaN", "1e", "Infinity"]) {
+    assert.throws(
+      () => readConfig({ ...base, SPLITCH_SMOKE_RUNS: bad }),
+      /SPLITCH_SMOKE_RUNS must be a positive number/,
+      `SPLITCH_SMOKE_RUNS=${bad} was accepted`,
+    );
+    assert.throws(
+      () => readConfig({ ...base, SPLITCH_SMOKE_PROPAGATION_WINDOW_MS: bad }),
+      /SPLITCH_SMOKE_PROPAGATION_WINDOW_MS must be a positive number/,
+      `SPLITCH_SMOKE_PROPAGATION_WINDOW_MS=${bad} was accepted`,
+    );
+  }
+  assert.equal(readConfig({ ...base, SPLITCH_SMOKE_RUNS: "3" }).runs, 3);
+  assert.equal(readConfig({ ...base, SPLITCH_SMOKE_RUNS: "" }).runs, 2);
 });

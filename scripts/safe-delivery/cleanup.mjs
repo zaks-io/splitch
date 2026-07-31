@@ -8,9 +8,8 @@
  */
 
 import assert from "node:assert/strict";
-
-import { deleteFlag, deleteSegment, listFlags } from "./control-plane.mjs";
 import { transientFlagKeys } from "./constants.mjs";
+import { deleteFlag, deleteSegment, listFlags } from "./control-plane.mjs";
 
 export async function cleanupSafeDelivery(deps, resources) {
   const failures = [];
@@ -46,14 +45,18 @@ export async function assertNoOrphans(deps, appId, keys, stableFlagKey) {
   const flags = await listFlags(deps, appId);
   const present = new Set((flags.items ?? flags.flags ?? []).map((flag) => flag.key));
   const orphans = transientFlagKeys(keys).filter((key) => present.has(key));
+  // Measured, not constant: `stableFlagPreserved: true` would also report true
+  // when no stable Flag key was configured and no assertion ever ran, which
+  // makes the evidence payload claim a check that did not happen.
+  const stableFlagPreserved = stableFlagKey ? present.has(stableFlagKey) : null;
   assert.deepEqual(orphans, [], `safe-delivery cleanup left orphaned Flags: ${orphans.join(", ")}`);
   if (stableFlagKey) {
     assert.ok(
-      present.has(stableFlagKey),
+      stableFlagPreserved,
       `safe-delivery cleanup removed the seeded stable Flag ${stableFlagKey}`,
     );
   }
-  return { orphanedFlags: orphans.length > 0, stableFlagPreserved: true };
+  return { orphanedFlags: orphans.length > 0, stableFlagPreserved };
 }
 
 /**

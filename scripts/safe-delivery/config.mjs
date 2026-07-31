@@ -8,6 +8,24 @@
  */
 
 import { requireFullCommitSha } from "../lib/shared-preview-deployment-evidence.mjs";
+import { PROPAGATION_WINDOW_MS } from "./constants.mjs";
+
+/**
+ * Reject a non-numeric override rather than coercing it.
+ *
+ * `Number("abc")` is NaN, and `Math.max(1, NaN)` is NaN too, so a typo'd
+ * SPLITCH_SMOKE_RUNS would make the runs loop execute ZERO times and the tracer
+ * would "pass" having proven nothing. A NaN propagation window is worse: every
+ * comparison against a deadline of NaN is false, so the poll never terminates.
+ */
+function positiveNumber(value, fallback, label) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be a positive number; found ${JSON.stringify(value)}`);
+  }
+  return parsed;
+}
 
 export function readConfig(env) {
   const clientSecret = env.SPLITCH_SMOKE_CLIENT_SECRET;
@@ -29,7 +47,7 @@ export function readConfig(env) {
     clientSecret,
     commitSha,
     runId,
-    runs: Math.max(1, Number(env.SPLITCH_SMOKE_RUNS ?? "2")),
+    runs: positiveNumber(env.SPLITCH_SMOKE_RUNS, 2, "SPLITCH_SMOKE_RUNS"),
     evidencePath:
       env.SPLITCH_SAFE_DELIVERY_EVIDENCE ??
       "test-results/shared-preview/safe-delivery-evidence.json",
@@ -51,7 +69,11 @@ export function readConfig(env) {
     devClientKey: env.SPLITCH_SMOKE_ACTIVE_CLIENT_KEY ?? "pk_shared_preview_smoke_dev",
     prodClientKey: env.SPLITCH_SMOKE_PROD_CLIENT_KEY ?? "pk_shared_preview_smoke_prod",
     stableFlagKey: env.SPLITCH_SMOKE_STABLE_FLAG_KEY ?? "shared-preview-smoke",
-    propagationWindowMs: Number(env.SPLITCH_SMOKE_PROPAGATION_WINDOW_MS ?? "60000"),
+    propagationWindowMs: positiveNumber(
+      env.SPLITCH_SMOKE_PROPAGATION_WINDOW_MS,
+      PROPAGATION_WINDOW_MS,
+      "SPLITCH_SMOKE_PROPAGATION_WINDOW_MS",
+    ),
   };
 }
 

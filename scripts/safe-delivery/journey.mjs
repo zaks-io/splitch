@@ -8,7 +8,7 @@
  */
 
 import assert from "node:assert/strict";
-
+import { assertNoOrphans, cleanupSafeDelivery } from "./cleanup.mjs";
 import {
   COHORT_VALUE,
   DANGLING_VARIANT,
@@ -19,7 +19,6 @@ import {
   syntheticKeys,
   UNTARGETED_COHORT_VALUE,
 } from "./constants.mjs";
-import { assertNoOrphans, cleanupSafeDelivery } from "./cleanup.mjs";
 import {
   createFlag,
   getApprovalRequest,
@@ -189,6 +188,10 @@ export async function runSafeDeliveryJourney(deps) {
       "flags_promote",
     );
     const appliedConfig = await getFlagConfig(deps, deps.appId, deps.prodEnvironmentId, primary.id);
+    assert.ok(
+      promotion.approvalRequest,
+      "config Promotion returned no Approval Request: the prod Policy is no longer confirm-gating the availability and targeting field groups",
+    );
     const persisted = await getApprovalRequest(deps, deps.appId, promotion.approvalRequest.id);
     assertDiffMatchesPreviewAndApplied({
       baseline,

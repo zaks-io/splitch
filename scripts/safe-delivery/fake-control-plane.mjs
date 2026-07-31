@@ -5,6 +5,8 @@
  * kill-switch-off is never gated.
  */
 
+import { buildDiff, danglingVariants, proposedFrom } from "./fake-promotion-model.mjs";
+
 export const APP = "app-1";
 export const DEV = "env-dev";
 export const PROD = "env-prod";
@@ -21,50 +23,9 @@ export function fakeControlPlane(overrides = {}) {
   const key = (env, flagId) => `${env}:${flagId}`;
   const clone = (value) => JSON.parse(JSON.stringify(value));
 
-  /**
-   * Per-field diff entries, sorted by path and unique, matching ApprovalDiffSchema.
-   * Real operators read THIS, not the whole-config blobs.
-   */
-  function diffEntries(current, proposed) {
-    const fields = ["availableVariantNames", "enabled", "rollout", "targetingRules"];
-    return fields
-      .filter((field) => JSON.stringify(current[field]) !== JSON.stringify(proposed[field]))
-      .sort()
-      .map((field) => ({
-        path: `/${field}`,
-        operation: "replace",
-        current: current[field] ?? null,
-        proposed: proposed[field] ?? null,
-      }));
-  }
-
-  function buildDiff(current, proposed) {
-    return {
-      current: clone(current),
-      proposed: clone(proposed),
-      entries: diffEntries(current, proposed),
-    };
-  }
-
   const json = (body, status = 200) => Response.json(body, { status });
   const error = (code, message, details = {}) =>
     json({ code, message, details }, code === "VALIDATION_ERROR" ? 400 : 409);
-
-  function proposedFrom(select, source, target) {
-    const next = clone(target);
-    if (select.availability !== undefined) next.availableVariantNames = [...select.availability];
-    if (select.targeting) next.targetingRules = clone(source.targetingRules);
-    if (select.rollout) next.rollout = clone(source.rollout);
-    if (select.enabled) next.enabled = source.enabled;
-    return next;
-  }
-
-  function danglingVariants(proposed, flag) {
-    const available = new Set(proposed.availableVariantNames);
-    return proposed.targetingRules
-      .map((rule) => flag.variants.find((variant) => variant.id === rule.variantId)?.name)
-      .filter((name) => name && !available.has(name));
-  }
 
   function apply(env, flagId, proposed) {
     const current = configs.get(key(env, flagId));
@@ -124,6 +85,15 @@ export function fakeControlPlane(overrides = {}) {
 
     replaceRules(env, flagId, body) {
       const current = configs.get(key(env, flagId));
+      if (!current) return error("FLAG_NOT_FOUND", "flag configuration not found");
+      // Targeting is a promotable field group, so `prod` gates it like any other
+      // change. A double that applied it ungated would let a test expecting a
+      // refused prod targeting write pass for the wrong reason.
+      if (env === PROD && !body.review) {
+        return error("APPROVAL_REVIEW_REQUIRED", "Approval Request is pending Review", {
+          approvalRequestId: "ar-rules",
+        });
+      }
       const applied = apply(env, flagId, {
         ...current,
         targetingRules: clone(body.targetingRules),
@@ -189,6 +159,10 @@ export function fakeControlPlane(overrides = {}) {
         id,
         status: "applied",
         targetVersion: before.version,
+        flagId,
+        environmentId: targetEnv,
+        select: body.select,
+        fromEnvironmentId: body.fromEnvironmentId,
         diff: buildDiff(before, applied),
       };
       approvals.set(id, approval);
@@ -204,10 +178,24 @@ export function fakeControlPlane(overrides = {}) {
       return json(response);
     },
 
-    review(appId, approvalId) {
+    review(appId, approvalId, body = {}) {
       const approval = approvals.get(approvalId);
       if (!approval) return error("APPROVAL_REQUEST_NOT_FOUND", "not found");
+      if (approval.status !== "pending") {
+        return error("APPROVAL_REQUEST_NOT_PENDING", "Approval Request is already resolved", {
+          approvalRequestId: approvalId,
+          status: approval.status,
+        });
+      }
+      // Honour the action. A double that applied on every action would model a
+      // `reject` as an apply, which is the exact confusion this tracer exists
+      // to rule out.
+      if (body.action !== "approve_and_apply") {
+        approval.status = "declined";
+        return json(clone(approval));
+      }
       const current = configs.get(key(approval.environmentId, approval.flagId));
+      if (!current) return error("FLAG_NOT_FOUND", "flag configuration not found");
       if (current.version !== approval.targetVersion) {
         // A refusal that still writes is the worst outcome: the operator is told
         // "no" while the target moves anyway. Modelled so the tracer can prove
@@ -241,8 +229,13 @@ export function fakeControlPlane(overrides = {}) {
     verify(clientKey, body) {
       const env = clientKey === PROD_KEY ? PROD : DEV;
       const flag = [...flags.values()].find((candidate) => candidate.key === body.flagKey);
+      if (!flag) return error("FLAG_NOT_FOUND", `no Flag with key ${body.flagKey}`);
       const config = configs.get(key(env, flag.id));
-      const defaultVariant = flag.variants.find((variant) => variant.isDefault).name;
+      if (!config) return error("FLAG_NOT_FOUND", "flag configuration not found");
+      const fallback = flag.variants.find((variant) => variant.isDefault);
+      if (!fallback)
+        return error("VALIDATION_ERROR", `Flag ${body.flagKey} has no default Variant`);
+      const defaultVariant = fallback.name;
       if (!config.enabled) return json({ variant: defaultVariant, reason: "DISABLED" });
       const match = config.targetingRules.find((rule) =>
         rule.conditions.every(
@@ -282,7 +275,7 @@ export function fakeControlPlane(overrides = {}) {
     match = pathname.match(/^\/apps\/([^/]+)\/approval-requests(?:\/([^/]+)(?:\/(reviews))?)?$/);
     if (match) {
       const [, appId, approvalId, reviews] = match;
-      if (reviews) return handlers.review(appId, approvalId);
+      if (reviews) return handlers.review(appId, approvalId, body);
       if (approvalId) {
         const persisted = clone(approvals.get(approvalId));
         overrides.mutateApprovalResponse?.(persisted);
