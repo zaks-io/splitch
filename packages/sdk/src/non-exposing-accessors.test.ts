@@ -18,7 +18,17 @@ const assertClientSurface: Assert<
   Equal<keyof SplitchClient, "evaluate" | "evaluateDetails" | "peekVariant" | "verify">
 > = true;
 type PublicModule = typeof import("./index");
-const assertModuleSurface: Assert<Equal<keyof PublicModule, "createSplitchClient">> = true;
+const assertModuleSurface: Assert<
+  Equal<
+    keyof PublicModule,
+    | "createSplitchClient"
+    | "formatSdkErrorMessage"
+    | "resolveErrorDocsUrl"
+    | "sdkClientErrorCodes"
+    | "sdkErrorCodes"
+    | "SplitchSdkError"
+  >
+> = true;
 
 const VERIFY_SPLIT: ResolutionDetails = {
   value: "verified",
@@ -134,13 +144,15 @@ describe("peekVariant: fail-loud errors without Default Variant fallback", () =>
       name: "SplitchSdkError",
       status: 403,
       code: "INSUFFICIENT_SCOPES",
-      message: "API Key required for this route",
+      causeSummary: "API Key required for this route.",
+      message: expect.stringContaining("API Key required for this route"),
+      remediation: expect.stringMatching(/\.$/),
     });
   });
 });
 
 describe("public SDK surface guard", () => {
-  it("exports only createSplitchClient plus the four client accessors", async () => {
+  it("exports the client, actionable error contract, and four client accessors", async () => {
     const publicSdk = await import("./index");
     const fake = new FakeTransport([]);
     const client = createSplitchClient({
@@ -151,7 +163,18 @@ describe("public SDK surface guard", () => {
 
     const surface = [...Object.keys(publicSdk), ...Object.keys(client)].sort();
     expect(surface).toEqual(
-      ["createSplitchClient", "evaluate", "evaluateDetails", "peekVariant", "verify"].sort(),
+      [
+        "SplitchSdkError",
+        "createSplitchClient",
+        "evaluate",
+        "evaluateDetails",
+        "formatSdkErrorMessage",
+        "peekVariant",
+        "resolveErrorDocsUrl",
+        "sdkClientErrorCodes",
+        "sdkErrorCodes",
+        "verify",
+      ].sort(),
     );
     expect(assertClientSurface).toBe(true);
     expect(assertModuleSurface).toBe(true);

@@ -1,3 +1,5 @@
+import { SplitchCliError } from "./errors.js";
+
 export interface ParsedGlobalFlags {
   readonly json: boolean;
   readonly app?: string;
@@ -76,7 +78,11 @@ function parseFlagToken(
   }
   const value = args[index + 1];
   if (!value || value.startsWith("--")) {
-    throw new Error(`splitch: ${key} requires a value`);
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: `${key} requires a value`,
+      remediation: `Pass a value immediately after ${key}`,
+    });
   }
   flags[toCamel(key)] = value;
   return index + 1;
@@ -131,7 +137,11 @@ function parseRolloutFlag(value: string | boolean | undefined): number | null | 
   // become a 0% rollout instead of a usage error.
   const percentage = typeof value === "string" && value.trim() !== "" ? Number(value) : Number.NaN;
   if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
-    throw new Error(`splitch: --rollout must be a number 0-100 or "none", got "${String(value)}"`);
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: `--rollout must be a number from 0 through 100 or "none", but received "${String(value)}"`,
+      remediation: "Pass a percentage from 0 through 100 or use none to clear the rollout",
+    });
   }
   return percentage;
 }
@@ -143,7 +153,11 @@ function parseEnabledFlag(value: string | boolean | undefined): boolean | undefi
   if (value === undefined) return undefined;
   if (value === true || value === "true") return true;
   if (value === false || value === "false") return false;
-  throw new Error(`splitch: --enabled must be "true" or "false", got "${String(value)}"`);
+  throw new SplitchCliError({
+    code: "CLI_USAGE_INVALID",
+    causeSummary: `--enabled must be "true" or "false", but received "${String(value)}"`,
+    remediation: "Pass either --enabled true or --enabled false",
+  });
 }
 
 function stringFlag(value: string | boolean | undefined): string | undefined {

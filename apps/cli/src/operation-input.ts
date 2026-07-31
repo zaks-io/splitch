@@ -3,6 +3,7 @@ import { getRoute } from "@splitch/contracts";
 import type { EvaluateContext } from "@splitch/sdk";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
+import { SplitchCliError } from "./errors.js";
 import {
   applyFlagsCreateConvenienceFields,
   assertContractValidFlagsCreateInput,
@@ -164,7 +165,11 @@ export function parseEvaluationContext(
   contextJson: string | undefined,
 ): EvaluateContext {
   if (!targetingKey) {
-    throw new Error("splitch flags test-eval requires --targeting-key");
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: "flags test-eval requires --targeting-key",
+      remediation: "Pass the Entity Targeting Key with --targeting-key",
+    });
   }
   const base = contextJson
     ? (JSON.parse(contextJson) as Record<string, unknown>)
