@@ -40,14 +40,19 @@ export function variantFreezeDetails(refusal: VariantFreezeRefusal) {
   };
 }
 
+/** Shared by the 409 on the direct route and the unapplicable Review outcome. */
+export function variantFreezeMessage(refusal: VariantFreezeRefusal): string {
+  const where = `running Run ${refusal.freeze.runId} in Environment ${refusal.freeze.environmentId}`;
+  return refusal.frozenChanges.includes("name")
+    ? `${where} allocates traffic to Variant "${refusal.variantName}" by name; end it before renaming this Variant`
+    : `${where} is serving Variant "${refusal.variantName}"; end it before changing this Variant's value`;
+}
+
 export function variantRunFrozenError(refusal: VariantFreezeRefusal, requestId: string): Response {
-  const renaming = refusal.frozenChanges.includes("name");
   return renderError(
     {
       code: "RUN_FROZEN",
-      message: renaming
-        ? `running Run ${refusal.freeze.runId} in Environment ${refusal.freeze.environmentId} allocates traffic to Variant "${refusal.variantName}" by name; end it before renaming this Variant`
-        : `running Run ${refusal.freeze.runId} in Environment ${refusal.freeze.environmentId} is serving Variant "${refusal.variantName}"; end it before changing this Variant's value`,
+      message: variantFreezeMessage(refusal),
       details: variantFreezeDetails(refusal),
     },
     { requestId },

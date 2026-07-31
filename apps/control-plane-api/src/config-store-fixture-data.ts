@@ -176,6 +176,13 @@ export async function narrowSeededAvailability(
  *
  * Explicit rather than seeded so a suite that depends on a running Experiment
  * says so in its own setup, and so the freeze it implies is never a surprise.
+ *
+ * TRAP for the next author: the base seed leaves `experiments.status = 'draft'`
+ * while `runs` already holds `run_live` with `status = 'running'` and
+ * `ended_at IS NULL`. The Run freeze keys on the EXPERIMENT, so a test that
+ * skips this call is asserting against an unfrozen world that merely looks live
+ * in the `runs` table — a write it expects to be refused comes back 200 and
+ * reads as a missing guard. Call this in any suite whose subject is the freeze.
  */
 export async function startSeededExperiment(d1: D1Database): Promise<void> {
   await d1
