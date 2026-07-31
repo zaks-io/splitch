@@ -4,6 +4,7 @@ import { NotFoundPage } from "@splitch/ui/state/not-found-page";
 import { PanelSkeleton } from "@splitch/ui/state/panel-skeleton";
 import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
 import { AppShell } from "#components/app-shell";
+import { deferredDestinationAt } from "#lib/app-shell-navigation";
 import {
   AccessDeniedError,
   isAccessDeniedError,
@@ -31,6 +32,19 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
       reportExpectedDomainFailure(404, location.pathname, { boundary: "section" });
       throw notFound();
     }
+
+    // Hiding a `deferred` destination from the sidebar is a UI decision only
+    // (SPL-177); the route still exists. A direct request for one is treated
+    // as a 404 rather than rendering implementation-status copy (SPL-253).
+    // This is registry-driven so it covers every `deferred` entry, not just
+    // Segments, and the Worker's membership/scope refusal above still runs
+    // first and unchanged.
+    const deferred = deferredDestinationAt(location.pathname, params);
+    if (deferred) {
+      reportExpectedDomainFailure(404, location.pathname, { boundary: "section" });
+      throw notFound({ data: { deferred: true } });
+    }
+
     configureControlPanelSentryScope(result.context);
     return result.context;
   },
@@ -49,8 +63,14 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env")({
     }
     return <SectionErrorPage description="Refresh this section or try again later." />;
   },
-  notFoundComponent: () => (
-    <NotFoundPage description="The requested App or Environment was not found." />
+  notFoundComponent: ({ data }) => (
+    <NotFoundPage
+      description={
+        (data as { deferred?: boolean } | undefined)?.deferred
+          ? "This destination is not available yet."
+          : "The requested App or Environment was not found."
+      }
+    />
   ),
   pendingComponent: PanelSkeleton,
   component: AppScopeRoute,
