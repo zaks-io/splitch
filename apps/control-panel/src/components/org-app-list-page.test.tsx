@@ -83,7 +83,8 @@ describe("OrgAppListPage pending resync", () => {
       />,
     );
 
-    expect(html).toContain('href="/auth/logout"');
+    expect(html).toContain('action="/auth/logout" method="post"');
+    expect(html).not.toContain('href="/auth/logout"');
     expect(html).not.toContain('data-testid="session-stale-reload"');
   });
 

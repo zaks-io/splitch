@@ -1,6 +1,7 @@
 import { Button } from "@splitch/ui/components/button";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { OrganizationChooser } from "#components/organization-chooser";
+import { SignOutForm } from "#components/sign-out-form";
 import type { SessionPrincipal } from "#lib/session";
 import { loadCurrentSession } from "#lib/session-functions";
 import type { StaleSession } from "#lib/stale-session";
@@ -39,7 +40,11 @@ function IndexRoute() {
           <p className="text-muted-foreground text-xs">
             Signed in as <span className="font-mono text-foreground">{session.userId}</span>
           </p>
-          <Button render={<a href="/auth/logout">Sign out</a>} size="sm" variant="outline" />
+          <SignOutForm>
+            <Button size="sm" type="submit" variant="outline">
+              Sign out
+            </Button>
+          </SignOutForm>
         </div>
       </header>
 
