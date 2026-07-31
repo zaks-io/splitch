@@ -1,4 +1,4 @@
-import type { VariantFrozenChange, VariantRunFreeze } from "@splitch/db";
+import type { UpdateVariantResult, VariantFrozenChange, VariantRunFreeze } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import type { RunningBlocker } from "./flag-definition-guards";
 import type { ValidationIssue } from "./flag-definition-schema";
@@ -52,6 +52,58 @@ export function variantRunFrozenError(refusal: VariantFreezeRefusal, requestId: 
     },
     { requestId },
   );
+}
+
+export type VariantWriteRefusal = Exclude<UpdateVariantResult, { ok: true }>;
+
+/**
+ * EVERY refusal reason gets a status code here, in one place.
+ *
+ * Branching on `RUN_FROZEN` alone and continuing past the rest was the original
+ * shape of this call site: `NOT_FOUND` and `NOT_APPLIED` fell through to the
+ * snapshot resync and a 200 flag body, telling the caller a refused write had
+ * succeeded — the disguised default ADR-0036 forbids, on the very seam SPL-267
+ * exists to make visible. The reasons stay DISTINCT: `NOT_APPLIED` is not a
+ * missing Variant, and rendering it as one would trade one disguised fact for
+ * another.
+ */
+export function variantWriteRefusal(refusal: VariantWriteRefusal, requestId: string): Response {
+  switch (refusal.reason) {
+    case "RUN_FROZEN":
+      return variantRunFrozenError(refusal, requestId);
+    case "NOT_FOUND":
+      return variantNotFound(requestId);
+    case "NOT_APPLIED":
+      return variantWriteNotApplied(requestId);
+    default:
+      return unhandledRefusal(refusal);
+  }
+}
+
+/**
+ * The write selected zero rows. On the direct route there is no Approval CAS to
+ * lose, so this means the Variant moved under a concurrent writer between the
+ * read and the batch: no client input can be corrected to fix it, which makes it
+ * a server fault worth surfacing loudly rather than a 404 the caller would read
+ * as "it was never there". `details` stays `{}` because the error contract
+ * declares `INTERNAL_SERVER_ERROR` details strictly empty; the reason lives in
+ * the message, and inventing a `recommendedAction` token for a 500 would widen
+ * the shared enum for one call site.
+ */
+function variantWriteNotApplied(requestId: string): Response {
+  return renderError(
+    {
+      code: "INTERNAL_SERVER_ERROR",
+      message: "variant update selected no rows and applied nothing",
+      details: {},
+    },
+    { requestId },
+  );
+}
+
+/** A reason added to the union without a status code must not reach a caller silently. */
+function unhandledRefusal(refusal: never): never {
+  throw new Error(`unhandled updateVariant refusal: ${JSON.stringify(refusal)}`);
 }
 
 export function validationError(requestId: string, issue: [string[], string]): Response {

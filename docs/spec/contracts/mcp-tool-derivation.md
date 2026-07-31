@@ -241,7 +241,7 @@ All tools share the same error shape — the `ErrorResponse` discriminated union
 naming the next step, so the agent's recovery branch is a token lookup, not prose parsing
 (canonical mapping in [error-responses.md](./error-responses.md#recommendedaction-machine-stable-recovery-guidance)):
 
-- `RUN_FROZEN` → `details.frozenFields`, `details.currentRunId`, `details.recommendedAction: 'CREATE_NEW_RUN'` (agent opens a new Run, not patch)
+- `RUN_FROZEN` → `details.frozenFields`, `details.currentRunId`, `details.recommendedAction`: `'CREATE_NEW_RUN'` for an assignment edit (agent opens a new Run, not patch), `'END_RUNNING_RUN_FIRST'` when the frozen field is App-level or Flag-Configuration (`flagConfig.*`, `variant.value`) and no draft Run can carry it. Branch on the token that arrived, never on the code alone
 - `EXPERIMENT_RUNNING` → `details.runningRunId`, `details.recommendedAction: 'END_RUNNING_RUN_FIRST'`
 - `RUN_NOT_RUNNING` → `details.currentState`, `details.recommendedAction: 'START_A_RUN'`
 - `VARIANT_NOT_AVAILABLE` → `details.missingVariants`, `details.recommendedAction: 'ADD_VARIANT_TO_ENV'`

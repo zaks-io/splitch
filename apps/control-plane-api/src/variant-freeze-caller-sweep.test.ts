@@ -13,10 +13,17 @@ import { describe, expect, it } from "vitest";
  * because there was nothing in `packages/db` to go red.
  *
  * So the rule is enforced where the callers are: a call to `updateVariant` whose
- * enclosing BLOCK never mentions `RUN_FROZEN` is a caller that would apply a
- * frozen write and report success. `updateVariant` still refuses it at the seam,
- * so this is not the security boundary; it is what stops a caller from silently
- * converting a refusal into a 200 (ADR-0036).
+ * enclosing BLOCK never reaches an exhaustive refusal handler is a caller that
+ * would apply a refused write and report success. `updateVariant` still refuses
+ * it at the seam, so this is not the security boundary; it is what stops a
+ * caller from silently converting a refusal into a 200 (ADR-0036).
+ *
+ * The block must name one of `HANDLERS` rather than the `RUN_FROZEN` literal.
+ * Naming the literal was satisfied by branching on ONE reason and letting the
+ * rest fall through to the success path, which is exactly the defect CodeRabbit
+ * found here after two audit rounds read past it. Each handler switches over the
+ * whole union and ends in a `never` branch, so a new reason breaks the build
+ * instead of resolving as applied.
  *
  * Two evasions a previous version of this file lost to, both closed below:
  * matching the receiver (`repo.flags.updateVariant(`) was stepped over by one
@@ -32,13 +39,14 @@ import { describe, expect, it } from "vitest";
 
 const SRC = fileURLToPath(new URL("./", import.meta.url));
 const CALL = ".updateVariant(";
-const REFUSAL = "RUN_FROZEN";
+
+/** The exhaustive-over-the-union refusal handlers a calling block may delegate to. */
+const HANDLERS = ["variantWriteRefusal", "variantApplicationRefusal"] as const;
 
 /** Every module here calling the writer, with how it surfaces the refusal. */
 const CALLERS: Record<string, string> = {
-  "approval-application.ts":
-    "renders the refusal onto the Review as a RUN_FROZEN application error",
-  "flag-definition-variant-handlers.ts": "renders the refusal as a 409 RUN_FROZEN response",
+  "approval-application.ts": "maps every reason onto a Review outcome",
+  "flag-definition-variant-handlers.ts": "maps every reason onto an error response",
 };
 
 function sourceFiles(dir: string, prefix = ""): string[] {
@@ -102,15 +110,17 @@ describe("every control-plane caller of updateVariant handles the freeze refusal
     expect(calling.sort()).toEqual(Object.keys(CALLERS).sort());
   });
 
-  it("mentions the refusal in the block that makes each call", () => {
+  it("routes every call through an exhaustive refusal handler", () => {
     for (const rel of Object.keys(CALLERS)) {
       const source = read(rel);
       const sites = callSites(source);
       expect(sites, `${rel} no longer calls the writer`).not.toEqual([]);
       for (const at of sites) {
         const line = source.slice(0, at).split("\n").length;
-        expect(enclosingBlock(source, at), `${rel}:${line} discards the refusal`).toContain(
-          REFUSAL,
+        const block = enclosingBlock(source, at);
+        const handled = HANDLERS.filter((handler) => block.includes(handler));
+        expect(handled, `${rel}:${line} does not reach an exhaustive refusal handler`).not.toEqual(
+          [],
         );
       }
     }

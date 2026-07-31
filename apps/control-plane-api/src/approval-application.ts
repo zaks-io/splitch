@@ -1,11 +1,5 @@
 import type { ApprovalRequest, ErrorCode } from "@splitch/contracts";
-import {
-  type ApprovalCommit,
-  appScope,
-  envScope,
-  type Repository,
-  type UpdateVariantResult,
-} from "@splitch/db";
+import { type ApprovalCommit, appScope, envScope, type Repository } from "@splitch/db";
 import type { ApplicationOutcome } from "./approval-service-types";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { syncExperimentConfigFromD1 } from "./experiment-handler-shared";
@@ -13,7 +7,7 @@ import { json } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
 import { decisionSpecFromProposal, startReadinessResponse } from "./experiment-start-decision-spec";
 import { purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
-import { variantFreezeDetails } from "./flag-definition-errors";
+import { variantFreezeDetails, type VariantWriteRefusal } from "./flag-definition-errors";
 import { resyncFlagSnapshots } from "./flag-definition-handler-utils";
 
 interface ApprovalApplicationDeps {
@@ -191,20 +185,47 @@ async function applyVariant(
   // recorded on the Review as a machine-stable reason rather than swallowed as
   // `notApplied`, which reads as a lost race worth retrying — a retry that can
   // never succeed while the Run lives (ADR-0036: no impossible remedy).
-  if (!updated.ok && updated.reason === "RUN_FROZEN") return reviewRunFrozen(updated);
-  // The Variant was read above, so any other failure is the Approval-guarded
-  // write reporting that it landed nothing; reconciliation decides stale vs
-  // resolved.
-  if (!updated.ok) return notApplied();
+  if (!updated.ok) return variantApplicationRefusal(updated);
   await resyncFlagSnapshots(deps, request.appId, variant.flagId);
   return { ok: true as const };
 }
 
-function reviewRunFrozen(refusal: Extract<UpdateVariantResult, { reason: "RUN_FROZEN" }>) {
-  return {
-    ok: false as const,
-    error: { code: "RUN_FROZEN" as const, details: variantFreezeDetails(refusal) },
-  };
+/**
+ * The sibling of `variantWriteRefusal` on the direct route: every reason gets an
+ * outcome, and the outcomes stay DISTINCT. `NOT_FOUND` used to be swallowed by
+ * the `notApplied` catch-all, which reads as a lost race worth another Review —
+ * a retry that can never find a Variant that no longer exists (ADR-0036).
+ */
+export function variantApplicationRefusal(refusal: VariantWriteRefusal): ApplicationOutcome {
+  switch (refusal.reason) {
+    // A proposal filed BEFORE a Run started and approved AFTER it is the second
+    // door onto this mutation — for the name AND for the value — and the same
+    // repository seam refuses both. A value swap landing here is the quieter of
+    // the two: it would return `applied`, republish KV, and leave the live Run
+    // serving the same arm name with a different payload, so the analysis
+    // population mixes two treatments with no error anywhere. Recorded on the
+    // Review as a machine-stable RUN_FROZEN rather than as a retryable race.
+    case "RUN_FROZEN":
+      return {
+        ok: false,
+        error: { code: "RUN_FROZEN" as const, details: variantFreezeDetails(refusal) },
+      };
+    // The Variant was read at the top of `applyVariant`, so this is a concurrent
+    // delete between that read and the guarded write.
+    case "NOT_FOUND":
+      return { ok: false, error: { code: "VARIANT_NOT_FOUND" as const, details: {} } };
+    // The guarded write selected zero rows: reconciliation decides stale vs
+    // resolved.
+    case "NOT_APPLIED":
+      return notApplied();
+    default:
+      return unhandledRefusal(refusal);
+  }
+}
+
+/** A reason added to the union without an outcome must not resolve as applied. */
+function unhandledRefusal(refusal: never): never {
+  throw new Error(`unhandled updateVariant refusal: ${JSON.stringify(refusal)}`);
 }
 
 async function applyVariantCreate(
