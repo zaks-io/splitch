@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ShellMenu, ShellMenuExternalLink, ShellMenuLink } from "#components/shell-menu";
+import { ShellMenu, ShellMenuLink, ShellMenuSignOut } from "#components/shell-menu";
 import type { OrgMembership } from "#lib/session";
 import { useHydrated } from "#lib/use-hydrated";
 
@@ -63,7 +63,7 @@ export function OrgShell({
             </ShellMenu>
           ) : null}
           <ShellMenu label="Signed in" value={userId}>
-            <ShellMenuExternalLink href="/auth/logout">Sign out</ShellMenuExternalLink>
+            <ShellMenuSignOut>Sign out</ShellMenuSignOut>
           </ShellMenu>
         </div>
       </header>

@@ -1,5 +1,6 @@
 import { useRouter } from "@tanstack/react-router";
 import type { MouseEvent, ReactNode } from "react";
+import { SignOutForm } from "#components/sign-out-form";
 
 /**
  * The one dropdown used by both shells. The Org shell's switcher and user menu
@@ -67,14 +68,16 @@ export function ShellMenuLink({ children, href }: { children: ReactNode; href: s
   );
 }
 
-/** A menu entry that leaves the SPA (sign out), so it is a plain document link. */
-export function ShellMenuExternalLink({ children, href }: { children: ReactNode; href: string }) {
+/** The sign-out entry: a POST submit, never a link, so nothing can prefetch it. */
+export function ShellMenuSignOut({ children }: { children: ReactNode }) {
   return (
-    <a
-      className="rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
-      href={href}
-    >
-      {children}
-    </a>
+    <SignOutForm className="grid">
+      <button
+        className="rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+        type="submit"
+      >
+        {children}
+      </button>
+    </SignOutForm>
   );
 }

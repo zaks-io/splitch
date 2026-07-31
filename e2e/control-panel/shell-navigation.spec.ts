@@ -92,7 +92,11 @@ test.describe("Honest Control Panel shell navigation", () => {
         await header
           .getByRole("link")
           .evaluateAll((links) => links.map((link) => link.getAttribute("href"))),
-      ).toEqual(["/", "/auth/logout"]);
+      ).toEqual(["/"]);
+      // Sign out is a POST submit, never a link: a link is prefetchable and a
+      // prefetch would sign the operator out (SPL-227).
+      await expect(header.locator("form[action='/auth/logout'][method='post']")).toHaveCount(1);
+      await expect(header.locator("a[href='/auth/logout']")).toHaveCount(0);
     }
 
     // Hiding the link is a UI decision only: the development surface itself is
