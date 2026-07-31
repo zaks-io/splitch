@@ -77,8 +77,10 @@ export function dispositionQueries(db: Db, scope: TenantScope, disposition: Appr
           resultingTargetVersion: sql<string | null>`NULL`.as("resulting_target_version"),
           resultingResourceType: sql<string | null>`NULL`.as("resulting_resource_type"),
           resultingResourceId: sql<string | null>`NULL`.as("resulting_resource_id"),
-          errorCode: sql<string | null>`NULL`.as("error_code"),
-          errorDetails: sql<string | null>`NULL`.as("error_details"),
+          errorCode: sql<string | null>`${disposition.cause?.errorCode ?? null}`.as("error_code"),
+          errorDetails: sql<string | null>`${disposition.cause?.errorDetails ?? null}`.as(
+            "error_details",
+          ),
         })
         .from(approvalRequests)
         .where(

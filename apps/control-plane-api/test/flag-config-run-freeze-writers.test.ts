@@ -1,5 +1,6 @@
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { narrowSeededAvailability } from "../src/config-store-fixture-data";
 import {
   type Harness,
   ids,
@@ -8,7 +9,6 @@ import {
   startSeededExperiment,
   token,
 } from "../src/config-store-harness-core";
-import { narrowSeededAvailability } from "../src/config-store-fixture-data";
 import { confirmPolicy, proposeA, reviewRequest } from "./approval-harness";
 import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
@@ -169,6 +169,31 @@ describe("an Approval Request that predates the Run", () => {
     const stored = await h.repo.approvals.getRequest(appScope(ids.appId), requestId);
     expect(stored?.status).toBe("stale");
     expect(stored?.resolvedAt).not.toBeNull();
+  });
+
+  /**
+   * `stale` alone is the wrong record: it is also what an ordinary version race
+   * writes. Someone asking "why did my approved change never land" gets the
+   * answer from the durable row or not at all, so the cause the response already
+   * carries has to be on the disposition too.
+   */
+  it("records why on the audit row, not only in the response", async () => {
+    const requestId = await proposeA(h);
+    await startSeededExperiment(h.d1);
+
+    await reviewRequest(h, requestId, "idem_review_frozen");
+
+    const row = await h.d1
+      .prepare("SELECT outcome, error_code, error_details FROM approval_reviews WHERE app_id = ?")
+      .bind(ids.appId)
+      .first<{ outcome: string; error_code: string | null; error_details: string | null }>();
+    expect(row?.outcome).toBe("stale");
+    expect(row?.error_code).toBe("RUN_FROZEN");
+    expect(JSON.parse(row?.error_details ?? "null")).toMatchObject({
+      frozenFields: ["flagConfig.availableVariantNames"],
+      currentRunId: ids.liveRunId,
+      recommendedAction: "END_RUNNING_RUN_FIRST",
+    });
   });
 
   it("keeps refusing a second Review rather than applying on retry", async () => {

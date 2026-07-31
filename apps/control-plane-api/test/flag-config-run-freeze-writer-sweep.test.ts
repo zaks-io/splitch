@@ -1,6 +1,7 @@
 import type { ApprovalCommit } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
+import { ConfigStoreDurableObject } from "../src/config-store-do";
 import { narrowSeededAvailability } from "../src/config-store-fixture-data";
 import {
   type Harness,
@@ -108,7 +109,46 @@ function frozenWriterCalls(): Record<string, () => Promise<{ ok: boolean }>> {
   };
 }
 
+/**
+ * The Durable Object is the actual network boundary: handlers hold a stub, not
+ * the store. A mutating method added to the class instead of to the store would
+ * never appear in `Object.keys(store)`, so the sweep above would not see it.
+ * Everything here is either a delegation of a store method or DO machinery with
+ * a written reason for touching no Flag Configuration row.
+ */
+const DURABLE_OBJECT_ONLY: Record<string, string> = {
+  constructor: "DurableObject construction",
+  fetch: "WebSocket upgrade only; refuses any other request with 426",
+  webSocketMessage: "revalidates the socket's session",
+  webSocketClose: "reschedules the expiry alarm",
+  webSocketError: "no-op",
+  alarm: "revalidates live sockets",
+  setLiveUpdatesAvailable: "flips a DO storage flag and closes sockets",
+  store: "constructs the guarded store; the guard it returns is the boundary",
+  broadcast: "sends a delta nudge over open sockets",
+  revalidate: "closes a socket whose authorization expired",
+  isAuthorized: "reads the session; no D1 write",
+  rescheduleExpiryAlarm: "DO alarm bookkeeping",
+};
+
 describe("every ConfigStore writer is classified against the freeze", () => {
+  /**
+   * Cheap boundary check: the DO's Flag Configuration surface must be exactly
+   * the store's, so a new method has to be classified in one table or the other
+   * before it can exist.
+   */
+  it("adds no Flag Configuration method to the Durable Object beyond the store's", () => {
+    const surface = Object.getOwnPropertyNames(ConfigStoreDurableObject.prototype);
+
+    const unclassified = surface.filter(
+      (name) => !(name in DURABLE_OBJECT_ONLY) && !Object.hasOwn(store, name),
+    );
+    expect(unclassified).toEqual([]);
+    // And the reverse: a store method the DO silently stopped exposing would
+    // mean handlers reach D1 by some path this sweep never sees.
+    expect(Object.keys(store).filter((name) => !surface.includes(name))).toEqual([]);
+  });
+
   it("leaves no method unaccounted for", () => {
     const classified = [...Object.keys(frozenWriterCalls()), ...Object.keys(EXEMPT_WRITERS)];
 

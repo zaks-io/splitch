@@ -14,6 +14,19 @@ import { ApprovalPolicyNote } from "./approval-policy-note";
 import { ApprovalRefusalNotice } from "./approval-refusal-notice";
 
 /**
+ * Refusals the Worker answers by resolving the Approval Request terminally
+ * rather than leaving it pending. After one of these the proposal is a closed
+ * record, so the gate must stop offering to apply it and must stop describing it
+ * as still pending — the copy would otherwise report a state the audit log is
+ * not in.
+ */
+const TERMINALLY_RESOLVING = new Set([
+  "RUN_FROZEN",
+  "APPROVAL_REQUEST_STALE",
+  "APPROVAL_REQUEST_RESOLVED",
+]);
+
+/**
  * The confirmation gate for a Policy-gated change.
  *
  * It takes a pending Approval Request and a confirm/cancel pair, and nothing
@@ -38,6 +51,7 @@ export function ApprovalGateDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const resolved = error !== null && TERMINALLY_RESOLVING.has(error.code);
   return (
     <Dialog open onOpenChange={(next) => (next ? undefined : onCancel())}>
       <DialogContent
@@ -53,10 +67,24 @@ export function ApprovalGateDialog({
           <ApprovalPolicyNote policyContexts={request.policyContexts} />
           <ApprovalDiffTable rows={request.rows} />
           {error ? <ApprovalRefusalNotice error={error} /> : null}
-          <p className="text-muted-foreground text-xs leading-5">
-            Confirming records your Review on Approval Request{" "}
-            <span className="font-mono">{request.id}</span> and applies it. Cancelling leaves the
-            proposal pending in the audit log; it is not deleted.
+          <p
+            className="text-muted-foreground text-xs leading-5"
+            data-gate-disposition={resolved ? "resolved" : "pending"}
+          >
+            {resolved ? (
+              <>
+                The refusal above resolved Approval Request{" "}
+                <span className="font-mono">{request.id}</span>, so it can no longer be applied. The
+                record and the reason stay in the audit log; propose the change again once the
+                refusal is cleared.
+              </>
+            ) : (
+              <>
+                Confirming records your Review on Approval Request{" "}
+                <span className="font-mono">{request.id}</span> and applies it. Cancelling leaves
+                the proposal pending in the audit log; it is not deleted.
+              </>
+            )}
           </p>
         </div>
 
@@ -66,7 +94,7 @@ export function ApprovalGateDialog({
           </Button>
           <Button
             data-approval-confirm="true"
-            disabled={confirming}
+            disabled={confirming || resolved}
             onClick={onConfirm}
             type="button"
           >

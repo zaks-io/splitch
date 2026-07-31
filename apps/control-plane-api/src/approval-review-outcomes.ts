@@ -87,6 +87,8 @@ export async function resolveUnapplicable(
     reason: commit.reason,
     idempotencyKey: commit.idempotencyKey,
     requestHash: commit.requestHash,
+    // Without this the row is indistinguishable from an ordinary version race.
+    cause: { errorCode: refusal.code, errorDetails: JSON.stringify(refusal.details) },
   });
   if (!resolved) return resolvedWinner(deps, row.appId, row.id, requestId);
   return {
