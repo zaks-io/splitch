@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 // Pre-commit guard: keep source files small and single-purpose.
 //
+// Two limits per file, so documentation is free but not unbounded:
+//
+//   - CODE lines (non-blank, non-comment) must stay within MAX_CODE_LINES:
+//     comments never force a split of an otherwise small module.
+//   - TOTAL lines must stay within MAX_TOTAL_LINES, a hard cap that keeps
+//     comment growth from turning "comments are free" into a loophole.
+//
 // The guard is a ratchet, not a snapshot. It compares each staged file against
 // the version it inherits (HEAD, or the largest version across both parents
-// during a merge) and fails only when THIS commit makes things worse:
+// during a merge) and fails only when THIS commit makes a metric worse:
 //
-//   - a file crosses the limit (it was at or under, now it is over), or
-//   - a file that was already over the limit grows further.
+//   - a file crosses a limit (it was at or under, now it is over), or
+//   - a file that was already over a limit grows further on that metric.
 //
 // A file that is already over and holds steady or shrinks passes. Without that,
 // any commit touching a pre-existing large file is forced to either drag an
@@ -18,22 +25,74 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 
-const MAX_LINES = 300;
+const MAX_CODE_LINES = 300;
+const MAX_TOTAL_LINES = MAX_CODE_LINES * 2;
 const EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".css"];
+
+const METRICS = [
+  { key: "code", max: MAX_CODE_LINES, noun: "code lines", limit: `${MAX_CODE_LINES} code-line` },
+  {
+    key: "total",
+    max: MAX_TOTAL_LINES,
+    noun: "total lines",
+    limit: `${MAX_TOTAL_LINES} total-line`,
+  },
+];
 
 function git(args) {
   return execFileSync("git", args, { encoding: "utf8" });
 }
 
-function countLines(text) {
-  return text.split("\n").length;
+/**
+ * Line-based comment scanner, not a tokenizer: a `/*` inside a string or regex
+ * literal reads as a comment opener and undercounts code until the block closes.
+ * That failure mode only makes the guard more lenient, never a false reject,
+ * which is the right bias for a local advisory.
+ */
+function countCodeLines(text) {
+  let inBlockComment = false;
+  let code = 0;
+  for (const rawLine of text.split("\n")) {
+    let rest = rawLine.trim();
+    if (!rest) continue;
+    let hasCode = false;
+    while (rest.length > 0) {
+      if (inBlockComment) {
+        const end = rest.indexOf("*/");
+        if (end === -1) break;
+        inBlockComment = false;
+        rest = rest.slice(end + 2).trim();
+        continue;
+      }
+      const lineComment = rest.indexOf("//");
+      const blockComment = rest.indexOf("/*");
+      if (lineComment !== -1 && (blockComment === -1 || lineComment < blockComment)) {
+        if (rest.slice(0, lineComment).trim()) hasCode = true;
+        break;
+      }
+      if (blockComment !== -1) {
+        if (rest.slice(0, blockComment).trim()) hasCode = true;
+        inBlockComment = true;
+        rest = rest.slice(blockComment + 2).trim();
+        continue;
+      }
+      hasCode = true;
+      break;
+    }
+    if (hasCode) code += 1;
+  }
+  return code;
 }
 
-/** Lines in the staged (index) version, or null when it is not readable. */
-function stagedLines(file) {
+function measure(text) {
+  return { code: countCodeLines(text), total: text.split("\n").length };
+}
+
+/** Metrics of the staged (index) version, or null when it is not readable. */
+function stagedMetrics(file) {
   try {
     if (!statSync(file).isFile()) return null;
-    return countLines(git(["show", `:${file}`]));
+    return measure(git(["show", `:${file}`]));
   } catch {
     // Staged for deletion/rename and gone from disk, or unreadable.
     return null;
@@ -60,21 +119,26 @@ function baselineRevisions() {
 
 const BASELINE_REVISIONS = baselineRevisions();
 
-function revisionLines(revision, file) {
+function revisionMetrics(revision, file) {
   try {
-    return countLines(git(["show", `${revision}:${file}`]));
+    return measure(git(["show", `${revision}:${file}`]));
   } catch {
-    return 0;
+    return { code: 0, total: 0 };
   }
 }
 
 /**
- * Lines already inherited: the largest version across every parent, or 0 when
- * the file is new to this commit. A merge that exceeds neither parent grew
- * nothing; a resolution that bloats a file past both still gets caught.
+ * Metrics already inherited: per metric, the largest value across every
+ * parent, or 0 when the file is new to this commit. A merge that exceeds
+ * neither parent grew nothing; a resolution that bloats a file past both
+ * still gets caught.
  */
-function committedLines(file) {
-  return Math.max(...BASELINE_REVISIONS.map((revision) => revisionLines(revision, file)));
+function committedMetrics(file) {
+  const inherited = BASELINE_REVISIONS.map((revision) => revisionMetrics(revision, file));
+  return {
+    code: Math.max(...inherited.map((metrics) => metrics.code)),
+    total: Math.max(...inherited.map((metrics) => metrics.total)),
+  };
 }
 
 /**
@@ -126,29 +190,38 @@ const staged = stagedChanges()
 
 const offenders = [];
 for (const { file, before: baseline } of staged) {
-  const lines = stagedLines(file);
-  if (lines === null || lines <= MAX_LINES) continue;
+  const now = stagedMetrics(file);
+  if (now === null) continue;
 
-  const before = committedLines(baseline);
-  if (before <= MAX_LINES) {
-    offenders.push({ file, lines, reason: `crosses the ${MAX_LINES}-line limit` });
-  } else if (lines > before) {
-    offenders.push({
-      file,
-      lines,
-      reason: `already over ${MAX_LINES} at ${before} lines and growing`,
-    });
+  let before;
+  for (const metric of METRICS) {
+    if (now[metric.key] <= metric.max) continue;
+    before ??= committedMetrics(baseline);
+
+    if (before[metric.key] <= metric.max) {
+      offenders.push({
+        file,
+        detail: `${now[metric.key]} ${metric.noun} (crosses the ${metric.limit} limit)`,
+      });
+    } else if (now[metric.key] > before[metric.key]) {
+      offenders.push({
+        file,
+        detail: `${now[metric.key]} ${metric.noun} (already over the ${metric.limit} limit at ${before[metric.key]} and growing)`,
+      });
+    }
   }
 }
 
 if (offenders.length > 0) {
   console.error(`\n✖ File-size guard: ${offenders.length} file(s) got worse in this commit.`);
-  for (const { file, lines, reason } of offenders) {
-    console.error(`  ${file} — ${lines} lines (${reason})`);
+  for (const { file, detail } of offenders) {
+    console.error(`  ${file} — ${detail}`);
   }
   console.error(
-    "\nKeep modules small and single-purpose. Split the file, or move the new code\n" +
-      "into a smaller module that the large one re-exports, so this file stops growing.\n",
+    "\nKeep modules small and single-purpose. Code lines over the limit: split the\n" +
+      "file, or move the new code into a smaller module that the large one\n" +
+      "re-exports. Total lines over the cap: the file is drowning in comments —\n" +
+      "tighten them or move the prose to real docs.\n",
   );
   process.exit(1);
 }
