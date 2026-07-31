@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waitForHydration } from "./hydration";
 import {
   LOCAL_E2E_MEMBER_SESSION_TOKEN,
   LOCAL_E2E_SESSION_TOKEN,
@@ -86,7 +87,7 @@ test.describe("Org shell and App list", () => {
   }) => {
     const slug = `e2e-app-${Date.now().toString(36)}`;
     await page.goto("/acme-labs");
-    await expect(page.locator("[data-org-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
     await page.getByTestId("create-app").click();
     await page.getByLabel("App name").fill(slug);
     await page.getByLabel("URL slug").fill(slug);
@@ -114,7 +115,7 @@ test.describe("Org shell and App list", () => {
       (request) => request.method() === "POST" && (request.postData() ?? "").includes(slug),
     );
     await page.goto("/acme-labs");
-    await expect(page.locator("[data-org-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
     await page.getByTestId("create-app").click();
     await page.getByLabel("App name").fill(slug);
     await page.getByLabel("URL slug").fill(slug);

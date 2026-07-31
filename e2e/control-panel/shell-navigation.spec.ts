@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waitForHydration } from "./hydration";
 import {
   LOCAL_E2E_MEMBER_SESSION_TOKEN,
   LOCAL_E2E_SESSION_TOKEN,
@@ -38,7 +39,7 @@ test.describe("Honest Control Panel shell navigation", () => {
   }, testInfo) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto("/acme-labs/checkout-api/dev");
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
 
     const nav = page.getByRole("navigation", { name: "App sections" });
     const destinations = await nav.getByRole("link").evaluateAll((links) =>
@@ -141,7 +142,7 @@ test.describe("Honest Control Panel shell navigation", () => {
   }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto("/acme-labs/checkout-api/dev");
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
 
     const expected = new Set(
       await page
