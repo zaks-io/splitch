@@ -159,8 +159,15 @@ Start (ADR-0002 Run immutability, ADR-0003 assignment-vs-measurement edits):
 
 A `fixed` horizon with no `sampleSizeLocked`, or a `sequential` horizon carrying one, is refused with
 `VALIDATION_ERROR` at `["body","sampleSizeLocked"]` rather than defaulted: a silently chosen stopping
-rule would change what the reported result means (ADR-0036). Both values ride the Approval proposal,
-so a gated Start freezes the horizon the proposer chose, not the one in effect at Review time.
+rule would change what the reported result means (ADR-0036). An absent `horizon` is not that case: it
+is the documented default and applies as `sequential`, on the request and equally on an Approval
+proposal that recorded none.
+
+Both values ride the Approval proposal, so a gated Start freezes the horizon the proposer chose, not
+the one in effect at Review time — and both are part of what `idempotency_key` identifies. A Start
+retried under the same key with a different `horizon`, `sampleSizeLocked`, or `reason` is a different
+request and is refused with `IDEMPOTENCY_KEY_CONFLICT` rather than replaying the proposal it does not
+match. Retried with identical intent, it still replays.
 
 There is no `confirm` boolean or confirmation-retry pipeline. The CLI `--confirm` affordance and the
 panel Confirmation modal produce `review.action = 'approve_and_apply'`. The Control Plane then uses

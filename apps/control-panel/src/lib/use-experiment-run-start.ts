@@ -16,19 +16,6 @@ import { useExperimentDetailRefresh } from "./use-experiment-detail-refresh";
  * outside its own definition.
  */
 
-export type StartedApprovalRequest = { id: string; status: string } | null;
-
-/**
- * A Run exists only when the Start actually applied: `allow` returns no Approval
- * Request at all, and `confirm` with an inline `approve_and_apply` Review returns
- * one already `applied`. Any other status (`pending`, `declined`, `stale`) means
- * the Control Plane recorded the request and opened NO Run, so treating it as a
- * success would be a disguised default (ADR-0036).
- */
-export function runStartLanded(approvalRequest: StartedApprovalRequest) {
-  return approvalRequest === null || approvalRequest.status === "applied";
-}
-
 export interface RunStartDraft {
   activationMetricId: string;
   allocation: Record<string, number>;
@@ -52,10 +39,11 @@ export function useExperimentRunStart({
   environmentId: string;
   experimentId: string;
   /**
-   * Called only once a Run actually exists — see `runStartLanded`. An Approval
-   * Request that did not apply leaves the caller's surface open on the
-   * confirmation, which names the request and its status, rather than reporting a
-   * Run that was never opened (ADR-0036).
+   * Called only once a Run actually exists. A Start whose Approval Request did
+   * not apply is answered by the Control Plane as a REFUSAL, not as an ok
+   * response carrying a pending request, so it lands on `error` below and never
+   * reaches here — the caller's surface stays open on the refusal rather than
+   * reporting a Run that was never opened (ADR-0036).
    */
   onStarted: () => void;
 }) {
@@ -66,7 +54,6 @@ export function useExperimentRunStart({
   const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [isStarting, setIsStarting] = useState(false);
   const [error, setError] = useState<string>();
-  const [approvalRequest, setApprovalRequest] = useState<StartedApprovalRequest>(null);
 
   async function start(draft: RunStartDraft) {
     // Parsed before the request, and outside the catch below: a local syntax
@@ -96,9 +83,8 @@ export function useExperimentRunStart({
         setError(controlPlaneErrorMessage(result.error));
         return;
       }
-      setApprovalRequest(result.data.approvalRequest);
       await refresh();
-      if (runStartLanded(result.data.approvalRequest)) onStarted();
+      onStarted();
     } catch {
       setError("The Control Plane could not Start this Experiment Run. Try again.");
     } finally {
@@ -106,5 +92,5 @@ export function useExperimentRunStart({
     }
   }
 
-  return { approvalRequest, error, isStarting, start };
+  return { error, isStarting, start };
 }

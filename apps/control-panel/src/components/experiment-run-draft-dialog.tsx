@@ -93,7 +93,6 @@ function ExperimentRunDraftForm({
   if (step === "confirm") {
     return (
       <ExperimentRunStartConfirmation
-        approvalRequest={start.approvalRequest}
         error={start.error}
         isStarting={start.isStarting}
         nextRunNumber={nextRunNumber}

@@ -96,6 +96,29 @@ export function startReadinessResponse(
 }
 
 /**
+ * Everything a Start request contributes to the Approval proposal, derived once.
+ * The Approval `proposed` record and the idempotency `proposalInput` are both
+ * built from this return value, so the recorded intent and the hash that
+ * identifies it cannot drift: a Start replayed under the same Idempotency-Key
+ * with different intent hashes differently and is refused rather than silently
+ * replaying the proposal it does not match (ADR-0036).
+ */
+export function startProposalFields(
+  body: Record<string, unknown>,
+  decisionSpec: RunDecisionSpec,
+): {
+  startReason: string | null;
+  horizon: RunDecisionSpec["horizon"];
+  sampleSizeLocked: number | null;
+} {
+  return {
+    startReason: typeof body.reason === "string" ? body.reason : null,
+    horizon: decisionSpec.horizon,
+    sampleSizeLocked: decisionSpec.sampleSizeLocked,
+  };
+}
+
+/**
  * The horizon the Approval Request recorded, replayed when a gated Start is
  * applied. An Approval that cannot be read back to the same Run config would
  * apply a different Run than the one reviewed.
@@ -103,8 +126,14 @@ export function startReadinessResponse(
 export function decisionSpecFromProposal(
   proposed: Record<string, unknown>,
 ): RunDecisionSpec | null {
-  if (!isRunHorizon(proposed.horizon)) return null;
-  const horizon = proposed.horizon;
+  // Absent means sequential here for the same reason it does on the request:
+  // it is the documented default. A proposal recorded before the horizon rode
+  // the Approval carries none, and refusing it would brick every pending
+  // `experiment_start` Approval Request with a remedy no operator can perform —
+  // a frozen proposal cannot be edited to add the field (ADR-0036).
+  const proposedHorizon = proposed.horizon ?? "sequential";
+  if (!isRunHorizon(proposedHorizon)) return null;
+  const horizon = proposedHorizon;
   const sampleSizeLocked =
     typeof proposed.sampleSizeLocked === "number" ? proposed.sampleSizeLocked : null;
   // The same pairing the ungated Start refuses with a 400. A proposal that

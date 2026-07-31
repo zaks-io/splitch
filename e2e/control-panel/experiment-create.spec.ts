@@ -173,7 +173,7 @@ test.describe("Control Panel Experiment creation", () => {
     // applied is not a pending one: the flow lands on the Run exactly as it does
     // under `allow`, and the confirmation raises nothing.
     await expect(page).toHaveURL(/\/setup$/);
-    await expect(page.getByTestId("run-start-approval-request")).toHaveCount(0);
+    await expect(page.getByTestId("run-start-error")).toHaveCount(0);
     await expect(page.getByRole("link", { name: /Run 1/ })).toBeVisible();
     await captureThemeScreenshots(page, testInfo, "experiment-create-gated-started");
 

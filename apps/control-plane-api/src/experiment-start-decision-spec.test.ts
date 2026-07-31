@@ -91,11 +91,19 @@ describe("decisionSpecFromProposal", () => {
     });
   });
 
-  it("refuses a proposal that names no horizon rather than inferring one", () => {
-    // Start always writes the horizon onto the proposal, so a proposal without
-    // one is a malformed row. Reading it back as sequential would freeze a
-    // stopping rule nobody chose onto the Run (ADR-0036).
-    expect(decisionSpecFromProposal({})).toBeNull();
+  it("reads a proposal with no recorded horizon as the documented default", () => {
+    // A proposal recorded before the horizon rode the Approval carries none, and
+    // a frozen pending proposal cannot be edited to add one. Refusing it would
+    // brick every such Approval Request with a remedy no operator can perform,
+    // which is the disguised failure ADR-0036 forbids.
+    expect(decisionSpecFromProposal({})).toEqual({ horizon: "sequential", sampleSizeLocked: null });
+    expect(decisionSpecFromProposal({ horizon: null })).toEqual({
+      horizon: "sequential",
+      sampleSizeLocked: null,
+    });
+  });
+
+  it("refuses a horizon the Control Plane cannot honour rather than coercing it", () => {
     expect(decisionSpecFromProposal({ horizon: "bayesian" })).toBeNull();
   });
 

@@ -72,7 +72,6 @@ export function ExperimentDraftRunStep({
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <ExperimentRunStartConfirmation
-              approvalRequest={start.approvalRequest}
               error={start.error}
               isStarting={start.isStarting}
               nextRunNumber={nextRunNumber}
