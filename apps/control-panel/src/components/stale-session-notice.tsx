@@ -1,5 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from "@splitch/ui/components/alert";
 import { Button } from "@splitch/ui/components/button";
+import { SignOutForm } from "#components/sign-out-form";
 
 /**
  * The Organization or App exists; the sign-in session that lists memberships
@@ -48,11 +49,11 @@ export function StaleSessionNotice({
           The Control Plane said: {reason}
         </span>
         {remedy === "reauth" ? (
-          <Button
-            render={<a href="/auth/logout">Sign in again to continue</a>}
-            size="sm"
-            variant="outline"
-          />
+          <SignOutForm>
+            <Button data-testid="session-stale-reauth" size="sm" type="submit" variant="outline">
+              Sign in again to continue
+            </Button>
+          </SignOutForm>
         ) : (
           <Button
             data-testid="session-stale-reload"

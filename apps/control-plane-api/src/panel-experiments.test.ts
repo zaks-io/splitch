@@ -90,6 +90,46 @@ describe("panel Experiments composite read", () => {
     });
   });
 
+  it("reads a Run with no Analysis rows yet as collecting, not as a failed list", async () => {
+    // A Run seconds after Start has nothing in Analysis, which answers
+    // RUN_NOT_FOUND. Propagating that would 500 the whole Experiment list for
+    // every Environment that just Started a Run.
+    const analysis = vi.fn(async (_request: Request) =>
+      Response.json(
+        { code: "RUN_NOT_FOUND", message: "no Run rows", details: {} },
+        { status: 404 },
+      ),
+    );
+
+    const response = await panelExperimentsList(
+      { repo: repository(), analysis: { fetch: analysis } as unknown as Fetcher },
+      { actorId: ACTOR_ID, appId: APP_ID, environmentId: ENVIRONMENT_ID },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      items: [
+        { health: { significanceReached: false, srmFiring: false, guardrailBreached: false } },
+      ],
+    });
+  });
+
+  it("still propagates an unreadable Analysis result rather than calling it collecting", async () => {
+    const analysis = vi.fn(async (_request: Request) =>
+      Response.json(
+        { code: "INTERNAL_SERVER_ERROR", message: "provenance mismatch", details: {} },
+        { status: 500 },
+      ),
+    );
+
+    await expect(
+      panelExperimentsList(
+        { repo: repository(), analysis: { fetch: analysis } as unknown as Fetcher },
+        { actorId: ACTOR_ID, appId: APP_ID, environmentId: ENVIRONMENT_ID },
+      ),
+    ).rejects.toThrow();
+  });
+
   it("refuses stale App membership before any downstream read", async () => {
     const analysis = vi.fn();
     const repo = repository({ appMembership: null });

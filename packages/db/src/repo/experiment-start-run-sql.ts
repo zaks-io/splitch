@@ -6,7 +6,7 @@
  * have to be read side by side to be checked at all.
  */
 
-import { experiments, runs } from "../schema/index";
+import type { experiments } from "../schema/index";
 import type { ApprovalCommit } from "./approval-types";
 import { approvalGuardParams, approvalGuardSql } from "./experiment-start-approval";
 // Type-only, so it is erased at compile and no runtime cycle exists.
@@ -47,7 +47,8 @@ export function insertRunStatement(
         id, app_id, environment_id, experiment_id, run_number, status,
         targeting_key_field, targeting_key_type, salt, allocation, variant_set, control_variant_id,
         targeting_rules, activation_metric_id,
-        confidence_level, decision_family, guardrail_decisions, config_hash,
+        confidence_level, horizon, sample_size_locked,
+        decision_family, guardrail_decisions, config_hash,
         started_at, start_reason, created_at, created_by
       )
       SELECT
@@ -59,7 +60,8 @@ export function insertRunStatement(
         ),
         'running',
         ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
         ?, ?, ?, ?
       WHERE EXISTS (SELECT 1 FROM experiments WHERE ${startGuardSql(input.approval)})
       RETURNING id
@@ -187,6 +189,11 @@ function insertRunParams(scope: EnvScope, input: StartRunInput): unknown[] {
     input.run.targetingRules,
     input.run.activationMetricId ?? null,
     input.run.confidenceLevel,
+    // The Run is the only home for the horizon decision spec, so the column
+    // default can never be the answer: `StartRunInput` requires the caller to
+    // state it and it is written through unchanged.
+    input.run.horizon,
+    input.run.sampleSizeLocked ?? null,
     input.run.decisionFamily,
     input.run.guardrailDecisions,
     input.run.configHash,

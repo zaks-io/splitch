@@ -67,7 +67,14 @@ function ExperimentRow({
   experiment: PanelExperimentListItem;
   scopeHref: string;
 }) {
-  const detailHref = `${scopeHref}/experiments/${encodeURIComponent(experiment.id)}`;
+  // An Experiment that has never opened a Run has no Results and no Run history
+  // to show, so it links back into the flow that opens its first one. A `draft`
+  // whose Run ended is NOT that: it keeps its detail screen.
+  const experimentHref = `${scopeHref}/experiments/${encodeURIComponent(experiment.id)}`;
+  const detailHref =
+    experiment.status === "draft" && !experiment.hasRuns
+      ? `${experimentHref}/draft`
+      : experimentHref;
   return (
     <TableRow className="group" data-experiment-id={experiment.id}>
       <TableCell className="font-medium">

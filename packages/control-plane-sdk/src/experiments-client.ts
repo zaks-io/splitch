@@ -13,10 +13,10 @@ import type {
   ExperimentsUpdateOutput,
 } from "@splitch/contracts/route-types";
 import {
-  createExperimentsHcClient,
-  hcRequestOptions,
-  type ExperimentsHcClient,
   type ControlPlaneHcOptions,
+  createExperimentsHcClient,
+  type ExperimentsHcClient,
+  hcRequestOptions,
   withAuthorization,
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
@@ -71,7 +71,11 @@ export function createExperimentsClient(
             param: { appId: input.appId, environmentId: input.environmentId },
             json: input,
           } as never,
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+          withIdempotencyHeader(
+            "experiments_create",
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            input.idempotency_key,
+          ),
         ),
       ),
     get: (input, callOptions) =>

@@ -74,5 +74,8 @@ function run(overrides: Partial<PanelExperimentRun> = {}): PanelExperimentRun {
     activationMetricId: overrides.activationMetricId ?? null,
     decisionMetricIds: overrides.decisionMetricIds ?? [],
     decisionGuardrailMetricIds: overrides.decisionGuardrailMetricIds ?? [],
+    confidenceLevel: overrides.confidenceLevel ?? 0.95,
+    horizon: overrides.horizon ?? "sequential",
+    sampleSizeLocked: overrides.sampleSizeLocked ?? null,
   };
 }

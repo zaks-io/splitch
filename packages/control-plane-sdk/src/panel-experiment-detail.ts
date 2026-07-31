@@ -22,6 +22,10 @@ export interface PanelExperimentRun {
   targetingRulesJson: string;
   decisionMetricIds: string[];
   decisionGuardrailMetricIds: string[];
+  /** The decision spec this Run froze at Start (ADR-0003). Never editable after. */
+  confidenceLevel: number;
+  horizon: "sequential" | "fixed";
+  sampleSizeLocked: number | null;
   configHash: string;
   startedAt: string;
   endedAt: string | null;
@@ -42,6 +46,8 @@ export interface PanelExperimentDetail {
   targetingKeyType: string;
   activationMetricId: string | null;
   conversionWindowMs: number;
+  confidenceLevel: number;
+  dimensions: string[];
   metricIds: string[];
   guardrailMetricIds: string[];
   draftAllocation: Record<string, number> | null;
@@ -119,6 +125,9 @@ function parsePanelExperimentRun(input: unknown): PanelExperimentRun | null {
     !isJsonArray(input.targetingRulesJson) ||
     !isStringArray(input.decisionMetricIds) ||
     !isStringArray(input.decisionGuardrailMetricIds) ||
+    typeof input.confidenceLevel !== "number" ||
+    !isRunHorizon(input.horizon) ||
+    !(input.sampleSizeLocked === null || Number.isInteger(input.sampleSizeLocked)) ||
     !isNonEmptyString(input.configHash) ||
     !isNonEmptyString(input.startedAt) ||
     !isOptionalString(input.endedAt) ||
@@ -144,6 +153,9 @@ function parsePanelExperimentRun(input: unknown): PanelExperimentRun | null {
     targetingRulesJson: input.targetingRulesJson,
     decisionMetricIds: input.decisionMetricIds,
     decisionGuardrailMetricIds: input.decisionGuardrailMetricIds,
+    confidenceLevel: input.confidenceLevel,
+    horizon: input.horizon,
+    sampleSizeLocked: input.sampleSizeLocked === null ? null : Number(input.sampleSizeLocked),
     configHash: input.configHash,
     startedAt: input.startedAt,
     endedAt: input.endedAt,
@@ -168,6 +180,9 @@ function parsePanelExperimentDetail(input: unknown): PanelExperimentDetail | nul
     !isNullableString(input.activationMetricId) ||
     typeof input.conversionWindowMs !== "number" ||
     !Number.isFinite(input.conversionWindowMs) ||
+    typeof input.confidenceLevel !== "number" ||
+    !Number.isFinite(input.confidenceLevel) ||
+    !isStringArray(input.dimensions) ||
     !isStringArray(input.metricIds) ||
     !isStringArray(input.guardrailMetricIds) ||
     !isNullableAllocation(input.draftAllocation) ||
@@ -190,6 +205,8 @@ function parsePanelExperimentDetail(input: unknown): PanelExperimentDetail | nul
     targetingKeyType: input.targetingKeyType,
     activationMetricId: input.activationMetricId,
     conversionWindowMs: input.conversionWindowMs,
+    confidenceLevel: input.confidenceLevel,
+    dimensions: input.dimensions,
     metricIds: input.metricIds,
     guardrailMetricIds: input.guardrailMetricIds,
     draftAllocation: input.draftAllocation,
@@ -222,6 +239,10 @@ const isNullableString = isOptionalString;
 
 function isRunStatus(value: unknown): value is PanelExperimentRun["status"] {
   return value === "ended" || value === "running";
+}
+
+function isRunHorizon(value: unknown): value is PanelExperimentRun["horizon"] {
+  return value === "sequential" || value === "fixed";
 }
 
 function isAllocation(value: unknown): value is Record<string, number> {

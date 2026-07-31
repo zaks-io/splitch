@@ -29,7 +29,11 @@ export type StartRunInput = {
   run: Omit<
     RunInsert,
     "appId" | "environmentId" | "experimentId" | "runNumber" | "status" | "controlVariantId"
-  >;
+  > &
+    // `horizon` has a column default, which would make it optional here and let a
+    // caller register a stopping rule it never chose. The Run is the only home
+    // for it (ADR-0014), so Start must state it (ADR-0036).
+    Required<Pick<RunInsert, "horizon">>;
   endedAt: string;
   updatedAt: string;
   updatedBy?: string | null;
