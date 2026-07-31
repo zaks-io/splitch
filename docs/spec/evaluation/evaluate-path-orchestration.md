@@ -114,9 +114,10 @@ information-disclosure surface.
 Fractional Evaluation, holdover predicate, replay decision. One code location for all
 policy.
 
-**Exposure pipeline** (downstream): fires Exposure events on read via `read-variant()`
-accessor; calls `AssignmentStore.put()` at first-touch. The evaluate path does not write
-to the Assignment Store.
+**Exposure pipeline** (downstream orchestration hosted by the Evaluation Worker): fires Exposure
+events on read via the `read-variant()` accessor. After durable Event Ingest acceptance, it calls
+`AssignmentStore.put()` at apparent first-touch. The evaluate policy module does not write to the
+Assignment Store.
 
 ## Condition matching
 

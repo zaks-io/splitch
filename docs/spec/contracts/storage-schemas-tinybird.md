@@ -12,8 +12,10 @@ leaf, not the envelope".)
 
 ### `raw_events` (raw log)
 
-Primary engine sorting key: `(app_id, environment_id, experiment_id, run_id, server_received_at, targeting_key_hash)` —
-`app_id` first for multi-tenant isolation; `environment_id` co-scoped (ADR-0027); `run_id` for first-touch grouping within a Run.
+Primary engine partition key: `toYYYYMM(ingest_ts)`. Sorting key:
+`(app_id, environment_id, ingest_ts, experiment_id, run_id, server_received_at,
+targeting_key_hash)`. The tenant and insertion-time prefix prunes the real-time tail; event-time
+columns remain available for first-touch, replay, and retention.
 
 | Column               | Type                    | Notes                                                                                                                                                                                                                     |
 | -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -29,9 +31,9 @@ Primary engine sorting key: `(app_id, environment_id, experiment_id, run_id, ser
 | `event_id`           | String                  | Retry-stable physical raw-row id                                                                                                                                                                                          |
 | `counterfactual`     | UInt8                   | 0/1; reserved for future counterfactual triggering                                                                                                                                                                        |
 | `source_id`          | String                  | Edge POP identifier; component of the wire `dedup_key`                                                                                                                                                                    |
-| `client_timestamp`   | DateTime64(3)           | SDK fire time; diagnostic only                                                                                                                                                                                            |
+| `client_timestamp`   | Nullable(DateTime64(3)) | Optional SDK fire time; diagnostic only                                                                                                                                                                                   |
 | `server_received_at` | DateTime64(3)           | Server-received event timestamp; used for `MIN` first-touch                                                                                                                                                               |
-| `ingest_ts`          | DateTime64(3)           | Raw-log append watermark; used by snapshot/tail only                                                                                                                                                                      |
+| `ingest_ts`          | DateTime64(3)           | Tinybird insertion watermark; `DEFAULT now64(3)` and omitted from NDJSON                                                                                                                                                  |
 | `activation_ts`      | Nullable(DateTime64(3)) | Activation timestamp; equals `server_received_at` for server-received activations                                                                                                                                         |
 | `is_holdover`        | UInt8                   | Exposure rows only; 0 on Activation rows                                                                                                                                                                                  |
 | `sdk_version`        | Nullable(String)        | SDK version; diagnostics only                                                                                                                                                                                             |
@@ -44,6 +46,19 @@ distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency 
 The `type` column discriminates Exposures from Activations on the same log. Activations additionally
 carry `counterfactual = 0` by default; future counterfactual triggering sets `counterfactual = 1` with
 no schema change. (ADR-0013.)
+
+### `deduped_activations_state` (derived Activation state)
+
+`mv_deduped_activations_state` filters `raw_events` to Activation rows and writes
+`minState(activation_ts)` into an `AggregatingMergeTree` target partitioned by activation event month.
+Its sorting key begins `(app_id, environment_id, run_id, event_date, counterfactual, ...)`.
+
+`serve_deduped_activations` requires injected App, Environment, exact Run, half-open event-date and
+`activation_ts` bounds, and counterfactual policy before `minMerge`. It returns one logical candidate
+per Entity, Run, counterfactual kind, and distinct Activation timestamp. Gated analysis and activation
+rollups reject pre-Exposure candidates before selecting the earliest valid timestamp and never read
+physical Activation rows from `raw_events`; late delivery remains visible in the original
+activation-time partition.
 
 ### `metric_events` (Metric Event log)
 
@@ -67,14 +82,13 @@ Primary sorting key:
 | `fields`                      | String                 | Canonical JSON object validated against declared named typed fields |
 | `dimensions`                  | String                 | Canonical JSON object validated against declared scalar Dimensions  |
 | `server_received_at`          | DateTime64(3)          | Canonical Metric Event time                                         |
-| `ingest_ts`                   | DateTime64(3)          | Raw append watermark                                                |
+| `ingest_ts`                   | DateTime64(6)          | Tinybird insertion time; `DEFAULT now64(6)` and omitted from NDJSON |
 
-The datasource configures `dedup_key` as its Tinybird deduplication key. That setting is an ingest
-optimization only: every statistical query still collapses its bounded source to one row per
-`dedup_key` before aggregation. The sharded ingest idempotency seam rejects a reused `event_id` with
-a different canonical payload before append. Accepted rows are retained for the configured replay
-window, default 90 days, and must never expire before the longest promised Conversion Window or
-analysis replay window.
+Tinybird does not enforce uniqueness for `dedup_key`. The sharded ingest idempotency seam rejects a
+reused `event_id` with different canonical content, while `serve_deduped_metric_events` applies
+`argMinMerge` to `deduped_metric_events_state` and supplies one logical row per `dedup_key`. Accepted
+raw rows and aggregate states are retained for the configured replay window, default 90 days, and
+must never expire before the longest promised Conversion Window or analysis replay window.
 
 ### `web_events` (Web Event log)
 
@@ -103,11 +117,11 @@ Primary sorting key:
 | `fields`                      | String                           | Canonical JSON validated against declared named typed fields                   |
 | `dimensions`                  | String                           | Canonical JSON validated against declared scalar Dimensions                    |
 | `server_received_at`          | DateTime64(3)                    | Canonical Web Event time                                                       |
-| `ingest_ts`                   | DateTime64(3)                    | Raw append watermark                                                           |
+| `ingest_ts`                   | DateTime64(6)                    | Tinybird insertion time; `DEFAULT now64(6)` and omitted from NDJSON            |
 
-The datasource configures `dedup_key` as its Tinybird deduplication key. Web Analytics reads still
-collapse physical retries by `dedup_key` before aggregation. Reusing an `event_id` with different
-canonical content fails before append. Trace context is correlation metadata only;
+Tinybird does not enforce uniqueness for `dedup_key`. Reusing an `event_id` with different canonical
+content fails before append, while `serve_deduped_web_events` applies `argMinMerge` to
+`deduped_web_events_state` and supplies one logical row per `dedup_key`. Trace context is correlation metadata only;
 OpenTelemetry span status, duration, resource attributes, instrumentation scope, and arbitrary
 attributes remain absent unless explicitly mapped into schema-governed `fields` or `dimensions`.
 Accepted rows have an independent configurable retention, default 30 days. No Experiment Conversion

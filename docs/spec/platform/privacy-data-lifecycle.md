@@ -17,15 +17,15 @@ cross-version identity joins and idempotent retries are not claimed.
 
 ## Privacy roles
 
-| Data class              | Examples                                                                                 | Role                                                       | Durable stores                                               |
-| ----------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------ |
-| Control-plane User data | WorkOS user ID, email in WorkOS, memberships, sessions, device-flow tokens               | Splitch-controlled                                         | WorkOS, D1 IDs, KV sessions, keychain/CLI                    |
-| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata     | Customer-controlled                                        | D1, KV config cache, per-App DO                              |
-| Entity data             | Targeting Key, idType, Exposures, Activations, Metric Events, Assignment Store holdovers | Customer-controlled; Splitch is processor/service provider | Tinybird, KV, Assignment Store DO, ingest outbox/queues/DLQs |
-| Browser analytics data  | Web Events, Web Sessions, optional Entity identity                                       | Customer-controlled; Splitch is processor/service provider | Tinybird `web_events`, ingest outbox/queues/DLQ              |
-| Audit/security data     | control-plane mutation audit, auth door, actor ID, request logs                          | shared legal/security record                               | Tinybird audit log, D1 privacy request log                   |
-| Observability data      | errors, traces, structured logs                                                          | Splitch-controlled operations data                         | Sentry, Axiom, Cloudflare logs                               |
-| Billing data            | plan, Stripe customer/subscription IDs, invoices                                         | Splitch-controlled billing data                            | D1, Stripe when enabled                                      |
+| Data class              | Examples                                                                                 | Role                                                       | Durable stores                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Control-plane User data | WorkOS user ID, email in WorkOS, memberships, sessions, device-flow tokens               | Splitch-controlled                                         | WorkOS, D1 IDs, KV sessions, keychain/CLI                                       |
+| Organization/App config | Orgs, Apps, Environments, Flags, Experiments, Metrics, Segments, credential metadata     | Customer-controlled                                        | D1, KV config cache, per-App DO                                                 |
+| Entity data             | Targeting Key, idType, Exposures, Activations, Metric Events, Assignment Store holdovers | Customer-controlled; Splitch is processor/service provider | Tinybird raw/derived data, KV, Assignment Store DO, ingest recovery/queues/DLQs |
+| Browser analytics data  | Web Events, Web Sessions, optional Entity identity                                       | Customer-controlled; Splitch is processor/service provider | Tinybird `web_events` plus retry state, ingest recovery/queues/DLQ              |
+| Audit/security data     | control-plane mutation audit, auth door, actor ID, request logs                          | shared legal/security record                               | Tinybird audit log, D1 privacy request log                                      |
+| Observability data      | errors, traces, structured logs                                                          | Splitch-controlled operations data                         | Sentry, Axiom, Cloudflare logs                                                  |
+| Billing data            | plan, Stripe customer/subscription IDs, invoices                                         | Splitch-controlled billing data                            | D1, Stripe when enabled                                                         |
 
 ## Browser analytics identity
 
@@ -94,15 +94,22 @@ targeting_key_hash = HMAC_SHA256(app_entity_identity_key, id_type + ":" + target
 Rules:
 
 - `app_entity_identity_key` is random, secret, App-scoped, and stored outside Tinybird.
-- The identity key is immutable for the App lifetime so Exposures, Assignments, Metric Events, and
-  Entity-identified Web Events continue to join across retries and retention windows.
+- The identity key is immutable for one App identity epoch so Exposures, Assignments, Metric Events,
+  and Entity-identified Web Events continue to join across retries and retention windows.
 - Routine secret rotation rotates or rewraps the key-encryption key while preserving the underlying
   App identity key and therefore the pseudonym.
-- Replacing a compromised App identity key is an explicit destructive privacy operation. It Ends
-  active Runs, clears Assignment Store rows and ingest idempotency claims, and creates a new
-  non-joining identity epoch for future data. Historical rows cannot be rekeyed because Splitch does
-  not retain raw Targeting Keys.
-- Entity export/delete computes the one stable `targeting_key_hash` and operates on all matches.
+- Replacing a compromised App identity key is an explicit destructive App-wide privacy reset. It
+  blocks App traffic and reads, Ends active Runs, revokes SDK credentials, suppresses and purges all
+  queued delivery, and deletes every App Assignment, idempotency claim, event row, deduped snapshot,
+  aggregate state, rollup, and result input before the old key is destroyed. It also purges
+  old-epoch `entity_deletions` rows and rewrites Entity `privacy_requests.subject_ref` hash arrays to
+  `redacted:app-identity-reset`. The reset includes anonymous Web Events because their Web Session
+  pseudonyms use the same key. No old-epoch identity-bearing row may remain.
+- The replacement key starts a new identity epoch only after every store-specific purge checkpoint
+  passes. The App requires explicit credential re-issuance before Evaluation or ingest resumes.
+- Entity export/delete computes the one stable `targeting_key_hash` for the active identity epoch and
+  operates on all matches. Requests accepted before a destructive reset are completed by the
+  mandatory App-wide purge rather than by retaining old keys.
 - The raw Targeting Key is used in memory for `assign()`, Condition matching, or Metric/Web Event
   HMAC derivation, then discarded.
 - KV keys, DO names, Tinybird rows, Axiom fields, Sentry payloads, and audit details never contain the
@@ -114,35 +121,40 @@ Rules:
 
 D1 owns a bounded `privacy_requests` table:
 
-| column            | meaning                                                                                    |
-| ----------------- | ------------------------------------------------------------------------------------------ |
-| `request_id`      | ULID                                                                                       |
-| `org_id`          | Organization receiving the request                                                         |
-| `app_id`          | nullable; present for App/Entity requests                                                  |
-| `request_type`    | `access` \| `export` \| `correct` \| `delete` \| `opt_out_sale_share` \| `limit_sensitive` |
-| `subject_type`    | `user` \| `organization` \| `app` \| `entity`                                              |
-| `subject_ref`     | WorkOS user ID, org/app ID, or JSON array of `targeting_key_hash` values                   |
-| `requested_by`    | WorkOS user ID of the requester                                                            |
-| `status`          | `received` \| `verifying` \| `processing` \| `completed` \| `denied`                       |
-| `received_at`     | server timestamp                                                                           |
-| `ack_due_at`      | received_at + 10 business days                                                             |
-| `response_due_at` | received_at + 45 calendar days, extendable once                                            |
-| `completed_at`    | nullable                                                                                   |
-| `denial_reason`   | nullable; policy/legal reason only                                                         |
+| column                    | meaning                                                                                               |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `request_id`              | ULID                                                                                                  |
+| `org_id`                  | Organization receiving the request                                                                    |
+| `app_id`                  | nullable; present for App/Entity requests                                                             |
+| `request_type`            | `access` \| `export` \| `correct` \| `delete` \| `opt_out_sale_share` \| `limit_sensitive`            |
+| `subject_type`            | `user` \| `organization` \| `app` \| `entity`                                                         |
+| `subject_ref`             | WorkOS user ID, org/app ID, Entity-hash array, or `redacted:app-identity-reset`                       |
+| `subject_ref_redacted_at` | nullable; set only when destructive identity reset irreversibly replaces an Entity-hash `subject_ref` |
+| `requested_by`            | WorkOS user ID of the requester                                                                       |
+| `status`                  | `received` \| `verifying` \| `processing` \| `completed` \| `denied`                                  |
+| `received_at`             | server timestamp                                                                                      |
+| `ack_due_at`              | received_at + 10 business days                                                                        |
+| `response_due_at`         | received_at + 45 calendar days, extendable once                                                       |
+| `completed_at`            | nullable                                                                                              |
+| `denial_reason`           | nullable; policy/legal reason only                                                                    |
 
 The ledger stores hashes and IDs, not email, raw Targeting Keys, or raw Evaluation Context attributes.
 Keep it for at least 24 months or the contractually configured audit period, whichever is longer.
+For a destructive App identity reset, an Entity request retains its non-identifying audit metadata
+but irreversibly replaces the hash array in `subject_ref` with
+`redacted:app-identity-reset` and stamps `subject_ref_redacted_at`. The old pseudonym is not retained
+in the ledger, audit details, logs, or reset evidence.
 
 ## Export contracts
 
 Exports are asynchronous jobs with a signed, expiring download URL. Raw secrets are never exported.
 
-| Export              | Included                                                                                                            | Excluded                                       |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| User export         | WorkOS profile, org/app memberships, sessions, issued tokens metadata, audit entries where actor                    | API Key raw values, other users' data          |
-| Organization export | Org, Apps, Environments, config, credential metadata, members, audit log, billing metadata                          | raw API Key values, processor-internal secrets |
-| App export          | Flag/Experiment/Event Definition/Metric/Segment config, Runs, results, credential metadata, audit rows              | other Apps in the Org                          |
-| Entity export       | rows matching `targeting_key_hash` in Assignment Store, raw events, Metric Events, deduped snapshots, result inputs | raw Targeting Rules for non-admin requesters   |
+| Export              | Included                                                                                                                                   | Excluded                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| User export         | WorkOS profile, org/app memberships, sessions, issued tokens metadata, audit entries where actor                                           | API Key raw values, other users' data          |
+| Organization export | Org, Apps, Environments, config, credential metadata, members, audit log, billing metadata                                                 | raw API Key values, processor-internal secrets |
+| App export          | Flag/Experiment/Event Definition/Metric/Segment config, Runs, results, credential metadata, audit rows                                     | other Apps in the Org                          |
+| Entity export       | rows matching `targeting_key_hash` in Assignment Store, raw events, Activation/Metric/Web states, deduped Exposure snapshot, result inputs | raw Targeting Rules for non-admin requesters   |
 
 Entity exports are scoped by App and idType. They include the categories, sources, purposes, and
 processors for the data, not only the physical rows.
@@ -152,13 +164,13 @@ Entity-identified Web Events with the same `targeting_key_hash` are included.
 
 Deletion is a two-phase job: stop future use first, then hard-purge every store that can hold the data.
 
-| Deletion                | Immediate action                                                    | Purge action                                                                                            |
-| ----------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| User                    | revoke sessions, refresh tokens, CLI/MCP tokens; remove memberships | delete or disable WorkOS user; remove D1 memberships; replace actor display with deleted-user tombstone |
-| Personal Organization   | revoke all SDK credentials and stop ingest/evaluate                 | purge all Apps, config, KV, DO state, Tinybird data, WorkOS org                                         |
-| Enterprise Organization | require owner approval and SSO/billing checks                       | same as personal Org after approval; preserve contracted audit records                                  |
-| App                     | revoke App credentials; block SDK evaluate/ingest                   | purge D1/KV config, Assignment Store, event rows, snapshots, rollups, audit read visibility             |
-| Entity                  | insert `entity_deletions` tombstone and exclude from analysis       | delete Assignment Store key/DO row and Tinybird rows matching `targeting_key_hash`                      |
+| Deletion                | Immediate action                                                    | Purge action                                                                                                       |
+| ----------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| User                    | revoke sessions, refresh tokens, CLI/MCP tokens; remove memberships | delete or disable WorkOS user; remove D1 memberships; replace actor display with deleted-user tombstone            |
+| Personal Organization   | revoke all SDK credentials and stop ingest/evaluate                 | purge all Apps, config, KV, DO state, Tinybird data, WorkOS org                                                    |
+| Enterprise Organization | require owner approval and SSO/billing checks                       | same as personal Org after approval; preserve contracted audit records                                             |
+| App                     | revoke App credentials; block SDK evaluate/ingest                   | purge D1/KV config, Assignment Store, event rows, Exposure snapshots, retry states, rollups, audit read visibility |
+| Entity                  | insert `entity_deletions` tombstone and exclude from analysis       | delete Assignment Store key/DO row and Tinybird rows matching `targeting_key_hash`                                 |
 
 `entity_deletions` contains `{ app_id, id_type, targeting_key_hash, delete_before_ts, requested_at,
 completed_at }`. The Analysis Worker MUST exclude rows where `server_received_at <= delete_before_ts` as soon as
@@ -166,13 +178,15 @@ the tombstone is committed, even before Tinybird hard purge finishes. New events
 Key after `delete_before_ts` are treated as newly collected customer data.
 
 App deletion immediately suppresses every pending outbox publication, primary-queue delivery,
-poison transfer, and manual DLQ replay for that `app_id`. Entity deletion applies the same
-suppression to queued or replayed rows carrying the matching `(app_id, id_type,
+write-ahead Tinybird attempt, indeterminate reconciliation, `poison_pending`, `poison_transferred`,
+and manual DLQ replay
+for that `app_id`. Entity deletion applies the same suppression to queued, attempting,
+indeterminate, or replayed rows carrying the matching `(app_id, id_type,
 targeting_key_hash)` at or before `delete_before_ts`. Event Ingest consumers and operator replay
 tools must recheck the current deletion suppression before Tinybird publication; a suppressed row is
-acknowledged or purged without append. Deletion cannot be marked complete until matching outbox and
-poison-transfer state is purged and the bounded primary-queue/DLQ retention or equivalent purge
-evidence proves no matching delivery can re-enter Tinybird.
+acknowledged or purged without append. Deletion cannot be marked complete until matching outbox,
+indeterminate state, and both poison states are purged and the bounded primary-queue/DLQ retention or
+equivalent purge evidence proves no matching delivery can re-enter Tinybird.
 
 Entity deletion redacts matching ingest claims and removes their canonical payloads, but it retains
 a payload-free suppression claim containing only the family-scoped `dedup_key`, payload fingerprint,
@@ -191,13 +205,16 @@ exceptions, read surfaces show a deleted-user tombstone instead of a name or ema
 Every delete job must record per-store status for:
 
 - WorkOS: user, Organization, SSO/SCIM state.
-- D1: Organization/App/config/membership/credential metadata/privacy ledgers.
+- D1: Organization/App/config/membership/credential metadata/privacy ledgers, including destructive
+  reset purge of old-epoch `entity_deletions` and irreversible Entity `subject_ref` redaction.
 - KV: sessions, credential caches, config cache, liveRun keys, Assignment Store read keys.
 - Durable Objects: per-App live-update state, Assignment Store writer rows, ingest claims/outbox
-  payloads, Admission Gate state, and poison-transfer records.
+  payloads, Admission Gate state, write-ahead Tinybird attempts, indeterminate records, and
+  `poison_pending`/`poison_transferred` records.
 - Cloudflare Queues: all four primary ingest queues and all four DLQs, including manual replay
   inventory and bounded retention evidence.
-- Tinybird: raw events, Metric Events, Web Events, deduped exposures, rollups, audit reads.
+- Tinybird: raw events, Metric Events, Web Events, the deduped Exposure snapshot,
+  Activation/Metric/Web aggregate states, rollups, result inputs, and audit reads.
 - Sentry/Axiom/Cloudflare logs: no raw Entity data by design; request deletion from processor if a
   scrubber regression captured personal data.
 - Stripe, when enabled: customer/subscription/invoice lifecycle by billing policy.
@@ -232,25 +249,39 @@ Minimum required coverage:
   poison-transfer, and manual DLQ replay from re-appending deleted rows.
 - Retry suppression tests proving a deleted Metric or Web Event cannot be resurrected after its
   payload-bearing claim is redacted.
+- Destructive identity-reset tests proving traffic and reads remain blocked until every raw and
+  derived store is purged, old `entity_deletions` are gone, Entity `privacy_requests.subject_ref`
+  values are irreversibly redacted, the old key is destroyed only after every checkpoint is complete,
+  and the new identity epoch cannot expose rows made unreachable by key destruction.
 - Export tests proving raw API Key values, processor secrets, and other tenants' data are absent.
 - Backup/restore tests proving privacy tombstones replay before serving traffic or analytics.
 
+## Activation retention
+
+Activation rows in `raw_events` and `deduped_activations_state` have matching default 90-day
+retention. Raw `server_received_at` equals `activation_ts`; the state TTL uses the exact
+`activation_ts`, so a derived Activation cannot outlive its raw fact. App and Entity deletion operate
+on both layers explicitly.
+
 ## Metric Event retention
 
-The `metric_events` datasource has a default 90-day retention, matching the Exposure replay window.
-Every configured Conversion Window and promised analysis replay window must fit inside retention.
-Event Definition and Metric metadata may outlive physical Metric Event rows, but immutable version
-records remain while any retained row references them.
+The raw `metric_events` datasource and `deduped_metric_events_state` have matching default 90-day
+retention, aligned with the Exposure replay window. Every configured Conversion Window and promised
+analysis replay window must fit inside both. Event Definition and Metric metadata may outlive physical
+Metric Event rows and states, but immutable version records remain while any retained row references
+them. Both TTL expressions use the same full `server_received_at` timestamp, so state cannot expire
+earlier because of date truncation.
 
 ## Web Event retention
 
-The `web_events` datasource has an independent default 30-day retention because it contains
-higher-volume exploratory browser facts and is not an Experiment input. Retention may be configured
-within plan limits and has no Conversion Window or Experiment replay minimum. Entity and App
-deletion obligations apply regardless of the configured TTL.
+The raw `web_events` datasource and `deduped_web_events_state` have matching independent default
+30-day retention because they contain higher-volume exploratory browser facts and are not Experiment
+inputs. Retention may be configured within plan limits and has no Conversion Window or Experiment
+replay minimum. Entity and App deletion obligations apply regardless of the configured TTL.
+Raw and state TTL use the same full `server_received_at` timestamp.
 
-Event Definition metadata may outlive physical Web Event rows, but each immutable Event Definition
-Version remains available while any retained row references it.
+Event Definition metadata may outlive physical Web Event rows and states, but each immutable Event
+Definition Version remains available while any retained row references it.
 
 The governing ADR is
 [0032](../../adr/0032-privacy-data-lifecycle-is-an-enforced-product-contract.md).

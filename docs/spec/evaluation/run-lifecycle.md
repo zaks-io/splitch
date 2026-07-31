@@ -66,15 +66,17 @@ open a new one (sample resets to zero; UI must warn loudly):
 
 ## Recomputable config (measurement edits — no new Run)
 
-Changes to these fields apply to the live Run in place and **recompute over existing raw log**:
+Changes to these fields apply to the live Run in place and **recompute through the canonical serving
+layers**:
 
 - Metric definitions (Binomial / Count / Revenue / Ratio)
 - Conversion Window
 - Guardrail Metric config
 - Activation Metric is specifically excluded; see above.
 
-The raw Exposure log is the system of record (append-only, never mutated); recomputing is a
-re-run of the dedup/metric query with the new definition. No new `runId`, no sample reset.
+The append-only raw logs remain systems of record, but recomputation reads
+`serve_deduped_exposures` and `serve_deduped_metric_events`, not a physical Metric log. It re-runs the
+logical dedup/metric query with the new definition. No new `runId`, no sample reset.
 
 ## Non-material edits (in place, same Run)
 

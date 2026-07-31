@@ -95,9 +95,10 @@ owner per SDK client.
 
 **Web Instrumentation Adapter**:
 An internal browser SDK adapter that translates one supported browser instrumentation source into
-one configured, schema-governed Web Event. The first supported sources are `page_view` and
-`web_vital`. Each adapter has a fixed output contract versioned with the SDK; later adapters may use
-OpenTelemetry instrumentation without exposing raw OTLP or a second ingest path.
+one configured, schema-governed Web Event. The first supported sources are `page_view`, `web_vital`,
+and privacy-safe `browser_error`. Each adapter has a fixed output contract versioned with the SDK;
+later adapters may use OpenTelemetry instrumentation without exposing raw OTLP or a second ingest
+path.
 
 **Web Flush**:
 The acknowledged `web.flush()` accessor. It sends the current in-memory Web Event queue and resolves

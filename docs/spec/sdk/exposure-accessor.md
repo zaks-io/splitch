@@ -52,8 +52,10 @@ branch on `reason` / `errorCode` (e.g. surface a banner on `STALE`, throw in you
    caller-owned idempotency key, and SDK/runtime to non-billable cache telemetry. That telemetry never
    carries a Targeting Key; a telemetry failure is logged loudly but cannot change the cached result.
 3. On seen-set miss: calls `POST /api/sdk/evaluate` (see [public-evaluate-endpoint.md](./public-evaluate-endpoint.md)).
-4. Worker fires Exposure to the raw log when the result carries a live Run (server-side; client does
-   not send a separate track call). A disabled, no-Experiment, or no-live-Run result records none.
+4. When the result carries a live Run, the Worker seals the retry-stable Exposure in the Event Ingest
+   `raw_events` outbox before returning success; the client does not send a separate track call. Seal
+   failure returns `reason: ERROR`, records no holdover, and can be retried with the same caller-owned
+   idempotency key. A disabled, no-Experiment, or no-live-Run result records none.
 5. SDK updates seen-set with `(flagKey, runId, targetingKey) -> VariantValue`.
 6. Returns resolved Variant (or full details).
 7. **On failure (network, 503, 404): returns Default Variant with `reason: ERROR` + an
@@ -154,10 +156,10 @@ What `verify` reveals scales with the credential (ADR-0037):
 `errorCode`, loudly. A green verify is an unambiguous success `reason`, never a disguised
 fallback.
 
-## Exposure row on the wire (Exposure pipeline schema cross-reference)
+## Accepted Exposure payload (pipeline schema cross-reference)
 
-When `evaluate` resolves through a live Experiment Run, the Worker appends the following to the raw
-Exposure log.
+When `evaluate` resolves through a live Experiment Run, the Evaluation Worker seals the following
+canonical payload for Event Ingest.
 **The SDK does not own this schema** — it is owned by the [pipeline area spec](../pipeline/).
 This table is a cross-reference only; do not duplicate the authoritative definition.
 
@@ -174,13 +176,14 @@ This table is a cross-reference only; do not duplicate the authoritative definit
 | `variant`            | string                     | Variant name (not value) — immutable experimental arm label        |
 | `source_id`          | string                     | edge POP identifier                                                |
 | `server_received_at` | timestamp                  | server-received-at (canonical for MIN(ts) first-touch)             |
-| `ingest_ts`          | timestamp                  | raw-log append watermark; never used for first-touch               |
 | `client_timestamp`   | timestamp                  | client-fired time (diagnostics only; may have clock skew)          |
 | `type`               | 'exposure' \| 'activation' | always 'exposure' here                                             |
 
 `run_id` is stamped **server-side at request time** (not at dedup time) to avoid race
 conditions with Run closure. `variant` is the Variant name;
 the Variant value is not logged (it is flag config, not event data).
+Physical `ingest_ts` is not in this payload. Tinybird assigns it with `DEFAULT now64(3)` when the
+Queue consumer inserts the row.
 
 ## First-touch identity
 

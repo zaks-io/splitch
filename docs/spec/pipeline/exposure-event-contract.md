@@ -23,7 +23,7 @@ datasource and contract; Web Events use another separate family. A peek or test-
 | `variant`            | `string`        | yes      | The Variant name (string, never the value/metadata) assigned to this Entity                                                                                                       |
 | `event_id`           | `string`        | yes      | Retry-stable physical event id generated once when the Worker creates this raw row                                                                                                |
 | `server_received_at` | `DateTime64(3)` | yes      | Server-received-at timestamp (millisecond precision, UTC); canonical for `MIN(ts)` first-touch ordering — monotonic, no clock skew                                                |
-| `ingest_ts`          | `DateTime64(3)` | yes      | Raw-log append timestamp; used only for snapshot/tail watermarks, never for analysis ordering                                                                                     |
+| `ingest_ts`          | `DateTime64(3)` | yes      | Tinybird-assigned physical insertion timestamp; used only for snapshot/tail watermarks, never for analysis ordering                                                               |
 | `client_timestamp`   | `DateTime64(3)` | no       | Client-fired timestamp; carried for diagnostics only, never used for ordering                                                                                                     |
 | `dedup_key`          | `string`        | yes      | Idempotent at-least-once key; see Dedup Key section below                                                                                                                         |
 | `source_id`          | `string`        | yes      | Edge POP identifier (e.g. `'sea01'`); included in `dedup_key`                                                                                                                     |
@@ -41,7 +41,8 @@ dedup_key = sha256(type + ':' + app_id + ':' + experiment_id + ':' + run_id + ':
 - `source_id` (POP hostname) makes same-Entity, same-ms events from different POPs distinct.
 - `server_received_at` is not part of the key; it is for first-touch ordering, not wire-level idempotency.
 - New fields do NOT change this key — schema-stable by construction.
-- Tinybird datasource configures this column as its `dedup_key` to handle at-least-once ingest.
+- The datasource carries a Splitch `DEDUP_KEY` contract marker for repository validation. Tinybird
+  does not interpret that comment or enforce uniqueness; the serving dedup layer remains authoritative.
 
 ### Idempotency invariant
 
@@ -60,11 +61,16 @@ The dedup key is for wire-level ingest deduplication only. The first-touch dedup
 | `targeting_key_hash` | `string`        | yes      | HMAC-derived Entity identifier                                                                         |
 | `event_id`           | `string`        | yes      | Retry-stable physical event id generated once when the Worker creates this raw row                     |
 | `server_received_at` | `DateTime64(3)` | yes      | Server-received-at timestamp; equals `activation_ts` for server-received activations                   |
-| `ingest_ts`          | `DateTime64(3)` | yes      | Raw-log append timestamp; used only for snapshot/tail watermarks, never for analysis ordering          |
+| `ingest_ts`          | `DateTime64(3)` | yes      | Tinybird-assigned physical insertion timestamp; used only for snapshot/tail watermarks                 |
 | `activation_ts`      | `DateTime64(3)` | yes      | When the activation event occurred (server-received-at)                                                |
 | `dedup_key`          | `string`        | yes      | Same construction as Exposure dedup key                                                                |
 | `source_id`          | `string`        | yes      | Edge POP identifier; included in `dedup_key`                                                           |
 | `counterfactual`     | `boolean`       | yes      | `false` by default; `true` when emitted by the SDK counterfactual evaluation path (additive, ADR-0013) |
+
+`ingest_ts` is required on every stored physical row but absent from the canonical producer, outbox,
+and Queue payload. The `raw_events` datasource assigns it with `DEFAULT now64(3)` when Tinybird
+inserts the row. Delayed Queue delivery and manual replay therefore receive their actual insertion
+watermark instead of a stale pre-publication timestamp.
 
 ## Non-exposing paths
 

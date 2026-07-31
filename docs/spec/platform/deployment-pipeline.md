@@ -138,17 +138,17 @@ record; they are not the default for splitch's public Workers.
 
 Per-Worker configs must declare only the bindings owned by that Worker:
 
-| Worker                   | Binding rule                                                                                                                                                                                                         |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update and D1-backed Durable Object bindings                                                                                                  |
-| MCP Worker               | No D1, KV, Tinybird, or Durable Object data bindings; calls public APIs by origin and Analysis by service binding through `@splitch/control-plane-sdk`                                                               |
-| Evaluation Worker        | Provider/config KV, Assignment Store KV/DO, Event Ingest service binding                                                                                                                                             |
-| Event Ingest Worker      | Four datasource-specific Queue producer/consumer bindings, four matching DLQ producer bindings, one SQLite Admission Gate Durable Object class binding, sharded ingest/outbox Durable Objects, Tinybird write secret |
-| Analysis Worker          | Tinybird read secret; no SDK evaluate or ingest bindings                                                                                                                                                             |
-| Auth API Worker          | D1 identity/session binding plus auth/session/token bindings; no post-create App management bindings                                                                                                                 |
-| Control Panel Worker     | D1 binding for server-side auth, session, and claim flows plus UI/session/client bindings; no direct KV/Tinybird access                                                                                              |
-| Marketing Worker         | Static/public bindings only; no authenticated App data                                                                                                                                                               |
-| Scheduled jobs           | Cron triggers stay on owning Workers: Control Plane API demo cleanup and Analysis snapshot refresh                                                                                                                   |
+| Worker                   | Binding rule                                                                                                                                                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Control Plane API Worker | D1 system-of-record binding, KV config/credential cache bindings, live-update and D1-backed Durable Object bindings                                                                                                           |
+| MCP Worker               | No D1, KV, Tinybird, or Durable Object data bindings; calls public APIs by origin and Analysis by service binding through `@splitch/control-plane-sdk`                                                                        |
+| Evaluation Worker        | Provider/config KV, Assignment Store KV/DO, Event Ingest service binding                                                                                                                                                      |
+| Event Ingest Worker      | Four datasource-specific Queue producer/consumer bindings, four matching DLQ producer bindings, one SQLite Admission Gate Durable Object class binding, sharded ingest/outbox/recovery Durable Objects, Tinybird write secret |
+| Analysis Worker          | Tinybird read secret; no SDK evaluate or ingest bindings                                                                                                                                                                      |
+| Auth API Worker          | D1 identity/session binding plus auth/session/token bindings; no post-create App management bindings                                                                                                                          |
+| Control Panel Worker     | D1 binding for server-side auth, session, and claim flows plus UI/session/client bindings; no direct KV/Tinybird access                                                                                                       |
+| Marketing Worker         | Static/public bindings only; no authenticated App data                                                                                                                                                                        |
+| Scheduled jobs           | Cron triggers stay on owning Workers: Control Plane API demo cleanup and Analysis snapshot refresh                                                                                                                            |
 
 Each Event Ingest queue consumer is checked into every Wrangler target with
 `max_concurrency = 1`, `max_batch_size = 100`, and `max_batch_timeout = 1` second. Preview and
@@ -160,6 +160,10 @@ means at most eight total attempts including the initial delivery. Permanent fai
 copied to the DLQ and acknowledged without consuming the retry budget. A deployment is incomplete
 if any primary queue lacks its matching DLQ binding or if shared preview and production reuse a queue
 resource.
+
+Hosted smoke must also prove each Tinybird request has durable write-ahead attempt state and that an
+unresolved `attempting`/`indeterminate` record prevents redelivery from calling Tinybird. Retryable
+`429`, `500`, and `503` outcomes remain bounded by the same eight-attempt ceiling.
 
 Queue publication contract tests and hosted smoke enforce the 120,000-byte per-message ceiling and
 the 100-message/240,000-byte `sendBatch` ceilings from
@@ -373,6 +377,14 @@ Tinybird flow:
    runs only after that verification.
 4. Destructive Tinybird deploys require explicit human approval and `--allow-destructive-operations`.
    They are not allowed in the default production deploy workflow.
+
+The first deployment of `deduped_activations_state`, `deduped_metric_events_state`, or
+`deduped_web_events_state` follows
+[physical-dedup-pipes.md](../pipeline/physical-dedup-pipes.md): `tb deploy --check` must prove
+`BACKFILL skip`, affected reads/intake remain blocked, population runs one App/Environment/source
+month at a time, and exact raw-versus-serving reconciliation completes before traffic opens. A
+Forward plan that automatically populates retained history or a smoke query that reads a physical raw
+log fails the release.
 
 Current cloud setup: Tinybird workspaces `splitch_dev` and `splitch_prod` exist. Both have the
 committed datasource shape deployed and a `raw_events_ingest` APPEND token generated by the Tinybird

@@ -8,10 +8,11 @@ A config edit is sorted by **what it invalidates**, and the two cases get differ
   `assign()` or how its output is interpreted, so Exposures collected before and after are **not comparable**.
   These **end the current Run and open the next** (sample resets to zero). This is the ADR-0002 invariant:
   a Run is a window over which _bucketing and the Control used to interpret it_ were frozen.
-- **Measurement edits** — Secondary Metric definitions, Conversion Window, and exploratory Guardrail config — change _what
-  the numbers mean_, but not _who is in which arm_. The raw Exposure/event log is untouched and still
-  comparable. These **recompute losslessly over the existing Run**: re-run the analysis query with the new
-  definition over the same raw log. **No new Run, no sample reset.**
+- **Measurement edits** — Secondary Metric definitions, Conversion Window, and exploratory Guardrail
+  config — change _what the numbers mean_, but not _who is in which arm_. Append-only raw logs remain
+  untouched and comparable, but request-time recomputation joins `serve_deduped_exposures` to
+  `serve_deduped_metric_events`; it never scans the physical Metric log directly. These
+  **recompute losslessly over the existing Run**. **No new Run, no sample reset.**
 - **Activation Metric config** is assignment-affecting for splitch because it redefines the analysis entry
   population and `window_anchor`; setting or changing it opens a new Run.
 - **Non-material edits** (description, owner, tags, dashboard layout) apply in place.

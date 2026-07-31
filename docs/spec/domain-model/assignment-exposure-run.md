@@ -31,7 +31,7 @@ The **only event recorded on this seam.**
 | `server_received_at` | `timestamp`                  | ✓   | Server-received-at; canonical for `MIN(ts)` first-touch ordering (no client clock skew)                 |
 | `client_timestamp`   | `timestamp \| null`          | ✗   | Client-fired time; diagnostics only                                                                     |
 | `type`               | `"exposure" \| "activation"` | ✓   | Row type discriminator (unified event log; see [activation-event.md](./activation-event.md))            |
-| `counterfactual`     | `boolean \| null`            | ✗   | `true` only on Control-arm would-have-activated events (additive deferred extension; null by default)   |
+| `counterfactual`     | `boolean`                    | ✓   | `true` only on Control-arm would-have-activated events (additive deferred extension; false by default)  |
 
 **`run_id` stamping:** stamped at SDK fire-time using the live Run config the SDK currently holds. The SDK is responsible for carrying `run_id` from its most recent flag resolution. The pipeline validates `run_id` is a known Run for the Experiment at ingest; malformed rows are quarantined.
 

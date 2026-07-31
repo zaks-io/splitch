@@ -126,9 +126,9 @@ activation rows satisfy this invariant.
 | `winsorize_pct`         | `number`                                | yes      | Default `99.9`; ignored if winsorize=false                              |
 | `downside_threshold`    | `number \| null`                        | no       | Set to make this a Guardrail Metric                                     |
 
-The Analysis Worker reads the query-time-deduplicated logical `metric_events` source, not physical
-rows and not the Exposure/Activation `raw_events` log. For a non-Ratio Metric it selects only rows
-with the same App, Environment, `id_type`,
+The Analysis Worker reads `serve_deduped_metric_events` after its aggregate-state merge, not physical
+`metric_events` rows and not the Exposure/Activation `raw_events` log. For a non-Ratio Metric it
+selects only rows with the same App, Environment, `id_type`,
 `targeting_key_hash`, and `event_definition_id = metric.event_definition_id`. For Ratio Metrics it
 applies that Event Definition match independently to the numerator and denominator component Metrics
 before forming the per-Entity pair. `id_type` must equal the Run's `targeting_key_type`;
@@ -137,8 +137,9 @@ accepting Event Definition Version using `event_field_name`.
 
 ## Measurement edits (no new Run)
 
-Metric definition changes are **measurement edits** (ADR-0002). They recompute
-over the existing Run losslessly; the raw event log is re-queried. No new Run, no sample reset.
+Metric definition changes are **measurement edits** (ADR-0002). They recompute over the existing Run
+losslessly by joining `serve_deduped_exposures` to `serve_deduped_metric_events`. The append-only raw
+logs remain replay and repair truth, not the request-time serving path. No new Run, no sample reset.
 
 Exception: changing the **Activation Metric** (the gate definition) is an **assignment edit** and
 opens a new Run. The Activation Metric is frozen per Run.

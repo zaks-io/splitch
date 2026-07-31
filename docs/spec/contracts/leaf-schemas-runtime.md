@@ -24,8 +24,8 @@ attributes.
 
 ## Exposure event
 
-The only event on the Assignment/Exposure seam. Appended to Tinybird. Every field is required so
-the wire `dedup_key` is always satisfiable.
+The only event on the Assignment/Exposure seam. Appended to Tinybird. Every field used by the wire
+`dedup_key` is required; diagnostic client time is optional.
 
 | Field              | Type                         | Required | Meaning                                                                                                                                                                                 |
 | ------------------ | ---------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -41,12 +41,13 @@ the wire `dedup_key` is always satisfiable.
 | `type`             | `'exposure' \| 'activation'` | yes      | Discriminator; activations share this schema                                                                                                                                            |
 | `sourceId`         | `string`                     | yes      | Edge POP identifier; component of `dedupKey`                                                                                                                                            |
 | `counterfactual`   | `boolean`                    | yes      | `false` for real Exposures; reserved for future counterfactual triggering                                                                                                               |
-| `clientTimestamp`  | `string` (ISO 8601)          | yes      | When the SDK fired the event (diagnostic only; subject to clock skew)                                                                                                                   |
+| `clientTimestamp`  | `string` (ISO 8601)          | no       | When the SDK fired the event (diagnostic only; subject to clock skew)                                                                                                                   |
 | `serverReceivedAt` | `string` (ISO 8601)          | yes      | Server-received event timestamp; used for `MIN(ts)` first-touch ordering                                                                                                                |
-| `ingestTs`         | `string` (ISO 8601)          | yes      | Raw-log append watermark; used by snapshot/tail only                                                                                                                                    |
 
 First-touch identity: the tuple `(appId, environmentId, experimentId, runId, idType, targetingKeyHash)`
 resolved by `MIN(serverReceivedAt)` — the earliest wins. Distinct from the wire `dedup_key` above.
+`ingestTs` is not a producer field. The Tinybird `raw_events` projection assigns physical
+`ingest_ts` with `DEFAULT now64(3)` at insertion.
 
 ---
 
@@ -102,47 +103,60 @@ privacy boundary from omitted input.
 
 `EventFieldDefinition`:
 
-| Field           | Type                                          | Required | Meaning                                                                |
-| --------------- | --------------------------------------------- | -------- | ---------------------------------------------------------------------- |
-| `name`          | `string`                                      | yes      | Stable top-level name referenced by Metrics                            |
-| `type`          | `'boolean' \| 'string' \| 'number' \| 'json'` | yes      | Accepted value family                                                  |
-| `required`      | `boolean`                                     | yes      | Whether every event must carry the field                               |
-| `allowedValues` | matching scalar array                         | cond.    | Required for string; optional for boolean/number                       |
-| `minimum`       | finite `number`                               | no       | Inclusive lower bound; number type only                                |
-| `maximum`       | finite `number`                               | no       | Inclusive upper bound; number type only                                |
-| `jsonSchema`    | closed JSON Schema                            | cond.    | Required only when `type = 'json'`; root and nested objects are closed |
+| Field           | Type                                                                                  | Required | Meaning                                                                |
+| --------------- | ------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
+| `name`          | `string`                                                                              | yes      | Stable top-level name referenced by Metrics                            |
+| `type`          | `'boolean' \| 'string' \| 'number' \| 'json'`                                         | yes      | Accepted value family                                                  |
+| `required`      | `boolean`                                                                             | yes      | Whether every event must carry the field                               |
+| `numberKind`    | `'measurement' \| 'count' \| 'amount' \| 'duration' \| 'ratio' \| 'score' \| 'delta'` | cond.    | Required only for number; declares a non-identifier measurement        |
+| `allowedValues` | matching scalar array                                                                 | cond.    | Required for string; optional for boolean; one number-bounding option  |
+| `minimum`       | finite `number`                                                                       | cond.    | Number lower bound; required with `maximum` when no numeric allowlist  |
+| `maximum`       | finite `number`                                                                       | cond.    | Number upper bound; required with `minimum` when no numeric allowlist  |
+| `jsonSchema`    | closed JSON Schema                                                                    | cond.    | Required only when `type = 'json'`; root and nested objects are closed |
 
 `DimensionDefinition`:
 
-| Field           | Type                                | Required | Meaning                                              |
-| --------------- | ----------------------------------- | -------- | ---------------------------------------------------- |
-| `name`          | `string`                            | yes      | Stable top-level Dimension name                      |
-| `type`          | `'boolean' \| 'string' \| 'number'` | yes      | Scalar only; JSON Dimensions are not supported in V1 |
-| `required`      | `boolean`                           | yes      | Whether every event must carry the Dimension         |
-| `allowedValues` | matching scalar array               | cond.    | Required for string; optional for boolean/number     |
-| `minimum`       | finite `number`                     | no       | Inclusive lower bound; number type only              |
-| `maximum`       | finite `number`                     | no       | Inclusive upper bound; number type only              |
+| Field           | Type                                                                                  | Required | Meaning                                                         |
+| --------------- | ------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------- |
+| `name`          | `string`                                                                              | yes      | Stable top-level Dimension name                                 |
+| `type`          | `'boolean' \| 'string' \| 'number'`                                                   | yes      | Scalar only; JSON Dimensions are not supported in V1            |
+| `required`      | `boolean`                                                                             | yes      | Whether every event must carry the Dimension                    |
+| `numberKind`    | `'measurement' \| 'count' \| 'amount' \| 'duration' \| 'ratio' \| 'score' \| 'delta'` | cond.    | Required only for number; declares a non-identifier measurement |
+| `allowedValues` | matching scalar array                                                                 | cond.    | Required for string; optional for boolean; one numeric option   |
+| `minimum`       | finite `number`                                                                       | cond.    | Number lower bound; required with `maximum` without allowlist   |
+| `maximum`       | finite `number`                                                                       | cond.    | Number upper bound; required with `minimum` without allowlist   |
 
 JSON is accepted only for a field declared as `type = 'json'`. Its `jsonSchema` must set
 `additionalProperties: false` for every object node, including nested objects. Schemaless JSON,
 unknown field names, unknown Dimensions, unknown nested keys, and undeclared Entity Profile fields
 fail before any write.
 
-Telemetry payloads never accept free-form strings. Every top-level string field or Dimension requires
-a non-empty immutable `allowedValues` list, and every string node in a closed JSON Schema requires a
-non-empty `enum`. An allowlist or string enum contains at most 256 values. Each permitted string is a
-machine token of 1 to 64 ASCII characters matching `[A-Za-z0-9][A-Za-z0-9_.:-]*`; whitespace, `@`,
-URL path/query delimiters, arbitrary text, and values matching email, phone, IP address, URL, or UUID
-shapes are invalid. Definition and JSON property names are case-insensitively rejected when they are
-direct-PII names, including `email`, `email_address`, `name`, `full_name`, `first_name`, `last_name`,
-`phone`, `phone_number`, `address`, `street_address`, `ip`, `ip_address`, `user_agent`, `cookie`, and
-`token`. The same checks apply recursively to JSON property names.
+Telemetry payloads never accept free-form strings or unbounded numbers. Every top-level string field
+or Dimension requires a non-empty immutable `allowedValues` list, and every string node in a closed
+JSON Schema requires a non-empty `enum`. An allowlist or string enum contains at most 256 values. Each
+permitted string is a machine token of 1 to 64 ASCII characters matching
+`[A-Za-z0-9][A-Za-z0-9_.:-]*`; whitespace, `@`, URL path/query delimiters, arbitrary text, and values
+matching email, phone, IP address, URL, or UUID shapes are invalid.
 
-This structural rule is the enforceable no-direct-PII boundary. It prevents an event caller from
-placing an email, person name, address, raw URL, token, or other unconstrained identifier into an
-otherwise innocuous string field. Event Definition publishers must still choose non-personal machine
-tokens; disguising personal data under a misleading allowed value is a contract violation and is
-covered by definition review and privacy fixtures.
+Every number declares a `numberKind` and either a non-empty immutable `allowedValues`/`enum` of at
+most 256 finite numbers or both finite `minimum` and `maximum` with `minimum <= maximum`. Runtime
+values must be finite and satisfy that allowlist or inclusive range. A number cannot be published as
+an identifier, opaque code, timestamp, phone number, postal code, or account number.
+
+Before comparison, every definition and JSON property name is normalized by lowercasing and removing
+ASCII `_`, `-`, `.`, and spaces. The normalized name is rejected when it equals a direct-identifier
+name, including `email`, `emailaddress`, `name`, `fullname`, `firstname`, `lastname`, `phone`,
+`phonenumber`, `address`, `streetaddress`, `ip`, `ipaddress`, `useragent`, `cookie`, `token`, `ssn`,
+`socialsecuritynumber`, `taxid`, `passportnumber`, `driverslicensenumber`, `nationalid`,
+`governmentid`, `userid`, `customerid`, `accountid`, `bankaccountnumber`, `creditcardnumber`,
+`cardnumber`, `routingnumber`, `postalcode`, `zipcode`, `dateofbirth`, `birthdate`, `dob`,
+`deviceid`, `sessionid`, or `targetingkey`. The same checks apply recursively to JSON property names.
+
+These structural rules are the enforceable no-direct-PII publication boundary: they reject
+identifier-shaped names, unconstrained strings, and undeclared or unbounded numeric semantics before
+an Event Definition Version can publish. They cannot prove that a publisher has not deliberately
+mislabelled personal data as an allowed machine token or bounded measurement; doing so is a contract
+violation covered by definition review, audit, and privacy fixtures.
 
 ### Closed JSON Schema
 
@@ -150,6 +164,24 @@ covered by definition review and privacy fixtures.
 document. It supports exactly these node shapes:
 
 ```typescript
+type NumberKind = "measurement" | "count" | "amount" | "duration" | "ratio" | "score" | "delta";
+
+type ClosedJsonNumberSchema = {
+  type: "number" | "integer";
+  numberKind: NumberKind;
+} & (
+  | {
+      enum: number[];
+      minimum?: never;
+      maximum?: never;
+    }
+  | {
+      enum?: never;
+      minimum: number;
+      maximum: number;
+    }
+);
+
 type ClosedJsonSchema =
   | {
       type: "object";
@@ -167,12 +199,7 @@ type ClosedJsonSchema =
       type: "string";
       enum: string[];
     }
-  | {
-      type: "number" | "integer";
-      enum?: number[];
-      minimum?: number;
-      maximum?: number;
-    }
+  | ClosedJsonNumberSchema
   | {
       type: "boolean";
       enum?: boolean[];
@@ -202,15 +229,16 @@ value recursively against the stamped schema without coercion. A schema-definiti
 an Event Definition Version, event claim, outbox payload, queue message, or Tinybird row.
 
 `allowedValues` contains unique JSON scalar values that exactly match the declared scalar type. It is
-required for a string declaration, optional for boolean and number declarations, and invalid on a
-`json` field, whose JSON Schema uses `enum` instead. Ingest rejects a value outside the published
-allowlist with `EVENT_SCHEMA_MISMATCH`. Allowlists participate in `schemaHash`; changing one requires
-a new immutable Event Definition Version.
+required for a string declaration, optional for boolean, one of the two required numeric-domain
+branches for number, and invalid on a `json` field, whose JSON Schema uses `enum` instead. A number
+without `numberKind` or with neither a numeric allowlist nor both bounds fails publication. Ingest
+rejects a value outside the published allowlist with `EVENT_SCHEMA_MISMATCH`. Allowlists participate
+in `schemaHash`; changing one requires a new immutable Event Definition Version.
 
 `minimum` and `maximum` are valid only for a number declaration and are inclusive. Both values must
-be finite, and publication rejects `minimum > maximum`. Ingest rejects out-of-range values with
-`EVENT_SCHEMA_MISMATCH`. Bounds participate in `schemaHash`; changing either requires a new
-immutable Event Definition Version.
+be finite, cannot be combined with a numeric allowlist, and publication rejects
+`minimum > maximum`. Ingest rejects out-of-range values with `EVENT_SCHEMA_MISMATCH`. Bounds
+participate in `schemaHash`; changing either requires a new immutable Event Definition Version.
 
 ## Built-in Web Instrumentation Adapter templates
 
@@ -225,11 +253,11 @@ Each template contains only:
 
 The templates are:
 
-| Source          | Fields                                                                 | Dimensions                                                                                                       |
-| --------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `page_view`     | none                                                                   | required string `navigationType`                                                                                 |
-| `web_vital`     | required number `value`, minimum 0; required number `delta`, minimum 0 | required string `metricName`; required string `rating`; required string `unit`; required string `navigationType` |
-| `browser_error` | none                                                                   | required string `signal`; required string `exceptionType`                                                        |
+| Source          | Fields                                                                                   | Dimensions                                                                                                       |
+| --------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `page_view`     | none                                                                                     | required string `navigationType`                                                                                 |
+| `web_vital`     | required measurement `value` and delta `delta`, each bounded `[-86_400_000, 86_400_000]` | required string `metricName`; required string `rating`; required string `unit`; required string `navigationType` |
+| `browser_error` | none                                                                                     | required string `signal`; required string `exceptionType`                                                        |
 
 The templates apply these closed scalar allowlists:
 
@@ -287,10 +315,11 @@ The Event Ingest Worker constructs this shape only after the complete request va
 | `fields`                   | `Record<string, JsonValue>`                   | yes      | Validated values serialized canonically              |
 | `dimensions`               | `Record<string, boolean \| string \| number>` | yes      | Validated scalar Dimensions                          |
 | `serverReceivedAt`         | `string` (ISO 8601)                           | yes      | Canonical Metric event time                          |
-| `ingestTs`                 | `string` (ISO 8601)                           | yes      | Append watermark                                     |
 
 The authoritative delivery, idempotency, validation, and response contract is
 [metric-event-contract.md](../pipeline/metric-event-contract.md).
+The physical Tinybird projection adds server-assigned insertion timestamp `ingest_ts` with datasource
+`DEFAULT now64(6)`; the sealed canonical payload and queue message omit it.
 
 ---
 
@@ -367,7 +396,6 @@ The Event Ingest Worker constructs this shape only after the complete request va
 | `fields`                   | `Record<string, JsonValue>`                   | yes      | Values validated against the accepting immutable version |
 | `dimensions`               | `Record<string, boolean \| string \| number>` | yes      | Validated scalar Dimensions                              |
 | `serverReceivedAt`         | `string` (ISO 8601)                           | yes      | Canonical Web Event time                                 |
-| `ingestTs`                 | `string` (ISO 8601)                           | yes      | Append watermark                                         |
 
 `WebEventBatchResult` is the route response and the return type of `sdk.web.flush()`. The route
 returns it with `202`; an empty SDK queue returns the same shape locally without network I/O:
@@ -382,6 +410,9 @@ returns it with `202`; an empty SDK queue returns the same shape locally without
 
 Results preserve input order. A rejected item creates no idempotency claim and no `web_events` row;
 valid sibling items remain independently accepted.
+
+The physical Tinybird projection adds server-assigned insertion timestamp `ingest_ts` with datasource
+`DEFAULT now64(6)`; the sealed canonical payload and queue message omit it.
 
 A Web Session may correlate events before and after explicit Entity identity appears. Earlier rows
 remain anonymous facts and are not rewritten, promoted into Entity facts, or admitted to Experiment

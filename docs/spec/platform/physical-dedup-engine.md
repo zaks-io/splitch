@@ -31,14 +31,22 @@ is deduped inline).
 QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash ORDER BY server_received_at) = 1
 
 -- real-time tail (inline dedup on fresh rows):
-WHERE ingest_ts > {last_snapshot_watermark_ts}
+WHERE ingest_ts >= coalesce(
+  {last_snapshot_watermark_ts},
+  toDateTime64('1970-01-01 00:00:00', 3, 'UTC')
+)
 QUALIFY ROW_NUMBER() OVER (PARTITION BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash ORDER BY server_received_at) = 1
 ```
 
-Both use `ROW_NUMBER()` equivalent to `MIN(server_received_at)` for first-touch. The tail boundary uses
-`ingest_ts`, not `server_received_at`, because late-arriving rows can have an event timestamp older than
-the snapshot. Both are generated from one shared definition, never hand-copied (ADR-0005 "one
-dedup, centralized" at the physical layer).
+Both use `ROW_NUMBER()` equivalent to `MIN(server_received_at)` for first-touch. The snapshot reads
+`ingest_ts < watermark`, while the tail reads `ingest_ts >= watermark`; these disjoint half-open
+ranges assign equality to the tail. The final UNION re-dedups later physical rows for an Entity already
+in the snapshot. The tail boundary uses `ingest_ts`, not `server_received_at`, because late-arriving
+rows can have an event timestamp older than the snapshot. Both are generated from one shared
+definition, never hand-copied (ADR-0005 "one dedup, centralized" at the physical layer).
+When the latest snapshot contains no rows, its row-carried watermark is null. The tail uses the Unix
+epoch fallback above and scans all retained raw rows until the first nonempty snapshot, preserving
+correctness.
 
 ## Snapshot datasource shape
 
@@ -52,19 +60,21 @@ ExposureSnapshot {
   id_type:          string    // required
   variant:          string    // required — '__multiple__' if conflict
   first_exposure_ts: datetime  // required — MIN(server_received_at) from raw log
-  watermark_ts:     datetime  // required — max raw ingest_ts included in snapshot
+  watermark_ts:     datetime  // required — exclusive ingest boundary captured at snapshot start
 }
 ```
 
-`ENGINE_SORTING_KEY`: `(app_id, environment_id, experiment_id, run_id, targeting_key_hash)` — `app_id`
-first for tenant isolation and low-cardinality range efficiency; `environment_id` co-scoped (ADR-0027).
+`ENGINE_SORTING_KEY`:
+`(app_id, environment_id, experiment_id, run_id, variant, targeting_key_hash)`. `app_id` is first for
+tenant isolation; `environment_id` is co-scoped; low-cardinality `variant` precedes the
+high-cardinality Entity hash for per-arm Run reads (ADR-0027).
 
-## Rollup materialized views must build off the snapshot
+## Rollups rebuild after the snapshot
 
-AggregatingMergeTree MVs build on the deduped snapshot, never the raw log. A MV fires per
-inserted block and never sees merged or cross-block state, so raw-log edge duplicates (ADR-0004)
-leak into rollups and silently inflate SRM denominators and metric counts. The snapshot is the
-correct and only correct MV source (ADR-0017, ADR-0024).
+Replace-mode rollup Copy Pipes rebuild from the completed deduped snapshot, never the raw log.
+Tinybird materialized views are not used here: they fire per inserted block and do not retract prior
+target state when the source snapshot is replaced, so repeated snapshots would inflate counts. The
+ordered replace copies preserve both dedup correctness and repeatability (ADR-0017, ADR-0024).
 
 ## Snapshot cadence
 
@@ -81,16 +91,56 @@ queries:
 ```sql
 -- v0 query (full history, no snapshot):
 SELECT ... FROM raw_events
-WHERE type = 'exposure' AND app_id = {{String(app_id)}}
+WHERE type = 'exposure'
+  AND app_id = {{String(app_id)}}
+  AND environment_id = {{String(environment_id)}}
 GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
 -- MIN(server_received_at), __multiple__ quarantine, etc.
 
--- production query (snapshot + tail):
-SELECT * FROM first_touch_snapshot WHERE app_id = {{String(app_id)}}
-UNION ALL
-SELECT ... FROM raw_events
-WHERE type = 'exposure' AND app_id = {{String(app_id)}} AND ingest_ts > {{DateTime(last_snapshot_watermark_ts)}}
-GROUP BY ...
+-- production query (tenant-scoped snapshot + derived watermark + tail + final dedup):
+WITH
+snapshot AS (
+  SELECT
+    app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
+    variant, first_exposure_ts
+  FROM deduped_exposures
+  WHERE app_id = {{String(app_id)}}
+    AND environment_id = {{String(environment_id)}}
+),
+watermark AS (
+  SELECT coalesce(
+    MAX(watermark_ts),
+    toDateTime64('1970-01-01 00:00:00', 3, 'UTC')
+  ) AS watermark_ts
+  FROM deduped_exposures
+  WHERE app_id = {{String(app_id)}}
+    AND environment_id = {{String(environment_id)}}
+),
+tail AS (
+  SELECT
+    app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
+    CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
+         ELSE MAX(variant) END AS variant,
+    MIN(server_received_at) AS first_exposure_ts
+  FROM raw_events
+  CROSS JOIN watermark
+  WHERE type = 'exposure'
+    AND app_id = {{String(app_id)}}
+    AND environment_id = {{String(environment_id)}}
+    AND ingest_ts >= watermark.watermark_ts
+  GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
+)
+SELECT
+  app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
+  MIN(first_exposure_ts) AS first_exposure_ts,
+  CASE WHEN COUNT(DISTINCT variant) > 1 THEN '__multiple__'
+       ELSE MAX(variant) END AS variant
+FROM (
+  SELECT * FROM snapshot
+  UNION ALL
+  SELECT * FROM tail
+)
+GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
 ```
 
 Introducing the lambda layer is a performance optimization, not a correctness change. Trigger: when

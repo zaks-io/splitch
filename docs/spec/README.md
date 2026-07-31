@@ -31,7 +31,7 @@ scale to millions of events. Two planes:
   and have no Queue or Admission Gate binding.
 - **Control plane:** authoring (Org/App/Flag/Experiment/Run/Metric/Segment), auth (WorkOS +
   OAuth PRM + auth.md), and the MCP/CLI surfaces — all thin skins over one Zod-first typed contract. The
-  analytics/stats engine reads the raw Tinybird log.
+  analytics/stats engine reads deduped Tinybird serving layers backed by append-only raw logs.
 
 ## How we build (applies to every slice)
 
@@ -58,19 +58,18 @@ The [vision](../vision.md) says _what_ to build; these are the non-negotiable ru
 ## System map (seams)
 
 ```
-  Public SDK ──evaluate()/peek()──▶  Evaluation Worker ────────────────────────┐
-   (Client Key)                        │  reads Provider config (KV)            │
-                                       │  reads AssignmentStore.getAll (KV)     │ fires
-                                       │  assign() on miss / replay on holdover │ Exposure
-                                       ▼                                        ▼
-                              Provider (config)              Event Ingest Worker
-                              AssignmentStore                 (raw log, Tinybird)
-                               getAll: KV  / put: per-key DO   │ first-touch dedup (query-time)
-                                       ▲ write-through          │ __multiple__ quarantine
-                                       └── put (first-touch) ◀──┘ activation gate (re-anchor)
-                                                                ▼
-                                                         Analysis Worker
-                                                          Stats engine: variance → CUPED → aCS → FDR
+  Public SDK ──evaluate()/peek()──▶ Evaluation Worker
+   (Client Key)                       │ reads Provider config (KV)
+                                      │ reads AssignmentStore.getAll (KV)
+                                      │ assign() on miss / replay on holdover
+                                      ├── durable Exposure seal ──▶ Event Ingest Worker ──▶ Queue/Tinybird
+                                      └── after seal: AssignmentStore.put
+                                                       │
+                                                       ▼
+                                          per-key DO ──write-through──▶ KV
+
+  Event Ingest data ──▶ first-touch dedup / activation gate ──▶ Analysis Worker
+                                                               Stats: variance → CUPED → aCS → FDR
 
   Humans / Agents ──▶ Control Plane API Worker ◀── CLI + remote MCP Worker
   (WorkOS / OAuth PRM) │ Zod-first contract (@splitch/contracts → hc client)
@@ -122,8 +121,13 @@ Some topics are touched by more than one area, each from its own angle. The cano
   adapters; [`pipeline/web-event-identity.md`](./pipeline/web-event-identity.md) owns retry, Web
   Session, optional Entity identity, and Experiment-exclusion rules.
 - **Event Ingest transport** → [`pipeline/edge-ingest-contract.md`](./pipeline/edge-ingest-contract.md)
-  owns the four queues, DLQs, fixed Tinybird drain governor, Admission Gate, and durable acceptance
-  boundary. ADR-0043 records why the current direct path must be replaced.
+  owns the four queues, DLQs, fixed Tinybird drain governor, Admission Gate, durable acceptance, and
+  write-ahead Tinybird recovery boundary. ADR-0043 records why the current direct path must be
+  replaced.
+- **Metric/Web physical retry collapse** →
+  [`pipeline/physical-dedup-pipes.md`](./pipeline/physical-dedup-pipes.md) owns aggregate-state
+  materialization, merged serving reads, performance gates, and replacement-safe repair. ADR-0045
+  records why the raw logs remain truth but are not the enterprise request-time dedup path.
 - **Web Analytics reads** →
   [`control-plane/endpoints-web-analytics.md`](./control-plane/endpoints-web-analytics.md) owns the
   typed Analysis Worker routes; frontend specs own only their URL and presentation behavior.

@@ -135,13 +135,14 @@ describe("Deploy workflow observability secrets", () => {
     const deployJob = workflow.slice(deployStart, releaseStart);
     const releaseJob = workflow.slice(releaseStart);
 
-    expect(validateJob).toContain(GITHUB_LINEAR_SECRET_REFERENCE);
+    expect(validateJob).not.toContain("LINEAR_ACCESS_KEY");
     expect(deployJob).not.toContain("LINEAR_ACCESS_KEY");
+    expect(releaseJob).toContain(GITHUB_LINEAR_SECRET_REFERENCE);
     expect(releaseJob).toContain(GITHUB_LINEAR_ACTION_INPUT);
     expect(releaseJob).toContain("needs: deploy");
-    expect(releaseJob).not.toContain("environment: production");
-    expect(workflow.indexOf("Check release credentials")).toBeLessThan(
-      workflow.indexOf("Deploy Production"),
+    expect(releaseJob).toContain("environment: production");
+    expect(workflow.indexOf("Check Linear release credential")).toBeLessThan(
+      workflow.indexOf("Sync Linear release"),
     );
     expect(workflow.indexOf("Deploy Production")).toBeLessThan(
       workflow.indexOf("Sync Linear release"),

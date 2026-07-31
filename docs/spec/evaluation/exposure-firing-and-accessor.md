@@ -59,7 +59,6 @@ The side effect **must be documented prominently** in the SDK reference.
 | `variant`          | string   | yes      | The resolved Variant name                                                                  |
 | `sourceId`         | string   | yes      | Edge POP identifier                                                                        |
 | `serverReceivedAt` | ISO 8601 | yes      | Canonical first-touch ordering; monotonic; no client clock skew                            |
-| `ingestTs`         | ISO 8601 | yes      | Raw-log append watermark; never used for first-touch                                       |
 | `clientFiredAt`    | ISO 8601 | yes      | Wall-clock at fire time; diagnostics only                                                  |
 
 `runId` is stamped from `EvaluateResult.liveRunId` at fire time — set by the evaluate path,
@@ -67,6 +66,8 @@ not the pipeline.
 
 Both `serverReceivedAt` and `clientFiredAt` are logged. `MIN(serverReceivedAt)` is the
 canonical first-touch anchor.
+`ingestTs` is not part of the producer or durable outbox shape. Tinybird assigns physical
+`ingest_ts` with `DEFAULT now64(3)` when it inserts the row.
 
 ## First-touch identity
 
@@ -107,25 +108,30 @@ A peeked Entity who later encounters the Variant via a real page render should c
 
 ## Pipeline first-touch write
 
-When `sdk.evaluate()` fires an Exposure (non-holdover path), the Exposure event travels
-to the Exposure pipeline. The pipeline calls `AssignmentStore.put()` at confirmed first-touch:
+When `sdk.evaluate()` fires an Exposure (non-holdover path), the Exposure event travels to
+Exposure-pipeline orchestration hosted by the Evaluation Worker. That orchestration calls
+`AssignmentStore.put()` after durable acceptance:
 
-1. `evaluate()` returns `EvaluateResult` (with `liveRunId`).
-2. Accessor fires Exposure event (async, at-least-once).
-3. Pipeline receives Exposure; calls `DO.putIfAbsent(key, { runId, variant })`.
-4. DO commits; write-throughs to KV.
-5. Future `getAll()` reads on this key return the holdover record.
+1. The Evaluation Worker resolves `EvaluateResult` with `liveRunId`.
+2. Event Ingest atomically seals the scoped Evaluation claim, result fingerprint, retry-stable
+   Exposure row, and `raw_events` outbox payload.
+3. Only after that seal does the Worker return success to the SDK.
+4. The outbox publishes to Queue asynchronously, and Exposure-pipeline orchestration invokes
+   `AssignmentStore.put()`, whose DO adapter calls
+   `DO.putIfAbsent(key, { runId, variant })`, without waiting for the DO commit.
+5. The DO commits and writes through to KV; future `getAll()` reads return the holdover record.
 
-Steps 3-5 are **asynchronous** and happen after the response is returned. The hot path is
-not blocked on DO commit.
+Step 2 is the durable analysis acceptance boundary on the response path. Queue publication, Tinybird
+delivery, and the DO/KV write in steps 4-5 are asynchronous. If step 2 fails, the response is
+fail-loud and no Assignment Store write begins.
 
 ## Seam boundary
 
 **What's on this side (SDK accessor):** `evaluate()` / `peekVariant()` / `verify()` method
 surface; Exposure event assembly; seen-set optimization; holdover short-circuit.
 
-**What's NOT here:** dedup logic (pipeline), first-touch write (pipeline via DO), rule
-matching (evaluate path).
+**What's NOT here:** dedup logic (pipeline), first-touch write (Exposure-pipeline orchestration via
+the Assignment Store DO adapter), rule matching (evaluate policy module).
 
 **No caller-controlled suppression:** `evaluate()` fires an Exposure for every successful fresh
 assignment under a live Experiment Run. Holdovers, disabled Flags, no-Experiment, no-live-Run, and

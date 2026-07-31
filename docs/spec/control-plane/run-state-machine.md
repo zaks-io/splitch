@@ -104,7 +104,8 @@ not just Worker logic):
 
 ## Measurement edit fields (apply to live Run in place, no Run reset)
 
-These are PATCH'd on the Experiment (not the Run); they recompute over the existing raw log:
+These are PATCH'd on the Experiment (not the Run); they recompute through
+`serve_deduped_exposures` and `serve_deduped_metric_events`, never by scanning a physical Metric log:
 
 - Metric definitions, Conversion Window, Guardrail config
 - Non-material edits: description, owner, tags
@@ -120,9 +121,9 @@ decision-valid significance or Guardrail breach output:
 - Primary Dimension members and declared values
 - Guardrail Metric thresholds and directions
 
-Post-start edits may recompute exploratory views over the same raw log, but they do not mutate
-the current Run's decision spec. The Worker rejects attempts to change these fields for the current
-decision-valid result with `DECISION_LOCKED`.
+Post-start edits may recompute exploratory views over the same canonical serving layers, but they do
+not mutate the current Run's decision spec. The Worker rejects attempts to change these fields for
+the current decision-valid result with `DECISION_LOCKED`.
 
 ## Run D1 record shape
 

@@ -59,12 +59,14 @@ otherwise:
 - Use `family` for the immutable `metric` or `web` Event Definition discriminator.
 - A `metric` Event Definition Version requires an Entity type. A `web` version uses null for an
   anonymous-only contract or a non-null type for optional matching Entity identity.
-- String Event fields and Dimensions require immutable typed `allowedValues`; boolean and number
-  declarations may carry them. Every JSON string node requires an enum. String values are bounded
-  machine tokens, direct-PII property names are prohibited, and these constraints participate in the
-  version's schema hash.
-- Number fields and Dimensions may carry immutable inclusive `minimum` and `maximum` bounds. Bounds
-  are finite, ordered, and participate in the version's schema hash.
+- String Event fields and Dimensions require immutable typed `allowedValues`; boolean declarations
+  may carry them. Every JSON string node requires an enum. String values are bounded machine tokens,
+  direct-PII property names are prohibited, and these constraints participate in the version's
+  schema hash.
+- Every number field, Dimension, and recursive JSON number declares `numberKind` plus exactly one
+  immutable domain: either a non-empty finite numeric `allowedValues`/`enum`, or both finite inclusive
+  `minimum` and `maximum` bounds. Numeric allowlists and ranges are mutually exclusive, bounds are
+  ordered, and all numeric constraints participate in the version's schema hash.
 - Built-in `page_view`, `web_vital`, and `browser_error` adapter templates define only source-owned
   fields and Dimensions. Applications still choose Event Definition names, display metadata, and
   Entity policy explicitly before publication.

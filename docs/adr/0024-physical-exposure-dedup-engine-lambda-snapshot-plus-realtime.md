@@ -17,11 +17,14 @@ must stay identical: the Copy Pipe that builds the snapshot, and the real-time t
 generated from one shared definition, never hand-copied (this is ADR-0005's "one dedup, centralized"
 at the physical layer).
 
-The physical boundary is deliberately **not** `server_received_at > last_snapshot_ts`. `server_received_at` is the
-analysis clock used for first-touch and Conversion Window anchoring; late-arriving rows can have an
-older `server_received_at` than the snapshot. The Copy Pipe records an ingest-time `watermark_ts`, and the
-tail reads `raw_events.ingest_ts > watermark_ts`. The final UNION re-dedups by `MIN(server_received_at)`, so
-late arrivals still become first-touch when their event time is earliest.
+The physical boundary is deliberately **not** `server_received_at > last_snapshot_ts`.
+`server_received_at` is the analysis clock used for first-touch and Conversion Window anchoring;
+late-arriving rows can have an older `server_received_at` than the snapshot. The Copy Pipe records an
+ingest-time `watermark_ts`; the snapshot reads `ingest_ts < watermark_ts`, while the tail reads
+`ingest_ts >= coalesce(watermark_ts, unix_epoch)`. These disjoint half-open ranges assign equality to
+the tail. The final UNION still re-dedups an Entity whose snapshot first-touch has a later retry or
+Exposure in the tail. This prevents a concurrent insertion at the exact watermark timestamp from being
+missed. The null fallback matters when a snapshot contains no Exposure rows.
 
 ## Considered options
 
@@ -41,22 +44,32 @@ late arrivals still become first-touch when their event time is earliest.
   correctness trap, not just a performance one. A materialized view fires per inserted block and
   never sees merged or cross-block state, so it cannot dedup the redundant edge events ADR-0004
   guarantees — duplicates leak into the rollup and silently inflate the SRM denominator and every
-  metric count. Rollup MVs therefore feed the **deduped snapshot**, never the raw log (see ADR-0017,
-  amended).
+  metric count. A materialized view on the replace-mode snapshot is also rejected because source
+  replacement does not retract target state. Ordered replace-mode rollup copies from the completed
+  snapshot solve both failures (see ADR-0017, amended).
 
 ## Consequences
 
 - **Two physical layers for one logical log.** The raw `.datasource` (append-only, the system of
-  record) plus a snapshot `.datasource` (Copy Pipe target, `COPY_MODE replace` or incremental per
-  volume). Serving pipes read snapshot ∪ tail. More moving parts than a single query, accepted as the
-  cost of bounded query latency over unbounded data.
+  record) plus a snapshot `.datasource` (mandatory `COPY_MODE replace` target). Serving pipes read
+  snapshot ∪ tail. More moving parts than a single query, accepted as the cost of bounded query
+  latency over unbounded data. Incremental append is not an allowed mode because it can retain
+  duplicate snapshot keys or skip rows around a prior watermark.
 - **Snapshot cadence is a freshness/cost dial, not a correctness one.** The real-time tail always
   covers rows after the snapshot ingest watermark, so a slower schedule never makes results wrong,
   only the batch layer staler — and the tail absorbs late-arriving earlier-`server_received_at` events on the
   next read, exactly as ADR-0010 requires.
-- **Rollups hang off the snapshot.** Any AggregatingMergeTree rollup MV builds on the deduped
-  snapshot datasource, never the raw log — this is the single rule that keeps redundant edge events
-  from double-counting. Recorded here and cross-referenced from ADR-0017.
+- **Rollups rebuild after the snapshot.** Scheduled `COPY_MODE replace` rollup Pipes run only after a
+  successful deduped-snapshot replacement. A Tinybird MV is rejected for this source because repeated
+  snapshot inserts append aggregate state and source replacement does not retract prior target rows.
+  The rollup copies never read the redundant raw Exposure stream directly. Recorded here and
+  cross-referenced from ADR-0017.
+- **Activation reads use mergeable derived state.** A continuous `minState(activation_ts)`
+  materialization feeds `serve_deduped_activations`, preserving one retry-deduplicated candidate per
+  Entity, Run, counterfactual kind, and distinct timestamp. Gated analysis and rollup copies filter it
+  by tenant, exact Run, and activation-time partitions before `minMerge`, reject pre-Exposure
+  candidates before choosing the earliest valid Activation, and never scan retained raw Activation
+  rows. Event-time partitioning preserves late-delivery correctness.
 - **Raw log gets a TTL once the snapshot is authoritative.** The raw datasource can carry a retention
   TTL sized to "longer than any rule-change replay window we promise," because the snapshot, not the
   raw tail, serves normal analysis. (Detail for the datasource build, not re-litigable here.)

@@ -13,8 +13,9 @@ interface AssignmentStore:
     -> void
 ```
 
-The SDK only calls `getAll`. The `put` is called by the **Exposure pipeline Worker** after
-confirming first-touch via the per-key Durable Object (ADR-0009). The SDK never writes.
+The SDK only calls `getAll`. Exposure-pipeline orchestration hosted by the Evaluation Worker calls
+`put` after Event Ingest durably accepts the Exposure; the per-key Durable Object resolves concurrent
+apparent first-touch writes (ADR-0009). The SDK never writes, and Event Ingest never owns this call.
 
 `getAll` is a **per-Entity batch read**: its logical key is `(appId, idType, targetingKey)` — note it
 does **not** take `experimentId`. One round-trip returns every Experiment's holdover for this
@@ -41,8 +42,10 @@ The Worker executes in this order for every `evaluate` call:
      // no Exposure fires, no Assignment Store write: already counted under held[experimentId].runId
    else:
      variant = assign(liveRun, targetingKey)        // pure hash (ADR-0001)
-     // Exposure fires → pipeline → DO.putIfAbsent → KV write-through
-7. Return VariantValue for resolved variantName
+     // Atomically seal Evaluation claim + retry-stable Exposure in Event Ingest outbox
+     // Seal failure returns fail-loud and performs no Assignment Store write
+7. Return VariantValue, then Exposure orchestration asynchronously calls
+   AssignmentStore.put → DO.putIfAbsent → KV write-through
 ```
 
 Each step has exactly one outcome — no superposition. The holdover branch returns the prior
@@ -104,11 +107,13 @@ self-healing**, bounded to returning Entity × Run boundary × cross-POP × with
 The `put` call that creates holdover entries flows:
 
 ```
-evaluate() Exposure fires → Worker appends raw log → pipeline → DO.putIfAbsent → KV write-through
+evaluate() → atomically seal Evaluation claim + Exposure outbox → return success
+           → async Queue/Tinybird delivery
+           → Exposure orchestration: async AssignmentStore.put → DO.putIfAbsent → KV write-through
 ```
 
 The SDK client is not involved in this write path. The SDK reads holdovers via `getAll`;
-it relies on the pipeline to establish them. This means there is a lag between an Exposure
+it relies on Evaluation Worker Exposure orchestration to establish them. This means there is a lag between an Exposure
 firing and the holdover being readable in KV (the DO → KV propagation). During this lag,
 a second evaluate call from a different POP may re-compute `assign()` (new Entity path) and
 fire a second raw Exposure — both raw Exposures resolve to first-touch in the pipeline.
