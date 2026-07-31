@@ -112,6 +112,10 @@ test("shared-preview deploy isolates non-blocking smoke verification for its imm
 
   assert.match(smokeJob, /needs: deploy/);
   assert.match(smokeJob, /continue-on-error: true/);
+  assert.match(
+    smokeJob,
+    /SPLITCH_DEPLOY_GATE_TOKEN: \$\{\{ secrets\.SPLITCH_DEPLOY_GATE_TOKEN \}\}/,
+  );
   assert.match(smokeJob, /ref: \$\{\{ needs\.deploy\.outputs\.deployed_sha \}\}/);
   assert.match(smokeJob, /DEPLOYED_SHA: \$\{\{ needs\.deploy\.outputs\.deployed_sha \}\}/);
   assert.match(smokeJob, /\[ "\$smoke_sha" != "\$DEPLOYED_SHA" \]/);
