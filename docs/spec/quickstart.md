@@ -25,6 +25,10 @@ credential tier (ADR-0037). A step never ends on "probably fine."
 
 ## 1. Authenticate
 
+The CLI ships on npm as [`@splitch/cli`](https://www.npmjs.com/package/@splitch/cli) (Node 20+):
+`npm install --global @splitch/cli` puts `splitch` on your PATH, or run one-off with
+`npx @splitch/cli`. Agents over MCP install nothing — they connect to `https://mcp.splitch.dev`.
+
 | You are…                      | Door                | How                                                                                 |
 | ----------------------------- | ------------------- | ----------------------------------------------------------------------------------- |
 | A human at a terminal         | Device flow         | `splitch login` — prints a verification URL, polls until approved                   |

@@ -1,56 +1,46 @@
-import type { ReactNode } from "react";
 import { CodeSnippet } from "./code-snippet";
 
 type Step = {
   title: string;
-  body: ReactNode;
-  cli?: string;
-  mcp?: string;
-  code?: string;
+  body: string;
+  code: string;
 };
 
 const steps: Step[] = [
   {
-    title: "Authenticate",
-    body: "Humans use the device flow. Agents connect through the MCP OAuth handshake, or bootstrap anonymously into a provisional Org that auto-deletes in 24 hours unless claimed.",
-    cli: "splitch login",
-    mcp: "connect https://mcp.splitch.dev\n# OAuth handshake runs on connect",
+    title: "Install and authenticate",
+    body: "The CLI ships on npm and needs Node 20+. Log in with the device flow: it prints a verification URL and polls until approved.",
+    code: "npm install --global @splitch/cli\nsplitch login",
   },
   {
     title: "Pick an Organization",
     body: "Discover the Organizations your token can reach, then pick one.",
-    cli: "splitch orgs list",
-    mcp: "organizations_list",
+    code: "splitch orgs list",
   },
   {
     title: "Create an App",
     body: "A dev and a prod Environment are auto-provisioned. You do not create Environments by hand for the common case.",
-    cli: 'splitch apps create --org <orgId> --name "My App"',
-    mcp: 'apps_create { orgId, name: "My App" }',
+    code: 'splitch apps create --org <orgId> --name "My App"',
   },
   {
     title: "Select the dev Environment",
     body: "Active context fills in IDs on every later call. It is convenience only and never widens authorization.",
-    cli: "splitch use --app my-app --env dev",
-    mcp: 'context_use { app: "my-app", environment: "dev" }',
+    code: "splitch use --app my-app --env dev",
   },
   {
     title: "Get your credential",
     body: "The Client Key is public and safe to ship in a browser. The API Key is secret, surfaced once, for trusted servers. New Client Keys start open to all origins so they work immediately; lock them to your origins before production.",
-    cli: "splitch client-key get",
-    mcp: "client_key_get",
+    code: "splitch client-key get",
   },
   {
     title: "Create a Flag",
     body: "Flag definition is App-level; serving config is per-Environment. Promote it where you want it served.",
-    cli: "splitch flags create --key new-checkout --variants on,off",
-    mcp: 'flags_create { key: "new-checkout", variants: ["on", "off"] }',
+    code: "splitch flags create --key new-checkout --variants on,off",
   },
   {
     title: "Verify",
     body: "Confirm the Flag resolves for a Targeting Key without firing an Exposure. One green round-trip proves auth, Environment, credential, and Flag config all line up. A step never ends on “probably fine.”",
-    cli: "splitch flags verify new-checkout --targeting-key test-user-1",
-    mcp: "flags_test_eval { flagId, evaluationContext: { targetingKey } }",
+    code: "splitch flags verify new-checkout --targeting-key test-user-1",
   },
   {
     title: "Wire the SDK",
@@ -83,7 +73,7 @@ export function QuickstartSteps() {
             <p className="text-muted-foreground text-sm leading-relaxed">{step.body}</p>
           </div>
           <div className="min-w-0">
-            <CodeSnippet cli={step.cli} code={step.code} mcp={step.mcp} />
+            <CodeSnippet code={step.code} />
           </div>
         </li>
       ))}
