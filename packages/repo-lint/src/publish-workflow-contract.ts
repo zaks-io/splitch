@@ -35,6 +35,8 @@ export function registerPublishWorkflowContract(options: PublishContractOptions)
     path.join(repoRoot, `.github/workflows/${options.workflowName}`),
     "utf8",
   );
+  const publishJob =
+    workflow.match(/\n {2}publish:\n([\s\S]*?)(?=\n {2}[a-z][\w-]*:\n|$)/)?.[1] ?? "";
   const packageManifest = JSON.parse(
     readFileSync(path.join(repoRoot, options.packageDir, "package.json"), "utf8"),
   ) as { repository?: { url?: string; directory?: string } };
@@ -49,8 +51,8 @@ export function registerPublishWorkflowContract(options: PublishContractOptions)
     });
 
     it("uses GitHub-hosted infrastructure and OIDC without npm tokens", () => {
-      expect(workflow).toContain("runs-on: ubuntu-24.04");
-      expect(workflow).not.toContain("blacksmith-");
+      expect(publishJob).toContain("runs-on: ubuntu-24.04");
+      expect(publishJob).not.toContain("blacksmith-");
       expect(workflow).toContain("contents: read");
       expect(workflow).toContain("id-token: write");
       expect(workflow).not.toMatch(/NPM_TOKEN|NODE_AUTH_TOKEN/);

@@ -89,7 +89,10 @@ in this config; refresh them from Linear during each workflow run.
 - npm package publish: the OIDC `.github/workflows/sdk-publish.yml` and
   `.github/workflows/cli-publish.yml` workflows are explicit Blacksmith exceptions. Each runs only
   after its namespaced GitHub Release is published, on GitHub-hosted `ubuntu-24.04` because npm
-  trusted publishing does not support Blacksmith, and carries no long-lived npm token. CLI
+  trusted publishing does not support Blacksmith, and carries no long-lived npm token. After npm
+  publication succeeds, a separate Blacksmith job bound to the GitHub `production` environment
+  syncs the package's dedicated Linear release using `SDK_LINEAR_ACCESS_KEY` or
+  `CLI_LINEAR_ACCESS_KEY`. CLI
   bootstrap, trusted-publisher configuration, and provider-side verification remain human-owned
   and unverified.
 - Shared preview deploy: workflow and hosted smoke wired, Cloudflare D1/KV resources are provisioned, the Tinybird
