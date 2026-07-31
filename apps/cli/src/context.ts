@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { SplitchCliError } from "./errors.js";
 
 export interface SplitchConfig {
   readonly version: 1;
@@ -148,6 +149,10 @@ async function readConfig(path: string): Promise<SplitchConfig | null> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return null;
     }
-    throw error;
+    throw new SplitchCliError({
+      code: "CLI_CONFIG_READ_FAILED",
+      cause: error instanceof Error ? error.message : String(error),
+      remediation: "Fix or remove the unreadable .splitch/config.json file and retry the command",
+    });
   }
 }

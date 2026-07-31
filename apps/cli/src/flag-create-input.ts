@@ -1,4 +1,5 @@
 import { CreateFlagRequestSchema } from "@splitch/contracts";
+import { SplitchCliError } from "./errors.js";
 
 const BOOLEAN_VARIANT_ALIASES: Readonly<Record<string, boolean>> = {
   on: true,
@@ -20,11 +21,15 @@ export interface CliInputErrorPayload {
   };
 }
 
-export class CliInputError extends Error {
+export class CliInputError extends SplitchCliError {
   readonly payload: CliInputErrorPayload;
 
   constructor(payload: CliInputErrorPayload) {
-    super(payload.message);
+    super({
+      code: payload.code,
+      cause: payload.message,
+      remediation: "Correct the named input field and run the command again",
+    });
     this.name = "CliInputError";
     this.payload = payload;
   }

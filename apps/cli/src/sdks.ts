@@ -1,5 +1,6 @@
 import { createMcpOperationAdapter } from "@splitch/control-plane-sdk/mcp-operation-adapter";
 import { parsePlatformTarget, type RouteOwner } from "@splitch/contracts";
+import { SplitchCliError } from "./errors.js";
 
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
 const defaultEvaluationBaseUrl = "http://127.0.0.1:8788";
@@ -56,7 +57,11 @@ export function sdkForOwner(sdks: OperationSdks, owner: RouteOwner): OperationSd
   if (owner === "control-plane-api" || owner === "evaluation-api" || owner === "analysis-api") {
     return sdks[owner as RoutableOwner];
   }
-  throw new Error(`splitch cli: no API origin configured for route owner "${owner}"`);
+  throw new SplitchCliError({
+    code: "CLI_ROUTE_OWNER_UNSUPPORTED",
+    cause: `No API origin is configured for route owner "${owner}"`,
+    remediation: "Use an operation owned by a CLI-supported API",
+  });
 }
 
 export function resolveAuthBaseUrl(options: SdkFactoryOptions = {}): string {
@@ -86,5 +91,9 @@ function apiBaseUrl(
   if (platformTarget === "local" || platformTarget === "pr-ci") {
     return localDefault;
   }
-  throw new Error(`splitch cli: ${envName} is required for ${platformTarget}`);
+  throw new SplitchCliError({
+    code: "CLI_API_ORIGIN_MISSING",
+    cause: `${envName} is required for ${platformTarget}`,
+    remediation: `Set ${envName} to the API origin for ${platformTarget}`,
+  });
 }

@@ -1,6 +1,7 @@
 import type { CliCredentialFile, CredentialStore } from "./credentials.js";
 import { isAccessTokenExpired } from "./credentials.js";
 import { resolveAuthBaseUrl, type SdkFactoryOptions } from "./sdks.js";
+import { SplitchCliError } from "./errors.js";
 
 const DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const REFRESH_GRANT = "refresh_token";
@@ -24,7 +25,11 @@ export async function loginWithDeviceFlow(deps: AuthDeps, appId: string): Promis
     app: appId,
   });
   if (!auth.ok) {
-    throw new Error(`splitch login: device authorization failed (${auth.status})`);
+    throw new SplitchCliError({
+      code: "CLI_DEVICE_AUTHORIZATION_FAILED",
+      cause: `Device authorization failed with HTTP ${auth.status}`,
+      remediation: "Check the auth service and selected App, then run splitch login again",
+    });
   }
   const grant = (await auth.json()) as {
     device_code: string;
@@ -87,10 +92,18 @@ async function pollDeviceApproval(
     }
     const pending = (await token.json()) as { error?: string };
     if (pending.error !== "authorization_pending" && pending.error !== "slow_down") {
-      throw new Error(`splitch login: token exchange failed (${pending.error ?? token.status})`);
+      throw new SplitchCliError({
+        code: "CLI_DEVICE_TOKEN_EXCHANGE_FAILED",
+        cause: `Device token exchange failed with ${pending.error ?? `HTTP ${token.status}`}`,
+        remediation: "Restart splitch login and complete the new device authorization",
+      });
     }
   }
-  throw new Error("splitch login: timed out waiting for device approval");
+  throw new SplitchCliError({
+    code: "CLI_DEVICE_APPROVAL_TIMEOUT",
+    cause: "Device approval timed out",
+    remediation: "Run splitch login again and approve the request before it expires",
+  });
 }
 
 function buildCredentialFile(body: {
@@ -139,7 +152,7 @@ async function loadAuthorization(
     if (options.allowMissing) {
       return null;
     }
-    throw new Error("splitch: not logged in — run `splitch login`");
+    throw notAuthenticatedError();
   }
   if (!isAccessTokenExpired(stored.credential.accessTokenExpiresAt)) {
     return {
@@ -160,7 +173,7 @@ export async function withAuthorizationRetry<T>(
 ): Promise<T> {
   const session = await loadAuthorization(deps);
   if (!session) {
-    throw new Error("splitch: not logged in — run `splitch login`");
+    throw notAuthenticatedError();
   }
   const first = await run(session.authorization);
   if (first.status !== 401) {
@@ -168,12 +181,12 @@ export async function withAuthorizationRetry<T>(
   }
   const stored = await deps.credentialStore.load();
   if (!stored) {
-    throw new Error("splitch: session expired — run `splitch login`");
+    throw sessionExpiredError();
   }
   const refreshed = await refreshAccessToken(deps, stored);
   const retry = await run(`Bearer ${refreshed.credential.accessToken}`);
   if (retry.status === 401) {
-    throw new Error("splitch: session expired — run `splitch login`");
+    throw sessionExpiredError();
   }
   return retry.value;
 }
@@ -190,7 +203,7 @@ async function refreshAccessToken(
     client_id: CLI_CLIENT_ID,
   });
   if (!response.ok) {
-    throw new Error("splitch: session expired — run `splitch login`");
+    throw sessionExpiredError();
   }
   const body = (await response.json()) as {
     access_token: string;
@@ -227,5 +240,21 @@ async function formPost(
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
+  });
+}
+
+function notAuthenticatedError(): SplitchCliError {
+  return new SplitchCliError({
+    code: "CLI_NOT_AUTHENTICATED",
+    cause: "No CLI login session is available",
+    remediation: "Run splitch login before retrying the command",
+  });
+}
+
+function sessionExpiredError(): SplitchCliError {
+  return new SplitchCliError({
+    code: "CLI_SESSION_EXPIRED",
+    cause: "The CLI login session expired and could not be refreshed",
+    remediation: "Run splitch login again before retrying the command",
   });
 }

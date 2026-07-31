@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createSplitchClient } from "./client";
 import { createFetchTransport } from "./fetch-transport";
+import { SplitchSdkError } from "./errors";
 import { FakeLogger, FakeTransport, httpError, ok, transportFailure } from "./test-fixtures";
 import type { Transport, TransportRequest } from "./transport";
 
@@ -36,15 +37,24 @@ function clientWith(transport: Transport, logger = new FakeLogger()) {
 
 describe("createSplitchClient: construction", () => {
   it("requires exactly one of clientKey or apiKey", () => {
-    expect(() => createSplitchClient({})).toThrow(/exactly one/);
-    expect(() => createSplitchClient({ clientKey: "ck", apiKey: "ak" })).toThrow(/exactly one/);
+    for (const options of [{}, { clientKey: "ck", apiKey: "ak" }]) {
+      try {
+        createSplitchClient(options);
+        throw new Error("expected createSplitchClient to reject invalid credentials");
+      } catch (error) {
+        expect(error).toBeInstanceOf(SplitchSdkError);
+        expect(error).toMatchObject({ code: "SDK_CREDENTIAL_CONFIGURATION_INVALID" });
+      }
+    }
     expect(() =>
       createSplitchClient({ apiKey: "ak", transport: new FakeTransport([]) }),
     ).not.toThrow();
   });
 
   it("rejects a non-zero retries (never retry the Exposure-bearing call)", () => {
-    expect(() => createSplitchClient({ clientKey: "ck", retries: 1 })).toThrow(/retries must be 0/);
+    expect(() => createSplitchClient({ clientKey: "ck", retries: 1 })).toThrowError(
+      expect.objectContaining({ code: "SDK_RETRIES_INVALID" }),
+    );
     expect(() =>
       createSplitchClient({ clientKey: "ck", retries: 0, transport: new FakeTransport([]) }),
     ).not.toThrow();
@@ -118,7 +128,8 @@ describe("fail-loud: every error row returns Default Variant + reason ERROR + no
       expect(fake.calls).toHaveLength(1);
       // Loud, never silent.
       expect(logger.errors).toHaveLength(1);
-      expect(logger.errors[0]?.message).toContain("failed-loud");
+      expect(logger.errors[0]?.message).toContain(row.errorCode);
+      expect(logger.errors[0]?.message).toContain("Remediation:");
     });
   }
 });

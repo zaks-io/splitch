@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseInvocation } from "./parse-args.js";
+import { SplitchCliError } from "./errors.js";
 
 /**
  * `--rollout` is a percentage that moves production traffic, so every input that
@@ -34,15 +35,25 @@ describe("--rollout parsing", () => {
   });
 
   it("rejects a whitespace-only value instead of coercing it to 0", () => {
-    expect(() => rolloutOf(" ")).toThrow(/--rollout must be a number 0-100/);
+    expectCliCode(() => rolloutOf(" "), "CLI_USAGE_INVALID");
   });
 
   it("rejects a non-numeric value", () => {
-    expect(() => rolloutOf("half")).toThrow(/--rollout must be a number 0-100/);
+    expectCliCode(() => rolloutOf("half"), "CLI_USAGE_INVALID");
   });
 
   it("rejects out-of-range percentages", () => {
-    expect(() => rolloutOf("101")).toThrow(/--rollout must be a number 0-100/);
-    expect(() => rolloutOf("-1")).toThrow(/--rollout must be a number 0-100/);
+    expectCliCode(() => rolloutOf("101"), "CLI_USAGE_INVALID");
+    expectCliCode(() => rolloutOf("-1"), "CLI_USAGE_INVALID");
   });
 });
+
+function expectCliCode(run: () => unknown, code: string): void {
+  try {
+    run();
+    throw new Error("expected CLI parsing to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(SplitchCliError);
+    expect(error).toMatchObject({ code });
+  }
+}

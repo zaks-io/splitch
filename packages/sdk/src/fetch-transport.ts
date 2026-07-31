@@ -11,6 +11,7 @@ import type {
   TransportResult,
   VerifyTransportResult,
 } from "./transport";
+import { SplitchSdkError } from "./errors";
 
 // `X-Run-Id` carries the live Run id as non-revealing operational metadata
 // alongside the bare `{ variant }` body, so the seen-set key has its runId
@@ -121,8 +122,14 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           signal,
         }),
       );
-      if (!response.ok)
-        throw new Error(`cached Evaluation telemetry failed: HTTP ${response.status}`);
+      if (!response.ok) {
+        throw new SplitchSdkError({
+          code: "SDK_CACHED_TELEMETRY_FAILED",
+          cause: `Cached Evaluation telemetry failed with HTTP ${response.status}`,
+          remediation: "Check data-plane availability before retrying the logical Evaluation",
+          status: response.status,
+        });
+      }
     },
   };
 }

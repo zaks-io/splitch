@@ -13,6 +13,7 @@ import {
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { CliInputError } from "./flag-create-input.js";
+import { writeCliError } from "./errors.js";
 import { buildOperationInput } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
 
@@ -28,7 +29,11 @@ export async function executeInvocation(
   }
   const command = findCommand(invocation.commandPath);
   if (!command) {
-    io.error(`Unknown command: ${invocation.commandPath.join(" ")}`);
+    writeCliError(io, {
+      code: "CLI_USAGE_INVALID",
+      cause: `Unknown command ${invocation.commandPath.join(" ")}`,
+      remediation: "Run splitch without arguments to view the supported command paths",
+    });
     return { exitCode: EXIT_USAGE };
   }
   return executeCommand(command, invocation, deps, io);
@@ -55,9 +60,11 @@ async function executeMeta(
         cwd: deps.cwd,
       });
       if (!context.appId) {
-        io.error(
-          "splitch login requires a selected App. Pass --app <app_id|slug> or set SPLITCH_APP.",
-        );
+        writeCliError(io, {
+          code: "CLI_SCOPE_UNRESOLVED",
+          cause: "Login requires a selected App",
+          remediation: "Pass --app with an App ID or slug, or set SPLITCH_APP",
+        });
         return { exitCode: EXIT_USAGE };
       }
       const session = await loginWithDeviceFlow(deps, context.appId);
@@ -73,7 +80,11 @@ async function executeMeta(
     }
     case "use": {
       if (!invocation.flags.app && !invocation.flags.env) {
-        io.error("splitch use requires --app and/or --env");
+        writeCliError(io, {
+          code: "CLI_USAGE_INVALID",
+          cause: "splitch use requires an App or Environment selection",
+          remediation: "Pass --app, --env, or both",
+        });
         return { exitCode: EXIT_USAGE };
       }
       const path = await writeNearestConfig(deps.cwd ?? process.cwd(), {
@@ -137,7 +148,7 @@ async function executeCommand(
 function handleInputError(error: unknown, invocation: ParsedInvocation, io: CliIo): CliResult {
   if (error instanceof CliInputError) {
     emit(io, invocation.flags.json, error.payload);
-    io.error(error.message);
+    writeCliError(io, error);
     return { exitCode: EXIT_USAGE, payload: error.payload };
   }
   return handleExecutionError(error, io);

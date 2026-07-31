@@ -103,7 +103,7 @@ describe("buildOperationInput", () => {
         "--enabled",
         "TRUE",
       ]),
-    ).toThrow(/--enabled must be "true" or "false"/);
+    ).toThrowError(expect.objectContaining({ code: "CLI_USAGE_INVALID" }));
   });
 
   it("flags promote keeps explicit target environment over --body-json", () => {

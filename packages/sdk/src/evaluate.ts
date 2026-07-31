@@ -1,4 +1,5 @@
 import type { ResolutionDetails, VariantValue } from "./generated/contract-surface.js";
+import { formatSdkErrorMessage, SplitchSdkError } from "./errors";
 import { errorCodeForStatus, synthesizeDetails } from "./resolution";
 import type { SeenSet } from "./seen-set";
 import type { AttributeValue, Transport, TransportFailure, TransportRequest } from "./transport";
@@ -57,17 +58,17 @@ const DEFAULT_ID_TYPE = "user";
 // off-state for the canonical boolean flag.
 const FALLBACK_DEFAULT_VALUE: VariantValue = false;
 
-class SplitchSdkError extends Error {
-  readonly code: NonNullable<TransportFailure["errorCode"]>;
-  readonly status: TransportFailure["status"];
+const SERVER_ERROR_REMEDIATION =
+  "Correct the request or credential described by the error, then retry the operation";
 
-  constructor(operation: "peekVariant", result: TransportFailure) {
-    const code = result.errorCode ?? errorCodeForStatus(result.status);
-    super(result.errorMessage ?? `${operation} failed: ${code}`);
-    this.name = "SplitchSdkError";
-    this.code = code;
-    this.status = result.status;
-  }
+function sdkErrorForFailure(operation: string, result: TransportFailure): SplitchSdkError {
+  const code = result.errorCode ?? errorCodeForStatus(result.status);
+  return new SplitchSdkError({
+    code,
+    cause: result.errorMessage ?? `${operation} failed with ${code}`,
+    remediation: SERVER_ERROR_REMEDIATION,
+    status: result.status,
+  });
 }
 
 function requestFor(flagKey: string, context: EvaluateContext): TransportRequest {
@@ -114,10 +115,19 @@ export async function runEvaluate(
     if (recordCachedEvaluation) {
       void recordCachedEvaluation({ flagKey, idempotencyKey: context.idempotencyKey }).catch(
         (cause) => {
-          deps.logger.error("[splitch] cached Evaluation telemetry failed-loud", {
-            flagKey,
-            errorMessage: cause instanceof Error ? cause.message : "non-error rejection",
-          });
+          const error =
+            cause instanceof SplitchSdkError
+              ? cause
+              : new SplitchSdkError({
+                  code: "SDK_CACHED_TELEMETRY_FAILED",
+                  cause:
+                    cause instanceof Error
+                      ? cause.message
+                      : "Cached Evaluation telemetry failed with a non-error rejection",
+                  remediation:
+                    "Check data-plane availability before retrying the logical Evaluation",
+                });
+          deps.logger.error(error.message, { flagKey, errorCode: error.code });
         },
       );
     }
@@ -135,12 +145,20 @@ export async function runEvaluate(
   if (details.reason === "ERROR") {
     // Loud, never silent: observable in logs AND via the ERROR reason the caller
     // branches on. No cache write, no Exposure, no retry.
-    deps.logger.error("[splitch] evaluate failed-loud to Default Variant", {
-      flagKey,
-      targetingKey,
-      status: result.status,
-      errorCode: details.errorCode,
-    });
+    deps.logger.error(
+      formatSdkErrorMessage({
+        code: details.errorCode ?? errorCodeForStatus(result.status),
+        cause: "Evaluation failed loud to the Default Variant",
+        remediation: SERVER_ERROR_REMEDIATION,
+        status: result.status,
+      }),
+      {
+        flagKey,
+        targetingKey,
+        status: result.status,
+        errorCode: details.errorCode,
+      },
+    );
     return details;
   }
 
@@ -165,8 +183,8 @@ export async function runPeekVariant(
     return result.variant;
   }
 
-  const error = new SplitchSdkError("peekVariant", result);
-  deps.logger.error("[splitch] peekVariant failed-loud", {
+  const error = sdkErrorForFailure("peekVariant", result);
+  deps.logger.error(error.message, {
     flagKey,
     targetingKey: context.targetingKey,
     status: error.status,
@@ -196,12 +214,20 @@ export async function runVerify(
     );
 
   if (details.reason === "ERROR") {
-    deps.logger.error("[splitch] verify failed-loud to Default Variant", {
-      flagKey,
-      targetingKey: context.targetingKey,
-      status: result.status,
-      errorCode: details.errorCode,
-    });
+    deps.logger.error(
+      formatSdkErrorMessage({
+        code: details.errorCode ?? errorCodeForStatus(result.status),
+        cause: "Verification failed loud to the Default Variant",
+        remediation: SERVER_ERROR_REMEDIATION,
+        status: result.status,
+      }),
+      {
+        flagKey,
+        targetingKey: context.targetingKey,
+        status: result.status,
+        errorCode: details.errorCode,
+      },
+    );
   }
 
   return details;
