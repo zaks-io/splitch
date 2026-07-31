@@ -207,6 +207,7 @@ const payload = {
     negativeAuthorization: runResults.every(
       (run) =>
         run.negativeProofs.wrongApp.isolated &&
+        run.negativeProofs.wrongApp.scopedMissErrorCode === "FLAG_NOT_FOUND" &&
         run.negativeProofs.revokedCredential.errorCode === "CREDENTIAL_REVOKED" &&
         run.negativeProofs.crossOrganization.writeCode === "FORBIDDEN" &&
         run.negativeProofs.crossOrganization.listCode === "FORBIDDEN",
@@ -246,6 +247,10 @@ function readConfig() {
     smokeClientId: process.env.SPLITCH_SMOKE_CLIENT_ID ?? "splitch-shared-preview-smoke",
     smokeClientSecret,
     smokeOrgId: process.env.SPLITCH_SMOKE_ORG_ID ?? "org_shared_preview_smoke",
+    // The smoke identity cannot discover Organizations outside its membership.
+    // This hosted negative therefore proves exact-resource OAuth scope refusal;
+    // the seeded SQL proves existence and the local journey proves the DB-backed
+    // membership guard against a directly observed foreign Organization.
     foreignOrgId: "org_shared_preview_isolation",
     runId: (process.env.SPLITCH_SMOKE_RUN_ID ?? process.env.GITHUB_RUN_ID ?? String(Date.now()))
       .toLowerCase()

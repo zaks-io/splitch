@@ -14,6 +14,8 @@ const COHORT_ATTRIBUTE = "cohort";
 const COHORT_VALUE = "launch";
 const TARGETED_KEY = "dark-launch-user-targeted";
 const WRONG_APP_VARIANT = "wrong-app-only";
+const JOURNEY_ONLY_FLAG_KEY = "dark-launch-journey-only";
+const JOURNEY_ONLY_VARIANT = "journey-app-only";
 
 export async function proveLocalNegativeAuth(
   harness: QuickstartHarness,
@@ -21,8 +23,12 @@ export async function proveLocalNegativeAuth(
   flagId: string,
 ): Promise<void> {
   const probeApps: Array<{ id: string; flagId?: string }> = [];
+  let journeyOnlyFlagId: string | undefined;
 
   try {
+    journeyOnlyFlagId = await createJourneyOnlyFlag(harness);
+    await assertJourneyOnlyFlagResolution(harness, packedSdk);
+
     const wrongApp = await createProbeApp(harness, `wrong-app-${Date.now()}`);
     const wrongProbe: { id: string; flagId?: string } = { id: wrongApp.app.id };
     probeApps.push(wrongProbe);
@@ -33,11 +39,13 @@ export async function proveLocalNegativeAuth(
     )?.keyMaterial;
     expect(wrongKeyMaterial).toBeDefined();
     const wrongToken = await appToken(harness.flagHarness, wrongApp.app.id);
-    const wrongFlagId = await createSameKeyWrongAppFlag(
+    const wrongFlagId = await createProbeFlag(
       harness,
       wrongApp.app.id,
       wrongDev?.id ?? "",
       wrongToken,
+      FLAG_KEY,
+      WRONG_APP_VARIANT,
     );
     wrongProbe.flagId = wrongFlagId;
     const wrongResolution = await packedSdk
@@ -54,6 +62,19 @@ export async function proveLocalNegativeAuth(
     expect(wrongResolution.value).toBe(WRONG_APP_VARIANT);
     expect(wrongResolution.variantName).toBe(WRONG_APP_VARIANT);
     expect(wrongResolution.variantName).not.toBe("on");
+
+    const scopedMiss = await packedSdk
+      .createSplitchClient({
+        clientKey: wrongKeyMaterial ?? "",
+        endpoint: quickstartOrigins.evaluationBaseUrl,
+        fetch: harness.routingFetch,
+      })
+      .verify(JOURNEY_ONLY_FLAG_KEY, {
+        targetingKey: TARGETED_KEY,
+        attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
+      });
+    expect(scopedMiss.reason).toBe("ERROR");
+    expect(scopedMiss.errorCode).toBe("FLAG_NOT_FOUND");
 
     const revokedProbe = await createProbeApp(harness, `revoked-app-${Date.now()}`);
     probeApps.push({ id: revokedProbe.app.id });
@@ -112,6 +133,9 @@ export async function proveLocalNegativeAuth(
     );
     expect(orgApps.items.some((item) => item.key === crossKey)).toBe(false);
   } finally {
+    if (journeyOnlyFlagId) {
+      await deleteFlagThroughApproval(harness, harness.appId, journeyOnlyFlagId);
+    }
     for (const probe of probeApps) {
       const token = await appToken(harness.flagHarness, probe.id);
       if (probe.flagId) {
@@ -138,13 +162,50 @@ export async function proveLocalNegativeAuth(
   }
 }
 
-async function createSameKeyWrongAppFlag(
+async function createJourneyOnlyFlag(harness: QuickstartHarness): Promise<string> {
+  const flagId = await createProbeFlag(
+    harness,
+    harness.appId,
+    harness.devEnvironmentId,
+    harness.accessToken,
+    JOURNEY_ONLY_FLAG_KEY,
+    JOURNEY_ONLY_VARIANT,
+  );
+  harness.invalidateFlagCache();
+  return flagId;
+}
+
+async function assertJourneyOnlyFlagResolution(
+  harness: QuickstartHarness,
+  packedSdk: PackedSdk,
+): Promise<void> {
+  const journeyKey = await controlPlaneGet<{ keyMaterial: string }>(
+    harness,
+    `/apps/${harness.appId}/envs/${harness.devEnvironmentId}/client-key`,
+  );
+  const resolution = await packedSdk
+    .createSplitchClient({
+      clientKey: journeyKey.keyMaterial,
+      endpoint: quickstartOrigins.evaluationBaseUrl,
+      fetch: harness.routingFetch,
+    })
+    .verify(JOURNEY_ONLY_FLAG_KEY, {
+      targetingKey: TARGETED_KEY,
+      attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
+    });
+  expect(resolution.reason).not.toBe("ERROR");
+  expect(resolution.variantName).toBe(JOURNEY_ONLY_VARIANT);
+}
+
+async function createProbeFlag(
   harness: QuickstartHarness,
   appId: string,
   environmentId: string,
   token: string,
+  flagKey: string,
+  variantName: string,
 ): Promise<string> {
-  const createKey = `wrong-app-flag-${crypto.randomUUID()}`;
+  const createKey = `isolation-flag-${crypto.randomUUID()}`;
   const flag = await controlPlanePost<{
     id: string;
     variants: Array<{ id: string; name: string }>;
@@ -153,13 +214,13 @@ async function createSameKeyWrongAppFlag(
     `/apps/${appId}/flags`,
     {
       appId,
-      key: FLAG_KEY,
-      name: "Wrong App same-key proof",
+      key: flagKey,
+      name: `${flagKey} isolation proof`,
       schema: { type: "string" },
       variants: [
         {
-          name: WRONG_APP_VARIANT,
-          value: WRONG_APP_VARIANT,
+          name: variantName,
+          value: variantName,
           isDefault: true,
         },
         { name: "journey-decoy", value: "journey-decoy", isDefault: false },
@@ -180,7 +241,7 @@ async function createSameKeyWrongAppFlag(
       },
       body: JSON.stringify({
         enabled: true,
-        availableVariantNames: [WRONG_APP_VARIANT, "journey-decoy"],
+        availableVariantNames: [variantName, "journey-decoy"],
         idempotency_key: configKey,
       }),
     },

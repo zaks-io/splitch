@@ -1,16 +1,10 @@
 /** Negative proofs and cleanup for the dark-launch journey. */
 
-import {
-  assertVariant,
-  COHORT_ATTRIBUTE,
-  COHORT_VALUE,
-  PROPAGATION_WINDOW_MS,
-} from "./constants.mjs";
+import { COHORT_ATTRIBUTE, COHORT_VALUE } from "./constants.mjs";
 import {
   clientKeyMaterialFromCreate,
   controlPlaneCall,
   createDarkLaunchApp,
-  createWrongAppFlag,
   deleteApp,
   deleteExperiment,
   deleteFlag,
@@ -20,6 +14,7 @@ import {
   listFlags,
   rotateClientKey,
 } from "./control-plane.mjs";
+import { proveWrongAppIsolation } from "./app-isolation-proof.mjs";
 
 /**
  * Negative authorization proofs.
@@ -28,7 +23,7 @@ import {
  * precondition instead of depending on opaque, potentially stale fixture keys.
  */
 export async function runNegativeProofs(deps, resources, keys, resolve, journeyLiveVariant) {
-  const probes = { apps: [] };
+  const probes = { apps: [], flags: [] };
 
   try {
     const wrongApp = await proveWrongAppIsolation(
@@ -55,60 +50,9 @@ export async function runNegativeProofs(deps, resources, keys, resolve, journeyL
     const crossOrganization = await proveCrossOrganizationWriteRejected(deps, keys);
     return { wrongApp, revokedCredential, crossOrganization };
   } finally {
-    for (const probe of probes.apps) {
-      if (probe.flagId) await deleteFlag(deps, probe.appId, probe.flagId);
-      await deleteApp(deps, probe.appId);
-    }
+    for (const probe of probes.flags.reverse()) await deleteFlag(deps, probe.appId, probe.flagId);
+    for (const appId of probes.apps.reverse()) await deleteApp(deps, appId);
   }
-}
-
-async function proveWrongAppIsolation(deps, resources, keys, probes, resolve, journeyLiveVariant) {
-  const wrongKeys = {
-    ...keys,
-    appKey: `${keys.appKey}-wrong`,
-    appName: `${keys.appName} Wrong`,
-  };
-  const wrongApp = await createDarkLaunchApp(deps, wrongKeys);
-  const wrongProbe = { appId: wrongApp.app.id, flagId: null };
-  probes.apps.push(wrongProbe);
-  resources.transientAppKeys.push(wrongKeys.appKey);
-  const wrongDev = wrongApp.environments.find((environment) => environment.key === "dev");
-  if (!wrongDev) throw new Error("wrong-App create missing dev Environment");
-  const clientKey = await getClientKey(deps, wrongApp.app.id, wrongDev.id);
-  const flag = await createWrongAppFlag(deps, wrongApp.app.id, keys.flagKey);
-  wrongProbe.flagId = flag.id;
-  await updateFlagConfig(deps, wrongApp.app.id, wrongDev.id, flag.id, {
-    enabled: true,
-    availableVariantNames: ["wrong-app-only", "journey-decoy"],
-  });
-
-  const deadline = Date.now() + (deps.propagationWindowMs ?? PROPAGATION_WINDOW_MS);
-  let lastError;
-  while (Date.now() <= deadline) {
-    try {
-      const details = await resolve("verify", {
-        clientKey: clientKey.keyMaterial,
-        targetingKey: keys.targetedKey,
-        attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
-      });
-      assertVariant(details, "wrong-app-only", "wrong-App same-key Flag");
-      if (details.variantName === journeyLiveVariant) {
-        throw new Error("wrong-App Client Key resolved the journey App's live-Run Variant");
-      }
-      return {
-        sameFlagKey: keys.flagKey,
-        resolvedVariant: details.variantName,
-        journeyLiveVariant,
-        isolated: true,
-      };
-    } catch (error) {
-      lastError = error;
-      await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
-    }
-  }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("wrong-App same-key Flag did not converge within the propagation window");
 }
 
 async function createRevokedClientKey(deps, resources, keys, probes) {
@@ -118,7 +62,7 @@ async function createRevokedClientKey(deps, resources, keys, probes) {
     appName: `${keys.appName} Revoked`,
   };
   const probeApp = await createDarkLaunchApp(deps, probeKeys);
-  probes.apps.push({ appId: probeApp.app.id });
+  probes.apps.push(probeApp.app.id);
   resources.transientAppKeys.push(probeKeys.appKey);
   const probeDev = probeApp.environments.find((environment) => environment.key === "dev");
   if (!probeDev) throw new Error("revoked-probe App create missing dev Environment");

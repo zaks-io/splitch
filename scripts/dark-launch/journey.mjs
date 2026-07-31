@@ -96,7 +96,7 @@ export async function runDarkLaunchJourney(deps) {
       deps.resolve(action, {
         clientKey: options.clientKey ?? resources.clientKeyMaterial,
         endpoint: deps.evaluationBaseUrl,
-        flagKey: keys.flagKey,
+        flagKey: options.flagKey ?? keys.flagKey,
         targetingKey: options.targetingKey,
         attributes: options.attributes ?? {},
         idempotencyKey: options.idempotencyKey,

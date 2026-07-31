@@ -9,6 +9,7 @@ import {
 } from "./dark-launch/control-plane.mjs";
 import { assertExposureHealth, summarizeExposureHealth } from "./dark-launch/hosted-results.mjs";
 import { cleanupDeferredRuns, findOrphanedDarkLaunchApps } from "./dark-launch/hosted-cleanup.mjs";
+import { proveWrongAppIsolation } from "./dark-launch/app-isolation-proof.mjs";
 import {
   assertVariant,
   DEFAULT_VARIANT,
@@ -34,6 +35,63 @@ test("shared-preview seed provides a live foreign Organization with a different 
   assert.match(sql, /app_shared_preview_isolation/);
   assert.match(sql, /user_shared_preview_isolation_owner/);
   assert.doesNotMatch(sql, /VALUES \('org_shared_preview_isolation', 'user_shared_preview_smoke',/);
+});
+
+test("hosted wrong-App proof covers same-key resolution and a scoped KV miss", async () => {
+  const calls = [];
+  const deps = {
+    orgId: "org-smoke",
+    runId: "run-1",
+    propagationWindowMs: 1,
+    callTool: async (name, args) => {
+      calls.push({ name, args });
+      if (name === "apps_create") {
+        return {
+          app: { id: "app-wrong" },
+          environments: [{ id: "env-wrong", key: "dev" }],
+        };
+      }
+      if (name === "client_key_get") return { keyMaterial: "wrong-client-key" };
+      if (name === "flags_create") return { id: `flag-${args.key}` };
+      if (name === "flag_config_update") return { enabled: true };
+      throw new Error(`unexpected tool ${name}`);
+    },
+  };
+  const resources = {
+    appId: "app-journey",
+    environmentId: "env-journey",
+    transientAppKeys: [],
+  };
+  const keys = {
+    appKey: "dark-launch-app-run-1",
+    appName: "Dark Launch run-1",
+    flagKey: "dark-launch-run-1",
+    targetedKey: "dark-launch-user-targeted-run-1",
+  };
+  const probes = { apps: [], flags: [] };
+  const resolutions = [];
+  const result = await proveWrongAppIsolation(
+    deps,
+    resources,
+    keys,
+    probes,
+    async (_action, options) => {
+      resolutions.push(options);
+      if (options.flagKey.endsWith("-journey-only") && options.clientKey) {
+        return { reason: "ERROR", errorCode: "FLAG_NOT_FOUND", value: false };
+      }
+      const variantName = options.clientKey ? "wrong-app-only" : "journey-app-only";
+      return { reason: "DEFAULT", variantName, value: variantName };
+    },
+    "on",
+  );
+
+  assert.equal(result.resolvedVariant, "wrong-app-only");
+  assert.equal(result.scopedMissErrorCode, "FLAG_NOT_FOUND");
+  assert.equal(resolutions.at(-1).flagKey, "dark-launch-run-1-journey-only");
+  assert.equal(resolutions.at(-1).clientKey, "wrong-client-key");
+  assert.equal(probes.flags.length, 2);
+  assert.equal(calls.filter(({ name }) => name === "flags_create").length, 2);
 });
 
 test("hosted result evidence requires exactly one raw and deduped Exposure", () => {
@@ -231,17 +289,20 @@ test("dark-launch Flag mutations use current idempotency and deletion approval c
   );
   assert.equal(requests[2].body.idempotency_key, "dark-launch-targeting-rules-run-123");
   assert.equal(requests[2].init.headers["idempotency-key"], "dark-launch-targeting-rules-run-123");
-  assert.equal(requests[3].init.headers["idempotency-key"], "dark-launch-flag-delete-run-123");
+  assert.equal(
+    requests[3].init.headers["idempotency-key"],
+    "dark-launch-flag-delete-run-123-flag-123",
+  );
   assert.equal(
     requests[4].url,
     "https://control-plane.example.test/apps/app-123/approval-requests/approval-123/reviews",
   );
   assert.deepEqual(requests[4].body, {
     action: "approve_and_apply",
-    idempotency_key: "dark-launch-flag-delete-review-run-123",
+    idempotency_key: "dark-launch-flag-delete-review-run-123-approval-123",
   });
   assert.equal(
     requests[4].init.headers["idempotency-key"],
-    "dark-launch-flag-delete-review-run-123",
+    "dark-launch-flag-delete-review-run-123-approval-123",
   );
 });

@@ -71,18 +71,18 @@ export async function createDarkLaunchFlag(deps, appId, flagKey) {
   );
 }
 
-export async function createWrongAppFlag(deps, appId, flagKey) {
-  const idempotencyKey = `dark-launch-wrong-app-flag-${deps.runId}`;
+export async function createIsolationProbeFlag(deps, appId, flagKey, variantName) {
+  const idempotencyKey = `dark-launch-isolation-flag-${variantName}-${deps.runId}`;
   const body = {
     appId,
     key: flagKey,
-    name: `${flagKey} wrong-App proof`,
+    name: `${flagKey} isolation proof`,
     schema: { type: "string" },
     variants: [
-      { name: "wrong-app-only", value: "wrong-app-only", isDefault: true },
+      { name: variantName, value: variantName, isDefault: true },
       { name: "journey-decoy", value: "journey-decoy", isDefault: false },
     ],
-    description: "Same-key Flag proving Client Keys remain App-scoped.",
+    description: "Flag proving Client Keys remain App-scoped.",
     idempotency_key: idempotencyKey,
   };
   return operation(deps, "flags_create", body, () =>
@@ -251,7 +251,7 @@ export async function deleteExperiment(deps, resources) {
 }
 
 export async function deleteFlag(deps, appId, flagId) {
-  const deleteKey = `dark-launch-flag-delete-${deps.runId}`;
+  const deleteKey = `dark-launch-flag-delete-${deps.runId}-${flagId}`;
   const args = { appId, flagId, idempotency_key: deleteKey };
   const deletion = deps.callToolResult
     ? await deps.callToolResult("flags_delete", args)
@@ -271,7 +271,7 @@ export async function deleteFlag(deps, appId, flagId) {
   if (!approvalRequestId) {
     throw new Error("flags_delete approval response omitted details.approvalRequestId");
   }
-  const reviewKey = `dark-launch-flag-delete-review-${deps.runId}`;
+  const reviewKey = `dark-launch-flag-delete-review-${deps.runId}-${approvalRequestId}`;
   const reviewBody = {
     action: "approve_and_apply",
     idempotency_key: reviewKey,
