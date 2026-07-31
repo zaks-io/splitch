@@ -84,12 +84,6 @@ test("smoke and reset summaries retain the independently verified deployed SHA",
     }),
   );
 
-  const deploy = summary("deploy", evidencePath, sha);
-  assert.equal(deploy.status, 0, deploy.stderr);
-  assert.match(deploy.stdout, /Deploy outcome: `success`/);
-  assert.match(deploy.stdout, /Smoke workflow dispatch outcome: `success`/);
-  assert.doesNotMatch(deploy.stdout, /Smoke outcome:/);
-
   const smoke = summary("smoke", evidencePath, sha);
   assert.equal(smoke.status, 0, smoke.stderr);
   assert.match(smoke.stdout, new RegExp(String.raw`Deployed commit SHA: \`${sha}\``));
@@ -106,12 +100,19 @@ test("smoke and reset summaries retain the independently verified deployed SHA",
 test("shared-preview deploy dispatches separate smoke verification for its immutable SHA", () => {
   const deployWorkflow = readFileSync(".github/workflows/deploy-shared-preview.yml", "utf8");
   const smokeWorkflow = readFileSync(".github/workflows/smoke-shared-preview.yml", "utf8");
+  const deployJob = deployWorkflow.match(/\n {2}deploy:\n([\s\S]*?)\n {2}dispatch-smoke:/)?.[1];
+  const dispatchJob = deployWorkflow.match(/\n {2}dispatch-smoke:\n([\s\S]*)$/)?.[1];
 
+  assert.ok(deployJob);
+  assert.ok(dispatchJob);
   assert.match(deployWorkflow, /deployed_sha="\$\(git rev-parse HEAD\)"/);
   assert.match(deployWorkflow, /SPLITCH_DEPLOYED_COMMIT_SHA=\$deployed_sha/);
-  assert.match(deployWorkflow, /actions: write/);
+  assert.match(deployWorkflow, /deployed_sha: \$\{\{ steps\.revision\.outputs\.deployed_sha \}\}/);
+  assert.doesNotMatch(deployJob, /actions: write/);
+  assert.match(dispatchJob, /permissions:\n\s+actions: write\n\s+contents: read/);
   assert.match(deployWorkflow, /actions\/workflows\/smoke-shared-preview\.yml\/dispatches/);
-  assert.match(deployWorkflow, /-f "inputs\[deployed_sha\]=\$SPLITCH_DEPLOYED_COMMIT_SHA"/);
+  assert.match(deployWorkflow, /DEPLOYED_SHA: \$\{\{ needs\.deploy\.outputs\.deployed_sha \}\}/);
+  assert.match(deployWorkflow, /-f "inputs\[deployed_sha\]=\$DEPLOYED_SHA"/);
   assert.doesNotMatch(deployWorkflow, /pnpm shared-preview:smoke/);
   assert.doesNotMatch(deployWorkflow, /pnpm smoke:dark-launch:shared-preview/);
 
@@ -148,9 +149,7 @@ function summary(mode, evidencePath, workflowRef) {
       ...process.env,
       SPLITCH_CLEANUP_OUTCOME: "success",
       SPLITCH_DARK_LAUNCH_OUTCOME: "success",
-      SPLITCH_DEPLOY_OUTCOME: "success",
       SPLITCH_RESET_OUTCOME: "success",
-      SPLITCH_SMOKE_DISPATCH_OUTCOME: "success",
       SPLITCH_SMOKE_EVIDENCE_FILE: evidencePath,
       SPLITCH_SMOKE_OUTCOME: "success",
       SPLITCH_WORKFLOW_REF: workflowRef,

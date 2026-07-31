@@ -9,7 +9,6 @@ on:
         default: main
 
 permissions:
-  actions: write
   contents: read
 
 concurrency:
@@ -28,6 +27,8 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 30
     environment: preview
+    outputs:
+      deployed_sha: ${{ steps.revision.outputs.deployed_sha }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
@@ -71,6 +72,7 @@ jobs:
           persist-credentials: false
 
       - name: Resolve immutable deploy revision
+        id: revision
         shell: bash
         run: |
           set -euo pipefail
@@ -80,6 +82,7 @@ jobs:
             exit 1
           fi
           echo "SPLITCH_DEPLOYED_COMMIT_SHA=$deployed_sha" >> "$GITHUB_ENV"
+          echo "deployed_sha=$deployed_sha" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         run: |
@@ -128,20 +131,36 @@ jobs:
         id: deploy
         run: pnpm deploy:shared-preview
 
+  dispatch-smoke:
+    name: Dispatch Shared Preview Smoke
+    needs: deploy
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
       - name: Dispatch shared preview smoke
         id: smoke_dispatch
         continue-on-error: true
         env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DEPLOYED_SHA: ${{ needs.deploy.outputs.deployed_sha }}
           GH_TOKEN: ${{ github.token }}
         run: >
           gh api --method POST
           "repos/$GITHUB_REPOSITORY/actions/workflows/smoke-shared-preview.yml/dispatches"
-          -f "ref=${{ github.event.repository.default_branch }}"
-          -f "inputs[deployed_sha]=$SPLITCH_DEPLOYED_COMMIT_SHA"
+          -f "ref=$DEFAULT_BRANCH"
+          -f "inputs[deployed_sha]=$DEPLOYED_SHA"
 
       - name: Summary
         if: always()
         env:
-          SPLITCH_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
-          SPLITCH_SMOKE_DISPATCH_OUTCOME: ${{ steps.smoke_dispatch.outcome }}
-        run: node scripts/render-shared-preview-summary.mjs deploy >> "$GITHUB_STEP_SUMMARY"
+          DEPLOYED_SHA: ${{ needs.deploy.outputs.deployed_sha }}
+          SMOKE_DISPATCH_OUTCOME: ${{ steps.smoke_dispatch.outcome }}
+        run: |
+          echo "## Shared preview deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deployed commit SHA: \`$DEPLOYED_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deploy outcome: \`success\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Smoke workflow dispatch outcome: \`$SMOKE_DISPATCH_OUTCOME\`" >> "$GITHUB_STEP_SUMMARY"
