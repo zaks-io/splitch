@@ -23,6 +23,8 @@ export interface PanelExperimentListItem {
   status: "draft" | "running" | "ended";
   flag: { id: string; name: string };
   liveRunId: string | null;
+  /** Whether any Run has ever been opened; a `draft` Experiment may be a former one. */
+  hasRuns: boolean;
   health: PanelExperimentHealth | null;
 }
 
@@ -45,7 +47,8 @@ function parsePanelExperimentItem(input: unknown): PanelExperimentListItem | nul
     !isLifecycle(input.status) ||
     !isNonEmptyString(input.flag.id) ||
     !isNonEmptyString(input.flag.name) ||
-    !(input.liveRunId === null || isNonEmptyString(input.liveRunId))
+    !(input.liveRunId === null || isNonEmptyString(input.liveRunId)) ||
+    typeof input.hasRuns !== "boolean"
   ) {
     return null;
   }
@@ -57,6 +60,7 @@ function parsePanelExperimentItem(input: unknown): PanelExperimentListItem | nul
     status: input.status,
     flag: { id: input.flag.id, name: input.flag.name },
     liveRunId: input.liveRunId,
+    hasRuns: input.hasRuns,
     health,
   };
 }

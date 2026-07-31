@@ -21,6 +21,14 @@ export function initialRunDraft(
     targetingKeyType: run?.targetingKeyType ?? data.experiment.targetingKeyType,
     activationMetricId: run?.activationMetricId ?? data.experiment.activationMetricId ?? "",
     targetingRules: run?.targetingRulesJson ?? data.experiment.draftTargetingRulesJson ?? "[]",
+    // Pre-filled from the Run this form is based on, never carried forward
+    // silently: the horizon is frozen per Run, so the next Run re-decides it and
+    // the operator sees the previous choice as a starting point.
+    horizon: (run?.horizon ?? "sequential") as RunHorizonChoice,
+    sampleSize:
+      run?.sampleSizeLocked === null || run === undefined ? "" : String(run.sampleSizeLocked),
+    salt: "",
+    reason: "",
   };
 }
 
@@ -40,14 +48,33 @@ function positiveAllocation(allocation: Record<string, number>): Record<string, 
   return Object.fromEntries(Object.entries(allocation).filter(([, share]) => share > 0));
 }
 
+export type RunHorizonChoice = "sequential" | "fixed";
+
+/**
+ * The horizon is the one decision-spec field with no Experiment column: it lives
+ * only on the Run, so it is chosen in the Start request itself and is therefore
+ * part of THIS input rather than the draft PATCH. A fixed horizon pre-registers
+ * the sample size it decides at; a sequential Run never reaches one, so sending
+ * a number with it would be stored and never read.
+ */
+export function horizonError(horizon: RunHorizonChoice, sampleSize: string): string | null {
+  if (horizon === "sequential") return null;
+  const parsed = Number(sampleSize.trim());
+  return sampleSize.trim() && Number.isInteger(parsed) && parsed > 0
+    ? null
+    : "A fixed-horizon Run decides at a pre-registered sample size. Enter a whole number above 0.";
+}
+
 export function buildRunStartInput({
   activationMetricId,
   allocation,
   appId,
   environmentId,
   experimentId,
+  horizon,
   idempotencyKey,
   reason,
+  sampleSize,
   salt,
   targetingKey,
   targetingKeyType,
@@ -58,8 +85,10 @@ export function buildRunStartInput({
   appId: string;
   environmentId: string;
   experimentId: string;
+  horizon: RunHorizonChoice;
   idempotencyKey: string;
   reason: string;
+  sampleSize: string;
   salt: string;
   targetingKey: string;
   targetingKeyType: string;
@@ -67,6 +96,9 @@ export function buildRunStartInput({
 }) {
   const saltOverride = salt.trim();
   const startReason = reason.trim();
+  if (horizonError(horizon, sampleSize)) {
+    throw new Error("buildRunStartInput: a fixed horizon needs a positive integer sample size");
+  }
   return {
     appId,
     environmentId,
@@ -82,6 +114,8 @@ export function buildRunStartInput({
     start: {
       idempotency_key: idempotencyKey,
       review: { action: "approve_and_apply" as const },
+      horizon,
+      sampleSizeLocked: horizon === "fixed" ? Number(sampleSize.trim()) : null,
       ...(startReason ? { reason: startReason } : {}),
     },
   };

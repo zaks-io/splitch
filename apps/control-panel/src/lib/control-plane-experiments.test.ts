@@ -66,6 +66,8 @@ describe("Control Panel Experiments transport", () => {
               targetingKeyType: "user",
               activationMetricId: null,
               conversionWindowMs: 0,
+              confidenceLevel: 0.95,
+              dimensions: [],
               metricIds: [],
               guardrailMetricIds: [],
               draftAllocation: null,

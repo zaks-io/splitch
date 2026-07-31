@@ -31,7 +31,11 @@ export type ControlPanelOperation =
       environmentId: string;
       experimentId: string;
     }
-  | { id: "flags_list" | "flags_create"; appId: string; environmentId: string }
+  | {
+      id: "flags_list" | "flags_create" | "experiments_create";
+      appId: string;
+      environmentId: string;
+    }
   | { id: "flag_config_get"; appId: string; environmentId: string; flagId: string }
   | {
       id:
@@ -65,6 +69,7 @@ const EXPERIMENT_RESULTS_PATH = "/control-panel/experiments/results";
 const EXPERIMENTS_PATH = "/control-panel/experiments/list";
 const EXPERIMENT_MUTATION_PATH =
   /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/([^/]+)(\/start)?\/?$/;
+const EXPERIMENTS_COLLECTION_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiments\/?$/;
 const ORGANIZATIONS_PATH = /^\/orgs\/?$/;
 const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
@@ -96,6 +101,7 @@ export function parseControlPanelOperation(
     parseOrganizationsCreate(method, pathname) ??
     parseExperimentsList(method, pathname) ??
     parseExperimentMutation(method, pathname) ??
+    parseExperimentCreate(method, pathname) ??
     parseFlags(method, pathname, panelEnvironmentId) ??
     parseConfig(method, pathname) ??
     parseEnvironmentSettings(method, pathname) ??
@@ -148,6 +154,20 @@ function parseExperimentMutation(method: string, pathname: string): ControlPanel
         experimentId,
       }
     : null;
+}
+
+/**
+ * `POST /apps/:appId/envs/:envId/experiments`. Disjoint from
+ * `EXPERIMENT_MUTATION_PATH` by construction: that pattern requires a third
+ * segment naming an existing Experiment, and a create names none, so the Panel's
+ * draft-creation call can never be confused with a mutation of an Experiment the
+ * delegation was not bound to.
+ */
+function parseExperimentCreate(method: string, pathname: string): ControlPanelOperation | null {
+  const match = pathname.match(EXPERIMENTS_COLLECTION_PATH);
+  if (method !== "POST" || !match?.[1] || !match[2]) return null;
+  const [appId, environmentId] = decodedSegments(match.slice(1, 3));
+  return appId && environmentId ? { id: "experiments_create", appId, environmentId } : null;
 }
 
 function parseAppsCreate(method: string, pathname: string): ControlPanelOperation | null {

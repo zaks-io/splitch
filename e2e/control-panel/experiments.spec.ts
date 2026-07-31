@@ -21,9 +21,11 @@ test.describe("Control Panel Experiments", () => {
       "href",
       "/acme-labs/checkout-api/dev/experiments/new",
     );
+    // A draft has no Run, so its row links into the creation flow rather than at
+    // a detail screen whose Results and Setup tabs would have nothing behind them.
     await expect(page.getByRole("link", { name: "Checkout Draft" })).toHaveAttribute(
       "href",
-      "/acme-labs/checkout-api/dev/experiments/experiment_checkout_draft_e2e",
+      "/acme-labs/checkout-api/dev/experiments/experiment_checkout_draft_e2e/draft",
     );
     await expect(page.getByText("Draft", { exact: true })).toBeVisible();
     await expect(page.getByText("Running", { exact: true }).first()).toBeVisible();

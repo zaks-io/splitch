@@ -29,6 +29,11 @@ import {
 } from "./experiment-handler-shared";
 import { type ExperimentRow, json, runResponse } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
+import {
+  runDecisionSpecFromBody,
+  startProposalFields,
+  startReadinessResponse,
+} from "./experiment-start-decision-spec";
 import { validateStartRequest } from "./experiment-start-request";
 import { readEnvironmentPolicy } from "./flag-config-policy";
 import { objectBody, pathParam } from "./handler-input";
@@ -46,13 +51,18 @@ export async function startExperiment(
   const body = objectBody(args.input);
   const writeError = await requireWritableEnvironment(deps, scope, args.principal, args.requestId);
   if (writeError) return writeError;
-  const proposalInput = {
-    ...(typeof body.reason === "string" ? { reason: body.reason } : {}),
-  };
+  // Parsed BEFORE the replay lookup: the horizon and the pre-registered sample
+  // size change what a Start writes, so the idempotency identity has to cover
+  // them or a same-key retry with different intent replays a stale proposal.
+  const decisionSpec = runDecisionSpecFromBody(body, args.requestId);
+  if (!decisionSpec.ok) return decisionSpec.response;
+  const proposalInput = startProposalFields(body, decisionSpec.value);
   const replay = await replayExperimentStart(deps, args, scope, experiment.id, body, proposalInput);
   if (replay) return replay;
   const startContext = await validateStartRequest(deps, args, scope, experiment);
   if (!startContext.ok) return startContext.response;
+  const readiness = startReadinessResponse(experiment, args.requestId);
+  if (readiness) return readiness;
 
   const prepared = await prepareStartOrReplaySync(
     deps.repo,
@@ -71,12 +81,13 @@ export async function startExperiment(
       ...experimentTargetProjection(experiment as unknown as Record<string, unknown>),
       status: "draft",
       startReason: null,
+      horizon: null,
+      sampleSizeLocked: null,
     };
-    const proposed = {
-      ...current,
-      status: "running",
-      startReason: typeof startContext.body.reason === "string" ? startContext.body.reason : null,
-    };
+    // The same fields the idempotency hash was taken over, spread from the same
+    // value. The horizon is a Run field with no Experiment column, so the
+    // Approval Request is the only place it survives proposal to application.
+    const proposed = { ...current, status: "running", ...proposalInput };
     const approval = await createApproval(
       {
         ...deps,
@@ -122,6 +133,8 @@ export async function startExperiment(
       variantSet: json(prepared.value.variantSet),
       targetingRules: json(prepared.value.targetingRules),
       confidenceLevel: experiment.confidenceLevel,
+      horizon: decisionSpec.value.horizon,
+      sampleSizeLocked: decisionSpec.value.sampleSizeLocked,
       decisionFamily: json(prepared.value.decisionFamily),
       guardrailDecisions: json(prepared.value.guardrailDecisions),
       configHash: prepared.value.configHash,

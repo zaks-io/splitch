@@ -111,6 +111,7 @@ function startInput(approval: ApprovalCommit, startedAt: string) {
       variantSet: JSON.stringify([{ id: seed.a.variantId, name: "control", value: "control" }]),
       targetingRules: "[]",
       confidenceLevel: 0.95,
+      horizon: "sequential",
       decisionFamily: "[]",
       guardrailDecisions: "[]",
       configHash: "hash_start",

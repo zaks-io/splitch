@@ -41,6 +41,17 @@ const RUN_FROZEN_ASSIGNMENT_FIELDS = [
   "activationMetricId",
 ] as const;
 
+/**
+ * Decision-spec fields the running Run froze at Start (ADR-0003). Editing one
+ * after data is visible is alpha shopping or post-hoc Dimension fishing, so the
+ * Run keeps the spec it was registered with and the edit is refused outright.
+ *
+ * The goal Metric family and Guardrail set are deliberately NOT here: adding to
+ * them mid-Run is a measurement edit that recomputes losslessly and stays
+ * exploratory for this Run, which is what `runs.decision_family` records.
+ */
+const DECISION_SPEC_FIELDS = ["confidenceLevel", "dimensions"] as const;
+
 const ASSIGNMENT_FIELDS = [
   ...RUN_FROZEN_ASSIGNMENT_FIELDS,
   ...STAGEABLE_ASSIGNMENT_FIELDS,
@@ -114,10 +125,11 @@ export async function validateExperimentPatch(
   if (unstageable.length > 0) {
     return { response: runFrozenUnstageable(runningRun.id, unstageable, requestId), runningRun };
   }
+  const locked = DECISION_SPEC_FIELDS.filter((field) => body[field] !== undefined);
   return {
     response:
-      body.confidenceLevel !== undefined
-        ? decisionLocked(runningRun.id, ["confidenceLevel"], "PATCH_EXPERIMENT", requestId)
+      locked.length > 0
+        ? decisionLocked(runningRun.id, locked, "PATCH_EXPERIMENT", requestId)
         : null,
     runningRun,
   };
