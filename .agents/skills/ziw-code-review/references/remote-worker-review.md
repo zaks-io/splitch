@@ -6,7 +6,9 @@ Use this when the user asks for a remote worker agent to review a branch or PR.
 
 - Use the repo-configured remote worker provider from
   `docs/agents/workflow/config.md`.
-- Launch a review-only run against the PR branch or head ref.
+- Resolve the target first with `node scripts/resolve-review-target.mjs`; the
+  remote worker inherits that head SHA and never resolves its own.
+- Launch a review-only run pinned to the resolved head SHA.
 - Set auto-PR creation off when the provider supports that option.
 - Paste the prompt below.
 - Do not print, store, or commit provider API keys.
@@ -20,8 +22,13 @@ credentials.
 ```text
 Code review only. Do not edit files, commit, push, or open a PR.
 
-Repo/branch: <repo and branch or PR URL>
+Repo: <owner/name>
+PR: #<number or "none">
+Head SHA: <resolved head sha, review this revision only>
 Base: <base branch>
+
+Do not resolve a target from the checked-out branch or any ambient state; review
+the head SHA above and report it in your output.
 
 Read first:
 - AGENTS.md or CLAUDE.md
