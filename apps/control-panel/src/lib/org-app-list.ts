@@ -109,13 +109,51 @@ function attentionReasons(state: Extract<EnvironmentAttentionState, { kind: "att
   return reasons;
 }
 
+/**
+ * `appAttentionSummary`'s severity, ranked worst-first: a known-unhealthy
+ * Environment always outranks an unknown one, because "fix this" is more
+ * urgent than "we couldn't check this" and an unknown must never bury a
+ * confirmed problem. `clear` only applies when every Environment was actually
+ * read and came back calm.
+ */
+export type AppAttentionSeverity = "unavailable" | "attention" | "unknown" | "clear";
+
+function environmentStates(app: OrgAppListApp) {
+  return app.environments.map((environment) => ({
+    environment,
+    state: environmentAttention(app.attention, environment.environmentId),
+  }));
+}
+
+/**
+ * The single place App-level health is rolled up from per-Environment state.
+ * Both `appAttentionSummary` and `appAttentionSeverity` read this so the
+ * headline text and its styling can never drift out of sync with each other
+ * or with the per-Environment dots (`environmentAttention`).
+ */
+export function appAttentionSeverity(app: OrgAppListApp): AppAttentionSeverity {
+  if (app.attention.kind === "unavailable") return "unavailable";
+  const states = environmentStates(app).map(({ state }) => state.kind);
+  if (states.includes("attention")) return "attention";
+  if (states.includes("unknown")) return "unknown";
+  return "clear";
+}
+
 /** The one-line summary shown under the App name, above the Environment links. */
 export function appAttentionSummary(app: OrgAppListApp): string {
-  if (app.attention.kind === "unavailable") return "Experiment health unavailable";
-  const failing = app.environments.filter(
-    (environment) =>
-      environmentAttention(app.attention, environment.environmentId).kind === "attention",
-  );
-  if (failing.length === 0) return "No Experiment needs attention";
-  return `Needs attention in ${failing.map((environment) => environment.env).join(", ")}`;
+  const severity = appAttentionSeverity(app);
+  if (severity === "unavailable") return "Experiment health unavailable";
+  if (severity === "clear") return "No Experiment needs attention";
+
+  const states = environmentStates(app);
+  // `attention` ranks above `unknown` (see AppAttentionSeverity): a
+  // known-unhealthy Environment is reported even when another Environment in
+  // the same App is unknown, so unknown can never mask a confirmed problem.
+  const wantedKind = severity;
+  const named = states
+    .filter(({ state }) => state.kind === wantedKind)
+    .map(({ environment }) => environment.env);
+
+  if (severity === "attention") return `Needs attention in ${named.join(", ")}`;
+  return `Health unknown in ${named.join(", ")}`;
 }

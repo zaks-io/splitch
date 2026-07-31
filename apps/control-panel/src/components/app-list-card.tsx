@@ -1,5 +1,10 @@
 import { EnvironmentLink } from "#components/environment-link";
-import { appAttentionSummary, environmentAttention, type OrgAppListApp } from "#lib/org-app-list";
+import {
+  appAttentionSeverity,
+  appAttentionSummary,
+  environmentAttention,
+  type OrgAppListApp,
+} from "#lib/org-app-list";
 
 /**
  * The card IS the Environment picker. The App name is a heading, not a link,
@@ -9,7 +14,17 @@ import { appAttentionSummary, environmentAttention, type OrgAppListApp } from "#
  */
 export function AppListCard({ app, orgSlug }: { app: OrgAppListApp; orgSlug: string }) {
   const summary = appAttentionSummary(app);
-  const unavailable = app.attention.kind === "unavailable";
+  const severity = appAttentionSeverity(app);
+  const unavailable = severity === "unavailable";
+  // Mirrors the per-Environment dot colors in `environment-link.tsx`: a
+  // confirmed problem reads as destructive (red), "we couldn't check" reads
+  // as amber, and only a fully-read, calm App gets the muted treatment.
+  const summaryClassName =
+    severity === "attention"
+      ? "font-medium text-destructive text-xs"
+      : severity === "unknown" || severity === "unavailable"
+        ? "font-medium text-amber-600 text-xs dark:text-amber-400"
+        : "text-muted-foreground text-xs";
 
   return (
     <article
@@ -19,11 +34,8 @@ export function AppListCard({ app, orgSlug }: { app: OrgAppListApp; orgSlug: str
       <header className="grid gap-1">
         <h3 className="font-semibold text-foreground text-lg tracking-tight">{app.appSlug}</h3>
         <p
-          className={
-            unavailable
-              ? "font-medium text-amber-600 text-xs dark:text-amber-400"
-              : "text-muted-foreground text-xs"
-          }
+          className={summaryClassName}
+          data-app-attention-severity={severity}
           data-app-attention-summary={app.appSlug}
         >
           {summary}

@@ -78,6 +78,32 @@ describe("App card", () => {
     expect(html).toContain('data-attention-state="unknown"');
   });
 
+  it("never renders the calm headline when an Environment is missing from the rollup", () => {
+    // SPL-202: the SPL-103 review scenario, at the render site. The rollup
+    // succeeded for env_dev only; env_prod is silently absent. This must not
+    // read as "No Experiment needs attention" — that sentence asserts health
+    // that was never measured (ADR-0036).
+    const html = card({
+      kind: "ready",
+      items: [{ environmentId: "env_dev", state: "clear", srm: false, guardrail: false }],
+    });
+
+    expect(html).toContain("Health unknown in prod");
+    expect(html).not.toContain("No Experiment needs attention");
+    expect(html).toContain('data-app-attention-severity="unknown"');
+  });
+
+  it("keeps a confirmed problem visible even when another Environment in the App is unknown", () => {
+    const html = card({
+      kind: "ready",
+      items: [{ environmentId: "env_prod", state: "attention", srm: true, guardrail: false }],
+    });
+
+    expect(html).toContain("Needs attention in prod");
+    expect(html).not.toContain("Health unknown");
+    expect(html).toContain('data-app-attention-severity="attention"');
+  });
+
   it("calls out an App with no Environments as broken, not empty", () => {
     const html = renderToStaticMarkup(
       <AppListCard
