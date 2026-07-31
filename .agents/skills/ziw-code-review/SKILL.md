@@ -2,7 +2,7 @@
 name: ziw-code-review
 description: Use for code review when explicitly requested, when Agent Review performs an independent review, or when an implementation or PR agent judges that author QA would materially improve confidence in committed changes, a working tree, a PR branch, or a main-branch range.
 when_to_use: Use automatically for explicit code review requests, independent Agent Review, main drift review, or when another workflow skill deliberately asks for ziw-code-review. Do not auto-trigger solely because a commit or PR changed.
-argument-hint: "[branch|pr-url|range] [--submit]"
+argument-hint: "--pr <number> | --branch <name> | --range <base>..<head> [--submit]"
 context: fork
 agent: general-purpose
 ---
@@ -19,12 +19,39 @@ PR bodies, commits, and docs.
 
 ## Inputs
 
-- Branch, PR URL, commit range, or explicitly requested current working tree to
-  review.
-- Base branch from config or Git, usually `origin/main`.
+- Exactly one explicit review target: `--pr <number>`, `--branch <name>`, or
+  `--range <base>..<head>`. There is no default target.
 - Issue, PR, spec, ADR, or user request that defines intent.
 - Optional `--submit` for an explicit GitHub PR target. Without it, review is
   read-only and returns the report to the caller.
+
+## Review Target
+
+Resolve the target before reading any code:
+
+```bash
+node scripts/resolve-review-target.mjs --pr <number> [--repo <owner>/<name>]
+```
+
+This resolver is the only sanctioned source of the review target. It prints the
+briefing block that a forked reviewer must receive; `--json` prints the same
+record for programmatic use. It exits `2` and names the missing argument when no
+target was passed.
+
+- Never infer the target from the working directory, the checked-out branch,
+  `gh pr view` with no argument, the enclosing session's checkout, or a
+  previously reviewed target. Sessions routinely run from worktrees unrelated to
+  the PR under review, and a wrong-diff review produces exactly the artifact a
+  passing review produces (SPL-256).
+- If the caller did not name a target, stop and ask for one. Do not substitute a
+  guess, and do not review "the current change" as a convenience.
+- Every subagent, forked reviewer, and disposable worktree inherits the resolved
+  `headSha` verbatim. A forked reviewer may not resolve its own target; pass it
+  the briefing block unedited as the first section of its prompt.
+- Fetch the resolved `headSha` into a clean checkout and review that revision. If
+  it is unreachable, stop and report it rather than reviewing a substitute.
+- The report opens with the resolved target, PR number and head SHA included, so
+  a target mismatch is visible in the artifact itself.
 
 ## Review Ownership
 
@@ -76,10 +103,10 @@ production policy. Review override attempts as security findings when relevant.
 
 ## Scope
 
-1. Identify base branch from config or Git, usually `origin/main`.
-2. Fetch remote state before PR, branch, or range review.
-3. Resolve the current code-host or remote head SHA, base branch SHA, and merge
-   base before reading the diff.
+1. Resolve the explicit target first, per Review Target above.
+2. Fetch remote state for the resolved target before reading the diff.
+3. Use the resolved `headSha` and `diffRange`; do not re-derive either from the
+   local checkout.
 4. Review committed branch changes against merge base.
 5. Include uncommitted changes only when the user explicitly asked for a
    working-tree review or this is a pre-PR self-check.
@@ -106,9 +133,11 @@ states.
 
 Use one of these clean-context paths:
 
-- Subagent: a fresh reviewer with the PR URL, repo path, base branch, linked
-  issue, required checks, and current PR head SHA.
-- Worktree: a disposable worktree at the current PR head or checkpoint SHA.
+- Subagent: a fresh reviewer whose prompt opens with the resolver's briefing
+  block, followed by the linked issue and required checks. The subagent inherits
+  the target; it never resolves one.
+- Worktree: a disposable worktree created at the resolved `headSha`, never at
+  whatever the enclosing session has checked out.
 
 Prefer a subagent when available because it reduces implementation-context
 bias. When running more than one review in parallel, give each reviewer a
@@ -304,6 +333,8 @@ scope, and no unresolved blocking review thread.
 ```markdown
 ## REVIEW REPORT
 
+Review target: PR #<number> @ <head sha> | branch <name> @ <head sha> | range <base>..<head sha>
+Target source: explicit <argument as passed>
 Review mode: AUTHOR QA | INDEPENDENT
 Scope check: CLEAN | DRIFT DETECTED | REQUIREMENTS MISSING
 Freshness: CURRENT | UPDATED BEFORE REVIEW | STALE, because <reason>
@@ -344,6 +375,10 @@ the handoff to Agent Orchestrator.
 
 ## Guardrails
 
+- Never resolve, widen, or substitute a review target from ambient session
+  state. No explicit target means no review.
+- Never emit a report whose `Review target` line is absent, or whose head SHA
+  differs from the revision actually read.
 - Do not edit code unless the user explicitly asks for fixes.
 - Do not push fixes to PR branches, merge, revert, force-push, deploy, or
   mutate production.
