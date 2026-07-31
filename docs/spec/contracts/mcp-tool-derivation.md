@@ -286,9 +286,30 @@ that retry should always supply one. (Mirrors the auth-claim idempotency key, au
 
 Approval-controlled mutations (`experiments_start`, `flag_config_update`,
 `flag_targeting_rules_replace`, `flags_promote`, and App-level Variant value updates) require
-`idempotency_key`. It owns durable Approval Request creation and any inline Review. Review calls
-also require their own key. Exact retries return the stored result; a key reused with a different
-payload fails with `IDEMPOTENCY_KEY_CONFLICT`.
+`idempotency_key`, as do the catalog deletes `flags_delete` and `flag_variants_delete`. It owns
+durable Approval Request creation and any inline Review. Review calls also require their own key.
+Exact retries return the stored result; a key reused with a different payload fails with
+`IDEMPOTENCY_KEY_CONFLICT`.
+
+`idempotency_key` is derived from the route body schema wherever the route has one. The two catalog
+deletes have no request body, so derivation **injects** a required `idempotency_key` into their flat
+tool schema instead: a `required` route whose schema cannot express the key advertises an
+unsatisfiable call, and an impossible remedy is exactly what ADR-0036 forbids. The rule is uniform —
+every `idempotency: "required"` route exposes `idempotency_key` as a required tool input, from the
+body when there is one and by injection when there is not.
+
+Omitting the key on a `required` route — or supplying a blank one — is refused by the client before
+any request leaves: a tool result with `isError: true` carrying the Worker's own `VALIDATION_ERROR`
+code in the same `details.issues[]` envelope. It is never a JSON-RPC `-32603`, which stays reserved
+for genuinely unexpected faults.
+
+The issue **path** is surface-local and deliberately differs from the Worker's. `worker-runtime`
+reads the `Idempotency-Key` HTTP header and so reports `["headers","idempotency-key"]`; an MCP caller
+sends JSON and cannot set a header, so the client-side refusal reports `["idempotency_key"]`, the
+tool input the agent actually controls. Naming the header to a caller that has no way to set one
+would be an impossible remedy, which ADR-0036 forbids. Any future client-side precondition check
+should copy this split: the Worker's `code` and envelope, with the path named in the caller's own
+vocabulary.
 
 ## Authorization
 

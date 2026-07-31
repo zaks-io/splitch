@@ -13,6 +13,10 @@
       "types": "./src/mcp-operation-adapter.ts",
       "default": "./src/mcp-operation-adapter.ts"
     },
+    "./idempotency-header": {
+      "types": "./src/idempotency-header.ts",
+      "default": "./src/idempotency-header.ts"
+    },
     "./control-panel-identity": {
       "types": "./src/control-panel-identity.ts",
       "default": "./src/control-panel-identity.ts"

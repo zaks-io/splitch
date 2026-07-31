@@ -31,6 +31,22 @@ async function typeChecks() {
   await sdk.experiments.list({ appId: "app_local", environmentId: "env_local" });
   // @ts-expect-error experiments_list requires environmentId
   await sdk.experiments.list({ appId: "app_local" });
+
+  // The body-less required-idempotency routes carry the key out-of-band, so the
+  // options argument holds the requirement other routes get from their schema (SPL-266).
+  const flagRef = { appId: "app_local", flagId: "flag_local" };
+  await sdk.flags.delete(flagRef, { idempotencyKey: "idem_1" });
+  // @ts-expect-error flags_delete requires an idempotency key
+  await sdk.flags.delete(flagRef);
+  // @ts-expect-error flags_delete requires an idempotency key
+  await sdk.flags.delete(flagRef, {});
+
+  const variantRef = { ...flagRef, variantName: "on" };
+  await sdk.flags.deleteVariant(variantRef, { idempotencyKey: "idem_2" });
+  // @ts-expect-error flag_variants_delete requires an idempotency key
+  await sdk.flags.deleteVariant(variantRef);
+  // @ts-expect-error flag_variants_delete requires an idempotency key
+  await sdk.flags.deleteVariant(variantRef, {});
 }
 
 void typeChecks;

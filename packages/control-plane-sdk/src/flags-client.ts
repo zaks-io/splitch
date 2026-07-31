@@ -33,7 +33,11 @@ import {
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
 import { withIdempotencyHeader } from "./idempotency-header";
-import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "./operation-result";
+import type {
+  ControlPlaneIdempotentOperationOptions,
+  ControlPlaneOperationOptions,
+  ControlPlaneOperationResult,
+} from "./operation-result";
 
 export interface FlagsClient {
   list(
@@ -54,7 +58,7 @@ export interface FlagsClient {
   ): Promise<ControlPlaneOperationResult<FlagsUpdateOutput>>;
   delete(
     input: FlagsDeleteInput,
-    options?: ControlPlaneOperationOptions,
+    options: ControlPlaneIdempotentOperationOptions,
   ): Promise<ControlPlaneOperationResult<FlagsDeleteOutput>>;
   createVariant(
     input: FlagVariantsCreateInput,
@@ -66,7 +70,7 @@ export interface FlagsClient {
   ): Promise<ControlPlaneOperationResult<FlagVariantsUpdateOutput>>;
   deleteVariant(
     input: FlagVariantsDeleteInput,
-    options?: ControlPlaneOperationOptions,
+    options: ControlPlaneIdempotentOperationOptions,
   ): Promise<ControlPlaneOperationResult<FlagVariantsDeleteOutput>>;
   getConfig(
     input: FlagConfigGetInput,

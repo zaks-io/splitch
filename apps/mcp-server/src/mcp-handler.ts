@@ -1,4 +1,5 @@
 import { getRoute, parsePlatformTarget, type RouteOwner } from "@splitch/contracts";
+import { IdempotencyKeyRequiredError } from "@splitch/control-plane-sdk/idempotency-header";
 import {
   JSON_RPC_INTERNAL_ERROR,
   JSON_RPC_METHOD_NOT_FOUND,
@@ -177,10 +178,26 @@ async function callTool(
       result.ok ? toolResult(result.data) : toolResult(result.error, { isError: true }),
     );
   } catch (error) {
-    return jsonRpcError(id, JSON_RPC_INTERNAL_ERROR, "Internal error", {
-      message: error instanceof Error ? error.message : String(error),
-    });
+    return toolCallFailure(id, error);
   }
+}
+
+/**
+ * A missing idempotency key is a caller-fixable precondition, so it reaches the
+ * agent as a typed `VALIDATION_ERROR` tool result — the same code and envelope the
+ * Worker uses for that rule — rather than a protocol fault. `Internal error` stays
+ * the last resort for genuinely unexpected throws (SPL-266).
+ *
+ * The promise is scoped to this rule: other refusals on this path (scope
+ * resolution) still return an untyped message with no `code`.
+ */
+function toolCallFailure(id: JsonRpcId, error: unknown): JsonRpcResponse {
+  if (error instanceof IdempotencyKeyRequiredError) {
+    return jsonRpcResult(id, toolResult(error.errorResponse, { isError: true }));
+  }
+  return jsonRpcError(id, JSON_RPC_INTERNAL_ERROR, "Internal error", {
+    message: error instanceof Error ? error.message : String(error),
+  });
 }
 
 function authIssuer(configured: string | undefined, platformTarget: string | undefined): string {

@@ -7,8 +7,14 @@ export default defineConfig({
       "@splitch/contracts": fileURLToPath(
         new URL("../../packages/contracts/src/index.ts", import.meta.url),
       ),
+      // Every subpath entry must stay ahead of the bare "@splitch/control-plane-sdk"
+      // one: aliases match by prefix, so the broader entry rewrites a subpath import
+      // into `index.ts/<subpath>` and resolution fails.
       "@splitch/control-plane-sdk/mcp-operation-adapter": fileURLToPath(
         new URL("../../packages/control-plane-sdk/src/mcp-operation-adapter.ts", import.meta.url),
+      ),
+      "@splitch/control-plane-sdk/idempotency-header": fileURLToPath(
+        new URL("../../packages/control-plane-sdk/src/idempotency-header.ts", import.meta.url),
       ),
       "@splitch/control-plane-sdk/panel-experiments": fileURLToPath(
         new URL("../../packages/control-plane-sdk/src/panel-experiments.ts", import.meta.url),

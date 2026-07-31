@@ -111,6 +111,7 @@ describe("control plane sdk Variant catalog operations", () => {
     const { sdk } = sdkWith(() => Response.json(flag));
 
     await expect(
+      // @ts-expect-error the signature now rejects this at compile time too; the throw is the backstop for untyped callers
       sdk.flags.deleteVariant({
         appId: "app_checkout",
         flagId: "flag_checkout",

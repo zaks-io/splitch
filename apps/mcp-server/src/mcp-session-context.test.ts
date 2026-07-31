@@ -98,6 +98,7 @@ describe("MCP session context", () => {
         flagId: "flag_checkout",
         fromEnvironmentId: "env_source",
         select: { enabled: true },
+        idempotency_key: "idem_flags_promote_probe",
       },
     };
     await mcp("tools/call", promotion, { sessionId, seen });

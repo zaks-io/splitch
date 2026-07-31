@@ -8,6 +8,7 @@
 import type { ApiRouteContract, ErrorResponse, McpDelegationActor } from "@splitch/contracts";
 import { createMcpDelegationHeader, getRoute, MCP_DELEGATION_HEADER } from "@splitch/contracts";
 import { type ControlPlaneHcOptions, resolveControlPlaneUrl, withAuthorization } from "./hc-client";
+import { withIdempotencyHeader } from "./idempotency-header";
 import {
   type ControlPlaneOperationOptions,
   type ControlPlaneOperationResult,
@@ -122,16 +123,30 @@ function buildRequest(
   if (body !== undefined) {
     headers.set("content-type", "application/json");
   }
-  const idempotencyKey = inputRecord(input).idempotency_key;
-  if (route.idempotency !== "none" && typeof idempotencyKey === "string") {
-    headers.set("idempotency-key", idempotencyKey);
-  }
+  applyIdempotencyHeader(route, headers, input);
 
   return new Request(url, {
     method: route.method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+}
+
+/**
+ * One rule, one behaviour: the MCP path lifts the key through the same helper the
+ * typed clients use, so a `required` route with no key fails here rather than
+ * shipping a request the Worker can only reject (ADR-0036, SPL-266).
+ */
+function applyIdempotencyHeader(route: ApiRouteContract, headers: Headers, input: unknown): void {
+  const key = inputRecord(input).idempotency_key;
+  const lifted = withIdempotencyHeader(
+    route.operationId,
+    {},
+    typeof key === "string" ? key : undefined,
+  );
+  for (const [name, value] of Object.entries(lifted.headers ?? {})) {
+    headers.set(name, value);
+  }
 }
 
 function buildPath(route: ApiRouteContract, input: unknown): string {
