@@ -27,8 +27,6 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 30
     environment: preview
-    outputs:
-      deployed_sha: ${{ steps.revision.outputs.deployed_sha }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
@@ -72,7 +70,6 @@ jobs:
           persist-credentials: false
 
       - name: Resolve immutable deploy revision
-        id: revision
         shell: bash
         run: |
           set -euo pipefail
@@ -82,7 +79,6 @@ jobs:
             exit 1
           fi
           echo "SPLITCH_DEPLOYED_COMMIT_SHA=$deployed_sha" >> "$GITHUB_ENV"
-          echo "deployed_sha=$deployed_sha" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         run: |
@@ -131,81 +127,25 @@ jobs:
         id: deploy
         run: pnpm deploy:shared-preview
 
-  smoke:
-    name: Smoke Shared Preview
-    needs: deploy
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    timeout-minutes: 15
-    continue-on-error: true
-    environment: preview
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      SPLITCH_DEPLOY_GATE_TOKEN: ${{ secrets.SPLITCH_DEPLOY_GATE_TOKEN }}
-      SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
-    steps:
-      - name: Harden runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout deployed revision
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.deploy.outputs.deployed_sha }}
-          persist-credentials: false
-
-      - name: Resolve immutable smoke revision
-        shell: bash
-        env:
-          DEPLOYED_SHA: ${{ needs.deploy.outputs.deployed_sha }}
-        run: |
-          set -euo pipefail
-          smoke_sha="$(git rev-parse HEAD)"
-          if [[ ! "$DEPLOYED_SHA" =~ ^[0-9a-f]{40}$ ]] || [ "$smoke_sha" != "$DEPLOYED_SHA" ]; then
-            echo "::error::smoke revision must resolve to the deployed full commit SHA"
-            exit 1
-          fi
-          echo "SPLITCH_WORKFLOW_REF=$smoke_sha" >> "$GITHUB_ENV"
-          echo "SPLITCH_DEPLOYED_COMMIT_SHA=$smoke_sha" >> "$GITHUB_ENV"
-
-      - name: Setup pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.8.0 --activate
-
-      - name: Setup Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.17.0
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Check smoke credentials
-        shell: bash
-        run: |
-          set -euo pipefail
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SPLITCH_DEPLOY_GATE_TOKEN SPLITCH_SMOKE_CLIENT_SECRET; do
-            if [ -z "${!name}" ]; then
-              echo "::error::$name is required for shared-preview smoke"
-              exit 1
-            fi
-          done
-
       - name: Seed shared preview smoke data
         id: seed
+        continue-on-error: true
         run: pnpm shared-preview:seed-smoke
 
       - name: Smoke shared preview
         id: smoke
+        if: steps.seed.outcome == 'success'
+        continue-on-error: true
+        env:
+          SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
         run: SPLITCH_SMOKE_COMMIT_SHA="$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke
 
       - name: Dark-launch shared preview
         id: dark_launch
+        if: steps.smoke.outcome == 'success'
+        continue-on-error: true
         env:
+          SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
           SPLITCH_SMOKE_COMMIT_SHA: ${{ env.SPLITCH_DEPLOYED_COMMIT_SHA }}
           SPLITCH_SMOKE_RUNS: "2"
         run: pnpm smoke:dark-launch:shared-preview
@@ -213,10 +153,16 @@ jobs:
       - name: Clean up shared preview smoke data
         id: cleanup
         if: always()
+        continue-on-error: true
         run: pnpm shared-preview:cleanup-smoke
 
       - name: Upload Playwright smoke report
-        if: failure()
+        if: >-
+          always() &&
+          (steps.seed.outcome == 'failure' ||
+          steps.smoke.outcome == 'failure' ||
+          steps.dark_launch.outcome == 'failure')
+        continue-on-error: true
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: shared-preview-playwright-report
@@ -227,6 +173,7 @@ jobs:
 
       - name: Summary
         if: always()
+        continue-on-error: true
         env:
           SPLITCH_SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
           SPLITCH_DARK_LAUNCH_OUTCOME: ${{ steps.dark_launch.outcome }}

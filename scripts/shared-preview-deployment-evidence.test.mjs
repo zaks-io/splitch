@@ -97,35 +97,37 @@ test("smoke and reset summaries retain the independently verified deployed SHA",
   assert.match(reset.stdout, new RegExp(String.raw`Deployed commit SHA: \`${sha}\``));
 });
 
-test("shared-preview deploy isolates non-blocking smoke verification for its immutable SHA", () => {
+test("shared-preview deploy keeps every post-deploy smoke phase non-blocking", () => {
   const workflow = readFileSync(".github/workflows/deploy-shared-preview.yml", "utf8");
-  const deployJob = workflow.match(/\n {2}deploy:\n([\s\S]*?)\n {2}smoke:/)?.[1];
-  const smokeJob = workflow.match(/\n {2}smoke:\n([\s\S]*)$/)?.[1];
+  const jobs = workflow.slice(workflow.indexOf("\njobs:\n"));
+  const deployJob = workflow.match(/\n {2}deploy:\n([\s\S]*)$/)?.[1];
 
   assert.ok(deployJob);
-  assert.ok(smokeJob);
   assert.match(workflow, /deployed_sha="\$\(git rev-parse HEAD\)"/);
   assert.match(workflow, /SPLITCH_DEPLOYED_COMMIT_SHA=\$deployed_sha/);
-  assert.match(workflow, /deployed_sha: \$\{\{ steps\.revision\.outputs\.deployed_sha \}\}/);
-  assert.doesNotMatch(deployJob, /pnpm shared-preview:smoke/);
-  assert.doesNotMatch(deployJob, /pnpm smoke:dark-launch:shared-preview/);
-
-  assert.match(smokeJob, /needs: deploy/);
-  assert.match(smokeJob, /continue-on-error: true/);
+  assert.doesNotMatch(jobs, /\n {2}(?!deploy:)[a-z0-9_-]+:\n/);
   assert.match(
-    smokeJob,
-    /SPLITCH_DEPLOY_GATE_TOKEN: \$\{\{ secrets\.SPLITCH_DEPLOY_GATE_TOKEN \}\}/,
+    deployJob,
+    /name: Seed shared preview smoke data\n\s+id: seed\n\s+continue-on-error: true/,
   );
-  assert.match(smokeJob, /ref: \$\{\{ needs\.deploy\.outputs\.deployed_sha \}\}/);
-  assert.match(smokeJob, /DEPLOYED_SHA: \$\{\{ needs\.deploy\.outputs\.deployed_sha \}\}/);
-  assert.match(smokeJob, /\[ "\$smoke_sha" != "\$DEPLOYED_SHA" \]/);
   assert.match(
-    smokeJob,
+    deployJob,
+    /name: Smoke shared preview\n\s+id: smoke\n\s+if: steps\.seed\.outcome == 'success'\n\s+continue-on-error: true/,
+  );
+  assert.match(
+    deployJob,
+    /name: Dark-launch shared preview\n\s+id: dark_launch\n\s+if: steps\.smoke\.outcome == 'success'\n\s+continue-on-error: true/,
+  );
+  assert.match(
+    deployJob,
     /SPLITCH_SMOKE_COMMIT_SHA="\$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke/,
   );
-  assert.match(smokeJob, /pnpm smoke:dark-launch:shared-preview/);
-  assert.match(smokeJob, /SPLITCH_SMOKE_RUNS: "2"/);
-  assert.match(smokeJob, /if: always\(\)\n\s+run: pnpm shared-preview:cleanup-smoke/);
+  assert.match(deployJob, /pnpm smoke:dark-launch:shared-preview/);
+  assert.match(deployJob, /SPLITCH_SMOKE_RUNS: "2"/);
+  assert.match(
+    deployJob,
+    /if: always\(\)\n\s+continue-on-error: true\n\s+run: pnpm shared-preview:cleanup-smoke/,
+  );
 });
 
 test("shared-preview reset resolves the hosted revision and verifies the whole fleet", () => {
