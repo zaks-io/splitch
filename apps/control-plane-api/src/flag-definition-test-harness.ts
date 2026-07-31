@@ -92,13 +92,17 @@ export function makeAppForRepo(
 }
 
 export function orgToken(h: FlagDefinitionHarness): Promise<string> {
+  return orgTokenFor(h, ORG.orgId);
+}
+
+export function orgTokenFor(h: FlagDefinitionHarness, orgId: string): Promise<string> {
   return h.signer.sign({
     sub: OWNER,
     iss: "https://auth.splitch.test",
     aud: AUDIENCE,
     iat: nowSeconds(),
     exp: nowSeconds() + 3600,
-    scopes: [`org:${ORG.orgId}:owner`],
+    scopes: [`org:${orgId}:owner`],
   });
 }
 

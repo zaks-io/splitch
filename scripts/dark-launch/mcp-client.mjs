@@ -88,7 +88,14 @@ export async function createMcpClient(config) {
       const result = await request("tools/list");
       return result?.structuredContent?.tools ?? result?.tools ?? [];
     },
-    discovery: { protectedResourceUrl, resource: expectedResource },
+    discovery: {
+      challengeStatus: challenge.status,
+      protectedResourceUrl,
+      resource: metadata.resource,
+      authorizationServer: config.authBaseUrl,
+      tokenEndpoint: authorizationMetadata.token_endpoint,
+      exactResourceTokenGranted: token.length > 0,
+    },
   };
 }
 

@@ -12,8 +12,6 @@
  * Optional:
  *   SPLITCH_SMOKE_RUNS (default 2)
  *   SPLITCH_DARK_LAUNCH_EVIDENCE (evidence output path)
- *   SPLITCH_SMOKE_WRONG_APP_CLIENT_KEY (default: seeded sibling App key)
- *   SPLITCH_SMOKE_REVOKED_CLIENT_KEY (default: seeded revoked key material)
  */
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -28,7 +26,13 @@ import {
   pollResults,
   summarizeExposureHealth,
 } from "./hosted-results.mjs";
-import { listApps, PROPAGATION_WINDOW_MS, runDarkLaunchJourney } from "./journey.mjs";
+import {
+  assertRevokedCredential,
+  cleanupDeferredRuns,
+  findOrphanedDarkLaunchApps,
+  RESULT_REREAD_DELAY_MS,
+} from "./hosted-cleanup.mjs";
+import { PROPAGATION_WINDOW_MS, runDarkLaunchJourney } from "./journey.mjs";
 import { createMcpClient } from "./mcp-client.mjs";
 import { installPackedSdkConsumer, runExternalResolve, writeEvidence } from "./pack-consumer.mjs";
 
@@ -50,9 +54,10 @@ const installCommand = consumer.installCommand.replace(
 );
 
 const runResults = [];
+let cleanupResults = [];
 const mcp = await createMcpClient(config);
 const tools = await mcp.listTools();
-assertToolParity(tools);
+const toolParity = assertToolParity(tools);
 const organizations = await mcp.callTool("organizations_list", {});
 const organizationItems = Array.isArray(organizations)
   ? organizations
@@ -60,6 +65,7 @@ const organizationItems = Array.isArray(organizations)
 if (!organizationItems.some((organization) => organization.id === config.smokeOrgId)) {
   throw new Error("organizations_list did not discover the seeded smoke Organization");
 }
+let journeyFailure;
 try {
   for (let index = 0; index < runs; index += 1) {
     const runId = `${config.runId}-r${index + 1}`;
@@ -69,11 +75,16 @@ try {
       orgId: config.smokeOrgId,
       controlPlaneBaseUrl: config.controlPlaneBaseUrl,
       evaluationBaseUrl: config.evaluationBaseUrl,
+      foreignOrgId: config.foreignOrgId,
       runId,
       propagationWindowMs: PROPAGATION_WINDOW_MS,
+      cleanupStabilityWindowMs: RESULT_REREAD_DELAY_MS,
+      deferCleanup: true,
       callTool: mcp.callTool,
       callToolResult: mcp.callToolResult,
       resolve: (action, options) => runExternalResolve(consumer, action, options),
+      assertCredentialRevoked: ({ clientKey, flagKey }) =>
+        assertRevokedCredential(consumer, config.evaluationBaseUrl, clientKey, flagKey),
       assertVerifyClean: async ({ appId, environmentId, experimentId, runId: liveRunId }) => {
         const results = await pollResults(mcp, {
           appId,
@@ -117,17 +128,38 @@ try {
       flagKey: result.keys.flagKey,
       experimentKey: result.keys.experimentKey,
       exposureHealth: summarizeExposureHealth(observedResults),
+      negativeProofs: result.negativeProofs,
+      resultScope: {
+        appId: result.resources.appId,
+        environmentId: result.resources.environmentId,
+        experimentId: result.resources.experimentId,
+        runId: result.resources.runId,
+      },
+      cleanup: result.cleanup,
       steps: result.steps,
     });
   }
-} finally {
-  consumer.dispose();
+
+  for (const run of runResults) {
+    const finalResults = await pollResults(mcp, run.resultScope, 1);
+    assertExposureHealth(finalResults, 1);
+    run.exposureHealth = summarizeExposureHealth(finalResults);
+  }
+} catch (error) {
+  journeyFailure = error;
 }
 
-const orphanedApps = await findOrphanedDarkLaunchApps(config, mcp);
-if (orphanedApps.length > 0) {
-  throw new Error(`cleanup assertion found orphaned Apps: ${JSON.stringify(orphanedApps)}`);
+let cleanupFailure;
+try {
+  cleanupResults = await cleanupDeferredRuns(runResults);
+} catch (error) {
+  cleanupFailure = error;
 }
+consumer.dispose();
+if (cleanupFailure) throw cleanupFailure;
+if (journeyFailure) throw journeyFailure;
+
+const orphanScans = await findOrphanedDarkLaunchApps(config, mcp);
 
 const healthRoutes = config.healthRoutes;
 const observations = [];
@@ -148,21 +180,42 @@ const evidence = createFleetEvidence({
 const payload = {
   ...evidence,
   consumerInstall: installCommand,
-  consecutiveRuns: runResults,
+  consecutiveRuns: runResults.map(({ cleanup: _cleanup, resultScope: _scope, ...run }) => run),
   cleanup: {
-    orphanedApps: false,
-    orphanedFlags: false,
-    orphanedCredentials: false,
-    transientAppsDeleted: true,
+    orphanedApps: orphanScans.some((scan) => scan.length > 0),
+    orphanedFlags: cleanupResults.some((result) => !result.flagDeleted),
+    orphanedCredentials: cleanupResults.some((result) => !result.credentialRevoked),
+    transientAppsDeleted:
+      cleanupResults.length === runs && cleanupResults.every((result) => result.appDeleted),
+    observations: { cleanupResults, orphanScans },
   },
   checks: {
-    packedSdkConsumer: true,
-    oauthPrmDiscovery: true,
-    exactResourceMcpToken: true,
-    mcpOnboardingTools: true,
-    firstExposure: true,
-    consecutiveRuns: runResults.length === runs,
+    packedSdkConsumer: consumer.installCommand.length > 0,
+    oauthPrmDiscovery:
+      mcp.discovery.challengeStatus === 401 &&
+      mcp.discovery.protectedResourceUrl.endsWith("/.well-known/oauth-protected-resource/mcp"),
+    exactResourceMcpToken:
+      mcp.discovery.exactResourceTokenGranted &&
+      mcp.discovery.resource === `${config.mcpBaseUrl}/mcp`,
+    mcpOnboardingTools: toolParity.missing.length === 0,
+    firstExposure: runResults.every(
+      (run) =>
+        run.exposureHealth.exposureTotal === 1 &&
+        run.exposureHealth.dedupedTotal === 1 &&
+        run.exposureHealth.multipleCount === 0,
+    ),
+    negativeAuthorization: runResults.every(
+      (run) =>
+        run.negativeProofs.wrongApp.isolated &&
+        run.negativeProofs.revokedCredential.errorCode === "CREDENTIAL_REVOKED" &&
+        run.negativeProofs.crossOrganization.writeCode === "FORBIDDEN" &&
+        run.negativeProofs.crossOrganization.listCode === "FORBIDDEN",
+    ),
+    consecutiveRuns:
+      runResults.length === runs && new Set(runResults.map((run) => run.runId)).size === runs,
   },
+  oauth: mcp.discovery,
+  toolParity,
 };
 
 mkdirSync(dirname(evidencePath), { recursive: true });
@@ -193,6 +246,7 @@ function readConfig() {
     smokeClientId: process.env.SPLITCH_SMOKE_CLIENT_ID ?? "splitch-shared-preview-smoke",
     smokeClientSecret,
     smokeOrgId: process.env.SPLITCH_SMOKE_ORG_ID ?? "org_shared_preview_smoke",
+    foreignOrgId: "org_shared_preview_isolation",
     runId: (process.env.SPLITCH_SMOKE_RUN_ID ?? process.env.GITHUB_RUN_ID ?? String(Date.now()))
       .toLowerCase()
       .replaceAll(/[^a-z0-9-]/g, "-")
@@ -221,12 +275,4 @@ function route(surface, service, fallback) {
 
 function originUrl(name, fallback) {
   return new URL(process.env[name] ?? fallback).origin;
-}
-
-async function findOrphanedDarkLaunchApps(cfg, mcpClient) {
-  const apps = await listApps({ callTool: mcpClient.callTool }, cfg.smokeOrgId);
-  const items = Array.isArray(apps) ? apps : (apps.items ?? apps.apps ?? []);
-  return items
-    .filter((app) => typeof app.key === "string" && app.key.startsWith("dark-launch-app-"))
-    .map((app) => ({ id: app.id, key: app.key }));
 }

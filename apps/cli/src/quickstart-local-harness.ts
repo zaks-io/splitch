@@ -16,6 +16,7 @@ import {
   makeFlagDefinitionHarness,
   NOW_ISO,
   orgToken,
+  orgTokenFor,
 } from "../../control-plane-api/src/flag-definition-test-harness.js";
 import { makeLocalBindings } from "../../control-plane-api/src/test-fixtures.js";
 import { createApp as createEvaluationApp } from "../../evaluation-api/src/app.js";
@@ -30,6 +31,7 @@ import {
 
 const CONTROL_PLANE_ORIGIN = "http://control-plane.local";
 const EVALUATION_ORIGIN = "http://evaluation.local";
+const FOREIGN_ORG_ID = "org_quickstart_foreign_live";
 const allowLimiter: RateLimiter = () => ({ limited: false });
 
 export interface QuickstartHarness {
@@ -43,6 +45,8 @@ export interface QuickstartHarness {
   readonly devEnvironmentId: string;
   readonly prodEnvironmentId: string;
   readonly orgId: string;
+  readonly foreignOrgId: string;
+  readonly foreignOrgAccessToken: string;
   readonly accessToken: string;
   readonly orgAccessToken: string;
   readonly routingFetch: typeof fetch;
@@ -61,6 +65,26 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
   const configKvBinding = await createConfigKvNamespace();
   const configKv = configKvBinding.kv;
   const repo = createRepository(flagHarness.bindings.d1);
+  await repo.identity.createOrganization({
+    organization: {
+      id: FOREIGN_ORG_ID,
+      name: "Quickstart Foreign Organization",
+      slug: "quickstart-foreign-live",
+      plan: "free",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    },
+    ownerUserId: "user_quickstart_foreign_owner",
+    createdAt: NOW_ISO,
+  });
+  await repo.identity.createApp({
+    id: "app_quickstart_foreign_live",
+    organizationId: FOREIGN_ORG_ID,
+    name: "Quickstart Foreign Sentinel",
+    key: "quickstart-foreign-sentinel",
+    createdAt: NOW_ISO,
+    updatedAt: NOW_ISO,
+  });
   const signer = flagHarness.signer;
   const configStore = makeConfigStore({
     repo,
@@ -91,6 +115,7 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
 
   const accessToken = await appToken(flagHarness, appId);
   const orgAccessToken = await orgToken(flagHarness);
+  const foreignOrgAccessToken = await orgTokenFor(flagHarness, FOREIGN_ORG_ID);
   const controlPlaneApp = flagHarness.app;
   const evaluationUsageSink = new RecordingEvaluationUsageSink();
   const exposureSink = new RecordingExposureSink();
@@ -134,6 +159,8 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
     devEnvironmentId,
     prodEnvironmentId,
     orgId: "org_flag_definition_crud",
+    foreignOrgId: FOREIGN_ORG_ID,
+    foreignOrgAccessToken,
     accessToken,
     orgAccessToken,
     routingFetch,

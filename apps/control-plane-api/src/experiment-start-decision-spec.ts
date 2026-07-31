@@ -1,4 +1,3 @@
-import type { ExperimentRow } from "./experiment-model";
 import { validationErrors } from "./flag-definition-errors";
 
 /**
@@ -71,20 +70,6 @@ export function runDecisionSpecFromBody(
     };
   }
   return { ok: true, value: { horizon, sampleSizeLocked } };
-}
-
-/**
- * Exposure collection is independently useful before a goal Metric exists. An
- * empty family produces no decision-valid statistical result, but it remains a
- * valid Run for first-touch Exposure integration and denominator verification.
- * Statistical decision gates continue to reject attempts to decide without a
- * frozen goal Metric family.
- */
-export function startReadinessResponse(
-  _experiment: ExperimentRow,
-  _requestId: string,
-): Response | null {
-  return null;
 }
 
 /**

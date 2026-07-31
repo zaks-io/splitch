@@ -84,12 +84,16 @@ export async function controlPlanePost<T>(
   body: Record<string, unknown>,
   token = harness.accessToken,
 ): Promise<T> {
+  const idempotencyKey =
+    typeof body.idempotency_key === "string"
+      ? body.idempotency_key
+      : `dark-launch-${crypto.randomUUID()}`;
   const response = await harness.routingFetch(`${quickstartOrigins.controlPlaneBaseUrl}${path}`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${token}`,
       "content-type": "application/json",
-      "idempotency-key": `dark-launch-${crypto.randomUUID()}`,
+      "idempotency-key": idempotencyKey,
     },
     body: JSON.stringify(body),
   });
@@ -124,8 +128,9 @@ export async function deleteFlagThroughApproval(
   harness: QuickstartHarness,
   appId: string,
   flagId: string,
+  token = harness.accessToken,
 ): Promise<void> {
-  const response = await controlPlaneDelete(harness, `/apps/${appId}/flags/${flagId}`);
+  const response = await controlPlaneDelete(harness, `/apps/${appId}/flags/${flagId}`, token);
   if (response.ok) return;
 
   expect(response.status).toBe(409);
@@ -143,7 +148,7 @@ export async function deleteFlagThroughApproval(
     {
       method: "POST",
       headers: {
-        authorization: `Bearer ${harness.accessToken}`,
+        authorization: `Bearer ${token}`,
         "content-type": "application/json",
         "idempotency-key": idempotencyKey,
       },

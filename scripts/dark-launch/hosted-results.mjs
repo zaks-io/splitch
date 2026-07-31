@@ -27,6 +27,7 @@ export function assertToolParity(tools) {
   if (missing.length > 0) {
     throw new Error(`MCP/CLI route parity is missing operations: ${missing.join(", ")}`);
   }
+  return { required, observed: [...names].sort(), missing };
 }
 
 export async function pollResults(mcpClient, scope, expectedDeduped = 0) {

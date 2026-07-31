@@ -11,8 +11,6 @@ export {
   syntheticKeys,
   variantName,
 } from "./constants.mjs";
-export { listApps } from "./control-plane.mjs";
-
 import { cleanupDarkLaunch, runNegativeProofs } from "./cleanup.mjs";
 import {
   assertVariant,
@@ -58,6 +56,8 @@ export async function runDarkLaunchJourney(deps) {
     transientAppKeys: [],
   };
   const steps = [];
+  let negativeProofs;
+  let succeeded = false;
 
   try {
     if (ownsApp) {
@@ -182,12 +182,21 @@ export async function runDarkLaunchJourney(deps) {
     });
     steps.push("kill_switch_default_variant");
 
-    await runNegativeProofs(deps, resources, keys, resolve);
+    negativeProofs = await runNegativeProofs(deps, resources, keys, resolve, expectedLiveVariant);
     steps.push("negative_proofs");
 
-    return { keys, resources: { ...resources }, steps };
+    succeeded = true;
+    return {
+      keys,
+      negativeProofs,
+      resources: { ...resources },
+      steps,
+      cleanup: deps.deferCleanup ? () => cleanupDarkLaunch(deps, resources, keys) : undefined,
+    };
   } finally {
-    await cleanupDarkLaunch(deps, resources, keys);
+    if (!deps.deferCleanup || !succeeded) {
+      await cleanupDarkLaunch(deps, resources, keys);
+    }
   }
 }
 

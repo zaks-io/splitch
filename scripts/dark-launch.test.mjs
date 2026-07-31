@@ -8,6 +8,7 @@ import {
   updateFlagConfig,
 } from "./dark-launch/control-plane.mjs";
 import { assertExposureHealth, summarizeExposureHealth } from "./dark-launch/hosted-results.mjs";
+import { cleanupDeferredRuns, findOrphanedDarkLaunchApps } from "./dark-launch/hosted-cleanup.mjs";
 import {
   assertVariant,
   DEFAULT_VARIANT,
@@ -16,6 +17,7 @@ import {
   syntheticKeys,
   variantName,
 } from "./dark-launch/journey.mjs";
+import { buildSeedSql } from "./seed-shared-preview-smoke-sql.mjs";
 
 test("syntheticKeys produces stable, lowercase App and Flag keys", () => {
   const keys = syntheticKeys("Run_ABC-123");
@@ -24,6 +26,14 @@ test("syntheticKeys produces stable, lowercase App and Flag keys", () => {
   assert.match(keys.experimentKey, /^dark-launch-experiment-/);
   assert.equal(keys.appKey, keys.appKey.toLowerCase());
   assert.equal(keys.flagKey, keys.flagKey.toLowerCase());
+});
+
+test("shared-preview seed provides a live foreign Organization with a different owner", () => {
+  const sql = buildSeedSql("2026-07-31T00:00:00.000Z");
+  assert.match(sql, /org_shared_preview_isolation/);
+  assert.match(sql, /app_shared_preview_isolation/);
+  assert.match(sql, /user_shared_preview_isolation_owner/);
+  assert.doesNotMatch(sql, /VALUES \('org_shared_preview_isolation', 'user_shared_preview_smoke',/);
 });
 
 test("hosted result evidence requires exactly one raw and deduped Exposure", () => {
@@ -61,6 +71,60 @@ test("hosted result evidence requires exactly one raw and deduped Exposure", () 
         1,
       ),
     /expected 1 raw Exposures/,
+  );
+});
+
+test("hosted cleanup rereads after the final deletion and derives reports", async () => {
+  const cleanupOrder = [];
+  const reports = await cleanupDeferredRuns([
+    {
+      runId: "run-1",
+      cleanup: async () => {
+        cleanupOrder.push("run-1");
+        return { appDeleted: true, flagDeleted: true, credentialRevoked: true };
+      },
+    },
+    {
+      runId: "run-2",
+      cleanup: async () => {
+        cleanupOrder.push("run-2");
+        return { appDeleted: true, flagDeleted: true, credentialRevoked: true };
+      },
+    },
+  ]);
+  assert.deepEqual(cleanupOrder, ["run-2", "run-1"]);
+  assert.equal(
+    reports.every((report) => report.appDeleted),
+    true,
+  );
+
+  let reads = 0;
+  const cleanScans = await findOrphanedDarkLaunchApps(
+    { smokeOrgId: "org-smoke" },
+    {
+      callTool: async () => {
+        reads += 1;
+        return { items: [] };
+      },
+    },
+    0,
+  );
+  assert.equal(reads, 2);
+  assert.deepEqual(cleanScans, [[], []]);
+
+  await assert.rejects(
+    () =>
+      findOrphanedDarkLaunchApps(
+        { smokeOrgId: "org-smoke" },
+        {
+          callTool: async () =>
+            reads++ % 2 === 0
+              ? { items: [] }
+              : { items: [{ id: "app-late", key: "dark-launch-app-late" }] },
+        },
+        0,
+      ),
+    /orphaned Apps/,
   );
 });
 

@@ -71,6 +71,25 @@ export async function createDarkLaunchFlag(deps, appId, flagKey) {
   );
 }
 
+export async function createWrongAppFlag(deps, appId, flagKey) {
+  const idempotencyKey = `dark-launch-wrong-app-flag-${deps.runId}`;
+  const body = {
+    appId,
+    key: flagKey,
+    name: `${flagKey} wrong-App proof`,
+    schema: { type: "string" },
+    variants: [
+      { name: "wrong-app-only", value: "wrong-app-only", isDefault: true },
+      { name: "journey-decoy", value: "journey-decoy", isDefault: false },
+    ],
+    description: "Same-key Flag proving Client Keys remain App-scoped.",
+    idempotency_key: idempotencyKey,
+  };
+  return operation(deps, "flags_create", body, () =>
+    controlPlaneCall(deps, "POST", `/apps/${appId}/flags`, body, idempotencyKey),
+  );
+}
+
 export async function getClientKey(deps, appId, environmentId) {
   return operation(deps, "client_key_get", { appId, environmentId }, () =>
     controlPlaneCall(deps, "GET", `/apps/${appId}/envs/${environmentId}/client-key`),
