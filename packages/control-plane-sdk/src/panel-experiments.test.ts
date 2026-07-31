@@ -17,6 +17,7 @@ describe("panel experiments binding transport", () => {
             status: "running",
             flag: { id: "flag_1", name: "Checkout Flag" },
             liveRunId: "run_1",
+            hasRuns: true,
             health: {
               significanceReached: true,
               srmFiring: false,
@@ -54,6 +55,8 @@ describe("panel experiments binding transport", () => {
           targetingKeyType: "user",
           activationMetricId: null,
           conversionWindowMs: 0,
+          confidenceLevel: 0.95,
+          dimensions: [],
           metricIds: [],
           guardrailMetricIds: [],
           draftAllocation: null,
@@ -111,6 +114,27 @@ describe("panel experiments binding transport", () => {
     expect(request.headers.get("authorization")).toBeNull();
     expect(request.headers.get("x-splitch-panel-session")).toBeNull();
   });
+
+  it("sends the Start idempotency key as the header the route requires", async () => {
+    const requests: Request[] = [];
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(new Request(input, init));
+      return Response.json({ code: "EXPERIMENT_NOT_FOUND", message: "gone", details: {} });
+    });
+
+    await createPanelExperimentsClient({ fetch: fetcher }).start({
+      appId: "app_1",
+      environmentId: "env_1",
+      experimentId: "exp_1",
+      idempotency_key: "start-run-1",
+      review: { action: "approve_and_apply" },
+    } as never);
+
+    // `experiments_start` declares idempotency "required" and the runtime guard
+    // reads the HEADER, not the body, so a Start without it is refused before
+    // the handler ever runs.
+    expect(requests[0]?.headers.get("idempotency-key")).toBe("start-run-1");
+  });
 });
 
 function panelRun() {
@@ -133,6 +157,9 @@ function panelRun() {
     targetingRulesJson: "[]",
     decisionMetricIds: [],
     decisionGuardrailMetricIds: [],
+    confidenceLevel: 0.95,
+    horizon: "sequential" as const,
+    sampleSizeLocked: null,
     configHash: "sha256:two",
     startedAt: "2026-07-19T00:00:00.000Z",
     endedAt: null,

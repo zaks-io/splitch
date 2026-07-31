@@ -29,6 +29,7 @@ import {
 } from "./experiment-handler-shared";
 import { type ExperimentRow, json, runResponse } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
+import { runDecisionSpecFromBody, startReadinessResponse } from "./experiment-start-decision-spec";
 import { validateStartRequest } from "./experiment-start-request";
 import { readEnvironmentPolicy } from "./flag-config-policy";
 import { objectBody, pathParam } from "./handler-input";
@@ -53,6 +54,10 @@ export async function startExperiment(
   if (replay) return replay;
   const startContext = await validateStartRequest(deps, args, scope, experiment);
   if (!startContext.ok) return startContext.response;
+  const readiness = startReadinessResponse(experiment, args.requestId);
+  if (readiness) return readiness;
+  const decisionSpec = runDecisionSpecFromBody(startContext.body, args.requestId);
+  if (!decisionSpec.ok) return decisionSpec.response;
 
   const prepared = await prepareStartOrReplaySync(
     deps.repo,
@@ -71,11 +76,17 @@ export async function startExperiment(
       ...experimentTargetProjection(experiment as unknown as Record<string, unknown>),
       status: "draft",
       startReason: null,
+      horizon: null,
+      sampleSizeLocked: null,
     };
     const proposed = {
       ...current,
       status: "running",
       startReason: typeof startContext.body.reason === "string" ? startContext.body.reason : null,
+      // The horizon is a Run field with no Experiment column, so the Approval
+      // Request is the only place it survives between proposal and application.
+      horizon: decisionSpec.value.horizon,
+      sampleSizeLocked: decisionSpec.value.sampleSizeLocked,
     };
     const approval = await createApproval(
       {
@@ -122,6 +133,8 @@ export async function startExperiment(
       variantSet: json(prepared.value.variantSet),
       targetingRules: json(prepared.value.targetingRules),
       confidenceLevel: experiment.confidenceLevel,
+      horizon: decisionSpec.value.horizon,
+      sampleSizeLocked: decisionSpec.value.sampleSizeLocked,
       decisionFamily: json(prepared.value.decisionFamily),
       guardrailDecisions: json(prepared.value.guardrailDecisions),
       configHash: prepared.value.configHash,

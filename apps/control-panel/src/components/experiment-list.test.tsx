@@ -45,6 +45,19 @@ describe("ExperimentList", () => {
     expect(html).toContain('href="/acme/checkout/dev/experiments/exp_significant"');
   });
 
+  it("routes a never-started draft into the guided flow and a former draft to its detail", () => {
+    const neverStarted = experiment("exp_new", "New Checkout", "draft", null);
+    const formerDraft = { ...experiment("exp_old", "Old Checkout", "draft", null), hasRuns: true };
+
+    const html = renderToStaticMarkup(
+      <ExperimentList items={[neverStarted, formerDraft]} scopeHref="/acme/checkout/dev" />,
+    );
+
+    expect(html).toContain('href="/acme/checkout/dev/experiments/exp_new/draft"');
+    expect(html).toContain('href="/acme/checkout/dev/experiments/exp_old"');
+    expect(html).not.toContain('href="/acme/checkout/dev/experiments/exp_old/draft"');
+  });
+
   it("teaches the concept and provides one primary entry point when empty", () => {
     const html = renderToStaticMarkup(<ExperimentList items={[]} scopeHref="/acme/checkout/dev" />);
 
@@ -67,6 +80,7 @@ function experiment(
     status,
     flag: { id: "flag_checkout", name: "Checkout Flag" },
     liveRunId: status === "running" ? `run_${id}` : null,
+    hasRuns: status !== "draft",
     health,
   };
 }

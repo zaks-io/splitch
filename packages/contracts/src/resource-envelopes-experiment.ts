@@ -116,12 +116,22 @@ export type ExperimentResponse = z.infer<typeof ExperimentResponseSchema>;
 // The assignment config lives on the Experiment draft. Start validates the draft
 // and freezes it into a Run. `review?` can approve and apply inline; without it,
 // a gated write returns an Approval Request. `reason?` is the Run's start note.
+//
+// `horizon` / `sampleSizeLocked` are the two decision-spec fields that live ONLY
+// on the Run (storage-schemas-d1-experiment.md), so Start — the moment a Run is
+// opened — is where they are chosen. Every other decision-spec field is carried
+// on the Experiment and frozen from it here.
 // ---------------------------------------------------------------------------
+
+export const RunHorizonSchema = z.enum(["sequential", "fixed"]);
+export type RunHorizon = z.infer<typeof RunHorizonSchema>;
 
 export const StartRunRequestSchema = z
   .object({
     review: InlineApproveAndApplyReviewSchema.optional(),
     reason: z.string().optional(),
+    horizon: RunHorizonSchema.optional(),
+    sampleSizeLocked: z.number().int().positive().nullable().optional(),
     idempotency_key: z.string().min(1),
   })
   .strict();

@@ -155,6 +155,10 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       return runsTable.findMany(scope, eq(runs.experimentId, experimentId));
     },
 
+    countRunsForExperiment(scope: EnvScope, experimentId: string): Promise<number> {
+      return runsTable.countRows(scope, eq(runs.experimentId, experimentId));
+    },
+
     getRun(scope: EnvScope, runId: string) {
       return runsTable.findOne(scope, eq(runs.id, runId));
     },

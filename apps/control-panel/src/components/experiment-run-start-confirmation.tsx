@@ -9,6 +9,7 @@ import {
 } from "@splitch/ui/components/dialog";
 import { Spinner } from "@splitch/ui/components/spinner";
 import { startConfirmationCopy } from "#lib/experiment-run-draft-model";
+import { runStartLanded, type StartedApprovalRequest } from "#lib/use-experiment-run-start";
 
 /**
  * `runningRun` is the Run this Start would actually abandon, which is only ever
@@ -19,6 +20,7 @@ import { startConfirmationCopy } from "#lib/experiment-run-draft-model";
  * and this is the one dialog that must not be.
  */
 export function ExperimentRunStartConfirmation({
+  approvalRequest,
   runningRun,
   error,
   isStarting,
@@ -27,6 +29,7 @@ export function ExperimentRunStartConfirmation({
   onStart,
   segmentIds,
 }: {
+  approvalRequest: StartedApprovalRequest;
   runningRun: PanelExperimentRun | undefined;
   error: string | undefined;
   isStarting: boolean;
@@ -62,6 +65,16 @@ export function ExperimentRunStartConfirmation({
         <Alert variant="destructive">
           <AlertTitle>Run not started</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+      {approvalRequest && !runStartLanded(approvalRequest) ? (
+        <Alert data-testid="run-start-approval-request" variant="destructive">
+          <AlertTitle>Run {nextRunNumber} was not opened</AlertTitle>
+          <AlertDescription>
+            This Environment gates `start_experiment_run` at `confirm`. Start opened Approval
+            Request {approvalRequest.id}, which is {approvalRequest.status}, so no Run exists yet.
+            Starting again would open a second request rather than resolve this one.
+          </AlertDescription>
         </Alert>
       ) : null}
       <DialogFooter>

@@ -134,6 +134,7 @@ describe("scope is required by type (compile-time proof)", () => {
             variantSet: '[{"id":"variant_attacker_injected","name":"control","value":"control"}]',
             targetingRules: "[]",
             confidenceLevel: 0.95,
+            horizon: "sequential",
             decisionFamily: "[]",
             guardrailDecisions: "[]",
             configHash: "hash_forged_control",

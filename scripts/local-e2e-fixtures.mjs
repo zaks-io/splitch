@@ -168,7 +168,9 @@ INSERT INTO environments (id, app_id, key, name, policy, created_at, updated_at,
   ('env_checkout_prod_e2e', 'app_checkout_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_checkout_setup_e2e', 'app_checkout_e2e', 'setup', 'Setup QA', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
   ('env_billing_prod_e2e', 'app_billing_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
-  ('env_agent_prod_e2e', 'app_agent_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e');
+  ('env_agent_prod_e2e', 'app_agent_e2e', 'prod', 'Production', '{"variantAvailability":"confirm","targetingRolloutValue":"confirm","enabledState":"confirm","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_checkout_create_e2e', 'app_checkout_e2e', 'create-lab', 'Creation Lab', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"allow"}', '${createdAt}', '${createdAt}', 'user_local_e2e'),
+  ('env_checkout_creategate_e2e', 'app_checkout_e2e', 'create-gated', 'Creation Gated', '{"variantAvailability":"allow","targetingRolloutValue":"allow","enabledState":"allow","startExperimentRun":"confirm"}', '${createdAt}', '${createdAt}', 'user_local_e2e');
 INSERT INTO org_memberships (org_id, user_id, role, created_at) VALUES
   ('org_acme_e2e', 'user_local_e2e', 'owner', '${createdAt}'),
   ('org_orbit_e2e', 'user_local_e2e', 'admin', '${createdAt}'),
@@ -208,7 +210,9 @@ INSERT INTO flag_configs (id, app_id, environment_id, flag_id, enabled, availabl
   ('config_ended_dev_e2e', 'app_checkout_e2e', 'env_checkout_dev_e2e', 'flag_checkout_ended_e2e', 1, '["control"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_srm_prod_e2e', 'app_checkout_e2e', 'env_checkout_prod_e2e', 'flag_checkout_srm_e2e', 1, '["control","treatment"]', 'variant_srm_control_e2e', '${createdAt}', '${createdAt}'),
   ('config_checkout_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_e2e', 1, '["control","treatment"]', 'variant_checkout_control_e2e', '${createdAt}', '${recentlyChangedAt}'),
-  ('config_srm_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_srm_e2e', 0, '["control"]', 'variant_srm_control_e2e', '${createdAt}', '${staleChangedAt}');
+  ('config_srm_overview_e2e', 'app_checkout_e2e', 'env_checkout_overview_e2e', 'flag_checkout_srm_e2e', 0, '["control"]', 'variant_srm_control_e2e', '${createdAt}', '${staleChangedAt}'),
+  ('config_create_lab_e2e', 'app_checkout_e2e', 'env_checkout_create_e2e', 'flag_checkout_ended_e2e', 1, '["control","treatment"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}'),
+  ('config_create_gated_e2e', 'app_checkout_e2e', 'env_checkout_creategate_e2e', 'flag_checkout_ended_e2e', 1, '["control","treatment"]', 'variant_ended_control_e2e', '${createdAt}', '${createdAt}');
 INSERT INTO metrics (id, app_id, key, name, kind, event_name, created_at, created_by) VALUES
   ('checkout-conversion', 'app_checkout_e2e', 'checkout-conversion', 'Checkout conversion', 'binomial', 'checkout_completed', '${createdAt}', 'user_local_e2e'),
   ('checkout-reliability', 'app_checkout_e2e', 'checkout-reliability', 'Checkout reliability', 'binomial', 'checkout_succeeded', '${createdAt}', 'user_local_e2e'),

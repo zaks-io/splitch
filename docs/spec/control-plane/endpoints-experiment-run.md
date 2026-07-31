@@ -123,7 +123,12 @@ Returns: updated Experiment.
 
 Starts the draft as a new Run; ends any running Run.
 Body:
-`{ review?: { action: "approve_and_apply" }, reason?: string, idempotency_key: string }`
+`{ review?: { action: "approve_and_apply" }, reason?: string, horizon?: "sequential" | "fixed",
+sampleSizeLocked?: number | null, idempotency_key: string }`
+`horizon` and `sampleSizeLocked` are the Run-only half of the decision spec; they exist as columns on
+`runs` alone, so Start is where they are chosen and frozen. `horizon` defaults to `sequential`. A
+`fixed` horizon without a `sampleSizeLocked`, or a `sequential` horizon carrying one, is refused with
+`VALIDATION_ERROR` rather than defaulted (ADR-0036).
 `reason` is an optional human note capturing _intent_ for the new Run ("testing higher exposure to
 v2"). It is stored as the Run's `start_reason` and surfaced by the Run-history timeline alongside the
 **derived** assignment-config diff from the prior Run (the timeline never depends on it being present —

@@ -1,12 +1,18 @@
 import type { StatsOutput } from "@splitch/contracts";
+import { createExperimentsClient } from "./experiments-client";
 import type { ControlPlaneOperationResult } from "./operation-result";
 import { parseControlPlaneResponse } from "./operation-result";
-import { createExperimentsClient } from "./experiments-client";
 import {
   type PanelExperimentDetailInput,
   type PanelExperimentDetailOutput,
   parsePanelExperimentDetailOutput,
 } from "./panel-experiment-detail";
+import {
+  type PanelExperimentResultsInput,
+  type PanelExperimentResultsOutput,
+  PanelExperimentResultsOutputSchema,
+  parsePanelExperimentResultsOutput,
+} from "./panel-experiment-results";
 import {
   type PanelExperimentsListInput,
   type PanelExperimentsListOutput,
@@ -19,12 +25,6 @@ import {
   ScopedAnalysisError,
   scopedAnalysisResultsRequest,
 } from "./panel-experiments-scoped-analysis";
-import {
-  type PanelExperimentResultsInput,
-  type PanelExperimentResultsOutput,
-  PanelExperimentResultsOutputSchema,
-  parsePanelExperimentResultsOutput,
-} from "./panel-experiment-results";
 
 /**
  * The Panel's read/write surface for Experiments. This module is the package
@@ -39,20 +39,21 @@ export type {
   PanelExperimentDetailOutput,
   PanelExperimentRun,
 } from "./panel-experiment-detail";
-export { parsePanelExperimentDetailOutput };
+export type {
+  PanelExperimentResultsInput,
+  PanelExperimentResultsOutput,
+} from "./panel-experiment-results";
 export type {
   PanelExperimentHealth,
   PanelExperimentListItem,
   PanelExperimentsListInput,
   PanelExperimentsListOutput,
 } from "./panel-experiments-list";
-export type {
-  PanelExperimentResultsInput,
-  PanelExperimentResultsOutput,
-} from "./panel-experiment-results";
-export { PanelExperimentResultsOutputSchema, parsePanelExperimentResultsOutput };
 export type { ScopedAnalysisIdentity } from "./panel-experiments-scoped-analysis";
 export {
+  PanelExperimentResultsOutputSchema,
+  parsePanelExperimentDetailOutput,
+  parsePanelExperimentResultsOutput,
   parseScopedAnalysisIdentity,
   parseScopedAnalysisResults,
   SCOPED_SERVICE_IDENTITY_HEADER,
@@ -116,6 +117,7 @@ export function createPanelExperimentsClient(options: { fetch: typeof fetch; bas
         },
       );
     },
+    create: mutations.create,
     update: mutations.update,
     start: mutations.start,
   };
