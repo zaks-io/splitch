@@ -136,7 +136,7 @@ describe("an Approval-gated Variant edit is atomic with its Flag version bump", 
       { approval: commitFor(requestId) },
     );
 
-    expect(applied).toBeNull();
+    expect(applied).toEqual({ ok: false, reason: "NOT_APPLIED" });
     const state = await readState();
     // The report and the disk must agree: "not applied" means the Variant was
     // NOT mutated.
@@ -159,7 +159,7 @@ describe("an Approval-gated Variant edit is atomic with its Flag version bump", 
       { approval: commitFor(requestId) },
     );
 
-    expect(applied).toMatchObject({ description: MARKER });
+    expect(applied).toMatchObject({ ok: true, variant: { description: MARKER } });
     const state = await readState();
     expect(state.variant?.description).toBe(MARKER);
     expect(state.flag?.version).toBe(2);

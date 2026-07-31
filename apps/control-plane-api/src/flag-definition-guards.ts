@@ -1,8 +1,6 @@
-import type { Variant } from "@splitch/contracts";
 import { envScope, type Repository } from "@splitch/db";
 
 export type EnvironmentRows = Awaited<ReturnType<Repository["identity"]["listEnvironments"]>>;
-export type VariantRow = Awaited<ReturnType<Repository["flags"]["listVariants"]>>[number];
 
 export interface RunningBlocker {
   experimentId: string;
@@ -90,42 +88,13 @@ function runningExperimentReference(
   }));
 }
 
-export async function runningExperimentForVariant(
-  repo: Repository,
-  appId: string,
-  flagId: string,
-  variant: VariantRow,
-  envs: EnvironmentRows,
-): Promise<RunningBlocker | null> {
-  for (const env of envs) {
-    const scope = envScope(appId, env.id);
-    const experiment = await repo.experiments.findRunningExperimentForFlag(scope, flagId);
-    if (!experiment) continue;
-
-    const blocker = await variantBlockerForExperiment(repo, scope, experiment, variant);
-    if (blocker) return blocker;
-  }
-  return null;
-}
-
-async function variantBlockerForExperiment(
-  repo: Repository,
-  scope: ReturnType<typeof envScope>,
-  experiment: NonNullable<
-    Awaited<ReturnType<Repository["experiments"]["findRunningExperimentForFlag"]>>
-  >,
-  variant: VariantRow,
-): Promise<RunningBlocker | null> {
-  const run =
-    (experiment.liveRunId ? await repo.experiments.getRun(scope, experiment.liveRunId) : null) ??
-    (await repo.experiments.findRunningRunForExperiment(scope, experiment.id));
-  if (!run) return { experimentId: experiment.id, runId: experiment.liveRunId ?? "unknown" };
-  return runReferencesVariant(run.variantSet, variant)
-    ? { experimentId: experiment.id, runId: run.id }
-    : null;
-}
-
-function runReferencesVariant(rawVariantSet: string, variant: VariantRow): boolean {
-  const set = JSON.parse(rawVariantSet) as Variant[];
-  return set.some((candidate) => candidate.id === variant.id || candidate.name === variant.name);
-}
+/**
+ * There is deliberately no `runningExperimentForVariant` here any more.
+ *
+ * This module used to carry its own environment-walking copy of "is a live Run
+ * using this Variant?", and it had already drifted from the repository's answer
+ * on whether `runs.ended_at IS NULL` counts. SPL-118 was bitten twice by exactly
+ * that pattern, so the question now has ONE implementation —
+ * `repo.flags.liveRunUsingVariant` — which is also the predicate `updateVariant`
+ * enforces before it writes.
+ */

@@ -8,6 +8,11 @@ import {
   makeUpdateVariant,
   type VariantWriteOptions,
 } from "./flag-variant-approval";
+import {
+  liveRunUsingVariant,
+  type VariantIdentity,
+  type VariantRunFreeze,
+} from "./flag-variant-run-freeze";
 import { idBatches } from "./id-batches";
 import type { TenantScope } from "./scope";
 import type { ScopedTable } from "./scoped-table";
@@ -189,6 +194,19 @@ export function makeVariantOps(
     },
 
     updateVariant: makeUpdateVariant(db, flagInScope, variantByName),
+
+    /**
+     * The one freeze predicate, exposed so the route layer can fail fast on the
+     * same answer `updateVariant` enforces instead of keeping a second copy.
+     * Reading it is never permission to write: `updateVariant` re-checks.
+     */
+    liveRunUsingVariant(
+      scope: TenantScope,
+      flagId: string,
+      variant: VariantIdentity,
+    ): Promise<VariantRunFreeze | null> {
+      return liveRunUsingVariant(db, scope, flagId, variant);
+    },
 
     async removeVariant(
       scope: TenantScope,

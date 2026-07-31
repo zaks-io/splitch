@@ -9,7 +9,7 @@ import {
   requiresReview,
   servableVariantEnvironments,
 } from "./approval-target";
-import { flagNotFound, variantNotFound } from "./flag-definition-errors";
+import { flagNotFound, variantNotFound, variantWriteRefusal } from "./flag-definition-errors";
 import {
   type FlagDefinitionDeps,
   loadWritableFlag,
@@ -122,13 +122,15 @@ export async function updateVariant(
 
   if (Object.keys(prepared.value.patch).length > 0) {
     const now = nowIso(deps);
-    await deps.repo.flags.updateVariant(
+    const written = await deps.repo.flags.updateVariant(
       loaded.value.scope,
       loaded.value.flag.id,
       variantName,
       prepared.value.patch,
       { updatedAt: now, updatedBy: args.principal.id },
     );
+    // EVERY non-ok reason returns; none of them may reach the resync below.
+    if (!written.ok) return variantWriteRefusal(written, args.requestId);
     await resyncFlagSnapshots(deps, loaded.value.appId, loaded.value.flag.id);
   }
 
