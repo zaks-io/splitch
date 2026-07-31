@@ -1,5 +1,4 @@
 import {
-  ApprovalPolicyContextSchema,
   type ApprovalRequest,
   type ErrorCode,
   ErrorCodeSchema,
@@ -10,11 +9,9 @@ import type { Principal } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { approvalReviewId } from "./approval-canonical";
 import { approvalRequestProjection } from "./approval-model";
-import { rowTargetVersion } from "./approval-row-target";
 import type {
   ApprovalRequestRow,
   ApprovalResult,
-  ApprovalReviewRow,
   ApprovalServiceDeps,
   ReviewApprovalInput,
   UnapplicableProposal,
@@ -137,72 +134,6 @@ export async function recordApplicationFailure(
           reviewId: commit.reviewId,
           applicationError: { code, details: errorDetails },
           recommendedAction: "RETRY_REVIEW",
-        },
-      },
-      { requestId },
-    ),
-  };
-}
-
-export async function replayResult(
-  deps: ApprovalServiceDeps,
-  row: ApprovalRequestRow,
-  review: ApprovalReviewRow,
-  requestId: string,
-): Promise<ApprovalResult> {
-  if (review.outcome === "failed") {
-    return failedReplay(row, review, requestId);
-  }
-  if (review.outcome === "stale") {
-    return staleReplay(deps, row, requestId);
-  }
-  return projectedResult(deps, row.appId, row.id, requestId);
-}
-
-function failedReplay(
-  row: ApprovalRequestRow,
-  review: ApprovalReviewRow,
-  requestId: string,
-): ApprovalResult {
-  return {
-    ok: false,
-    response: renderError(
-      {
-        code: "APPROVAL_APPLICATION_FAILED",
-        message: "Approval Request application failed and was rolled back",
-        details: {
-          approvalRequestId: row.id,
-          reviewId: review.id,
-          applicationError: {
-            code: ErrorCodeSchema.parse(review.errorCode),
-            details: review.errorDetails ? JSON.parse(review.errorDetails) : {},
-          },
-          recommendedAction: "RETRY_REVIEW",
-        },
-      },
-      { requestId },
-    ),
-  };
-}
-
-export async function staleReplay(
-  deps: ApprovalServiceDeps,
-  row: ApprovalRequestRow,
-  requestId: string,
-): Promise<ApprovalResult> {
-  const contexts = ApprovalPolicyContextSchema.array().parse(JSON.parse(row.policyContexts));
-  const currentVersion = await rowTargetVersion(deps.repo, row, contexts, row.diff);
-  return {
-    ok: false,
-    response: renderError(
-      {
-        code: "APPROVAL_REQUEST_STALE",
-        message: "Approval Request target changed before Review",
-        details: {
-          approvalRequestId: row.id,
-          targetVersion: row.targetVersion,
-          currentTargetVersion: currentVersion,
-          recommendedAction: "REFRESH_AND_REPROPOSE",
         },
       },
       { requestId },

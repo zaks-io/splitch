@@ -55,6 +55,19 @@ export type MutationErrorSurface =
       readonly policyContexts: readonly ApprovalPolicyContext[];
       readonly fields: readonly [];
     }
+  /**
+   * The Approval Request is already closed. WHICH way it closed decides the
+   * operator's next move — re-proposing after an `applied` Review would be a
+   * second copy of a change that already landed — so the disposition travels
+   * with the refusal instead of being flattened into prose.
+   */
+  | {
+      readonly kind: "resolved";
+      readonly code: "APPROVAL_REQUEST_RESOLVED";
+      readonly message: string;
+      readonly status: "applied" | "declined" | "stale";
+      readonly fields: readonly [];
+    }
   | {
       readonly kind: "form";
       readonly code: SurfaceErrorCode;
@@ -119,6 +132,16 @@ export function mutationErrorSurface(
 
   if (error.code === "RUN_FROZEN") {
     return frozenSurface(error);
+  }
+
+  if (error.code === "APPROVAL_REQUEST_RESOLVED") {
+    return {
+      kind: "resolved",
+      code: error.code,
+      message: error.message,
+      status: error.details.status,
+      fields: [],
+    };
   }
 
   if (result.status === 403) {

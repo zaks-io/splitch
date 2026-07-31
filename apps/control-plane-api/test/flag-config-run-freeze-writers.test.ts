@@ -1,5 +1,6 @@
 import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { approvalRequestProjection } from "../src/approval-model";
 import { narrowSeededAvailability } from "../src/config-store-fixture-data";
 import {
   type Harness,
@@ -194,6 +195,66 @@ describe("an Approval Request that predates the Run", () => {
       currentRunId: ids.liveRunId,
       recommendedAction: "END_RUNNING_RUN_FIRST",
     });
+  });
+
+  /**
+   * A durable row nobody can read is not an audit trail. Both readers of the
+   * resolved Request have to hand back the recorded cause: the exact-key replay,
+   * and the Approval Request projection the operator reads afterwards. Answering
+   * the generic version-race refusal here would send them looking for a version
+   * change that never happened.
+   */
+  it("replays the recorded cause instead of a version race", async () => {
+    const requestId = await proposeA(h);
+    await startSeededExperiment(h.d1);
+    await reviewRequest(h, requestId, "idem_review_frozen");
+
+    const replay = await reviewRequest(h, requestId, "idem_review_frozen");
+
+    expect(replay.status).toBe(409);
+    expect(await replay.json()).toMatchObject({
+      code: "RUN_FROZEN",
+      details: {
+        frozenFields: ["flagConfig.availableVariantNames"],
+        currentRunId: ids.liveRunId,
+        recommendedAction: "END_RUNNING_RUN_FIRST",
+      },
+    });
+  });
+
+  it("surfaces the cause on the Approval Request an operator reads back", async () => {
+    const requestId = await proposeA(h);
+    await startSeededExperiment(h.d1);
+    await reviewRequest(h, requestId, "idem_review_frozen");
+
+    const row = await h.repo.approvals.getRequest(appScope(ids.appId), requestId);
+    if (!row) throw new Error("no Approval Request");
+    const projected = await approvalRequestProjection(h.repo, row);
+
+    expect(projected.latestReview?.outcome).toBe("stale");
+    expect(projected.latestReview?.error).toMatchObject({
+      code: "RUN_FROZEN",
+      details: { currentRunId: ids.liveRunId, recommendedAction: "END_RUNNING_RUN_FIRST" },
+    });
+  });
+
+  /**
+   * The other direction, so the cause column stays a signal. A decline resolves
+   * the Request for a reason that is the Review itself; writing an error there
+   * too would make "has a cause" stop meaning anything.
+   */
+  it("writes no cause when the Review is an ordinary decline", async () => {
+    const requestId = await proposeA(h);
+
+    await reviewRequest(h, requestId, "idem_review_decline", "decline");
+
+    const row = await h.d1
+      .prepare("SELECT outcome, error_code, error_details FROM approval_reviews WHERE app_id = ?")
+      .bind(ids.appId)
+      .first<{ outcome: string; error_code: string | null; error_details: string | null }>();
+    expect(row?.outcome).toBe("declined");
+    expect(row?.error_code).toBeNull();
+    expect(row?.error_details).toBeNull();
   });
 
   it("keeps refusing a second Review rather than applying on retry", async () => {

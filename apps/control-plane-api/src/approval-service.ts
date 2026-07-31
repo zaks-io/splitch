@@ -22,14 +22,13 @@ import {
   idempotencyConflict,
   materializeStale,
   projectedResult,
-  replayResult,
   requiredAuthDoor,
   resolvedError,
   resolvedWinner,
   reviewForbidden,
   reviewRequired,
-  staleReplay,
 } from "./approval-review-outcomes";
+import { replayResult, staleReplay } from "./approval-review-replay";
 import { rowTargetVersion } from "./approval-row-target";
 import type {
   ApprovalRequestRow,

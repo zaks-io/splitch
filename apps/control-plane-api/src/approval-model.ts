@@ -73,12 +73,14 @@ function approvalReviewProjection(row: ReviewRow): ApprovalReview {
     reason: row.reason,
     idempotencyKey: row.idempotencyKey,
     resultingTargetVersion: row.resultingTargetVersion,
-    error:
-      row.outcome === "failed"
-        ? {
-            code: row.errorCode,
-            details: row.errorDetails ? JSON.parse(row.errorDetails) : {},
-          }
-        : null,
+    // Keyed off the recorded cause, not the outcome. A `stale` Review that was
+    // refused for a nameable reason carries one, and nulling it here would leave
+    // the operator with a disposition and no way to see why it happened.
+    error: row.errorCode
+      ? {
+          code: row.errorCode,
+          details: row.errorDetails ? JSON.parse(row.errorDetails) : {},
+        }
+      : null,
   });
 }

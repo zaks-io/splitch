@@ -1,3 +1,4 @@
+import { env, runInDurableObject } from "cloudflare:test";
 import type { ApprovalCommit } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type ConfigStoreWriter, makeConfigStore } from "../src/config-store";
@@ -118,6 +119,8 @@ function frozenWriterCalls(): Record<string, () => Promise<{ ok: boolean }>> {
  */
 const DURABLE_OBJECT_ONLY: Record<string, string> = {
   constructor: "DurableObject construction",
+  ctx: "DurableObjectState the base class assigns",
+  env: "bindings the base class assigns",
   fetch: "WebSocket upgrade only; refuses any other request with 426",
   webSocketMessage: "revalidates the socket's session",
   webSocketClose: "reschedules the expiry alarm",
@@ -137,11 +140,23 @@ describe("every ConfigStore writer is classified against the freeze", () => {
    * the store's, so a new method has to be classified in one table or the other
    * before it can exist.
    */
-  it("adds no Flag Configuration method to the Durable Object beyond the store's", () => {
-    const surface = Object.getOwnPropertyNames(ConfigStoreDurableObject.prototype);
+  it("adds no Flag Configuration method to the Durable Object beyond the store's", async () => {
+    // The prototype alone would miss a class FIELD holding an arrow function,
+    // which Workers RPC exposes exactly like a method, so the live instance's own
+    // properties are swept too.
+    const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${ids.environmentId}`);
+    const instanceOwn = await runInDurableObject(stub, (instance: object) =>
+      Object.getOwnPropertyNames(instance),
+    );
+    const surface = [
+      ...new Set([
+        ...Object.getOwnPropertyNames(ConfigStoreDurableObject.prototype),
+        ...instanceOwn,
+      ]),
+    ];
 
     const unclassified = surface.filter(
-      (name) => !(name in DURABLE_OBJECT_ONLY) && !Object.hasOwn(store, name),
+      (name) => !Object.hasOwn(DURABLE_OBJECT_ONLY, name) && !Object.hasOwn(store, name),
     );
     expect(unclassified).toEqual([]);
     // And the reverse: a store method the DO silently stopped exposing would
