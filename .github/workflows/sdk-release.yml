@@ -27,6 +27,9 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
       TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+      # Matches the ci Verify job so env-hashed tasks (control-panel#build and
+      # its dependents) replay from the remote cache instead of rebuilding.
+      SPLITCH_PLATFORM_TARGET: pr-ci
       GITLEAKS_VERSION: 8.30.1
     steps:
       - name: Harden runner
@@ -182,7 +185,7 @@ jobs:
           path: ${{ runner.temp }}/sdk-release-artifacts
 
       - name: Build @splitch/sdk for release packaging
-        run: pnpm --filter @splitch/sdk build
+        run: pnpm exec turbo run build --filter=@splitch/sdk
 
       - name: Prepare release artifacts
         id: prepare

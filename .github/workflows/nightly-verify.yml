@@ -1,0 +1,69 @@
+name: nightly-verify
+
+# Per-PR and per-push CI leans fully on the Turbo remote cache. This nightly
+# run is the staleness backstop: TURBO_FORCE re-executes every task from
+# source and rewrites fresh signed cache entries, so a stale or wrong cache
+# entry can survive at most one day. Signal-only; it gates nothing.
+on:
+  schedule:
+    - cron: "47 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-verify
+  cancel-in-progress: false
+
+jobs:
+  verify-forced:
+    name: Verify Forced
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 30
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+      TURBO_FORCE: "true"
+      SPLITCH_PLATFORM_TARGET: pr-ci
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Install
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+
+      - name: Require signed Turbo remote cache
+        run: node scripts/check-turbo-remote-cache-env.mjs --required
+
+      - name: Install Tinybird CLI
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 120 https://tinybird.co | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify (forced, no cache reads)
+        timeout-minutes: 20
+        run: pnpm verify:ci

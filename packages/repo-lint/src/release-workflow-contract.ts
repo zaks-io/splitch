@@ -46,13 +46,18 @@ export function registerReleaseWorkflowContract(options: ReleaseContractOptions)
       expect(workflow).not.toContain("npm publish");
     });
 
-    it(`builds ${options.packageName} before packaging`, () => {
+    it(`builds ${options.packageName} through turbo before packaging`, () => {
       const prepareSection = workflow.split("  prepare:")[1]?.split("  draft-release:")[0] ?? "";
-      const buildIndex = prepareSection.indexOf(`pnpm --filter ${options.packageName} build`);
+      const buildIndex = prepareSection.indexOf(
+        `pnpm exec turbo run build --filter=${options.packageName}`,
+      );
       const packageIndex = prepareSection.indexOf(`prepare-artifacts.mjs ${options.targetKey}`);
       expect(buildIndex).toBeGreaterThan(-1);
       expect(packageIndex).toBeGreaterThan(-1);
       expect(buildIndex).toBeLessThan(packageIndex);
+      // A bare `pnpm --filter <pkg> build` bypasses turbo and forfeits the
+      // remote cache entry the validate job just wrote at the same SHA.
+      expect(prepareSection).not.toContain(`pnpm --filter ${options.packageName} build`);
     });
   });
 
