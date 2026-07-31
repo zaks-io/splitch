@@ -68,6 +68,47 @@ export const TargetingEditInputSchema = FlagScopeSchema.extend({
   variantLabels: VariantLabelsSchema,
 });
 
+/**
+ * The promote endpoint's field-group selection (ADR-0028), revalidated here.
+ *
+ * `.strict()` and the `literal(true)` ticks are the contract, not decoration: the
+ * three whole-group fields have exactly one meaningful value, so a `false` is a
+ * caller asking for something the endpoint does not mean and is refused rather
+ * than coerced. Absence — not `false` — is how a group is left untouched.
+ */
+const PromotionSelectSchema = z
+  .object({
+    availability: z.array(z.string().min(1)).min(1).optional(),
+    targeting: z.literal(true).optional(),
+    rollout: z.literal(true).optional(),
+    enabled: z.literal(true).optional(),
+  })
+  .strict();
+
+export const PromoteInputSchema = z
+  .object({
+    appId: z.string().min(1),
+    /** The Environment about to change; ITS Policy governs this write. */
+    targetEnvironmentId: z.string().min(1),
+    fromEnvironmentId: z.string().min(1),
+    flagId: z.string().min(1),
+    select: PromotionSelectSchema,
+    idempotencyKey: IdempotencyKeySchema,
+    variantLabels: VariantLabelsSchema,
+  })
+  // An empty selection is a Promotion that promotes nothing. The endpoint would
+  // accept it as a no-op, which reports success for a change that never happened.
+  .refine((input) => Object.keys(input.select).length > 0, {
+    message: "Select at least one field group to promote",
+    path: ["select"],
+  })
+  // Promotion is a pull into the target from somewhere else; the same Environment
+  // on both sides is a diff against itself that can only ever be empty.
+  .refine((input) => input.fromEnvironmentId !== input.targetEnvironmentId, {
+    message: "The source and target Environments must differ",
+    path: ["fromEnvironmentId"],
+  });
+
 export const ApprovalRequestInputSchema = z.object({
   appId: z.string().min(1),
   approvalRequestId: z.string().min(1),

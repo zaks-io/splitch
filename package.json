@@ -96,6 +96,7 @@
     "knip": "^6.24.0",
     "lefthook": "^2.1.9",
     "prettier": "^3.9.4",
+    "seroval": "^1.5.4",
     "tsup": "^8.5.0",
     "turbo": "^2.10.3",
     "typescript": "^6.0.3",

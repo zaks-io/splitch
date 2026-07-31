@@ -37,7 +37,18 @@ export type ControlPanelOperation =
       environmentId: string;
     }
   | {
-      id: "flag_config_get" | "flag_config_update" | "flag_targeting_rules_replace";
+      id:
+        | "flag_config_get"
+        | "flag_config_update"
+        | "flag_targeting_rules_replace"
+        /**
+         * A promotion reads one Environment and writes another, but only the
+         * TARGET is named here: the write is what needs authority, and the
+         * source Environment travels in the body, which the delegation's body
+         * digest already binds. Naming both would let a claim assert a scope
+         * the route does not carry.
+         */
+        | "flag_config_promote";
       appId: string;
       environmentId: string;
       flagId: string;
@@ -90,6 +101,7 @@ const ORGANIZATIONS_PATH = /^\/orgs\/?$/;
 const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
 const TARGETING_RULES_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/targeting-rules\/?$/;
+const FLAG_PROMOTE_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/promote\/?$/;
 const APPROVAL_REQUEST_PATH = /^\/apps\/([^/]+)\/approval-requests\/([^/]+)\/?$/;
 const APPROVAL_REVIEWS_PATH = /^\/apps\/([^/]+)\/approval-requests\/([^/]+)\/reviews\/?$/;
 const METRICS_PATH = /^\/apps\/([^/]+)\/metrics\/?$/;
@@ -219,6 +231,7 @@ function parseConfig(method: string, pathname: string): ControlPanelOperation | 
     [FLAG_CONFIG_PATH, "GET", "flag_config_get"],
     [FLAG_CONFIG_PATH, "PATCH", "flag_config_update"],
     [TARGETING_RULES_PATH, "PUT", "flag_targeting_rules_replace"],
+    [FLAG_PROMOTE_PATH, "POST", "flag_config_promote"],
   ] as const) {
     const match = pathname.match(pattern);
     if (method !== expectedMethod || !match?.[1] || !match[2] || !match[3]) continue;

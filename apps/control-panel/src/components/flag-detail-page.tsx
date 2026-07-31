@@ -3,7 +3,7 @@ import { useFlagEditing } from "#lib/use-flag-editing";
 import { FlagDetailDefinition } from "./flag-detail-definition";
 import { FlagDetailEnvConfig } from "./flag-detail-env-config";
 import { FlagDetailExperimentBanner } from "./flag-detail-experiment-banner";
-import { FlagEditOutcome } from "./flag-edit-outcome";
+import { GatedWriteOutcome } from "./gated-write-outcome";
 
 /**
  * The Flag detail screen.
@@ -21,11 +21,14 @@ export function FlagDetailPage({
   environmentId,
   scopeHref,
   view,
+  promotionSourceEnv,
 }: {
   appId: string;
   environmentId: string;
   scopeHref: string;
   view: FlagDetailView;
+  /** The Environment this one would pull from by default; absent when it is the only one. */
+  promotionSourceEnv?: string;
 }) {
   const env = view.env;
   const editing = useFlagEditing({
@@ -57,13 +60,27 @@ export function FlagDetailPage({
         {view.description ? (
           <p className="max-w-2xl text-muted-foreground text-sm leading-6">{view.description}</p>
         ) : null}
+        {promotionSourceEnv ? (
+          <p className="pt-1">
+            <a
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-muted-foreground text-xs transition-colors hover:border-foreground/30 hover:text-foreground"
+              data-flag-promote-entry={promotionSourceEnv}
+              href={`${scopeHref}/flags/${encodeURIComponent(view.key)}/promote?from=${encodeURIComponent(promotionSourceEnv)}`}
+            >
+              Promote from <span className="font-mono">{promotionSourceEnv}</span>
+            </a>
+          </p>
+        ) : null}
       </header>
 
       {view.controllingExperiment ? (
         <FlagDetailExperimentBanner experiment={view.controllingExperiment} scopeHref={scopeHref} />
       ) : null}
 
-      <FlagEditOutcome editing={editing} />
+      <GatedWriteOutcome
+        ungatedCopy="Saved. This Environment's Policy does not gate this change, so no Approval Request was needed."
+        write={editing}
+      />
       <FlagDetailEnvConfig editing={editing} view={view} />
       <FlagDetailDefinition editing={editing} view={view} />
     </section>

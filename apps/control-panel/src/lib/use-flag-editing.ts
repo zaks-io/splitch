@@ -8,7 +8,7 @@ import {
   updateControlPanelFlagConfig,
 } from "./control-plane-flag-mutations";
 import type { FlagEditIntent } from "./flag-edit-intent";
-import { type FlagEditPhase, flagGatePhase } from "./flag-edit-phase";
+import { type GatedWritePhase, gatedWritePhase } from "./gated-write-phase";
 import { flagWriteDecision } from "./flag-write-decision";
 
 /**
@@ -35,7 +35,7 @@ export type FlagEditScope = {
 };
 
 export type FlagEditing = {
-  readonly state: FlagEditPhase;
+  readonly state: GatedWritePhase;
   readonly busy: boolean;
   submit(intent: FlagEditIntent): Promise<void>;
   confirm(): Promise<void>;
@@ -47,7 +47,7 @@ export function useFlagEditing(
   newKey: () => string = defaultKey,
 ): FlagEditing {
   const router = useRouter();
-  const [state, setState] = useState<FlagEditPhase>({ phase: "idle" });
+  const [state, setState] = useState<GatedWritePhase>({ phase: "idle" });
 
   const submit = useCallback(
     async (intent: FlagEditIntent) => {
@@ -59,7 +59,7 @@ export function useFlagEditing(
         return;
       }
       if (decision.kind === "refused") {
-        setState({ phase: "refused", intent, error: decision.error });
+        setState({ phase: "refused", summary: intent.summary, error: decision.error });
         return;
       }
       const request = await loadControlPanelApprovalRequest({
@@ -71,7 +71,7 @@ export function useFlagEditing(
       });
       // The gate cannot render a proposal it could not read. Falling back to a
       // generic "please try again" would hide a real pending record.
-      setState(flagGatePhase(intent, request));
+      setState(gatedWritePhase(intent.summary, request));
     },
     [newKey, router, scope],
   );

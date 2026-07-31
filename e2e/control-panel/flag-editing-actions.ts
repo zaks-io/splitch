@@ -54,7 +54,7 @@ export async function addRule(
 
 /** An ungated write says so outright, and no gate may have appeared on the way. */
 export async function expectUngated(page: Page): Promise<void> {
-  await expect(page.locator("[data-flag-edit-applied='ungated']")).toBeVisible();
+  await expect(page.locator("[data-gated-write-applied='ungated']")).toBeVisible();
   await expect(approvalGate(page)).toHaveCount(0);
 }
 

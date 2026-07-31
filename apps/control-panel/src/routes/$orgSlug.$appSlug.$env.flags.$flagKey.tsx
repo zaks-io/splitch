@@ -8,6 +8,7 @@ import { loadControlPanelFlagDetail } from "#lib/control-plane-flag-functions";
 import { isFlagDetailNotFound } from "#lib/flag-detail-data";
 import { AccessDeniedError } from "#lib/loader-context";
 import { reportRouteError } from "#lib/panel-observability";
+import { promotionSources } from "#lib/promotion-source";
 import { loadScopedSession } from "#lib/session-functions";
 
 export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
@@ -30,7 +31,16 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
       },
     });
     if (!result.ok) throw new Error(result.error.message);
-    return { detail: result.data, scope: scoped.context.scope };
+    const sources = promotionSources(
+      scoped.context.navigation,
+      scoped.context.scope.appId,
+      scoped.context.scope.env,
+    );
+    return {
+      detail: result.data,
+      scope: scoped.context.scope,
+      promotionSourceEnv: sources[0]?.env,
+    };
   },
   onError: ({ error }) => {
     reportRouteError("section", error, "/$orgSlug/$appSlug/$env/flags/$flagKey");
@@ -41,7 +51,7 @@ export const Route = createFileRoute("/$orgSlug/$appSlug/$env/flags/$flagKey")({
 });
 
 function FlagDetailRoute() {
-  const { detail, scope } = Route.useLoaderData();
+  const { detail, scope, promotionSourceEnv } = Route.useLoaderData();
 
   if (isFlagDetailNotFound(detail)) {
     // The key is resolved against a bounded catalog read. When that read was
@@ -64,6 +74,7 @@ function FlagDetailRoute() {
     <FlagDetailPage
       appId={scope.appId}
       environmentId={scope.environmentId}
+      promotionSourceEnv={promotionSourceEnv}
       scopeHref={scopedHref(scope)}
       view={detail}
     />

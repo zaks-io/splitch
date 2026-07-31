@@ -37,6 +37,7 @@ const FLAG_CONFIG_OPERATION_IDS = [
   "flag_config_get",
   "flag_config_update",
   "flag_targeting_rules_replace",
+  "flag_config_promote",
 ] as const;
 
 const APPROVAL_OPERATION_IDS = ["approval_request_get", "approval_request_review"] as const;

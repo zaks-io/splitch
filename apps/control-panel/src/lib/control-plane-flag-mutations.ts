@@ -4,6 +4,7 @@ import { z } from "zod";
 import { type ApprovalGateRecord, approvalGateRecord } from "./approval-gate-record";
 import {
   ApprovalRequestInputSchema,
+  PromoteInputSchema,
   ReviewInputSchema,
   type TargetingEditSchema,
   TargetingEditInputSchema,
@@ -85,6 +86,44 @@ export const editControlPanelTargetingRules = createServerFn({ method: "POST" })
       environmentId,
       flagId,
       targetingRules: applyTargetingEdit(current.data.targetingRules, edit, flagId),
+      idempotency_key: idempotencyKey,
+    });
+    return writeResult(result, variantLabels);
+  });
+
+/**
+ * A Promotion, pulled INTO the Environment the operator is standing in.
+ *
+ * The target Environment is the one that delegates, because the target's Policy is
+ * the one that governs the write (screen-inventory.md): you are standing in the env
+ * about to change. The panel sends only the ticked field groups and computes no
+ * resulting Configuration of its own — the Worker resolves the source, applies the
+ * selection, and rejects a dangling Variant reference. Previewing the result here
+ * would be a second opinion the operator could act on and the Worker could refuse.
+ */
+export const promoteControlPanelFlagConfig = createServerFn({ method: "POST" })
+  .validator((data: unknown) => PromoteInputSchema.safeParse(data))
+  .handler(async ({ data: parsed }): Promise<FlagWriteResult> => {
+    if (!parsed.success) return malformed(parsed.error, "The Promotion is malformed");
+    const {
+      appId,
+      targetEnvironmentId,
+      fromEnvironmentId,
+      flagId,
+      select,
+      idempotencyKey,
+      variantLabels,
+    } = parsed.data;
+    const authorized = await authorizedFlagsClient(targetEnvironmentId);
+    if (!authorized.ok) return authorized.result;
+
+    // No inline `review`: the panel never self-approves on the operator's behalf.
+    const result = await authorized.client.promote({
+      appId,
+      targetEnvironmentId,
+      flagId,
+      fromEnvironmentId,
+      select,
       idempotency_key: idempotencyKey,
     });
     return writeResult(result, variantLabels);

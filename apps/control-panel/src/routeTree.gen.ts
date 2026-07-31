@@ -29,6 +29,7 @@ import { Route as OrgSlugAppSlugEnvFlagsFlagKeyRouteImport } from './routes/$org
 import { Route as OrgSlugAppSlugEnvExperimentsNewRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.new'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdIndexRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.index'
+import { Route as OrgSlugAppSlugEnvFlagsFlagKeyPromoteRouteImport } from './routes/$orgSlug.$appSlug.$env.flags.$flagKey_.promote'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdDraftRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments_.$experimentId.draft'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdSetupRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.setup'
 import { Route as OrgSlugAppSlugEnvExperimentsExperimentIdResultsRouteImport } from './routes/$orgSlug.$appSlug.$env.experiments.$experimentId.results'
@@ -146,6 +147,12 @@ const OrgSlugAppSlugEnvExperimentsExperimentIdIndexRoute =
     path: '/',
     getParentRoute: () => OrgSlugAppSlugEnvExperimentsExperimentIdRoute,
   } as any)
+const OrgSlugAppSlugEnvFlagsFlagKeyPromoteRoute =
+  OrgSlugAppSlugEnvFlagsFlagKeyPromoteRouteImport.update({
+    id: '/flags/$flagKey_/promote',
+    path: '/flags/$flagKey/promote',
+    getParentRoute: () => OrgSlugAppSlugEnvRoute,
+  } as any)
 const OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute =
   OrgSlugAppSlugEnvExperimentsExperimentIdDraftRouteImport.update({
     id: '/experiments_/$experimentId/draft',
@@ -215,6 +222,7 @@ export interface FileRoutesByFullPath {
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/results': typeof OrgSlugAppSlugEnvExperimentsExperimentIdResultsRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup': typeof OrgSlugAppSlugEnvExperimentsExperimentIdSetupRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/draft': typeof OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute
+  '/$orgSlug/$appSlug/$env/flags/$flagKey/promote': typeof OrgSlugAppSlugEnvFlagsFlagKeyPromoteRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/': typeof OrgSlugAppSlugEnvExperimentsExperimentIdIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRouteWithChildren
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/results': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdResultsRoute
@@ -241,6 +249,7 @@ export interface FileRoutesByTo {
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/results': typeof OrgSlugAppSlugEnvExperimentsExperimentIdResultsRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup': typeof OrgSlugAppSlugEnvExperimentsExperimentIdSetupRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/draft': typeof OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute
+  '/$orgSlug/$appSlug/$env/flags/$flagKey/promote': typeof OrgSlugAppSlugEnvFlagsFlagKeyPromoteRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId': typeof OrgSlugAppSlugEnvExperimentsExperimentIdIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/results': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdResultsRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/setup': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdSetupRoute
@@ -270,6 +279,7 @@ export interface FileRoutesById {
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/results': typeof OrgSlugAppSlugEnvExperimentsExperimentIdResultsRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup': typeof OrgSlugAppSlugEnvExperimentsExperimentIdSetupRoute
   '/$orgSlug/$appSlug/$env/experiments_/$experimentId/draft': typeof OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute
+  '/$orgSlug/$appSlug/$env/flags/$flagKey_/promote': typeof OrgSlugAppSlugEnvFlagsFlagKeyPromoteRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/': typeof OrgSlugAppSlugEnvExperimentsExperimentIdIndexRoute
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdRouteWithChildren
   '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/results': typeof OrgSlugAppSlugEnvExperimentsExperimentIdRunsRunIdResultsRoute
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/results'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/draft'
+    | '/$orgSlug/$appSlug/$env/flags/$flagKey/promote'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/results'
@@ -327,6 +338,7 @@ export interface FileRouteTypes {
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/results'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/draft'
+    | '/$orgSlug/$appSlug/$env/flags/$flagKey/promote'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/results'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/setup'
@@ -355,6 +367,7 @@ export interface FileRouteTypes {
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/results'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/setup'
     | '/$orgSlug/$appSlug/$env/experiments_/$experimentId/draft'
+    | '/$orgSlug/$appSlug/$env/flags/$flagKey_/promote'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId'
     | '/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/results'
@@ -517,6 +530,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdIndexRouteImport
       parentRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdRoute
     }
+    '/$orgSlug/$appSlug/$env/flags/$flagKey_/promote': {
+      id: '/$orgSlug/$appSlug/$env/flags/$flagKey_/promote'
+      path: '/flags/$flagKey/promote'
+      fullPath: '/$orgSlug/$appSlug/$env/flags/$flagKey/promote'
+      preLoaderRoute: typeof OrgSlugAppSlugEnvFlagsFlagKeyPromoteRouteImport
+      parentRoute: typeof OrgSlugAppSlugEnvRoute
+    }
     '/$orgSlug/$appSlug/$env/experiments_/$experimentId/draft': {
       id: '/$orgSlug/$appSlug/$env/experiments_/$experimentId/draft'
       path: '/experiments/$experimentId/draft'
@@ -642,6 +662,7 @@ interface OrgSlugAppSlugEnvRouteChildren {
   OrgSlugAppSlugEnvFlagsFlagKeyRoute: typeof OrgSlugAppSlugEnvFlagsFlagKeyRoute
   OrgSlugAppSlugEnvFlagsIndexRoute: typeof OrgSlugAppSlugEnvFlagsIndexRoute
   OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute: typeof OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute
+  OrgSlugAppSlugEnvFlagsFlagKeyPromoteRoute: typeof OrgSlugAppSlugEnvFlagsFlagKeyPromoteRoute
 }
 
 const OrgSlugAppSlugEnvRouteChildren: OrgSlugAppSlugEnvRouteChildren = {
@@ -654,6 +675,8 @@ const OrgSlugAppSlugEnvRouteChildren: OrgSlugAppSlugEnvRouteChildren = {
   OrgSlugAppSlugEnvFlagsIndexRoute: OrgSlugAppSlugEnvFlagsIndexRoute,
   OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute:
     OrgSlugAppSlugEnvExperimentsExperimentIdDraftRoute,
+  OrgSlugAppSlugEnvFlagsFlagKeyPromoteRoute:
+    OrgSlugAppSlugEnvFlagsFlagKeyPromoteRoute,
 }
 
 const OrgSlugAppSlugEnvRouteWithChildren =
