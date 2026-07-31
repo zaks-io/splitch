@@ -15,6 +15,15 @@ import { makeSessionStore } from "../src/session-store.js";
 
 const AUDIENCE = "https://cp.splitch.test";
 const USER_ID = "user_live_updates";
+const DEFAULT_SESSION_VALIDITY_MS = 3_600_000;
+
+/**
+ * How long the expiring panel session stays valid. It has to outlast the connect
+ * handshake by enough that machine load cannot eat it, and stay well inside the
+ * per-test timeout so the expiry alarm still gets to fire. Seeding measured at
+ * 2-32ms, so this is a ~60x margin.
+ */
+const EXPIRING_SESSION_VALIDITY_MS = 2_000;
 
 let signer: FixtureSigner;
 
@@ -81,6 +90,7 @@ describe("live-update Durable Object", () => {
     const response = await stub.fetch("https://live.test/connect", {
       headers: { upgrade: "websocket", [LIVE_UPDATE_CONTEXT_HEADER]: JSON.stringify(context) },
     });
+    expect(response.status).toBe(101);
     const socket = response.webSocket;
     expect(socket).not.toBeNull();
     socket?.accept();
@@ -96,12 +106,13 @@ describe("live-update Durable Object", () => {
   it("closes a silent expired panel session after hibernation", async () => {
     const stub = env.CONFIG_STORE_WRITER.getByName(`${ids.appId}:${ids.environmentId}:expired`);
     const context = await seededLiveUpdateContext({
-      expiresInSeconds: 1,
+      validForMs: EXPIRING_SESSION_VALIDITY_MS,
       sessionTokenHash: "b".repeat(64),
     });
     const response = await stub.fetch("https://live.test/connect", {
       headers: { upgrade: "websocket", [LIVE_UPDATE_CONTEXT_HEADER]: JSON.stringify(context) },
     });
+    expect(response.status).toBe(101);
     const socket = response.webSocket;
     expect(socket).not.toBeNull();
     socket?.accept();
@@ -236,10 +247,17 @@ async function hashToken(token: string): Promise<string> {
 }
 
 async function seededLiveUpdateContext(
-  options: { expiresInSeconds?: number; sessionTokenHash?: string } = {},
+  options: { validForMs?: number; sessionTokenHash?: string } = {},
 ) {
   const sessionTokenHash = options.sessionTokenHash ?? "a".repeat(64);
-  const expiresAt = Math.floor(Date.now() / 1_000) + (options.expiresInSeconds ?? 3_600);
+  // Session expiry is stored and compared in whole seconds, so truncating the
+  // deadline hands the caller only the milliseconds left in the current wall-clock
+  // second: a validity window uniformly distributed over 0-1000ms rather than the
+  // window it asked for (SPL-255). Round up so `validForMs` is a floor, not a
+  // ceiling, and the window no longer depends on when the test happened to start.
+  const expiresAt = Math.ceil(
+    (Date.now() + (options.validForMs ?? DEFAULT_SESSION_VALIDITY_MS)) / 1_000,
+  );
   await env.SESSION_STORE.put(
     `session:${sessionTokenHash}`,
     JSON.stringify({
