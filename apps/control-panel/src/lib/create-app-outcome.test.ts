@@ -134,6 +134,7 @@ describe("Create App effect", () => {
       kind: "failed",
       failure: {
         kind: "form",
+        code: "TRANSPORT_FAILURE",
         message: "The Control Plane could not create this App. Try again.",
         fields: [],
       },

@@ -99,6 +99,27 @@ const OPERATION_ROUTES: OperationCoverage = {
     route: { method: "GET", pathname: `/apps/${APP}/envs/${ENV}/flags/flag_1/config` },
     operation: { id: "flag_config_get", appId: APP, environmentId: ENV, flagId: "flag_1" },
   },
+  flag_config_update: {
+    route: { method: "PATCH", pathname: `/apps/${APP}/envs/${ENV}/flags/flag_1/config` },
+    operation: { id: "flag_config_update", appId: APP, environmentId: ENV, flagId: "flag_1" },
+  },
+  flag_targeting_rules_replace: {
+    route: { method: "PUT", pathname: `/apps/${APP}/envs/${ENV}/flags/flag_1/targeting-rules` },
+    operation: {
+      id: "flag_targeting_rules_replace",
+      appId: APP,
+      environmentId: ENV,
+      flagId: "flag_1",
+    },
+  },
+  approval_request_get: {
+    route: { method: "GET", pathname: `/apps/${APP}/approval-requests/apr_1` },
+    operation: { id: "approval_request_get", appId: APP, approvalRequestId: "apr_1" },
+  },
+  approval_request_review: {
+    route: { method: "POST", pathname: `/apps/${APP}/approval-requests/apr_1/reviews` },
+    operation: { id: "approval_request_review", appId: APP, approvalRequestId: "apr_1" },
+  },
   metrics_list: {
     route: { method: "GET", pathname: `/apps/${APP}/metrics`, environmentId: ENV },
     operation: { id: "metrics_list", appId: APP, environmentId: ENV },
