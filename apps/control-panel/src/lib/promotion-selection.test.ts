@@ -59,7 +59,7 @@ describe("Promotion dependency nudge", () => {
     expect(nudges).toEqual([
       {
         variantName: "beta",
-        reason: '1. plan eq "pro" → beta (25%)',
+        reason: 'Targeting Rule 1: plan eq "pro" → beta (25%)',
         remedy: "tick",
         rowId: "availability:beta",
       },

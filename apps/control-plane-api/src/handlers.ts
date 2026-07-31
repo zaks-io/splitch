@@ -1,7 +1,6 @@
 import type { TargetingRule } from "@splitch/contracts";
 import { envScope, type Repository } from "@splitch/db";
-import type { HandlerArgs } from "@splitch/worker-runtime";
-import { renderError } from "@splitch/worker-runtime";
+import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
 import { canonicalHash } from "./approval-canonical";
 import { createApproval, replayApprovalIfExists } from "./approval-service";
@@ -21,6 +20,7 @@ import { flagConfigPatchGates, promotionGates, readEnvironmentPolicy } from "./f
 import { flagConfigFreezeRefusal, targetingFreezeRefusal } from "./flag-config-run-freeze";
 import { objectBody, pathParam } from "./handler-input";
 import { type MemberProfileResolver, makeOrgHandlers } from "./org-handlers";
+import { validatePromotionSource } from "./promotion-source-validation";
 
 /**
  * Minimal-but-real control-plane handlers for the mounted routes. They run AFTER
@@ -294,13 +294,12 @@ export function makeHandlers(deps: HandlerDeps) {
       if (!deps.configStore) return configStoreUnavailable(requestId);
 
       const appId = pathParam(input, "appId");
-      const targetEnvironmentId = pathParam(input, "targetEnvironmentId");
-      const flagId = pathParam(input, "flagId");
       const adminError = await requireAppAdmin(deps, appId, principal, requestId);
       if (adminError) return adminError;
 
-      const body = objectBody(input);
-      const fromEnvironmentId = body.fromEnvironmentId as string;
+      const source = await validatePromotionSource(deps.repo, input, appId, requestId);
+      if (!source.ok) return source.response;
+      const { body, flagId, fromEnvironmentId, targetEnvironmentId } = source;
       const configRow = await deps.repo.flags.getFlagConfig(
         envScope(appId, targetEnvironmentId),
         flagId,

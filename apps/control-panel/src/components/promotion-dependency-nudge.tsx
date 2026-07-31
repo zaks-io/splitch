@@ -45,7 +45,7 @@ export function PromotionDependencyNudge({
               <span className="font-mono text-foreground">{dependency.variantName}</span> is not
               available here.{" "}
               <span data-promotion-nudge-reason="true">
-                Added because rule {dependency.reason} needs it.
+                Added because {dependency.reason} needs it.
               </span>
             </p>
             <NudgeAction dependency={dependency} disabled={disabled} onApply={onApply} />

@@ -135,7 +135,10 @@ function dependency(
   servingView: FlagDetailView,
 ): PromotionDependency {
   const row = rows.find((candidate) => candidate.variantName === variantName);
-  const reason = ruleServing(servingView, variantName) ?? `a promoted rule serves ${variantName}`;
+  const renderedRule = ruleServing(servingView, variantName);
+  const reason = renderedRule
+    ? `Targeting Rule ${renderedRule.replace(/^(\d+)\. /, "$1: ")}`
+    : `a Targeting Rule serving ${variantName}`;
 
   if (!row) return { variantName, reason, remedy: "none", rowId: null };
   return {

@@ -31,6 +31,16 @@ describe("Control Panel binding operation allowlist", () => {
       },
     ],
     [
+      "POST",
+      "/apps/app_1/envs/env_1/flags/flag_1/promote",
+      {
+        id: "flag_config_promote",
+        appId: "app_1",
+        environmentId: "env_1",
+        flagId: "flag_1",
+      },
+    ],
+    [
       "GET",
       "/apps/app_1/approval-requests/apr_1",
       { id: "approval_request_get", appId: "app_1", approvalRequestId: "apr_1" },
@@ -76,6 +86,7 @@ describe("Control Panel binding operation allowlist", () => {
     // method is part of the operation: no other verb on those paths is claimable.
     ["DELETE", "/apps/app_1/envs/env_1/flags/flag_1/config"],
     ["POST", "/apps/app_1/envs/env_1/flags/flag_1/targeting-rules"],
+    ["GET", "/apps/app_1/envs/env_1/flags/flag_1/promote"],
     ["DELETE", "/apps/app_1/approval-requests/apr_1"],
     ["GET", "/apps/app_1/approval-requests"],
     ["GET", "/apps/app_1/environments"],
