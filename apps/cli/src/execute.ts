@@ -46,7 +46,8 @@ async function executeMeta(
 ): Promise<CliResult> {
   switch (invocation.metaCommand) {
     case "health": {
-      const endpoint = invocation.flags.endpoint ?? "http://localhost:8787";
+      const { resolveControlPlaneBaseUrl } = await import("./sdks.js");
+      const endpoint = invocation.flags.endpoint ?? resolveControlPlaneBaseUrl(deps);
       const { createControlPlaneSdk } = await import("@splitch/control-plane-sdk");
       const health = await createControlPlaneSdk({ baseUrl: endpoint, fetch: deps.fetch }).health();
       emit(io, invocation.flags.json, health);

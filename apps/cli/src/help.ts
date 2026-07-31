@@ -220,7 +220,12 @@ function metaFlags(command: (typeof META_COMMANDS)[number]): HelpFlag[] {
     );
   if (command === "health")
     flags.push(
-      flag("--endpoint <url>", "URL", "http://localhost:8787", "Control Plane API base URL."),
+      flag(
+        "--endpoint <url>",
+        "URL",
+        "resolved platform target origin",
+        "Control Plane API base URL.",
+      ),
     );
   flags.push(flag("--json", "boolean", "false", "Write machine-readable JSON to stdout."));
   flags.push(helpFlag());

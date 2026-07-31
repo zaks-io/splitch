@@ -19,6 +19,19 @@ For a one-off run without a global install:
 npx @splitch/cli context --json
 ```
 
+## Select a platform target
+
+By default the CLI targets hosted splitch (`https://api.splitch.dev`, `https://auth.splitch.dev`,
+`https://edge.splitch.dev`). To develop against a local splitch stack instead:
+
+```bash
+export SPLITCH_PLATFORM_TARGET=local
+```
+
+Individual origins can be overridden with `CONTROL_PLANE_API_ORIGIN`, `AUTH_API_ORIGIN`,
+`EVALUATION_API_ORIGIN`, and `ANALYSIS_API_ORIGIN`. A command fails loudly with
+`CLI_API_ORIGIN_MISSING` when the origin it routes to has no default for the selected target.
+
 ## Authenticate and select an Environment
 
 The CLI authenticates its control-plane session with a browser device flow. A selected App is
@@ -64,6 +77,13 @@ FLAG_ID=$(splitch flags create \
   --json | jq -r '.id')
 ```
 
+A new Flag starts disabled with `off` as its default Variant. Enable it in the selected Environment
+before evaluating:
+
+```bash
+splitch flag-config update "$FLAG_ID" --enabled true --json
+```
+
 Evaluate the Flag through the authenticated control plane. This dry run returns the full resolution
 reason and does not fire an Exposure:
 
@@ -79,8 +99,11 @@ splitch flags verify checkout --targeting-key user-123 --json
 ```
 
 ```json
-{ "value": true, "variantName": "on", "reason": "DEFAULT" }
+{ "value": false, "variantName": "off", "reason": "DEFAULT" }
 ```
+
+The enabled Flag serves its Default Variant (`off`) until targeting rules or a rollout say
+otherwise, so `false` here means the data plane is wired up correctly.
 
 Pass `--app` and `--env` on an individual command when you do not want to persist scope. Run
 `splitch context --json` to see the resolved App and Environment.

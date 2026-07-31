@@ -16,18 +16,34 @@ export interface RunCliOptions {
   readonly cwd?: string;
   readonly env?: Record<string, string | undefined>;
   readonly fetch?: typeof fetch;
+  readonly platformTarget?: string;
   readonly controlPlaneBaseUrl?: string;
   readonly evaluationBaseUrl?: string;
   readonly analysisBaseUrl?: string;
   readonly authBaseUrl?: string;
 }
 
+// The published binary receives no programmatic options; the environment
+// selects the platform target and overrides individual API origins.
+function withEnvOrigins(options: RunCliOptions): RunCliOptions {
+  const env = options.env ?? process.env;
+  return {
+    ...options,
+    platformTarget: options.platformTarget ?? env.SPLITCH_PLATFORM_TARGET,
+    controlPlaneBaseUrl: options.controlPlaneBaseUrl ?? env.CONTROL_PLANE_API_ORIGIN,
+    evaluationBaseUrl: options.evaluationBaseUrl ?? env.EVALUATION_API_ORIGIN,
+    analysisBaseUrl: options.analysisBaseUrl ?? env.ANALYSIS_API_ORIGIN,
+    authBaseUrl: options.authBaseUrl ?? env.AUTH_API_ORIGIN,
+  };
+}
+
 const COMMAND_LOOKUP_KEYS = new Set(CLI_COMMANDS.map((command) => command.path.join("\0")));
 
 export async function runCli(
   args: readonly string[] = process.argv.slice(2),
-  options: RunCliOptions = {},
+  runOptions: RunCliOptions = {},
 ): Promise<number> {
+  const options = withEnvOrigins(runOptions);
   const help = renderHelp(args);
   if (help) {
     console.log(help);
@@ -88,6 +104,7 @@ async function executeParsedInvocation(
       cwd: options.cwd,
       env: options.env,
       fetch: options.fetch,
+      platformTarget: options.platformTarget,
       controlPlaneBaseUrl: options.controlPlaneBaseUrl,
       evaluationBaseUrl: options.evaluationBaseUrl,
       analysisBaseUrl: options.analysisBaseUrl,

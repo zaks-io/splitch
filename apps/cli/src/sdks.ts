@@ -7,6 +7,16 @@ const defaultEvaluationBaseUrl = "http://127.0.0.1:8788";
 const defaultAnalysisBaseUrl = "http://127.0.0.1:8790";
 const defaultAuthBaseUrl = "http://127.0.0.1:8789";
 
+// The published binary defaults to hosted production; local development
+// opts in with SPLITCH_PLATFORM_TARGET=local. The analysis API has no
+// hosted hostname yet, so analysis commands fail loud until one exists.
+const defaultPlatformTarget = "production";
+const productionOrigins: Readonly<Record<string, string>> = {
+  CONTROL_PLANE_API_ORIGIN: "https://api.splitch.dev",
+  AUTH_API_ORIGIN: "https://auth.splitch.dev",
+  EVALUATION_API_ORIGIN: "https://edge.splitch.dev",
+};
+
 type RoutableOwner = "control-plane-api" | "evaluation-api" | "analysis-api";
 export type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
 export type OperationSdks = Record<RoutableOwner, OperationSdk>;
@@ -20,36 +30,29 @@ export interface SdkFactoryOptions {
   readonly fetch?: typeof fetch;
 }
 
+// Origins resolve lazily per route owner so a command only demands the
+// origin it actually routes to (the analysis API has no hosted hostname yet).
 export function createOperationSdks(options: SdkFactoryOptions = {}): OperationSdks {
-  const platformTarget = parsePlatformTarget(options.platformTarget ?? "local");
+  const platformTarget = parsePlatformTarget(options.platformTarget ?? defaultPlatformTarget);
+  const adapter = (envName: string, configured: string | undefined, localDefault: string) =>
+    createMcpOperationAdapter({
+      baseUrl: apiBaseUrl(envName, configured, localDefault, platformTarget),
+      fetch: options.fetch,
+    });
   return {
-    "control-plane-api": createMcpOperationAdapter({
-      baseUrl: apiBaseUrl(
+    get "control-plane-api"() {
+      return adapter(
         "CONTROL_PLANE_API_ORIGIN",
         options.controlPlaneBaseUrl,
         defaultControlPlaneBaseUrl,
-        platformTarget,
-      ),
-      fetch: options.fetch,
-    }),
-    "evaluation-api": createMcpOperationAdapter({
-      baseUrl: apiBaseUrl(
-        "EVALUATION_API_ORIGIN",
-        options.evaluationBaseUrl,
-        defaultEvaluationBaseUrl,
-        platformTarget,
-      ),
-      fetch: options.fetch,
-    }),
-    "analysis-api": createMcpOperationAdapter({
-      baseUrl: apiBaseUrl(
-        "ANALYSIS_API_ORIGIN",
-        options.analysisBaseUrl,
-        defaultAnalysisBaseUrl,
-        platformTarget,
-      ),
-      fetch: options.fetch,
-    }),
+      );
+    },
+    get "evaluation-api"() {
+      return adapter("EVALUATION_API_ORIGIN", options.evaluationBaseUrl, defaultEvaluationBaseUrl);
+    },
+    get "analysis-api"() {
+      return adapter("ANALYSIS_API_ORIGIN", options.analysisBaseUrl, defaultAnalysisBaseUrl);
+    },
   };
 }
 
@@ -64,13 +67,23 @@ export function sdkForOwner(sdks: OperationSdks, owner: RouteOwner): OperationSd
   });
 }
 
+export function resolveControlPlaneBaseUrl(options: SdkFactoryOptions = {}): string {
+  const platformTarget = parsePlatformTarget(options.platformTarget ?? defaultPlatformTarget);
+  return apiBaseUrl(
+    "CONTROL_PLANE_API_ORIGIN",
+    options.controlPlaneBaseUrl,
+    defaultControlPlaneBaseUrl,
+    platformTarget,
+  );
+}
+
 export function resolveAuthBaseUrl(options: SdkFactoryOptions = {}): string {
-  const platformTarget = parsePlatformTarget(options.platformTarget ?? "local");
+  const platformTarget = parsePlatformTarget(options.platformTarget ?? defaultPlatformTarget);
   return apiBaseUrl("AUTH_API_ORIGIN", options.authBaseUrl, defaultAuthBaseUrl, platformTarget);
 }
 
 export function resolveDataPlaneBaseUrl(options: SdkFactoryOptions = {}): string {
-  const platformTarget = parsePlatformTarget(options.platformTarget ?? "local");
+  const platformTarget = parsePlatformTarget(options.platformTarget ?? defaultPlatformTarget);
   return apiBaseUrl(
     "EVALUATION_API_ORIGIN",
     options.evaluationBaseUrl,
@@ -90,6 +103,9 @@ function apiBaseUrl(
   }
   if (platformTarget === "local" || platformTarget === "pr-ci") {
     return localDefault;
+  }
+  if (platformTarget === "production" && productionOrigins[envName]) {
+    return productionOrigins[envName];
   }
   throw new SplitchCliError({
     code: "CLI_API_ORIGIN_MISSING",

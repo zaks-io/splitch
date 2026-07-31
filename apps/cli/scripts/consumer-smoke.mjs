@@ -49,7 +49,7 @@ try {
   if (result.status !== 1) {
     throw new Error(`splitch with no args must exit with EXIT_USAGE (1); got ${result.status}`);
   }
-  if (!output.includes("Usage:") || !output.includes("splitch login")) {
+  if (!output.includes("Usage:") || !/^\s*login\s/m.test(output)) {
     throw new Error(`splitch with no args did not print usage:\n${output}`);
   }
 
