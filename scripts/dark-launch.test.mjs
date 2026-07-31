@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { assertStructuredAuthFailure } from "./dark-launch/cleanup.mjs";
 import {
+  createDarkLaunchFlag,
+  deleteFlag,
+  replaceTargetingRules,
+  updateFlagConfig,
+} from "./dark-launch/control-plane.mjs";
+import {
   assertVariant,
   DEFAULT_VARIANT,
   LAUNCH_VARIANT,
@@ -73,4 +79,55 @@ test("assertStructuredAuthFailure requires the expected errorCode", async () => 
       ),
     /expected reason ERROR/,
   );
+});
+
+test("dark-launch Flag mutations use current idempotency and deletion approval contracts", async () => {
+  const requests = [];
+  const deps = {
+    accessToken: "test-access-token",
+    controlPlaneBaseUrl: "https://control-plane.example.test",
+    runId: "run-123",
+    fetch: async (url, init) => {
+      requests.push({ url, init, body: init.body ? JSON.parse(init.body) : undefined });
+      if (init.method === "DELETE") {
+        return Response.json(
+          {
+            code: "APPROVAL_REVIEW_REQUIRED",
+            message: "Approval Request is pending Review",
+            details: { approvalRequestId: "approval-123" },
+          },
+          { status: 409 },
+        );
+      }
+      return Response.json(
+        url.endsWith("/flags")
+          ? {
+              id: "flag-123",
+              variants: [
+                { id: "variant-on", name: LAUNCH_VARIANT, value: true, isDefault: false },
+                { id: "variant-off", name: DEFAULT_VARIANT, value: false, isDefault: true },
+              ],
+            }
+          : { status: "applied" },
+      );
+    },
+  };
+
+  await createDarkLaunchFlag(deps, "app-123", "flag-key");
+  await updateFlagConfig(deps, "app-123", "env-123", "flag-123", { enabled: true });
+  await replaceTargetingRules(deps, "app-123", "env-123", "flag-123", []);
+  await deleteFlag(deps, "app-123", "flag-123");
+
+  assert.equal(requests[0].body.idempotency_key, "dark-launch-flag-create-run-123");
+  assert.equal(requests[1].body.idempotency_key, "dark-launch-flag-config-enable-run-123");
+  assert.equal(requests[2].body.idempotency_key, "dark-launch-targeting-rules-run-123");
+  assert.equal(requests[3].init.headers["idempotency-key"], "dark-launch-flag-delete-run-123");
+  assert.equal(
+    requests[4].url,
+    "https://control-plane.example.test/apps/app-123/approval-requests/approval-123/reviews",
+  );
+  assert.deepEqual(requests[4].body, {
+    action: "approve_and_apply",
+    idempotency_key: "dark-launch-flag-delete-review-run-123",
+  });
 });
