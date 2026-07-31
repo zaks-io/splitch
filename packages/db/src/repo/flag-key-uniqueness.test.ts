@@ -163,6 +163,30 @@ describe("Flag key uniqueness is enforced by the database", () => {
     ).rejects.toThrow();
     expect(await rawFlagIds(local, seed.a.appId, "never-used-key")).toEqual([]);
   });
+
+  it("does not classify D1's parameter-free bind-time echo of the collision text", async () => {
+    // The parameter skip alone is NOT enough. D1 rejects an unsupported value at
+    // bind time with a message that carries no `params` of its own yet quotes the
+    // caller's value verbatim, so it survives the skip:
+    //
+    //   D1_TYPE_ERROR: Type 'object' not supported for value '<caller's value>'
+    //
+    // A caller who spells the whole collision string, extended result code and
+    // all, therefore reaches a layer the skip yields. Substring matching would
+    // call this a collision and tell the operator to pick a different key while
+    // the key was free and nothing was written. Anchoring is what refuses it.
+    const failing = createRepository(
+      failingInsertD1(local.d1, `D1_TYPE_ERROR: Type 'object' not supported for value '${POISON}'`),
+    );
+
+    await expect(
+      failing.flags.createFlag(
+        appScope(seed.a.appId),
+        flagValues(seed.a.appId, "flag_bind_time_echo", "never-used-key"),
+      ),
+    ).rejects.toThrow();
+    expect(await rawFlagIds(local, seed.a.appId, "never-used-key")).toEqual([]);
+  });
 });
 
 const TRANSIENT_D1_FAILURE = "D1_ERROR: Network connection lost.";

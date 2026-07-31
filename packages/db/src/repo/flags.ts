@@ -200,8 +200,18 @@ const FLAG_KEY_UNIQUE_VIOLATION = "UNIQUE constraint failed: flags.app_id, flags
 const SQLITE_UNIQUE_CODE = "SQLITE_CONSTRAINT_UNIQUE";
 
 /**
+ * D1's collision message in full, anchored end to end.
+ *
+ * The `D1_ERROR: ` prefix is optional so the match still holds if the seam ever
+ * throws D1's error unwrapped.
+ */
+const FLAG_KEY_UNIQUE_MESSAGE = new RegExp(
+  `^(D1_ERROR: )?${FLAG_KEY_UNIQUE_VIOLATION.replaceAll(".", "\\.")}: SQLITE_CONSTRAINT \\(extended: ${SQLITE_UNIQUE_CODE}\\)$`,
+);
+
+/**
  * Classify a write failure WITHOUT ever reading a message that embeds the bound
- * parameters.
+ * parameters, and only when the message is D1's collision text *in its entirety*.
  *
  * D1 exposes no structured code on the thrown Error — the extended result code
  * only ever appears in prose — so this has to match text. That makes WHICH text
@@ -213,18 +223,24 @@ const SQLITE_UNIQUE_CODE = "SQLITE_CONSTRAINT_UNIQUE";
  * nothing was written. A disguised default with an impossible remedy (ADR-0036),
  * and worse than the 500 it replaces, because the 500 was at least honest.
  *
- * So every layer carrying bound parameters is skipped, wherever it sits in the
- * chain. That is stated as a property of the layer rather than as "skip the top
- * one", because a nesting change that moved the wrapper down a level would
- * silently reopen the hole, and because it still classifies correctly if the seam
- * ever throws D1's error unwrapped. What is left is D1's own text, which no
- * caller can author. Both the constraint string and the extended result code must
- * appear in that SAME message: the column list identifies the collision, the
- * result code is the proof it was a uniqueness failure at all.
+ * Skipping every layer that carries bound parameters is necessary but NOT
+ * sufficient, and the earlier "what is left is D1's own text, which no caller can
+ * author" was simply false. D1 emits a *parameter-free* `D1_TYPE_ERROR` at bind
+ * time that echoes the offending value verbatim:
+ *
+ *   D1_TYPE_ERROR: Type 'object' not supported for value '<the caller's value>'
+ *
+ * so a caller who spells the collision text — extended result code and all —
+ * inside a non-string field reaches a layer the parameter skip happily yields.
+ * Substring matching therefore reopens the exact hole it was meant to close.
+ *
+ * Anchoring kills the class rather than that one instance: every echo vector
+ * arrives wrapped in a prefix and a trailing quote, so it can never equal D1's
+ * message end to end. The parameter skip stays as defence in depth.
  */
 function isFlagKeyConflict(error: unknown): boolean {
   for (const message of messagesNotCarryingParameters(error)) {
-    if (message.includes(FLAG_KEY_UNIQUE_VIOLATION) && message.includes(SQLITE_UNIQUE_CODE)) {
+    if (FLAG_KEY_UNIQUE_MESSAGE.test(message)) {
       return true;
     }
   }
