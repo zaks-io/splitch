@@ -141,6 +141,7 @@ function attentionRollupRepo(): Repository {
     },
     experiments: {
       listRunningExperiments: vi.fn(async () => [{ id: EXPERIMENT_ID, liveRunId: RUN_ID }]),
+      countRunningExperiments: vi.fn(async () => 1),
     },
   } as unknown as Repository;
 }

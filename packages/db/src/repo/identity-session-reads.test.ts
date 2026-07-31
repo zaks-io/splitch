@@ -87,6 +87,21 @@ describe("batched session membership reads", () => {
     expect(rows.map((row) => row.app.id)).toEqual(["app_1"]);
   }, 15_000);
 
+  // D1 refuses a statement carrying more than 100 bound parameters. Unbatched,
+  // `eq(userId)` plus `inArray(orgIds)` over 150 Organizations binds 151
+  // parameters in one statement and D1 itself throws `too many SQL variables`.
+  // This seeds past that real cap (not a mock of it) and proves the batched
+  // read still resolves every row.
+  it("resolves App memberships across enough Organizations to cross the D1 100-parameter cap", async () => {
+    const orgCount = 150;
+    const orgIds = await seedManyOrgsWithApps(local.d1, orgCount);
+
+    const rows = await repo.identity.listAppMembershipsWithAppForUser("bulk_user", orgIds);
+
+    expect(rows).toHaveLength(orgCount);
+    expect(new Set(rows.map((row) => row.app.organizationId)).size).toBe(orgCount);
+  }, 30_000);
+
   it("issues no query at all when there are no Organizations to look in", async () => {
     let prepared = 0;
     const counting = new Proxy(local.d1, {
@@ -107,6 +122,47 @@ describe("batched session membership reads", () => {
     expect(prepared).toBe(0);
   }, 15_000);
 });
+
+/**
+ * One Organization, one App, and one membership on each, per index. Uses
+ * literal SQL VALUES rows (as `seed` below does) rather than bound `?`
+ * parameters, so the seeding statements themselves stay clear of the D1 cap
+ * this test exists to exercise on the read path.
+ */
+async function seedManyOrgsWithApps(d1: D1Database, count: number): Promise<string[]> {
+  const orgIds: string[] = [];
+  const orgRows: string[] = [];
+  const appRows: string[] = [];
+  const appMembershipRows: string[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const orgId = `org_bulk_${index}`;
+    const appId = `app_bulk_${index}`;
+    orgIds.push(orgId);
+    orgRows.push(
+      `('${orgId}', 'Bulk Org ${index}', 'bulk-org-${index}', 'free', 0, '${NOW}', '${NOW}')`,
+    );
+    appRows.push(
+      `('${appId}', '${orgId}', 'Bulk App ${index}', 'bulk-app-${index}', '${NOW}', '${NOW}', 'bulk_user')`,
+    );
+    appMembershipRows.push(`('${appId}', 'bulk_user', 'owner', '${NOW}')`);
+  }
+  await d1
+    .prepare(
+      `INSERT INTO organizations (id, name, slug, plan, is_provisional, created_at, updated_at) VALUES ${orgRows.join(",")}`,
+    )
+    .run();
+  await d1
+    .prepare(
+      `INSERT INTO apps (id, organization_id, name, key, created_at, updated_at, created_by) VALUES ${appRows.join(",")}`,
+    )
+    .run();
+  await d1
+    .prepare(
+      `INSERT INTO app_memberships (app_id, user_id, role, created_at) VALUES ${appMembershipRows.join(",")}`,
+    )
+    .run();
+  return orgIds;
+}
 
 /**
  * `user_1` owns org_1 and is a member of org_2. `app_2` sits in org_1 but

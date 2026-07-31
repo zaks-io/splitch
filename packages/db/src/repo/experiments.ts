@@ -140,6 +140,17 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       return experimentsTable.findMany(scope, eq(experiments.status, "running"), options);
     },
 
+    /**
+     * The true count of running Experiments in this Environment, via `COUNT`
+     * rather than materializing rows. A caller that bounds `listRunningExperiments`
+     * for its own read budget still owes a total that is not that bound: reporting
+     * a bounded page size as if it were the total renders a floor as a total
+     * (ADR-0036).
+     */
+    countRunningExperiments(scope: EnvScope) {
+      return experimentsTable.countRows(scope, eq(experiments.status, "running"));
+    },
+
     listRunsForExperiment(scope: EnvScope, experimentId: string) {
       return runsTable.findMany(scope, eq(runs.experimentId, experimentId));
     },

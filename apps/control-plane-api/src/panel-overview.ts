@@ -10,7 +10,7 @@ import {
   type AnalysisResultsReader,
   AnalysisResultsUnavailableError,
 } from "./attention-analysis-reader";
-import { ExperimentIntegrityError } from "./attention-rollup-errors";
+import { ExperimentIntegrityError, missingLiveRun } from "./attention-rollup-errors";
 import { mapWithConcurrency } from "./bounded-map";
 import { classifyOverviewExperiments, type OverviewExperimentReading } from "./overview-attention";
 import { flagChangeWindowStart, overviewFlagChanges } from "./overview-flag-changes";
@@ -146,9 +146,9 @@ async function readExperimentAttention(
     running,
     OVERVIEW_ANALYSIS_READ_CONCURRENCY,
     async (experiment): Promise<OverviewExperimentReading> => {
-      if (!experiment.liveRunId) throw new ExperimentIntegrityError(experiment.id);
+      if (!experiment.liveRunId) throw missingLiveRun(experiment.id);
       const run = await deps.repo.experiments.getRun(scope, experiment.liveRunId);
-      if (!run) throw new ExperimentIntegrityError(experiment.id);
+      if (!run) throw missingLiveRun(experiment.id);
       const stats = await deps.analysisResults.read(
         {
           appId: input.appId,

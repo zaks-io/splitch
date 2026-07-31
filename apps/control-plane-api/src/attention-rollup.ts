@@ -18,6 +18,8 @@ import {
   experimentIntegrityFault,
   fanoutLimitExceeded,
   forbidden,
+  missingLiveRun,
+  truncatedRunningExperimentRead,
 } from "./attention-rollup-errors";
 import { mapWithConcurrency } from "./bounded-map";
 import { pathParam } from "./handler-input";
@@ -34,13 +36,16 @@ export const ANALYSIS_READ_LIMIT = 200;
 
 /**
  * Hard ceiling on Environments planned for one rollup. Planning costs one D1 read
- * per Environment, so this has to be checked before planning starts: an App with
- * thousands of Environments would otherwise exhaust the subrequest budget mid-plan
- * and surface as an untyped 500 instead of this refusal.
+ * per Environment on the common path, plus a second COUNT only when that read
+ * comes back exactly at its own bound (see `planEnvironment`), so this has to be
+ * checked before planning starts: an App with thousands of Environments would
+ * otherwise exhaust the subrequest budget mid-plan and surface as an untyped 500
+ * instead of this refusal.
  */
 export const ENVIRONMENT_FANOUT_LIMIT = 200;
 
-interface AttentionRollupDeps {
+/** Exported for attention-rollup-plan-guard.test.ts, which calls planEnvironment directly. */
+export interface AttentionRollupDeps {
   repo: Repository;
   analysisResults: AnalysisResultsReader;
 }
@@ -95,7 +100,12 @@ async function rollupResponse(
   }
 
   const plans = await planRollup(deps, appId, environments);
-  const runningExperiments = plans.reduce((total, plan) => total + plan.reads.length, 0);
+  // The true total, from a COUNT per Environment, not `plan.reads.length`. The
+  // materializing read below is itself bounded (to avoid unbounded row
+  // materialization in one Environment), so its length is a floor once an
+  // Environment holds more running Experiments than that bound; reporting that
+  // floor as the total would be exactly the disguised-default ADR-0036 forbids.
+  const runningExperiments = plans.reduce((total, plan) => total + plan.runningTotal, 0);
   if (runningExperiments > ANALYSIS_READ_LIMIT) {
     return fanoutLimitExceeded(
       {
@@ -115,9 +125,32 @@ async function rollupResponse(
   return Response.json(AppAttentionRollupResponseSchema.parse({ appId, items }));
 }
 
-interface EnvironmentPlan {
+/** Exported for `attention-rollup-plan-guard.test.ts`, which unit tests `assertPlansComplete` directly. */
+export interface EnvironmentPlan {
   environmentId: string;
+  /** The true running-Experiment count for this Environment, from `COUNT`. */
+  runningTotal: number;
   reads: AnalysisResultsScope[];
+}
+
+/**
+ * The invariant this whole module exists to hold, checked at the point the
+ * reads are actually consumed rather than trusted from the callers that build
+ * them. Everything upstream (the whole-rollup budget check, the per-Environment
+ * read bound) is what SHOULD make every plan complete; this is what makes it
+ * ALWAYS true regardless of how those change. Exported so this can be proven
+ * directly, independent of whether today's callers can produce a mismatch.
+ */
+export function assertPlansComplete(plans: readonly EnvironmentPlan[]): void {
+  for (const plan of plans) {
+    if (plan.reads.length !== plan.runningTotal) {
+      throw truncatedRunningExperimentRead(
+        plan.environmentId,
+        plan.runningTotal,
+        plan.reads.length,
+      );
+    }
+  }
 }
 
 /**
@@ -153,19 +186,41 @@ async function planRollup(
   );
 }
 
-/** Resolves which Analysis reads an Environment needs, without issuing any of them. */
-async function planEnvironment(
+/**
+ * Resolves which Analysis reads an Environment needs, without issuing any of
+ * them, plus the Environment's true running-Experiment count.
+ *
+ * The materializing read is bounded to `ANALYSIS_READ_LIMIT + 1` (one row past
+ * the whole-rollup budget is enough to build every read this Environment could
+ * still contribute once the budget check below passes; more than that would be
+ * discarded work). Its own length is already the true total UNLESS it comes
+ * back at exactly that bound: only then might more rows exist that it did not
+ * see, so only then is a second COUNT subrequest worth issuing. This keeps the
+ * common case at one D1 read per Environment while still never reporting a
+ * bounded page size as if it were a total (ADR-0036).
+ */
+export async function planEnvironment(
   deps: AttentionRollupDeps,
   appId: string,
   environmentId: string,
 ): Promise<EnvironmentPlan> {
-  const experiments = await deps.repo.experiments.listRunningExperiments(
-    envScope(appId, environmentId),
-  );
+  const scope = envScope(appId, environmentId);
+  const bound = ANALYSIS_READ_LIMIT + 1;
+  const experiments = await deps.repo.experiments.listRunningExperiments(scope, { limit: bound });
+  const runningTotal =
+    experiments.length === bound
+      ? await deps.repo.experiments.countRunningExperiments(scope)
+      : experiments.length;
   return {
     environmentId,
+    runningTotal,
+    // Only checks the rows this Environment's bounded read actually saw: a
+    // corrupt Experiment past the bound would not be caught here during
+    // planning, but any request that reaches that many running Experiments in
+    // one Environment already 409s on the budget above before this result is
+    // used, so the corrupt row is never silently skipped, only reported later.
     reads: experiments.map((experiment) => {
-      if (!experiment.liveRunId) throw new ExperimentIntegrityError(experiment.id);
+      if (!experiment.liveRunId) throw missingLiveRun(experiment.id);
       return { appId, environmentId, experimentId: experiment.id, runId: experiment.liveRunId };
     }),
   };
@@ -176,6 +231,8 @@ async function rollupPlans(
   plans: EnvironmentPlan[],
   actorId: string,
 ): Promise<EnvironmentAttentionRollup[]> {
+  assertPlansComplete(plans);
+
   // One pool across every Environment, so concurrency is a property of the request
   // rather than of how many Environments the App happens to have.
   const results = await mapWithConcurrency(

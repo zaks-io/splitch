@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { appNotFound } from "./app-environment-model";
 import {
   analysisUnavailable,
-  ExperimentIntegrityError,
   experimentIntegrityFault,
   fanoutLimitExceeded,
   forbidden,
+  missingLiveRun,
 } from "./attention-rollup-errors";
 
 /**
@@ -36,7 +36,7 @@ describe("attention rollup handler emitted error codes", () => {
         emittedCode(
           fanoutLimitExceeded({ appId: "app_x", limit: 200, environments: 240 }, "req_1"),
         ),
-        emittedCode(experimentIntegrityFault(new ExperimentIntegrityError("exp_x"), "req_1")),
+        emittedCode(experimentIntegrityFault(missingLiveRun("exp_x"), "req_1")),
       ]),
     );
 
