@@ -1452,7 +1452,7 @@ Usage:
   splitch health [flags]
 
 Flags:
-  --endpoint <url>  [type: URL; default: http://localhost:8787] Control Plane API base URL.
+  --endpoint <url>  [type: URL; default: resolved platform target origin] Control Plane API base URL.
   --json            [type: boolean; default: false] Write machine-readable JSON to stdout.
   -h, --help        [type: boolean; default: false] Show help and exit.
 

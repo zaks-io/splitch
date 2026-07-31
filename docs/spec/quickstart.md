@@ -128,6 +128,14 @@ flags_create { key: "new-checkout", variants: [...] }           # MCP tool
 Flag definition is App-level; serving config is per-Environment (ADR-0028). Promote it into your
 Environment with `flags promote` / `flags_promote` when you are ready to serve it there.
 
+A new Flag starts disabled with the false-alias Variant (`off`) as its Default Variant. Enable it in
+the selected Environment before expecting any non-default resolution:
+
+```
+splitch flag-config update <flag-id> --enabled true             # CLI
+flag_config_update { flagId, enabled: true }                    # MCP tool
+```
+
 ## 7. VERIFY — the first-confidence step
 
 Confirm the Flag actually resolves for a Targeting Key **without firing an Exposure**:
@@ -152,7 +160,7 @@ A verified Flag is already servable. To put it in front of a slice of real traff
 Configuration's **baseline rollout** — one percentage, no Targeting Rule, no Experiment:
 
 ```
-splitch flag-config update --rollout 10                        # CLI
+splitch flag-config update <flag-id> --rollout 10              # CLI
 flag_config_update { flagId, rollout: { percentage: 10 } }     # MCP tool
 ```
 
