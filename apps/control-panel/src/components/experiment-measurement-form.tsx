@@ -24,9 +24,9 @@ import {
 } from "@splitch/ui/components/field";
 import { Input } from "@splitch/ui/components/input";
 import { Spinner } from "@splitch/ui/components/spinner";
-import { useRouter } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { updateControlPanelExperiment } from "#lib/control-plane-experiment-functions";
+import { useExperimentDetailRefresh } from "#lib/use-experiment-detail-refresh";
 
 type MetricOption = { id: string; name: string };
 
@@ -43,7 +43,7 @@ export function ExperimentMeasurementForm({
   liveRun: PanelExperimentRun | undefined;
   metrics: MetricOption[];
 }) {
-  const router = useRouter();
+  const refresh = useExperimentDetailRefresh({ appId, environmentId }, experiment.id);
   const decisionMetrics = new Set(liveRun?.decisionMetricIds ?? []);
   const decisionGuardrails = new Set(liveRun?.decisionGuardrailMetricIds ?? []);
   const [conversionHours, setConversionHours] = useState(experiment.conversionWindowMs / 3_600_000);
@@ -81,7 +81,7 @@ export function ExperimentMeasurementForm({
         return;
       }
       setState("saved");
-      await router.invalidate();
+      await refresh();
     } catch {
       setState("error");
     }

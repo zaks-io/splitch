@@ -1,7 +1,7 @@
 import type { Metric } from "@splitch/contracts";
 import { EmptyState } from "@splitch/ui/state/empty-state";
+import { useRouter } from "@tanstack/react-router";
 import { parityHint } from "#lib/parity-hints";
-import { useEffect, useState } from "react";
 import { MetricEditorDialog } from "./metric-editor-dialog";
 import { ParityNote } from "./parity-note";
 import { MetricsTable } from "./metrics-table";
@@ -15,16 +15,18 @@ export function MetricsPage({
   environmentId: string;
   metrics: Metric[];
 }) {
-  const [visibleMetrics, setVisibleMetrics] = useState(metrics);
+  const router = useRouter();
 
-  useEffect(() => setVisibleMetrics(metrics), [metrics]);
-
-  function saveMetric(metric: Metric) {
-    setVisibleMetrics((current) => upsertMetric(current, metric));
-  }
-
-  function deleteMetric(metricId: string) {
-    setVisibleMetrics((current) => removeMetric(current, metricId));
+  /*
+   * Re-read, never patch: `metrics` is route-loader data with no React Query
+   * cache in front of it, so invalidating the route is the whole read-back.
+   * Splicing the write's own response into local state would show the operator
+   * a row the Panel never read back from the Control Plane -- the disguised
+   * default ADR-0036 forbids, and the reason no surface here keeps a local
+   * mirror of server state (ADR-0023).
+   */
+  async function reread() {
+    await router.invalidate();
   }
 
   return (
@@ -42,24 +44,24 @@ export function MetricsPage({
             Experiment.
           </p>
         </div>
-        {visibleMetrics.length > 0 ? (
+        {metrics.length > 0 ? (
           <MetricEditorDialog
             appId={appId}
             environmentId={environmentId}
-            metrics={visibleMetrics}
-            onDeleted={deleteMetric}
-            onSaved={saveMetric}
+            metrics={metrics}
+            onDeleted={reread}
+            onSaved={reread}
           />
         ) : null}
       </header>
 
-      {visibleMetrics.length > 0 ? (
+      {metrics.length > 0 ? (
         <MetricsTable
           appId={appId}
           environmentId={environmentId}
-          metrics={visibleMetrics}
-          onDeleted={deleteMetric}
-          onSaved={saveMetric}
+          metrics={metrics}
+          onDeleted={reread}
+          onSaved={reread}
         />
       ) : (
         <EmptyState
@@ -67,9 +69,9 @@ export function MetricsPage({
             <MetricEditorDialog
               appId={appId}
               environmentId={environmentId}
-              metrics={visibleMetrics}
-              onDeleted={deleteMetric}
-              onSaved={saveMetric}
+              metrics={metrics}
+              onDeleted={reread}
+              onSaved={reread}
             />
           }
           description="A Metric combines an event fact with a Binomial, Count, Revenue, or Ratio aggregation."
@@ -79,13 +81,4 @@ export function MetricsPage({
       )}
     </section>
   );
-}
-
-export function upsertMetric(metrics: readonly Metric[], metric: Metric): Metric[] {
-  if (!metrics.some(({ id }) => id === metric.id)) return [...metrics, metric];
-  return metrics.map((candidate) => (candidate.id === metric.id ? metric : candidate));
-}
-
-export function removeMetric(metrics: readonly Metric[], metricId: string): Metric[] {
-  return metrics.filter(({ id }) => id !== metricId);
 }

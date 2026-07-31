@@ -1,9 +1,8 @@
-import type { Metric } from "@splitch/contracts";
 import { Dialog } from "@splitch/ui/components/dialog";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { MetricForm } from "./metric-form";
-import { MetricsPage, removeMetric, upsertMetric } from "./metrics-page";
+import { MetricsPage } from "./metrics-page";
 
 vi.mock("#lib/control-plane-metric-functions", () => ({
   deleteControlPanelMetric: vi.fn(),
@@ -36,26 +35,4 @@ describe("Metric editor dialog", () => {
     expect(html).toContain('id="metric-name"');
     expect(html).toContain("Metric name");
   });
-
-  it("applies Metric upserts and removals to local state", () => {
-    const created = metric({ id: "metric_signups", key: "signups", name: "Signups" });
-    const updated = { ...created, name: "Completed signups" };
-
-    expect(upsertMetric([], created)).toEqual([created]);
-    expect(upsertMetric([created], updated)).toEqual([updated]);
-    expect(removeMetric([updated], created.id)).toEqual([]);
-  });
 });
-
-function metric(overrides: Partial<Metric> = {}): Metric {
-  return {
-    id: "metric_1",
-    appId: "app_billing",
-    name: "Metric",
-    key: "metric",
-    kind: "binomial",
-    eventName: "metric_happened",
-    createdAt: "2026-07-29T00:00:00.000Z",
-    ...overrides,
-  };
-}
