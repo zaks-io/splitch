@@ -1,4 +1,5 @@
 import { envScope } from "@splitch/db";
+import { approvedProposalFreeze } from "./config-store-freeze";
 import {
   type ApplyApprovedFlagConfigInput,
   buildSnapshotFromD1,
@@ -28,6 +29,12 @@ export async function applyApprovedFlagConfig(
   if (!current) return { ok: false, reason: "FLAG_NOT_FOUND" };
   const invalid = validateProposal(current, input);
   if (invalid) return invalid;
+  // Judged against the CURRENT Configuration, not against the proposal's own
+  // snapshot: a Run started after the proposal was minted bumps no Flag
+  // Configuration version, so the optimistic staleness guard cannot see it and
+  // this is the only thing standing between an approver and a frozen field.
+  const frozen = await approvedProposalFreeze(deps, input, current);
+  if (frozen) return frozen;
 
   const patch = {
     enabled: input.proposed.enabled,

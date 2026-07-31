@@ -1,4 +1,5 @@
 import {
+  type ApprovalsClient,
   type AppsClient,
   createControlPlaneSdk,
   type FlagsClient,
@@ -86,6 +87,31 @@ export function createControlPanelFlagsClient(
       delegationOptions,
     ),
   }).flags;
+}
+
+/**
+ * Server-only typed Approvals client over the Control Plane Worker binding.
+ *
+ * No `environmentId`: an Approval Request is App-scoped and can carry Policy
+ * contexts for several Environments at once, so pinning the delegation to one
+ * Environment would name a scope the resource does not have.
+ */
+export function createControlPanelApprovalsClient(
+  controlPlane: Fetcher,
+  actor: ControlPanelActor,
+  delegationSecret: string,
+  delegationOptions?: DelegationOptions,
+): ApprovalsClient {
+  return createControlPlaneSdk({
+    baseUrl: CONTROL_PLANE_INTERNAL_ORIGIN,
+    fetch: panelDelegationFetch(
+      controlPlane,
+      actor,
+      delegationSecret,
+      undefined,
+      delegationOptions,
+    ),
+  }).approvals;
 }
 
 /**

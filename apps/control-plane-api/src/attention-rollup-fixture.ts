@@ -4,7 +4,7 @@ import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runti
 import { afterEach, beforeEach, type Mock, vi } from "vitest";
 import { createApp } from "./app";
 import type { AnalysisResultsReader } from "./attention-analysis-reader";
-import { ids, NOW, seedConfigGraph } from "./config-store-fixture-data";
+import { ids, NOW, seedConfigGraph, startSeededExperiment } from "./config-store-fixture-data";
 import { type LocalBindings, makeLocalBindings } from "./test-fixtures";
 
 export const USER_ID = "user_attention";
@@ -27,6 +27,9 @@ export function setupAttentionRollupFixture(): void {
   beforeEach(async () => {
     bindings = await makeLocalBindings();
     await seedConfigGraph(bindings.d1);
+    // Attention is about work in flight, so the seeded prod Experiment has to be
+    // actually running here.
+    await startSeededExperiment(bindings.d1);
     const repo = createRepository(bindings.d1);
     await repo.identity.createAppMembership({
       appId: ids.appId,

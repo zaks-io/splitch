@@ -31,36 +31,52 @@ const UNBOUND_OPERATION_IDS = [
   "organizations_create",
 ] as const;
 
-export function isControlPanelOperation(value: unknown): value is ControlPanelOperation {
-  if (!isRecord(value) || typeof value.id !== "string") return false;
-  if (value.id === "apps_create") return isResourceOperation(value, "orgId");
-  if (value.id === "app_attention_rollup_get") return isResourceOperation(value, "appId");
-  // An unbound claim carries the id and NOTHING else. `hasKeys` is exact-length,
-  // so a forged claim cannot smuggle an extra resource field past this.
-  if (isUnboundOperationId(value.id)) return hasKeys(value, ["id"]);
-  if (isExperimentMutationOperationId(value.id)) return isExperimentMutationOperation(value);
-  if (value.id === "flag_config_get") return isFlagConfigOperation(value);
-  if (isScopedOperationId(value.id)) return isAppCollectionOperation(value);
-  if (isMetricResourceOperationId(value.id)) return isMetricResourceOperation(value);
-  if (value.id === "api_key_revoke") {
-    return isApiKeyRevokeOperation(value);
-  }
-  return false;
+const EXPERIMENT_MUTATION_OPERATION_IDS = ["experiments_update", "experiments_start"] as const;
+
+const FLAG_CONFIG_OPERATION_IDS = [
+  "flag_config_get",
+  "flag_config_update",
+  "flag_targeting_rules_replace",
+] as const;
+
+const APPROVAL_OPERATION_IDS = ["approval_request_get", "approval_request_review"] as const;
+
+const METRIC_RESOURCE_OPERATION_IDS = ["metrics_get", "metrics_update", "metrics_delete"] as const;
+
+type ClaimGuard = (value: Record<string, unknown>) => boolean;
+
+/**
+ * One guard per operation id, so adding an id to the vocabulary without stating
+ * its claim shape leaves it unclaimable rather than silently falling through to
+ * a looser neighbour's check.
+ *
+ * An unbound claim carries the id and NOTHING else. `hasKeys` is exact-length,
+ * so a forged claim cannot smuggle an extra resource field past any of these.
+ */
+const CLAIM_GUARDS: ReadonlyMap<string, ClaimGuard> = new Map<string, ClaimGuard>([
+  ["apps_create", (value) => isResourceOperation(value, "orgId")],
+  ["app_attention_rollup_get", (value) => isResourceOperation(value, "appId")],
+  ["api_key_revoke", isApiKeyRevokeOperation],
+  ...family(UNBOUND_OPERATION_IDS, (value) => hasKeys(value, ["id"])),
+  ...family(EXPERIMENT_MUTATION_OPERATION_IDS, isExperimentMutationOperation),
+  ...family(FLAG_CONFIG_OPERATION_IDS, isFlagConfigOperation),
+  ...family(APPROVAL_OPERATION_IDS, isApprovalOperation),
+  ...family(SCOPED_OPERATION_IDS, isAppCollectionOperation),
+  ...family(METRIC_RESOURCE_OPERATION_IDS, isMetricResourceOperation),
+]);
+
+function family(ids: readonly string[], guard: ClaimGuard): [string, ClaimGuard][] {
+  return ids.map((id) => [id, guard]);
 }
 
-function isUnboundOperationId(value: string): boolean {
-  return (UNBOUND_OPERATION_IDS as readonly string[]).includes(value);
+export function isControlPanelOperation(value: unknown): value is ControlPanelOperation {
+  if (!isRecord(value) || typeof value.id !== "string") return false;
+  return CLAIM_GUARDS.get(value.id)?.(value) ?? false;
 }
 
 /** Operations named by exactly one resource id: apps_create (Org) and the App rollup. */
 function isResourceOperation(value: Record<string, unknown>, key: string): boolean {
   return hasKeys(value, ["id", key]) && isNonEmptyString(value[key]);
-}
-
-function isExperimentMutationOperationId(
-  id: string,
-): id is "experiments_update" | "experiments_start" {
-  return id === "experiments_update" || id === "experiments_start";
 }
 
 function isExperimentMutationOperation(value: Record<string, unknown>): boolean {
@@ -76,6 +92,20 @@ function isFlagConfigOperation(value: Record<string, unknown>): boolean {
     hasKeys(value, ["id", "appId", "environmentId", "flagId"]) &&
     hasAppEnvironment(value) &&
     isNonEmptyString(value.flagId)
+  );
+}
+
+/**
+ * An Approval claim names the App and the request, and NOTHING else. The
+ * exact-length check matters more here than elsewhere: an extra `environmentId`
+ * smuggled alongside a valid pair would let a forged claim assert a narrower
+ * scope than the App-scoped resource actually has.
+ */
+function isApprovalOperation(value: Record<string, unknown>): boolean {
+  return (
+    hasKeys(value, ["id", "appId", "approvalRequestId"]) &&
+    isNonEmptyString(value.appId) &&
+    isNonEmptyString(value.approvalRequestId)
   );
 }
 
@@ -95,12 +125,6 @@ function hasAppEnvironment(value: Record<string, unknown>): boolean {
   return isNonEmptyString(value.appId) && isNonEmptyString(value.environmentId);
 }
 
-function isMetricResourceOperationId(
-  id: string,
-): id is "metrics_get" | "metrics_update" | "metrics_delete" {
-  return id === "metrics_get" || id === "metrics_update" || id === "metrics_delete";
-}
-
 function isApiKeyRevokeOperation(value: Record<string, unknown>): boolean {
   return (
     hasKeys(value, ["id", "appId", "environmentId", "keyId"]) &&
@@ -108,10 +132,6 @@ function isApiKeyRevokeOperation(value: Record<string, unknown>): boolean {
     isNonEmptyString(value.environmentId) &&
     isNonEmptyString(value.keyId)
   );
-}
-
-function isScopedOperationId(value: string): value is (typeof SCOPED_OPERATION_IDS)[number] {
-  return (SCOPED_OPERATION_IDS as readonly string[]).includes(value);
 }
 
 /**

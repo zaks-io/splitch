@@ -1,14 +1,15 @@
-import { createHash } from "node:crypto";
+import { runConfigHash as hashRunConfig } from "./local-e2e-run-hash.mjs";
 
 /**
  * The frozen assignment config of every seeded Run, plus the config hash the
  * Control Plane would have computed for it.
  *
  * This lives apart from the seed rows because it is the one part of the fixture
- * that is not arbitrary: `runConfigHash` has to mirror the Worker's hashing
+ * that is not arbitrary: the config hash has to mirror the Worker's hashing
  * algorithm exactly, or the seeded Runs carry hashes no code path would ever
  * produce and the e2e suite asserts against fiction. Keeping it next to a few
- * hundred lines of INSERT statements hid that obligation.
+ * hundred lines of INSERT statements hid that obligation. The algorithm itself
+ * lives in `local-e2e-run-hash.mjs` so every fixture module derives it once.
  */
 
 const checkoutTargetingRules = [];
@@ -82,22 +83,10 @@ function variantPair(flag) {
 }
 
 function runConfigHash(runSalt, allocation, variantSet) {
-  const config = {
+  return hashRunConfig({
     salt: runSalt,
     allocation,
     variantSet,
     targetingRules: checkoutTargetingRules,
-  };
-  return `sha256:${createHash("sha256").update(stableStringify(config)).digest("hex")}`;
-}
-
-function stableStringify(value) {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value).sort(([left], [right]) => left.localeCompare(right));
-    return `{${entries
-      .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
+  });
 }

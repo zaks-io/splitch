@@ -7,7 +7,7 @@ import {
 import { appScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeConfigStore } from "../src/config-store";
-import { narrowSeededAvailability } from "../src/config-store-fixture-data";
+import { narrowSeededAvailability, startSeededExperiment } from "../src/config-store-fixture-data";
 import {
   authedPatch,
   faultingCommitRepo,
@@ -45,7 +45,11 @@ afterEach(async () => {
 
 describe("config store write path", () => {
   it("commits D1, writes KV, then broadcasts a delta nudge", async () => {
-    const res = await patchFlagConfig(h, { enabled: true, availableVariantNames: ["control"] });
+    // A live Run, so the KV projection carries the Experiment and its Run — and
+    // therefore the kill switch, the one field group the freeze leaves writable.
+    await startSeededExperiment(h.d1);
+
+    const res = await patchFlagConfig(h, { enabled: true });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       approvalRequest: null,
@@ -54,7 +58,6 @@ describe("config store write path", () => {
         environmentId: ids.environmentId,
         version: 2,
         enabled: true,
-        availableVariantNames: ["control"],
       },
     });
 

@@ -95,6 +95,7 @@ describe("reference Flag Configuration route query flow", () => {
       ok: false,
       error: {
         kind: "field",
+        code: "VALIDATION_ERROR",
         message: "Invalid Flag Configuration",
         fields: [
           { field: "enabled", code: "VALIDATION_ERROR", message: "Cannot disable this Flag" },

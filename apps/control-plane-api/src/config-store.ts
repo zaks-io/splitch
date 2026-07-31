@@ -1,6 +1,7 @@
 import { DeltaNudgeSchema } from "@splitch/contracts";
 import { appScope, type EnvScope, envScope } from "@splitch/db";
 import { applyApprovedFlagConfig } from "./config-store-approved-write";
+import { configPatchFreeze, targetingFreeze } from "./config-store-freeze";
 import { deleteFlagConfigSnapshot } from "./config-store-kv";
 import { promoteFlagConfig, replaceTargetingRules } from "./config-store-mutations";
 import {
@@ -103,6 +104,9 @@ export function makeConfigStore(deps: ConfigStoreDeps): ConfigStoreWriter {
     },
 
     async previewTargetingRules(input) {
+      const frozen = await targetingFreeze(deps, input);
+      if (frozen) return frozen;
+
       const scope = envScope(input.appId, input.environmentId);
       const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
       if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
@@ -183,6 +187,9 @@ async function writeFlagConfig(
   deps: ConfigStoreDeps,
   input: PatchFlagConfigInput,
 ): Promise<FlagConfigWriteResult> {
+  const frozen = await configPatchFreeze(deps, input);
+  if (frozen) return frozen;
+
   const scope = envScope(input.appId, input.environmentId);
   const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
   if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
@@ -232,6 +239,12 @@ async function previewFlagConfig(
   deps: ConfigStoreDeps,
   input: PatchFlagConfigInput,
 ): Promise<FlagConfigWriteResult> {
+  // The preview is what the Policy gate turns into an Approval Request, so it is
+  // refused for the same reason the commit is: a proposal a live Run can never
+  // let land must not exist for a reviewer to approve.
+  const frozen = await configPatchFreeze(deps, input);
+  if (frozen) return frozen;
+
   const scope = envScope(input.appId, input.environmentId);
   const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
   if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };

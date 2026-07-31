@@ -79,12 +79,19 @@ export const ApprovalReviewSchema = z
     }
   })
   .superRefine((review, context) => {
+    // `failed` always carries the error that rolled the application back.
+    // `stale` may carry one: a Request refused for a nameable reason (a Run
+    // freeze, say) resolves stale but records WHY, which is the only thing that
+    // distinguishes it from an ordinary version race. `applied` and `declined`
+    // are outcomes with nothing to explain.
     const hasError = review.error !== null;
-    if (hasError !== (review.outcome === "failed")) {
+    const required = review.outcome === "failed";
+    const allowed = required || review.outcome === "stale";
+    if (hasError ? !allowed : required) {
       context.addIssue({
         code: "custom",
         path: ["error"],
-        message: "only a failed Review requires an error",
+        message: "a failed Review requires an error; only stale may also carry one",
       });
     }
   });

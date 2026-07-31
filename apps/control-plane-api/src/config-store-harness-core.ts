@@ -5,7 +5,7 @@ import type { Hono } from "hono";
 import { createApp } from "./app";
 import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { type ConfigStoreWriter, makeConfigStore } from "./config-store";
-import { ids, NOW, NOW_MS } from "./config-store-fixture-data";
+import { ids, NOW, NOW_MS, startSeededExperiment } from "./config-store-fixture-data";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { appAdminScope } from "./scope-binding";
@@ -15,7 +15,7 @@ const AUDIENCE = "https://cp.splitch.test";
 const TEST_IDEMPOTENCY_KEY = "idem_config_store_test";
 export const USER_ID = "user_config_admin";
 
-export { ids, NOW, NOW_MS };
+export { ids, NOW, NOW_MS, startSeededExperiment };
 
 export interface Harness {
   app: Hono;

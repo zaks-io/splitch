@@ -60,5 +60,12 @@ function FlagDetailRoute() {
     );
   }
 
-  return <FlagDetailPage scopeHref={scopedHref(scope)} view={detail} />;
+  return (
+    <FlagDetailPage
+      appId={scope.appId}
+      environmentId={scope.environmentId}
+      scopeHref={scopedHref(scope)}
+      view={detail}
+    />
+  );
 }

@@ -7,6 +7,7 @@ import type {
   TargetingRule,
 } from "@splitch/contracts";
 import type { ApprovalCommit, Repository } from "@splitch/db";
+import type { RunFrozenFailure } from "./flag-config-run-freeze";
 
 /**
  * The config store's data shapes: what callers hand in, what they get back, and
@@ -87,7 +88,15 @@ type FlagConfigWriteFailure =
    */
   | { ok: false; reason: "APPROVAL_NOT_APPLIED" }
   | { ok: false; reason: "VARIANT_NOT_AVAILABLE"; missingVariants: string[] }
-  | { ok: false; reason: "ROLLOUT_AMBIGUOUS"; availableVariantNames: string[] };
+  | { ok: false; reason: "ROLLOUT_AMBIGUOUS"; availableVariantNames: string[] }
+  /**
+   * A live Run in this Environment owns a field the write would move. Raised by
+   * the store rather than by a route so every caller of the write — the
+   * Configuration PATCH, the Targeting PUT, a Promotion into this Environment,
+   * and an approved Approval Request — is refused by the same check
+   * (flag-config-run-freeze.ts).
+   */
+  | RunFrozenFailure;
 
 export type FlagConfigWriteResult =
   | { ok: true; config: FlagConfigResult; nudge: DeltaNudge }

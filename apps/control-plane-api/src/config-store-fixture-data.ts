@@ -134,7 +134,12 @@ export async function seedConfigGraph(d1: D1Database): Promise<void> {
     key: "checkout-exp",
     flagId: ids.flagId,
     name: "Checkout experiment",
-    status: "running",
+    // Draft by default, started explicitly by the suites that are ABOUT a live
+    // Run. A live Run freezes this Flag's availability, baseline rollout, and
+    // Targeting in this Environment (flag-config-run-freeze.ts), so a fixture
+    // that ships one running would make every unrelated config-write test
+    // negotiate a refusal that has nothing to do with what it asserts.
+    status: "draft",
     targetingKeyField: "userId",
     targetingKeyType: "user",
     metrics: "[]",
@@ -163,6 +168,19 @@ export async function narrowSeededAvailability(
   await d1
     .prepare("UPDATE flag_configs SET available_variant_names = ? WHERE app_id = ?")
     .bind(JSON.stringify(names), ids.appId)
+    .run();
+}
+
+/**
+ * Put the seeded Experiment into the state where `run_live` is actually live.
+ *
+ * Explicit rather than seeded so a suite that depends on a running Experiment
+ * says so in its own setup, and so the freeze it implies is never a surprise.
+ */
+export async function startSeededExperiment(d1: D1Database): Promise<void> {
+  await d1
+    .prepare("UPDATE experiments SET status = 'running' WHERE app_id = ? AND id = ?")
+    .bind(ids.appId, ids.experimentId)
     .run();
 }
 

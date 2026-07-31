@@ -1,13 +1,22 @@
 import { flagConfigKey } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type Harness, ids, NOW, patchFlagConfig, token } from "../src/config-store-harness-core";
+import {
+  type Harness,
+  ids,
+  NOW,
+  patchFlagConfig,
+  startSeededExperiment,
+  token,
+} from "../src/config-store-harness-core";
 import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
 
 let h: Harness;
 
 beforeEach(async () => {
   h = await makeHarness();
+  // This suite is entirely about what a RUNNING Experiment shows on the read.
+  await startSeededExperiment(h.d1);
 });
 
 afterEach(async () => {
@@ -59,14 +68,19 @@ describe("Flag Configuration controlling Experiment", () => {
     expect(body.flagId).toBe(ids.flagId);
   });
 
+  /**
+   * The kill switch, because it is the only field group a live Run leaves writable
+   * — availability and Targeting are refused with `RUN_FROZEN`. The point stands
+   * either way: the lock a write returns is the lock the next read reports.
+   */
   it("keeps the lock aligned with the configuration a write returns", async () => {
-    const res = await patchFlagConfig(h, { enabled: true, availableVariantNames: ["control"] });
+    const res = await patchFlagConfig(h, { enabled: true });
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       approvalRequest: null,
       config: {
-        availableVariantNames: ["control"],
+        enabled: true,
         experiment: { id: ids.experimentId, name: "Checkout experiment" },
       },
     });

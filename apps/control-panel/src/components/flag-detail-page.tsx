@@ -1,17 +1,39 @@
 import type { FlagDetailView } from "#lib/flag-detail-view";
+import { useFlagEditing } from "#lib/use-flag-editing";
 import { FlagDetailDefinition } from "./flag-detail-definition";
 import { FlagDetailEnvConfig } from "./flag-detail-env-config";
 import { FlagDetailExperimentBanner } from "./flag-detail-experiment-banner";
+import { FlagEditOutcome } from "./flag-edit-outcome";
 
 /**
- * The read-complete Flag detail screen.
+ * The Flag detail screen.
  *
  * Order is the message: this Environment's Configuration first, the App-level
  * definition after it as a labeled sub-area (screen-inventory.md). The banner sits
  * above both because it changes how everything below it can be read.
+ *
+ * One editing controller for the whole screen and one outcome region, because
+ * there is one write path. Every control proposes to the Worker and waits; none
+ * of them renders a value the Worker has not confirmed.
  */
-export function FlagDetailPage({ scopeHref, view }: { scopeHref: string; view: FlagDetailView }) {
+export function FlagDetailPage({
+  appId,
+  environmentId,
+  scopeHref,
+  view,
+}: {
+  appId: string;
+  environmentId: string;
+  scopeHref: string;
+  view: FlagDetailView;
+}) {
   const env = view.env;
+  const editing = useFlagEditing({
+    appId,
+    environmentId,
+    flagId: view.flagId,
+    variantLabels: Object.fromEntries(view.catalog.map((variant) => [variant.id, variant.name])),
+  });
 
   return (
     <section className="grid gap-6" aria-labelledby="flag-detail-title">
@@ -41,8 +63,9 @@ export function FlagDetailPage({ scopeHref, view }: { scopeHref: string; view: F
         <FlagDetailExperimentBanner experiment={view.controllingExperiment} scopeHref={scopeHref} />
       ) : null}
 
-      <FlagDetailEnvConfig view={view} />
-      <FlagDetailDefinition view={view} />
+      <FlagEditOutcome editing={editing} />
+      <FlagDetailEnvConfig editing={editing} view={view} />
+      <FlagDetailDefinition editing={editing} view={view} />
     </section>
   );
 }

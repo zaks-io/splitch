@@ -232,3 +232,60 @@ describe("control plane sdk targeting and promotion", () => {
     ).resolves.toEqual({ ok: false, status: 409, error: approvalRequired });
   });
 });
+
+/**
+ * Every mutating Flag Configuration route reads the idempotency key from the
+ * `Idempotency-Key` HEADER and rejects the request outright when it is missing.
+ * The body field alone shipped for a while and made every Control Panel write
+ * fail as a VALIDATION_ERROR about a header the caller never got to set, so the
+ * header is pinned here per route rather than left to the callers to remember.
+ */
+describe("control plane sdk idempotency header", () => {
+  it("sends the Flag Configuration update key in both body and header", async () => {
+    const { sdk, requests } = sdkWith(() => Response.json({ config, approvalRequest: null }));
+
+    await sdk.flags.updateConfig({
+      appId: "app_checkout",
+      environmentId: "env_prod",
+      flagId: "flag_checkout",
+      enabled: true,
+      idempotency_key: "idem_config",
+    });
+
+    expect(requests[0]?.headers.get("idempotency-key")).toBe("idem_config");
+    await expect(requests[0]?.json()).resolves.toMatchObject({ idempotency_key: "idem_config" });
+  });
+
+  it("sends the Targeting Rules replace key in both body and header", async () => {
+    const { sdk, requests } = sdkWith(() => Response.json({ config, approvalRequest: null }));
+
+    await sdk.flags.replaceTargetingRules({
+      appId: "app_checkout",
+      environmentId: "env_prod",
+      flagId: "flag_checkout",
+      targetingRules: [],
+      idempotency_key: "idem_targeting",
+    });
+
+    expect(requests[0]?.headers.get("idempotency-key")).toBe("idem_targeting");
+    await expect(requests[0]?.json()).resolves.toMatchObject({ idempotency_key: "idem_targeting" });
+  });
+
+  it("sends the promotion key in both body and header", async () => {
+    const { sdk, requests } = sdkWith(() =>
+      Response.json({ config, diff: { before: config, after: config }, approvalRequest: null }),
+    );
+
+    await sdk.flags.promote({
+      appId: "app_checkout",
+      targetEnvironmentId: "env_prod",
+      flagId: "flag_checkout",
+      fromEnvironmentId: "env_dev",
+      select: { enabled: true },
+      idempotency_key: "idem_promote",
+    });
+
+    expect(requests[0]?.headers.get("idempotency-key")).toBe("idem_promote");
+    await expect(requests[0]?.json()).resolves.toMatchObject({ idempotency_key: "idem_promote" });
+  });
+});

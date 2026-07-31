@@ -43,6 +43,13 @@ export interface ApprovalDisposition {
   reason: string | null;
   idempotencyKey: string;
   requestHash: string;
+  /**
+   * Why the Request was resolved without applying, when the caller has a reason
+   * beyond the disposition itself. `stale` alone is also what an ordinary
+   * version race writes, and the audit row is where "why did my approved change
+   * never land" gets asked long after the response is gone.
+   */
+  cause?: { errorCode: string; errorDetails: string };
 }
 
 /** Same rule as `ApprovalCommit`: the App comes from the minted scope only. */

@@ -36,7 +36,23 @@ export type ControlPanelOperation =
       appId: string;
       environmentId: string;
     }
-  | { id: "flag_config_get"; appId: string; environmentId: string; flagId: string }
+  | {
+      id: "flag_config_get" | "flag_config_update" | "flag_targeting_rules_replace";
+      appId: string;
+      environmentId: string;
+      flagId: string;
+    }
+  /**
+   * An Approval Request is App-scoped, not Environment-scoped: one request can
+   * carry Policy contexts for several Environments (an App-level Variant change
+   * gated by every Environment that serves it). Binding its claim to a single
+   * Environment would name a scope the resource does not have.
+   */
+  | {
+      id: "approval_request_get" | "approval_request_review";
+      appId: string;
+      approvalRequestId: string;
+    }
   | {
       id:
         | "metrics_list"
@@ -73,6 +89,9 @@ const EXPERIMENTS_COLLECTION_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/experiment
 const ORGANIZATIONS_PATH = /^\/orgs\/?$/;
 const FLAGS_PATH = /^\/apps\/([^/]+)\/flags\/?$/;
 const FLAG_CONFIG_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/config\/?$/;
+const TARGETING_RULES_PATH = /^\/apps\/([^/]+)\/envs\/([^/]+)\/flags\/([^/]+)\/targeting-rules\/?$/;
+const APPROVAL_REQUEST_PATH = /^\/apps\/([^/]+)\/approval-requests\/([^/]+)\/?$/;
+const APPROVAL_REVIEWS_PATH = /^\/apps\/([^/]+)\/approval-requests\/([^/]+)\/reviews\/?$/;
 const METRICS_PATH = /^\/apps\/([^/]+)\/metrics\/?$/;
 const METRIC_PATH = /^\/apps\/([^/]+)\/metrics\/([^/]+)\/?$/;
 const METRIC_COLLECTION_METHODS = {
@@ -104,6 +123,7 @@ export function parseControlPanelOperation(
     parseExperimentCreate(method, pathname) ??
     parseFlags(method, pathname, panelEnvironmentId) ??
     parseConfig(method, pathname) ??
+    parseApproval(method, pathname) ??
     parseEnvironmentSettings(method, pathname) ??
     parseMetrics(method, pathname, panelEnvironmentId)
   );
@@ -189,15 +209,41 @@ function parseFlags(
   return { id: method === "GET" ? "flags_list" : "flags_create", appId, environmentId };
 }
 
+/**
+ * The three per-Environment Flag Configuration operations the panel may reach.
+ * The write pair is named separately from the read so a delegation minted for a
+ * config READ can never be replayed as the PATCH that changes what is served.
+ */
 function parseConfig(method: string, pathname: string): ControlPanelOperation | null {
-  const match = pathname.match(FLAG_CONFIG_PATH);
-  if (method !== "GET" || !match?.[1] || !match[2] || !match[3]) return null;
-  const appId = decodeSegment(match[1]);
-  const environmentId = decodeSegment(match[2]);
-  const flagId = decodeSegment(match[3]);
-  return appId && environmentId && flagId
-    ? { id: "flag_config_get", appId, environmentId, flagId }
-    : null;
+  for (const [pattern, expectedMethod, id] of [
+    [FLAG_CONFIG_PATH, "GET", "flag_config_get"],
+    [FLAG_CONFIG_PATH, "PATCH", "flag_config_update"],
+    [TARGETING_RULES_PATH, "PUT", "flag_targeting_rules_replace"],
+  ] as const) {
+    const match = pathname.match(pattern);
+    if (method !== expectedMethod || !match?.[1] || !match[2] || !match[3]) continue;
+    const [appId, environmentId, flagId] = decodedSegments(match.slice(1, 4));
+    return appId && environmentId && flagId ? { id, appId, environmentId, flagId } : null;
+  }
+  return null;
+}
+
+/**
+ * Reading an Approval Request and reviewing it are separate operations for the
+ * same reason the config read and write are: rendering a proposal's diff must
+ * not carry the authority to apply it.
+ */
+function parseApproval(method: string, pathname: string): ControlPanelOperation | null {
+  for (const [pattern, expectedMethod, id] of [
+    [APPROVAL_REVIEWS_PATH, "POST", "approval_request_review"],
+    [APPROVAL_REQUEST_PATH, "GET", "approval_request_get"],
+  ] as const) {
+    const match = pathname.match(pattern);
+    if (method !== expectedMethod || !match?.[1] || !match[2]) continue;
+    const [appId, approvalRequestId] = decodedSegments(match.slice(1, 3));
+    return appId && approvalRequestId ? { id, appId, approvalRequestId } : null;
+  }
+  return null;
 }
 
 function parseMetrics(

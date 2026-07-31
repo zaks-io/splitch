@@ -7,6 +7,7 @@ import {
   ids,
   patchFlagConfig,
   setProdPolicy,
+  startSeededExperiment,
   USER_ID,
 } from "../src/config-store-harness-core";
 import {
@@ -32,6 +33,9 @@ afterEach(async () => {
 
 describe("a frozen Run outranks the Approval gate", () => {
   it("answers RUN_FROZEN instead of opening a reviewable Request", async () => {
+    // Only this case wants a live Run: the rest of the file proposes ordinary
+    // Flag Configuration writes, which a live Run would refuse outright.
+    await startSeededExperiment(h.d1);
     // Precedence matters: if the gate answered first, a `confirm` Environment
     // would offer a Review that can never legally apply, and approving it would
     // read as authorization to mutate a Variant a running Run has frozen.

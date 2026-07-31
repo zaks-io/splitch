@@ -17,6 +17,7 @@ import {
   recordApplicationFailure,
   requiredAuthDoor,
   resolvedError,
+  resolveUnapplicable,
   reviewForbidden,
 } from "./approval-review-outcomes";
 import { rowTargetVersion } from "./approval-row-target";
@@ -29,6 +30,7 @@ import type {
 } from "./approval-service-types";
 import { currentPolicyProjection } from "./approval-target";
 import type { FlagConfigResult, FlagConfigWriteResult } from "./config-store-types";
+import { runFrozenError } from "./flag-config-run-freeze";
 
 export async function prepareAndApplyApproval(
   deps: ApprovalServiceDeps,
@@ -74,36 +76,8 @@ async function applyAndProject(
   commit: ApprovalCommit,
   input: ReviewApprovalInput,
 ): Promise<ApprovalResult> {
-  try {
-    const request = await approvalRequestProjection(deps.repo, row);
-    const application = isFlagConfigurationOperation(request.operation)
-      ? await applyFlagConfiguration(deps, request, commit)
-      : await deps.applyOther?.(request, commit);
-    if (!application) {
-      return recordApplicationFailure(
-        deps,
-        row,
-        commit,
-        { code: "INTERNAL_SERVER_ERROR", details: {} },
-        input.requestId,
-      );
-    }
-    // A `notApplied` outcome falls through to the reconciliation below, which
-    // reads the stored status and answers applied / resolved / stale.
-    if (!(application.ok || "notApplied" in application)) {
-      return recordApplicationFailure(deps, row, commit, application.error, input.requestId);
-    }
-  } catch (cause) {
-    const current = await deps.repo.approvals.getRequest(appScope(row.appId), row.id);
-    if (current?.status === "applied") throw cause;
-    return recordApplicationFailure(
-      deps,
-      row,
-      commit,
-      { code: "INTERNAL_SERVER_ERROR", details: {} },
-      input.requestId,
-    );
-  }
+  const attempted = await attemptApplication(deps, row, commit, input);
+  if (attempted) return attempted;
 
   const current = await deps.repo.approvals.getRequest(appScope(row.appId), row.id);
   if (current?.status === "applied") {
@@ -113,6 +87,48 @@ async function applyAndProject(
     return { ok: false, response: await resolvedError(deps, current, input.requestId) };
   }
   return staleAfterLostApply(deps, row, commit, input);
+}
+
+/**
+ * Run the proposal against its target and answer only when the attempt itself
+ * decides the Review. `null` means "no verdict here" — a lost guard or a
+ * `notApplied` outcome, both of which the caller settles by re-reading the
+ * stored status rather than by trusting what this attempt observed.
+ */
+async function attemptApplication(
+  deps: ApprovalServiceDeps,
+  row: ApprovalRequestRow,
+  commit: ApprovalCommit,
+  input: ReviewApprovalInput,
+): Promise<ApprovalResult | null> {
+  const internalFailure = () =>
+    recordApplicationFailure(
+      deps,
+      row,
+      commit,
+      { code: "INTERNAL_SERVER_ERROR" as const, details: {} },
+      input.requestId,
+    );
+  let application: ApplicationOutcome | undefined;
+  try {
+    const request = await approvalRequestProjection(deps.repo, row);
+    application = isFlagConfigurationOperation(request.operation)
+      ? await applyFlagConfiguration(deps, request, commit)
+      : await deps.applyOther?.(request, commit);
+  } catch (cause) {
+    const current = await deps.repo.approvals.getRequest(appScope(row.appId), row.id);
+    if (current?.status === "applied") throw cause;
+    return internalFailure();
+  }
+  if (!application) return internalFailure();
+  if (application.ok) return null;
+  if ("unapplicable" in application) {
+    return resolveUnapplicable(deps, row, commit, input.requestId, application.unapplicable);
+  }
+  // A `notApplied` outcome falls through to the caller's reconciliation, which
+  // reads the stored status and answers applied / resolved / stale.
+  if ("notApplied" in application) return null;
+  return recordApplicationFailure(deps, row, commit, application.error, input.requestId);
 }
 
 async function staleAfterLostApply(
@@ -201,6 +217,12 @@ function configFailure(
 ): ApplicationOutcome {
   if (result.reason === "APPROVAL_NOT_APPLIED") {
     return { ok: false as const, notApplied: true as const };
+  }
+  // The Run started after this proposal was minted. Approving it can never be a
+  // legal way to move the field, so the Request is resolved rather than parked.
+  if (result.reason === "RUN_FROZEN") {
+    const { message, details } = runFrozenError(result);
+    return { ok: false as const, unapplicable: { code: "RUN_FROZEN", message, details } };
   }
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return {

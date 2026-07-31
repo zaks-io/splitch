@@ -1,7 +1,20 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FlagDetailView } from "#lib/flag-detail-view";
 import { FlagDetailPage } from "./flag-detail-page";
+
+vi.mock("@tanstack/react-router", () => ({
+  useRouter: () => ({ invalidate: () => Promise.resolve() }),
+}));
+
+// The write path reaches the Worker binding; this suite is about what the screen
+// renders, so the server functions are stubbed rather than the screen reshaped.
+vi.mock("#lib/control-plane-flag-mutations", () => ({
+  updateControlPanelFlagConfig: vi.fn(),
+  editControlPanelTargetingRules: vi.fn(),
+  loadControlPanelApprovalRequest: vi.fn(),
+  reviewControlPanelApprovalRequest: vi.fn(),
+}));
 
 const scopeHref = "/acme-labs/checkout-api/dev";
 
@@ -18,18 +31,31 @@ describe("Flag detail page", () => {
     );
   });
 
-  it("renders the per-Variant availability toggle STATE without making it togglable", () => {
+  it("renders a live availability toggle per catalog Variant", () => {
     const html = render(view());
 
     expect(html).toContain("available in dev");
     expect(html).toContain('data-variant-availability="available"');
     expect(html).toContain('data-variant-availability="unavailable"');
-    // Every switch on this read-only screen is frozen. A single enabled one would
-    // promise a mutation this slice does not implement.
-    const switches = html.match(/data-slot="switch"/g) ?? [];
-    const disabled = html.match(/data-slot="switch"[^>]*data-disabled/g) ?? [];
-    expect(switches).toHaveLength(2);
-    expect(disabled).toHaveLength(switches.length);
+    expect(html).toContain('data-availability-input="control"');
+    expect(html).toContain('data-availability-input="treatment"');
+    // Nothing is frozen while no Experiment controls the Flag, so no switch may
+    // render disabled: a dead switch on an unlocked screen is a lie about the gate.
+    const switches = html.split("<").filter((tag) => tag.includes('data-slot="switch"'));
+    expect(switches).toHaveLength(3);
+    expect(switches.filter((tag) => tag.includes('data-disabled="'))).toEqual([]);
+  });
+
+  it("removes the availability control entirely while an Experiment owns the Variant set", () => {
+    const html = render(
+      view({ controllingExperiment: { id: "exp_1", name: "Checkout Copy Dev" } }),
+    );
+
+    // Structurally absent, not disabled. A locked-but-present control is one
+    // stray click away from proposing a change the Worker will refuse.
+    expect(html).not.toContain("data-availability-input");
+    expect(html).not.toContain("data-flag-targeting-editor");
+    expect(html).toContain('data-flag-kill-switch="true"');
   });
 
   it("makes an unavailable Variant visibly distinct, not merely absent from a count", () => {
@@ -78,7 +104,10 @@ describe("Flag detail page", () => {
     );
 
     expect(html).toContain("No Flag Configuration in this Environment yet");
-    expect(html).toContain("Disabled");
+    // No Configuration means nothing to write, so no control is offered at all
+    // rather than one that proposes against a resource that does not exist.
+    expect(html).not.toContain("data-kill-switch-input");
+    expect(html).not.toContain("data-flag-targeting-editor");
   });
 
   it("does not claim an un-narrowed Configuration can serve nothing", () => {
@@ -105,17 +134,20 @@ describe("Flag detail page", () => {
 });
 
 function render(next: FlagDetailView): string {
-  return renderToStaticMarkup(<FlagDetailPage scopeHref={scopeHref} view={next} />);
+  return renderToStaticMarkup(
+    <FlagDetailPage appId="app_1" environmentId="env_dev" scopeHref={scopeHref} view={next} />,
+  );
 }
 
 function section(html: string, label: string): string {
   const start = html.indexOf(`aria-label="${label}"`);
-  const end = html.indexOf("aria-label=", start + 1);
+  const end = html.indexOf("<section", start + 1);
   return html.slice(start, end === -1 ? undefined : end);
 }
 
 function view(overrides: Partial<FlagDetailView> = {}): FlagDetailView {
   return {
+    flagId: "flag_new_checkout",
     key: "new-checkout",
     name: "New Checkout",
     env: "dev",

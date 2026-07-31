@@ -1,0 +1,299 @@
+import { appScope, envScope } from "@splitch/db";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { approvalRequestProjection } from "../src/approval-model";
+import { narrowSeededAvailability } from "../src/config-store-fixture-data";
+import {
+  type Harness,
+  ids,
+  promoteFlagConfig,
+  setProdPolicy,
+  startSeededExperiment,
+  token,
+} from "../src/config-store-harness-core";
+import { confirmPolicy, proposeA, reviewRequest } from "./approval-harness";
+import { makePoolHarness as makeHarness } from "./config-store-pool-harness";
+
+/**
+ * The freeze has to hold for EVERY writer that can reach a frozen field, not
+ * just the two routes that happen to name it. Both cases below are the
+ * reviewer's executed exploits: each one is a fully authorized App admin
+ * reaching `flag_configs` / `targeting_rules` in `env_prod` while `run_live` is
+ * live, through a door the route-level guard never covered.
+ */
+
+let h: Harness;
+
+afterEach(async () => {
+  await h.dispose();
+});
+
+describe("Promotion into the Environment a live Run owns", () => {
+  beforeEach(async () => {
+    h = await makeHarness();
+    await narrowSeededAvailability(h.d1, ["control", "treatment"]);
+    await h.d1
+      .prepare(
+        "UPDATE flag_configs SET available_variant_names = ? WHERE app_id = ? AND environment_id = ?",
+      )
+      .bind(JSON.stringify(["control"]), ids.appId, ids.devEnvironmentId)
+      .run();
+    await startSeededExperiment(h.d1);
+  });
+
+  it("refuses to strip a live Run's arm out of the target's servable set", async () => {
+    const before = await readProdConfig();
+
+    const res = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { availability: ["treatment"] },
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      code: "RUN_FROZEN",
+      details: {
+        frozenFields: ["flagConfig.availableVariantNames"],
+        currentRunId: ids.liveRunId,
+        recommendedAction: "END_RUNNING_RUN_FIRST",
+      },
+    });
+    const after = await readProdConfig();
+    expect(after.availableVariantNames).toEqual(before.availableVariantNames);
+    expect(after.version).toBe(before.version);
+  });
+
+  it("refuses to replace the target's Targeting Rules", async () => {
+    const before = await readProdConfig();
+
+    const res = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { targeting: true },
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      code: "RUN_FROZEN",
+      details: { frozenFields: ["flagConfig.targetingRules"] },
+    });
+    expect((await readProdConfig()).version).toBe(before.version);
+  });
+
+  /**
+   * Incident control still wins: promoting only `enabled` touches no field the
+   * Run owns, so it must go through exactly as it does with no Run at all.
+   */
+  it("still promotes the kill switch alone", async () => {
+    const res = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { enabled: true },
+    });
+
+    expect(res.status).toBe(200);
+    expect((await readProdConfig()).enabled).toBe(true);
+  });
+
+  /**
+   * The freeze is per-Environment. `env_dev` carries no Run, so the mirror
+   * Promotion — prod into dev — is the same call against an unfrozen target and
+   * must succeed.
+   */
+  it("does not leak the prod Run's freeze into the other direction", async () => {
+    const jwt = await token(h.signer);
+    const res = await h.app.request(
+      `/apps/${ids.appId}/envs/${ids.devEnvironmentId}/flags/${ids.flagId}/promote`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${jwt}`,
+          "content-type": "application/json",
+          "idempotency-key": "idem_promote_into_dev",
+        },
+        body: JSON.stringify({
+          idempotency_key: "idem_promote_into_dev",
+          fromEnvironmentId: ids.environmentId,
+          select: { availability: ["treatment"] },
+        }),
+      },
+    );
+
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("an Approval Request that predates the Run", () => {
+  beforeEach(async () => {
+    h = await makeHarness();
+    await setProdPolicy(h, confirmPolicy);
+  });
+
+  /**
+   * The reviewer's ATTACK-2, reproduced. The proposal is minted legitimately
+   * while nothing is running, so the route guard that refuses ahead of the
+   * Policy gate never sees it. Starting a Run does not bump the Flag
+   * Configuration version either, so the staleness check cannot catch it. The
+   * refusal has to live where the write does.
+   */
+  it("refuses approve_and_apply once a Run owns the field", async () => {
+    const requestId = await proposeA(h);
+    const before = await readProdConfig();
+
+    await startSeededExperiment(h.d1);
+    const res = await reviewRequest(h, requestId, "idem_review_frozen");
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      code: "RUN_FROZEN",
+      details: {
+        frozenFields: ["flagConfig.availableVariantNames"],
+        currentRunId: ids.liveRunId,
+        recommendedAction: "END_RUNNING_RUN_FIRST",
+      },
+    });
+    const after = await readProdConfig();
+    expect(after.availableVariantNames).toEqual(before.availableVariantNames);
+    expect(after.version).toBe(before.version);
+  });
+
+  /**
+   * It must not stay pending. A Request that can only become applicable the
+   * moment the Run ends is a delayed write nobody re-authorized — the same
+   * disguised default the direct refusal exists to prevent (ADR-0036). It
+   * resolves terminally, so the remedy is to re-propose against the state the
+   * Run actually leaves behind.
+   */
+  it("resolves the Request terminally instead of leaving it approvable", async () => {
+    const requestId = await proposeA(h);
+    await startSeededExperiment(h.d1);
+
+    await reviewRequest(h, requestId, "idem_review_frozen");
+
+    const stored = await h.repo.approvals.getRequest(appScope(ids.appId), requestId);
+    expect(stored?.status).toBe("stale");
+    expect(stored?.resolvedAt).not.toBeNull();
+  });
+
+  /**
+   * `stale` alone is the wrong record: it is also what an ordinary version race
+   * writes. Someone asking "why did my approved change never land" gets the
+   * answer from the durable row or not at all, so the cause the response already
+   * carries has to be on the disposition too.
+   */
+  it("records why on the audit row, not only in the response", async () => {
+    const requestId = await proposeA(h);
+    await startSeededExperiment(h.d1);
+
+    await reviewRequest(h, requestId, "idem_review_frozen");
+
+    const row = await h.d1
+      .prepare("SELECT outcome, error_code, error_details FROM approval_reviews WHERE app_id = ?")
+      .bind(ids.appId)
+      .first<{ outcome: string; error_code: string | null; error_details: string | null }>();
+    expect(row?.outcome).toBe("stale");
+    expect(row?.error_code).toBe("RUN_FROZEN");
+    expect(JSON.parse(row?.error_details ?? "null")).toMatchObject({
+      frozenFields: ["flagConfig.availableVariantNames"],
+      currentRunId: ids.liveRunId,
+      recommendedAction: "END_RUNNING_RUN_FIRST",
+    });
+  });
+
+  /**
+   * A durable row nobody can read is not an audit trail. Both readers of the
+   * resolved Request have to hand back the recorded cause: the exact-key replay,
+   * and the Approval Request projection the operator reads afterwards. Answering
+   * the generic version-race refusal here would send them looking for a version
+   * change that never happened.
+   */
+  it("replays the recorded cause instead of a version race", async () => {
+    const requestId = await proposeA(h);
+    await startSeededExperiment(h.d1);
+    await reviewRequest(h, requestId, "idem_review_frozen");
+
+    const replay = await reviewRequest(h, requestId, "idem_review_frozen");
+
+    expect(replay.status).toBe(409);
+    expect(await replay.json()).toMatchObject({
+      code: "RUN_FROZEN",
+      details: {
+        frozenFields: ["flagConfig.availableVariantNames"],
+        currentRunId: ids.liveRunId,
+        recommendedAction: "END_RUNNING_RUN_FIRST",
+      },
+    });
+  });
+
+  it("surfaces the cause on the Approval Request an operator reads back", async () => {
+    const requestId = await proposeA(h);
+    await startSeededExperiment(h.d1);
+    await reviewRequest(h, requestId, "idem_review_frozen");
+
+    const row = await h.repo.approvals.getRequest(appScope(ids.appId), requestId);
+    if (!row) throw new Error("no Approval Request");
+    const projected = await approvalRequestProjection(h.repo, row);
+
+    expect(projected.latestReview?.outcome).toBe("stale");
+    expect(projected.latestReview?.error).toMatchObject({
+      code: "RUN_FROZEN",
+      details: { currentRunId: ids.liveRunId, recommendedAction: "END_RUNNING_RUN_FIRST" },
+    });
+  });
+
+  /**
+   * The other direction, so the cause column stays a signal. A decline resolves
+   * the Request for a reason that is the Review itself; writing an error there
+   * too would make "has a cause" stop meaning anything.
+   */
+  it("writes no cause when the Review is an ordinary decline", async () => {
+    const requestId = await proposeA(h);
+
+    await reviewRequest(h, requestId, "idem_review_decline", "decline");
+
+    const row = await h.d1
+      .prepare("SELECT outcome, error_code, error_details FROM approval_reviews WHERE app_id = ?")
+      .bind(ids.appId)
+      .first<{ outcome: string; error_code: string | null; error_details: string | null }>();
+    expect(row?.outcome).toBe("declined");
+    expect(row?.error_code).toBeNull();
+    expect(row?.error_details).toBeNull();
+  });
+
+  it("keeps refusing a second Review rather than applying on retry", async () => {
+    const requestId = await proposeA(h);
+    await startSeededExperiment(h.d1);
+    await reviewRequest(h, requestId, "idem_review_frozen");
+
+    const retry = await reviewRequest(h, requestId, "idem_review_frozen_retry");
+
+    expect(retry.status).toBe(409);
+    expect((await readProdConfig()).version).toBe(1);
+  });
+
+  /**
+   * The Approval path is not a second freeze rule. With no Run live the exact
+   * same Request applies, which is what proves the refusal above is the Run and
+   * not the Approval machinery refusing everything.
+   */
+  it("applies the same Request while nothing is running", async () => {
+    const requestId = await proposeA(h);
+
+    const res = await reviewRequest(h, requestId, "idem_review_free");
+
+    expect(res.status).toBe(200);
+    expect((await readProdConfig()).availableVariantNames).toEqual(["control"]);
+  });
+});
+
+async function readProdConfig(): Promise<{
+  availableVariantNames: string[];
+  enabled: boolean;
+  version: number;
+}> {
+  const scope = envScope(ids.appId, ids.environmentId);
+  const row = await h.repo.flags.getFlagConfig(scope, ids.flagId);
+  if (!row) throw new Error("readProdConfig: no Flag Configuration");
+  return {
+    availableVariantNames: JSON.parse(row.availableVariantNames) as string[],
+    enabled: row.enabled,
+    version: row.version,
+  };
+}

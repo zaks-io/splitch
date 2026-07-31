@@ -1,6 +1,6 @@
 import { Button } from "@splitch/ui/components/button";
 import { WidgetErrorState } from "@splitch/ui/state/widget-error-state";
-import { Component, Fragment, type ErrorInfo, type ReactNode } from "react";
+import { Component, type ErrorInfo, Fragment, type ReactNode } from "react";
 import { reportBoundaryError } from "#lib/panel-observability";
 
 type WidgetErrorBoundaryProps = {

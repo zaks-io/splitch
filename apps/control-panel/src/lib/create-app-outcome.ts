@@ -89,6 +89,7 @@ function createAppFailure(input: unknown): MutationErrorSurface {
   }
   return {
     kind: "form",
+    code: "TRANSPORT_FAILURE",
     message: "The Control Plane could not create this App. Try again.",
     fields: [],
   };
