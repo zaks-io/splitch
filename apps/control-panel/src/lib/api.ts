@@ -62,6 +62,26 @@ export type MutationErrorSurface =
       readonly fields: readonly [];
     };
 
+/**
+ * A live Run owns these fields. The Worker names them and names the Run; a
+ * message alone would leave the operator guessing which edit to back out and
+ * which Run to end, so each frozen field is pinned to the input it came from.
+ */
+function frozenSurface(
+  error: Extract<ErrorResponse, { code: "RUN_FROZEN" }>,
+): MutationErrorSurface {
+  return {
+    kind: "field",
+    code: error.code,
+    message: error.message,
+    fields: error.details.frozenFields.map((frozen) => ({
+      field: frozen.replace(/^flagConfig\./, ""),
+      code: error.code,
+      message: `${frozen} is frozen while ${error.details.currentRunId} is running`,
+    })),
+  };
+}
+
 /** Turns the control-plane's authoritative error response into form state. */
 export function mutationErrorSurface(
   result: Extract<ApiResult<never>, { ok: false }>,
@@ -95,6 +115,10 @@ export function mutationErrorSurface(
         message: `${variant} is not available in this Environment`,
       })),
     };
+  }
+
+  if (error.code === "RUN_FROZEN") {
+    return frozenSurface(error);
   }
 
   if (result.status === 403) {

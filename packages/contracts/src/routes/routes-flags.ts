@@ -240,6 +240,9 @@ export const flagRoutes = [
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
       "FORBIDDEN",
+      // A live Run in the TARGET Environment owns the availability, baseline
+      // rollout, and Targeting a Promotion would overwrite there.
+      "RUN_FROZEN",
       ...APPROVAL_WRITE_ERRORS,
       "VALIDATION_ERROR",
     ],

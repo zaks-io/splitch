@@ -8,8 +8,15 @@ import { createApproval, replayApprovalIfExists } from "./approval-service";
 import { environmentPolicyContexts, requiresReview } from "./approval-target";
 import type { ConfigStoreWriter } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-do";
-import { configStoreUnavailable, variantNotAvailable } from "./experiment-errors";
-import { flagConfigNotFound, rolloutAmbiguous } from "./flag-config-errors";
+import { configStoreUnavailable } from "./experiment-errors";
+import { flagConfigNotFound } from "./flag-config-errors";
+import {
+  flagConfigPatchInput,
+  flagConfigProposalInput,
+  type PromotionSelect,
+  renderFlagConfigWriteResult,
+  renderPromotionResult,
+} from "./flag-config-handler-render";
 import { flagConfigPatchGates, promotionGates, readEnvironmentPolicy } from "./flag-config-policy";
 import { flagConfigFreezeRefusal, targetingFreezeRefusal } from "./flag-config-run-freeze";
 import { objectBody, pathParam } from "./handler-input";
@@ -416,74 +423,4 @@ export function makeHandlers(deps: HandlerDeps) {
       return renderPromotionResult(result, flagId, targetEnvironmentId, requestId, null);
     },
   };
-}
-
-type FlagConfigWriteResult = Awaited<ReturnType<ConfigStoreWriter["writeFlagConfig"]>>;
-type PromotionResult = Awaited<ReturnType<ConfigStoreWriter["promoteFlagConfig"]>>;
-type PromotionSelect = Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0]["select"];
-
-function flagConfigPatchInput(
-  appId: string,
-  environmentId: string,
-  flagId: string,
-  payload: Record<string, unknown>,
-): Parameters<ConfigStoreWriter["writeFlagConfig"]>[0] {
-  return {
-    appId,
-    environmentId,
-    flagId,
-    ...(payload.enabled !== undefined ? { enabled: payload.enabled as boolean } : {}),
-    ...(payload.availableVariantNames !== undefined
-      ? { availableVariantNames: payload.availableVariantNames as string[] }
-      : {}),
-    ...(payload.rollout !== undefined
-      ? { rollout: payload.rollout as { percentage: number } | null }
-      : {}),
-  };
-}
-
-function flagConfigProposalInput(payload: Record<string, unknown>): Record<string, unknown> {
-  return {
-    ...(payload.enabled !== undefined ? { enabled: payload.enabled } : {}),
-    ...(payload.availableVariantNames !== undefined
-      ? { availableVariantNames: payload.availableVariantNames }
-      : {}),
-    ...(payload.rollout !== undefined ? { rollout: payload.rollout } : {}),
-  };
-}
-
-function renderFlagConfigWriteResult(
-  result: FlagConfigWriteResult,
-  flagId: string,
-  environmentId: string,
-  requestId: string,
-  approvalRequest: import("@splitch/contracts").ApprovalRequest | null,
-): Response {
-  if (result.ok) return Response.json({ config: result.config, approvalRequest });
-  if (result.reason === "VARIANT_NOT_AVAILABLE") {
-    return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
-  }
-  if (result.reason === "ROLLOUT_AMBIGUOUS") {
-    return rolloutAmbiguous(result.availableVariantNames, requestId);
-  }
-  return flagConfigNotFound(requestId);
-}
-
-function renderPromotionResult(
-  result: PromotionResult,
-  flagId: string,
-  environmentId: string,
-  requestId: string,
-  approvalRequest: import("@splitch/contracts").ApprovalRequest | null,
-): Response {
-  if (result.ok) {
-    return Response.json({ config: result.config, diff: result.diff, approvalRequest });
-  }
-  if (result.reason === "VARIANT_NOT_AVAILABLE") {
-    return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
-  }
-  if (result.reason === "ROLLOUT_AMBIGUOUS") {
-    return rolloutAmbiguous(result.availableVariantNames, requestId);
-  }
-  return flagConfigNotFound(requestId);
 }

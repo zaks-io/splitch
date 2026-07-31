@@ -188,6 +188,14 @@ Returns: the updated target Flag Configuration + the immutable Approval diff +
 - Subject to the target Environment's Policy (ADR-0029): under `confirm`, the proposer may perform
   the inline `approve_and_apply` Review. Without it, the durable request remains `pending` and the
   endpoint returns `APPROVAL_REVIEW_REQUIRED`.
+- **Run freeze (target Environment):** a Promotion writes into the target, so it is the **target's**
+  live Run that decides. While a running Experiment owns this Flag there, `select.availability`,
+  `select.rollout`, and `select.targeting` are refused with `RUN_FROZEN`, `recommended_action:
+"END_RUNNING_RUN_FIRST"`, and the target's Run in `current_run_id`; `frozen_fields` names only the
+  field-groups the caller actually ticked. `select.enabled` is exempt, so promoting a kill switch
+  alone still succeeds. The refusal covers the whole request — no field-group is partially promoted —
+  and it is checked before the Policy gate, so a frozen Promotion never becomes a pending Approval
+  Request. The source Environment's Runs are irrelevant: nothing is written there.
 - **Dangling-reference check:** if the resulting target config would have a promoted targeting rule routing
   to a Variant not in the target's available set (after applying `availability`), the request is **rejected**
   with a structured error naming the missing Variant. The panel offers to also tick that Variant's
@@ -223,6 +231,13 @@ metadata commit atomically at the owning D1 boundary. Application failure rolls 
 back, records a failed Review attempt, and leaves the request `pending`. Exact retries replay by
 idempotency key; a later application retry uses a new Review key. Error details are canonical in
 [../contracts/error-responses.md](../contracts/error-responses.md#approval-request-and-review-errors).
+
+A Run that starts after a Request is minted does not change the target's version, so version
+validation cannot see it. `approve_and_apply` therefore re-checks the freeze at the application seam
+and, when a Run now owns a proposed field, returns `RUN_FROZEN` and resolves the Request `stale`.
+Resolving it is deliberate: leaving it `pending` would make it approvable the moment the Run ended,
+which is the silent delayed write the freeze exists to prevent. The remedy is to re-propose against
+the state the operator can currently see, not to retry the Review.
 
 Multiple pending Approval Requests for the same target are allowed. Each is an independent immutable
 proposal against its captured target version. Applying one changes the live target version, so every

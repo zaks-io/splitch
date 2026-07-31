@@ -21,6 +21,17 @@ import { renderError } from "@splitch/worker-runtime";
  * The kill switch is deliberately absent from every frozen set below. An operator
  * must always be able to turn a Flag off in an incident, and no Experiment
  * outranks that (ADR-0029, flag-editing-ux.md).
+ *
+ * WHERE this runs is the whole security property. The refusal belongs to the
+ * WRITE, not to a route: `config-store-mutations.ts` and `config-store-*.ts` are
+ * reached by the Configuration PATCH, the Targeting PUT, the Promotion POST, and
+ * the `approve_and_apply` Review, and a guard bolted onto a subset of those doors
+ * is a guard that the next door walks around. Every store method that can move a
+ * frozen field calls `frozenWriteFailure` itself (see the sweep in
+ * `flag-config-run-freeze-writer-sweep.test.ts`). The two route-level helpers
+ * below are ORDERING, not coverage: they make the refusal land ahead of the
+ * Policy gate so a change that can never apply never becomes a pending Approval
+ * Request for someone to approve into a refusal.
  */
 
 interface LiveRunFreeze {
@@ -34,13 +45,115 @@ export interface FlagTarget {
   flagId: string;
 }
 
+/** The refusal as data, so the store can return it and the routes can render it. */
+export interface RunFrozenFailure {
+  ok: false;
+  reason: "RUN_FROZEN";
+  frozenFields: string[];
+  currentRunId: string;
+  attemptedChange: string;
+}
+
+/** Names match the wire fields an operator is refused, so the error is self-locating. */
+const AVAILABILITY_FIELD = "flagConfig.availableVariantNames";
+const ROLLOUT_FIELD = "flagConfig.rollout";
+const TARGETING_FIELD = "flagConfig.targetingRules";
+
 /**
- * The two entry points the routes call. Both answer `null` when the write is free
- * to proceed, so a caller cannot accidentally treat "not frozen" as a refusal.
+ * The one lookup every writer shares. Answers `null` when the write is free to
+ * proceed, so no caller can accidentally read "not frozen" as a refusal.
  *
- * A Configuration PATCH that touches no frozen field — a kill switch flip — never
- * reaches the lookup, so incident control does not pay for a query whose answer it
- * would ignore.
+ * An empty `frozenFields` — a kill-switch-only patch — never reaches the query,
+ * so incident control does not pay for an answer it would ignore.
+ */
+export async function frozenWriteFailure(
+  repo: Repository,
+  target: FlagTarget,
+  frozenFields: string[],
+  attemptedChange: string,
+): Promise<RunFrozenFailure | null> {
+  if (frozenFields.length === 0) return null;
+  const freeze = await liveRunFreezeForFlag(repo, target);
+  if (!freeze) return null;
+  return {
+    ok: false,
+    reason: "RUN_FROZEN",
+    frozenFields,
+    currentRunId: freeze.runId,
+    attemptedChange: `${attemptedChange}:${target.flagId}`,
+  };
+}
+
+/**
+ * Which fields of a Flag Configuration PATCH a live Run owns.
+ *
+ * `enabled` is never listed. The baseline `rollout` is: a live Run's allocation is
+ * the authority for its traffic and the config baseline is explicitly not applied
+ * while it runs (evaluate-path), so accepting one would confirm "applied" for a
+ * change with zero effect on served traffic until the Run ended.
+ */
+export function frozenConfigFields(payload: {
+  availableVariantNames?: unknown;
+  rollout?: unknown;
+}): string[] {
+  const frozen: string[] = [];
+  if (payload.availableVariantNames !== undefined) frozen.push(AVAILABILITY_FIELD);
+  if (payload.rollout !== undefined) frozen.push(ROLLOUT_FIELD);
+  return frozen;
+}
+
+export function frozenTargetingFields(): string[] {
+  return [TARGETING_FIELD];
+}
+
+/**
+ * A Promotion writes into the TARGET Environment, so it is the target's Run that
+ * judges it, and `select` says exactly which fields it moves. `select.enabled`
+ * alone moves nothing a Run owns and stays free.
+ */
+export function frozenPromotionFields(select: {
+  availability?: string[];
+  targeting?: true;
+  rollout?: true;
+}): string[] {
+  const frozen: string[] = [];
+  if (select.availability !== undefined) frozen.push(AVAILABILITY_FIELD);
+  if (select.rollout) frozen.push(ROLLOUT_FIELD);
+  if (select.targeting) frozen.push(TARGETING_FIELD);
+  return frozen;
+}
+
+/**
+ * An approved proposal is COMPLETE state, not a patch, so what it would MOVE is
+ * the diff against the Configuration as it stands now. Comparing the diff rather
+ * than the payload is what keeps an `enabled`-only proposal — the kill switch
+ * routed through the Approval gate — applicable under a live Run.
+ */
+export function frozenProposalFields(
+  current: {
+    availableVariantNames: string[];
+    rollout: unknown;
+    targetingRules: unknown;
+  },
+  proposed: {
+    availableVariantNames: string[];
+    rollout: unknown;
+    targetingRules: unknown;
+  },
+): string[] {
+  const frozen: string[] = [];
+  if (differs(current.availableVariantNames, proposed.availableVariantNames)) {
+    frozen.push(AVAILABILITY_FIELD);
+  }
+  if (differs(current.rollout, proposed.rollout)) frozen.push(ROLLOUT_FIELD);
+  if (differs(current.targetingRules, proposed.targetingRules)) frozen.push(TARGETING_FIELD);
+  return frozen;
+}
+
+/**
+ * Route-level ORDERING for the Configuration PATCH and the Targeting PUT: refuse
+ * before the Policy gate can mint a proposal. The store refuses these same writes
+ * again on the way to D1 — that second refusal, not this one, is the boundary.
  */
 export async function flagConfigFreezeRefusal(
   repo: Repository,
@@ -48,39 +161,55 @@ export async function flagConfigFreezeRefusal(
   payload: Record<string, unknown>,
   requestId: string,
 ): Promise<Response | null> {
-  return refusal(repo, target, frozenConfigFields(payload), "PATCH_FLAG_CONFIG", requestId);
-}
-
-export function targetingFreezeRefusal(
-  repo: Repository,
-  target: FlagTarget,
-  requestId: string,
-): Promise<Response | null> {
-  return refusal(repo, target, frozenTargetingFields(), "PUT_TARGETING_RULES", requestId);
-}
-
-async function refusal(
-  repo: Repository,
-  target: FlagTarget,
-  frozenFields: string[],
-  attemptedChange: string,
-  requestId: string,
-): Promise<Response | null> {
-  if (frozenFields.length === 0) return null;
-  const freeze = await liveRunFreezeForFlag(repo, target);
-  if (!freeze) return null;
-  return flagConfigRunFrozen(
-    freeze,
-    frozenFields,
-    `${attemptedChange}:${target.flagId}`,
-    requestId,
+  const failure = await frozenWriteFailure(
+    repo,
+    target,
+    frozenConfigFields(payload),
+    "PATCH_FLAG_CONFIG",
   );
+  return failure ? runFrozenResponse(failure, requestId) : null;
 }
 
-/** Names match the wire fields an operator is refused, so the error is self-locating. */
-const AVAILABILITY_FIELD = "flagConfig.availableVariantNames";
-const ROLLOUT_FIELD = "flagConfig.rollout";
-const TARGETING_FIELD = "flagConfig.targetingRules";
+export async function targetingFreezeRefusal(
+  repo: Repository,
+  target: FlagTarget,
+  requestId: string,
+): Promise<Response | null> {
+  const failure = await frozenWriteFailure(
+    repo,
+    target,
+    frozenTargetingFields(),
+    "PUT_TARGETING_RULES",
+  );
+  return failure ? runFrozenResponse(failure, requestId) : null;
+}
+
+/**
+ * The refusal, carrying the Run that owns the field and a remedy the operator can
+ * actually perform. `END_RUNNING_RUN_FIRST` and not `CREATE_NEW_RUN`: opening a new
+ * Run is the remedy for an Experiment assignment edit, and offering it here would
+ * send the operator somewhere that does not change this Flag Configuration at all.
+ */
+export function runFrozenResponse(failure: RunFrozenFailure, requestId: string): Response {
+  return renderError(runFrozenError(failure), { requestId });
+}
+
+export function runFrozenError(failure: RunFrozenFailure) {
+  return {
+    code: "RUN_FROZEN" as const,
+    message: runFrozenMessage(failure.currentRunId),
+    details: {
+      frozenFields: failure.frozenFields,
+      currentRunId: failure.currentRunId,
+      attemptedChange: failure.attemptedChange,
+      recommendedAction: "END_RUNNING_RUN_FIRST" as const,
+    },
+  };
+}
+
+function runFrozenMessage(runId: string): string {
+  return `running Run ${runId} owns this Flag Configuration field; end it to change this`;
+}
 
 async function liveRunFreezeForFlag(
   repo: Repository,
@@ -101,48 +230,6 @@ async function liveRunFreezeForFlag(
   };
 }
 
-/**
- * Which fields of a Flag Configuration PATCH a live Run owns.
- *
- * `enabled` is never listed. The baseline `rollout` is: a live Run's allocation is
- * the authority for its traffic and the config baseline is explicitly not applied
- * while it runs (evaluate-path), so accepting one would confirm "applied" for a
- * change with zero effect on served traffic until the Run ended.
- */
-function frozenConfigFields(payload: Record<string, unknown>): string[] {
-  const frozen: string[] = [];
-  if (payload.availableVariantNames !== undefined) frozen.push(AVAILABILITY_FIELD);
-  if (payload.rollout !== undefined) frozen.push(ROLLOUT_FIELD);
-  return frozen;
-}
-
-function frozenTargetingFields(): string[] {
-  return [TARGETING_FIELD];
-}
-
-/**
- * The refusal, carrying the Run that owns the field and a remedy the operator can
- * actually perform. `END_RUNNING_RUN_FIRST` and not `CREATE_NEW_RUN`: opening a new
- * Run is the remedy for an Experiment assignment edit, and offering it here would
- * send the operator somewhere that does not change this Flag Configuration at all.
- */
-function flagConfigRunFrozen(
-  freeze: LiveRunFreeze,
-  frozenFields: string[],
-  attemptedChange: string,
-  requestId: string,
-): Response {
-  return renderError(
-    {
-      code: "RUN_FROZEN",
-      message: `running Run ${freeze.runId} owns this Flag Configuration field; end it to change this`,
-      details: {
-        frozenFields,
-        currentRunId: freeze.runId,
-        attemptedChange,
-        recommendedAction: "END_RUNNING_RUN_FIRST",
-      },
-    },
-    { requestId },
-  );
+function differs(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) !== JSON.stringify(right);
 }

@@ -21,7 +21,23 @@ export interface ApprovalServiceDeps {
 export type ApplicationOutcome =
   | { ok: true }
   | { ok: false; notApplied: true }
+  /**
+   * The proposal can never be applied AS PROPOSED, no matter how often it is
+   * reviewed: the world it was written against has moved on in a way the target
+   * version cannot express. The Request is resolved terminally rather than
+   * recorded as a retryable failure, because a Request that only becomes
+   * approvable again once some other condition lifts is a delayed write nobody
+   * re-authorized (ADR-0036). The carried error is surfaced verbatim so the
+   * reviewer learns WHAT refused it, not just that something did.
+   */
+  | { ok: false; unapplicable: UnapplicableProposal }
   | { ok: false; error: { code: ErrorCode; details: Record<string, unknown> } };
+
+export interface UnapplicableProposal {
+  code: ErrorCode;
+  message: string;
+  details: Record<string, unknown>;
+}
 
 export type ApprovalResult =
   | { ok: true; approvalRequest: ApprovalRequest }

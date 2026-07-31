@@ -15,6 +15,7 @@ import {
   targetingRuleRows,
   writeSnapshotAndBroadcast,
 } from "./config-store-shared";
+import { promotionFreeze, targetingFreeze } from "./config-store-freeze";
 import { randomHex } from "./credential-cache";
 import { baselineIsUnresolvable, mintSalt } from "./flag-config-rollout";
 
@@ -30,6 +31,9 @@ export async function replaceTargetingRules(
   deps: ConfigStoreDeps,
   input: ReplaceTargetingRulesInput,
 ): Promise<FlagConfigWriteResult> {
+  const frozen = await targetingFreeze(deps, input);
+  if (frozen) return frozen;
+
   const scope = envScope(input.appId, input.environmentId);
   const snapshot = await buildSnapshotFromD1(deps.repo, scope, input.flagId);
   if (!snapshot) return { ok: false, reason: "FLAG_NOT_FOUND" };
@@ -50,6 +54,12 @@ export async function promoteFlagConfig(
   deps: ConfigStoreDeps,
   input: PromoteFlagConfigInput,
 ): Promise<PromoteFlagConfigResult> {
+  // Covers the preview too, and deliberately: `previewPromotion` is what the
+  // Policy gate turns into an Approval Request, so refusing here is what stops a
+  // frozen Promotion from being parked as a pending proposal.
+  const frozen = await promotionFreeze(deps, input);
+  if (frozen) return frozen;
+
   const loaded = await loadPromotionSnapshots(deps, input);
   if (!loaded.ok) return loaded;
 

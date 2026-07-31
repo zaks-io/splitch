@@ -17,6 +17,7 @@ import type {
   ApprovalReviewRow,
   ApprovalServiceDeps,
   ReviewApprovalInput,
+  UnapplicableProposal,
 } from "./approval-service-types";
 
 export async function materializeStale(
@@ -54,6 +55,49 @@ export async function materializeStale(
         },
       },
       { requestId: input.requestId },
+    ),
+  };
+}
+
+/**
+ * Resolve a Request that can never apply as proposed, and say why.
+ *
+ * `stale` is the disposition because that is exactly what happened: the proposal
+ * still describes a world that no longer exists, and the operator's move is to
+ * re-propose against the state they can actually see. It is NOT recorded as a
+ * retryable application failure — that would leave the Request pending and
+ * approvable the instant the blocking condition lifted, which is the silent
+ * delayed write the refusal exists to prevent.
+ */
+export async function resolveUnapplicable(
+  deps: ApprovalServiceDeps,
+  row: ApprovalRequestRow,
+  commit: ApprovalCommit,
+  requestId: string,
+  refusal: UnapplicableProposal,
+): Promise<ApprovalResult> {
+  const resolved = await deps.repo.approvals.resolveWithoutApplication(appScope(row.appId), {
+    requestId: row.id,
+    reviewId: commit.reviewId,
+    action: "approve_and_apply",
+    outcome: "stale",
+    reviewedBy: commit.reviewedBy,
+    reviewedVia: commit.reviewedVia,
+    reviewedAt: commit.reviewedAt,
+    reason: commit.reason,
+    idempotencyKey: commit.idempotencyKey,
+    requestHash: commit.requestHash,
+  });
+  if (!resolved) return resolvedWinner(deps, row.appId, row.id, requestId);
+  return {
+    ok: false,
+    response: renderError(
+      {
+        code: refusal.code,
+        message: refusal.message,
+        details: refusal.details,
+      } as Parameters<typeof renderError>[0],
+      { requestId },
     ),
   };
 }

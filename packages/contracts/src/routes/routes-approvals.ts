@@ -63,6 +63,9 @@ export const approvalRoutes = [
       "APPROVAL_REQUEST_STALE",
       "APPROVAL_REQUEST_RESOLVED",
       "APPROVAL_APPLICATION_FAILED",
+      // `approve_and_apply` on a Flag Configuration proposal that a Run started
+      // owning after it was minted. The Request resolves; it is not retryable.
+      "RUN_FROZEN",
       "IDEMPOTENCY_KEY_CONFLICT",
       "VALIDATION_ERROR",
     ],
