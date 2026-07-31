@@ -105,12 +105,14 @@ test.describe("Honest Control Panel shell navigation", () => {
     page,
     request,
   }) => {
-    // Segments is hidden from navigation while SPL-112 is unfinished. Hiding the
-    // link must not change what a direct request gets back.
+    // Segments is hidden from navigation while SPL-112 is unfinished, and
+    // registered `deferred`. A direct request for a `deferred` destination is
+    // the Worker's honest 404 (SPL-253), not a client redirect and not the
+    // implementation-status copy the old stub used to render.
     const hidden = await page.request.get("/acme-labs/checkout-api/dev/segments", {
       maxRedirects: 0,
     });
-    expect(hidden.status()).toBe(200);
+    expect(hidden.status()).toBe(404);
     expect(hidden.headers().location).toBeUndefined();
 
     const signedOut = await request.get("/acme-labs/checkout-api/dev/segments", {
@@ -118,6 +120,18 @@ test.describe("Honest Control Panel shell navigation", () => {
     });
     expect([302, 307]).toContain(signedOut.status());
     expect(signedOut.headers().location).toContain("/auth/login?returnTo=");
+
+    // The deferred 404 is self-explaining and offers no remedy the user
+    // cannot act on (ADR-0036) — no implementation-status copy, no dead link.
+    await page.goto("/acme-labs/checkout-api/dev/segments");
+    const deferredError = page.locator("[data-slot='error-page']");
+    await expect(deferredError).toContainText("404");
+    await expect(page.getByText("This destination is not available yet.")).toBeVisible();
+    const deferredCopy = (await deferredError.innerText()).trim();
+    for (const pattern of IMPLEMENTATION_STATUS_COPY) {
+      expect(deferredCopy).not.toMatch(pattern);
+    }
+    await expect(deferredError.getByRole("button", { name: "No action available" })).toBeVisible();
 
     // An invalid deep link still resolves to the Worker's 404, hidden or not.
     await page.goto("/acme-labs/no-such-app/dev/segments");

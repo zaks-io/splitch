@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   appSectionRegistry,
+  deferredDestinationAt,
   environmentSwitchHref,
   type NavigationDestination,
   scopedHref,
@@ -100,6 +101,49 @@ describe("Visible navigation destinations", () => {
       if (destination.status === "shipped") continue;
       expect(destination.hiddenBecause, `${destination.label} hidden reason`).toBeTruthy();
     }
+  });
+});
+
+describe("Deferred destination deep links", () => {
+  /**
+   * Driven off `appSectionRegistry` rather than hardcoding "Segments", so
+   * this proves the whole `deferred` class: registering a second entry
+   * `deferred` covers it here automatically, with no test change required.
+   */
+  const deferredDestinations = appSectionRegistry.filter(
+    (destination) => destination.status === "deferred",
+  );
+
+  it("has at least one deferred destination to prove the class against", () => {
+    expect(deferredDestinations.length).toBeGreaterThan(0);
+  });
+
+  it("matches a direct request for every deferred destination's href", () => {
+    for (const destination of deferredDestinations) {
+      const href = scopedHref(
+        scope,
+        destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
+      );
+      expect(deferredDestinationAt(href, scope), `${destination.label} (${href})`).toBe(
+        destination,
+      );
+    }
+  });
+
+  it("never matches a shipped destination's href", () => {
+    for (const destination of visibleAppSections) {
+      const href = scopedHref(
+        scope,
+        destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
+      );
+      expect(deferredDestinationAt(href, scope), `${destination.label} (${href})`).toBeUndefined();
+    }
+  });
+
+  it("does not match an unrelated pathname", () => {
+    expect(
+      deferredDestinationAt("/acme-labs/checkout-api/dev/no-such-section", scope),
+    ).toBeUndefined();
   });
 });
 

@@ -54,6 +54,32 @@ export function scopedHref(scope: UrlScope, section = ""): string {
   return section ? `${root}/${section.replace(/^\/+/, "")}` : root;
 }
 
+const APP_SCOPE_PREFIX = "/$orgSlug/$appSlug/$env";
+
+function destinationSection(to: string): string {
+  return to.startsWith(APP_SCOPE_PREFIX)
+    ? to.slice(APP_SCOPE_PREFIX.length).replace(/^\/+/, "")
+    : to;
+}
+
+/**
+ * Registering a destination `deferred` hides it from the sidebar, but the
+ * route still exists and a bookmark or shared link can still reach it. This
+ * matches a direct request's pathname against every `deferred` entry in the
+ * registry (not just Segments), so the App-scope loader can answer the whole
+ * class uniformly instead of each deferred route file special-casing itself.
+ */
+export function deferredDestinationAt(
+  pathname: string,
+  scope: UrlScope,
+): NavigationDestination | undefined {
+  return appSectionRegistry.find(
+    (destination) =>
+      destination.status === "deferred" &&
+      scopedHref(scope, destinationSection(destination.to)) === pathname,
+  );
+}
+
 export function environmentSwitchHref(
   currentHref: string,
   scope: UrlScope,
