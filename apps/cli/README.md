@@ -47,6 +47,8 @@ The CLI login is separate from the credentials used by your application at runti
 | API Key    | Trusted servers and edge functions           | Secret; create with `splitch api-keys create` and store the value shown once in a secret manager. |
 
 Both credentials belong to one App and one Environment. Do not use an API Key in client-side code.
+New Client Keys start open to all origins so they work immediately. Lock the Client Key to your
+App's origins before production.
 The CLI's `flags verify` command fetches the selected Environment's Client Key and uses it for a
 non-exposing data-plane check; it does not use either SDK credential to log in to the control plane.
 
@@ -81,7 +83,7 @@ splitch flags list --json
 Verify one Flag for a Targeting Key without firing an Exposure:
 
 ```bash
-splitch flags verify flag_checkout --targeting-key user-123 --json
+splitch flags verify checkout --targeting-key user-123 --json
 ```
 
 ```json
@@ -93,5 +95,6 @@ Pass `--app` and `--env` on an individual command when you do not want to persis
 
 ## Full quickstart
 
-See [`docs/spec/quickstart.md`](../../docs/spec/quickstart.md) for the complete path from
-authentication through the first real Exposure.
+Read the [public quickstart](https://splitch.dev/quickstart) for the complete path from authentication
+through the first real Exposure. Its source is
+[`docs/spec/quickstart.md`](../../docs/spec/quickstart.md).
