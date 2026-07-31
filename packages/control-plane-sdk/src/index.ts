@@ -98,6 +98,7 @@ export type { EnvironmentsClient } from "./environments-client";
 export type { ExperimentsClient } from "./experiments-client";
 export type { FlagsClient } from "./flags-client";
 export type {
+  ControlPlaneIdempotentOperationOptions,
   ControlPlaneOperationOptions,
   ControlPlaneOperationResult,
 } from "./operation-result";

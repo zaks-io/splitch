@@ -12,6 +12,16 @@ export interface ControlPlaneOperationOptions {
   readonly idempotencyKey?: string;
 }
 
+/**
+ * Options for a body-less `idempotency: "required"` route. Every other required
+ * route gets a compile error from a non-optional `idempotency_key` schema field;
+ * these two carry the key out-of-band, so the type has to carry the requirement
+ * (SPL-266). The runtime throw in `withIdempotencyHeader` stays as the backstop.
+ */
+export interface ControlPlaneIdempotentOperationOptions extends ControlPlaneOperationOptions {
+  readonly idempotencyKey: string;
+}
+
 export type ControlPlaneOperationResult<T = unknown> =
   | { ok: true; data: T; status: number }
   | { ok: false; error: ErrorResponse; status: number };

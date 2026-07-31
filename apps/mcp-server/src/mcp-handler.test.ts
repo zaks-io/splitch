@@ -180,17 +180,12 @@ describe("mcp server errors and config", () => {
   it("returns upstream ErrorResponse as a tool error when the Worker rejects Zod body", async () => {
     const seen: SeenRequest[] = [];
     const baseUrl = await bootControlPlaneApi(seen);
+    // Valid idempotency key, deliberately invalid `variants`: the Worker's body
+    // rejection is what this asserts, not the adapter's own key check.
+    const args = { appId: "app_local", key: "checkout", schema: null, variants: [] };
     const response = await mcp(
       "tools/call",
-      {
-        name: "flags_create",
-        arguments: {
-          appId: "app_local",
-          key: "checkout",
-          schema: null,
-          variants: [],
-        },
-      },
+      { name: "flags_create", arguments: { ...args, idempotency_key: "idem_probe" } },
       { controlPlaneBaseUrl: baseUrl },
     );
     const body = (await response.json()) as JsonRpcSuccess<ToolResult<ErrorResponse>>;

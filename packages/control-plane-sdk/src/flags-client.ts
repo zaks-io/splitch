@@ -33,7 +33,11 @@ import {
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
 import { withIdempotencyHeader } from "./idempotency-header";
-import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "./operation-result";
+import type {
+  ControlPlaneIdempotentOperationOptions,
+  ControlPlaneOperationOptions,
+  ControlPlaneOperationResult,
+} from "./operation-result";
 
 export interface FlagsClient {
   list(
@@ -54,7 +58,7 @@ export interface FlagsClient {
   ): Promise<ControlPlaneOperationResult<FlagsUpdateOutput>>;
   delete(
     input: FlagsDeleteInput,
-    options?: ControlPlaneOperationOptions,
+    options: ControlPlaneIdempotentOperationOptions,
   ): Promise<ControlPlaneOperationResult<FlagsDeleteOutput>>;
   createVariant(
     input: FlagVariantsCreateInput,
@@ -66,7 +70,7 @@ export interface FlagsClient {
   ): Promise<ControlPlaneOperationResult<FlagVariantsUpdateOutput>>;
   deleteVariant(
     input: FlagVariantsDeleteInput,
-    options?: ControlPlaneOperationOptions,
+    options: ControlPlaneIdempotentOperationOptions,
   ): Promise<ControlPlaneOperationResult<FlagVariantsDeleteOutput>>;
   getConfig(
     input: FlagConfigGetInput,
@@ -127,6 +131,8 @@ export function createFlagsClient(
         ),
       );
     },
+    // `?.` despite the non-optional signature: an untyped caller must still get the
+    // named throw from `withIdempotencyHeader`, not a TypeError (SPL-266).
     delete: (input, callOptions) =>
       invokeHcRoute<FlagsDeleteOutput>("flags_delete", () =>
         hcClient.apps[":appId"].flags[":flagId"].$delete(

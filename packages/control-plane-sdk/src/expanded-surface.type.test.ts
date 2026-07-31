@@ -85,11 +85,14 @@ async function typeChecks() {
     idempotency_key: "variant-update-2",
   });
 
-  await sdk.flags.deleteVariant({
-    appId: "app_local",
-    flagId: "flag_local",
-    variantName: "treatment",
-  });
+  await sdk.flags.deleteVariant(
+    {
+      appId: "app_local",
+      flagId: "flag_local",
+      variantName: "treatment",
+    },
+    { idempotencyKey: "variant-delete-2" },
+  );
 
   // --- Targeting rules and promotion --------------------------------------
   await sdk.flags.replaceTargetingRules({

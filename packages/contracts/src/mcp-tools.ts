@@ -92,14 +92,32 @@ function deriveInputSchema(route: ApiRouteContract): z.ZodTypeAny {
   if (bodyObject) {
     Object.assign(shape, bodyObject.shape);
   } else if (body) {
-    if (Object.keys(shape).length > 0) {
+    if (needsFlatShape(route, shape)) {
       throw new Error(
-        `mcp-tools: route "${route.operationId}" cannot derive flat input from non-object body plus path/query fields`,
+        `mcp-tools: route "${route.operationId}" cannot derive flat input from non-object body plus path/query or idempotency fields`,
       );
     }
     return body;
   }
-  return z.object(shape);
+  return z.object(withIdempotencyKeyField(route, shape));
+}
+
+/** A non-object body can only be the whole tool input when the route needs no sibling fields. */
+function needsFlatShape(route: ApiRouteContract, shape: z.ZodRawShape): boolean {
+  return Object.keys(shape).length > 0 || route.idempotency === "required";
+}
+
+/**
+ * A `required` route whose contract gives the key no request body — the DELETE
+ * mutations — would otherwise derive a strict schema that forbids the one field
+ * the MCP adapter reads, leaving the agent an unsatisfiable request with no
+ * reachable remedy (ADR-0036, SPL-266).
+ */
+function withIdempotencyKeyField(route: ApiRouteContract, shape: z.ZodRawShape): z.ZodRawShape {
+  if (route.idempotency !== "required" || shape.idempotency_key) {
+    return shape;
+  }
+  return { ...shape, idempotency_key: z.string().min(1) };
 }
 
 function unwrapOptionalObject(schema: z.ZodTypeAny | undefined): z.ZodObject | undefined {
