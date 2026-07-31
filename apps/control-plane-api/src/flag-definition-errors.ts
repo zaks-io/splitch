@@ -1,6 +1,41 @@
+import type { VariantRunFreeze } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import type { RunningBlocker } from "./flag-definition-guards";
 import type { ValidationIssue } from "./flag-definition-schema";
+
+/**
+ * The rename refusal, raised by the repository seam (`updateVariant`) and only
+ * RENDERED here.
+ *
+ * `flagConfig.availableVariantNames` is the frozen field named, not some new
+ * one: renaming a Variant removes its old name from every Environment's
+ * available set, which is the same act SPL-118 already refuses. Naming the field
+ * an operator actually sees keeps one refusal for one invariant.
+ *
+ * `END_RUNNING_RUN_FIRST`, never `CREATE_NEW_RUN`: a new Run cannot be opened
+ * while this one is live, so offering it would be an impossible remedy
+ * (ADR-0036). The Environment is in the message because the `RUN_FROZEN` details
+ * contract has no field for it.
+ */
+export function variantRenameRunFrozenError(
+  freeze: VariantRunFreeze,
+  variantName: string,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "RUN_FROZEN",
+      message: `running Run ${freeze.runId} in Environment ${freeze.environmentId} allocates traffic to Variant "${variantName}" by name; end it before renaming this Variant`,
+      details: {
+        frozenFields: ["flagConfig.availableVariantNames"],
+        currentRunId: freeze.runId,
+        attemptedChange: `RENAME_VARIANT:${variantName}`,
+        recommendedAction: "END_RUNNING_RUN_FIRST" as const,
+      },
+    },
+    { requestId },
+  );
+}
 
 export function validationError(requestId: string, issue: [string[], string]): Response {
   return validationErrors(requestId, [{ path: issue[0], message: issue[1] }]);

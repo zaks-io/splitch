@@ -1,5 +1,5 @@
-import { and, eq, exists, sql } from "drizzle-orm";
-import { approvalRequests, flagConfigs, flags, variants } from "../schema/index";
+import { and, eq, exists, inArray, sql } from "drizzle-orm";
+import { approvalRequests, environments, flagConfigs, flags, variants } from "../schema/index";
 import {
   appliedRequestUpdate,
   appliedReviewInsert,
@@ -9,7 +9,8 @@ import {
 } from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
-import type { TenantScope } from "./scope";
+import { liveRunUsingVariant, type VariantRunFreeze } from "./flag-variant-run-freeze";
+import { assertMintedScope, type TenantScope } from "./scope";
 
 /**
  * Carry a Variant rename into every Environment's available set for the Flag,
@@ -20,6 +21,19 @@ import type { TenantScope } from "./scope";
  * The `version` bump is load-bearing, not bookkeeping: it is what makes a
  * pending flag_configuration proposal for the same row render `stale` and what
  * lets `updateFlagConfig`'s optimistic version guard see this write at all.
+ *
+ * EVERY Environment is deliberate, not an oversight: the Variant catalog is
+ * App-level (ADR-0028) and the name is one shared value, so a rename that
+ * reached only some Environments would leave the rest naming a Variant that no
+ * longer exists. What the Environment axis buys here (ADR-0027) is a BOUND: the
+ * rewrite is restricted to `environment_id`s that belong to this App, so an
+ * Environment row that has been removed, or a `flag_configs` row whose
+ * `environment_id` has drifted out of the App, is not silently rewritten and
+ * version-bumped. `app_id` is the tenant boundary (ADR-0018) and is unchanged.
+ *
+ * This function is module-private ON PURPOSE. Its only caller is
+ * `makeUpdateVariant` below, which refuses the rename when a live Run owns the
+ * name; exporting it would create a door around that refusal.
  */
 function renameAvailableVariant(
   db: Db,
@@ -29,6 +43,7 @@ function renameAvailableVariant(
   to: string,
   options: { approval?: ApprovalCommit; updatedAt?: string },
 ) {
+  assertMintedScope(scope);
   const approval = options.approval;
   return db
     .update(flagConfigs)
@@ -41,6 +56,13 @@ function renameAvailableVariant(
       and(
         eq(flagConfigs.appId, scope.appId),
         eq(flagConfigs.flagId, flagId),
+        inArray(
+          flagConfigs.environmentId,
+          db
+            .select({ id: environments.id })
+            .from(environments)
+            .where(eq(environments.appId, scope.appId)),
+        ),
         sql`EXISTS (SELECT 1 FROM json_each(${flagConfigs.availableVariantNames}) WHERE "value" = ${from})`,
         ...(approval ? [reviewRecorded(db, scope, approval)] : []),
       ),
@@ -155,6 +177,23 @@ type VariantByName = (
   name: string,
 ) => Promise<typeof variants.$inferSelect | null>;
 
+/**
+ * The Variant update as a RESULT, not a nullable row.
+ *
+ * `RUN_FROZEN` is a member of this union rather than a thrown error or a `null`
+ * so a caller that forgets the refusal fails to COMPILE — the same move SPL-118
+ * made when it added `RunFrozenFailure` to `FlagConfigWriteFailure`. `null` used
+ * to mean both "no such Variant" and "the Approval-guarded write landed
+ * nothing", which is exactly the ambiguity a refusal must not join.
+ */
+export type UpdateVariantResult =
+  | { ok: true; variant: typeof variants.$inferSelect }
+  /** No Variant by that name, or the Flag is not in this App scope. */
+  | { ok: false; reason: "NOT_FOUND" }
+  /** The Approval-guarded write selected zero rows; no Review landed. */
+  | { ok: false; reason: "NOT_APPLIED" }
+  | { ok: false; reason: "RUN_FROZEN"; freeze: VariantRunFreeze; variantName: string };
+
 export function makeUpdateVariant(
   db: Db,
   flagInScope: (scope: TenantScope, flagId: string) => Promise<typeof flags.$inferSelect | null>,
@@ -171,11 +210,20 @@ export function makeUpdateVariant(
       updatedBy?: string;
       approval?: ApprovalCommit;
     },
-  ): Promise<typeof variants.$inferSelect | null> {
+  ): Promise<UpdateVariantResult> {
     const variant = await variantByName(scope, flagId, name);
-    if (!variant) return null;
+    if (!variant) return { ok: false, reason: "NOT_FOUND" };
     const flag = await flagInScope(scope, flagId);
-    if (!flag) return null;
+    if (!flag) return { ok: false, reason: "NOT_FOUND" };
+
+    const renaming = patch.name !== undefined && patch.name !== variant.name;
+    // The refusal sits AHEAD of the batch, not inside it: a rename that a live
+    // Run forbids must leave no Review row, no version bump, and no partially
+    // applied Approval Request behind.
+    if (renaming) {
+      const freeze = await liveRunUsingVariant(db, scope, flagId, variant);
+      if (freeze) return { ok: false, reason: "RUN_FROZEN", freeze, variantName: variant.name };
+    }
     const variantWhere = options?.approval
       ? and(
           eq(variants.id, variant.id),
@@ -216,15 +264,14 @@ export function makeUpdateVariant(
     // name that no longer exists: the served snapshot dangles and the Variant
     // stops counting as servable, which silently disarms the Approval gate on
     // any follow-up value edit.
-    const renameQueries =
-      patch.name !== undefined && patch.name !== variant.name
-        ? [
-            renameAvailableVariant(db, scope, flagId, variant.name, patch.name, {
-              approval: options?.approval,
-              updatedAt: options?.approval?.reviewedAt ?? options?.updatedAt,
-            }),
-          ]
-        : [];
+    const renameQueries = renaming
+      ? [
+          renameAvailableVariant(db, scope, flagId, variant.name, patch.name as string, {
+            approval: options?.approval,
+            updatedAt: options?.approval?.reviewedAt ?? options?.updatedAt,
+          }),
+        ]
+      : [];
     await db.batch([
       variantUpdate,
       flagUpdate,
@@ -235,7 +282,8 @@ export function makeUpdateVariant(
     // A lost guard no-ops the whole batch, and the re-read below would then hand
     // back the untouched Variant as though the proposal had been applied.
     if (options?.approval && !(await approvalReviewLanded(db, scope, options.approval)))
-      return null;
-    return variantByName(scope, flagId, (patch.name as string | undefined) ?? name);
+      return { ok: false, reason: "NOT_APPLIED" };
+    const updated = await variantByName(scope, flagId, (patch.name as string | undefined) ?? name);
+    return updated ? { ok: true, variant: updated } : { ok: false, reason: "NOT_APPLIED" };
   };
 }

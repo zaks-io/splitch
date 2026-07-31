@@ -4,6 +4,7 @@ import {
   buildSnapshotFromD1,
   type ConfigStoreDeps,
   type FlagConfigWriteResult,
+  flagConfigResult,
   json,
   missingAvailableVariants,
   missingRuleVariantNames,
@@ -66,28 +67,7 @@ export async function promoteFlagConfig(
   const prepared = preparePromotion(input, loaded.source, loaded.target);
   if (!prepared.ok) return prepared;
 
-  if (input.preview) {
-    const before = responseFromSnapshot(loaded.target);
-    const after = {
-      ...before,
-      version: before.version + 1,
-      availableVariantNames: prepared.value.availableVariantNames,
-      enabled: input.select.enabled ? prepared.value.enabled : before.enabled,
-      targetingRules: prepared.value.targetingRules,
-      rollout: prepared.value.rollout === undefined ? before.rollout : prepared.value.rollout,
-    };
-    return {
-      ok: true,
-      config: after,
-      diff: { before, after },
-      nudge: {
-        type: "config.changed",
-        entity: "flag",
-        id: input.flagId,
-        version: after.version,
-      },
-    };
-  }
+  if (input.preview) return promotionPreview(input, loaded.target, prepared.value);
 
   const write = await commitPromotion(deps, input, loaded.targetScope, prepared.value);
   if (!write.ok) return write;
@@ -97,6 +77,30 @@ export async function promoteFlagConfig(
     config: write.config,
     diff: { before: responseFromSnapshot(loaded.target), after: write.config },
     nudge: write.nudge,
+  };
+}
+
+function promotionPreview(
+  input: PromoteFlagConfigInput,
+  target: Snapshot,
+  prepared: PreparedPromotion,
+): PromoteFlagConfigResult {
+  const before = responseFromSnapshot(target);
+  const after = {
+    ...before,
+    // A preview that promises a version bump the commit will not perform is a
+    // lie the caller plans against.
+    version: promotionSelectsNothing(input) ? before.version : before.version + 1,
+    availableVariantNames: prepared.availableVariantNames,
+    enabled: input.select.enabled ? prepared.enabled : before.enabled,
+    targetingRules: prepared.targetingRules,
+    rollout: prepared.rollout === undefined ? before.rollout : prepared.rollout,
+  };
+  return {
+    ok: true,
+    config: after,
+    diff: { before, after },
+    nudge: { type: "config.changed", entity: "flag", id: input.flagId, version: after.version },
   };
 }
 
@@ -266,6 +270,28 @@ function promotionConfigPatch(
   };
 }
 
+/**
+ * `select: {}` moves no field group, so the only patch left is `updatedAt` — and
+ * writing that still bumps `flag_configs.version`, which is the concurrency token
+ * every pending Approval Request on that Flag Configuration holds. A caller who
+ * changed nothing would invalidate a proposal someone else is waiting to have
+ * reviewed. A no-op write is a no-op.
+ *
+ * Only on the ungated path. Under `approval` the D1 write is also what records
+ * the Review as landed, so short-circuiting it would strand the Review as
+ * un-applied — a Policy gate never produces this shape anyway, since an empty
+ * selection yields no change types to gate.
+ */
+function promotionSelectsNothing(input: PromoteFlagConfigInput): boolean {
+  if (input.approval) return false;
+  return (
+    input.select.availability === undefined &&
+    !input.select.enabled &&
+    !input.select.rollout &&
+    !input.select.targeting
+  );
+}
+
 async function commitPromotion(
   deps: ConfigStoreDeps,
   input: PromoteFlagConfigInput,
@@ -273,6 +299,11 @@ async function commitPromotion(
   prepared: PreparedPromotion,
 ): Promise<FlagConfigWriteResult> {
   const now = input.approval ? new Date(input.approval.reviewedAt) : (deps.now?.() ?? new Date());
+  if (promotionSelectsNothing(input)) {
+    const current = await buildSnapshotFromD1(deps.repo, targetScope, input.flagId);
+    if (!current) return { ok: false, reason: "FLAG_NOT_FOUND" };
+    return flagConfigResult(input.flagId, current);
+  }
   const configPatch = promotionConfigPatch(input, prepared, now);
   // Only `select.targeting` moves rules. Since SPL-170 `select.rollout` means the
   // config-level baseline, which lives on flag_configs — routing it through

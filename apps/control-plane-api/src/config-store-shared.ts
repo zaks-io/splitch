@@ -132,14 +132,27 @@ export async function writeSnapshotAndBroadcast(
   snapshot: Snapshot,
 ): Promise<FlagConfigWriteResult> {
   await writeSnapshot(deps.kv, scope, snapshot);
+  const result = flagConfigResult(flagId, snapshot);
+  await deps.broadcaster.broadcast(result.nudge);
+  return result;
+}
 
+/**
+ * The same successful shape, for a write that turned out to change nothing: no
+ * D1 row, no KV blob, no nudge. The `version` reported is the CURRENT one, which
+ * is the point — a caller holding it as a concurrency token still holds a valid
+ * one after a no-op.
+ */
+export function flagConfigResult(
+  flagId: string,
+  snapshot: Snapshot,
+): Extract<FlagConfigWriteResult, { ok: true }> {
   const nudge = DeltaNudgeSchema.parse({
     type: "config.changed",
     entity: "flag",
     id: flagId,
     version: snapshot.version,
   });
-  await deps.broadcaster.broadcast(nudge);
   return { ok: true, config: responseFromSnapshot(snapshot), nudge };
 }
 

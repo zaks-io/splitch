@@ -1,5 +1,11 @@
 import type { ApprovalRequest, ErrorCode } from "@splitch/contracts";
-import { type ApprovalCommit, appScope, envScope, type Repository } from "@splitch/db";
+import {
+  type ApprovalCommit,
+  appScope,
+  envScope,
+  type Repository,
+  type UpdateVariantResult,
+} from "@splitch/db";
 import type { ApplicationOutcome } from "./approval-service-types";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { syncExperimentConfigFromD1 } from "./experiment-handler-shared";
@@ -175,11 +181,33 @@ async function applyVariant(
       approval: commit,
     },
   );
-  // The Variant was read above, so null is the Approval-guarded write reporting
-  // that it landed nothing; the reconciliation decides stale vs resolved.
-  if (!updated) return notApplied();
+  // A proposal filed BEFORE a Run started and approved AFTER it is the second
+  // door onto the rename, and the same repository seam refuses it. The refusal
+  // is recorded on the Review as a machine-stable reason rather than swallowed
+  // as `notApplied`, which reads as a lost race worth retrying — a retry that
+  // can never succeed while the Run lives (ADR-0036: no impossible remedy).
+  if (!updated.ok && updated.reason === "RUN_FROZEN") return renameFrozen(updated);
+  // The Variant was read above, so any other failure is the Approval-guarded
+  // write reporting that it landed nothing; reconciliation decides stale vs
+  // resolved.
+  if (!updated.ok) return notApplied();
   await resyncFlagSnapshots(deps, request.appId, variant.flagId);
   return { ok: true as const };
+}
+
+function renameFrozen(refusal: Extract<UpdateVariantResult, { reason: "RUN_FROZEN" }>) {
+  return {
+    ok: false as const,
+    error: {
+      code: "RUN_FROZEN" as const,
+      details: {
+        frozenFields: ["flagConfig.availableVariantNames"],
+        currentRunId: refusal.freeze.runId,
+        attemptedChange: `RENAME_VARIANT:${refusal.variantName}`,
+        recommendedAction: "END_RUNNING_RUN_FIRST" as const,
+      },
+    },
+  };
 }
 
 async function applyVariantCreate(
