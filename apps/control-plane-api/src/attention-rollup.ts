@@ -44,7 +44,8 @@ export const ANALYSIS_READ_LIMIT = 200;
  */
 export const ENVIRONMENT_FANOUT_LIMIT = 200;
 
-interface AttentionRollupDeps {
+/** Exported for attention-rollup-plan-guard.test.ts, which calls planEnvironment directly. */
+export interface AttentionRollupDeps {
   repo: Repository;
   analysisResults: AnalysisResultsReader;
 }
@@ -198,17 +199,16 @@ async function planRollup(
  * common case at one D1 read per Environment while still never reporting a
  * bounded page size as if it were a total (ADR-0036).
  */
-async function planEnvironment(
+export async function planEnvironment(
   deps: AttentionRollupDeps,
   appId: string,
   environmentId: string,
 ): Promise<EnvironmentPlan> {
   const scope = envScope(appId, environmentId);
-  const experiments = await deps.repo.experiments.listRunningExperiments(scope, {
-    limit: ANALYSIS_READ_LIMIT + 1,
-  });
+  const bound = ANALYSIS_READ_LIMIT + 1;
+  const experiments = await deps.repo.experiments.listRunningExperiments(scope, { limit: bound });
   const runningTotal =
-    experiments.length === ANALYSIS_READ_LIMIT + 1
+    experiments.length === bound
       ? await deps.repo.experiments.countRunningExperiments(scope)
       : experiments.length;
   return {

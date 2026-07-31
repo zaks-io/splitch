@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { assertPlansComplete, type EnvironmentPlan } from "./attention-rollup";
+import {
+  type AttentionRollupDeps,
+  assertPlansComplete,
+  type EnvironmentPlan,
+  planEnvironment,
+} from "./attention-rollup";
+import {
+  ATTENTION_TEST_TIMEOUT,
+  QA_ENVIRONMENT_ID,
+  repository,
+  setupAttentionRollupFixture,
+} from "./attention-rollup-fixture";
+import { seedRunningExperiments } from "./attention-rollup-seeds";
+import { ids } from "./config-store-fixture-data";
 
 /**
  * Direct unit coverage of the invariant `rollupPlans` enforces before consuming
@@ -31,6 +44,41 @@ describe("attention rollup plan completeness guard", () => {
     const plans: EnvironmentPlan[] = [completePlan("env_a", 3), completePlan("env_b", 0)];
 
     expect(() => assertPlansComplete(plans)).not.toThrow();
+  });
+});
+
+/**
+ * Companion to the fixture-based tests above: those prove the guard fires
+ * against a hand-set `EnvironmentPlan`, which says nothing about whether real
+ * `planEnvironment` output can ever actually diverge like that. This calls
+ * the real function against a real seeded D1, past its own read bound, so
+ * `reads.length` (the bounded read's own page size) and `runningTotal` (from
+ * the real COUNT) are both genuine, not asserted into existence. Calling
+ * `planEnvironment` directly, instead of through the HTTP handler, is
+ * deliberate: it is the only way to reach this divergence at all, since the
+ * whole-rollup budget check in `rollupResponse` refuses first given today's
+ * constants (see the module doc above).
+ */
+describe("attention rollup plan completeness guard against real planEnvironment output", () => {
+  setupAttentionRollupFixture();
+
+  it("refuses a real plan whose bounded read and COUNT genuinely diverge", {
+    timeout: ATTENTION_TEST_TIMEOUT,
+  }, async () => {
+    const repo = repository();
+    await seedRunningExperiments(repo, QA_ENVIRONMENT_ID, 210);
+    const deps: AttentionRollupDeps = {
+      repo,
+      analysisResults: { read: () => Promise.reject(new Error("unused")) },
+    };
+
+    const plan = await planEnvironment(deps, ids.appId, QA_ENVIRONMENT_ID);
+
+    expect(plan.reads).toHaveLength(201);
+    expect(plan.runningTotal).toBe(210);
+    expect(() => assertPlansComplete([plan])).toThrow(
+      `Environment ${QA_ENVIRONMENT_ID} has 210 running Experiments but only 201 were planned; refusing to silently drop the rest from the rollup`,
+    );
   });
 });
 
