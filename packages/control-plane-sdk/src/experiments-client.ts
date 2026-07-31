@@ -20,6 +20,7 @@ import {
   withAuthorization,
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
+import { withIdempotencyHeader } from "./idempotency-header";
 import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "./operation-result";
 
 export interface ExperimentsClient {
@@ -100,7 +101,11 @@ export function createExperimentsClient(
       return invokeHcRoute<ExperimentsStartOutput>("experiments_start", () =>
         hcClient.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].start.$post(
           { param: { appId, environmentId, experimentId }, json: body } as never,
-          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+          withIdempotencyHeader(
+            "experiments_start",
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            body.idempotency_key,
+          ),
         ),
       );
     },
