@@ -1,4 +1,5 @@
 import type { VariantValue } from "./generated/contract-surface.js";
+import { SplitchSdkError } from "./errors";
 
 /**
  * Per-instance in-memory Exposure dedup cache (docs/spec/sdk/seen-set.md). It is
@@ -67,10 +68,18 @@ export class SeenSet {
   ) {
     if (maxSize < 1) {
       // Fail loud: a zero/negative cache is a misconfiguration, not a silent no-op.
-      throw new Error(`splitch seen-set maxSize must be >= 1, got ${maxSize}`);
+      throw new SplitchSdkError({
+        code: "SDK_SEEN_SET_MAX_SIZE_INVALID",
+        causeSummary: `The seen-set maxSize must be at least 1 but received ${maxSize}`,
+        remediation: "Set seenSetMaxSize to a positive integer",
+      });
     }
     if (ttlMs < 0) {
-      throw new Error(`splitch seen-set ttlMs must be >= 0, got ${ttlMs}`);
+      throw new SplitchSdkError({
+        code: "SDK_SEEN_SET_TTL_INVALID",
+        causeSummary: `The seen-set ttlMs must be at least 0 but received ${ttlMs}`,
+        remediation: "Set revalidateMs to 0 or a positive duration in milliseconds",
+      });
     }
   }
 

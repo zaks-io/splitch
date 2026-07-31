@@ -1,5 +1,6 @@
 import type { EvaluateContext, EvaluateDeps, EvaluationContext, Logger } from "./evaluate";
 import { runEvaluate, runPeekVariant, runVerify } from "./evaluate";
+import { SplitchSdkError } from "./errors";
 import { createFetchTransport } from "./fetch-transport";
 import type { ResolutionDetails, VariantValue } from "./generated/contract-surface.js";
 import { SeenSet } from "./seen-set";
@@ -97,7 +98,11 @@ export function createSplitchClient(options: SplitchClientOptions): SplitchClien
   const credential = resolveCredential(options);
   if (options.retries !== undefined && options.retries !== DEFAULT_RETRIES) {
     // Fail loud: silently retrying an Exposure-bearing call would double-count.
-    throw new Error("splitch SDK does not retry the Exposure-bearing evaluate (retries must be 0)");
+    throw new SplitchSdkError({
+      code: "SDK_RETRIES_INVALID",
+      causeSummary: "Exposure-bearing evaluations require retries to be 0",
+      remediation: "Remove the retries option or set it to 0",
+    });
   }
 
   const deps: EvaluateDeps = {
@@ -136,7 +141,11 @@ function resolveCredential(options: SplitchClientOptions): string {
   const hasApi = typeof options.apiKey === "string" && options.apiKey.length > 0;
   if (hasClient === hasApi) {
     // Exactly one credential; presenting both or neither is a setup bug.
-    throw new Error("splitch SDK requires exactly one of clientKey or apiKey");
+    throw new SplitchSdkError({
+      code: "SDK_CREDENTIAL_CONFIGURATION_INVALID",
+      causeSummary: "The SDK requires exactly one of clientKey or apiKey",
+      remediation: "Provide one credential and remove the other credential option",
+    });
   }
   return (options.clientKey ?? options.apiKey) as string;
 }

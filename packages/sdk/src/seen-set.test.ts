@@ -71,11 +71,15 @@ describe("SeenSet: LRU eviction", () => {
   });
 
   it("rejects a non-positive maxSize loudly", () => {
-    expect(() => new SeenSet(0)).toThrow(/maxSize/);
+    expect(() => new SeenSet(0)).toThrowError(
+      expect.objectContaining({ code: "SDK_SEEN_SET_MAX_SIZE_INVALID" }),
+    );
   });
 
   it("rejects a negative ttlMs loudly", () => {
-    expect(() => new SeenSet(10, -1)).toThrow(/ttlMs/);
+    expect(() => new SeenSet(10, -1)).toThrowError(
+      expect.objectContaining({ code: "SDK_SEEN_SET_TTL_INVALID" }),
+    );
   });
 
   it("exposes a sane default revalidation window (~60s)", () => {

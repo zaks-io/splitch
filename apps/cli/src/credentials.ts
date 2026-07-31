@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { SplitchCliError } from "./errors.js";
 
 interface CliPrincipal {
   readonly userId: string;
@@ -43,7 +44,7 @@ export function createFileCredentialStore(path = CREDENTIALS_PATH): CredentialSt
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
           return null;
         }
-        throw error;
+        throw credentialStoreError(error, "read");
       }
     },
     async save(file) {
@@ -56,11 +57,20 @@ export function createFileCredentialStore(path = CREDENTIALS_PATH): CredentialSt
         await unlink(path);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-          throw error;
+          throw credentialStoreError(error, "clear");
         }
       }
     },
   };
+}
+
+function credentialStoreError(error: unknown, operation: "read" | "clear"): SplitchCliError {
+  return new SplitchCliError({
+    code: "CLI_CREDENTIAL_STORE_FAILED",
+    causeSummary: `The credential store could not ${operation}: ${error instanceof Error ? error.message : String(error)}`,
+    remediation: "Check credential-file permissions and retry the command",
+    originalError: error,
+  });
 }
 
 export function isAccessTokenExpired(expiresAt: string, now = Date.now()): boolean {

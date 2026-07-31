@@ -2,7 +2,9 @@ import { initCliObservability, shutdownCliObservability } from "@splitch/observa
 import { createFileCredentialStore } from "./credentials.js";
 import { CLI_COMMANDS, findCommand, META_COMMANDS } from "./command-registry.js";
 import { executeInvocation } from "./execute.js";
-import { EXIT_USAGE } from "./exit-codes.js";
+import { consoleIo } from "./execute-io.js";
+import { EXIT_AUTH, EXIT_USAGE } from "./exit-codes.js";
+import { normalizeCliError, writeCliError } from "./errors.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { longestMatchingCommandPath, parseInvocation } from "./parse-args.js";
 
@@ -26,6 +28,11 @@ export async function runCli(
   options: RunCliOptions = {},
 ): Promise<number> {
   if (args.length === 0) {
+    writeCliError(consoleIo(), {
+      code: "CLI_USAGE_INVALID",
+      causeSummary: "No command was provided",
+      remediation: "Choose a command from the usage output",
+    });
     printUsage();
     return EXIT_USAGE;
   }
@@ -49,25 +56,46 @@ export async function runCli(
       invocation.commandPath.length > 0 &&
       !findCommand(invocation.commandPath)
     ) {
+      writeCliError(consoleIo(), {
+        code: "CLI_USAGE_INVALID",
+        causeSummary: `Unknown command ${invocation.commandPath.join(" ")}`,
+        remediation: "Choose a command from the usage output",
+      });
       printUsage();
       return EXIT_USAGE;
     }
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+    writeCliError(consoleIo(), normalizeCliError(error));
     return EXIT_USAGE;
   }
 
-  const result = await executeInvocation(invocation, {
-    credentialStore: createFileCredentialStore(options.credentialPath),
-    cwd: options.cwd,
-    env: options.env,
-    fetch: options.fetch,
-    controlPlaneBaseUrl: options.controlPlaneBaseUrl,
-    evaluationBaseUrl: options.evaluationBaseUrl,
-    analysisBaseUrl: options.analysisBaseUrl,
-    authBaseUrl: options.authBaseUrl,
-  });
-  return result.exitCode;
+  return executeParsedInvocation(invocation, options);
+}
+
+async function executeParsedInvocation(
+  invocation: ParsedInvocation,
+  options: RunCliOptions,
+): Promise<number> {
+  try {
+    const result = await executeInvocation(invocation, {
+      credentialStore: createFileCredentialStore(options.credentialPath),
+      cwd: options.cwd,
+      env: options.env,
+      fetch: options.fetch,
+      controlPlaneBaseUrl: options.controlPlaneBaseUrl,
+      evaluationBaseUrl: options.evaluationBaseUrl,
+      analysisBaseUrl: options.analysisBaseUrl,
+      authBaseUrl: options.authBaseUrl,
+    });
+    return result.exitCode;
+  } catch (error) {
+    cliObservability.captureException(error);
+    const cliError = normalizeCliError(error);
+    writeCliError(consoleIo(), cliError);
+    return cliError.code === "CLI_NOT_AUTHENTICATED" || cliError.code === "CLI_SESSION_EXPIRED"
+      ? EXIT_AUTH
+      : EXIT_USAGE;
+  }
 }
 
 function printUsage(): void {
@@ -88,6 +116,7 @@ export async function launchCli(): Promise<void> {
     process.exitCode = await runCli();
   } catch (error) {
     cliObservability.captureException(error);
+    writeCliError(consoleIo(), normalizeCliError(error));
     process.exitCode = 1;
   } finally {
     await shutdownCliObservability();
