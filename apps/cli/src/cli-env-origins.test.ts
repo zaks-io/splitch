@@ -86,6 +86,28 @@ describe("platform target and API origins", () => {
     expect(transport.requests[0]?.url.startsWith("https://option.example/")).toBe(true);
   });
 
+  it("rejects an invalid SPLITCH_PLATFORM_TARGET instead of falling back to local", async () => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = new FakeCliTransport([]);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const code = await runCli([...createArgs], {
+        credentialPath,
+        fetch: transport.fetch,
+        env: { SPLITCH_PLATFORM_TARGET: "prod" },
+      });
+      expect(code).not.toBe(EXIT_OK);
+      expect(transport.requests).toHaveLength(0);
+      const output = errorSpy.mock.calls.flat().join("\n");
+      expect(output).toContain("CLI_VALIDATION_ERROR");
+      expect(output).toContain("production");
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it("fails loud when the selected target has no origin for the route", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
