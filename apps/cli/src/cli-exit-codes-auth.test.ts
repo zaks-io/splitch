@@ -1,8 +1,8 @@
 import { constants } from "node:fs";
 import { access, readFile, writeFile } from "node:fs/promises";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_API, EXIT_AUTH, EXIT_OK } from "./exit-codes.js";
+import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import {
   authHeader,
   clientKeyMaterial,
@@ -17,6 +17,7 @@ import {
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await cleanupTempHomes();
 });
 
@@ -83,6 +84,26 @@ describe("logout exit code", () => {
 });
 
 describe("flags verify transport", () => {
+  it("names the positional as a Flag key in the coded usage error", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli([
+      "flags",
+      "verify",
+      "--app",
+      "app_1",
+      "--env",
+      "env_1",
+      "--targeting-key",
+      "user-1",
+    ]);
+
+    expect(code).toBe(EXIT_USAGE);
+    expect(error).toHaveBeenCalledWith(
+      "CLI_USAGE_INVALID: Cause: flags verify requires a Flag key. Remediation: Pass the Flag key as the first positional argument.",
+    );
+  });
+
   it("flags verify uses the Client Key on the data-plane transport, not the control-plane token", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
@@ -115,7 +136,7 @@ describe("flags verify transport", () => {
         "app_1",
         "--env",
         "env_1",
-        "flag_1",
+        "checkout",
         "--targeting-key",
         "user-1",
       ],
@@ -130,6 +151,7 @@ describe("flags verify transport", () => {
     expect(clientKeyCall?.authorization).toBe(authHeader());
     expect(verifyCall?.authorization).toBe(`Bearer ${clientKeyMaterial}`);
     expect(verifyCall?.authorization).not.toBe(authHeader());
+    expect(verifyCall?.body).toMatchObject({ flagKey: "checkout" });
   });
 
   it("flags verify returns EXIT_API when SDK reason is ERROR", async () => {
@@ -164,7 +186,7 @@ describe("flags verify transport", () => {
         "app_1",
         "--env",
         "env_1",
-        "missing_flag",
+        "missing-flag",
         "--targeting-key",
         "user-1",
       ],

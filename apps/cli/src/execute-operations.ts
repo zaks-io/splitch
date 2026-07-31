@@ -45,12 +45,12 @@ export async function executeFlagsVerify(
   io: CliIo,
   context: ResolvedContext,
 ): Promise<CliResult> {
-  const flagId = invocation.positionals[0];
-  if (!flagId) {
+  const flagKey = invocation.positionals[0];
+  if (!flagKey) {
     writeCliError(io, {
       code: "CLI_USAGE_INVALID",
-      causeSummary: "flags verify requires a Flag ID",
-      remediation: "Pass the Flag ID as the first positional argument",
+      causeSummary: "flags verify requires a Flag key",
+      remediation: "Pass the Flag key as the first positional argument",
     });
     return { exitCode: EXIT_USAGE };
   }
@@ -95,7 +95,7 @@ export async function executeFlagsVerify(
         debug: () => {},
       },
     });
-    const verifyDetails = await client.verify(flagId, evaluationContext);
+    const verifyDetails = await client.verify(flagKey, evaluationContext);
     emit(io, invocation.flags.json, verifyDetails);
     if (verifyDetails.reason === "ERROR") {
       // The CLI renders this SDK failure once with command-specific remediation.
