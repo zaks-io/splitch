@@ -20,6 +20,7 @@ import {
   withAuthorization,
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
+import { withIdempotencyHeader } from "./idempotency-header";
 import type { ControlPlaneOperationOptions, ControlPlaneOperationResult } from "./operation-result";
 
 export interface ExperimentsClient {
@@ -49,24 +50,6 @@ export interface ExperimentsClient {
   ): Promise<ControlPlaneOperationResult<ExperimentsDeleteOutput>>;
 }
 
-/**
- * `experiments_start` declares `idempotency: "required"` and the runtime guard
- * reads the HEADER, while the typed request carries `idempotency_key` in the
- * BODY. Without mirroring one onto the other, every typed caller of Start is
- * refused with a VALIDATION_ERROR before the handler ever runs. The MCP adapter
- * already applies this same body → header rule; this keeps the typed client and
- * the adapter answering the transport the same way rather than making each
- * caller remember a header the contract already describes.
- */
-function withIdempotencyHeader(
-  options: { headers?: Record<string, string> },
-  body: unknown,
-): { headers?: Record<string, string> } {
-  const key = (body as { idempotency_key?: unknown }).idempotency_key;
-  if (typeof key !== "string" || key.length === 0) return options;
-  return { ...options, headers: { ...options.headers, "idempotency-key": key } };
-}
-
 export function createExperimentsClient(
   hcOptions: ControlPlaneHcOptions,
   client?: ExperimentsHcClient,
@@ -88,7 +71,11 @@ export function createExperimentsClient(
             param: { appId: input.appId, environmentId: input.environmentId },
             json: input,
           } as never,
-          withIdempotencyHeader(hcRequestOptions(withAuthorization(hcOptions, callOptions)), input),
+          withIdempotencyHeader(
+            "experiments_create",
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            input.idempotency_key,
+          ),
         ),
       ),
     get: (input, callOptions) =>
@@ -109,7 +96,7 @@ export function createExperimentsClient(
       return invokeHcRoute<ExperimentsUpdateOutput>("experiments_update", () =>
         hcClient.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].$patch(
           { param: { appId, environmentId, experimentId }, json: body } as never,
-          withIdempotencyHeader(hcRequestOptions(withAuthorization(hcOptions, callOptions)), body),
+          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),
       );
     },
@@ -118,7 +105,11 @@ export function createExperimentsClient(
       return invokeHcRoute<ExperimentsStartOutput>("experiments_start", () =>
         hcClient.apps[":appId"].envs[":environmentId"].experiments[":experimentId"].start.$post(
           { param: { appId, environmentId, experimentId }, json: body } as never,
-          withIdempotencyHeader(hcRequestOptions(withAuthorization(hcOptions, callOptions)), body),
+          withIdempotencyHeader(
+            "experiments_start",
+            hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+            body.idempotency_key,
+          ),
         ),
       );
     },

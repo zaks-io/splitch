@@ -91,16 +91,32 @@ describe("control plane sdk Variant catalog operations", () => {
   it("deletes a Variant by name", async () => {
     const { sdk, requests } = sdkWith(() => Response.json(flag));
 
-    await sdk.flags.deleteVariant({
-      appId: "app_checkout",
-      flagId: "flag_checkout",
-      variantName: "on",
-    });
+    await sdk.flags.deleteVariant(
+      {
+        appId: "app_checkout",
+        flagId: "flag_checkout",
+        variantName: "on",
+      },
+      { idempotencyKey: "variant-delete-1" },
+    );
 
     expect(requests[0]?.method).toBe("DELETE");
     expect(requests[0]?.url).toBe(
       "https://control-plane.test/apps/app_checkout/flags/flag_checkout/variants/on",
     );
+    expect(requests[0]?.headers.get("idempotency-key")).toBe("variant-delete-1");
+  });
+
+  it("refuses a Variant delete carrying no idempotency key instead of letting the Worker refuse it", async () => {
+    const { sdk } = sdkWith(() => Response.json(flag));
+
+    await expect(
+      sdk.flags.deleteVariant({
+        appId: "app_checkout",
+        flagId: "flag_checkout",
+        variantName: "on",
+      }),
+    ).rejects.toThrow("flag_variants_delete requires an idempotency key");
   });
 
   it("surfaces the Worker's Run-frozen refusal on a Variant value change", async () => {
