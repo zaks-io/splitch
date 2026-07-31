@@ -1,6 +1,6 @@
 /** SQL builders for shared-preview smoke seed / transient cleanup. */
 
-const SMOKE_IDS = {
+export const SMOKE_IDS = {
   app: "app_shared_preview_smoke",
   appOther: "app_shared_preview_smoke_other",
   clientKeyDev: "ck_shared_preview_smoke_dev",

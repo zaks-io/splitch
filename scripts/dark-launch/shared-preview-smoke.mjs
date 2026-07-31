@@ -20,18 +20,20 @@ import {
   createFleetEvidence,
   requireFullCommitSha,
 } from "../lib/shared-preview-deployment-evidence.mjs";
-import {
-  assertExposureHealth,
-  assertToolParity,
-  pollResults,
-  summarizeExposureHealth,
-} from "./hosted-results.mjs";
+import { SMOKE_IDS } from "../seed-shared-preview-smoke-sql.mjs";
+import { throwPrimaryWithCleanup } from "./cleanup-failures.mjs";
 import {
   assertRevokedCredential,
   cleanupDeferredRuns,
   findOrphanedDarkLaunchApps,
   RESULT_REREAD_DELAY_MS,
 } from "./hosted-cleanup.mjs";
+import {
+  assertExposureHealth,
+  assertToolParity,
+  pollResults,
+  summarizeExposureHealth,
+} from "./hosted-results.mjs";
 import { PROPAGATION_WINDOW_MS, runDarkLaunchJourney } from "./journey.mjs";
 import { createMcpClient } from "./mcp-client.mjs";
 import { installPackedSdkConsumer, runExternalResolve, writeEvidence } from "./pack-consumer.mjs";
@@ -156,10 +158,14 @@ try {
   cleanupFailure = error;
 }
 consumer.dispose();
-if (cleanupFailure) throw cleanupFailure;
-if (journeyFailure) throw journeyFailure;
+throwPrimaryWithCleanup(
+  journeyFailure,
+  cleanupFailure ? [cleanupFailure] : [],
+  "hosted onboarding journey failed and cleanup also failed",
+);
 
 const orphanScans = await findOrphanedDarkLaunchApps(config, mcp);
+const orphanedApps = orphanScans.flat();
 
 const healthRoutes = config.healthRoutes;
 const observations = [];
@@ -182,7 +188,7 @@ const payload = {
   consumerInstall: installCommand,
   consecutiveRuns: runResults.map(({ cleanup: _cleanup, resultScope: _scope, ...run }) => run),
   cleanup: {
-    orphanedApps: orphanScans.some((scan) => scan.length > 0),
+    orphanedApps,
     orphanedFlags: cleanupResults.some((result) => !result.flagDeleted),
     orphanedCredentials: cleanupResults.some((result) => !result.credentialRevoked),
     transientAppsDeleted:
@@ -221,6 +227,9 @@ const payload = {
 
 mkdirSync(dirname(evidencePath), { recursive: true });
 writeEvidence(evidencePath, payload);
+if (orphanedApps.length > 0) {
+  throw new Error(`cleanup assertion found orphaned Apps: ${JSON.stringify(orphanedApps)}`);
+}
 console.log(`dark-launch smoke passed (${runs} consecutive runs)`);
 console.log(`evidence: ${evidencePath}`);
 console.log(`deployedCommitSha: ${evidence.deployedCommitSha}`);
@@ -251,7 +260,7 @@ function readConfig() {
     // This hosted negative therefore proves exact-resource OAuth scope refusal;
     // the seeded SQL proves existence and the local journey proves the DB-backed
     // membership guard against a directly observed foreign Organization.
-    foreignOrgId: "org_shared_preview_isolation",
+    foreignOrgId: SMOKE_IDS.isolationOrg,
     runId: (process.env.SPLITCH_SMOKE_RUN_ID ?? process.env.GITHUB_RUN_ID ?? String(Date.now()))
       .toLowerCase()
       .replaceAll(/[^a-z0-9-]/g, "-")

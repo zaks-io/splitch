@@ -115,6 +115,10 @@ export async function makeQuickstartHarness(): Promise<QuickstartHarness> {
 
   const accessToken = await appToken(flagHarness, appId);
   const orgAccessToken = await orgToken(flagHarness);
+  // Intentionally claim foreign-Organization owner scope for the same signed
+  // subject without inserting a foreign membership. This gets past the token
+  // scope check and forces the DB-backed membership guard to reject stale or
+  // forged authority. Mutating that guard to trust the claim makes the journey red.
   const foreignOrgAccessToken = await orgTokenFor(flagHarness, FOREIGN_ORG_ID);
   const controlPlaneApp = flagHarness.app;
   const evaluationUsageSink = new RecordingEvaluationUsageSink();

@@ -4,7 +4,10 @@ export async function createMcpClient(config) {
   const protectedResourceUrl = `${config.mcpBaseUrl}/.well-known/oauth-protected-resource/mcp`;
   const challenge = await fetch(`${config.mcpBaseUrl}/mcp`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+    },
     body: JSON.stringify({ jsonrpc: "2.0", id: "discover", method: "initialize", params: {} }),
   });
   if (challenge.status !== 401) {
@@ -53,6 +56,7 @@ export async function createMcpClient(config) {
     const response = await fetch(`${config.mcpBaseUrl}/mcp`, {
       method: "POST",
       headers: {
+        accept: "application/json, text/event-stream",
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
       },

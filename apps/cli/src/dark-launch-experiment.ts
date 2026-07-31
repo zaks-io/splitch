@@ -67,6 +67,10 @@ async function createAndStartExperiment(
     (candidate) => candidate.key === EXPERIMENT_KEY,
   );
   expect(experiment).toBeDefined();
+  if (!experiment) {
+    throw new Error(`dark launch proof: Experiment ${EXPERIMENT_KEY} was not created`);
+  }
+  const experimentId = experiment.id;
 
   expect(
     await runCli(
@@ -78,7 +82,7 @@ async function createAndStartExperiment(
         harness.appId,
         "--env",
         harness.devEnvironmentId,
-        experiment?.id ?? "missing",
+        experimentId,
         "--idempotency-key",
         "dark-launch-start-1",
       ],
@@ -87,13 +91,12 @@ async function createAndStartExperiment(
   ).toBe(EXIT_OK);
   harness.invalidateFlagCache();
 
-  const runs = await harness.repo.experiments.listRunsForExperiment(
-    scope,
-    experiment?.id ?? "missing",
-  );
+  const runs = await harness.repo.experiments.listRunsForExperiment(scope, experimentId);
   expect(runs).toHaveLength(1);
   expect(runs[0]).toMatchObject({ status: "running" });
-  return { id: experiment?.id ?? "missing", runId: runs[0]?.id ?? "missing" };
+  const runId = runs[0]?.id;
+  if (!runId) throw new Error("dark launch proof: started Experiment has no Run");
+  return { id: experimentId, runId };
 }
 
 async function proveEvaluateObservation(

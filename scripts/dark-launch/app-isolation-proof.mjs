@@ -114,7 +114,7 @@ async function waitForVariant(deps, action, expected, label) {
       return details;
     } catch (error) {
       lastError = error;
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
     }
   }
   throw lastError instanceof Error

@@ -2,7 +2,7 @@
  * Control Plane HTTP helpers for the dark-launch journey (no D1/KV/Tinybird).
  */
 
-import { DEFAULT_VARIANT, LAUNCH_VARIANT } from "./constants.mjs";
+import { COHORT_ATTRIBUTE, COHORT_VALUE, DEFAULT_VARIANT, LAUNCH_VARIANT } from "./constants.mjs";
 
 export async function controlPlaneCall(deps, method, path, body, idempotencyKey) {
   const headers = {
@@ -40,15 +40,14 @@ async function operation(deps, name, args, httpCall, label = name) {
 
 export async function createDarkLaunchApp(deps, keys) {
   const body = {
-    orgId: deps.orgId,
     organizationId: deps.orgId,
     name: keys.appName,
     key: keys.appKey,
     description: "Transient hosted onboarding proof App (SPL-148).",
     idempotency_key: keys.appKey,
   };
-  return operation(deps, "apps_create", body, () =>
-    controlPlaneCall(deps, "POST", `/orgs/${deps.orgId}/apps`, body),
+  return operation(deps, "apps_create", { orgId: deps.orgId, ...body }, () =>
+    controlPlaneCall(deps, "POST", `/orgs/${deps.orgId}/apps`, body, keys.appKey),
   );
 }
 
@@ -108,7 +107,7 @@ export async function rotateClientKey(deps, appId, environmentId) {
 
 export async function updateFlagConfig(deps, appId, environmentId, flagId, patch) {
   const state = patch.enabled === true ? "enable" : patch.enabled === false ? "disable" : "update";
-  const idempotencyKey = `dark-launch-flag-config-${state}-${deps.runId}`;
+  const idempotencyKey = `dark-launch-flag-config-${state}-${deps.runId}-${environmentId}-${flagId}`;
   const body = { ...patch, idempotency_key: idempotencyKey };
   const args = { appId, environmentId, flagId, ...body };
   return operation(deps, "flag_config_update", args, () =>
@@ -123,7 +122,7 @@ export async function updateFlagConfig(deps, appId, environmentId, flagId, patch
 }
 
 export async function replaceTargetingRules(deps, appId, environmentId, flagId, targetingRules) {
-  const idempotencyKey = `dark-launch-targeting-rules-${deps.runId}`;
+  const idempotencyKey = `dark-launch-targeting-rules-${deps.runId}-${appId}-${environmentId}-${flagId}`;
   const body = { targetingRules, idempotency_key: idempotencyKey };
   const args = { appId, environmentId, flagId, ...body };
   return operation(deps, "flag_targeting_rules_replace", args, () =>
@@ -191,7 +190,7 @@ export async function testLiveRunVariant(deps, resources, keys) {
     evaluationContext: {
       targetingKey: keys.targetedKey,
       idType: "user",
-      attributes: { cohort: "launch" },
+      attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
     },
   };
   const args = {
@@ -310,13 +309,4 @@ export async function listApps(deps, orgId) {
   return operation(deps, "apps_list", { orgId }, () =>
     controlPlaneCall(deps, "GET", `/orgs/${orgId}/apps`),
   );
-}
-
-export function clientKeyMaterialFromCreate(created, environmentId) {
-  const keys = created.clientKeys ?? [];
-  const match = keys.find((key) => key.environmentId === environmentId) ?? keys[0];
-  if (!match?.keyMaterial) {
-    throw new Error("apps_create did not return clientKeys.keyMaterial");
-  }
-  return match.keyMaterial;
 }

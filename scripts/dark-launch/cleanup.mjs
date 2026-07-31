@@ -1,8 +1,9 @@
 /** Negative proofs and cleanup for the dark-launch journey. */
 
+import { proveWrongAppIsolation } from "./app-isolation-proof.mjs";
+import { captureCleanupFailure, throwPrimaryWithCleanup } from "./cleanup-failures.mjs";
 import { COHORT_ATTRIBUTE, COHORT_VALUE } from "./constants.mjs";
 import {
-  clientKeyMaterialFromCreate,
   controlPlaneCall,
   createDarkLaunchApp,
   deleteApp,
@@ -14,7 +15,6 @@ import {
   listFlags,
   rotateClientKey,
 } from "./control-plane.mjs";
-import { proveWrongAppIsolation } from "./app-isolation-proof.mjs";
 
 /**
  * Negative authorization proofs.
@@ -24,6 +24,8 @@ import { proveWrongAppIsolation } from "./app-isolation-proof.mjs";
  */
 export async function runNegativeProofs(deps, resources, keys, resolve, journeyLiveVariant) {
   const probes = { apps: [], flags: [] };
+  let result;
+  let proofFailure;
 
   try {
     const wrongApp = await proveWrongAppIsolation(
@@ -47,12 +49,29 @@ export async function runNegativeProofs(deps, resources, keys, resolve, journeyL
       "revoked credential",
     );
 
-    const crossOrganization = await proveCrossOrganizationWriteRejected(deps, keys);
-    return { wrongApp, revokedCredential, crossOrganization };
-  } finally {
-    for (const probe of probes.flags.reverse()) await deleteFlag(deps, probe.appId, probe.flagId);
-    for (const appId of probes.apps.reverse()) await deleteApp(deps, appId);
+    const crossOrganization = await proveCrossOrganizationWriteRejected(deps, keys, probes);
+    result = { wrongApp, revokedCredential, crossOrganization };
+  } catch (error) {
+    proofFailure = error;
   }
+
+  const cleanupFailures = [];
+  for (const probe of probes.flags.reverse()) {
+    await captureCleanupFailure(cleanupFailures, `delete probe Flag ${probe.flagId}`, () =>
+      deleteFlag(deps, probe.appId, probe.flagId),
+    );
+  }
+  for (const appId of probes.apps.reverse()) {
+    await captureCleanupFailure(cleanupFailures, `delete probe App ${appId}`, () =>
+      deleteApp(deps, appId),
+    );
+  }
+  throwPrimaryWithCleanup(
+    proofFailure,
+    cleanupFailures,
+    "negative authorization proof failed and probe cleanup also failed",
+  );
+  return result;
 }
 
 async function createRevokedClientKey(deps, resources, keys, probes) {
@@ -66,12 +85,12 @@ async function createRevokedClientKey(deps, resources, keys, probes) {
   resources.transientAppKeys.push(probeKeys.appKey);
   const probeDev = probeApp.environments.find((environment) => environment.key === "dev");
   if (!probeDev) throw new Error("revoked-probe App create missing dev Environment");
-  const priorKey = clientKeyMaterialFromCreate(probeApp, probeDev.id);
+  const priorKey = await getClientKey(deps, probeApp.app.id, probeDev.id);
   await rotateClientKey(deps, probeApp.app.id, probeDev.id);
-  return priorKey;
+  return priorKey.keyMaterial;
 }
 
-async function proveCrossOrganizationWriteRejected(deps, keys) {
+async function proveCrossOrganizationWriteRejected(deps, keys, probes) {
   if (typeof deps.foreignOrgId !== "string" || deps.foreignOrgId.length === 0) {
     throw new Error("cross-Organization proof requires a seeded foreignOrgId");
   }
@@ -86,6 +105,10 @@ async function proveCrossOrganizationWriteRejected(deps, keys) {
     idempotency_key: crossKey,
   };
   const crossOrg = await crossOrgCreate(deps, foreignOrgId, body);
+  if (crossOrg.ok) {
+    const createdAppId = crossOrg.body?.app?.id ?? crossOrg.body?.id;
+    if (typeof createdAppId === "string") probes.apps.push(createdAppId);
+  }
   const code = requireForbidden(crossOrg, "cross-Organization mutation");
 
   if (deps.orgId) {
@@ -102,9 +125,10 @@ async function proveCrossOrganizationWriteRejected(deps, keys) {
 }
 
 function crossOrgCreate(deps, foreignOrgId, body) {
+  const { orgId: _orgId, ...httpBody } = body;
   return deps.callToolResult
     ? deps.callToolResult("apps_create", body)
-    : controlPlaneCall(deps, "POST", `/orgs/${foreignOrgId}/apps`, body, body.idempotency_key);
+    : controlPlaneCall(deps, "POST", `/orgs/${foreignOrgId}/apps`, httpBody, body.idempotency_key);
 }
 
 function crossOrgList(deps, foreignOrgId) {
@@ -149,6 +173,7 @@ export async function assertStructuredAuthFailure(action, expectedErrorCode, lab
 
 export async function cleanupDarkLaunch(deps, resources, keys) {
   const activeKeyBefore = resources.clientKeyMaterial;
+  const failures = [];
   const report = {
     runEnded: resources.runId === null,
     experimentDeleted: resources.experimentId === null,
@@ -158,38 +183,86 @@ export async function cleanupDarkLaunch(deps, resources, keys) {
   };
 
   if (resources.runId) {
-    await endRun(deps, resources);
-    resources.runId = null;
-    report.runEnded = true;
+    await captureCleanupFailure(
+      failures,
+      `end Run ${resources.runId}`,
+      () => endRun(deps, resources),
+      () => {
+        resources.runId = null;
+        report.runEnded = true;
+      },
+    );
   }
 
   if (resources.experimentId) {
-    await deleteExperiment(deps, resources);
-    resources.experimentId = null;
-    report.experimentDeleted = true;
+    await captureCleanupFailure(
+      failures,
+      `delete Experiment ${resources.experimentId}`,
+      () => deleteExperiment(deps, resources),
+      () => {
+        resources.experimentId = null;
+        report.experimentDeleted = true;
+      },
+    );
   }
 
   if (resources.appId && resources.flagId) {
-    await deleteFlag(deps, resources.appId, resources.flagId);
-    resources.flagId = null;
-    report.flagDeleted = true;
+    await captureCleanupFailure(
+      failures,
+      `delete Flag ${resources.flagId}`,
+      () => deleteFlag(deps, resources.appId, resources.flagId),
+      () => {
+        resources.flagId = null;
+        report.flagDeleted = true;
+      },
+    );
   }
 
   if (resources.ownsApp && resources.appId) {
-    await deleteApp(deps, resources.appId);
-    resources.appId = null;
-    report.appDeleted = true;
-    if (deps.assertCredentialRevoked && activeKeyBefore) {
-      await deps.assertCredentialRevoked({ clientKey: activeKeyBefore, flagKey: keys.flagKey });
-      report.credentialRevoked = true;
+    const appId = resources.appId;
+    await captureCleanupFailure(
+      failures,
+      `delete App ${appId}`,
+      () => deleteApp(deps, appId),
+      () => {
+        resources.appId = null;
+        report.appDeleted = true;
+      },
+    );
+    if (report.appDeleted && deps.assertCredentialRevoked && activeKeyBefore) {
+      await captureCleanupFailure(
+        failures,
+        `verify credential revocation for App ${appId}`,
+        () => deps.assertCredentialRevoked({ clientKey: activeKeyBefore, flagKey: keys.flagKey }),
+        () => {
+          report.credentialRevoked = true;
+        },
+      );
     }
   }
 
-  const firstScan = await assertNoOrphans(deps, resources, keys, activeKeyBefore);
+  let firstScan;
+  await captureCleanupFailure(
+    failures,
+    "first orphan scan",
+    () => assertNoOrphans(deps, resources, keys, activeKeyBefore),
+    (scan) => {
+      firstScan = scan;
+    },
+  );
   await new Promise((resolvePromise) =>
     setTimeout(resolvePromise, deps.cleanupStabilityWindowMs ?? 2_000),
   );
-  const finalScan = await assertNoOrphans(deps, resources, keys, activeKeyBefore);
+  let finalScan;
+  await captureCleanupFailure(
+    failures,
+    "final orphan scan",
+    () => assertNoOrphans(deps, resources, keys, activeKeyBefore),
+    (scan) => {
+      finalScan = scan;
+    },
+  );
+  throwPrimaryWithCleanup(undefined, failures, "one or more dark-launch cleanup steps failed");
   return { ...report, orphanScans: [firstScan, finalScan] };
 }
 
@@ -200,7 +273,7 @@ async function assertNoOrphans(deps, resources, keys, activeKeyBefore) {
 }
 
 async function scanOrphanApps(deps, resources, keys) {
-  if (!deps.orgId) return [];
+  if (!deps.orgId) return { checkedKeys: [], matchedKeys: [] };
   const apps = await listApps(deps, deps.orgId);
   const items = Array.isArray(apps) ? apps : (apps.items ?? apps.apps ?? []);
   const watchedKeys = new Set([
@@ -214,19 +287,22 @@ async function scanOrphanApps(deps, resources, keys) {
   if (orphaned[0]) {
     throw new Error(`cleanup left orphaned App ${orphaned[0].id} (${orphaned[0].key})`);
   }
-  return orphaned.map((app) => app.key);
+  return { checkedKeys: [...watchedKeys].sort(), matchedKeys: [] };
 }
 
 async function scanRemainingAppResources(deps, resources, keys, activeKeyBefore) {
-  if (!resources.appId) return { flags: [], credentialStable: null };
+  if (!resources.appId) {
+    return { flags: { checkedKeys: [], matchedKeys: [] }, credentialStable: null };
+  }
   const flags = await listFlags(deps, resources.appId);
   const flagItems = Array.isArray(flags) ? flags : (flags.items ?? []);
-  const orphaned = flagItems.filter((flag) => flag.key === keys.flagKey);
+  const checkedKeys = [keys.flagKey, `${keys.flagKey}-journey-only`];
+  const orphaned = flagItems.filter((flag) => checkedKeys.includes(flag.key));
   if (orphaned[0]) {
     throw new Error(`cleanup left orphaned Flag ${orphaned[0].id} (${orphaned[0].key})`);
   }
   const credentialStable = await assertCredentialStable(deps, resources, activeKeyBefore);
-  return { flags: orphaned.map((flag) => flag.key), credentialStable };
+  return { flags: { checkedKeys, matchedKeys: [] }, credentialStable };
 }
 
 async function assertCredentialStable(deps, resources, activeKeyBefore) {

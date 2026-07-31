@@ -7,7 +7,7 @@ import {
   deleteFlagThroughApproval,
   type PackedSdk,
 } from "./dark-launch-http.js";
-import { quickstartOrigins, type QuickstartHarness } from "./quickstart-local-harness.js";
+import { type QuickstartHarness, quickstartOrigins } from "./quickstart-local-harness.js";
 
 const FLAG_KEY = "dark-launch-demo";
 const COHORT_ATTRIBUTE = "cohort";
@@ -154,11 +154,12 @@ export async function proveLocalNegativeAuth(
   expect(flags.items.some((item) => item.key === FLAG_KEY)).toBe(false);
 
   for (const probe of probeApps) {
+    const token = await appToken(harness.flagHarness, probe.id);
     const response = await harness.routingFetch(
       `${quickstartOrigins.controlPlaneBaseUrl}/apps/${probe.id}`,
-      { headers: { authorization: `Bearer ${harness.accessToken}` } },
+      { headers: { authorization: `Bearer ${token}` } },
     );
-    expect(response.ok).toBe(false);
+    expect(response.status).toBe(404);
   }
 }
 

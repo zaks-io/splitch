@@ -38,7 +38,7 @@ export function onboardNewAppPlan(orgId: string, appName: string): McpPromptPlan
       ),
       toolMessage(
         "flag_config_update",
-        "Enable the Flag and make its Control and Treatment Variants available in dev.",
+        "Enable the Flag and make its Variants available in the dev Environment.",
       ),
       toolMessage(
         "experiments_create",
@@ -50,7 +50,7 @@ export function onboardNewAppPlan(orgId: string, appName: string): McpPromptPlan
       ),
       toolMessage(
         "flags_test_eval",
-        "Confirm the live Run resolves without recording an Exposure (ADR-0037). Customer code then evaluates once through the SDK and retries with the same idempotency key.",
+        "Run a test evaluation to confirm the live Run resolves. A test evaluation records no Exposure (ADR-0037). Customer code then evaluates once through the SDK and retries with the same idempotency key.",
       ),
       toolMessage(
         "experiment_results_get",

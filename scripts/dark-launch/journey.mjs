@@ -11,7 +11,9 @@ export {
   syntheticKeys,
   variantName,
 } from "./constants.mjs";
+
 import { cleanupDarkLaunch, runNegativeProofs } from "./cleanup.mjs";
+import { throwPrimaryWithCleanup } from "./cleanup-failures.mjs";
 import {
   assertVariant,
   COHORT_ATTRIBUTE,
@@ -58,6 +60,7 @@ export async function runDarkLaunchJourney(deps) {
   const steps = [];
   let negativeProofs;
   let succeeded = false;
+  let journeyFailure;
 
   try {
     if (ownsApp) {
@@ -193,9 +196,20 @@ export async function runDarkLaunchJourney(deps) {
       steps,
       cleanup: deps.deferCleanup ? () => cleanupDarkLaunch(deps, resources, keys) : undefined,
     };
+  } catch (error) {
+    journeyFailure = error;
+    throw error;
   } finally {
     if (!deps.deferCleanup || !succeeded) {
-      await cleanupDarkLaunch(deps, resources, keys);
+      try {
+        await cleanupDarkLaunch(deps, resources, keys);
+      } catch (cleanupFailure) {
+        throwPrimaryWithCleanup(
+          journeyFailure,
+          [cleanupFailure],
+          "dark-launch journey failed and cleanup also failed",
+        );
+      }
     }
   }
 }

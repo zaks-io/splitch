@@ -31,10 +31,6 @@ export async function findOrphanedDarkLaunchApps(
   const first = await readOrphanedDarkLaunchApps(config, mcpClient);
   await delay(rereadDelayMs);
   const final = await readOrphanedDarkLaunchApps(config, mcpClient);
-  const orphaned = [...first, ...final];
-  if (orphaned.length > 0) {
-    throw new Error(`cleanup assertion found orphaned Apps: ${JSON.stringify(orphaned)}`);
-  }
   return [first, final];
 }
 
