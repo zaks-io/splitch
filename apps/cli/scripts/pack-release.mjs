@@ -24,6 +24,7 @@ try {
     listing,
     manifestText: readTarballFile(tarballPath, "package/package.json"),
     cliJs: readTarballFile(tarballPath, "package/dist/cli.js"),
+    readme: readTarballFile(tarballPath, "package/README.md"),
   });
   process.stdout.write(`${tarballName}\n`);
 } finally {

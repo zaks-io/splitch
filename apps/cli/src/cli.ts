@@ -1,9 +1,10 @@
 import { initCliObservability, shutdownCliObservability } from "@splitch/observability";
 import { createFileCredentialStore } from "./credentials.js";
-import { CLI_COMMANDS, findCommand, META_COMMANDS } from "./command-registry.js";
+import { CLI_COMMANDS, findCommand } from "./command-registry.js";
 import { executeInvocation } from "./execute.js";
 import { consoleIo } from "./execute-io.js";
-import { EXIT_AUTH, EXIT_USAGE } from "./exit-codes.js";
+import { EXIT_AUTH, EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
+import { renderHelp, renderRootHelp } from "./help.js";
 import { normalizeCliError, writeCliError } from "./errors.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { longestMatchingCommandPath, parseInvocation } from "./parse-args.js";
@@ -27,6 +28,11 @@ export async function runCli(
   args: readonly string[] = process.argv.slice(2),
   options: RunCliOptions = {},
 ): Promise<number> {
+  const help = renderHelp(args);
+  if (help) {
+    console.log(help);
+    return EXIT_OK;
+  }
   if (args.length === 0) {
     writeCliError(consoleIo(), {
       code: "CLI_USAGE_INVALID",
@@ -99,16 +105,7 @@ async function executeParsedInvocation(
 }
 
 function printUsage(): void {
-  console.log(
-    [
-      "Usage:",
-      "  splitch login | logout | use --app <id> [--env <id>] | context | health",
-      "  splitch <resource> <action> [args] [--json] [--app <id>] [--env <id>]",
-      "  splitch flags create --key <key> --variants on,off",
-      "",
-      `Meta commands: ${META_COMMANDS.join(", ")}`,
-    ].join("\n"),
-  );
+  console.log(renderRootHelp());
 }
 
 export async function launchCli(): Promise<void> {
