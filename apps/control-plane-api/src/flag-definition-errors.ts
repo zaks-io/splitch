@@ -16,17 +16,17 @@ export interface VariantFreezeRefusal {
  *
  * `flagConfig.availableVariantNames` is the field named for a rename, not some
  * new one: renaming a Variant removes its old name from every Environment's
- * available set, which is the same act SPL-118 already refuses. A rename's
- * remedy is `END_RUNNING_RUN_FIRST`, never `CREATE_NEW_RUN` — a new Run cannot
- * be opened while this one is live, and per `docs/spec/contracts/error-responses.md`
- * `CREATE_NEW_RUN` is the remedy for an Experiment assignment edit, which would
- * send the operator somewhere that does not change this Flag Configuration at
- * all (ADR-0036: no impossible remedy).
+ * available set, which is the same act SPL-118 already refuses.
  *
- * A value swap keeps the contract the direct route has always emitted —
- * `variant.value` / `PATCH_VARIANT` / `CREATE_NEW_RUN` — because cloning the Run
- * and applying the new payload there IS the achievable remedy for a payload
- * edit, and changing a shipped wire contract is not this fix's business.
+ * BOTH frozen properties recommend `END_RUNNING_RUN_FIRST`, because it is the
+ * only action that completes either edit. A Variant is App-level (ADR-0028) and
+ * a draft Run has no destination field for a Variant name or value, so
+ * `CREATE_NEW_RUN` produces a second running Run and leaves the write refused
+ * exactly as before — followed literally it never terminates. That is the
+ * impossible remedy ADR-0036 forbids, and it was emitted here for the value
+ * branch until SPL-267 removed it. `CREATE_NEW_RUN` remains correct in
+ * `docs/spec/contracts/error-responses.md` for an Experiment ASSIGNMENT edit,
+ * which a draft Run really can carry.
  */
 export function variantFreezeDetails(refusal: VariantFreezeRefusal) {
   const renaming = refusal.frozenChanges.includes("name");
@@ -36,7 +36,7 @@ export function variantFreezeDetails(refusal: VariantFreezeRefusal) {
     ),
     currentRunId: refusal.freeze.runId,
     attemptedChange: `${renaming ? "RENAME_VARIANT" : "PATCH_VARIANT"}:${refusal.variantName}`,
-    recommendedAction: renaming ? ("END_RUNNING_RUN_FIRST" as const) : ("CREATE_NEW_RUN" as const),
+    recommendedAction: "END_RUNNING_RUN_FIRST" as const,
   };
 }
 
@@ -47,7 +47,7 @@ export function variantRunFrozenError(refusal: VariantFreezeRefusal, requestId: 
       code: "RUN_FROZEN",
       message: renaming
         ? `running Run ${refusal.freeze.runId} in Environment ${refusal.freeze.environmentId} allocates traffic to Variant "${refusal.variantName}" by name; end it before renaming this Variant`
-        : "running Run freezes this Variant value",
+        : `running Run ${refusal.freeze.runId} in Environment ${refusal.freeze.environmentId} is serving Variant "${refusal.variantName}"; end it before changing this Variant's value`,
       details: variantFreezeDetails(refusal),
     },
     { requestId },

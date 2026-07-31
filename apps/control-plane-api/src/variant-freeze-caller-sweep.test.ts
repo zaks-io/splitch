@@ -8,15 +8,22 @@ import { describe, expect, it } from "vitest";
  *
  * `packages/db/src/repo/variant-rename-writer-sweep.test.ts` classifies the
  * writer's surface INSIDE the seam. It cannot see this layer, and this layer is
- * where every production caller of `updateVariant` actually lives — a reviewer
- * added a caller here that threw the result away and nothing in `packages/db`
- * went red, because there was nothing in `packages/db` to go red.
+ * where every production caller of `updateVariant` lives — a reviewer added a
+ * caller here that threw the result away and nothing in `packages/db` went red,
+ * because there was nothing in `packages/db` to go red.
  *
  * So the rule is enforced where the callers are: a call to `updateVariant` whose
- * enclosing function never mentions `RUN_FROZEN` is a caller that would apply a
+ * enclosing BLOCK never mentions `RUN_FROZEN` is a caller that would apply a
  * frozen write and report success. `updateVariant` still refuses it at the seam,
- * so this is not the security boundary; it is the thing that stops a caller from
- * silently converting a refusal into a 200 (ADR-0036).
+ * so this is not the security boundary; it is what stops a caller from silently
+ * converting a refusal into a 200 (ADR-0036).
+ *
+ * Two evasions a previous version of this file lost to, both closed below:
+ * matching the receiver (`repo.flags.updateVariant(`) was stepped over by one
+ * line of destructuring, and scanning back to `function` declarations passed
+ * VACUOUSLY on a module written entirely with arrow consts, because it found no
+ * enclosing function at all. The match is now on the method alone, and the
+ * enclosing scope is found by balancing braces, which every call shape has.
  *
  * Coverage this does NOT give: a brand-new package that imports `@splitch/db`
  * and calls `updateVariant` is outside this tree and outside the db sweep, and
@@ -24,7 +31,7 @@ import { describe, expect, it } from "vitest";
  */
 
 const SRC = fileURLToPath(new URL("./", import.meta.url));
-const CALL = "repo.flags.updateVariant(";
+const CALL = ".updateVariant(";
 const REFUSAL = "RUN_FROZEN";
 
 /** Every module here calling the writer, with how it surfaces the refusal. */
@@ -47,25 +54,45 @@ function read(rel: string): string {
   return readFileSync(join(SRC, rel), "utf8");
 }
 
-/** The top-level declaration each call sits inside, by scanning back to it. */
-function enclosingFunctions(source: string, needle: string): string[] {
-  const declarations = [...source.matchAll(/^(?:export )?(?:async )?function (\w+)/gm)];
-  const found: string[] = [];
-  let at = source.indexOf(needle);
+function callSites(source: string): number[] {
+  const found: number[] = [];
+  let at = source.indexOf(CALL);
   while (at >= 0) {
-    const owner = declarations.filter((d) => (d.index ?? 0) < at).pop();
-    if (owner?.[1]) found.push(owner[1]);
-    at = source.indexOf(needle, at + 1);
+    found.push(at);
+    at = source.indexOf(CALL, at + 1);
   }
-  return [...new Set(found)];
+  return found;
 }
 
-function bodyOf(source: string, name: string): string {
-  const start = source.search(new RegExp(`^(?:export )?(?:async )?function ${name}\\b`, "m"));
-  if (start < 0) throw new Error(`no declaration for ${name}`);
-  const rest = source.slice(start + 1);
-  const next = rest.search(/^(?:export )?(?:async )?function \w+/m);
-  return next < 0 ? rest : rest.slice(0, next);
+/** The offset of the `{` opening the innermost block containing `at`. */
+function blockStart(source: string, at: number): number {
+  let depth = 0;
+  for (let i = at; i >= 0; i--) {
+    if (source[i] === "}") depth += 1;
+    else if (source[i] === "{") {
+      if (depth === 0) return i;
+      depth -= 1;
+    }
+  }
+  throw new Error("call is not inside any block");
+}
+
+/**
+ * The innermost `{ … }` the call sits inside, found by balancing braces rather
+ * than by recognising a declaration keyword. `function`, arrow const, object
+ * method and class method all produce one, so no call shape escapes.
+ */
+function enclosingBlock(source: string, at: number): string {
+  const open = blockStart(source, at);
+  let nesting = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === "{") nesting += 1;
+    else if (source[i] === "}") {
+      nesting -= 1;
+      if (nesting === 0) return source.slice(open, i + 1);
+    }
+  }
+  throw new Error("unbalanced block");
 }
 
 describe("every control-plane caller of updateVariant handles the freeze refusal", () => {
@@ -75,13 +102,16 @@ describe("every control-plane caller of updateVariant handles the freeze refusal
     expect(calling.sort()).toEqual(Object.keys(CALLERS).sort());
   });
 
-  it("mentions the refusal inside the function that makes each call", () => {
+  it("mentions the refusal in the block that makes each call", () => {
     for (const rel of Object.keys(CALLERS)) {
       const source = read(rel);
-      const callers = enclosingFunctions(source, CALL);
-      expect(callers, `${rel} no longer calls the writer`).not.toEqual([]);
-      for (const caller of callers) {
-        expect(bodyOf(source, caller), `${rel}:${caller} discards the refusal`).toContain(REFUSAL);
+      const sites = callSites(source);
+      expect(sites, `${rel} no longer calls the writer`).not.toEqual([]);
+      for (const at of sites) {
+        const line = source.slice(0, at).split("\n").length;
+        expect(enclosingBlock(source, at), `${rel}:${line} discards the refusal`).toContain(
+          REFUSAL,
+        );
       }
     }
   });
