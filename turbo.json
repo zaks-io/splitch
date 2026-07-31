@@ -423,7 +423,7 @@
       "outputs": ["dist/**"]
     },
     "@splitch/cli#pack:dry-run": {
-      "dependsOn": ["build", "//#knip"],
+      "dependsOn": ["build", "//#knip", "@splitch/sdk#test:consumer-smoke"],
       "cache": false
     },
     "@splitch/cli#pack:check": {
