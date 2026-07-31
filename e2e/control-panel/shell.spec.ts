@@ -4,6 +4,7 @@ import {
   LOCAL_E2E_MEMBER_SESSION_TOKEN,
   LOCAL_E2E_SESSION_TOKEN,
 } from "../../scripts/local-e2e-fixtures.mjs";
+import { waitForHydration } from "./hydration";
 import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
@@ -173,7 +174,7 @@ test.describe("Control Panel local full-stack harness", () => {
     await page.goto("/acme-labs/checkout-api/dev/flags");
 
     const shell = page.locator("[data-app-shell='ready']");
-    await expect(shell).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
     await expect(shell).toHaveAttribute("data-app-id", "app_checkout_e2e");
     await expect(shell).toHaveAttribute("data-environment-id", "env_checkout_dev_e2e");
     const nav = page.getByRole("navigation", { name: "App sections" });
@@ -197,7 +198,7 @@ test.describe("Control Panel local full-stack harness", () => {
   }) => {
     await page.goto("/acme-labs/checkout-api/dev");
 
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
     await chooseScope(page, "App", "/acme-labs/billing-api/prod");
     await expect(page).toHaveURL("/acme-labs/billing-api/prod");
     await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute(
@@ -220,7 +221,7 @@ test.describe("Control Panel local full-stack harness", () => {
     const coldShell = await page.locator("[data-app-shell='ready']").innerText();
 
     await page.goto("/acme-labs/checkout-api/dev/metrics");
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
     await chooseScope(page, "Environment", target);
     await expect(page).toHaveURL(target);
     await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute(
@@ -228,6 +229,25 @@ test.describe("Control Panel local full-stack harness", () => {
       "env_checkout_prod_e2e",
     );
     expect(await page.locator("[data-app-shell='ready']").innerText()).toBe(coldShell);
+  });
+
+  test("waits for hydration before an immediate interaction", async ({ page }) => {
+    await page.route("**/*", async (route) => {
+      if (route.request().resourceType() === "script") {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      await route.continue();
+    });
+    await page.goto("/acme-labs/checkout-api/dev/flags", { waitUntil: "commit" });
+
+    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute(
+      "data-hydrated",
+      "false",
+    );
+    await waitForHydration(page);
+    await page.getByRole("link", { name: "Metrics App-level" }).click();
+
+    await expect(page).toHaveURL("/acme-labs/checkout-api/dev/metrics");
   });
 
   test("surfaces stale data after server loss and clears it only after refetch recovery", async ({

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { LOCAL_E2E_SESSION_TOKEN } from "../../scripts/local-e2e-fixtures.mjs";
+import { waitForHydration } from "./hydration";
 import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
@@ -36,6 +37,7 @@ test.describe("App-level Metrics", () => {
     const ratioKey = `signup-rate-${suffix}`;
 
     await page.goto("/acme-labs/billing-api/prod/metrics");
+    await waitForHydration(page);
     for (const key of [signupsKey, countKey, revenueKey, ratioKey]) {
       await expect(page.locator(`[data-metric-key='${key}']`)).toHaveCount(0);
     }

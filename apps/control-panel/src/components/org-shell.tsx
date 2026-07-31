@@ -1,6 +1,7 @@
-import { type ReactNode, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { ShellMenu, ShellMenuExternalLink, ShellMenuLink } from "#components/shell-menu";
 import type { OrgMembership } from "#lib/session";
+import { useHydrated } from "#lib/use-hydrated";
 
 export interface OrgShellOrg {
   readonly orgId: string;
@@ -28,8 +29,7 @@ export function OrgShell({
   // Create App is a client action, so the frame states when it is actually
   // usable rather than leaving a rendered-but-inert control (the same contract
   // the App shell publishes).
-  const [isHydrated, setIsHydrated] = useState(false);
-  useEffect(() => setIsHydrated(true), []);
+  const isHydrated = useHydrated();
 
   return (
     <div

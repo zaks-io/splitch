@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waitForHydration } from "./hydration";
 import {
   LOCAL_E2E_NEWCOMER_SESSION_TOKEN,
   LOCAL_E2E_SESSION_TOKEN,
@@ -26,10 +27,7 @@ test.describe("Create Organization", () => {
       { name: "__session", value: LOCAL_E2E_NEWCOMER_SESSION_TOKEN, url: origin },
     ]);
     await page.goto("/");
-    await expect(page.locator("[data-org-chooser='ready']")).toHaveAttribute(
-      "data-hydrated",
-      "true",
-    );
+    await waitForHydration(page);
 
     // The landing screen a brand new User actually sees. Before SPL-205 this was
     // a dead end: signed in, no Organization, no way to make one.
@@ -66,10 +64,7 @@ test.describe("Create Organization", () => {
   }, testInfo) => {
     await context.addCookies([{ name: "__session", value: LOCAL_E2E_SESSION_TOKEN, url: origin }]);
     await page.goto("/");
-    await expect(page.locator("[data-org-chooser='ready']")).toHaveAttribute(
-      "data-hydrated",
-      "true",
-    );
+    await waitForHydration(page);
 
     await page.getByTestId("create-organization").click();
     await page.getByLabel("Organization name").fill("Acme Labs Again");
