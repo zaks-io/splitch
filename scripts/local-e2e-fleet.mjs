@@ -14,10 +14,13 @@ import {
   localE2eSession,
 } from "./local-e2e-fixtures.mjs";
 import { localBindings, localE2eWorkers } from "./local-e2e-fleet-config.mjs";
+import { createFaultTracker, describeFault } from "./local-e2e-fleet-faults.mjs";
+import { createSupervisor } from "./local-e2e-fleet-supervisor.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const persistPath = resolve(repoRoot, "test-results/control-panel-e2e-state");
 const workers = localE2eWorkers(persistPath);
+const faultTracker = createFaultTracker();
 
 export async function waitForHealth(
   worker,
@@ -73,11 +76,22 @@ export async function waitForFleetReady(running, healthOptions) {
   ]);
 }
 
-function createReadinessServer(runId) {
+function createReadinessServer(runId, tracker = faultTracker) {
   let ready = false;
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1:18799");
-    if (url.pathname !== "/health" || url.searchParams.get("run") !== runId) {
+    if (url.searchParams.get("run") !== runId) {
+      response.writeHead(404).end("not found");
+      return;
+    }
+    // SPL-181: the Playwright fault reporter reads this to attribute a failing
+    // spec to the harness instead of to the product code under test.
+    if (url.pathname === "/faults") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ faults: tracker.list() }));
+      return;
+    }
+    if (url.pathname !== "/health") {
       response.writeHead(404).end("not found");
       return;
     }
@@ -182,26 +196,49 @@ function seedLocalResources() {
   ]);
 }
 
-function launchWorkers(runId) {
-  return workers.map((worker) => {
-    const args =
-      worker.name === "control-plane-api"
-        ? [...worker.args, "--var", `SPLITCH_LOCAL_E2E_RUN_ID:${runId}`]
-        : worker.args;
-    const child = spawn(worker.command, args, {
-      cwd: repoRoot,
-      env: {
-        ...process.env,
-        ...localBindings,
-        ...worker.env,
-        CI: "true",
-        SPLITCH_LOCAL_E2E_RUN_ID: runId,
-      },
-      stdio: "inherit",
-    });
-    const runningWorker = { ...worker, process: child };
-    return { ...runningWorker, stopped: watchWorker(runningWorker) };
+function launchWorker(worker, runId, tracker = faultTracker) {
+  const args =
+    worker.name === "control-plane-api"
+      ? [...worker.args, "--var", `SPLITCH_LOCAL_E2E_RUN_ID:${runId}`]
+      : worker.args;
+  const child = spawn(worker.command, args, {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      ...localBindings,
+      ...worker.env,
+      CI: "true",
+      SPLITCH_LOCAL_E2E_RUN_ID: runId,
+    },
+    // SPL-181: piped rather than inherited so the harness can watch for the
+    // miniflare D1 crash signature. Output is still echoed verbatim.
+    stdio: ["ignore", "pipe", "pipe"],
   });
+  for (const [stream, sink] of [
+    [child.stdout, process.stdout],
+    [child.stderr, process.stderr],
+  ]) {
+    stream.setEncoding("utf8");
+    stream.on("data", (chunk) => {
+      sink.write(chunk);
+      for (const fault of tracker.scan(worker.name, chunk)) {
+        process.stderr.write(`${describeFault(fault)}\n`);
+      }
+    });
+    // A Worker dying mid-write can leave the crash signature on an unterminated
+    // line; flush it so the death is attributed instead of reading as unexplained.
+    stream.on("end", () => {
+      for (const fault of tracker.flush(worker.name)) {
+        process.stderr.write(`${describeFault(fault)}\n`);
+      }
+    });
+  }
+  const runningWorker = { ...worker, process: child, startedAt: Date.now() };
+  return { ...runningWorker, stopped: watchWorker(runningWorker) };
+}
+
+function launchWorkers(runId) {
+  return workers.map((worker) => launchWorker(worker, runId));
 }
 
 export async function bootFleet(
@@ -230,11 +267,22 @@ async function main() {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
 
+  const supervisor = createSupervisor({
+    tracker: faultTracker,
+    runId,
+    relaunch: (worker) => {
+      const replacement = launchWorker(worker, runId);
+      running[running.findIndex((candidate) => candidate.name === worker.name)] = replacement;
+      return replacement;
+    },
+    waitForHealth,
+  });
+
   try {
     await waitForFleetReady(running, { runId });
     readiness.markReady();
     console.log(`local-e2e-fleet: healthy (${running.map((worker) => worker.name).join(", ")})`);
-    await failOnWorkerStop(running);
+    await supervisor.supervise(running);
   } finally {
     readiness.server.close();
     stop();

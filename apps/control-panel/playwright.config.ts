@@ -15,7 +15,13 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? [["line"], ["html", { open: "never" }]] : "line",
+  // SPL-181: the fault reporter runs in every mode so a miniflare D1 crash is
+  // named as a harness fault instead of being mis-read as a product failure.
+  reporter: [
+    ["line"],
+    ...(process.env.CI ? [["html", { open: "never" }] as const] : []),
+    [resolve(repoRoot, "scripts/local-e2e-fault-reporter.mjs")],
+  ],
   outputDir: resolve(repoRoot, "test-results/control-panel-e2e"),
   use: {
     baseURL: "http://127.0.0.1:18793",
