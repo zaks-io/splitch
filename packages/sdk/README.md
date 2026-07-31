@@ -97,3 +97,6 @@ Every option is documented in the shipped type declarations
 
 - Quickstart: <https://splitch.dev/quickstart>
 - Platform: <https://splitch.dev>
+- Source quickstart: [`docs/spec/quickstart.md`](../../docs/spec/quickstart.md)
+- Evaluation and Exposure accessor contract:
+  [`docs/spec/sdk/exposure-accessor.md`](../../docs/spec/sdk/exposure-accessor.md)
