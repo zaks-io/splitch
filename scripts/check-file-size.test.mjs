@@ -14,6 +14,15 @@ function source(lines) {
   );
 }
 
+/** `//` comment lines, plus a trailing multi-line JSDoc block. */
+function comments(lines) {
+  const jsdoc = ["/**", " * Why this module exists, at length.", " */"];
+  const fillers = Math.max(0, lines - jsdoc.length);
+  return [...Array.from({ length: fillers }, (_, index) => `// filler ${index}`), ...jsdoc].join(
+    "\n",
+  );
+}
+
 test("allows an oversized generated .gen.ts file", (t) => {
   const repo = newRepo(t);
   stage(repo, "apps/control-panel/src/routeTree.gen.ts", source(301));
@@ -28,7 +37,7 @@ test("rejects a new file that lands over the limit", (t) => {
   const result = run(repo);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /routes\.ts — 301 lines \(crosses the 300-line limit\)/);
+  assert.match(result.stderr, /routes\.ts — 301 code lines \(crosses the 300 code-line limit\)/);
 });
 
 test("rejects a file this commit pushes across the limit", (t) => {
@@ -39,7 +48,7 @@ test("rejects a file this commit pushes across the limit", (t) => {
   const result = run(repo);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /grower\.ts — 301 lines \(crosses the 300-line limit\)/);
+  assert.match(result.stderr, /grower\.ts — 301 code lines \(crosses the 300 code-line limit\)/);
 });
 
 test("rejects a file that was already over the limit and grew", (t) => {
@@ -52,7 +61,7 @@ test("rejects a file that was already over the limit and grew", (t) => {
   assert.equal(result.status, 1);
   assert.match(
     result.stderr,
-    /barrel\.ts — 361 lines \(already over 300 at 359 lines and growing\)/,
+    /barrel\.ts — 361 code lines \(already over the 300 code-line limit at 359 and growing\)/,
   );
 });
 
@@ -80,7 +89,10 @@ test("rejects a file moved and grown past the limit in one commit", (t) => {
   const result = run(repo);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /moved\/deep\.ts — 371 lines \(crosses the 300-line limit\)/);
+  assert.match(
+    result.stderr,
+    /moved\/deep\.ts — 371 code lines \(crosses the 300 code-line limit\)/,
+  );
 });
 
 test("rejects a moved file that was already over the limit and grew", (t) => {
@@ -91,7 +103,7 @@ test("rejects a moved file that was already over the limit and grew", (t) => {
   const result = run(repo);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /already over 300 at 359 lines and growing/);
+  assert.match(result.stderr, /already over the 300 code-line limit at 359 and growing/);
 });
 
 test("allows a pure move of a pre-existing oversized file", (t) => {
@@ -107,6 +119,69 @@ test("allows a normal small file", (t) => {
   stage(repo, "src/small.ts", source(42));
 
   assert.equal(run(repo).status, 0);
+});
+
+test("comment and blank lines are free: heavy docs over 300 raw lines pass", (t) => {
+  const repo = newRepo(t);
+  stage(repo, "src/documented.ts", `${comments(240)}\n\n${source(250)}`);
+
+  assert.equal(run(repo).status, 0);
+});
+
+test("a line with trailing comment still counts as code", (t) => {
+  const repo = newRepo(t);
+  const trailing = Array.from({ length: 301 }, (_, i) => `export const n${i} = ${i}; // doc`).join(
+    "\n",
+  );
+  stage(repo, "src/trailing.ts", trailing);
+
+  const result = run(repo);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /trailing\.ts — 301 code lines \(crosses the 300 code-line limit\)/);
+});
+
+test("rejects a file whose comments push it past the total-line cap", (t) => {
+  const repo = newRepo(t);
+  stage(repo, "src/dense.ts", `${comments(450)}\n${source(200)}`);
+
+  const result = run(repo);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /dense\.ts — 650 total lines \(crosses the 600 total-line limit\)/);
+});
+
+test("rejects comment growth on a file already over the total cap", (t) => {
+  const repo = newRepo(t);
+  commit(repo, "src/dense.ts", `${comments(450)}\n${source(200)}`);
+  stage(repo, "src/dense.ts", `${comments(460)}\n${source(200)}`);
+
+  const result = run(repo);
+
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /dense\.ts — 660 total lines \(already over the 600 total-line limit at 650 and growing\)/,
+  );
+});
+
+test("allows trimming comments on a file still over the total cap", (t) => {
+  const repo = newRepo(t);
+  commit(repo, "src/dense.ts", `${comments(450)}\n${source(200)}`);
+  stage(repo, "src/dense.ts", `${comments(440)}\n${source(200)}`);
+
+  assert.equal(run(repo).status, 0);
+});
+
+test("reports both metrics when a file trips code limit and total cap", (t) => {
+  const repo = newRepo(t);
+  stage(repo, "src/huge.ts", `${comments(300)}\n${source(301)}`);
+
+  const result = run(repo);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /huge\.ts — 301 code lines/);
+  assert.match(result.stderr, /huge\.ts — 601 total lines/);
 });
 
 test("allows a merge whose resolution matches the other parent's growth", (t) => {
@@ -154,7 +229,7 @@ test("rejects a merge resolution larger than both parents", (t) => {
   assert.equal(result.status, 1);
   assert.match(
     result.stderr,
-    /barrel\.ts — 380 lines \(already over 300 at 360 lines and growing\)/,
+    /barrel\.ts — 380 code lines \(already over the 300 code-line limit at 360 and growing\)/,
   );
 });
 
@@ -172,7 +247,7 @@ test("rejects a merge resolution that crosses the limit neither parent was over"
   const result = run(repo);
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /barrel\.ts — 301 lines \(crosses the 300-line limit\)/);
+  assert.match(result.stderr, /barrel\.ts — 301 code lines \(crosses the 300 code-line limit\)/);
 });
 
 function newRepo(t) {
