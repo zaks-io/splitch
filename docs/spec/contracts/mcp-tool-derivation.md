@@ -298,10 +298,18 @@ unsatisfiable call, and an impossible remedy is exactly what ADR-0036 forbids. T
 every `idempotency: "required"` route exposes `idempotency_key` as a required tool input, from the
 body when there is one and by injection when there is not.
 
-Omitting the key on a `required` route is refused by the client before any request leaves, in the
-same shape the Worker uses for the same rule: a tool result with `isError: true` carrying
-`VALIDATION_ERROR` and `details.issues[].path` of `["idempotency_key"]`. It is never a JSON-RPC
-`-32603`, which stays reserved for genuinely unexpected faults.
+Omitting the key on a `required` route — or supplying a blank one — is refused by the client before
+any request leaves: a tool result with `isError: true` carrying the Worker's own `VALIDATION_ERROR`
+code in the same `details.issues[]` envelope. It is never a JSON-RPC `-32603`, which stays reserved
+for genuinely unexpected faults.
+
+The issue **path** is surface-local and deliberately differs from the Worker's. `worker-runtime`
+reads the `Idempotency-Key` HTTP header and so reports `["headers","idempotency-key"]`; an MCP caller
+sends JSON and cannot set a header, so the client-side refusal reports `["idempotency_key"]`, the
+tool input the agent actually controls. Naming the header to a caller that has no way to set one
+would be an impossible remedy, which ADR-0036 forbids. Any future client-side precondition check
+should copy this split: the Worker's `code` and envelope, with the path named in the caller's own
+vocabulary.
 
 ## Authorization
 

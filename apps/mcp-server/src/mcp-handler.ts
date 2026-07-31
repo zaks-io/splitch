@@ -183,10 +183,13 @@ async function callTool(
 }
 
 /**
- * A caller-fixable precondition reaches the agent in the shape the Worker would
- * have used for the same rule, so an agent can branch on `code` wherever the check
- * happens to live. `Internal error` stays the last resort for genuinely unexpected
- * throws (SPL-266).
+ * A missing idempotency key is a caller-fixable precondition, so it reaches the
+ * agent as a typed `VALIDATION_ERROR` tool result — the same code and envelope the
+ * Worker uses for that rule — rather than a protocol fault. `Internal error` stays
+ * the last resort for genuinely unexpected throws (SPL-266).
+ *
+ * The promise is scoped to this rule: other refusals on this path (scope
+ * resolution) still return an untyped message with no `code`.
  */
 function toolCallFailure(id: JsonRpcId, error: unknown): JsonRpcResponse {
   if (error instanceof IdempotencyKeyRequiredError) {

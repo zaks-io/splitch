@@ -4,10 +4,15 @@ import { getRoute } from "@splitch/contracts";
 const IDEMPOTENCY_HEADER = "idempotency-key";
 
 /**
- * A caller-fixable precondition, not an internal fault. Carries the same
- * `ErrorResponse` the Worker returns for this exact rule, so a surface that moves
- * the check closer to the caller (the MCP handler) still hands the agent a typed
- * refusal it can branch on rather than a generic protocol error (SPL-266).
+ * A caller-fixable precondition, not an internal fault. Carries the Worker's `code`
+ * and `ErrorResponse` envelope for this rule, so a surface that moves the check
+ * closer to the caller (the MCP handler) still hands the agent a typed refusal it
+ * can branch on rather than a generic protocol error (SPL-266).
+ *
+ * The issue path is deliberately NOT the Worker's `["headers","idempotency-key"]`:
+ * a JSON-only caller cannot set an HTTP header, so naming one would be an
+ * impossible remedy (ADR-0036). The path names the field the caller actually
+ * controls — the `idempotency_key` input.
  */
 export class IdempotencyKeyRequiredError extends Error {
   readonly errorResponse: ErrorResponse;
@@ -54,7 +59,13 @@ export function withIdempotencyHeader(
   if (route.idempotency === "none") {
     return options;
   }
-  if (idempotencyKey === undefined) {
+  // A blank string is not a key: it names no replay, and forwarding it would push
+  // the refusal across the boundary, where the Worker reports the defect against a
+  // header the caller may have no way to set (ADR-0036).
+  // The value is forwarded verbatim rather than trimmed: the same key also travels
+  // in the request body for routes that have one, and normalizing only one copy
+  // would make a caller's two spellings name two different replays.
+  if (idempotencyKey === undefined || idempotencyKey.trim() === "") {
     if (route.idempotency === "required") {
       throw new IdempotencyKeyRequiredError(operationId);
     }

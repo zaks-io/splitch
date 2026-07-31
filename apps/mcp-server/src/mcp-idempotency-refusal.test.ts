@@ -4,10 +4,12 @@ import { handleMcpServerRequest } from "./mcp-handler";
 import { allowMcpRevocations, TEST_MCP_DELEGATION_SECRET } from "./mcp-test-verifier";
 
 /**
- * SPL-266: the client-side refusal must reach the agent in the SAME shape as the
- * Worker's own refusal — a tool result carrying a typed `ErrorResponse` — not as a
- * JSON-RPC `-32603 "Internal error"` with the remedy buried in prose. An agent that
- * branches on `code` has to keep working when the check moves closer to the caller.
+ * SPL-266: the client-side refusal must reach the agent as a tool result carrying a
+ * typed `ErrorResponse` with the Worker's own `code`, not as a JSON-RPC
+ * `-32603 "Internal error"` with the remedy buried in prose. An agent that branches
+ * on `code` has to keep working when the check moves closer to the caller. The issue
+ * path is surface-local (`idempotency_key`, the tool input the agent controls), not
+ * the Worker's header path.
  */
 
 const service = "splitch-mcp-server";
@@ -40,7 +42,11 @@ describe("mcp missing-idempotency-key refusal", () => {
     );
 
     expect(body.result).toBeUndefined();
-    expect(body.error).toMatchObject({ code: -32603, message: "Internal error" });
+    expect(body.error).toMatchObject({
+      code: -32603,
+      message: "Internal error",
+      data: { message: "upstream exploded" },
+    });
   });
 });
 
