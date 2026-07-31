@@ -196,19 +196,55 @@ export type CreateFlagResult =
  */
 const FLAG_KEY_UNIQUE_VIOLATION = "UNIQUE constraint failed: flags.app_id, flags.key";
 
+/** SQLite's extended result code for the same failure, which no column list can spell. */
+const SQLITE_UNIQUE_CODE = "SQLITE_CONSTRAINT_UNIQUE";
+
 /**
- * Drizzle wraps the D1 failure in a query error whose own message is the SQL it
- * ran, so the constraint text lives further down the `cause` chain. Reading only
- * the top-level message classifies every collision as an unknown fault and turns
- * a refusable duplicate into a 500.
+ * Classify a write failure WITHOUT ever reading a message that embeds the bound
+ * parameters.
+ *
+ * D1 exposes no structured code on the thrown Error — the extended result code
+ * only ever appears in prose — so this has to match text. That makes WHICH text
+ * it reads the whole security property. Drizzle's top-level `DrizzleQueryError`
+ * message carries the SQL *and its parameters*, so a Flag `key`, `name` or
+ * `description` containing the constraint string would classify ANY insert
+ * failure as a collision: a lost connection would come back as "flag key already
+ * exists", telling an operator to pick a different key when the key was free and
+ * nothing was written. A disguised default with an impossible remedy (ADR-0036),
+ * and worse than the 500 it replaces, because the 500 was at least honest.
+ *
+ * So every layer carrying bound parameters is skipped, wherever it sits in the
+ * chain. That is stated as a property of the layer rather than as "skip the top
+ * one", because a nesting change that moved the wrapper down a level would
+ * silently reopen the hole, and because it still classifies correctly if the seam
+ * ever throws D1's error unwrapped. What is left is D1's own text, which no
+ * caller can author. Both the constraint string and the extended result code must
+ * appear in that SAME message: the column list identifies the collision, the
+ * result code is the proof it was a uniqueness failure at all.
  */
 function isFlagKeyConflict(error: unknown): boolean {
-  for (let current: unknown = error, depth = 0; current && depth < 8; depth += 1) {
-    const message = current instanceof Error ? current.message : String(current);
-    if (message.includes(FLAG_KEY_UNIQUE_VIOLATION)) return true;
-    current = current instanceof Error ? current.cause : undefined;
+  for (const message of messagesNotCarryingParameters(error)) {
+    if (message.includes(FLAG_KEY_UNIQUE_VIOLATION) && message.includes(SQLITE_UNIQUE_CODE)) {
+      return true;
+    }
   }
   return false;
+}
+
+/** The `cause` chain, minus every layer that stringifies the caller's values. */
+function* messagesNotCarryingParameters(error: unknown): Generator<string> {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 8; depth += 1) {
+    if (!embedsBoundParameters(current)) {
+      yield current instanceof Error ? current.message : String(current);
+    }
+    current = current instanceof Error ? current.cause : undefined;
+  }
+}
+
+/** A query error, which stringifies the caller's values into its own message. */
+function embedsBoundParameters(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "params" in error;
 }
 
 function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {

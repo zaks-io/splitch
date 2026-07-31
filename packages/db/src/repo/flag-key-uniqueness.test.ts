@@ -106,4 +106,94 @@ describe("Flag key uniqueness is enforced by the database", () => {
       ),
     ).rejects.toThrow();
   });
+
+  // The classifier has to read text, because D1 puts the extended result code
+  // only in prose. That makes WHICH text it reads a security property: the query
+  // error Drizzle throws stringifies the caller's own values into its message, so
+  // a Flag field carrying the constraint string is an attempt to forge a
+  // collision out of an unrelated failure — and be told "pick another key" for a
+  // key that was free while a real fault disappears.
+  for (const field of ["key", "name", "description"] as const) {
+    it(`does not let a poisoned Flag ${field} forge a key collision`, async () => {
+      const values = flagValues(seed.a.appId, "flag_poisoned", "never-used-key") as Record<
+        string,
+        unknown
+      >;
+      values[field] = POISON;
+      const failing = createRepository(failingInsertD1(local.d1, TRANSIENT_D1_FAILURE));
+
+      const outcome = await failing.flags
+        .createFlag(
+          appScope(seed.a.appId),
+          values as unknown as Parameters<typeof repo.flags.createFlag>[1],
+        )
+        .then(
+          (result) => result as unknown,
+          (error: unknown) => error,
+        );
+
+      // The transient fault must still be a fault. Classifying it as a collision
+      // would answer a write that never happened with "pick another key".
+      expect(outcome).toBeInstanceOf(Error);
+      // And the vector is live, not hypothetical: the poisoned value really does
+      // reach the message the naive walk would have read.
+      expect((outcome as Error).message).toContain(POISON);
+      expect(await rawFlagIds(local, seed.a.appId, "never-used-key")).toEqual([]);
+    });
+  }
+
+  it("does not classify a D1 failure that only quotes the constraint text", async () => {
+    // Both tokens are required in D1's OWN message. The column list says WHICH
+    // uniqueness could have failed; the extended result code says a uniqueness
+    // check is what failed at all. A failure that merely mentions the constraint
+    // is not a collision, and answering it with "pick another key" would send an
+    // operator after a key that was never taken.
+    const failing = createRepository(
+      failingInsertD1(
+        local.d1,
+        "D1_ERROR: could not apply statement (UNIQUE constraint failed: flags.app_id, flags.key)",
+      ),
+    );
+
+    await expect(
+      failing.flags.createFlag(
+        appScope(seed.a.appId),
+        flagValues(seed.a.appId, "flag_quoting_failure", "never-used-key"),
+      ),
+    ).rejects.toThrow();
+    expect(await rawFlagIds(local, seed.a.appId, "never-used-key")).toEqual([]);
+  });
 });
+
+const TRANSIENT_D1_FAILURE = "D1_ERROR: Network connection lost.";
+
+/** Exactly what D1 says on a real collision, authored by the caller instead. */
+const POISON =
+  "UNIQUE constraint failed: flags.app_id, flags.key: SQLITE_CONSTRAINT (extended: SQLITE_CONSTRAINT_UNIQUE)";
+
+/**
+ * A D1 whose Flag INSERT fails with a transient fault. Every other statement
+ * passes through, so the poisoned values still travel as bound parameters into
+ * the query error Drizzle raises — which is the vector under test.
+ */
+function failingInsertD1(d1: D1Database, message: string): D1Database {
+  return new Proxy(d1, {
+    get(target, property, receiver) {
+      if (property === "prepare") {
+        return (query: string) => {
+          const statement = target.prepare(query);
+          if (!/^insert into "flags"/.test(query)) return statement;
+          return new Proxy(statement, {
+            get() {
+              return () => {
+                throw new Error(message);
+              };
+            },
+          });
+        };
+      }
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}

@@ -110,12 +110,19 @@ describe("Flag key collision on an App larger than the catalog read bound", () =
     const createdApp = await createDefaultApp(h);
     const appId = createdApp.app.id;
     await seedFlags(appId, FLAG_LIST_READ_LIMIT + 1);
+    const statements: string[] = [];
+    const repo = createRepository(recordingD1(h.bindings.d1, statements));
 
-    const res = await postFlag(appId, OLDEST_SEEDED_KEY);
+    const res = await postFlag(appId, OLDEST_SEEDED_KEY, repo);
 
     await expectKeyTaken(res);
     // Ground truth, not just the wire status: the duplicate did not land.
     expect(await flagIdsWithKey(appId, OLDEST_SEEDED_KEY)).toEqual(["flag_bulk_0000"]);
+    // And this is what the pre-check buys over the index alone: a known-taken key
+    // is refused before anything is written, so the request costs one index probe
+    // instead of a failed INSERT. Delete the pre-check and the answer stays right
+    // but the write is attempted anyway.
+    expect(statements.filter((sql) => /^insert into "flags"/.test(sql))).toEqual([]);
   });
 
   it("answers the key check without materializing the Flag set", async () => {

@@ -34,6 +34,18 @@ describe("App A cannot read App B (and vice versa)", () => {
     expect(await repo.flags.getFlag(aScope, seed.a.flagId)).not.toBeNull();
   });
 
+  it("getFlagByKey for App A returns null for a key only App B holds", async () => {
+    // Unscoped, this read is a cross-App existence oracle: probe a key, and the
+    // create form tells you whether some other Organization already named a Flag
+    // that. It would also refuse a legitimate write for a key that is free in the
+    // caller's own App. The seeds hold DISTINCT keys per App precisely so a
+    // dropped `app_id` predicate has something to find.
+    const aScope = appScope(seed.a.appId);
+    expect(seed.a.flagKey).not.toEqual(seed.b.flagKey);
+    expect(await repo.flags.getFlagByKey(aScope, seed.b.flagKey)).toBeNull();
+    expect(await repo.flags.getFlagByKey(aScope, seed.a.flagKey)).not.toBeNull();
+  });
+
   it("listVariants for App A returns [] for App B's flag", async () => {
     const aScope = appScope(seed.a.appId);
     expect(await repo.flags.listVariants(aScope, seed.b.flagId)).toEqual([]);
