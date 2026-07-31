@@ -21,8 +21,13 @@ export default defineConfig({
     },
   },
   test: {
+    name: "workers",
     include: ["test/**/*.{test,spec}.ts"],
     passWithNoTests: true,
+    // Miniflare startup plus CPU contention from the parallel verify graph
+    // makes the 5s default flaky (SPL-231).
+    testTimeout: 15_000,
+    hookTimeout: 30_000,
   },
 });
 

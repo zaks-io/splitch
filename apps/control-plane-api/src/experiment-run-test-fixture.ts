@@ -50,12 +50,35 @@ export async function makeExperimentRunHarness(
   makeBindings: () => Promise<LocalBindings>,
   options?: {
     syncFailures?: SyncFailureControl;
+    /**
+     * Runs immediately before every `updateExperiment` write reaches D1 — the
+     * only seam that lands another operation strictly between a PATCH's guard
+     * read and its write. A test that cannot control that interleaving cannot
+     * say anything about whether the write is guarded.
+     */
+    beforeExperimentUpdate?: () => Promise<void>;
   },
 ): Promise<ExperimentRunHarness> {
   const h = await makeFlagDefinitionHarness(makeBindings);
   const repo = createRepository(h.bindings.d1);
-  h.app = makeAppForRepo(h, repo, configStoreAccess(repo, h.bindings.kv, options?.syncFailures));
+  const appRepo = interleavedRepo(repo, options?.beforeExperimentUpdate);
+  h.app = makeAppForRepo(h, appRepo, configStoreAccess(repo, h.bindings.kv, options?.syncFailures));
   return { h, repo };
+}
+
+function interleavedRepo(repo: Repository, before?: () => Promise<void>): Repository {
+  if (!before) return repo;
+  const experiments = repo.experiments;
+  return {
+    ...repo,
+    experiments: {
+      ...experiments,
+      async updateExperiment(...args: Parameters<typeof experiments.updateExperiment>) {
+        await before();
+        return experiments.updateExperiment(...args);
+      },
+    },
+  };
 }
 
 export async function experimentFixture(ctx: ExperimentRunHarness, environmentKey = "dev") {
@@ -136,12 +159,14 @@ export async function startExperiment(
   ctx: ExperimentRunHarness,
   fx: Fixture,
   experimentId: string,
+  body: Record<string, unknown> = {},
 ) {
   return request(
     ctx.h,
     "POST",
     `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experimentId}/start`,
     fx.jwt,
+    { idempotency_key: `idem_start_${experimentId}`, ...body },
   );
 }
 
@@ -225,6 +250,7 @@ export async function insertSyntheticNewerRun(
     salt: "synthetic-salt",
     allocation: JSON.stringify({ control: 100 }),
     variantSet: JSON.stringify([{ id: fx.flag.defaultVariantId, name: "control", value: false }]),
+    controlVariantId: fx.flag.defaultVariantId,
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: "[]",

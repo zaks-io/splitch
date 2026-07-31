@@ -1,136 +1,159 @@
-# SDK release runbook
+# Package release runbook
 
-This runbook is the operating contract for publishing `@splitch/sdk`. It documents the
-implemented workflow path and the human-owned provider setup it depends on. It does not grant
-permission to publish, change repository visibility, configure providers, or change tag/release
-rules.
+This runbook is the operating contract for publishing `@splitch/sdk` and `@splitch/cli`. It
+documents the implemented workflow path and the human-owned provider setup it depends on. It does
+not grant permission to publish, change repository visibility, configure providers, or change
+tag/release rules.
 
 ## Release model
 
-`packages/sdk/package.json` is the source of truth for the SDK version. At this time the release
-helpers accept only `0.1.0`; they derive the release tag as `sdk-v0.1.0`. Do not enter or create a
-release tag by hand.
+Each package manifest is the source of truth for its version: the release workflows release
+exactly the version checked into the target's `package.json`, and the version bump PR is the
+reviewed act of cutting a release. Dispatching a release workflow for a version whose tag already
+has a published release is a deliberate no-op, not a failure: the validate job green-skips with a
+step summary and annotation telling you to bump the manifest, and nothing is validated or
+drafted. Every unexpected state (a tag that moved, a published release being mutated, mismatched
+commit evidence) still fails loudly.
 
-The package is public (`publishConfig.access = public`). `@splitch/contracts` remains private:
-the SDK build derives its public declaration surface from the source-of-truth contracts, and the
-published manifest and declarations must not require `@splitch/contracts`.
+`cli-v0.1.0` is a burned release: it was published targeting a commit whose manifest npm's
+publish-time fixer would strip the `bin` from, its publish run failed before npm was reachable,
+and the published release/tag are immutable. Never re-run its failed `cli-publish` run; it would
+consume npm version `0.1.0` with a binary-less package. The CLI's first stable version is
+`0.1.1`.
 
-There are two deliberately separate workflows:
+| Target | Manifest                    | Tag              | Draft workflow                                              | Trusted-publish workflow                                    |
+| ------ | --------------------------- | ---------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
+| `sdk`  | `packages/sdk/package.json` | `sdk-v<version>` | [`sdk-release`](../../../.github/workflows/sdk-release.yml) | [`sdk-publish`](../../../.github/workflows/sdk-publish.yml) |
+| `cli`  | `apps/cli/package.json`     | `cli-v<version>` | [`cli-release`](../../../.github/workflows/cli-release.yml) | [`cli-publish`](../../../.github/workflows/cli-publish.yml) |
 
-| Workflow                                                    | Trigger and runner                                              | Result                                                                                                                                                                                   |
-| ----------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`sdk-release`](../../../.github/workflows/sdk-release.yml) | Manual `workflow_dispatch`; Blacksmith                          | Validates the candidate, creates release artifacts, and creates or updates a **draft** GitHub Release for `sdk-v<version>`. It never publishes to npm.                                   |
-| [`sdk-publish`](../../../.github/workflows/sdk-publish.yml) | A GitHub Release is **published**; GitHub-hosted `ubuntu-24.04` | Revalidates the live release source, then uses npm trusted publishing/OIDC to run `npm publish --provenance --access public --tag latest`, or safely skips an already-published version. |
+The release workflows are manual `workflow_dispatch` jobs on Blacksmith. They validate the
+repo-wide candidate, prepare artifacts, and create or update a draft GitHub Release. They never
+publish to npm. Publishing the reviewed GitHub Release triggers the matching package's
+GitHub-hosted `ubuntu-24.04` workflow, which revalidates live release state and runs
+`npm publish --provenance --access public --tag latest` through npm trusted publishing/OIDC. After
+that job succeeds, a separate job bound to the GitHub `production` environment syncs the package's
+dedicated Linear release pipeline. The SDK pipeline reads `SDK_LINEAR_ACCESS_KEY`; the CLI pipeline
+reads `CLI_LINEAR_ACCESS_KEY`. The platform deploy continues to use `LINEAR_ACCESS_KEY`.
 
-Pushing an `sdk-v*` tag by itself does not publish to npm. Only the `release: published` event
-can enter `sdk-publish`. Blacksmith handles validation, packaging, and draft preparation; npm
-trusted publishing's final job intentionally runs on GitHub-hosted infrastructure, not
-Blacksmith.
+Pushing a namespaced tag alone does not publish. The publish workflows accept only a
+`release: published` event and filter their own `sdk-v*` or `cli-v*` namespace.
 
-## Provider setup before the first stable release
+The SDK derives its public declaration surface from private contracts. Its manifest and
+declarations must not require `@splitch/contracts`. The CLI bundles all `@splitch/*` runtime code,
+including `@splitch/sdk`, while keeping third-party runtime packages external. Its packed manifest
+must contain no workspace dependency or `workspace:` range.
 
-These are human-owned provider actions. Record completion in the release PR or release evidence,
-but do not put credentials, tokens, signed URLs, or private logs in this repository.
+## Provider setup before a first stable release
 
-| Owner                                           | Required setup                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Evidence to retain                                                                                                                                                                                                |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub repository administrator                 | Make `zaks-io/splitch` public before the stable release. `sdk-publish` fails closed when live repository visibility is not public.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Repository visibility is public immediately before release publication.                                                                                                                                           |
-| GitHub repository or organization administrator | Enable immutable releases. Draft releases remain editable while they are drafts; after publication, release assets and the associated tag must be immutable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | GitHub shows the published release as immutable; record the release URL and `sdk-v0.1.0` commit.                                                                                                                  |
-| GitHub repository or organization administrator | Create a tag ruleset targeting `sdk-v*` that restricts tag creation, update, and deletion, but do not treat the current workflow as compatible with an active restrictive ruleset. `sdk-release` force-updates its draft tag with the standard Actions token, which is not a selectable workflow-specific bypass actor. Before activating the ruleset or dispatching a release, a human must choose a supported bypass actor and authorize the corresponding workflow-auth change in a separate PR. Prefer a dedicated GitHub App with only the required tag/release permissions if that option is approved later; do not grant a broad human or unrelated-app bypass. | Record the ruleset name, target pattern, restrictions, selected supported bypass actor, approving human, and the workflow run proving draft tag creation/update. Until all exist, release preparation is blocked. |
-| npm organization administrator                  | Ensure the `@splitch` scope and `@splitch/sdk` package are controlled by the intended organization. Complete the one-time bootstrap below before configuring trusted publishing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Package ownership and organization write access are confirmed by the responsible human.                                                                                                                           |
-| npm organization administrator                  | Configure the sole GitHub Actions trusted publisher for repository owner `zaks-io`, repository `splitch`, workflow filename `sdk-publish.yml`, and allowed action `npm publish`. Do not set an environment name unless the workflow is changed to use that exact environment.                                                                                                                                                                                                                                                                                                                                                                                          | npm's trusted-publisher view matches those values exactly, including the `.yml` filename.                                                                                                                         |
-| Bootstrap publisher                             | Revoke every temporary publishing token and temporary publishing grant after bootstrap. Set the npm package's **Publishing Access** to the option that disallows token-based publishing; normal `sdk-publish` must remain OIDC-only.                                                                                                                                                                                                                                                                                                                                                                                                                                   | Retain provider evidence showing temporary access revoked, token-based publishing disallowed, and no npm token present in repository secrets.                                                                     |
+These are human-owned provider actions. Retain evidence with the release record, but never commit
+credentials, tokens, signed URLs, or private logs.
 
-Immutable releases are part of the release boundary, not an optional afterthought. The publish
-workflow independently verifies that the live release is published, non-prerelease, immutable,
-and tied to one matching remote tag, release target, checked-out commit, and `GITHUB_SHA`.
+1. Make `zaks-io/splitch` public. Both publish workflows fail closed unless the live repository is
+   public.
+2. Enable immutable releases. A publish workflow requires a published, non-prerelease, immutable
+   GitHub Release tied to one matching tag, target commit, checked-out commit, and `GITHUB_SHA`.
+3. Maintain separate tag rulesets for `sdk-v*` and `cli-v*`. Each ruleset restricts tag creation,
+   update, and deletion. The dedicated release GitHub App is the sole bypass actor for both. It
+   uses repository variable `SDK_RELEASE_APP_ID` and secret `SDK_RELEASE_APP_PRIVATE_KEY`, has only
+   repository `contents: write`, and is installed on `zaks-io/splitch` alone.
+4. Confirm the `@splitch` npm scope and both packages are controlled by the intended organization.
+5. Configure one trusted publisher per package:
+
+   | Package        | Repository        | Workflow filename | Allowed action |
+   | -------------- | ----------------- | ----------------- | -------------- |
+   | `@splitch/sdk` | `zaks-io/splitch` | `sdk-publish.yml` | `npm publish`  |
+   | `@splitch/cli` | `zaks-io/splitch` | `cli-publish.yml` | `npm publish`  |
+
+   Do not configure an environment unless the workflow is changed to use that exact environment.
+
+6. After bootstrap, revoke every temporary publishing token and grant. Set each npm package's
+   Publishing Access to disallow token-based publishing. The normal workflows remain OIDC-only.
+
+Do not activate either tag ruleset before the shared App credentials and matching release workflow
+are proven able to create and update a draft tag.
 
 ### One-time npm bootstrap
 
-npm trusted publishing requires an existing npm package. Before the first stable release, a human
-with npm organization write access and 2FA manually publishes exactly
-`@splitch/sdk@0.1.0-bootstrap.0` with dist-tag `bootstrap`. This disposable prerelease must not
-consume `0.1.0`, `latest`, or the stable tag, and it does not make the stable release's provenance
-claim. Then configure and verify the trusted publisher, revoke temporary tokens and publishing
-grants, set the package's Publishing Access to disallow tokens, retain provider evidence, and
-continue through the normal draft-release flow.
+npm trusted publishing requires an existing package. A human with npm organization write access
+and 2FA manually publishes only the disposable prerelease for the package being bootstrapped:
 
-## First stable release: `@splitch/sdk@0.1.0`
+- `@splitch/sdk@0.1.0-bootstrap.0` with dist-tag `bootstrap`
+- `@splitch/cli@0.1.0-bootstrap.0` with dist-tag `bootstrap`
 
-Use this procedure only after a human approves the release. It is a checklist, not an automated
-deployment command.
+The prerelease must not consume `0.1.0` or a stable release tag. npm may force `latest` onto the
+first-ever version until the stable publish repoints it. Record that state instead of working
+around it. Then configure and verify the package's trusted publisher, revoke temporary access,
+disallow token publishing, and continue through the normal draft flow.
+
+## Stable release checklist
+
+Use this only after a human approves the package release.
 
 ### 1. Candidate and metadata
 
-- [ ] `packages/sdk/package.json` says `name: "@splitch/sdk"` and `version: "0.1.0"`.
-- [ ] Its metadata is ready for npm consumers: description, Apache-2.0 SPDX license, repository
-      URL and `packages/sdk` directory, ESM exports, supported Node engine, public access, and a
-      `dist`-only files whitelist.
-- [ ] Review consumer-facing README and license material. The package tarball is the authority for
-      what ships, so treat an absent README or license in its dry-run listing as a release blocker
-      until the package contents are intentionally corrected.
-- [ ] Confirm the built declarations and packed manifest contain no `@splitch/contracts` dependency
-      or import. Public types must remain build-derived, never hand-copied.
-- [ ] Run the candidate evidence required by `sdk-release`: format, lint, typecheck, SDK tests,
-      SDK build, pack dry-run, pack check, consumer smoke, and `verify:push`.
+- [ ] The target manifest has the expected package name and the target's `allowedVersion`.
+- [ ] Description, Apache-2.0 SPDX license, repository directory, ESM export, Node engine, public
+      access, and dist-only files whitelist are correct.
+- [ ] The consumer README and license appear in the actual package tarball.
+- [ ] SDK only: declarations and packed manifest contain no `@splitch/contracts`.
+- [ ] CLI only: `dist/cli.js` has the Node shebang; workspace packages are bundled; packed
+      dependencies are exactly the external runtime set; no workspace range or dev dependency
+      ships.
+- [ ] Candidate validation passes as one shared Turbo graph covering format, lint, typecheck,
+      tests, builds, Knip, secret scanning, Tinybird and D1 checks, pack checks, and consumer smoke.
 
 ### 2. Provider readiness
 
-- [ ] The repository is public.
-- [ ] Immutable releases are enabled. The `sdk-v*` tag ruleset restricts creation, update, and
-      deletion, and its supported bypass actor is recorded and proven by a draft workflow run. The
-      current standard Actions token does not satisfy this requirement; stop until a human-approved
-      actor and separate workflow-auth change land.
-- [ ] The bootstrap prerelease exists only as `0.1.0-bootstrap.0` under dist-tag `bootstrap`.
-- [ ] npm trusted publisher matches `zaks-io/splitch`, `sdk-publish.yml`, and `npm publish`.
-- [ ] Every temporary bootstrap token and publishing grant is revoked. npm package Publishing Access
-      disallows token-based publishing, no npm token is available to the normal publish workflow,
-      and provider evidence is retained with the release record.
+- [ ] The repository is public and immutable releases are enabled.
+- [ ] The target's tag ruleset restricts create/update/delete and has the shared release App as its
+      sole bypass actor.
+- [ ] A draft workflow run proves the App can create or update the target's draft tag.
+- [ ] The target bootstrap prerelease exists and no unintended version exists.
+- [ ] The trusted publisher is pinned to the target's exact publish workflow filename.
+- [ ] Temporary bootstrap access is revoked and npm Publishing Access disallows tokens.
 
 ### 3. Prepare the draft
 
-1. Manually dispatch `sdk-release` from the approved commit. It resolves the version from the
-   checked-in SDK manifest and validates it before touching a release.
-2. Inspect the `sdk-release-validation-sdk-v0.1.0` and `sdk-release-package-sdk-v0.1.0` workflow
-   artifacts. They include validation logs/summaries, the packed tarball, checksum,
-   tarball-contents listing, dependency inventory, and release manifest.
-3. Inspect the draft GitHub Release for `sdk-v0.1.0`: its target must be the validated commit, and
-   the attached artifacts must be the reviewed ones. A rerun may update this draft only; it refuses
-   to mutate an already-published release.
+1. Dispatch `sdk-release` or `cli-release` from the approved commit.
+2. Inspect both `<target>-release-validation-<tag>` and `<target>-release-package-<tag>` artifacts.
+   They contain validation evidence, the tarball, checksum, tarball listing, dependency inventory,
+   and release manifest.
+3. Inspect the draft GitHub Release. Its target and artifacts must match the reviewed evidence. A
+   rerun may update a draft only; it refuses to mutate a published release.
 
 ### 4. Release publication and verification
 
-1. Change the reviewed GitHub Release from draft to published. Do not create a second tag or release
-   manually.
-2. Confirm the resulting `sdk-publish` run used `ubuntu-24.04`, checked out `sdk-v0.1.0`, and
-   reported the same release tag, release target commit, checked-out commit, and `GITHUB_SHA`.
-3. Confirm its summary reports provenance/OIDC, dist-tag `latest`, and either `publish` or
-   `skip-already-published`. A skip is correct only when exactly `@splitch/sdk@0.1.0` already
-   exists; npm versions are immutable and must never be overwritten.
-4. Confirm the published GitHub Release is immutable and retain the release URL, npm package URL,
-   commit SHA, workflow URLs, and artifact/checksum evidence with the release record.
+1. Change the reviewed draft GitHub Release to published. Do not create another tag or release.
+2. Confirm the matching publish workflow used `ubuntu-24.04` and reported identical tag, target,
+   checked-out commit, and `GITHUB_SHA`.
+3. Confirm the summary reports OIDC/provenance, dist-tag `latest`, and either `publish` or
+   `skip-already-published`. A skip is valid only when the exact immutable version already exists.
+4. Confirm the package-specific Linear release job succeeded and linked the GitHub Release, npm
+   package version, and GitHub Actions run.
+5. Retain the immutable release URL, npm package URL, Linear release URL, commit, workflow URLs, and
+   checksum evidence.
 
-If any provider check fails, stop. Fix the human-owned setup or release metadata, then repeat only
-the draft-safe preparation steps. Do not add an npm token, make an ad hoc publish, or move a
-published release/tag to work around the failure.
+If a provider check fails, stop. Fix the setup or metadata, then repeat only the draft-safe steps.
+Never add an npm token, publish ad hoc, or move a published release/tag around the failure.
 
 ## Operational boundaries
 
-- The normal path publishes only `@splitch/sdk` and only with dist-tag `latest`.
-- The publish workflow rejects a private repository, a wrong SDK tag or version, mismatched commit
-  evidence, a non-immutable or unpublished release, and a changed remote tag.
-- Release preparation has GitHub `contents: write` only because it creates/updates a draft tag and
-  draft release. The trusted-publish workflow has read-only contents plus OIDC `id-token: write`.
-- This runbook does not replace the general deployment contract in
-  [deployment-pipeline.md](./deployment-pipeline.md) or the local verification rules in
+- Each workflow publishes only its declared package, namespace, and `latest` dist-tag.
+- The publish workflows reject a private repository, wrong tag/version, mismatched commit evidence, mutable or
+  unpublished release, or changed remote tag.
+- Draft preparation has `contents: write` only for its draft tag and release. Trusted publish has
+  read-only contents plus OIDC `id-token: write`.
+- This runbook does not replace [deployment-pipeline.md](./deployment-pipeline.md) or
   [local-quality-gates.md](./local-quality-gates.md).
 
 ## Sources
 
-- [`packages/sdk/package.json`](../../../packages/sdk/package.json)
+- [`@splitch/sdk` manifest](../../../packages/sdk/package.json)
+- [`@splitch/cli` manifest](../../../apps/cli/package.json)
 - [`sdk-release` workflow](../../../.github/workflows/sdk-release.yml)
 - [`sdk-publish` workflow](../../../.github/workflows/sdk-publish.yml)
-- [Deployment pipeline](./deployment-pipeline.md)
+- [`cli-release` workflow](../../../.github/workflows/cli-release.yml)
+- [`cli-publish` workflow](../../../.github/workflows/cli-publish.yml)
 - [GitHub immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
 - [GitHub tag rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository)
 - [npm trusted publishers](https://docs.npmjs.com/trusted-publishers/)

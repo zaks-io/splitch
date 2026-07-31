@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createControlPlaneSdk } from "./index";
 
 const flagPage = {
+  readTruncated: false,
+  readLimit: 200,
   items: [
     {
       id: "flag_checkout",
@@ -52,6 +54,7 @@ describe("control plane sdk typed route groups", () => {
       key: "checkout",
       schema: null,
       variants: [{ name: "on", value: true, isDefault: true }],
+      idempotency_key: "idem-create-checkout",
     });
 
     expect(capturedBody).toMatchObject({ appId: "app_local", key: "checkout" });

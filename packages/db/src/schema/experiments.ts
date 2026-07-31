@@ -43,6 +43,8 @@ export const experiments = sqliteTable(
     name: text("name").notNull(),
     description: text("description"),
     hypothesis: text("hypothesis"),
+    owner: text("owner"),
+    tags: text("tags").notNull().default("[]"),
     status: text("status").notNull().default("draft"),
     // EC field name read as the Targeting Key (e.g. "userId").
     targetingKeyField: text("targeting_key_field").notNull(),
@@ -98,10 +100,13 @@ export const runs = sqliteTable(
     targetingKeyField: text("targeting_key_field").notNull(),
     // Entity type label frozen at Start (the Run's id_type). immutable.
     targetingKeyType: text("targeting_key_type").notNull(),
+    activationMetricId: text("activation_metric_id"), // immutable
     salt: text("salt").notNull(), // immutable
     // JSON { [variantName]: number }, keyed by Variant name. immutable.
     allocation: text("allocation").notNull(),
     variantSet: text("variant_set").notNull(), // JSON. immutable
+    // Control Variant identity frozen from the Experiment at Start. immutable.
+    controlVariantId: text("control_variant_id").notNull(),
     // JSON TargetingRule[] resolved snapshot frozen at Start ([] = all eligible).
     targetingRules: text("targeting_rules").notNull(), // immutable
     confidenceLevel: real("confidence_level").notNull(), // locked at Start

@@ -64,5 +64,10 @@ if (probe.status !== 0) {
   process.exit(0);
 }
 
-const run = spawnSync("gitleaks", gitleaksArgs, { stdio: "inherit" });
+// Range scans finish in seconds; the bound is for the full-history fallback
+// or a wedged process, which must fail loudly rather than hang the push.
+const run = spawnSync("gitleaks", gitleaksArgs, { stdio: "inherit", timeout: 5 * 60 * 1000 });
+if (run.signal) {
+  console.error(`secrets:range: gitleaks was killed with ${run.signal} (timed out after 5m?).`);
+}
 process.exit(run.status ?? 1);

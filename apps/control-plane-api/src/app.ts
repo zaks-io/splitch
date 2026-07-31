@@ -9,10 +9,18 @@ import {
 } from "@splitch/worker-runtime";
 import { Hono } from "hono";
 import { makeAppEnvironmentHandlers } from "./app-environment-handlers";
+import { makeOtherApprovalApplication } from "./approval-application";
+import { makeApprovalHandlers } from "./approval-handlers";
+import {
+  type AnalysisResultsReader,
+  unavailableAnalysisResults,
+} from "./attention-analysis-reader";
+import { makeAttentionRollupHandler } from "./attention-rollup";
 import type { ConfigStoreAccess } from "./config-store-do";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
 import { makeExperimentHandlers } from "./experiment-handlers";
+import { diagnosableHandlers } from "./flag-config-policy";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
 import { makeHandlers } from "./handlers";
 import { mountLiveUpdateRoute } from "./live-updates";
@@ -50,6 +58,7 @@ export interface AppDeps {
   defaultHeaders?: Record<string, string>;
   observability?: RegistrarDeps["observability"];
   logger?: Pick<Console, "warn">;
+  analysisResults?: AnalysisResultsReader;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -63,35 +72,42 @@ export function controlPlaneRegistrar(deps: AppDeps): Registrar {
   return createRegistrar(registrarDeps);
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: route mounting stays explicit so no operation can be silently omitted
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
-  const handlers = makeHandlers({
-    repo: deps.repo,
-    configStore: deps.configStore,
-    memberProfileResolver: deps.memberProfileResolver,
-    nowIso: deps.nowIso,
-  });
+  const handlers = diagnosableHandlers(
+    makeHandlers({
+      repo: deps.repo,
+      configStore: deps.configStore,
+      memberProfileResolver: deps.memberProfileResolver,
+      nowIso: deps.nowIso,
+    }),
+  );
   const credentialHandlers = makeCredentialHandlers({
     repo: deps.repo,
     credentialStore: deps.credentialStore,
     credentialCacheWriter: deps.credentialCacheWriter,
     nowIso: deps.nowIso,
   });
-  const flagDefinitionHandlers = makeFlagDefinitionHandlers({
-    repo: deps.repo,
-    configStore: deps.configStore,
-    logger: deps.logger,
-    nowIso: deps.nowIso,
-  });
+  const flagDefinitionHandlers = diagnosableHandlers(
+    makeFlagDefinitionHandlers({
+      repo: deps.repo,
+      configStore: deps.configStore,
+      logger: deps.logger,
+      nowIso: deps.nowIso,
+    }),
+  );
   const metricSegmentHandlers = makeMetricSegmentHandlers({
     repo: deps.repo,
     nowIso: deps.nowIso,
   });
-  const experimentHandlers = makeExperimentHandlers({
-    repo: deps.repo,
-    configStore: deps.configStore,
-    nowIso: deps.nowIso,
-  });
+  const experimentHandlers = diagnosableHandlers(
+    makeExperimentHandlers({
+      repo: deps.repo,
+      configStore: deps.configStore,
+      nowIso: deps.nowIso,
+    }),
+  );
   const appEnvironmentHandlers = makeAppEnvironmentHandlers({
     repo: deps.repo,
     credentialStore: deps.credentialStore,
@@ -100,6 +116,17 @@ export function createApp(deps: AppDeps): Hono {
     nowIso: deps.nowIso,
   });
   const registrar = controlPlaneRegistrar(deps);
+  const approvalHandlers = diagnosableHandlers(
+    makeApprovalHandlers({
+      repo: deps.repo,
+      configStore: deps.configStore,
+      nowIso: deps.nowIso,
+      applyOther: makeOtherApprovalApplication({
+        repo: deps.repo,
+        configStore: deps.configStore,
+      }),
+    }),
+  );
 
   app.get("/.well-known/openapi.json", (c) => c.json(buildOpenApiDocument()));
 
@@ -114,6 +141,7 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("apps_list"), appEnvironmentHandlers.listApps);
   registrar.mount(app, controlPlaneRoute("apps_create"), appEnvironmentHandlers.createApp);
   registrar.mount(app, controlPlaneRoute("apps_get"), appEnvironmentHandlers.getApp);
+  mountAttentionRollupRoute(app, registrar, deps);
   registrar.mount(app, controlPlaneRoute("apps_update"), appEnvironmentHandlers.updateApp);
   registrar.mount(app, controlPlaneRoute("apps_delete"), appEnvironmentHandlers.deleteApp);
   registrar.mount(
@@ -177,6 +205,13 @@ export function createApp(deps: AppDeps): Hono {
     handlers.replaceTargetingRules,
   );
   registrar.mount(app, controlPlaneRoute("flags_promote"), handlers.promoteFlagConfig);
+  registrar.mount(app, controlPlaneRoute("approval_requests_list"), approvalHandlers.list);
+  registrar.mount(app, controlPlaneRoute("approval_requests_get"), approvalHandlers.get);
+  registrar.mount(
+    app,
+    controlPlaneRoute("approval_request_reviews_create"),
+    approvalHandlers.review,
+  );
   registrar.mount(app, controlPlaneRoute("segments_list"), metricSegmentHandlers.listSegments);
   registrar.mount(app, controlPlaneRoute("segments_create"), metricSegmentHandlers.createSegment);
   registrar.mount(app, controlPlaneRoute("segments_get"), metricSegmentHandlers.getSegment);
@@ -193,6 +228,17 @@ export function createApp(deps: AppDeps): Hono {
   mountUnavailableControlPlaneRoutes(app, registrar, deps.repo);
 
   return app;
+}
+
+function mountAttentionRollupRoute(app: Hono, registrar: Registrar, deps: AppDeps): void {
+  registrar.mount(
+    app,
+    controlPlaneRoute("app_attention_rollup_get"),
+    makeAttentionRollupHandler({
+      repo: deps.repo,
+      analysisResults: deps.analysisResults ?? unavailableAnalysisResults,
+    }),
+  );
 }
 
 function mountUnavailableControlPlaneRoutes(

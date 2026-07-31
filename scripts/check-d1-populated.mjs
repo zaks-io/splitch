@@ -21,6 +21,8 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dbDir = join(repoRoot, "packages", "db");
 const D1_BINDING = "DB";
+// Bounds a wedged wrangler/workerd process; each call takes seconds when healthy.
+const WRANGLER_TIMEOUT_MS = 5 * 60 * 1000;
 
 // The first migration that rebuilds a table referenced by a foreign key. Every
 // migration from here on is withheld from the first pass so the seed lands in
@@ -34,8 +36,9 @@ function fail(message) {
 
 const NOW = "2026-01-01T00:00:00.000Z";
 
-// A parent Organization plus one row in each table that references it. These are
-// the FKs that make `DROP TABLE organizations` fail on a populated D1.
+// A parent Organization plus rows that exercise both table rebuilds: the
+// Organization FK graph from 0014 and an existing Experiment Run for the 0015
+// frozen-Control backfill.
 const SEED = [
   `INSERT INTO organizations (id, name, plan, created_at, updated_at)
      VALUES ('org_fk_probe', 'FK Probe', 'free', '${NOW}', '${NOW}')`,
@@ -43,6 +46,34 @@ const SEED = [
      VALUES ('org_fk_probe', 'user_fk_probe', 'owner', '${NOW}')`,
   `INSERT INTO apps (id, organization_id, name, key, created_at, updated_at)
      VALUES ('app_fk_probe', 'org_fk_probe', 'FK Probe', 'fk-probe', '${NOW}', '${NOW}')`,
+  `INSERT INTO environments (id, app_id, key, name, created_at, updated_at)
+     VALUES ('env_fk_probe', 'app_fk_probe', 'dev', 'Dev', '${NOW}', '${NOW}')`,
+  `INSERT INTO flags (id, app_id, key, name, schema, default_variant_id, created_at, updated_at)
+     VALUES (
+       'flag_fk_probe', 'app_fk_probe', 'probe-flag', 'Probe Flag', '{"type":"boolean"}',
+       'variant_control_fk_probe', '${NOW}', '${NOW}'
+     )`,
+  `INSERT INTO experiments (
+     id, app_id, environment_id, key, flag_id, name, status, targeting_key_field,
+     targeting_key_type, confidence_level, default_variant_id, metrics, guardrail_metrics,
+     conversion_window_ms, dimensions, created_at, updated_at
+   )
+   VALUES (
+     'experiment_fk_probe', 'app_fk_probe', 'env_fk_probe', 'probe-experiment',
+     'flag_fk_probe', 'Probe Experiment', 'ended', 'userId', 'user', 0.95,
+     'variant_control_fk_probe', '[]', '[]', 0, '[]', '${NOW}', '${NOW}'
+   )`,
+  `INSERT INTO runs (
+     id, app_id, environment_id, experiment_id, run_number, status, targeting_key_field,
+     targeting_key_type, salt, allocation, variant_set, targeting_rules, confidence_level,
+     decision_family, guardrail_decisions, config_hash, started_at, ended_at, created_at
+   )
+   VALUES (
+     'run_fk_probe', 'app_fk_probe', 'env_fk_probe', 'experiment_fk_probe', 1, 'ended',
+     'userId', 'user', 'salt_fk_probe', '{"control":50,"treatment":50}',
+     '[{"id":"variant_control_fk_probe","name":"control","value":false}]', '[]', 0.95,
+     '[]', '[]', 'sha256:probe', '${NOW}', '${NOW}', '${NOW}'
+   )`,
   `INSERT INTO privacy_requests (
      request_id, org_id, app_id, request_type, subject_type, subject_ref, requested_by,
      status, received_at, ack_due_at, response_due_at)
@@ -71,12 +102,17 @@ function wrangler(args) {
       "--persist-to",
       persistDir,
     ],
-    { cwd: dbDir, encoding: "utf8" },
+    { cwd: dbDir, encoding: "utf8", timeout: WRANGLER_TIMEOUT_MS },
   );
 }
 
 function execSql(sql, label) {
   const result = wrangler(["execute", "--command", sql]);
+  if (result.signal) {
+    fail(
+      `${label}: wrangler was killed with ${result.signal} (timed out after ${WRANGLER_TIMEOUT_MS / 60000}m?).`,
+    );
+  }
   if (result.status !== 0) {
     fail(`${label} failed:\n${result.stderr || result.stdout}`);
   }
@@ -152,6 +188,14 @@ try {
   );
   if (!slug.includes("org_fk_probe")) {
     fail(`the slug backfill did not run against the pre-existing row:\n${slug}`);
+  }
+
+  const controlVariant = execSql(
+    "SELECT control_variant_id FROM runs WHERE id = 'run_fk_probe'",
+    "verifying the frozen Control backfill",
+  );
+  if (!controlVariant.includes("variant_control_fk_probe")) {
+    fail(`the frozen Control backfill did not preserve the existing Run:\n${controlVariant}`);
   }
 
   console.log(

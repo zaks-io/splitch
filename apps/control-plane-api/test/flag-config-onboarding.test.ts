@@ -53,13 +53,20 @@ describe("flag configuration onboarding path", () => {
       "PATCH",
       `/apps/${createdApp.app.id}/envs/${dev?.id}/flags/${flag.id}/config`,
       jwt,
-      { enabled: true, availableVariantNames: ["control"] },
+      {
+        enabled: true,
+        availableVariantNames: ["control"],
+        idempotency_key: "idem_onboarding_configure",
+      },
     );
     expect(configured.status).toBe(200);
     expect(await configured.json()).toMatchObject({
-      enabled: true,
-      availableVariantNames: ["control"],
-      version: 2,
+      approvalRequest: null,
+      config: {
+        enabled: true,
+        availableVariantNames: ["control"],
+        version: 2,
+      },
     });
 
     const clientKeyRes = await request(

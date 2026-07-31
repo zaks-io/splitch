@@ -11,4 +11,4 @@ export {
   type ResolutionReason,
   type VariantValue,
 } from "../../contracts/src/sdk-data-plane-surface";
-export { ErrorCodeSchema, type ErrorCode } from "../../contracts/src/errors";
+export { ErrorCodeSchema, type ErrorCode } from "../../contracts/src/error-code";

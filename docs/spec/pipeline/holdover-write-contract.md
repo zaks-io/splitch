@@ -47,29 +47,42 @@ KV propagation window: up to ~60s. During this window, a cross-POP evaluate may 
 
 ## Timing in the hot path
 
+The following is the accepted ADR-0043 target. The current Event Ingest implementation directly
+posts each Exposure row to Tinybird and has no Cloudflare Queue binding.
+
 ```
 evaluate() call
   ├── Read KV for holdover (cache hit → replay, cache miss → assign())
-  ├── Return Variant to SDK caller  ← response is here; not blocked by DO write
-  ├── ctx.waitUntil: append raw Exposure row to Tinybird
-  └── ctx.waitUntil: if KV miss → call DO.putIfAbsent(key, run_id, variant)
+  ├── On fresh Exposure: synchronously seal retry-stable row in Event Ingest raw_events outbox
+  │     └── Fail Evaluation before Assignment Store write if durable seal fails
+  ├── Return Variant to SDK caller  ← response is here; not blocked by Queue, Tinybird, or DO write
+  └── ctx.waitUntil: after durable seal, if KV miss → call DO.putIfAbsent(key, run_id, variant)
                         ├── DO responds within ~100ms timeout
                         ├── On success: DO write-throughs to KV
                         └── On timeout/failure: enqueue for async retry
 ```
 
-The DO write is non-blocking — executed in `ctx.waitUntil` (Cloudflare's background task mechanism). The SDK caller never waits for the DO write. The Tinybird append and DO write are independent background tasks.
+The SDK caller waits for durable Exposure ownership, not Queue publication or Tinybird. The outbox
+retries Queue publication until it succeeds. The DO write remains non-blocking in `ctx.waitUntil`
+(Cloudflare's background task mechanism) and starts only after the durable Exposure seal succeeds.
+This ordering prevents a successful holdover write from suppressing the only retry of an unaccepted
+Exposure.
 
 ## Failure contract
 
-| Failure                                          | Effect on experience                    | Effect on analysis                                           | Recovery                                                              |
-| ------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------- |
-| DO write fails (timeout or error)                | Holdover miss on next cross-POP request | None — raw log append unaffected                             | Async retry; assign() deterministic → same Variant computed on miss   |
-| KV write-through fails (after DO write succeeds) | KV miss for ~60s                        | None                                                         | Self-healing: next evaluate hits KV miss → DO write-through retried   |
-| Raw log append fails (after DO write succeeds)   | DO has holdover → experience correct    | Exposure never in dedup → Entity not counted in analysis Run | At-least-once retry on the ingest call; SDK re-fires on next evaluate |
-| Both DO write and raw log append fail            | No holdover; no analysis row            | None — clean miss                                            | Both retry independently                                              |
+| Failure                                          | Effect on experience                     | Effect on analysis                         | Recovery                                                            |
+| ------------------------------------------------ | ---------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------- |
+| DO write fails (timeout or error)                | Holdover miss on next cross-POP request  | None — raw log append unaffected           | Async retry; assign() deterministic → same Variant computed on miss |
+| KV write-through fails (after DO write succeeds) | KV miss for ~60s                         | None                                       | Self-healing: next evaluate hits KV miss → DO write-through retried |
+| Durable Exposure outbox seal fails               | Evaluation fails; no holdover is written | No accepted Exposure                       | Retry the same Evaluation idempotency key                           |
+| Queue publication fails after outbox seal        | Experience unaffected                    | Analysis availability is delayed           | Durable outbox retries Queue publication                            |
+| Tinybird `429`/`500`/`503` after queue handoff   | Experience unaffected                    | Analysis availability is delayed           | Bounded queue retry with the same row and stable dedup key          |
+| Tinybird `422` after queue handoff               | Experience unaffected                    | Raw/derived commit is indeterminate        | Durable scoped reconciliation; no ordinary retry                    |
+| Permanent Tinybird failure or quarantine         | Experience unaffected                    | Analysis unavailable until operator repair | Durable DLQ transfer, alert, and manual replay only                 |
 
-No distributed transaction. The failure modes are accepted as self-healing within the ~60s KV propagation window.
+There is no distributed transaction. DO and KV propagation failures self-heal within the ~60s
+window. Tinybird retry, reconciliation, and DLQ states are visible operational failures and are not
+described as self-healing.
 
 ## Connection between ingest and DO write
 
@@ -93,7 +106,8 @@ There is no multi-Run holdover history in the DO. The pipeline's `raw_events` lo
 
 **What each side owns:**
 
-- Evaluation Worker: decides when to call `putIfAbsent` (on KV miss); supplies `(key, run_id, variant)`.
+- Exposure-pipeline orchestration hosted by the Evaluation Worker: after durable Exposure acceptance,
+  decides when to call `AssignmentStore.put()` (on KV miss) and supplies `(key, run_id, variant)`.
 - DO: serializes concurrent writes; guarantees one true first-touch winner; write-throughs to KV.
 
 **Failure contract:** DO timeout is non-blocking; retry is async; result is cosmetic miss within KV propagation window. Not a distributed transaction.
@@ -105,3 +119,4 @@ There is no multi-Run holdover history in the DO. The pipeline's `raw_events` lo
 - [ADR-0005](../../adr/0005-exposure-dedup-first-touch-pipeline-authoritative.md) — pipeline drives holdover put
 - [ADR-0009](../../adr/0009-assignment-store-substrate-kv-read-do-write.md) — KV read, per-key DO write, get-then-put-if-absent atomicity, ~60s propagation window
 - [ADR-0006](../../adr/0006-run-boundary-sticky-experience-counted-in-old-run.md) — holdover Entity keeps prior Run's Variant
+- [ADR-0043](../../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md) — pending queue-backed Tinybird delivery refactor

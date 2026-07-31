@@ -25,6 +25,10 @@ credential tier (ADR-0037). A step never ends on "probably fine."
 
 ## 1. Authenticate
 
+The CLI ships on npm as [`@splitch/cli`](https://www.npmjs.com/package/@splitch/cli) (Node 20+):
+`npm install --global @splitch/cli` puts `splitch` on your PATH, or run one-off with
+`npx @splitch/cli`. Agents over MCP install nothing — they connect to `https://mcp.splitch.dev`.
+
 | You are…                      | Door                | How                                                                                 |
 | ----------------------------- | ------------------- | ----------------------------------------------------------------------------------- |
 | A human at a terminal         | Device flow         | `splitch login` — prints a verification URL, polls until approved                   |
@@ -160,8 +164,10 @@ bucketing salt on the first write and never regenerates it, so 10 → 25 only _a
 treatment. Nobody already inside the rollout is silently moved out. Clearing the rollout to `null` is
 the one visible way to drop the cohort, and re-establishing it starts a fresh one.
 
-In an Environment whose Policy gates `targeting_rollout_value`, this call answers `409
-CONFIRMATION_REQUIRED`; repeat it with `confirm: true`. That is the gate working, not an error.
+In an Environment whose Policy gates `targeting_rollout_value`, the CLI Confirmation supplies the
+canonical `review: { action: "approve_and_apply" }`. If Review is omitted, the call answers
+`409 APPROVAL_REVIEW_REQUIRED` with the durable request ID. Review that request; do not resend a
+parallel confirmation mutation.
 
 Reach for step 9 when you need to _measure_ the rollout rather than just serve it: Exposures,
 allocation, and statistical results all belong to an Experiment Run.
@@ -183,7 +189,11 @@ splitch experiments create --body-json '<CreateExperimentRequest JSON>'
 splitch experiments start --confirm <experiment_id>
 
 experiments_create { ...typed Experiment draft... }
-experiments_start { experimentId, confirm: true }
+experiments_start {
+  experimentId,
+  review: { action: "approve_and_apply" },
+  idempotency_key: "start-checkout-experiment-1"
+}
 ```
 
 Use `flags verify` / `flags_test_eval` again after Start to confirm the live Run resolves the expected
@@ -229,13 +239,15 @@ splitch is fail-loud then guide (ADR-0036). Every operational `409` carries a ma
 ([contracts/error-responses.md](contracts/error-responses.md#recommendedaction-machine-stable-recovery-guidance)).
 The `recover_from_error` MCP prompt turns a token into a full remediation plan.
 
-| You hit…                  | It means…                                           | Do…                                              |
-| ------------------------- | --------------------------------------------------- | ------------------------------------------------ |
-| `CONFIRMATION_REQUIRED`   | the Environment Policy gates this change (ADR-0029) | resend the same call with `confirm: true`        |
-| `VARIANT_NOT_AVAILABLE`   | the Variant is not promoted to this Environment     | `flags_promote`, then retry                      |
-| `RUN_FROZEN`              | the edit touches a running Run                      | clone into a new draft Run and apply it there    |
-| `APP_MISMATCH` on verify  | wrong key for this App / Environment                | fetch the credential for _this_ Env (step 5)     |
-| `401` / `403` on evaluate | bad or revoked Client Key, or origin not allowed    | check the key and its origin allow-list (step 5) |
+| You hit…                      | It means…                                        | Do…                                              |
+| ----------------------------- | ------------------------------------------------ | ------------------------------------------------ |
+| `APPROVAL_REVIEW_REQUIRED`    | the durable request awaits an authorized Review  | review `details.approvalRequestId`               |
+| `APPROVAL_REQUEST_STALE`      | the target changed after proposal                | refresh current state and create a new request   |
+| `APPROVAL_APPLICATION_FAILED` | application rolled back; request remains pending | retry Review with a new idempotency key          |
+| `VARIANT_NOT_AVAILABLE`       | the Variant is not promoted to this Environment  | `flags_promote`, then retry                      |
+| `RUN_FROZEN`                  | the edit touches a running Run                   | clone into a new draft Run and apply it there    |
+| `APP_MISMATCH` on verify      | wrong key for this App / Environment             | fetch the credential for _this_ Env (step 5)     |
+| `401` / `403` on evaluate     | bad or revoked Client Key, or origin not allowed | check the key and its origin allow-list (step 5) |
 
 ## Sources
 

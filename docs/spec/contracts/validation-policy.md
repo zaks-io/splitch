@@ -82,7 +82,7 @@ All domain invariants live in the Worker — both skins (MCP, CLI) inherit corre
 | **Run frozen fields**                 | Reject `PatchRunRequest` with any of `{salt, allocation, variantSet, targetingRules, targetingSegmentId}`                                                                     | `RUN_FROZEN`                                 |
 | **Variant frozen per Run**            | Reject `PatchVariantRequest.value` if any running Run's `variantSet` includes this variant                                                                                    | `RUN_FROZEN`                                 |
 | **Allocation sums to 100**            | Sum check on the staged Experiment draft allocation when Start freezes it into a Run                                                                                          | `ALLOCATION_INVALID`                         |
-| **Activation ordering**               | `activation_ts > first_exposure_ts`; enforced at ingest time in the Exposure pipeline                                                                                         | `ACTIVATION_TIMESTAMP_INVALID`               |
+| **Activation ordering**               | Analysis filters candidates by `activation_ts > first_exposure_ts`, then selects the earliest valid Activation; pre-Exposure rows remain replay truth but never count         | none                                         |
 | **app_id scoping**                    | Every D1/Tinybird query filtered by `app_id` (and `environment_id` co-scoped for experiments/runs/exposures/credentials, ADR-0027) in the data-access layer                   | `FORBIDDEN` (wrong app)                      |
 | **Credential scopes**                 | KV cache lookup on every request; checked before the handler runs                                                                                                             | `INSUFFICIENT_SCOPES` / `CREDENTIAL_REVOKED` |
 | **targetingKey assignment edit**      | Reject `PatchExperimentRequest.targetingKey` or `targetingKeyType` when Experiment.status = `'running'`                                                                       | `RUN_FROZEN`                                 |
@@ -113,13 +113,18 @@ not a partial resolution.
 
 When `POST /apps/{app_id}/envs/{environment_id}/experiments/:id/start` fires:
 
-1. Worker validates the optional lifecycle request body (Zod): `confirm`, `reason`, and
-   `idempotency_key` only. Assignment config is rejected here and must already be staged on the
-   Experiment draft via create/patch.
+1. Worker validates the lifecycle request body (Zod): optional
+   `review: { action: 'approve_and_apply' }`, optional `reason`, and required `idempotency_key` only.
+   Assignment config is rejected here and must already be staged on the Experiment draft via
+   create/patch. The CLI `--confirm` affordance derives the inline canonical Review; there is no
+   stateless confirmation-retry body.
 2. Worker validates the staged draft assignment config: allocation sums to 100, Variants are
    available in this Environment, and draft Segment ids resolve to frozen `targetingRules`.
-3. D1 transaction: end any running Run (set `ended_at`, `status = 'ended'`), insert the new Run,
-   update `experiments.live_run_id`, and consume the draft assignment fields.
+3. Under `allow`, enter the canonical application transaction directly. Under `confirm` or future
+   `approve`, persist/resolve the Approval Request, authorize Review, and validate the target
+   version first. The D1 transaction then ends any running Run (set `ended_at`,
+   `status = 'ended'`), inserts the new Run, updates `experiments.live_run_id`, consumes the draft
+   assignment fields, and atomically records the successful Review and Approval Request transition.
 4. KV sync: write the D1-derived reader set: `app:{appId}:{environmentId}:experiment:{experimentId}`
    with `ExperimentConfigKV.liveRunId`, `app:{appId}:{environmentId}:run:{newRunId}` with
    `RunConfigKV`, and `live_run:{appId}:{environmentId}:{experimentId}` with `LiveRunKV`.

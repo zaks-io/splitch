@@ -1,7 +1,8 @@
 # Run lifecycle and state machine
 
 A Run is the immutable unit of analysis for an Experiment. Its assignment config (salt,
-allocation, Variant set, Targeting rules, Targeting Key) is frozen for its entire life.
+allocation, Variant set, Control identity, Targeting rules, Targeting Key) is frozen for its entire
+life.
 
 ## Identity
 
@@ -56,6 +57,7 @@ open a new one (sample resets to zero; UI must warn loudly):
 - `salt` — per-experiment bucketing seed
 - `allocation` — Variant proportions (weights)
 - `variantSet` — the set of Variants
+- `controlVariantId` — the Control identity copied from the Experiment at Start
 - `targetingRules` — rule set (Conditions, Segments, Percentage Rollouts)
 - `targetingKey` — which Entity attribute to bucket on
 - **Activation Metric** — re-anchors the Conversion Window retroactively; redefines the
@@ -64,15 +66,17 @@ open a new one (sample resets to zero; UI must warn loudly):
 
 ## Recomputable config (measurement edits — no new Run)
 
-Changes to these fields apply to the live Run in place and **recompute over existing raw log**:
+Changes to these fields apply to the live Run in place and **recompute through the canonical serving
+layers**:
 
 - Metric definitions (Binomial / Count / Revenue / Ratio)
 - Conversion Window
 - Guardrail Metric config
 - Activation Metric is specifically excluded; see above.
 
-The raw Exposure log is the system of record (append-only, never mutated); recomputing is a
-re-run of the dedup/metric query with the new definition. No new `runId`, no sample reset.
+The append-only raw logs remain systems of record, but recomputation reads
+`serve_deduped_exposures` and `serve_deduped_metric_events`, not a physical Metric log. It re-runs the
+logical dedup/metric query with the new definition. No new `runId`, no sample reset.
 
 ## Non-material edits (in place, same Run)
 

@@ -1,5 +1,14 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { flagConfigs, targetingRules } from "../schema/index";
+import {
+  appliedRequestUpdate,
+  appliedReviewInsert,
+  appliedReviewQueries,
+  approvalPendingCondition,
+  approvalReviewLanded,
+  reviewRecorded,
+} from "./approval-atomic";
+import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
 import type { EnvScope } from "./scope";
 import { assertMintedScope } from "./scope";
@@ -11,6 +20,7 @@ import type { ScopedTable } from "./scoped-table";
  * Every operation takes an `EnvScope`, so the tenant boundary is the same one
  * `scopedTable` enforces for the rest of the domain.
  */
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: these operations share the same scoped config and targeting-rule tables
 export function makeFlagConfigOps(
   db: Db,
   flagConfigsTable: ScopedTable<typeof flagConfigs>,
@@ -19,6 +29,37 @@ export function makeFlagConfigOps(
   return {
     getFlagConfig(scope: EnvScope, flagId: string) {
       return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
+    },
+
+    getFlagConfigById(scope: EnvScope, configId: string) {
+      return flagConfigsTable.findOne(scope, eq(flagConfigs.id, configId));
+    },
+
+    /**
+     * Flag Configurations in this Environment changed at or after `since`, most
+     * recently changed first, bounded to `limit` rows.
+     *
+     * Exists so a "what changed lately" surface costs what it renders instead of
+     * what the Environment holds: the unbounded read this replaces made every
+     * page load scale with the App's Flag count.
+     *
+     * `updated_at` is fixed-width ISO-8601 TEXT, so the lexicographic comparison
+     * SQLite applies IS the chronological one — no conversion, and the `>=` bound
+     * and the DESC order agree with how a caller reads the column in JS.
+     *
+     * Ordered by `(updated_at DESC, id DESC)`. `id` is the table's PRIMARY KEY, so
+     * the pair is a TOTAL order. Timestamps collide (a batch write stamps one
+     * `updated_at` across rows), and without the tiebreaker which of the tied rows
+     * a `LIMIT` dropped would vary between two otherwise identical reads.
+     *
+     * Ask for one row more than you intend to keep and you learn whether you
+     * truncated, rather than inferring it from a full page.
+     */
+    listRecentFlagConfigs(scope: EnvScope, since: string, limit: number) {
+      return flagConfigsTable.findMany(scope, gte(flagConfigs.updatedAt, since), {
+        limit,
+        orderBy: [desc(flagConfigs.updatedAt), desc(flagConfigs.id)],
+      });
     },
 
     /**
@@ -69,9 +110,33 @@ export function makeFlagConfigOps(
           | "version"
         >
       >,
+      approval?: ApprovalCommit,
     ): Promise<typeof flagConfigs.$inferSelect | null> {
       const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       if (!current) return null;
+      if (approval) {
+        const mutation = db
+          .update(flagConfigs)
+          .set({ ...patch, version: current.version + 1 })
+          .where(
+            and(
+              scopedFlagConfig(scope, flagId),
+              eq(flagConfigs.version, current.version),
+              approvalPendingCondition(db, scope, approval),
+            ),
+          )
+          .returning({ id: flagConfigs.id });
+        // `changes() = 1` binds the Review to this exact mutation statement.
+        await db.batch([
+          mutation,
+          ...appliedReviewQueries(db, scope, approval),
+        ] as unknown as Parameters<Db["batch"]>[0]);
+        // The guard can lose (request resolved, reviewer role revoked, Policy
+        // level changed, version CAS lost) and leave every statement a no-op.
+        // Returning the re-read row would report that as an applied change.
+        if (!(await approvalReviewLanded(db, scope, approval))) return null;
+        return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
+      }
       const rows = await flagConfigsTable.update(
         scope,
         { ...patch, version: current.version + 1 },
@@ -94,10 +159,63 @@ export function makeFlagConfigOps(
           "enabled" | "availableVariantNames" | "rollout" | "updatedAt"
         >
       >,
+      approval?: ApprovalCommit,
     ): Promise<typeof flagConfigs.$inferSelect | null> {
       assertMintedScope(scope);
       const current = await flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
       if (!current) return null;
+
+      if (approval) {
+        // The Review row is this attempt's unique evidence: the rule writes ride
+        // along with it, and it is itself bound to the config bump by changes().
+        const evidence = reviewRecorded(db, scope, approval);
+        const guardedDelete = db
+          .delete(targetingRules)
+          .where(and(scopedTargetingRule(scope, flagId), evidence))
+          .returning();
+        const guardedInserts = rows.map((row) =>
+          db.insert(targetingRules).select(
+            db
+              .select({
+                id: sql<string>`${row.id}`.as("id"),
+                appId: sql<string>`${scope.appId}`.as("app_id"),
+                environmentId: sql<string>`${scope.environmentId}`.as("environment_id"),
+                flagId: sql<string>`${flagId}`.as("flag_id"),
+                priority: sql<number>`${row.priority}`.as("priority"),
+                conditions: sql<string>`${row.conditions}`.as("conditions"),
+                variantId: sql<string | null>`${row.variantId ?? null}`.as("variant_id"),
+                percentageRollout: sql<string | null>`${row.percentageRollout ?? null}`.as(
+                  "percentage_rollout",
+                ),
+                createdAt: sql<string>`${row.createdAt}`.as("created_at"),
+                updatedAt: sql<string>`${row.updatedAt}`.as("updated_at"),
+              })
+              .from(flagConfigs)
+              .where(and(scopedFlagConfig(scope, flagId), evidence))
+              .limit(1),
+          ),
+        );
+        const guardedUpdate = db
+          .update(flagConfigs)
+          .set({ ...configPatch, version: current.version + 1 })
+          .where(
+            and(
+              scopedFlagConfig(scope, flagId),
+              eq(flagConfigs.version, current.version),
+              approvalPendingCondition(db, scope, approval),
+            ),
+          )
+          .returning();
+        await db.batch([
+          guardedUpdate,
+          appliedReviewInsert(db, scope, approval),
+          guardedDelete,
+          ...guardedInserts,
+          appliedRequestUpdate(db, scope, approval),
+        ] as unknown as Parameters<Db["batch"]>[0]);
+        if (!(await approvalReviewLanded(db, scope, approval))) return null;
+        return flagConfigsTable.findOne(scope, eq(flagConfigs.flagId, flagId));
+      }
 
       const batch = [
         db.delete(targetingRules).where(scopedTargetingRule(scope, flagId)).returning(),

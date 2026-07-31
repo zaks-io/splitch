@@ -1,10 +1,12 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index";
 import type { Db } from "./client";
-import type { EnvScope, TenantScope } from "./scope";
 import { makeEndRun } from "./experiment-end-run";
 import { makeStartRun } from "./experiment-start-run";
-import { scopedTable } from "./scoped-table";
+import type { EnvScope, TenantScope } from "./scope";
+import { type ReadOptions, scopedTable } from "./scoped-table";
+
+const RUN_STATUS_UPDATE_KEYS = new Set(["status", "endedAt", "endReason"]);
 
 /**
  * Experiment-domain repository. Per-Environment (require an EnvScope):
@@ -18,6 +20,12 @@ import { scopedTable } from "./scoped-table";
 export function makeExperimentRepo(db: Db, d1: D1Database) {
   const experimentsTable = scopedTable(db, experiments);
   const runsTable = scopedTable(db, runs);
+  const runsWithoutUpdate = {
+    findMany: runsTable.findMany,
+    findOne: runsTable.findOne,
+    insert: runsTable.insert,
+    remove: runsTable.remove,
+  };
   const metricsTable = scopedTable(db, metrics);
   const startRun = makeStartRun(d1, experimentsTable, runsTable);
   const endRun = makeEndRun(d1, experimentsTable, runsTable);
@@ -29,7 +37,9 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
 
   return {
     experiments: experimentsTable,
-    runs: runsTable,
+    // Run snapshots are insert-once. Lifecycle transitions use the narrow
+    // methods below; callers cannot reach a generic snapshot UPDATE path.
+    runs: runsWithoutUpdate,
     metrics: metricsTable,
 
     getExperiment(scope: EnvScope, experimentId: string) {
@@ -40,6 +50,20 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       return experimentsTable.findMany(scope);
     },
 
+    /**
+     * Compare-and-set on `liveRunId`, the same token `startRun` and `endRun`
+     * guard on. A caller reads the Experiment, decides which fields it may
+     * write against the Run that read showed, and then passes that Run id back
+     * here; the UPDATE matches no row if a Run started or ended in between.
+     *
+     * Without it a PATCH decided while the Experiment was a draft could land on
+     * a row that a Run has since frozen, re-bucketing a live sample. ADR-0002
+     * makes that impossible by construction, and this is the write-path half of
+     * "by construction".
+     * `expectedLiveRunId` is required, not optional, so no caller can skip the
+     * check by forgetting it. A `null` result means either "no such Experiment"
+     * or "lost the race" — the caller re-reads to tell them apart.
+     */
     updateExperiment(
       scope: EnvScope,
       experimentId: string,
@@ -51,6 +75,8 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
           | "name"
           | "description"
           | "hypothesis"
+          | "owner"
+          | "tags"
           | "status"
           | "targetingKeyField"
           | "targetingKeyType"
@@ -70,9 +96,10 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
           | "updatedBy"
         >
       >,
+      expectedLiveRunId: string | null,
     ): Promise<typeof experiments.$inferSelect | null> {
       return experimentsTable
-        .update(scope, patch, eq(experiments.id, experimentId))
+        .update(scope, patch, and(eq(experiments.id, experimentId), liveRunIdIs(expectedLiveRunId)))
         .then((rows) => rows[0] ?? null);
     },
 
@@ -95,8 +122,33 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       return rows[0] ?? null;
     },
 
-    listRunningExperiments(scope: EnvScope) {
-      return experimentsTable.findMany(scope, eq(experiments.status, "running"));
+    /**
+     * Running Experiments in this Environment, optionally bounded.
+     *
+     * A caller enforcing a fan-out budget passes `limit: budget + 1`: the extra
+     * row proves the budget is blown, and proves it WITHOUT materializing the
+     * rows the budget exists to refuse. Checking `rows.length` after an unbounded
+     * read pays the exact cost it then declines to pay.
+     *
+     * No `orderBy` is required here and none is imposed: a bounded page is only
+     * ever counted and thrown away, because both budgets refuse whole rather than
+     * truncating (a truncated attention list renders as "nothing to do"). Any
+     * future caller that KEEPS a bounded page owes a total order — see
+     * `ReadOptions`.
+     */
+    listRunningExperiments(scope: EnvScope, options?: ReadOptions) {
+      return experimentsTable.findMany(scope, eq(experiments.status, "running"), options);
+    },
+
+    /**
+     * The true count of running Experiments in this Environment, via `COUNT`
+     * rather than materializing rows. A caller that bounds `listRunningExperiments`
+     * for its own read budget still owes a total that is not that bound: reporting
+     * a bounded page size as if it were the total renders a floor as a total
+     * (ADR-0036).
+     */
+    countRunningExperiments(scope: EnvScope) {
+      return experimentsTable.countRows(scope, eq(experiments.status, "running"));
     },
 
     listRunsForExperiment(scope: EnvScope, experimentId: string) {
@@ -113,6 +165,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       patch: Pick<typeof runs.$inferInsert, "status" | "endedAt"> &
         Partial<Pick<typeof runs.$inferInsert, "endReason">>,
     ): Promise<typeof runs.$inferSelect | null> {
+      assertRunStatusUpdate(patch);
       return runsTable.update(scope, patch, eq(runs.id, runId)).then((rows) => rows[0] ?? null);
     },
 
@@ -158,4 +211,16 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
       return metricsTable.remove(scope, eq(metrics.id, metricId));
     },
   };
+}
+
+function liveRunIdIs(expected: string | null) {
+  return expected === null ? isNull(experiments.liveRunId) : eq(experiments.liveRunId, expected);
+}
+
+function assertRunStatusUpdate(patch: Record<string, unknown>): void {
+  for (const key of Object.keys(patch)) {
+    if (!RUN_STATUS_UPDATE_KEYS.has(key)) {
+      throw new Error(`updateRunStatus: cannot update immutable Run snapshot field "${key}"`);
+    }
+  }
 }

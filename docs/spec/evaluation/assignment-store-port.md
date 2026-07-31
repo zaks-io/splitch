@@ -1,8 +1,9 @@
 # Assignment Store port — durable holdover memory
 
 The Assignment Store is **dumb storage and zero policy**. It answers exactly one question:
-"what Variant did this Entity see, and under which Run?" All policy (holdover predicate,
-replay-vs-assign, first-touch write timing) lives on the evaluate path.
+"what Variant did this Entity see, and under which Run?" The evaluate policy module owns the holdover
+predicate, replay-vs-assign decision, and write intent. Exposure-pipeline orchestration, hosted by the
+same Evaluation Worker, owns write timing after durable Event Ingest acceptance.
 
 ## Port interface
 
@@ -12,7 +13,7 @@ interface AssignmentStore {
   // Returns a map keyed by experimentId (string). Empty map if Entity has no holdovers.
   getAll(appId: string, idType: string, targetingKey: string): Map<string, HoldoverRecord>
 
-  // First-touch write: called by the Exposure pipeline (not the evaluate path).
+  // First-touch write: called by Exposure orchestration after durable Event Ingest acceptance.
   // Durable Object ensures exactly one winner per key across concurrent POPs.
   put(appId: string, experimentId: string, idType: string, targetingKey: string, runId: string, variant: string): void
 }
@@ -62,9 +63,9 @@ Object is touched on the read path.
 
 ## Write model (first-touch only)
 
-`put()` is called by the **Exposure pipeline**, not the evaluate path. The evaluate path
-fires Exposure; the pipeline calls `put()` at first-touch. On the evaluate path, `put()`
-is never called directly.
+`put()` is called by **Exposure-pipeline orchestration hosted in the Evaluation Worker**, not by the
+evaluate policy module or public SDK accessor. The policy module resolves and hands off the Exposure.
+After Event Ingest durably seals it, the orchestration schedules `put()` at apparent first-touch.
 
 Substrate: one Durable Object per `(appId, experimentId, idType, targetingKeyHash)`. The DO's
 `get-then-put-if-absent` is atomic (single-threaded, globally unique per key), so two
@@ -97,7 +98,9 @@ These are evaluate-path concerns (see [evaluate-path-orchestration.md](./evaluat
 
 **What's on this side (Assignment Store):** logical `(appId, idType, targetingKey)` → `(runId, variant)` memory, stored physically by `targetingKeyHash`. Get/put.
 
-**What's on the other side (evaluate path):** holdover predicate, replay decision, Exposure firing, first-touch write timing.
+**What's on the other side (Evaluation Worker):** evaluate policy owns the holdover predicate, replay
+decision, Exposure firing, and write intent; Exposure orchestration owns write timing after durable
+Event Ingest acceptance.
 
 **Deletion test:** two real adapters exist in the wild — Statsig `IUserPersistentStorage`,
 GrowthBook `StickyBucketService`. Both are swappable ports the evaluation engine consults,

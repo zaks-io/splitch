@@ -40,14 +40,27 @@ Cached package tasks:
 | `typecheck` | yes   | depends on upstream build where generated types are consumed                                                           |
 | `test`      | yes   | deterministic unit/integration tests; coverage output declared only where stable                                       |
 
+Cached root guards (explicit input globs, so unrelated changes replay from cache):
+
+| Task                   | Cache | Contract                                                                       |
+| ---------------------- | ----- | ------------------------------------------------------------------------------ |
+| `spec:lint`            | yes   | inputs: `docs/spec/**` and the linter script                                   |
+| `check:cli-mcp-parity` | yes   | inputs: CLI/MCP/contracts source trees and the parity scripts                  |
+| `test:scripts`         | yes   | inputs: `scripts/**`, `.github/workflows/**`, and the files those tests assert |
+| `test:connect-snippet` | yes   | inputs: snippet source + compile guard; chains the `@splitch/sdk#build` hash   |
+| `format:check`         | yes   | inputs: every tracked file (`$TURBO_DEFAULT$`); pure function of file content  |
+| `knip`                 | yes   | inputs: tracked files minus Markdown/`.github/**`; chains SDK/CLI build hashes |
+
+Root-task input rule: use `$TURBO_DEFAULT$` (all tracked, gitignore-respecting files) plus
+exclusions — never bare filesystem globs like `**`, which hash `node_modules/` and build outputs and
+self-invalidate.
+
 Uncached or root-wide tasks:
 
 | Task                                  | Cache | Contract                                                               |
 | ------------------------------------- | ----- | ---------------------------------------------------------------------- |
-| `format:check` / `format:write`       | no    | repo-wide Biome formatting plus Prettier for Markdown only             |
 | `depcruise`                           | no    | root architecture import graph gate                                    |
 | `duplicates`                          | no    | root duplicate-code detection over source-bearing paths                |
-| `knip`                                | no    | root unused files, exports, dependencies, and config-hints gate        |
 | `secrets:*`                           | no    | Gitleaks scans working tree or git history; never cache security scans |
 | `d1:migrate:local` / `tinybird:local` | no    | local backing-resource validators                                      |
 | `dev`                                 | no    | persistent local dev task                                              |
@@ -60,6 +73,16 @@ hosted CI has a stable main baseline. Deployment jobs use `--filter=<workspace>.
 Worker/app graph being deployed.
 Every build-affecting environment variable must be listed in `globalEnv` or task `env` so preview and
 production builds cannot reuse the wrong cache entry.
+
+Cache-trust contract: per-PR/per-push runs replay cached results freely because the `nightly-verify`
+workflow re-executes the full `verify:ci` graph with `TURBO_FORCE=true` every day, rewriting fresh
+signed cache entries — a stale or wrong entry survives at most one day. Workflows that run Turbo
+tasks must (a) route builds through `turbo run` (never `pnpm --filter <pkg> build`, which bypasses
+the cache) and (b) set `SPLITCH_PLATFORM_TARGET: pr-ci` to match the `ci` Verify hash-space, unless
+they intentionally build for another platform target. The npm publish workflows (`sdk-publish`,
+`cli-publish`) are the deliberate exception: they rebuild hermetically from the tagged source on
+GitHub-hosted runners because npm provenance should attest a from-source build, not a cache
+restore.
 
 Local hook policy lives in [local-quality-gates.md](./local-quality-gates.md). Commit hooks block
 format, lint, type, Knip, and Gitleaks failures before code is committed. The pre-push hook runs the
@@ -110,14 +133,20 @@ Use the Turborepo convention directly:
 These Workers are separate deploy units because they are separate capability and trust seams. Do
 not collapse them into generic `api` or `edge` Workers during slicing.
 
-| Worker                   | Boundary                     | Owns                                                                                                                                         | Does not own                                                     |
-| ------------------------ | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Control Plane API Worker | Authenticated management API | Org, App, Environment, Flag, Flag Configuration, Promotion, Experiment, Run, Event Definition, Metric, Segment, and SDK credential mutations | MCP transport, SDK evaluate, event ingest, Tinybird result reads |
-| MCP Worker               | Agent protocol adapter       | Remote MCP auth handshake, tool registry, calls through `@splitch/control-plane-sdk`                                                         | D1/KV/Tinybird bindings, domain invariants                       |
-| Evaluation Worker        | SDK/data-plane resolution    | Client Key/API Key evaluate, API-Key-only peek (ADR-0034), control-plane dry-run test-eval, Provider + Assignment Store reads                | Config writes, analysis queries, direct Metric computation       |
-| Event Ingest Worker      | Append-only event intake     | Exposure/Activation/Metric Event validation, version stamping, queueing, sharded DO dedup, Tinybird delivery                                 | Variant resolution, result calculation, control-plane CRUD       |
-| Analysis Worker          | Result read model            | Tinybird proxy endpoints, SRM/Metric/statistical result reads, `app_id`/`environment_id` injection from auth/path context                    | SDK evaluate, event ingest, config mutation                      |
-| Auth API Worker          | Identity/token surface       | AuthKit/auth.md/OAuth endpoints, token/revocation flows, provisional create handoff                                                          | Post-create Org/App management, SDK credentials, analytics       |
+The ownership table describes the accepted target. ADR-0043 is pending: the current Event Ingest
+Worker has no Queue binding and directly posts each implemented `raw_events` and `raw_evaluations`
+row to Tinybird. It also has no Ingest Admission Gate Durable Object binding. Metric Event and Web
+Event intake must be built on the target admission and queue transport rather than copying that
+direct path.
+
+| Worker                   | Boundary                     | Owns                                                                                                                                                                                                                                                            | Does not own                                                     |
+| ------------------------ | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Control Plane API Worker | Authenticated management API | Org, App, Environment, Flag, Flag Configuration, Promotion, Experiment, Run, Event Definition, Metric, Segment, and SDK credential mutations                                                                                                                    | MCP transport, SDK evaluate, event ingest, Tinybird result reads |
+| MCP Worker               | Agent protocol adapter       | Remote MCP auth handshake, tool registry, calls through `@splitch/control-plane-sdk`                                                                                                                                                                            | D1/KV/Tinybird bindings, domain invariants                       |
+| Evaluation Worker        | SDK/data-plane resolution    | Client Key/API Key evaluate, API-Key-only peek (ADR-0034), control-plane dry-run test-eval, Provider + Assignment Store reads                                                                                                                                   | Config writes, analysis queries, direct Metric computation       |
+| Event Ingest Worker      | Append-only event intake     | Evaluation usage and Exposure/Activation/Metric/Web Event validation, version stamping, per-scope SQLite Admission Gate DOs, four datasource-specific durable queues, sharded DO claim/outbox/write-ahead recovery, bounded Tinybird NDJSON microbatch delivery | Variant resolution, result calculation, control-plane CRUD       |
+| Analysis Worker          | Result read model            | Tinybird proxy endpoints, SRM/Metric/statistical result reads, `app_id`/`environment_id` injection from auth/path context                                                                                                                                       | SDK evaluate, event ingest, config mutation                      |
+| Auth API Worker          | Identity/token surface       | AuthKit/auth.md/OAuth endpoints, token/revocation flows, provisional create handoff                                                                                                                                                                             | Post-create Org/App management, SDK credentials, analytics       |
 
 Worker bindings and capability-specific orchestration stay local to the owning Worker. Shared library
 code belongs in `packages/` when it is imported through a stable package API or published as a customer

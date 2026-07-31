@@ -9,7 +9,17 @@ export interface RunningBlocker {
   runId: string;
 }
 
-export async function availableVariantReferenceCount(
+/**
+ * How many Environments name this Variant EXPLICITLY in their available set.
+ *
+ * This is deliberately NOT the servability question `servesVariant` answers: an
+ * empty available set serves the whole catalog but names nothing, so removing
+ * the Variant leaves no dangling reference behind and the count is 0. Keeping
+ * the two questions separate — and named apart — is the point: they were once
+ * conflated, and the disagreement let a delete slip through a gate that the
+ * servability rule would have caught.
+ */
+export async function explicitVariantReferenceCount(
   repo: Repository,
   appId: string,
   flagId: string,

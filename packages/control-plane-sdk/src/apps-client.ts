@@ -1,4 +1,6 @@
 import type {
+  AppAttentionRollupGetInput,
+  AppAttentionRollupGetOutput,
   AppsCreateInput,
   AppsCreateOutput,
   AppsDeleteInput,
@@ -11,10 +13,10 @@ import type {
   AppsUpdateOutput,
 } from "@splitch/contracts/route-types";
 import {
-  type AppsHcClient,
-  type ControlPlaneHcOptions,
   createAppsHcClient,
   hcRequestOptions,
+  type AppsHcClient,
+  type ControlPlaneHcOptions,
   withAuthorization,
 } from "./hc-client";
 import { invokeHcRoute } from "./hc-invoke";
@@ -41,6 +43,10 @@ export interface AppsClient {
     input: AppsDeleteInput,
     options?: ControlPlaneOperationOptions,
   ): Promise<ControlPlaneOperationResult<AppsDeleteOutput>>;
+  getAttentionRollup(
+    input: AppAttentionRollupGetInput,
+    options?: ControlPlaneOperationOptions,
+  ): Promise<ControlPlaneOperationResult<AppAttentionRollupGetOutput>>;
 }
 
 export function createAppsClient(
@@ -48,7 +54,6 @@ export function createAppsClient(
   client?: AppsHcClient,
 ): AppsClient {
   const hcClient = client ?? createAppsHcClient(hcOptions);
-
   return {
     list: (input, callOptions) =>
       invokeHcRoute<AppsListOutput>("apps_list", () =>
@@ -85,6 +90,13 @@ export function createAppsClient(
     delete: (input, callOptions) =>
       invokeHcRoute<AppsDeleteOutput>("apps_delete", () =>
         hcClient.apps[":appId"].$delete(
+          { param: { appId: input.appId } },
+          hcRequestOptions(withAuthorization(hcOptions, callOptions)),
+        ),
+      ),
+    getAttentionRollup: (input, callOptions) =>
+      invokeHcRoute<AppAttentionRollupGetOutput>("app_attention_rollup_get", () =>
+        hcClient.apps[":appId"]["attention-rollup"].$get(
           { param: { appId: input.appId } },
           hcRequestOptions(withAuthorization(hcOptions, callOptions)),
         ),

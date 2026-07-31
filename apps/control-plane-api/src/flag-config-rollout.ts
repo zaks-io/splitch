@@ -1,4 +1,4 @@
-import { PercentageRolloutSchema, type PercentageRollout } from "@splitch/contracts";
+import { type PercentageRollout, PercentageRolloutSchema } from "@splitch/contracts";
 import { randomHex } from "./credential-cache";
 
 /**
@@ -19,6 +19,7 @@ import { randomHex } from "./credential-cache";
 export function nextBaselineRollout(
   current: PercentageRollout | null,
   patch: { percentage: number } | null | undefined,
+  freshSalt = mintSalt,
 ): PercentageRollout | null | undefined {
   // Absent from the patch = leave the baseline exactly as it is.
   if (patch === undefined) return undefined;
@@ -28,7 +29,7 @@ export function nextBaselineRollout(
     percentage: patch.percentage,
     // Reusing the existing salt is the whole point: same salt + same key = same
     // bucket, so a 10 -> 25 change only widens the band, it never reshuffles it.
-    salt: current?.salt ?? mintSalt(),
+    salt: current?.salt ?? freshSalt(),
   });
 }
 

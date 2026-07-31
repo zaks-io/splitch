@@ -125,6 +125,7 @@ describe("MCP prompts workflows", () => {
           recommendedAction: action,
           runningRunId: "run_live",
           retryAfterMs: 250,
+          approvalRequestId: "apr_01J00000000000000000000000",
         },
       });
       expect(plan.operationIds).toEqual([...RECOVERY_OPERATION_IDS[action as RecommendedAction]]);
@@ -140,9 +141,20 @@ describe("MCP prompts workflows", () => {
     expect(RECOVERY_OPERATION_IDS.EDIT_DRAFT_THEN_START).toEqual(["experiments_start"]);
     expect(RECOVERY_OPERATION_IDS.ADD_VARIANT_TO_ENV).toEqual(["flags_promote"]);
     expect(RECOVERY_OPERATION_IDS.RETRY_AFTER).toEqual([]);
-    expect(RECOVERY_OPERATION_IDS.RETRY_WITH_CONFIRMATION).toEqual([]);
+    expect(RECOVERY_OPERATION_IDS.CHOOSE_DIFFERENT_SLUG).toEqual([]);
+    expect(RECOVERY_OPERATION_IDS.READ_PER_ENVIRONMENT).toEqual([
+      "experiments_list",
+      "experiment_results_get",
+    ]);
+    expect(RECOVERY_OPERATION_IDS.REVIEW_APPROVAL_REQUEST).toEqual([
+      "approval_request_reviews_create",
+    ]);
+    expect(RECOVERY_OPERATION_IDS.REFRESH_AND_REPROPOSE).toEqual(["approval_requests_get"]);
+    expect(RECOVERY_OPERATION_IDS.RETRY_REVIEW).toEqual(["approval_request_reviews_create"]);
   });
+});
 
+describe("MCP prompt plan shapes", () => {
   it("onboard_new_app ends by telling a human to claim an anon-door demo Org", () => {
     const plan = getPromptPlan("onboard_new_app", {
       orgId: "org_demo",

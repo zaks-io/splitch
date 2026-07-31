@@ -28,10 +28,10 @@ The **only event recorded on this seam.**
 | `targeting_key_hash` | `string`                     | ✓   | HMAC-derived Entity identifier                                                                          |
 | `id_type`            | `string`                     | ✓   | Entity type (e.g. `"user"`, `"workspace"`); always explicit, never derived                              |
 | `variant`            | `string`                     | ✓   | Variant **name** assigned; never the value                                                              |
-| `server_ts`          | `timestamp`                  | ✓   | Server-received-at; canonical for `MIN(ts)` first-touch ordering (no client clock skew)                 |
-| `client_ts`          | `timestamp \| null`          | ✗   | Client-fired time; diagnostics only                                                                     |
+| `server_received_at` | `timestamp`                  | ✓   | Server-received-at; canonical for `MIN(ts)` first-touch ordering (no client clock skew)                 |
+| `client_timestamp`   | `timestamp \| null`          | ✗   | Client-fired time; diagnostics only                                                                     |
 | `type`               | `"exposure" \| "activation"` | ✓   | Row type discriminator (unified event log; see [activation-event.md](./activation-event.md))            |
-| `counterfactual`     | `boolean \| null`            | ✗   | `true` only on Control-arm would-have-activated events (additive deferred extension; null by default)   |
+| `counterfactual`     | `boolean`                    | ✓   | `true` only on Control-arm would-have-activated events (additive deferred extension; false by default)  |
 
 **`run_id` stamping:** stamped at SDK fire-time using the live Run config the SDK currently holds. The SDK is responsible for carrying `run_id` from its most recent flag resolution. The pipeline validates `run_id` is a known Run for the Experiment at ingest; malformed rows are quarantined.
 
@@ -41,7 +41,7 @@ The **only event recorded on this seam.**
 
 `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash)`
 
-This is the first-touch identity, resolved by `MIN(server_ts)` at query time. (`environment_id` co-scopes alongside `app_id` since Exposures are per-Environment, ADR-0027.) Many raw Exposures for the same Entity/Run share it; the earliest `server_ts` wins. Variant is **excluded** so that different-Variant Exposures for the same Entity/Run are not suppressed; they arrive at the `__multiple__` quarantine query downstream (see [exposure-dedup.md](./exposure-dedup.md)). This is distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key for at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
+This is the first-touch identity, resolved by `MIN(server_received_at)` at query time. (`environment_id` co-scopes alongside `app_id` since Exposures are per-Environment, ADR-0027.) Many raw Exposures for the same Entity/Run share it; the earliest `server_received_at` wins. Variant is **excluded** so that different-Variant Exposures for the same Entity/Run are not suppressed; they arrive at the `__multiple__` quarantine query downstream (see [exposure-dedup.md](./exposure-dedup.md)). This is distinct from the wire-level `dedup_key` (a per-physical-row sha256 idempotency key for at-least-once ingest); see [../pipeline/exposure-event-contract.md](../pipeline/exposure-event-contract.md).
 
 ### Exposure fires on read
 

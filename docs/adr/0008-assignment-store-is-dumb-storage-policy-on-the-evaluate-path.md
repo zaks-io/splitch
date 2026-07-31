@@ -15,9 +15,10 @@ edge-local read. They do **not** enter the per-record storage key — an Experim
 Environment, so `experiment_id` already implies the Environment. (Canonical signature:
 `docs/spec/domain-model/assignment-store.md`.)
 
-It is durable memory and nothing else. The **evaluate path** owns all policy — the holdover predicate, the
-replay-vs-`assign()` choice, first-touch write timing, runId stamping. The store never branches, never calls
-`assign()`, never decides anything.
+It is durable memory and nothing else. The Evaluation Worker owns all behavior outside the store. Its
+evaluate policy module owns the holdover predicate, replay-vs-`assign()` choice, write intent, and
+runId stamping. Its Exposure orchestration owns first-touch write timing after durable Event Ingest
+acceptance. The store never branches, never calls `assign()`, and never decides anything.
 
 This rejects a "deeper" `resolveAssignment(exp, run, key) -> variant` that would consult holdover, fall
 through to `assign()`, and maybe stamp — all internally. That interface is _shallower than it looks_: it is

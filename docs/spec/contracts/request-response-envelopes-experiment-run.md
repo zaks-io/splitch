@@ -59,7 +59,6 @@ Sorted by edit type. The Worker enforces the edit taxonomy (ADR-0003):
 - `flagId` — changing the controlled Flag
 - `allocation` — draft assignment allocation for the next Start
 - `salt` — draft assignment salt for the next Start
-- `variantSet` — draft assignment Variant set for the next Start
 - `targetingRules` — draft assignment inline rules for the next Start
 - `segmentIds` — draft assignment Segment ids for the next Start
 
@@ -86,6 +85,8 @@ frozen at Run Start and immutable for the Run's life (see [storage-schemas-d1-ex
 - `name`
 - `description`
 - `hypothesis`
+- `owner`
+- `tags`
 
 **Status transitions**:
 
@@ -95,24 +96,39 @@ with `VALIDATION_ERROR`; callers end a Run with `POST .../runs/{run_id}/end`.
 
 `PatchExperimentRequest` field set (all optional, Worker validates taxonomy on each):
 
-| Field                | Required | Edit type        |
-| -------------------- | -------- | ---------------- |
-| `name`               | no       | non-material     |
-| `description`        | no       | non-material     |
-| `hypothesis`         | no       | non-material     |
-| `targetingKey`       | no       | assignment       |
-| `targetingKeyType`   | no       | assignment       |
-| `activationMetricId` | no       | assignment       |
-| `allocation`         | no       | draft assignment |
-| `salt`               | no       | draft assignment |
-| `variantSet`         | no       | draft assignment |
-| `targetingRules`     | no       | draft assignment |
-| `segmentIds`         | no       | draft assignment |
-| `metrics`            | no       | measurement      |
-| `guardrailMetrics`   | no       | measurement      |
-| `conversionWindowMs` | no       | measurement      |
-| `dimensions`         | no       | measurement      |
-| `confidenceLevel`    | no       | decision-locked  |
+| Field                | Required | Edit type                        |
+| -------------------- | -------- | -------------------------------- |
+| `name`               | no       | non-material                     |
+| `description`        | no       | non-material                     |
+| `hypothesis`         | no       | non-material                     |
+| `owner`              | no       | non-material                     |
+| `tags`               | no       | non-material                     |
+| `targetingKey`       | no       | assignment                       |
+| `targetingKeyType`   | no       | assignment                       |
+| `activationMetricId` | no       | assignment                       |
+| `allocation`         | no       | draft assignment                 |
+| `salt`               | no       | draft assignment                 |
+| `variantSet`         | no       | **not editable** — always `400`  |
+| `targetingRules`     | no       | draft assignment                 |
+| `segmentIds`         | no       | draft assignment                 |
+| `metrics`            | no       | measurement                      |
+| `guardrailMetrics`   | no       | measurement                      |
+| `conversionWindowMs` | no       | measurement                      |
+| `dimensions`         | no       | measurement                      |
+| `confidenceLevel`    | no       | decision-locked                  |
+| `stageForNextRun`    | no       | explicit next-Run staging marker |
+
+`variantSet` is the one field the schema accepts and the Worker always rejects. A Run's Variant set
+is **derived** at Start from the Flag's Variant catalog and the staged allocation; the Experiment has
+no Variant-set column to write, so there is nothing a PATCH could mean. It stays in
+`PatchExperimentRequestSchema` on purpose: dropping it would make `.strict()` answer with a bare
+"unrecognized key", whereas keeping it lets the Worker answer with `VALIDATION_ERROR` pointing at
+`/flags/:flagId/variants` and at `allocation`. The rejection is unconditional — it does not depend on
+Run state, and `stageForNextRun: true` does not change it.
+
+On a running Run, assignment fields without `stageForNextRun: true` return `RUN_FROZEN`. The marker
+does not weaken Run immutability: it writes only the Experiment's draft staging fields. Start still
+owns the atomic boundary that ends Run N and opens Run N+1.
 
 ---
 
@@ -127,13 +143,33 @@ staged by `CreateExperimentRequest` or `PatchExperimentRequest` fields such as `
 `variantSet`, `targetingRules`, and `segmentIds`. Start validates that staged draft, freezes it onto
 the new Run, and then consumes the draft so an unchanged second Start returns `EXPERIMENT_NO_DRAFT`.
 
-The request body is optional. When present, it is lifecycle metadata only:
+The request body is lifecycle metadata only:
 
-| Field             | Required | Notes                                                              |
-| ----------------- | -------- | ------------------------------------------------------------------ |
-| `confirm`         | no       | `true` self-confirms when Environment Policy requires confirmation |
-| `reason`          | no       | Human or agent-readable Start reason copied onto the Run           |
-| `idempotency_key` | no       | Optional caller retry key; no assignment config is accepted here   |
+| Field             | Required | Notes                                                                                               |
+| ----------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `review`          | no       | `{ action: 'approve_and_apply' }`; inline use of the canonical Review action under `confirm`        |
+| `reason`          | no       | Human or agent-readable Start reason copied onto the Run                                            |
+| `idempotency_key` | yes      | Idempotently owns Approval Request creation and any inline Review; no assignment config is accepted |
+
+There is no `confirm` boolean or confirmation-retry pipeline. The CLI `--confirm` affordance and the
+panel Confirmation modal produce `review.action = 'approve_and_apply'`. The Control Plane then uses
+the same Approval Request, Review authorization, target-version check, and atomic D1 application
+path as future second-person Review.
+
+Policy changes only Review authority:
+
+- `allow`: no Review is required; Start enters the same validated application seam directly.
+- `confirm`: the proposer may supply the inline `approve_and_apply` Review.
+- future `approve`: the proposer cannot self-review. Start creates a `pending` Approval Request, and
+  an authorized distinct principal submits the same action through the Review endpoint.
+
+The Approval target is the Experiment draft. Its opaque target version hashes the complete draft
+assignment and decision projection, `liveRunId`, and the relevant Environment Policy projection. A
+draft, live-Run, or Policy change before Review moves the request to `stale`; it never starts a
+different Run or uses weaker authority than the immutable proposal.
+The canonical Approval Request, Review, diff, and application-result shapes are in
+[storage-schemas-d1.md](./storage-schemas-d1.md#approval_requests) and executable in
+`packages/contracts/src/routes/route-shapes.ts`.
 
 Worker computes: `id`, dense `runNumber`, `configHash`, `status = 'running'`, `startedAt`,
 `variantSet`, `allocation`, and **`targetingRules`** from the staged draft. Draft `segmentIds` are
@@ -145,6 +181,27 @@ Worker writes `Experiment.liveRunId`, `ExperimentConfigKV.liveRunId`, the new `R
 explicit `live_run:{appId}:{environmentId}:{experimentId}` pointer. Edge readers use
 `ExperimentConfigKV.liveRunId` plus `RunConfigKV` as the reader model; they never derive a live Run
 from the latest D1 Run.
+
+For a reviewed Start, the new Run row, prior-Run End, `Experiment.liveRunId`, successful Review,
+resulting target version, and Approval Request `applied` transition commit in one owning D1
+transaction. KV writes are post-commit projections. A KV projection failure is retried and surfaced
+loudly; it cannot roll back or relabel an already-applied canonical D1 mutation.
+
+Applied response:
+
+```
+{
+  experimentId: string
+  run: RunResponse
+  previousRunId: string | null
+  approvalRequest: ApprovalRequest | null
+}
+```
+
+`approvalRequest` is null under `allow` and contains the applied request and latest Review under
+`confirm`. When required Review is omitted or future `approve` awaits a distinct reviewer, the
+mutation returns the canonical `APPROVAL_REVIEW_REQUIRED` error with the durable pending request ID;
+no Run response is synthesized.
 
 ### PatchRunRequest (non-material only)
 

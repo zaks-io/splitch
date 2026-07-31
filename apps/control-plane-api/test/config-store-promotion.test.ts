@@ -1,6 +1,7 @@
 import { CURRENT_KV_SCHEMA_VERSION, flagConfigKey } from "@splitch/contracts";
 import { envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { narrowSeededAvailability } from "../src/config-store-fixture-data";
 import {
   type Harness,
   ids,
@@ -15,6 +16,10 @@ let h: Harness;
 
 beforeEach(async () => {
   h = await makeHarness();
+  // The fixture ships `[]` (never narrowed), matching `ensureInitialFlagConfig`.
+  // This suite asserts on the available-Variant list itself, so it narrows
+  // explicitly instead of leaning on a fixture default.
+  await narrowSeededAvailability(h.d1);
 });
 
 afterEach(async () => {
@@ -60,15 +65,64 @@ describe("flag configuration Promotion routes", () => {
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      code: "CONFIRMATION_REQUIRED",
+      code: "APPROVAL_REVIEW_REQUIRED",
       details: {
-        gate: "enabled_state",
-        environmentId: ids.environmentId,
-        attemptedOp: "PROMOTE_FLAG_CONFIG",
-        recommendedAction: "RETRY_WITH_CONFIRMATION",
+        approvalRequestId: expect.stringMatching(/^apr_/),
+        policyContexts: [
+          expect.objectContaining({
+            environmentId: ids.environmentId,
+            changeTypes: ["enabled_state"],
+          }),
+        ],
+        recommendedAction: "REVIEW_APPROVAL_REQUEST",
       },
     });
     expect(h.nudges).toEqual([]);
+
+    const legacyConfirm = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { enabled: true },
+      confirm: true,
+    });
+    expect(legacyConfirm.status).toBe(400);
+    expect(await legacyConfirm.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+
+    const approved = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { enabled: true },
+      review: { action: "approve_and_apply" },
+    });
+    expect(approved.status).toBe(200);
+    const approvedBody = await approved.json();
+
+    const approvedReplay = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { enabled: true },
+      review: { action: "approve_and_apply" },
+    });
+    expect(approvedReplay.status).toBe(200);
+    expect(await approvedReplay.json()).toEqual(approvedBody);
+  });
+
+  it("replays a pending rollout Promotion with its deterministic target salt", async () => {
+    await setProdPolicy(h, confirmPolicy);
+    await h.repo.flags.updateFlagConfig(envScope(ids.appId, ids.devEnvironmentId), ids.flagId, {
+      rollout: JSON.stringify({ percentage: 25, salt: "source-salt" }),
+      updatedAt: NOW,
+    });
+
+    const first = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { rollout: true },
+    });
+    const replay = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.devEnvironmentId,
+      select: { rollout: true },
+    });
+
+    expect(first.status).toBe(409);
+    expect(replay.status).toBe(409);
+    expect(await replay.json()).toEqual(await first.json());
   });
 
   /**

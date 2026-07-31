@@ -16,6 +16,7 @@ const validCreateFlag = {
   key: "feature-x",
   schema: null,
   variants: [variantControl, variantTreatment],
+  idempotency_key: "idem-create-flag",
 };
 
 describe("CreateFlagRequestSchema", () => {
@@ -23,6 +24,14 @@ describe("CreateFlagRequestSchema", () => {
     const req = CreateFlagRequestSchema.parse(validCreateFlag);
     expect(req.key).toBe("feature-x");
     expect(req.variants.filter((variant) => variant.isDefault)).toHaveLength(1);
+  });
+
+  // `flags_create` is an Idempotency-Key route, so a retried create cannot mint a
+  // second definition for a key a gated delete just refused to free.
+  it("rejects a request with no idempotency_key", () => {
+    const { idempotency_key, ...noKey } = validCreateFlag;
+    void idempotency_key;
+    expect(CreateFlagRequestSchema.safeParse(noKey).success).toBe(false);
   });
 
   it("parses with optional description", () => {
@@ -106,8 +115,8 @@ describe("FlagResponseSchema", () => {
   });
 });
 
-describe("CreateVariantRequestSchema (non-idempotent create)", () => {
-  it("parses a request with an optional idempotency_key", () => {
+describe("CreateVariantRequestSchema (Idempotency-Key route)", () => {
+  it("parses a request carrying an idempotency_key", () => {
     const req = CreateVariantRequestSchema.parse({
       appId: "app_1",
       flagId: "flag_1",
@@ -126,6 +135,32 @@ describe("CreateVariantRequestSchema (non-idempotent create)", () => {
     ).toBe(false);
   });
 
+  // Without the key the Worker cannot tell a retry from a second Variant, so
+  // `flag_variants_create` declares `idempotency: "required"` and the envelope
+  // has to refuse a request that omits it.
+  it("rejects a request with no idempotency_key", () => {
+    expect(
+      CreateVariantRequestSchema.safeParse({
+        appId: "app_1",
+        flagId: "flag_1",
+        name: "treatment-b",
+        value: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects an empty idempotency_key", () => {
+    expect(
+      CreateVariantRequestSchema.safeParse({
+        appId: "app_1",
+        flagId: "flag_1",
+        name: "treatment-b",
+        value: true,
+        idempotency_key: "",
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects an unknown field (strict)", () => {
     expect(
       CreateVariantRequestSchema.safeParse({
@@ -140,11 +175,26 @@ describe("CreateVariantRequestSchema (non-idempotent create)", () => {
 });
 
 describe("PatchVariantRequestSchema (value is Run-frozen at the Worker)", () => {
-  it("parses a value patch (Run-frozen check is a Worker runtime guard)", () => {
-    expect(PatchVariantRequestSchema.parse({ value: 42 }).value).toBe(42);
+  it("parses a value patch with an optional inline review", () => {
+    const request = PatchVariantRequestSchema.parse({
+      value: 42,
+      review: { action: "approve_and_apply" },
+      idempotency_key: "idem-1",
+    });
+    expect(request.value).toBe(42);
+    expect(request.review?.action).toBe("approve_and_apply");
+  });
+
+  it("rejects a missing idempotency key", () => {
+    expect(PatchVariantRequestSchema.safeParse({ value: 42 }).success).toBe(false);
   });
 
   it("rejects an unknown field (strict)", () => {
-    expect(PatchVariantRequestSchema.safeParse({ flagId: "flag_1" }).success).toBe(false);
+    expect(
+      PatchVariantRequestSchema.safeParse({
+        flagId: "flag_1",
+        idempotency_key: "idem-1",
+      }).success,
+    ).toBe(false);
   });
 });

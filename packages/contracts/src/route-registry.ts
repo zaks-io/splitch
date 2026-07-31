@@ -1,12 +1,15 @@
-import { errorCodes, type ErrorCode } from "./errors";
+import { type ErrorCode, errorCodes } from "./errors";
 import type { ApiRouteContract } from "./openapi-route";
 import { accountRoutes } from "./routes/routes-account";
 import { analysisRoutes } from "./routes/routes-analysis";
+import { approvalRoutes } from "./routes/routes-approvals";
+import { attentionRoutes } from "./routes/routes-attention";
 import { credentialRoutes } from "./routes/routes-credentials";
 import { dataPlaneRoutes } from "./routes/routes-data-plane";
 import { experimentRoutes } from "./routes/routes-experiments";
 import { flagRoutes } from "./routes/routes-flags";
 import { privacyRoutes } from "./routes/routes-privacy";
+import { segmentRoutes } from "./routes/routes-segments";
 
 /**
  * THE single route registry every Worker mounts, the SDK infers from, and MCP
@@ -67,7 +70,10 @@ export function assertRegistry<const T extends readonly ApiRouteContract[]>(rout
 
 export const routeRegistry = assertRegistry([
   ...accountRoutes,
+  ...approvalRoutes,
+  ...attentionRoutes,
   ...flagRoutes,
+  ...segmentRoutes,
   ...experimentRoutes,
   ...credentialRoutes,
   ...analysisRoutes,

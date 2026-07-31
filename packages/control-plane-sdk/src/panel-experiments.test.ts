@@ -45,11 +45,29 @@ describe("panel experiments binding transport", () => {
         experiment: {
           id: "exp_1",
           name: "Checkout",
+          description: "",
+          owner: "",
+          tags: [],
           status: "running",
           flagId: "flag_1",
+          targetingKey: "userId",
+          targetingKeyType: "user",
+          activationMetricId: null,
+          conversionWindowMs: 0,
+          metricIds: [],
+          guardrailMetricIds: [],
+          draftAllocation: null,
+          draftSalt: null,
+          draftTargetingRulesJson: null,
+          draftSegmentIds: ["segment_paid"],
           liveRunId: "run_2",
         },
         flag: { id: "flag_1", name: "Checkout Flag" },
+        metrics: [],
+        variants: [
+          { id: "variant_control", name: "control" },
+          { id: "variant_treatment", name: "treatment" },
+        ],
         runs: [panelRun()],
       }),
     );
@@ -62,7 +80,13 @@ describe("panel experiments binding transport", () => {
 
     expect(result).toMatchObject({
       ok: true,
-      data: { experiment: { id: "exp_1" }, runs: [{ runNumber: 2 }] },
+      data: {
+        // A Run freezes resolved Targeting Rules, never the Segment references
+        // behind them, so dropping this here would make staged references
+        // unreadable everywhere in the Panel.
+        experiment: { id: "exp_1", draftSegmentIds: ["segment_paid"] },
+        runs: [{ runNumber: 2 }],
+      },
     });
     expect(String(fetcher.mock.calls[0]?.[0])).toBe(
       "https://control-plane.internal/control-panel/experiments/detail",
@@ -98,13 +122,17 @@ function panelRun() {
     status: "running",
     targetingKey: "userId",
     targetingKeyType: "user",
+    activationMetricId: null,
     salt: "salt-2",
     allocation: { control: 70, treatment: 30 },
+    controlVariantId: "variant_control",
     variantsJson: JSON.stringify([
       { id: "variant_control", name: "control", value: false },
       { id: "variant_treatment", name: "treatment", value: true },
     ]),
     targetingRulesJson: "[]",
+    decisionMetricIds: [],
+    decisionGuardrailMetricIds: [],
     configHash: "sha256:two",
     startedAt: "2026-07-19T00:00:00.000Z",
     endedAt: null,

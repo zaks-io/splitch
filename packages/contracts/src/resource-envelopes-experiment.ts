@@ -1,6 +1,10 @@
 import { z } from "zod";
-import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
 import { ExperimentSchema, MetricRefSchema, RunSchema } from "./leaf-schemas-experiment";
+import { TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
+import {
+  ApprovalRequestSchema,
+  InlineApproveAndApplyReviewSchema,
+} from "./routes/route-shapes-approval-request";
 
 /**
  * Create/patch/response wire envelopes for the Experiment and Experiment Run
@@ -70,12 +74,20 @@ export const PatchExperimentRequestSchema = z
     name: z.string().optional(),
     description: z.string().optional(),
     hypothesis: z.string().optional(),
+    owner: z.string().optional(),
+    tags: z.array(z.string()).optional(),
     flagId: z.string().optional(),
     targetingKey: z.string().optional(),
     targetingKeyType: z.string().optional(),
     activationMetricId: z.string().nullable().optional(),
     allocation: DraftAllocationSchema.optional(),
     salt: z.string().optional(),
+    // Accepted structurally, ALWAYS rejected by the Worker with a 400. A Run's
+    // Variant set is derived at Start from the Flag's Variant catalog and the
+    // staged allocation, so the Experiment has no column for it. It stays in the
+    // schema only so the refusal can point at the Flag's Variant catalog instead
+    // of `.strict()` answering "unrecognized key" — see
+    // `variantSetNotPatchable` in the control-plane Worker.
     variantSet: z.array(VariantSchema).optional(),
     targetingRules: z.array(TargetingRuleSchema).optional(),
     segmentIds: z.array(z.string()).optional(),
@@ -84,6 +96,9 @@ export const PatchExperimentRequestSchema = z
     conversionWindowMs: z.number().optional(),
     dimensions: z.array(z.string()).optional(),
     confidenceLevel: z.number().optional(),
+    // Assignment fields remain frozen on a running Run. This explicit marker
+    // stages them for the next Run instead of pretending to edit the live one.
+    stageForNextRun: z.literal(true).optional(),
   })
   .strict();
 export type PatchExperimentRequest = z.infer<typeof PatchExperimentRequestSchema>;
@@ -99,19 +114,28 @@ export type ExperimentResponse = z.infer<typeof ExperimentResponseSchema>;
 // StartRunRequest (opens a new Experiment Run — the ONLY path to open one)
 //
 // The assignment config lives on the Experiment draft. Start validates the draft
-// and freezes it into a Run. `confirm?` makes this a gated write under the
-// Environment Policy (ADR-0029); `reason?` is the Run's start note.
+// and freezes it into a Run. `review?` can approve and apply inline; without it,
+// a gated write returns an Approval Request. `reason?` is the Run's start note.
 // ---------------------------------------------------------------------------
 
 export const StartRunRequestSchema = z
   .object({
-    // Environment-Policy confirmation gate (ADR-0029); default false.
-    confirm: z.boolean().optional(),
+    review: InlineApproveAndApplyReviewSchema.optional(),
     reason: z.string().optional(),
-    idempotency_key: z.string().optional(),
+    idempotency_key: z.string().min(1),
   })
   .strict();
 export type StartRunRequest = z.infer<typeof StartRunRequestSchema>;
+
+export const StartRunResponseSchema = z
+  .object({
+    experimentId: z.string(),
+    run: RunSchema,
+    previousRunId: z.string().nullable(),
+    approvalRequest: ApprovalRequestSchema.nullable(),
+  })
+  .strict();
+export type StartRunResponse = z.infer<typeof StartRunResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // PatchRunRequest (non-material only)

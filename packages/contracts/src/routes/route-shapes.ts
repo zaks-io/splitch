@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { ApprovalRequestIdSchema } from "../approval-identifiers";
 import { OriginAllowlistSchema } from "../client-origin";
 import {
   ConditionSchema,
@@ -6,6 +7,10 @@ import {
   TargetingRuleSchema,
 } from "../leaf-schemas-flag";
 import { EnvironmentPolicySchema, UserRoleSchema } from "../leaf-schemas-runtime";
+import {
+  ApprovalRequestSchema,
+  InlineApproveAndApplyReviewSchema,
+} from "./route-shapes-approval-request";
 
 /**
  * Path-param and route-local request/response shapes that have NO dedicated
@@ -65,6 +70,10 @@ export const PromoteParams = z.object({
   appId: z.string(),
   targetEnvironmentId: z.string(),
   flagId: z.string(),
+});
+export const ApprovalRequestParams = z.object({
+  appId: z.string(),
+  id: ApprovalRequestIdSchema,
 });
 export const PrivacyRequestParams = z.object({ requestId: z.string() });
 
@@ -132,36 +141,50 @@ export const PatchFlagConfigRequestSchema = z
       .strict()
       .nullable()
       .optional(),
-    // Gated change types require an explicit confirm under the Env Policy.
-    confirm: z.boolean().optional(),
+    review: InlineApproveAndApplyReviewSchema.optional(),
+    idempotency_key: z.string().min(1),
   })
   .strict();
 
-export const ReplaceTargetingRulesRequestSchema = z.object({
-  targetingRules: z.array(TargetingRuleSchema),
-  confirm: z.boolean().optional(),
-});
+export const ReplaceTargetingRulesRequestSchema = z
+  .object({
+    targetingRules: z.array(TargetingRuleSchema),
+    review: InlineApproveAndApplyReviewSchema.optional(),
+    idempotency_key: z.string().min(1),
+  })
+  .strict();
+
+export const FlagConfigMutationResponseSchema = z
+  .object({
+    config: FlagConfigResponseSchema,
+    approvalRequest: ApprovalRequestSchema.nullable(),
+  })
+  .strict();
 
 // ---------------------------------------------------------------------------
 // Promotion (ADR-0028) — explicit ticked field-groups; absence = leave untouched.
 // ---------------------------------------------------------------------------
 
-export const PromoteRequestSchema = z.object({
-  fromEnvironmentId: z.string(),
-  select: z
-    .object({
-      availability: z.array(z.string()).optional(),
-      targeting: z.literal(true).optional(),
-      rollout: z.literal(true).optional(),
-      enabled: z.literal(true).optional(),
-    })
-    .strict(),
-  confirm: z.boolean().optional(),
-});
+export const PromoteRequestSchema = z
+  .object({
+    fromEnvironmentId: z.string(),
+    select: z
+      .object({
+        availability: z.array(z.string()).optional(),
+        targeting: z.literal(true).optional(),
+        rollout: z.literal(true).optional(),
+        enabled: z.literal(true).optional(),
+      })
+      .strict(),
+    review: InlineApproveAndApplyReviewSchema.optional(),
+    idempotency_key: z.string().min(1),
+  })
+  .strict();
 
 export const PromoteResponseSchema = z.object({
   config: FlagConfigResponseSchema,
   diff: z.object({ before: FlagConfigResponseSchema, after: FlagConfigResponseSchema }),
+  approvalRequest: ApprovalRequestSchema.nullable(),
 });
 
 // ---------------------------------------------------------------------------

@@ -30,6 +30,7 @@ const CANONICAL_OPERATION_IDS = [
   "apps_list",
   "apps_create",
   "apps_get",
+  "app_attention_rollup_get",
   "apps_update",
   "apps_delete",
   // Environments
@@ -38,6 +39,10 @@ const CANONICAL_OPERATION_IDS = [
   "environments_get",
   "environments_update",
   "environments_delete",
+  // Approval Requests + Reviews
+  "approval_requests_list",
+  "approval_requests_get",
+  "approval_request_reviews_create",
   // Flags
   "flags_list",
   "flags_create",

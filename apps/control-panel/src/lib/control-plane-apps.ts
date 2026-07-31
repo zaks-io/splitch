@@ -2,6 +2,7 @@ import {
   type AppsClient,
   createControlPlaneSdk,
   type FlagsClient,
+  type OrganizationsClient,
 } from "@splitch/control-plane-sdk";
 import {
   CONTROL_PANEL_DELEGATION_HEADER,
@@ -41,6 +42,32 @@ export function createControlPanelAppsClient(
   }).apps;
 }
 
+/**
+ * Server-only typed Organizations client over the Control Plane Worker binding.
+ *
+ * `create` is the one Organization operation with no `:orgId`, so its delegation
+ * claims name no resource and the Worker's handler is the sole authorization
+ * authority. Same transport as every other Panel call: one binding, one
+ * delegation, no second door.
+ */
+export function createControlPanelOrganizationsClient(
+  controlPlane: Fetcher,
+  actor: ControlPanelActor,
+  delegationSecret: string,
+  delegationOptions?: DelegationOptions,
+): OrganizationsClient {
+  return createControlPlaneSdk({
+    baseUrl: CONTROL_PLANE_INTERNAL_ORIGIN,
+    fetch: panelDelegationFetch(
+      controlPlane,
+      actor,
+      delegationSecret,
+      undefined,
+      delegationOptions,
+    ),
+  }).organizations;
+}
+
 /** Server-only typed Flags client over the Control Plane Worker binding. */
 export function createControlPanelFlagsClient(
   controlPlane: Fetcher,
@@ -61,6 +88,21 @@ export function createControlPanelFlagsClient(
   }).flags;
 }
 
+/**
+ * The signed delegation header is the only credential this binding accepts, and
+ * every inbound header is copied onto the outbound request. The SDK exposes a
+ * per-call `authorization` option, so caller-supplied bearer or cookie material
+ * can reach here; the entrypoint refuses it, but only once it has already crossed
+ * the binding. Refuse before dispatch instead.
+ */
+function refuseCallerCredentials(headers: Headers): void {
+  for (const header of ["authorization", "cookie"]) {
+    if (headers.has(header)) {
+      throw new Error(`control-panel binding request must not carry ${header} material`);
+    }
+  }
+}
+
 export function panelDelegationFetch(
   controlPlane: Fetcher,
   actor: ControlPanelActor,
@@ -71,6 +113,7 @@ export function panelDelegationFetch(
   return async (input, init) => {
     const request = input instanceof Request ? new Request(input, init) : new Request(input, init);
     const headers = new Headers(request.headers);
+    refuseCallerCredentials(headers);
     if (environmentId) headers.set(CONTROL_PANEL_ENVIRONMENT_HEADER, environmentId);
     const operation = parseControlPanelOperation(
       request.method,

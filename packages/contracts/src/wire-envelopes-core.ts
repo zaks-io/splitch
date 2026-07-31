@@ -61,7 +61,7 @@ export function paginatedResponse<ItemSchema extends z.ZodTypeAny>(itemSchema: I
 // ---------------------------------------------------------------------------
 
 export const PaginationQuerySchema = z.object({
-  limit: z.number().int().min(1).max(PAGINATION_MAX_LIMIT).default(PAGINATION_DEFAULT_LIMIT),
+  limit: z.coerce.number().int().min(1).max(PAGINATION_MAX_LIMIT).default(PAGINATION_DEFAULT_LIMIT),
   // Present-with-null: absent and explicit-null both mean "first page".
   cursor: z.string().nullable().default(null),
 });

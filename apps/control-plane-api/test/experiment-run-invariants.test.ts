@@ -92,7 +92,18 @@ describe("control-plane Experiment Run invariants", () => {
 
     const gated = await startExperiment(ctx, fx, experiment.id);
     expect(gated.status).toBe(409);
-    expect((await errorBody(gated)).code).toBe("CONFIRMATION_REQUIRED");
+    expect(await errorBody(gated)).toMatchObject({
+      code: "APPROVAL_REVIEW_REQUIRED",
+      details: {
+        approvalRequestId: expect.stringMatching(/^apr_/),
+        policyContexts: [
+          expect.objectContaining({
+            environmentId: fx.environmentId,
+            changeTypes: ["start_experiment_run"],
+          }),
+        ],
+      },
+    });
     expect(
       await ctx.repo.experiments.listRunsForExperiment(
         envScope(fx.appId, fx.environmentId),
@@ -103,15 +114,20 @@ describe("control-plane Experiment Run invariants", () => {
       await ctx.h.bindings.kv.get(liveRunKey(fx.appId, fx.environmentId, experiment.id), "text"),
     ).toBe(null);
 
-    const confirmed = await request(
-      ctx.h,
-      "POST",
-      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments/${experiment.id}/start`,
-      fx.jwt,
-      { confirm: true },
-    );
+    const legacyConfirm = await startExperiment(ctx, fx, experiment.id, { confirm: true });
+    expect(legacyConfirm.status).toBe(400);
+    expect((await errorBody(legacyConfirm)).code).toBe("VALIDATION_ERROR");
+
+    const confirmed = await startExperiment(ctx, fx, experiment.id, {
+      review: { action: "approve_and_apply" },
+    });
     expect(confirmed.status).toBe(200);
     const started = (await confirmed.json()) as StartResponse;
+    const replay = await startExperiment(ctx, fx, experiment.id, {
+      review: { action: "approve_and_apply" },
+    });
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual(started);
 
     const segmentPatch = await request(
       ctx.h,

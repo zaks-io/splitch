@@ -1,15 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["biome.json", "tsconfig.base.json"],
-  "globalEnv": [
-    "CI",
-    "NODE_ENV",
-    "SPLITCH_PLATFORM_TARGET",
-    "AUTH_API_ORIGIN",
-    "AUTH_JWKS_URI",
-    "CONTROL_PLANE_ORIGIN",
-    "TINYBIRD_API_URL"
-  ],
+  "globalEnv": ["CI", "NODE_ENV"],
   "globalPassThroughEnv": [
     "GITHUB_RUN_ID",
     "SPLITCH_SMOKE_APP_ID",
@@ -26,29 +18,17 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".output/**", "build/**"],
-      "inputs": ["$TURBO_DEFAULT$"],
-      "env": [
-        "SPLITCH_PLATFORM_TARGET",
-        "AUTH_API_ORIGIN",
-        "AUTH_JWKS_URI",
-        "CONTROL_PLANE_ORIGIN",
-        "TINYBIRD_API_URL"
-      ]
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
+      "inputs": ["$TURBO_DEFAULT$"]
     },
     "@splitch/control-panel#build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".output/**", "build/**"],
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
       "inputs": ["$TURBO_DEFAULT$"],
       "env": [
         "SPLITCH_PLATFORM_TARGET",
-        "AUTH_API_ORIGIN",
-        "AUTH_JWKS_URI",
-        "CONTROL_PLANE_ORIGIN",
-        "TINYBIRD_API_URL",
         "CLOUDFLARE_ENV",
         "SPLITCH_GENERATED_WRANGLER_ENV",
-        "SENTRY_DSN",
         "SENTRY_RELEASE",
         "SENTRY_RELEASE_BASE",
         "VITE_SENTRY_DSN",
@@ -58,17 +38,46 @@
     },
     "@splitch/marketing#build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", ".output/**", "build/**"],
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
       "inputs": ["$TURBO_DEFAULT$"],
-      "env": [
-        "SPLITCH_PLATFORM_TARGET",
-        "AUTH_API_ORIGIN",
-        "AUTH_JWKS_URI",
-        "CONTROL_PLANE_ORIGIN",
-        "TINYBIRD_API_URL",
-        "CLOUDFLARE_ENV",
-        "SPLITCH_GENERATED_WRANGLER_ENV"
-      ]
+      "env": ["CLOUDFLARE_ENV", "SPLITCH_GENERATED_WRANGLER_ENV"]
+    },
+    "@splitch/cli#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/spec/quickstart.md",
+        "$TURBO_ROOT$/fixtures/external-dark-launch-product/**",
+        "$TURBO_ROOT$/scripts/dark-launch/**"
+      ],
+      "outputs": []
+    },
+    "@splitch/repo-lint#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/.github/workflows/cli-*.yml",
+        "$TURBO_ROOT$/.github/workflows/sdk-*.yml",
+        "$TURBO_ROOT$/apps/cli/LICENSE.md",
+        "$TURBO_ROOT$/apps/cli/package.json",
+        "$TURBO_ROOT$/apps/cli/scripts/**",
+        "$TURBO_ROOT$/apps/cli/src/**",
+        "$TURBO_ROOT$/apps/cli/tsconfig*.json",
+        "$TURBO_ROOT$/apps/cli/tsup*.ts",
+        "$TURBO_ROOT$/apps/*/package.json",
+        "$TURBO_ROOT$/packages/contracts/package.json",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/packages/sdk/LICENSE.md",
+        "$TURBO_ROOT$/packages/sdk/package.json",
+        "$TURBO_ROOT$/packages/sdk/scripts/**",
+        "$TURBO_ROOT$/packages/sdk/src/**",
+        "!$TURBO_ROOT$/packages/sdk/src/generated/**",
+        "$TURBO_ROOT$/packages/sdk/tsconfig*.json",
+        "$TURBO_ROOT$/packages/sdk/tsup*.ts",
+        "$TURBO_ROOT$/packages/*/package.json",
+        "$TURBO_ROOT$/scripts/release/**"
+      ],
+      "outputs": []
     },
     "clean": {
       "cache": false
@@ -84,6 +93,64 @@
     "test": {
       "dependsOn": ["^build"],
       "outputs": []
+    },
+    "//#format:check": {
+      "inputs": ["$TURBO_DEFAULT$"],
+      "outputs": []
+    },
+    "//#spec:lint": {
+      "inputs": ["docs/spec/**", "scripts/spec-lint.mjs"],
+      "outputs": []
+    },
+    "//#check:cli-mcp-parity": {
+      "inputs": [
+        "scripts/check-cli-mcp-parity.ts",
+        "scripts/lib/**",
+        "apps/cli/src/**",
+        "apps/mcp-server/src/**",
+        "packages/contracts/src/**"
+      ],
+      "outputs": []
+    },
+    "//#test:scripts": {
+      "inputs": [
+        "scripts/**",
+        ".github/workflows/**",
+        "apps/control-panel/playwright.config.ts",
+        "package.json"
+      ],
+      "outputs": []
+    },
+    "@splitch/control-panel#test:connect-snippet": {
+      "dependsOn": ["@splitch/sdk#build"],
+      "inputs": ["scripts/connect-snippet-compile.mjs", "src/lib/connect-snippet.ts"],
+      "outputs": []
+    },
+    "@splitch/mcp-server#generate": {
+      "inputs": [
+        "$TURBO_ROOT$/CONTEXT.md",
+        "$TURBO_ROOT$/docs/spec/quickstart.md",
+        "$TURBO_ROOT$/scripts/generate-mcp-resource-files.mjs"
+      ],
+      "outputs": ["src/mcp-resource-files.generated.ts"]
+    },
+    "@splitch/mcp-server#build": {
+      "dependsOn": ["^build", "@splitch/mcp-server#generate"],
+      "outputs": ["dist/**", ".output/**", "build/**", ".wrangler/deploy/**"],
+      "inputs": ["$TURBO_DEFAULT$"]
+    },
+    "@splitch/mcp-server#typecheck": {
+      "dependsOn": ["^build", "@splitch/mcp-server#generate"],
+      "outputs": []
+    },
+    "@splitch/mcp-server#test": {
+      "dependsOn": ["^build", "@splitch/mcp-server#generate"],
+      "outputs": []
+    },
+    "test:e2e": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "env": ["SPLITCH_PLATFORM_TARGET"]
     },
     "stats:unit": {
       "dependsOn": ["^build"],
@@ -264,11 +331,23 @@
         "SPLITCH_SMOKE_CLIENT_SECRET"
       ]
     },
-    "d1:migrate:local": {
+    "//#d1:migrate:local": {
       "cache": false
     },
-    "d1:migrate:populated": {
+    "//#d1:migrate:populated": {
+      "cache": false,
+      "dependsOn": ["//#d1:migrate:local"]
+    },
+    "//#secrets:range": {
       "cache": false
+    },
+    "//#secrets:staged": {
+      "cache": false
+    },
+    "//#knip": {
+      "dependsOn": ["@splitch/cli#build", "@splitch/sdk#build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!.github/**"],
+      "outputs": []
     },
     "migrate": {
       "cache": false,
@@ -297,7 +376,7 @@
     "tinybird:deploy:production": {
       "cache": false
     },
-    "tinybird:local": {
+    "//#tinybird:local": {
       "cache": false
     },
     "wrangler": {
@@ -306,20 +385,54 @@
     "wrangler:types": {
       "cache": false
     },
+    "@splitch/stats#test": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/package.json"],
+      "outputs": []
+    },
     "@splitch/sdk#build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/contracts/src/**"],
       "outputs": ["dist/**", "src/generated/**"]
     },
     "@splitch/sdk#typecheck": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/contracts/src/**"],
-      "outputs": ["src/generated/**"]
-    },
-    "@splitch/sdk#test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["build"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/contracts/src/**"],
       "outputs": []
+    },
+    "@splitch/sdk#test": {
+      "dependsOn": ["build"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/contracts/src/**"],
+      "outputs": []
+    },
+    "@splitch/sdk#pack:dry-run": {
+      "dependsOn": ["build", "//#knip"],
+      "cache": false
+    },
+    "@splitch/sdk#pack:check": {
+      "dependsOn": ["pack:dry-run"],
+      "cache": false
+    },
+    "@splitch/sdk#test:consumer-smoke": {
+      "dependsOn": ["pack:check"],
+      "cache": false
+    },
+    "@splitch/cli#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "tsconfig*.json", "tsup*.ts", "package.json"],
+      "outputs": ["dist/**"]
+    },
+    "@splitch/cli#pack:dry-run": {
+      "dependsOn": ["build", "//#knip"],
+      "cache": false
+    },
+    "@splitch/cli#pack:check": {
+      "dependsOn": ["pack:dry-run"],
+      "cache": false
+    },
+    "@splitch/cli#test:consumer-smoke": {
+      "dependsOn": ["pack:check"],
+      "cache": false
     }
   }
 }

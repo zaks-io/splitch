@@ -77,9 +77,10 @@ loudly. "First-touch wins" would silently bias the timestamp-winning arm; SRM wo
 ADR-0009 has the pipeline drive the holdover `put`, but authoritative first-touch is only known _after_ the
 batch dedup runs. Splitting the two jobs resolves the timing:
 
-- **Experience (replay now):** the edge fires `DO.putIfAbsent(key, run, variant)` optimistically on apparent
-  first-touch. The DO's get-then-put-if-absent (ADR-0009) makes concurrent writers safe — first writer
-  wins — so replay works for the _very next_ request without waiting for the batch.
+- **Experience (replay now):** after Event Ingest durably seals the retry-stable Exposure outbox row,
+  the edge fires `DO.putIfAbsent(key, run, variant)` optimistically on apparent first-touch. The DO's
+  get-then-put-if-absent (ADR-0009) makes concurrent writers safe — first writer wins — so replay
+  works for the _very next_ request without waiting for Queue or Tinybird.
 - **Analysis (the denominator):** the raw log + batch dedup remains authoritative for SRM and all metrics.
 
 So **the DO is for experience, the log is for analysis** — the same separation the Assignment Store seam

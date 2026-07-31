@@ -52,6 +52,7 @@ describe("control-plane Flag MCP tool derivation", () => {
         flagId: "flag_1",
         variantName: "treatment",
         name: "beta",
+        idempotency_key: "variant-update-1",
       }).success,
     ).toBe(true);
     expect(updateTool?.inputSchema.safeParse({ name: "beta" }).success).toBe(false);

@@ -53,13 +53,14 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 
 ### Apps
 
-| Tool          | Method | Path                |
-| ------------- | ------ | ------------------- |
-| `apps_list`   | GET    | `/orgs/:orgId/apps` |
-| `apps_create` | POST   | `/orgs/:orgId/apps` |
-| `apps_get`    | GET    | `/apps/:appId`      |
-| `apps_update` | PATCH  | `/apps/:appId`      |
-| `apps_delete` | DELETE | `/apps/:appId`      |
+| Tool                       | Method | Path                            |
+| -------------------------- | ------ | ------------------------------- |
+| `apps_list`                | GET    | `/orgs/:orgId/apps`             |
+| `apps_create`              | POST   | `/orgs/:orgId/apps`             |
+| `apps_get`                 | GET    | `/apps/:appId`                  |
+| `app_attention_rollup_get` | GET    | `/apps/:appId/attention-rollup` |
+| `apps_update`              | PATCH  | `/apps/:appId`                  |
+| `apps_delete`              | DELETE | `/apps/:appId`                  |
 
 ### Environments
 
@@ -74,14 +75,28 @@ Grouped by resource. All are thin 1:1 wrappers — no per-tool invariant logic (
 **Reading the Environment Policy.** There is no separate policy endpoint or tool: the Environment
 Policy (the per-change-type `allow | confirm` map, ADR-0029) is returned inline by `environments_get`
 and written by `environments_update` (endpoints-org-app.md). An agent reads `environments_get` and
-inspects `policy` **before** a gated write so it can pass `confirm: true` on the first attempt rather
-than round-tripping through a `409 CONFIRMATION_REQUIRED`. The CLI `splitch env-policy get` / `set`
+inspects `policy` **before** a gated write so it can send
+`review: { action: "approve_and_apply" }` on the first attempt under `confirm`. The CLI
+`splitch env-policy get` / `set`
 are presentation aliases that project the `policy` field of those same calls — same endpoint, friendlier
 surface, no second route (one way to do one thing).
 
 `organizations_list` (above) is the agent's **cold-start entry point**: with no `orgId` in hand on
 first connection, an agent calls it to discover the Organizations the token can reach, then proceeds
 to `apps_create` / `onboard_new_app`.
+
+### Approval Requests
+
+| Tool                              | Method | Path                                         |
+| --------------------------------- | ------ | -------------------------------------------- |
+| `approval_requests_list`          | GET    | `/apps/:appId/approval-requests`             |
+| `approval_requests_get`           | GET    | `/apps/:appId/approval-requests/:id`         |
+| `approval_request_reviews_create` | POST   | `/apps/:appId/approval-requests/:id/reviews` |
+
+The list input derives the optional `status` and `target_kind` filters plus standard `limit` and
+`cursor` pagination. The single read returns the full wire projection. Review creation derives the
+canonical Review action and required idempotency key. Registering these routes is sufficient for all
+three tools to exist.
 
 ### Flags
 
@@ -188,19 +203,23 @@ Auth: control-plane token (not Client Key). Writes nothing; zero Exposures. (ADR
 
 `flags_test_eval` is the agent's verify step — the control-plane, full-reason tier. Data-plane
 `POST /api/sdk/evaluate`, `POST /api/sdk/peek` (ADR-0034), `POST /api/sdk/verify` (ADR-0037), and
-`POST /api/sdk/events` are **not** MCP tools: they are data-plane endpoints called by SDK clients
-with an SDK credential.
+`POST /api/sdk/events` and `POST /api/sdk/web-events` are **not** MCP tools: they are data-plane
+endpoints called by SDK clients with an SDK credential.
 The verify endpoint is surfaced in the CLI as `splitch flags verify` for developers testing with
 the credential their code holds.
 
 ### Analytics
 
-| Tool                      | Method | Path                                                                 |
-| ------------------------- | ------ | -------------------------------------------------------------------- |
-| `organization_usage_get`  | GET    | `/orgs/:orgId/usage`                                                 |
-| `experiment_results_get`  | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results` |
-| `experiment_results_post` | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results` |
-| `audit_log_list`          | GET    | `/apps/:appId/audit-log`                                             |
+| Tool                                | Method | Path                                                                            |
+| ----------------------------------- | ------ | ------------------------------------------------------------------------------- |
+| `organization_usage_get`            | GET    | `/orgs/:orgId/usage`                                                            |
+| `experiment_results_get`            | GET    | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results`            |
+| `experiment_results_post`           | POST   | `/apps/:appId/envs/:environmentId/experiments/:experimentId/results`            |
+| `web_analytics_overview_get`        | GET    | `/apps/:appId/envs/:environmentId/web-analytics/overview`                       |
+| `web_analytics_sessions_list`       | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions`                       |
+| `web_analytics_session_events_list` | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions/:sessionIdHash/events` |
+| `web_analytics_vitals_get`          | GET    | `/apps/:appId/envs/:environmentId/web-analytics/vitals`                         |
+| `audit_log_list`                    | GET    | `/apps/:appId/audit-log`                                                        |
 
 ### Privacy data
 
@@ -228,20 +247,25 @@ naming the next step, so the agent's recovery branch is a token lookup, not pros
 - `VARIANT_NOT_AVAILABLE` → `details.missingVariants`, `details.recommendedAction: 'ADD_VARIANT_TO_ENV'`
 - `ALLOCATION_INVALID` → `details.got` (the actual sum; fix allocation to sum to 100)
 - `INSUFFICIENT_SCOPES` → `details.requiredScopes` (re-authenticate with broader scopes)
-- `CONFIRMATION_REQUIRED` → `details.gate` + `recommendedAction: 'RETRY_WITH_CONFIRMATION'` (the Environment Policy gates this change type; resend the **same** tool call with `confirm: true`)
+- `APPROVAL_REVIEW_REQUIRED` → `details.approvalRequestId` + `recommendedAction: 'REVIEW_APPROVAL_REQUEST'`
+- `APPROVAL_REQUEST_STALE` → `details.currentTargetVersion` + `recommendedAction: 'REFRESH_AND_REPROPOSE'`
+- `APPROVAL_APPLICATION_FAILED` → `details.reviewId` + `recommendedAction: 'RETRY_REVIEW'`
+- `ATTENTION_FANOUT_LIMIT_EXCEEDED` → `details.limit` / `details.environments` + `recommendedAction: 'READ_PER_ENVIRONMENT'` (the App-wide rollup is over a fan-out budget; call `experiments_list` per Environment to find the running Experiments, then `experiment_results_get` on each for SRM/Guardrail health — `experiments_list` alone carries no health signal — and do **not** retry the rollup)
 
 No per-tool ad-hoc error shapes. (ADR-0025 "one canonical ErrorResponse".)
 
-## Confirmation gate over MCP
+## Approval Request and Review over MCP
 
-Gated writes (`experiments_start`, `flag_config_update`, `flags_promote`, the enabled-state toggle)
-derive a `confirm?: boolean` input from the same Zod request body the Worker validates, so the field
-is exposed on the tool by construction — there is no separate confirmation ceremony. If the
-Environment Policy gates the change type (ADR-0029) and `confirm` is omitted/false, the Worker
-returns `409 CONFIRMATION_REQUIRED` naming `details.gate`; the agent resends the identical call with
-`confirm: true`. To avoid the round-trip, an agent reads the Policy from `environments_get` first and
-sets `confirm` up front. `confirm: true` satisfies the gate but does not widen authorization (full Worker validation
-still applies). Canonical shape in [error-responses.md](./error-responses.md#confirmation_required-the-environment-policy-confirmation-handshake).
+Policy-controlled writes derive `review?: { action: "approve_and_apply" }` from the same Zod request
+body the Worker validates. Under `allow`, no Review is required. Under `confirm`, the proposer may
+send the action inline. Future `approve` changes only Review authority and requires a distinct
+principal to submit that same action.
+
+If required Review is omitted, the Worker persists the immutable Approval Request and returns
+`409 APPROVAL_REVIEW_REQUIRED`. The agent invokes the route-derived Approval Review tool with the
+returned ID and a new `idempotency_key`; it does not resend the mutation or create a second
+confirmation pipeline. Canonical shape in
+[error-responses.md](./error-responses.md#approval-request-and-review-errors).
 
 ## Pagination inputs
 
@@ -253,12 +277,18 @@ Tinybird-backed lists. Canonical contract in
 
 ## Idempotency on retried creates
 
-Non-idempotent control-plane creates (`apps_create`, `experiments_create`, `experiments_start`,
+Non-idempotent control-plane creates (`apps_create`, `experiments_create`,
 `flag_variants_create`, `metrics_create`, `segments_create`, `api_keys_create`) accept an optional
 `idempotency_key` (caller-supplied, derived from the route body schema). The Worker records the key
 and returns the **same** resource on a retry with the same key, so an agent retrying after a network
 timeout never double-creates. Omitting the key preserves at-most-once-per-call semantics only; agents
 that retry should always supply one. (Mirrors the auth-claim idempotency key, auth-doors.md.)
+
+Approval-controlled mutations (`experiments_start`, `flag_config_update`,
+`flag_targeting_rules_replace`, `flags_promote`, and App-level Variant value updates) require
+`idempotency_key`. It owns durable Approval Request creation and any inline Review. Review calls
+also require their own key. Exact retries return the stored result; a key reused with a different
+payload fails with `IDEMPOTENCY_KEY_CONFLICT`.
 
 ## Authorization
 

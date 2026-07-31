@@ -9,7 +9,9 @@ The gate is a **binary property on a Run**. When `run.activationMetric` is set, 
 ## Inputs
 
 - `exposed`: deduped first-touch output per `(targeting_key_hash, run_id)` with `__multiple__` already excluded (produced by [dedup-query-contract.md](./dedup-query-contract.md))
-- `raw_events` rows with `type = 'activation'` (first-class event rows, ADR-0013)
+- `serve_deduped_activations`: deduplicated Activation candidates per Entity, Run, counterfactual
+  kind, and `activation_ts` after aggregate-state merge, bounded by injected App, Environment, exact
+  Run, and the Run's half-open activation-time analysis interval (ADR-0013)
 
 ## Activation JOIN query
 
@@ -17,40 +19,73 @@ The gate is a **binary property on a Run**. When `run.activationMetric` is set, 
 WITH exposed AS (
   -- deduped first-touch output, __multiple__ excluded
   SELECT app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash, variant, first_exposure_ts
-  FROM deduped_exposures          -- or the real-time equivalent; see physical-dedup-pipes.md
+  FROM serve_deduped_exposures
   WHERE variant != '__multiple__'
     AND app_id = {app_id: String}
+    AND environment_id = {environment_id: String}
+    AND run_id = {run_id: String}
 ),
 activations AS (
   SELECT
-    app_id, environment_id, experiment_id, run_id, targeting_key_hash,
-    MIN(activation_ts)          AS activation_ts        -- earliest activation per Entity per Run
-  FROM raw_events
-  WHERE type = 'activation'
-    AND (counterfactual = false OR {include_counterfactual: Bool} = true)
-    AND app_id = {app_id: String}
-  GROUP BY app_id, environment_id, experiment_id, run_id, targeting_key_hash
+    app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash,
+    activation_ts
+  FROM serve_deduped_activations
+  WHERE app_id = {app_id: String}
+    AND environment_id = {environment_id: String}
+    AND run_id = {run_id: String}
+    AND activation_ts >= {activation_from: DateTime64(3)}
+    AND activation_ts < {activation_to: DateTime64(3)}
+),
+activated AS (
+  SELECT
+    e.app_id,
+    e.environment_id,
+    e.experiment_id,
+    e.run_id,
+    e.id_type,
+    e.targeting_key_hash,
+    e.variant,
+    e.first_exposure_ts,
+    MIN(a.activation_ts) AS activation_ts
+  FROM exposed e
+  INNER JOIN activations a
+    ON  a.app_id = e.app_id
+    AND a.environment_id = e.environment_id
+    AND a.experiment_id = e.experiment_id
+    AND a.run_id = e.run_id
+    AND a.id_type = e.id_type
+    AND a.targeting_key_hash = e.targeting_key_hash
+    AND a.activation_ts > e.first_exposure_ts
+  GROUP BY
+    e.app_id,
+    e.environment_id,
+    e.experiment_id,
+    e.run_id,
+    e.id_type,
+    e.targeting_key_hash,
+    e.variant,
+    e.first_exposure_ts
 )
 SELECT
-  e.app_id,
-  e.environment_id,
-  e.experiment_id,
-  e.run_id,
-  e.id_type,
-  e.targeting_key_hash,
-  e.variant,
-  e.first_exposure_ts,
-  a.activation_ts,
-  COALESCE(a.activation_ts, e.first_exposure_ts)        AS window_anchor
-FROM exposed e
-INNER JOIN activations a
-  ON  a.app_id        = e.app_id
-  AND a.experiment_id = e.experiment_id
-  AND a.run_id        = e.run_id
-  AND a.targeting_key_hash = e.targeting_key_hash
-  AND a.activation_ts > e.first_exposure_ts             -- ordering invariant: activation follows exposure
--- INNER JOIN drops un-activated Entities from the gated population
+  app_id,
+  environment_id,
+  experiment_id,
+  run_id,
+  id_type,
+  targeting_key_hash,
+  variant,
+  first_exposure_ts,
+  activation_ts,
+  activation_ts AS window_anchor
+FROM activated
 ```
+
+`activation_from` and `activation_to` are server-derived from the retained Run and requested analysis
+cutoff, never caller-selected free ranges. The serving Pipe translates them to event-date partition
+bounds before `minMerge`; its explicit `include_counterfactual` parameter applies counterfactual
+policy before merge. It preserves distinct candidate timestamps. The Exposure-relative JOIN rejects
+pre-Exposure candidates before `MIN(a.activation_ts)` chooses the first valid Activation. Late Queue
+delivery remains correct because partitioning follows `activation_ts`, not physical insertion time.
 
 ### Ordering invariant
 
@@ -121,7 +156,11 @@ The full-exposed SRM (from [dedup-query-contract.md](./dedup-query-contract.md))
 
 ## Counterfactual extension point (additive, ADR-0013)
 
-Activation rows default to `counterfactual = false`. When the SDK-side counterfactual evaluation is built (deferred), Control-arm would-have-activated events flow as `counterfactual = true` rows through the same `raw_events` log, the same JOIN, and the same anchor. No schema change, no query rewrite. The `{include_counterfactual}` parameter gates their inclusion.
+Activation rows default to `counterfactual = false`. When SDK-side counterfactual evaluation is built
+(deferred), Control-arm would-have-activated events enter the same raw log as
+`counterfactual = true`, materialize into the same Activation state, and flow through the same serving
+join and anchor. No schema change or raw serving path is added. The
+`include_counterfactual` serving parameter gates their inclusion before `minMerge`.
 
 ## Output shape (per-Entity gated population)
 

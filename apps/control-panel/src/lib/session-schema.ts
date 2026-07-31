@@ -1,17 +1,23 @@
-import { nowSeconds } from "./session-cookie";
 import type { AppMembership, OrgMembership, StoredSession } from "./session";
+import { nowSeconds } from "./session-cookie";
 
 const ORG_ROLES = new Set(["owner", "admin", "member"]);
 const APP_ROLES = new Set(["owner", "admin", "member", "viewer"]);
-const STORED_SESSION_KEYS = new Set([
+/**
+ * Exported so the live-update contract schema can be checked against them. That
+ * schema is `.strict()` over this same shape and lives in another package, so a
+ * key added here and not there refuses every session at the socket boundary.
+ */
+export const STORED_SESSION_KEYS = new Set([
   "userId",
   "orgs",
+  "orgsTruncated",
   "expiresAt",
   "workosSessionId",
   "workosAccessToken",
   "version",
 ]);
-const ORG_MEMBERSHIP_KEYS = new Set([
+export const ORG_MEMBERSHIP_KEYS = new Set([
   "orgId",
   "orgSlug",
   "orgRole",
@@ -19,7 +25,7 @@ const ORG_MEMBERSHIP_KEYS = new Set([
   "demoExpiresAt",
   "apps",
 ]);
-const APP_MEMBERSHIP_KEYS = new Set(["appId", "appSlug", "role"]);
+export const APP_MEMBERSHIP_KEYS = new Set(["appId", "appSlug", "role"]);
 const LEGACY_ORG_MEMBERSHIP_KEYS = new Set(["orgId", "orgSlug", "orgRole", "apps"]);
 
 export function parseStoredSession(
@@ -71,6 +77,7 @@ function isStoredSession(value: Partial<StoredSession>): value is StoredSession 
     (value.version === 1 || value.version === 2) &&
     (value.workosSessionId === undefined || isNonEmptyString(value.workosSessionId)) &&
     (value.workosAccessToken === undefined || isNonEmptyString(value.workosAccessToken)) &&
+    (value.orgsTruncated === undefined || typeof value.orgsTruncated === "boolean") &&
     Array.isArray(value.orgs) &&
     value.orgs.every(isOrgMembership)
   );
@@ -84,6 +91,11 @@ function isLegacyStoredSession(
     Number.isInteger(value.expiresAt) &&
     (value.workosSessionId === undefined || isNonEmptyString(value.workosSessionId)) &&
     (value.workosAccessToken === undefined || isNonEmptyString(value.workosAccessToken)) &&
+    // Checked here too, not only on the v2 path: the key allowlist admits it and
+    // `normalizeStoredSession` spreads the candidate through, so without this a
+    // v1 session carrying `orgsTruncated: "definitely"` would load with the
+    // string intact while the identical v2 session is rejected.
+    (value.orgsTruncated === undefined || typeof value.orgsTruncated === "boolean") &&
     Array.isArray(value.orgs) &&
     value.orgs.every(isLegacyOrgMembership)
   );

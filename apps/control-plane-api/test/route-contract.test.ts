@@ -90,7 +90,7 @@ beforeEach(async () => {
 afterEach(async () => h.bindings.dispose());
 
 describe("control-plane route contract", () => {
-  it("mounts every Control Plane-owned registry route", () => {
+  it("mounts every implemented Control Plane route", () => {
     const expected = routeRegistry
       .filter((route) => route.owner === "control-plane-api")
       .map((route) => `${route.method} ${route.path}`)

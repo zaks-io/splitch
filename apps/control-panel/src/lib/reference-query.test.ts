@@ -51,14 +51,18 @@ describe("reference Flag Configuration route query flow", () => {
       api,
       scope,
       flagId: "flag_1",
-      patch: { enabled: true },
+      patch: { enabled: true, idempotency_key: "config-update-1" },
     });
     expect(queryClient.getQueryData(query.queryKey)).toEqual(initialConfig);
 
     readConfig = config({ version: 2, enabled: true });
-    resolveUpdate?.(Response.json(readConfig));
+    resolveUpdate?.(Response.json({ config: readConfig, approvalRequest: null }));
 
-    await expect(mutation).resolves.toEqual({ ok: true, data: readConfig });
+    await expect(mutation).resolves.toEqual({
+      ok: true,
+      data: readConfig,
+      approvalRequest: null,
+    });
     expect(queryClient.getQueryData(query.queryKey)).toEqual(readConfig);
     unsubscribe();
   });
@@ -85,7 +89,7 @@ describe("reference Flag Configuration route query flow", () => {
         api,
         scope,
         flagId: "flag_1",
-        patch: { enabled: true },
+        patch: { enabled: true, idempotency_key: "config-update-2" },
       }),
     ).resolves.toEqual({
       ok: false,
@@ -118,7 +122,7 @@ describe("reference Flag Configuration route query flow", () => {
         api,
         scope,
         flagId: "flag_1",
-        patch: { enabled: true },
+        patch: { enabled: true, idempotency_key: "config-update-3" },
       }),
     ).resolves.toMatchObject({
       ok: false,

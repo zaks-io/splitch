@@ -44,7 +44,15 @@ function FlagDetailRoute() {
   const { detail, scope } = Route.useLoaderData();
 
   if (isFlagDetailNotFound(detail)) {
-    return (
+    // The key is resolved against a bounded catalog read. When that read was
+    // truncated, "not in the page" is not "does not exist", and the screen must
+    // not state the stronger claim it cannot back (ADR-0036).
+    return detail.catalogTruncated ? (
+      <NotFoundPage
+        description="This App has more Flags than the catalog read returns at once, and this key was not in the page that came back. It may still exist."
+        title="Flag not found in this page of the catalog"
+      />
+    ) : (
       <NotFoundPage
         description="No Flag with this key exists in this App."
         title="Flag not found"

@@ -1,6 +1,7 @@
 import { createRepository, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  allowAllPolicies,
   appToken,
   baseFlag,
   createDefaultApp,
@@ -94,6 +95,7 @@ describe("control-plane Flag definition invariants", () => {
 
   it("adds and deletes catalog Variants while blocking Environment-available Variants", async () => {
     const createdApp = await createDefaultApp(h);
+    await allowAllPolicies(h, createdApp.app.id);
     const jwt = await appToken(h, createdApp.app.id);
     const flag = await createFlag(h, createdApp.app.id, jwt);
 
@@ -107,6 +109,7 @@ describe("control-plane Flag definition invariants", () => {
         flagId: flag.id,
         name: "beta",
         value: true,
+        idempotency_key: "idem_variant_add_beta",
       },
     );
     expect(add.status).toBe(200);
@@ -126,6 +129,8 @@ describe("control-plane Flag definition invariants", () => {
       "DELETE",
       `/apps/${createdApp.app.id}/flags/${flag.id}/variants/beta`,
       jwt,
+      undefined,
+      "idem_variant_delete_beta",
     );
     expect(blocked.status).toBe(409);
     expect((await errorBody(blocked)).code).toBe("RESOURCE_NOT_EMPTY");
@@ -143,13 +148,22 @@ describe("control-plane Flag Variant updates", () => {
       "PATCH",
       `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
       jwt,
-      { name: "beta", value: false, description: "renamed catalog entry" },
+      {
+        name: "beta",
+        value: false,
+        description: "renamed catalog entry",
+        idempotency_key: "idem_variant_update_success",
+        review: { action: "approve_and_apply" },
+      },
     );
 
     expect(res.status).toBe(200);
-    const updated = (await res.json()) as {
-      variants: Array<{ name: string; value: unknown; description?: string }>;
+    const body = (await res.json()) as {
+      approvalRequest: { status: string };
+      flag: { variants: Array<{ name: string; value: unknown; description?: string }> };
     };
+    expect(body.approvalRequest.status).toBe("applied");
+    const updated = body.flag;
     expect("enabled" in updated).toBe(false);
     expect(updated.variants).toContainEqual(
       expect.objectContaining({
@@ -170,7 +184,7 @@ describe("control-plane Flag Variant updates", () => {
       "PATCH",
       `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
       jwt,
-      { name: "control" },
+      { name: "control", idempotency_key: "idem_variant_update_duplicate" },
     );
     expect(duplicate.status).toBe(400);
     expect((await errorBody(duplicate)).code).toBe("VALIDATION_ERROR");
@@ -180,7 +194,7 @@ describe("control-plane Flag Variant updates", () => {
       "PATCH",
       `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
       jwt,
-      { value: "not-boolean" },
+      { value: "not-boolean", idempotency_key: "idem_variant_update_wrong_type" },
     );
     expect(wrongType.status).toBe(400);
     expect((await errorBody(wrongType)).code).toBe("VALIDATION_ERROR");
@@ -207,7 +221,7 @@ describe("control-plane Flag Variant updates", () => {
       "PATCH",
       `/apps/${createdApp.app.id}/flags/${flag.id}/variants/treatment`,
       jwt,
-      { value: false },
+      { value: false, idempotency_key: "idem_variant_update_running" },
     );
 
     expect(res.status).toBe(409);
@@ -254,6 +268,7 @@ async function seedRunningVariantRun(
     salt: "salt_variant_update_guard",
     allocation: JSON.stringify({ control: 50, treatment: 50 }),
     variantSet: JSON.stringify([variant]),
+    controlVariantId: variant.id,
     targetingRules: "[]",
     confidenceLevel: 0.95,
     decisionFamily: "[]",

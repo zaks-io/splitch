@@ -3,14 +3,12 @@ import { envScope, type Repository } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { renderError } from "@splitch/worker-runtime";
 import { requireAppAdmin } from "./app-authz";
+import { canonicalHash } from "./approval-canonical";
+import { createApproval, replayApprovalIfExists } from "./approval-service";
+import { environmentPolicyContexts, requiresReview } from "./approval-target";
 import type { ConfigStoreWriter } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-do";
-import {
-  confirmationRequired,
-  flagConfigPatchGates,
-  promotionGates,
-  readEnvironmentPolicy,
-} from "./flag-config-policy";
+import { flagConfigPatchGates, promotionGates, readEnvironmentPolicy } from "./flag-config-policy";
 import { objectBody, pathParam } from "./handler-input";
 import { type MemberProfileResolver, makeOrgHandlers } from "./org-handlers";
 
@@ -38,6 +36,7 @@ interface HandlerDeps {
   nowIso?: () => string;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the returned handler registry keeps route ownership visible in one place
 export function makeHandlers(deps: HandlerDeps) {
   return {
     ...makeOrgHandlers(deps),
@@ -61,6 +60,7 @@ export function makeHandlers(deps: HandlerDeps) {
       return Response.json(result.config);
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: authorization, preview, Approval creation, and application are ordered fail-fast gates
     async updateFlagConfig({
       input,
       principal,
@@ -75,25 +75,94 @@ export function makeHandlers(deps: HandlerDeps) {
       if (adminError) return adminError;
 
       const body = objectBody(input);
+      const configRow = await deps.repo.flags.getFlagConfig(envScope(appId, environmentId), flagId);
+      if (!configRow) return flagConfigNotFound(requestId);
+      const replay = await replayApprovalIfExists(
+        { ...deps, configStore: deps.configStore },
+        {
+          appId,
+          operation: "flag_config_update",
+          target: { type: "flag_configuration", id: configRow.id },
+          proposalInput: flagConfigProposalInput(body),
+          principal,
+          idempotencyKey: body.idempotency_key as string,
+          inlineReview: body.review !== undefined,
+          requestId,
+        },
+        { ignoreMismatch: true },
+      );
+      if (replay) {
+        if (!replay.ok) return replay.response;
+        const applied = await deps.configStore
+          .writerFor(appId, environmentId)
+          .readFlagConfig({ appId, environmentId, flagId });
+        return applied.ok
+          ? Response.json({
+              config: applied.config,
+              approvalRequest: replay.approvalRequest,
+            })
+          : flagConfigNotFound(requestId);
+      }
       const policy = await readEnvironmentPolicy(deps.repo, appId, environmentId);
       if (!policy) return flagConfigNotFound(requestId);
 
-      const confirmation = confirmationRequired(
-        policy,
-        flagConfigPatchGates(body),
-        body.confirm === true,
-        environmentId,
-        "PATCH_FLAG_CONFIG",
-        requestId,
-      );
-      if (confirmation) return confirmation;
+      const mutationInput = flagConfigPatchInput(appId, environmentId, flagId, body);
+      const contexts = environmentPolicyContexts(environmentId, policy, flagConfigPatchGates(body));
+      if (requiresReview(contexts)) {
+        if (mutationInput.rollout && mutationInput.approvalRolloutSalt === undefined) {
+          mutationInput.approvalRolloutSalt = (
+            await canonicalHash({
+              appId,
+              environmentId,
+              flagId,
+              idempotencyKey: body.idempotency_key,
+            })
+          ).slice("sha256:".length, "sha256:".length + 16);
+        }
+        const current = await deps.configStore
+          .writerFor(appId, environmentId)
+          .readFlagConfig({ appId, environmentId, flagId });
+        const preview = await deps.configStore
+          .writerFor(appId, environmentId)
+          .previewFlagConfig(mutationInput);
+        if (!current.ok) return flagConfigNotFound(requestId);
+        if (!preview.ok) {
+          return renderFlagConfigWriteResult(preview, flagId, environmentId, requestId, null);
+        }
+        const approval = await createApproval(
+          { ...deps, configStore: deps.configStore },
+          {
+            appId,
+            operation: "flag_config_update",
+            target: { type: "flag_configuration", id: configRow.id },
+            policyContexts: contexts,
+            current: current.config as unknown as Record<string, unknown>,
+            proposed: preview.config as unknown as Record<string, unknown>,
+            proposalInput: flagConfigProposalInput(body),
+            principal,
+            idempotencyKey: body.idempotency_key as string,
+            inlineReview: body.review !== undefined,
+            requestId,
+          },
+        );
+        if (!approval.ok) return approval.response;
+        const applied = await deps.configStore
+          .writerFor(appId, environmentId)
+          .readFlagConfig({ appId, environmentId, flagId });
+        if (!applied.ok) return flagConfigNotFound(requestId);
+        return Response.json({
+          config: applied.config,
+          approvalRequest: approval.approvalRequest,
+        });
+      }
 
       const result = await deps.configStore
         .writerFor(appId, environmentId)
-        .writeFlagConfig(flagConfigPatchInput(appId, environmentId, flagId, body));
-      return renderFlagConfigWriteResult(result, flagId, environmentId, requestId);
+        .writeFlagConfig(mutationInput);
+      return renderFlagConfigWriteResult(result, flagId, environmentId, requestId, null);
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: authorization, preview, Approval creation, and application are ordered fail-fast gates
     async replaceTargetingRules({
       input,
       principal,
@@ -108,28 +177,88 @@ export function makeHandlers(deps: HandlerDeps) {
       if (adminError) return adminError;
 
       const body = objectBody(input);
+      const configRow = await deps.repo.flags.getFlagConfig(envScope(appId, environmentId), flagId);
+      if (!configRow) return flagConfigNotFound(requestId);
+      const replay = await replayApprovalIfExists(
+        { ...deps, configStore: deps.configStore },
+        {
+          appId,
+          operation: "flag_targeting_rules_replace",
+          target: { type: "flag_configuration", id: configRow.id },
+          proposalInput: { targetingRules: body.targetingRules },
+          principal,
+          idempotencyKey: body.idempotency_key as string,
+          inlineReview: body.review !== undefined,
+          requestId,
+        },
+        { ignoreMismatch: true },
+      );
+      if (replay) {
+        if (!replay.ok) return replay.response;
+        const applied = await deps.configStore
+          .writerFor(appId, environmentId)
+          .readFlagConfig({ appId, environmentId, flagId });
+        return applied.ok
+          ? Response.json({
+              config: applied.config,
+              approvalRequest: replay.approvalRequest,
+            })
+          : flagConfigNotFound(requestId);
+      }
       const policy = await readEnvironmentPolicy(deps.repo, appId, environmentId);
       if (!policy) return flagConfigNotFound(requestId);
 
-      const confirmation = confirmationRequired(
-        policy,
-        ["targeting_rollout_value"],
-        body.confirm === true,
-        environmentId,
-        "PUT_TARGETING_RULES",
-        requestId,
-      );
-      if (confirmation) return confirmation;
-
-      const result = await deps.configStore.writerFor(appId, environmentId).replaceTargetingRules({
+      const mutationInput = {
         appId,
         environmentId,
         flagId,
         targetingRules: body.targetingRules as TargetingRule[],
-      });
-      return renderFlagConfigWriteResult(result, flagId, environmentId, requestId);
+      };
+      const contexts = environmentPolicyContexts(environmentId, policy, [
+        "targeting_rollout_value",
+      ]);
+      if (requiresReview(contexts)) {
+        const writer = deps.configStore.writerFor(appId, environmentId);
+        const [current, preview] = await Promise.all([
+          writer.readFlagConfig({ appId, environmentId, flagId }),
+          writer.previewTargetingRules(mutationInput),
+        ]);
+        if (!current.ok) return flagConfigNotFound(requestId);
+        if (!preview.ok) {
+          return renderFlagConfigWriteResult(preview, flagId, environmentId, requestId, null);
+        }
+        const approval = await createApproval(
+          { ...deps, configStore: deps.configStore },
+          {
+            appId,
+            operation: "flag_targeting_rules_replace",
+            target: { type: "flag_configuration", id: configRow.id },
+            policyContexts: contexts,
+            current: current.config as unknown as Record<string, unknown>,
+            proposed: preview.config as unknown as Record<string, unknown>,
+            proposalInput: { targetingRules: mutationInput.targetingRules },
+            principal,
+            idempotencyKey: body.idempotency_key as string,
+            inlineReview: body.review !== undefined,
+            requestId,
+          },
+        );
+        if (!approval.ok) return approval.response;
+        const applied = await writer.readFlagConfig({ appId, environmentId, flagId });
+        if (!applied.ok) return flagConfigNotFound(requestId);
+        return Response.json({
+          config: applied.config,
+          approvalRequest: approval.approvalRequest,
+        });
+      }
+
+      const result = await deps.configStore
+        .writerFor(appId, environmentId)
+        .replaceTargetingRules(mutationInput);
+      return renderFlagConfigWriteResult(result, flagId, environmentId, requestId, null);
     },
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: source/target policy and Approval application stay explicit at the route boundary
     async promoteFlagConfig({
       input,
       principal,
@@ -145,6 +274,44 @@ export function makeHandlers(deps: HandlerDeps) {
 
       const body = objectBody(input);
       const fromEnvironmentId = body.fromEnvironmentId as string;
+      const configRow = await deps.repo.flags.getFlagConfig(
+        envScope(appId, targetEnvironmentId),
+        flagId,
+      );
+      if (!configRow) return flagConfigNotFound(requestId);
+      const proposalInput = {
+        fromEnvironmentId,
+        select: body.select as PromotionSelect,
+      };
+      const replay = await replayApprovalIfExists(
+        { ...deps, configStore: deps.configStore },
+        {
+          appId,
+          operation: "flags_promote",
+          target: { type: "flag_configuration", id: configRow.id },
+          proposalInput,
+          principal,
+          idempotencyKey: body.idempotency_key as string,
+          inlineReview: body.review !== undefined,
+          requestId,
+        },
+        { ignoreMismatch: true },
+      );
+      if (replay) {
+        if (!replay.ok) return replay.response;
+        const applied = await deps.configStore
+          .writerFor(appId, targetEnvironmentId)
+          .readFlagConfig({ appId, environmentId: targetEnvironmentId, flagId });
+        if (!applied.ok) return flagConfigNotFound(requestId);
+        return Response.json({
+          config: applied.config,
+          diff: {
+            before: replay.approvalRequest.diff.current,
+            after: replay.approvalRequest.diff.proposed,
+          },
+          approvalRequest: replay.approvalRequest,
+        });
+      }
       const policy = await readEnvironmentPolicy(deps.repo, appId, targetEnvironmentId);
       if (!policy) return flagConfigNotFound(requestId);
 
@@ -155,26 +322,78 @@ export function makeHandlers(deps: HandlerDeps) {
       if (!sourceConfig) return flagConfigNotFound(requestId);
 
       const gates = promotionGates(body.select as PromotionSelect, sourceConfig.enabled);
-      const confirmation = confirmationRequired(
-        policy,
-        gates,
-        body.confirm === true,
+      const mutationInput: Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0] = {
+        appId,
         targetEnvironmentId,
-        "PROMOTE_FLAG_CONFIG",
-        requestId,
-      );
-      if (confirmation) return confirmation;
+        flagId,
+        fromEnvironmentId,
+        select: body.select as PromotionSelect,
+      };
+      const contexts = environmentPolicyContexts(targetEnvironmentId, policy, gates);
+      if (requiresReview(contexts)) {
+        if (mutationInput.select.rollout) {
+          mutationInput.approvalRolloutSalt = (
+            await canonicalHash({
+              operation: "flags_promote",
+              appId,
+              targetEnvironmentId,
+              flagId,
+              fromEnvironmentId,
+              idempotencyKey: body.idempotency_key,
+            })
+          ).slice("sha256:".length, "sha256:".length + 16);
+        }
+        const writer = deps.configStore.writerFor(appId, targetEnvironmentId);
+        const [current, preview] = await Promise.all([
+          writer.readFlagConfig({
+            appId,
+            environmentId: targetEnvironmentId,
+            flagId,
+          }),
+          writer.previewPromotion(mutationInput),
+        ]);
+        if (!current.ok) return flagConfigNotFound(requestId);
+        if (!preview.ok) {
+          return renderPromotionResult(preview, flagId, targetEnvironmentId, requestId, null);
+        }
+        const approval = await createApproval(
+          { ...deps, configStore: deps.configStore },
+          {
+            appId,
+            operation: "flags_promote",
+            target: { type: "flag_configuration", id: configRow.id },
+            policyContexts: contexts,
+            current: current.config as unknown as Record<string, unknown>,
+            proposed: preview.config as unknown as Record<string, unknown>,
+            proposalInput,
+            principal,
+            idempotencyKey: body.idempotency_key as string,
+            inlineReview: body.review !== undefined,
+            requestId,
+          },
+        );
+        if (!approval.ok) return approval.response;
+        const applied = await writer.readFlagConfig({
+          appId,
+          environmentId: targetEnvironmentId,
+          flagId,
+        });
+        if (!applied.ok) return flagConfigNotFound(requestId);
+        const approvalDiff = approval.approvalRequest.diff;
+        return Response.json({
+          config: applied.config,
+          diff: {
+            before: approvalDiff.current,
+            after: approvalDiff.proposed,
+          },
+          approvalRequest: approval.approvalRequest,
+        });
+      }
 
       const result = await deps.configStore
         .writerFor(appId, targetEnvironmentId)
-        .promoteFlagConfig({
-          appId,
-          targetEnvironmentId,
-          flagId,
-          fromEnvironmentId,
-          select: body.select as PromotionSelect,
-        });
-      return renderPromotionResult(result, flagId, targetEnvironmentId, requestId);
+        .promoteFlagConfig(mutationInput);
+      return renderPromotionResult(result, flagId, targetEnvironmentId, requestId, null);
     },
   };
 }
@@ -203,13 +422,24 @@ function flagConfigPatchInput(
   };
 }
 
+function flagConfigProposalInput(payload: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...(payload.enabled !== undefined ? { enabled: payload.enabled } : {}),
+    ...(payload.availableVariantNames !== undefined
+      ? { availableVariantNames: payload.availableVariantNames }
+      : {}),
+    ...(payload.rollout !== undefined ? { rollout: payload.rollout } : {}),
+  };
+}
+
 function renderFlagConfigWriteResult(
   result: FlagConfigWriteResult,
   flagId: string,
   environmentId: string,
   requestId: string,
+  approvalRequest: import("@splitch/contracts").ApprovalRequest | null,
 ): Response {
-  if (result.ok) return Response.json(result.config);
+  if (result.ok) return Response.json({ config: result.config, approvalRequest });
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
   }
@@ -246,8 +476,11 @@ function renderPromotionResult(
   flagId: string,
   environmentId: string,
   requestId: string,
+  approvalRequest: import("@splitch/contracts").ApprovalRequest | null,
 ): Response {
-  if (result.ok) return Response.json({ config: result.config, diff: result.diff });
+  if (result.ok) {
+    return Response.json({ config: result.config, diff: result.diff, approvalRequest });
+  }
   if (result.reason === "VARIANT_NOT_AVAILABLE") {
     return variantNotAvailable(flagId, environmentId, result.missingVariants, requestId);
   }

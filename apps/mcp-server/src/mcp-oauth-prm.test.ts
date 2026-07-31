@@ -1,12 +1,10 @@
-import { parseMcpDelegation } from "@splitch/contracts";
 import { afterEach, describe, expect, it } from "vitest";
+import { flagPage } from "./mcp-flag-fixtures";
 import { actor, NOW_SECONDS } from "./mcp-oauth-prm-actor";
 import {
   bootAuthApi,
   bootControlPlaneApi,
-  bootServer,
   closeBootedServers,
-  flagPage,
   type JsonRpcSuccess,
   mcp,
   memorySessionStore,
@@ -16,7 +14,6 @@ import {
   type ToolResult,
 } from "./mcp-oauth-prm-harness";
 import { actorClaims, encodeJwtSegment, malformedShapeTokens } from "./mcp-oauth-prm-jwt";
-import { McpSessionNotFoundError } from "./mcp-session-store";
 
 afterEach(closeBootedServers);
 

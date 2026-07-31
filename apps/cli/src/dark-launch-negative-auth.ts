@@ -4,6 +4,7 @@ import {
   controlPlaneDelete,
   controlPlaneGet,
   controlPlanePost,
+  deleteFlagThroughApproval,
   type PackedSdk,
 } from "./dark-launch-http.js";
 import { quickstartOrigins, type QuickstartHarness } from "./quickstart-local-harness.js";
@@ -80,11 +81,12 @@ export async function proveLocalNegativeAuth(
   } finally {
     for (const appId of probeApps) {
       const token = await appToken(harness.flagHarness, appId);
-      await controlPlaneDelete(harness, `/apps/${appId}`, token);
+      const deleted = await controlPlaneDelete(harness, `/apps/${appId}`, token);
+      expect(deleted.ok).toBe(true);
     }
   }
 
-  await controlPlaneDelete(harness, `/apps/${harness.appId}/flags/${flagId}`);
+  await deleteFlagThroughApproval(harness, harness.appId, flagId);
   const flags = await controlPlaneGet<{ items: { key: string }[] }>(
     harness,
     `/apps/${harness.appId}/flags`,

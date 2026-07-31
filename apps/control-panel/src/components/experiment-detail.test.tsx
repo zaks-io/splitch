@@ -31,10 +31,10 @@ describe("ExperimentDetail", () => {
   it("teaches a draft with no Run that its first landing is Setup", () => {
     const data = detail({
       experiment: {
+        ...experiment(),
         id: "experiment_draft",
         name: "Draft Experiment",
         status: "draft",
-        flagId: "flag_1",
         liveRunId: null,
       },
       runs: [],
@@ -57,16 +57,38 @@ describe("ExperimentDetail", () => {
 
 function detail(overrides: Partial<PanelExperimentDetailOutput> = {}): PanelExperimentDetailOutput {
   return {
-    experiment: {
-      id: "experiment_1",
-      name: "Checkout Copy",
-      status: "running",
-      flagId: "flag_1",
-      liveRunId: "run_2",
-    },
+    experiment: experiment(),
     flag: { id: "flag_1", name: "New Checkout" },
+    metrics: [],
+    variants: [
+      { id: "variant_control", name: "control" },
+      { id: "variant_treatment", name: "treatment" },
+    ],
     runs: [run(2), run(1)],
     ...overrides,
+  };
+}
+
+function experiment(): PanelExperimentDetailOutput["experiment"] {
+  return {
+    id: "experiment_1",
+    name: "Checkout Copy",
+    description: "",
+    owner: "",
+    tags: [],
+    status: "running",
+    flagId: "flag_1",
+    targetingKey: "userId",
+    targetingKeyType: "user",
+    activationMetricId: null,
+    conversionWindowMs: 0,
+    metricIds: [],
+    guardrailMetricIds: [],
+    draftAllocation: null,
+    draftSalt: null,
+    draftTargetingRulesJson: null,
+    draftSegmentIds: [],
+    liveRunId: "run_2",
   };
 }
 
@@ -80,13 +102,17 @@ function run(runNumber: 1 | 2): PanelExperimentRun {
     status: latest ? "running" : "ended",
     targetingKey: "userId",
     targetingKeyType: "user",
+    activationMetricId: null,
     salt: `salt-${runNumber}`,
     allocation: latest ? { control: 70, treatment: 30 } : { control: 50, treatment: 50 },
+    controlVariantId: "variant_control",
     variantsJson: JSON.stringify([
       { id: "variant_control", name: "control", value: false },
       { id: "variant_treatment", name: "treatment", value: true },
     ]),
     targetingRulesJson: "[]",
+    decisionMetricIds: [],
+    decisionGuardrailMetricIds: [],
     configHash: `sha256:${runNumber}`,
     startedAt: latest ? "2026-07-19T00:00:00.000Z" : "2026-07-18T00:00:00.000Z",
     endedAt: latest ? null : "2026-07-18T23:00:00.000Z",

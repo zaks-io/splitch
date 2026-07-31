@@ -103,6 +103,37 @@ describe("mcp tools: 1:1 parity with control-plane routes", () => {
     expect(shape).not.toHaveProperty("orgId");
   });
 
+  it("derives Approval Request reads, filters, and Review creation from the registry", () => {
+    const list = tools.find((tool) => tool.name === "approval_requests_list");
+    const get = tools.find((tool) => tool.name === "approval_requests_get");
+    const review = tools.find((tool) => tool.name === "approval_request_reviews_create");
+    const id = "apr_01J00000000000000000000000";
+
+    expect(list).toBeDefined();
+    expect(list?.inputSchema.safeParse({ appId: "app_1", limit: "25" }).success).toBe(true);
+    expect(
+      list?.inputSchema.safeParse({
+        appId: "app_1",
+        status: "pending",
+        target_kind: "flag_configuration",
+      }).success,
+    ).toBe(true);
+
+    expect(get).toBeDefined();
+    expect(get?.inputSchema.safeParse({ appId: "app_1", id }).success).toBe(true);
+    expect(get?.outputSchema).toBe(getRoute("approval_requests_get")?.output);
+
+    expect(review).toBeDefined();
+    expect(
+      review?.inputSchema.safeParse({
+        appId: "app_1",
+        id,
+        action: "approve_and_apply",
+        idempotency_key: "review-1",
+      }).success,
+    ).toBe(true);
+  });
+
   it("derives exactly one tool per control-plane route", () => {
     const controlPlaneIds = routeRegistry.filter(isMcpToolRoute).map((route) => route.operationId);
     expect([...toolNames].sort()).toEqual([...controlPlaneIds].sort());

@@ -3,7 +3,8 @@
 Storage, infrastructure, toolchain, and cross-cutting contracts for splitch.
 
 Spine idea: **`app_id` is the isolation boundary; KV/D1 serve the hot path; Tinybird owns
-append-only analytics; every seam is clean, non-superpositioned, and self-healing on failure.**
+append-only analytics; every seam is clean, non-superpositioned, and explicit about automatic retry
+versus fail-loud operator repair.**
 
 ## Files
 
@@ -14,7 +15,7 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 | [config-store.md](./config-store.md)                             | Draft/live config, `liveRunId`, no separate-copy property, config write failure contract                                |
 | [assignment-store-substrate.md](./assignment-store-substrate.md) | KV-read / DO-write split for holdover sticky experience; consistency window and failure semantics                       |
 | [exposure-pipeline.md](./exposure-pipeline.md)                   | Raw append-only log as system of record; dedup at query time; Exposure row schema; SRM denominator                      |
-| [physical-dedup-engine.md](./physical-dedup-engine.md)           | Lambda architecture: Copy Pipe snapshot + real-time tail UNION; rollup MV correctness constraint                        |
+| [physical-dedup-engine.md](./physical-dedup-engine.md)           | Lambda architecture: Copy Pipe snapshot + real-time tail UNION; ordered replace-mode rollups                            |
 | [live-updates-do.md](./live-updates-do.md)                       | Per-App fan-out DO: hibernating WebSocket, write-through, delta-nudge, persisted-before-announced                       |
 | [multi-tenant-isolation.md](./multi-tenant-isolation.md)         | App-enforced `app_id` isolation in D1 (Drizzle seam) and Tinybird (two-seam enforcement)                                |
 | [security-model.md](./security-model.md)                         | Trust boundaries, threat model, and the enforced security contracts (ties together ADR-0018/0022/0032/0034)             |
@@ -24,7 +25,7 @@ append-only analytics; every seam is clean, non-superpositioned, and self-healin
 | [local-quality-gates.md](./local-quality-gates.md)               | Git hooks, CI-parity pre-push, Biome, TypeScript, Knip, Gitleaks, dependency-cruiser, local validation policy           |
 | [agent-verification.md](./agent-verification.md)                 | Slice-level Done proof, local Worker smoke, remote Cursor requirements, and verification ladder                         |
 | [deployment-pipeline.md](./deployment-pipeline.md)               | GitHub Actions on Blacksmith with Turborepo cache; PR CI with Tinybird Local; shared preview; production rollback rules |
-| [sdk-release.md](./sdk-release.md)                               | Human-operated `@splitch/sdk` draft-release, trusted-publish, provider setup, and first-release runbook                 |
+| [sdk-release.md](./sdk-release.md)                               | Human-operated SDK and CLI draft-release, trusted-publish, provider setup, and first-release runbook                    |
 
 Architecture map: [system-architecture.md](../../architecture/system-architecture.md) lays out the
 Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcement.
@@ -34,7 +35,8 @@ Worker fleet, trust boundaries, runtime flows, and dependency-cruiser enforcemen
 1. **No separate config-copy seam.** Editing and serving share KV/D1 directly. No cross-system copy.
 2. **KV is a cache, D1 is truth.** KV miss always has a D1 fallback path; never bypass D1 as truth.
 3. **ELT, not ETL.** Raw Exposure log is the system of record; dedup is at query time, re-runnable.
-4. **Rollup MVs build on the deduped snapshot, never the raw log.** Correctness constraint.
+4. **Exposure rollups replace after the deduped snapshot.** MVs on raw or replace-mode snapshot
+   sources are forbidden.
 5. **Tinybird is never queried directly.** All reads proxy through a control-plane endpoint that
    injects `app_id` from auth context.
 6. **One authored source: Zod.** Types, client, OpenAPI, MCP schemas are all derived. Nothing

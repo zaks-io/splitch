@@ -82,7 +82,25 @@ describe("Flag detail route data", () => {
 
     const result = await readFlagDetail(flagsClient(getConfig), scope, "from-another-tenant");
 
-    expect(result).toMatchObject({ ok: true, data: { code: "FLAG_NOT_FOUND" } });
+    expect(result).toMatchObject({
+      ok: true,
+      data: { code: "FLAG_NOT_FOUND", catalogTruncated: false },
+    });
+    expect(getConfig).not.toHaveBeenCalled();
+  });
+
+  it("does not claim a key is absent when the catalog read did not see the whole catalog", async () => {
+    const getConfig = vi.fn<FlagsClient["getConfig"]>();
+
+    // The key resolves against a BOUNDED list read. When that read truncated,
+    // "not in the page" is not "does not exist", and the screen needs to know
+    // which of the two it has (ADR-0036).
+    const result = await readFlagDetail(flagsClient(getConfig, true), scope, "past-the-ceiling");
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { code: "FLAG_NOT_FOUND", catalogTruncated: true },
+    });
     expect(getConfig).not.toHaveBeenCalled();
   });
 });
@@ -100,13 +118,18 @@ function config(environmentId: string): FlagConfigGetOutput {
   };
 }
 
-function flagsClient(getConfig: FlagsClient["getConfig"]): Pick<FlagsClient, "list" | "getConfig"> {
+function flagsClient(
+  getConfig: FlagsClient["getConfig"],
+  readTruncated = false,
+): Pick<FlagsClient, "list" | "getConfig"> {
   return {
     getConfig,
     list: vi.fn(async () => ({
       ok: true as const,
       status: 200,
       data: {
+        readTruncated,
+        readLimit: 200,
         items: [
           {
             id: "flag_checkout",
@@ -123,7 +146,6 @@ function flagsClient(getConfig: FlagsClient["getConfig"]): Pick<FlagsClient, "li
             updatedAt: "2026-07-18T00:00:00.000Z",
           },
         ],
-        nextCursor: null,
       },
     })),
   };

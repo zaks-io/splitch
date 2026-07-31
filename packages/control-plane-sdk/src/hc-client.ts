@@ -1,4 +1,5 @@
 import type {
+  ApprovalsControlPlaneClientApp,
   AppsControlPlaneClientApp,
   CredentialsControlPlaneClientApp,
   EnvironmentsControlPlaneClientApp,
@@ -32,11 +33,20 @@ export type EnvironmentsHcClient = ReturnType<typeof createEnvironmentsHcClient>
 
 /** Hono `hc` client over the SDK credential emit-only app type. */
 export type CredentialsHcClient = ReturnType<typeof createCredentialsHcClient>;
+export type ApprovalsHcClient = ReturnType<typeof createApprovalsHcClient>;
 
 export function createEnvironmentsHcClient(options: ControlPlaneHcOptions) {
   const headers = options.authorization ? { authorization: options.authorization } : undefined;
 
   return hc<EnvironmentsControlPlaneClientApp>(options.baseUrl, {
+    fetch: options.fetch,
+    ...(headers ? { headers } : {}),
+  });
+}
+
+export function createApprovalsHcClient(options: ControlPlaneHcOptions) {
+  const headers = options.authorization ? { authorization: options.authorization } : undefined;
+  return hc<ApprovalsControlPlaneClientApp>(options.baseUrl, {
     fetch: options.fetch,
     ...(headers ? { headers } : {}),
   });
@@ -62,7 +72,6 @@ export function createOrganizationsHcClient(options: ControlPlaneHcOptions) {
 
 export function createAppsHcClient(options: ControlPlaneHcOptions) {
   const headers = options.authorization ? { authorization: options.authorization } : undefined;
-
   return hc<AppsControlPlaneClientApp>(options.baseUrl, {
     fetch: options.fetch,
     ...(headers ? { headers } : {}),

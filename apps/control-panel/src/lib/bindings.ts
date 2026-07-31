@@ -4,13 +4,15 @@ export interface ControlPanelBindings {
   WORKOS_API_KEY: string;
   WORKOS_CLIENT_ID: string;
   AUTH_API_ORIGIN: string;
+  /** Data-plane origin the Panel's "Test this Flag" verify call is sent to. */
+  EVALUATION_API_ORIGIN: string;
   CONTROL_PANEL_DELEGATION_SECRET?: string;
   CONTROL_PLANE_API?: Fetcher;
   SPLITCH_PLATFORM_TARGET?: string;
   SENTRY_DSN?: string;
 }
 
-interface ControlPanelMutationBindings extends ControlPanelBindings {
+export interface ControlPanelMutationBindings extends ControlPanelBindings {
   CONTROL_PLANE_API: Fetcher;
   CONTROL_PANEL_DELEGATION_SECRET: string;
 }
@@ -32,6 +34,7 @@ export function controlPanelBindings(raw: unknown): ControlPanelBindings {
     WORKOS_API_KEY: requiredString(raw.WORKOS_API_KEY, "WORKOS_API_KEY"),
     WORKOS_CLIENT_ID: requiredString(raw.WORKOS_CLIENT_ID, "WORKOS_CLIENT_ID"),
     AUTH_API_ORIGIN: requiredString(raw.AUTH_API_ORIGIN, "AUTH_API_ORIGIN"),
+    EVALUATION_API_ORIGIN: requiredString(raw.EVALUATION_API_ORIGIN, "EVALUATION_API_ORIGIN"),
     CONTROL_PANEL_DELEGATION_SECRET: optionalString(raw.CONTROL_PANEL_DELEGATION_SECRET),
     CONTROL_PLANE_API: optionalFetcher(raw.CONTROL_PLANE_API),
     SPLITCH_PLATFORM_TARGET: optionalString(raw.SPLITCH_PLATFORM_TARGET),
@@ -80,6 +83,7 @@ function isBindings(value: unknown): value is {
   WORKOS_API_KEY?: unknown;
   WORKOS_CLIENT_ID?: unknown;
   AUTH_API_ORIGIN?: unknown;
+  EVALUATION_API_ORIGIN?: unknown;
   CONTROL_PANEL_DELEGATION_SECRET?: unknown;
   CONTROL_PLANE_API?: unknown;
   SPLITCH_PLATFORM_TARGET?: unknown;

@@ -70,6 +70,7 @@ describe("PatchExperimentRequestSchema", () => {
 
   it("parses assignment draft edits for Worker taxonomy enforcement", () => {
     const req = PatchExperimentRequestSchema.parse({
+      stageForNextRun: true,
       allocation: { control: 50, treatment: 50 },
       salt: "next-salt",
       variantSet: [variantControl, variantTreatment],
@@ -79,6 +80,7 @@ describe("PatchExperimentRequestSchema", () => {
       activationMetricId: "metric_activation",
     });
     expect(req.salt).toBe("next-salt");
+    expect(req.stageForNextRun).toBe(true);
     expect(req.variantSet).toHaveLength(2);
   });
 
@@ -101,9 +103,12 @@ describe("ExperimentResponseSchema", () => {
       key: "checkout-test",
       flagId: "flag_1",
       name: "Checkout test",
+      owner: "user_1",
+      tags: ["checkout", "q3"],
       status: "draft",
       targetingKey: "userId",
       targetingKeyType: "user",
+      activationMetricId: null,
       confidenceLevel: 0.95,
       defaultVariantId: "var_1",
       metrics: [{ metricId: "m_1" }],
@@ -126,26 +131,33 @@ const variantControl = { id: "var_1", name: "control", value: false };
 const variantTreatment = { id: "var_2", name: "treatment", value: "on" };
 
 describe("StartRunRequestSchema (the only path to open a Run)", () => {
-  it("parses an empty lifecycle body", () => {
-    const req = StartRunRequestSchema.parse({});
-    expect(req).toEqual({});
-  });
-
-  it("exposes an optional confirm gate (gated write, ADR-0029)", () => {
-    const req = StartRunRequestSchema.parse({ confirm: true });
-    expect(req.confirm).toBe(true);
-  });
-
-  it("accepts optional reason and idempotency_key", () => {
+  it("requires an idempotency key and accepts an optional inline review", () => {
     const req = StartRunRequestSchema.parse({
+      review: { action: "approve_and_apply" },
       reason: "higher exposure to v2",
       idempotency_key: "idem-1",
     });
+    expect(req.review?.action).toBe("approve_and_apply");
     expect(req.reason).toBe("higher exposure to v2");
   });
 
+  it("rejects the removed confirm gate", () => {
+    expect(
+      StartRunRequestSchema.safeParse({ confirm: true, idempotency_key: "idem-1" }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a missing idempotency key", () => {
+    expect(StartRunRequestSchema.safeParse({ reason: "start it" }).success).toBe(false);
+  });
+
   it("rejects assignment config in the Start body", () => {
-    expect(StartRunRequestSchema.safeParse({ allocation: { control: 100 } }).success).toBe(false);
+    expect(
+      StartRunRequestSchema.safeParse({
+        allocation: { control: 100 },
+        idempotency_key: "idem-1",
+      }).success,
+    ).toBe(false);
   });
 });
 

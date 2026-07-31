@@ -13,6 +13,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { updateControlPanelEnvironmentPolicy } from "#lib/control-plane-settings-functions";
+import { ENVIRONMENT_POLICY_LABELS } from "#lib/environment-policy-labels";
 import { refreshEnvironmentSettings } from "#lib/settings-query";
 
 interface EnvironmentPolicyEditorProps {
@@ -20,13 +21,6 @@ interface EnvironmentPolicyEditorProps {
   environmentId: string;
   initialPolicy: EnvironmentPolicy;
 }
-
-const POLICY_ROWS = [
-  ["variantAvailability", "Variant availability"],
-  ["targetingRolloutValue", "Targeting, rollout, or value"],
-  ["enabledState", "Enabled state (turn on)"],
-  ["startExperimentRun", "Start an Experiment Run"],
-] as const;
 
 export function EnvironmentPolicyEditor({
   appId,
@@ -38,7 +32,7 @@ export function EnvironmentPolicyEditor({
   const [saved, setSaved] = useState(initialPolicy);
   const [error, setError] = useState<string>();
   const [isSaving, setIsSaving] = useState(false);
-  const isDirty = POLICY_ROWS.some(([key]) => draft[key] !== saved[key]);
+  const isDirty = ENVIRONMENT_POLICY_LABELS.some(([key]) => draft[key] !== saved[key]);
 
   async function save() {
     setError(undefined);
@@ -88,7 +82,7 @@ export function EnvironmentPolicyEditor({
             <span>Confirm</span>
             <span>Approve</span>
           </div>
-          {POLICY_ROWS.map(([key, label]) => (
+          {ENVIRONMENT_POLICY_LABELS.map(([key, label]) => (
             <PolicyRow
               key={key}
               label={label}

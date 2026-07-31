@@ -18,6 +18,12 @@ const CreateFlagInputSchema = z.object({
   appId: z.string(),
   environmentId: z.string(),
   draft: FlagDraftSchema,
+  /**
+   * Carried from the browser rather than minted here: a key minted per handler
+   * invocation is fresh on every retry, so it would give the Control Plane no
+   * way to recognize a replay of the same submission.
+   */
+  idempotencyKey: z.string().min(1),
 });
 
 export const loadControlPanelFlags = createServerFn({ method: "GET" })
@@ -80,7 +86,9 @@ export const createControlPanelFlag = createServerFn({ method: "POST" })
 
     const authorized = await authorizedFlagsClient(data.environmentId);
     if (!authorized.ok) return authorized.result;
-    const result = await authorized.flags.create(flagCreateInput(data.appId, data.draft));
+    const result = await authorized.flags.create(
+      flagCreateInput(data.appId, data.draft, data.idempotencyKey),
+    );
     return result.ok ? { ok: true, status: result.status, data: { key: result.data.key } } : result;
   });
 

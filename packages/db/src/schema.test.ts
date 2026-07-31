@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { getTableColumns } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createLocalD1 } from "./repo/test-d1";
-import { claimVerifications } from "./schema";
+import { claimVerifications, runs } from "./schema";
 
 /**
  * Asserts the GENERATED migration SQL — the exact DDL `wrangler d1 migrations
@@ -113,6 +113,23 @@ describe("runs storage-only decision columns", () => {
     expect(runsBlock).toContain(column);
   });
 
+  it("stores frozen control_variant_id as NOT NULL after backfill", async () => {
+    expect(getTableColumns(runs).controlVariantId?.notNull).toBe(true);
+    expect(migrationSql).toContain("`control_variant_id` text NOT NULL");
+
+    const local = await createLocalD1();
+    try {
+      const columns = await local.d1
+        .prepare("PRAGMA table_info('runs')")
+        .all<{ name: string; notnull: number }>();
+      expect(columns.results.find((column) => column.name === "control_variant_id")).toMatchObject({
+        notnull: 1,
+      });
+    } finally {
+      await local.dispose();
+    }
+  });
+
   it("enforces run_number + salt uniqueness per Experiment", () => {
     expect(migrationSql).toContain("`runs_experiment_run_number_unique`");
     expect(migrationSql).toContain("`runs_experiment_salt_unique`");
@@ -129,7 +146,7 @@ describe("credential invariants", () => {
 });
 
 describe("full table corpus", () => {
-  it("applies the 22 named live D1 tables", async () => {
+  it("applies the 24 named live D1 tables", async () => {
     const local = await createLocalD1();
     try {
       const tables = await local.d1
@@ -140,6 +157,8 @@ describe("full table corpus", () => {
       expect(tables.results.map((table) => table.name).sort()).toEqual([
         "api_keys",
         "app_memberships",
+        "approval_requests",
+        "approval_reviews",
         "apps",
         "claim_consent_attempts",
         "claim_idempotency",

@@ -95,6 +95,13 @@ describe("Control Panel delegation secret", () => {
       expect(config.env?.[target]?.secrets?.required).toContain("CONTROL_PANEL_DELEGATION_SECRET");
     });
   }
+
+  it("keeps the local Control Panel delegation value out of committed vars", () => {
+    const config = readWranglerConfig(join(repoRoot, WORKER_WRANGLER_PATHS["control-panel"]));
+
+    expect(config.secrets?.required).toContain("CONTROL_PANEL_DELEGATION_SECRET");
+    expect(config.vars?.CONTROL_PANEL_DELEGATION_SECRET).toBeUndefined();
+  });
 });
 
 describe("Deploy workflow observability secrets", () => {
@@ -116,10 +123,7 @@ describe("Deploy workflow observability secrets", () => {
       "utf8",
     );
 
-    expect(workflow).toContain(
-      "SENTRY_RELEASE: $" +
-        "{{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}",
-    );
+    expect(workflow).toContain("SENTRY_RELEASE: $" + "{{ inputs.release_sha || github.sha }}");
     expect(workflow).toContain(GITHUB_LINEAR_SECRET_REFERENCE);
     expect(workflow).toContain(GITHUB_RELEASE_VERSION_REFERENCE);
     expect(workflow).toContain(GITHUB_ACTIONS_LINK_REFERENCE);
@@ -131,13 +135,14 @@ describe("Deploy workflow observability secrets", () => {
     const deployJob = workflow.slice(deployStart, releaseStart);
     const releaseJob = workflow.slice(releaseStart);
 
-    expect(validateJob).toContain(GITHUB_LINEAR_SECRET_REFERENCE);
+    expect(validateJob).not.toContain("LINEAR_ACCESS_KEY");
     expect(deployJob).not.toContain("LINEAR_ACCESS_KEY");
+    expect(releaseJob).toContain(GITHUB_LINEAR_SECRET_REFERENCE);
     expect(releaseJob).toContain(GITHUB_LINEAR_ACTION_INPUT);
     expect(releaseJob).toContain("needs: deploy");
-    expect(releaseJob).not.toContain("environment: production");
-    expect(workflow.indexOf("Check release credentials")).toBeLessThan(
-      workflow.indexOf("Deploy Production"),
+    expect(releaseJob).toContain("environment: production");
+    expect(workflow.indexOf("Check Linear release credential")).toBeLessThan(
+      workflow.indexOf("Sync Linear release"),
     );
     expect(workflow.indexOf("Deploy Production")).toBeLessThan(
       workflow.indexOf("Sync Linear release"),

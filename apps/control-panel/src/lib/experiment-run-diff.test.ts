@@ -58,6 +58,7 @@ function run(overrides: Partial<PanelExperimentRun> = {}): PanelExperimentRun {
     targetingKeyType: "user",
     salt: "salt-1",
     allocation: { control: 50, treatment: 50 },
+    controlVariantId: "variant_control",
     variantsJson: JSON.stringify([
       { id: "variant_control", name: "control", value: false },
       { id: "variant_treatment", name: "treatment", value: true },
@@ -70,5 +71,8 @@ function run(overrides: Partial<PanelExperimentRun> = {}): PanelExperimentRun {
     endReason: null,
     createdAt: "2026-07-18T00:00:00.000Z",
     ...overrides,
+    activationMetricId: overrides.activationMetricId ?? null,
+    decisionMetricIds: overrides.decisionMetricIds ?? [],
+    decisionGuardrailMetricIds: overrides.decisionGuardrailMetricIds ?? [],
   };
 }

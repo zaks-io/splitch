@@ -1,113 +1,43 @@
 // biome-ignore lint/performance/noBarrelFile: package public-API entry (exports "." → index.js); the contracts surface is intentionally aggregated here
 export { accessTokenRevocationKey, accessTokenRevocationTtl } from "./access-token-revocation";
+export type { ApprovalRequestId, ApprovalReviewId } from "./approval-identifiers";
+export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped CLI/MCP parity-skin API
+export * from "./barrels/parity-skins";
+export type { CanonicalJsonSha256 } from "./canonical-hash";
+export { CanonicalJsonSha256Schema } from "./canonical-hash";
 export {
   ClientOriginSchema,
   NormalizedOriginAllowlistSchema,
   normalizeClientOrigins,
   OriginAllowlistSchema,
 } from "./client-origin";
-export {
-  CONTROL_PANEL_DELEGATION_HEADER,
-  PANEL_API_KEY_SCOPES,
-} from "./control-panel-binding";
+export { CONTROL_PANEL_DELEGATION_HEADER, PANEL_API_KEY_SCOPES } from "./control-panel-binding";
+export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
+export { DeltaNudgeEntitySchema, DeltaNudgeSchema, deltaNudgeEntities } from "./delta-nudge";
 export { errorStatusByCode, httpStatusForError } from "./error-status";
+export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
 export {
   ErrorCodeSchema,
-  errorCodes,
+  ErrorDetailsSchema,
   ErrorResponseSchema,
+  errorCodes,
   PolicyChangeTypeSchema,
   policyChangeTypes,
   RecommendedActionSchema,
   recommendedActions,
 } from "./errors";
-export type { ErrorCode, ErrorResponse, PolicyChangeType, RecommendedAction } from "./errors";
-// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped resource envelope API
-export * from "./resource-envelopes";
-export {
-  AuthDoorSchema,
-  authDoors,
-  AuthKindSchema,
-  authKinds,
-  defineRoute,
-  isProvisionalAuthDoor,
-  HttpMethodSchema,
-  httpMethods,
-  IdempotencyModeSchema,
-  idempotencyModes,
-  RateLimitClassSchema,
-  rateLimitClasses,
-  RouteOwnerSchema,
-  routeOwners,
-} from "./route-contract";
-export type {
-  AuthDoor,
-  AuthKind,
-  HttpMethod,
-  IdempotencyMode,
-  RateLimitClass,
-  RouteContract,
-  RouteOwner,
-} from "./route-contract";
-export { defineApiRoute } from "./openapi-route";
-export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
-export { controlPlaneRpcApp, type ControlPlaneRpcApp } from "./openapi-rpc";
-export { getRoute, operationIds, routeRegistry } from "./route-registry";
-export {
-  createMcpDelegationHeader,
-  MCP_DELEGATION_HEADER,
-  parseMcpDelegation,
-} from "./mcp-delegation";
-export type { McpDelegationActor, McpDelegationReplayGuard } from "./mcp-delegation";
-export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
-export { deriveMcpProtocolTools, deriveMcpTools, isMcpToolRoute } from "./mcp-tools";
-export type { McpProtocolToolDefinition, McpToolDefinition } from "./mcp-tools";
-export {
-  getRouteMembershipGate,
-  membershipAxes,
-  membershipGatePatterns,
-  membershipRoles,
-  scopeSatisfiesMembershipGate,
-} from "./mcp-tool-membership-gates";
-export type {
-  MembershipAxis,
-  MembershipRole,
-  McpToolOperationId,
-  RouteMembershipGate,
-} from "./mcp-tool-membership-gates";
-export { DeltaNudgeEntitySchema, deltaNudgeEntities, DeltaNudgeSchema } from "./delta-nudge";
-export type { DeltaNudge, DeltaNudgeEntity } from "./delta-nudge";
-export {
-  authorizesLiveUpdateConnection,
-  LiveUpdateConnectionContextSchema,
-  parseLiveUpdateConnectionContext,
-  ServerAuthenticatedLiveUpdateContextSchema,
-} from "./live-update-connection";
-export type {
-  LiveUpdateAuthorizationContext,
-  LiveUpdateConnectionContext,
-  ServerAuthenticatedLiveUpdateContext,
-} from "./live-update-connection";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped rigor API
+export * from "./experiment-rigor";
+export type { HealthResponse, PlatformTarget } from "./health-response";
 export {
   createHealthResponse,
   FullCommitShaSchema,
   HealthResponseSchema,
-  parsePlatformTarget,
   PlatformTargetSchema,
+  parsePlatformTarget,
   platformTargets,
 } from "./health-response";
-export type { HealthResponse, PlatformTarget } from "./health-response";
-export {
-  ExperimentSchema,
-  ExperimentStatusSchema,
-  experimentStatuses,
-  MetricKindSchema,
-  metricKinds,
-  MetricRefSchema,
-  MetricSchema,
-  RunSchema,
-  RunStatusSchema,
-  runStatuses,
-} from "./leaf-schemas-experiment";
 export type {
   Experiment,
   ExperimentStatus,
@@ -118,70 +48,17 @@ export type {
   RunStatus,
 } from "./leaf-schemas-experiment";
 export {
-  ActivationRowSchema,
-  CupedCovariateRowSchema,
-  CupedCovariateSourceSchema,
-  DecisionFamilyMemberSchema,
-  DimensionInputSchema,
-  DedupeExposureRowSchema,
-  PerEntityMetricRowSchema,
-  PrePeriodRowSchema,
-  StatsInputSchema,
-} from "./stats-input-contract";
-export type {
-  ActivationRow,
-  CupedCovariateRow,
-  CupedCovariateSource,
-  DecisionFamilyMember,
-  DimensionInput,
-  DedupeExposureRow,
-  PerEntityMetricRow,
-  PrePeriodRow,
-  StatsInput,
-} from "./stats-input-contract";
-export {
-  ArmResultSchema,
-  CupedAttributeSourceSchema,
-  cupedAttributeSources,
-  CupedMethodSchema,
-  cupedMethods,
-  DimensionClassSchema,
-  dimensionClasses,
-  DimensionResultSchema,
-  GuardrailResultSchema,
-  HealthMetricsSchema,
-  SrmResultSchema,
-  StatsOutputSchema,
-  StatsResultStatusSchema,
-  statsResultStatuses,
-  WinsorizeCapSchema,
-  VarianceTechniquesSchema,
-} from "./stats-result-contract";
-export type {
-  ArmResult,
-  CupedAttributeSource,
-  CupedMethod,
-  DimensionClass,
-  DimensionResult,
-  GuardrailResult,
-  HealthMetrics,
-  SrmResult,
-  StatsEngine,
-  StatsOutput,
-  StatsResultStatus,
-  WinsorizeCap,
-  VarianceTechniques,
-} from "./stats-result-contract";
-export {
-  ConditionOperatorSchema,
-  ConditionSchema,
-  FlagSchema,
-  PercentageRolloutSchema,
-  SegmentSchema,
-  TargetingRuleSchema,
-  VariantSchema,
-  conditionOperators,
-} from "./leaf-schemas-flag";
+  ExperimentSchema,
+  ExperimentStatusSchema,
+  experimentStatuses,
+  MetricKindSchema,
+  MetricRefSchema,
+  MetricSchema,
+  metricKinds,
+  RunSchema,
+  RunStatusSchema,
+  runStatuses,
+} from "./leaf-schemas-experiment";
 export type {
   Condition,
   ConditionOperator,
@@ -192,31 +69,19 @@ export type {
   Variant,
 } from "./leaf-schemas-flag";
 export {
-  APIKeySchema,
-  AppSchema,
-  ClientKeySchema,
-  EnvironmentPolicyLevelSchema,
-  EnvironmentPolicySchema,
-  environmentPolicyLevels,
-  EnvironmentSchema,
-  EvaluationContextSchema,
-  ExposureEventSchema,
-  ExposureTypeSchema,
-  exposureTypes,
-  OrganizationSchema,
-  OrgPlanSchema,
-  orgPlans,
-  ResolutionDetailsSchema,
-  ResolutionReasonSchema,
-  resolutionReasons,
-  UserRoleSchema,
-  userRoles,
-  UserSchema,
-  VariantValueSchema,
-} from "./leaf-schemas-runtime";
+  ConditionOperatorSchema,
+  ConditionSchema,
+  conditionOperators,
+  FlagSchema,
+  PercentageRolloutSchema,
+  SegmentSchema,
+  TargetingRuleSchema,
+  VariantSchema,
+} from "./leaf-schemas-flag";
 export type {
   APIKey,
   App,
+  ApprovalPolicyLevel,
   ClientKey,
   Environment,
   EnvironmentPolicy,
@@ -233,6 +98,66 @@ export type {
   VariantValue,
 } from "./leaf-schemas-runtime";
 export {
+  APIKeySchema,
+  ApprovalPolicyLevelSchema,
+  AppSchema,
+  approvalPolicyLevels,
+  ClientKeySchema,
+  EnvironmentPolicyLevelSchema,
+  EnvironmentPolicySchema,
+  EnvironmentSchema,
+  EvaluationContextSchema,
+  ExposureEventSchema,
+  ExposureTypeSchema,
+  environmentPolicyLevels,
+  exposureTypes,
+  OrganizationSchema,
+  OrgPlanSchema,
+  orgPlans,
+  ResolutionDetailsSchema,
+  ResolutionReasonSchema,
+  reservedEnvironmentPolicyLevels,
+  resolutionReasons,
+  UserRoleSchema,
+  UserSchema,
+  userRoles,
+  VariantValueSchema,
+} from "./leaf-schemas-runtime";
+export type {
+  LiveUpdateAuthorizationContext,
+  LiveUpdateConnectionContext,
+  ServerAuthenticatedLiveUpdateContext,
+} from "./live-update-connection";
+export {
+  authorizesLiveUpdateConnection,
+  LiveUpdateConnectionContextSchema,
+  parseLiveUpdateConnectionContext,
+  ServerAuthenticatedLiveUpdateContextSchema,
+} from "./live-update-connection";
+export type { McpDelegationActor, McpDelegationReplayGuard } from "./mcp-delegation";
+export {
+  createMcpDelegationHeader,
+  MCP_DELEGATION_HEADER,
+  parseMcpDelegation,
+} from "./mcp-delegation";
+export type {
+  McpToolOperationId,
+  MembershipAxis,
+  MembershipRole,
+  RouteMembershipGate,
+} from "./mcp-tool-membership-gates";
+export {
+  getRouteMembershipGate,
+  membershipAxes,
+  membershipGatePatterns,
+  membershipRoles,
+  scopeSatisfiesMembershipGate,
+} from "./mcp-tool-membership-gates";
+export { buildOpenApiDocument, type OpenApiDocumentInfo } from "./openapi-document";
+export type { ApiRouteContract, ApiRouteRequest, DefineApiRouteInput } from "./openapi-route";
+export { defineApiRoute } from "./openapi-route";
+export { type ControlPlaneRpcApp, controlPlaneRpcApp } from "./openapi-rpc";
+export {
   deriveOrganizationSlug,
   isReservedOrganizationSlug,
   ORGANIZATION_SLUG_MAX_LENGTH,
@@ -240,6 +165,161 @@ export {
   OrganizationSlugSchema,
   RESERVED_ORGANIZATION_SLUGS,
 } from "./organization-slug";
+export type {
+  AppOverviewResponse,
+  OverviewDecisionExperiment,
+  OverviewDecisionReason,
+  OverviewExperiments,
+  OverviewExperimentsUnavailableReason,
+  OverviewFailingExperiment,
+  OverviewFailureReason,
+  OverviewFlagConfigChange,
+} from "./panel-overview-contract";
+export {
+  AppOverviewResponseSchema,
+  OverviewDecisionExperimentSchema,
+  OverviewDecisionReasonSchema,
+  OverviewExperimentsSchema,
+  OverviewExperimentsUnavailableReasonSchema,
+  OverviewFailingExperimentSchema,
+  OverviewFailureReasonSchema,
+  OverviewFlagConfigChangeSchema,
+  overviewDecisionReasons,
+  overviewExperimentsUnavailableReasons,
+  overviewFailureReasons,
+} from "./panel-overview-contract";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped resource envelope API
+export * from "./resource-envelopes";
+export type {
+  AuthDoor,
+  AuthKind,
+  HttpMethod,
+  IdempotencyMode,
+  RateLimitClass,
+  RouteContract,
+  RouteOwner,
+} from "./route-contract";
+export {
+  AuthDoorSchema,
+  AuthKindSchema,
+  authDoors,
+  authKinds,
+  defineRoute,
+  HttpMethodSchema,
+  httpMethods,
+  IdempotencyModeSchema,
+  idempotencyModes,
+  isProvisionalAuthDoor,
+  RateLimitClassSchema,
+  RouteOwnerSchema,
+  rateLimitClasses,
+  routeOwners,
+} from "./route-contract";
+export { getRoute, operationIds, routeRegistry } from "./route-registry";
+export {
+  type ApprovalApplicationResult,
+  ApprovalApplicationResultSchema,
+  type ApprovalRequest,
+  type ApprovalRequestListQuery,
+  ApprovalRequestListQuerySchema,
+  ApprovalRequestSchema,
+  type ApprovalReview,
+  type ApprovalReviewError,
+  ApprovalReviewErrorSchema,
+  ApprovalReviewSchema,
+  InlineApproveAndApplyReviewSchema,
+  type ReviewApprovalRequest,
+  ReviewApprovalRequestSchema,
+} from "./routes/route-shapes-approval-request";
+export {
+  type ApprovalActor,
+  ApprovalActorSchema,
+  type ApprovalAppliedResourceType,
+  ApprovalAppliedResourceTypeSchema,
+  type ApprovalDiff,
+  type ApprovalDiffEntry,
+  ApprovalDiffEntrySchema,
+  ApprovalDiffSchema,
+  type ApprovalOperation,
+  ApprovalOperationSchema,
+  type ApprovalPolicyContext,
+  ApprovalPolicyContextSchema,
+  type ApprovalRequestStatus,
+  ApprovalRequestStatusSchema,
+  type ApprovalReviewAction,
+  ApprovalReviewActionSchema,
+  type ApprovalReviewOutcome,
+  ApprovalReviewOutcomeSchema,
+  type ApprovalTarget,
+  ApprovalTargetSchema,
+  type ApprovalTargetType,
+  ApprovalTargetTypeSchema,
+  type ApprovalTargetVersion,
+  ApprovalTargetVersionSchema,
+  approvalAppliedResourceTypes,
+  approvalOperations,
+  approvalRequestStatuses,
+  approvalReviewActions,
+  approvalReviewOutcomes,
+  approvalTargetTypes,
+} from "./routes/route-shapes-approvals";
+export type {
+  ActivationRow,
+  CupedCovariateRow,
+  CupedCovariateSource,
+  DecisionFamilyMember,
+  DedupeExposureRow,
+  DimensionInput,
+  PerEntityMetricRow,
+  PrePeriodRow,
+  StatsInput,
+} from "./stats-input-contract";
+export {
+  ActivationRowSchema,
+  CupedCovariateRowSchema,
+  CupedCovariateSourceSchema,
+  DecisionFamilyMemberSchema,
+  DedupeExposureRowSchema,
+  DimensionInputSchema,
+  PerEntityMetricRowSchema,
+  PrePeriodRowSchema,
+  StatsInputSchema,
+} from "./stats-input-contract";
+export type {
+  AnalysisResultsEnvelope,
+  ArmResult,
+  CupedAttributeSource,
+  CupedMethod,
+  DimensionClass,
+  DimensionResult,
+  GuardrailResult,
+  HealthMetrics,
+  SrmResult,
+  StatsEngine,
+  StatsOutput,
+  StatsResultStatus,
+  VarianceTechniques,
+  WinsorizeCap,
+} from "./stats-result-contract";
+export {
+  AnalysisResultsEnvelopeSchema,
+  ArmResultSchema,
+  CupedAttributeSourceSchema,
+  CupedMethodSchema,
+  cupedAttributeSources,
+  cupedMethods,
+  DimensionClassSchema,
+  DimensionResultSchema,
+  dimensionClasses,
+  GuardrailResultSchema,
+  HealthMetricsSchema,
+  SrmResultSchema,
+  StatsOutputSchema,
+  StatsResultStatusSchema,
+  statsResultStatuses,
+  VarianceTechniquesSchema,
+  WinsorizeCapSchema,
+} from "./stats-result-contract";
 export {
   apiKeyCacheKey,
   assignmentKey,
@@ -249,20 +329,6 @@ export {
   liveRunKey,
   runConfigKey,
 } from "./storage-keys-kv";
-export {
-  AssignmentStoreEntrySchema,
-  AssignmentStoreValueSchema,
-  CredentialCacheKVSchema,
-  CredentialCacheKVSchemaV1,
-  CredentialKindSchema,
-  credentialKinds,
-  CURRENT_KV_SCHEMA_VERSION,
-  ExperimentConfigKVSchema,
-  FlagConfigKVSchema,
-  kvEnvelope,
-  LiveRunKVSchema,
-  RunConfigKVSchema,
-} from "./storage-schemas-kv";
 export type {
   AssignmentStoreEntry,
   AssignmentStoreValue,
@@ -274,20 +340,19 @@ export type {
   RunConfigKV,
 } from "./storage-schemas-kv";
 export {
-  DataPlaneEvaluateRequestSchema,
-  DataPlaneEvaluateResponseSchema,
-  CachedEvaluationTelemetryRequestSchema,
-  CachedEvaluationTelemetryResponseSchema,
-  PAGINATION_DEFAULT_LIMIT,
-  PAGINATION_MAX_LIMIT,
-  PaginationQuerySchema,
-  PeekEvaluateResponseSchema,
-  paginatedResponse,
-  RuleSelectionSchema,
-  TestEvaluationReasonSchema,
-  TestEvaluationRequestSchema,
-  TestEvaluationResponseSchema,
-} from "./wire-envelopes-core";
+  AssignmentStoreEntrySchema,
+  AssignmentStoreValueSchema,
+  CredentialCacheKVSchema,
+  CredentialCacheKVSchemaV1,
+  CredentialKindSchema,
+  CURRENT_KV_SCHEMA_VERSION,
+  credentialKinds,
+  ExperimentConfigKVSchema,
+  FlagConfigKVSchema,
+  kvEnvelope,
+  LiveRunKVSchema,
+  RunConfigKVSchema,
+} from "./storage-schemas-kv";
 export type {
   DataPlaneEvaluateRequest,
   DataPlaneEvaluateResponse,
@@ -297,4 +362,19 @@ export type {
   TestEvaluationReason,
   TestEvaluationRequest,
   TestEvaluationResponse,
+} from "./wire-envelopes-core";
+export {
+  CachedEvaluationTelemetryRequestSchema,
+  CachedEvaluationTelemetryResponseSchema,
+  DataPlaneEvaluateRequestSchema,
+  DataPlaneEvaluateResponseSchema,
+  PAGINATION_DEFAULT_LIMIT,
+  PAGINATION_MAX_LIMIT,
+  PaginationQuerySchema,
+  PeekEvaluateResponseSchema,
+  paginatedResponse,
+  RuleSelectionSchema,
+  TestEvaluationReasonSchema,
+  TestEvaluationRequestSchema,
+  TestEvaluationResponseSchema,
 } from "./wire-envelopes-core";

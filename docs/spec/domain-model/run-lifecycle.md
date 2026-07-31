@@ -12,6 +12,7 @@
 | `status`             | `RunStatus`                      | ✓   | `"running" \| "ended"`                                             |
 | `salt`               | `string`                         | ✓   | Frozen at Run creation; drives Fractional Evaluation hash          |
 | `allocation`         | `AllocationMap`                  | ✓   | `{ variantName: percentage }` summing to 100; frozen               |
+| `control_variant_id` | `string` (ULID)                  | ✓   | Control identity frozen from the Experiment at Start               |
 | `targeting_key_type` | `string`                         | ✓   | Frozen entity-type name                                            |
 | `targeting_rules`    | `TargetingRule[]`                | ✓   | Priority-ordered; frozen at Run creation                           |
 | `activation_metric`  | `ActivationMetricConfig \| null` | ✓   | Frozen at Run creation                                             |
@@ -54,6 +55,7 @@ These change `assign()`, so Exposures collected before and after are in incompar
 | `salt`                                    | Changes the Fractional Evaluation hash; re-buckets every Entity      |
 | `allocation`                              | Changes bucket boundaries; may move Entities between Variants        |
 | Variant set (add/remove/rename Variant)   | Changes the range of `assign()`                                      |
+| Control identity                          | Changes the baseline used to interpret every result                  |
 | Targeting / Segment config                | Changes which Entities are eligible and which rule wins              |
 | `targeting_key_type` (Targeting Key type) | Changes the bucketing identity                                       |
 | Activation Metric config                  | Re-anchors Conversion Window retroactively; a bucketing-class change |
@@ -62,7 +64,9 @@ These change `assign()`, so Exposures collected before and after are in incompar
 
 ### Measurement edits → applied to live Run in place; recompute, no reset
 
-These change what the numbers mean, not who is in which arm. The raw Exposure/event log is the system of record (ADR-0010); the dedup/metric query re-runs with the new definition over the same raw log.
+These change what the numbers mean, not who is in which arm. Append-only raw Exposure and Metric
+Event logs remain replay truth (ADR-0010); the dedup/Metric query re-runs with the new definition over
+the same retry-collapsed logical facts.
 
 | What changed                                                  |
 | ------------------------------------------------------------- |
@@ -71,7 +75,10 @@ These change what the numbers mean, not who is in which arm. The raw Exposure/ev
 | Guardrail Metric config (add/remove/change threshold)         |
 | Secondary Metric config                                       |
 
-**Recompute timing:** eventual. Recomputing re-runs the Tinybird query over the full raw log; the pipeline may buffer recent Exposures. The UI shows stale results with a "recomputing" state indicator and refreshes when ready. There is no blocking SLA; the recompute is background, not synchronous.
+**Recompute timing:** eventual. Recomputing reads the deduped Exposure snapshot plus tail and
+`serve_deduped_metric_events`, not a full physical Metric Event log scan. The UI shows stale results
+with a "recomputing" state indicator and refreshes when ready. There is no blocking SLA; the recompute
+is background, not synchronous.
 
 ### Non-material edits → mutate in place, same Run, no recompute
 

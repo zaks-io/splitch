@@ -2,10 +2,15 @@
 
 ## Live, per-change — not staged
 
-Flag editing is **live and per-change**. There is no staged apply cycle for Flags. You change a
-Variant, edit a Targeting Rule, reorder rules, flip the kill switch — each is a confirmed write
-(server 200 → refetch, per [mutation-data-flow.md](./mutation-data-flow.md)). No batching, no
-client-held pending draft.
+Flag editing is **live and per-change**. There is no client-held staged apply cycle for Flags. Under
+`allow`, a validated edit applies immediately. Under `confirm`, submit creates the durable Approval
+Request and the proposer performs `approve_and_apply` in the same user action. Future `approve`
+leaves that request `pending` until a distinct authorized principal performs the identical Review.
+No batching and no client-held pending draft.
+
+An applied edit returns server success and refetches per
+[mutation-data-flow.md](./mutation-data-flow.md). A pending, declined, stale, or failed Review renders
+the Approval Request state and never optimistically updates the Flag Configuration.
 
 **Start** is the Experiment concept for opening/managing a Run, not a Flag concept. Editing a
 Flag never creates a Run. A Flag that is not under a running Experiment has no Run at all; its
@@ -51,12 +56,12 @@ the operator finds out at the keystroke that caused it instead of from productio
 Clearing the baseline (`rollout: null`) is always allowed, and widening availability in the same write
 that clears the baseline succeeds, so an ambiguous Configuration is never wedged.
 
-## Production-change confirmation (resolved)
+## Policy-gated change Review (resolved)
 
-A production-affecting flag edit must be **intentional**, and that gate is **not flag-specific** — it
-is the cross-cutting **Environment Policy** + **Approval Request** workflow, designed once and shared
+A Policy-gated flag edit must be **intentional**, and that gate is **not flag-specific**. It is the
+cross-cutting **Environment Policy** + **Approval Request** workflow, designed once and shared
 by Promotions, Variant/value changes, and Starting a Run. See
-[screen-inventory.md](./screen-inventory.md#promotion--the-prod-change-approval-workflow) for the
+[screen-inventory.md](./screen-inventory.md#promotion--the-policy-gated-approval-workflow) for the
 full workflow and [ADR-0029](../../adr/0029-environment-policy-configurable-per-change-type-confirmation-gates.md).
 
 **"What is production?" — resolved.** Production is an **Environment** (ADR-0027), and "careful" is
@@ -64,6 +69,11 @@ that Environment's **Policy** (per-change-type `allow | confirm | approve`), not
 check. The gate fires only on the change types the env's Policy gates, so it is not noisy-by-default.
 A gated edit becomes an **Approval Request** (diff + Review); under `confirm` the editor self-reviews
 in one step, and the same object grows into second-person `approve` later without a rewrite.
+
+The only positive Review action is `approve_and_apply`. Review authorization and target-version
+validation happen before mutation. A changed target becomes terminal `stale`; application failure
+leaves the request `pending` and shows its machine-stable error. There is no approve-only or deferred
+application state.
 
 ## A Flag under a running Experiment
 

@@ -60,10 +60,26 @@ function recoveryMessages(
   return messages;
 }
 
+const APPROVAL_RECOVERY_ACTIONS = new Set<RecommendedAction>([
+  "REVIEW_APPROVAL_REQUEST",
+  "REFRESH_AND_REPROPOSE",
+  "RETRY_REVIEW",
+]);
+
+function isApprovalRecoveryAction(
+  action: RecommendedAction,
+): action is "REVIEW_APPROVAL_REQUEST" | "REFRESH_AND_REPROPOSE" | "RETRY_REVIEW" {
+  return APPROVAL_RECOVERY_ACTIONS.has(action);
+}
+
 function recoverySteps(
   action: RecommendedAction,
   details: Record<string, unknown>,
 ): readonly McpPromptMessage[] {
+  if (isApprovalRecoveryAction(action)) {
+    return approvalRecoverySteps(action, details);
+  }
+
   switch (action) {
     case "CREATE_NEW_RUN":
       return [
@@ -117,13 +133,6 @@ function recoverySteps(
         ),
       ];
     }
-    case "RETRY_WITH_CONFIRMATION":
-      return [
-        message(
-          "assistant",
-          "Resend the identical call with confirm: true (Environment Policy gate, ADR-0029). No different tool is required.",
-        ),
-      ];
     case "CHOOSE_DIFFERENT_SLUG": {
       const taken =
         typeof details.conflictingSlug === "string"
@@ -136,7 +145,63 @@ function recoverySteps(
         ),
       ];
     }
+    case "READ_PER_ENVIRONMENT": {
+      const environments =
+        typeof details.environments === "number" ? details.environments : "<environments>";
+      return [
+        toolMessage(
+          "experiments_list",
+          `List Experiments one Environment at a time (${environments} Environments) to enumerate the running Experiments in each; the Experiment record itself carries no SRM or Guardrail health.`,
+        ),
+        message("assistant", "For every running Experiment returned above, fetch its health next."),
+        toolMessage(
+          "experiment_results_get",
+          "Get the Experiment's StatsOutput (srm, guardrail_results) — this is the operation that actually carries SRM and Guardrail health, not experiments_list.",
+        ),
+        message(
+          "assistant",
+          "Do not retry the App-wide rollup: the refusal is a fan-out budget, not a transient failure, and only a smaller App shape (or this per-Environment, per-Experiment walk) changes it.",
+        ),
+      ];
+    }
   }
+}
+
+function approvalRecoverySteps(
+  action: "REVIEW_APPROVAL_REQUEST" | "REFRESH_AND_REPROPOSE" | "RETRY_REVIEW",
+  details: Record<string, unknown>,
+): readonly McpPromptMessage[] {
+  const approvalRequestId =
+    typeof details.approvalRequestId === "string"
+      ? details.approvalRequestId
+      : "<approvalRequestId>";
+
+  if (action === "REVIEW_APPROVAL_REQUEST") {
+    return [
+      toolMessage(
+        "approval_request_reviews_create",
+        `Review ${approvalRequestId} with the authorized approve_and_apply or decline action.`,
+      ),
+    ];
+  }
+  if (action === "REFRESH_AND_REPROPOSE") {
+    return [
+      toolMessage(
+        "approval_requests_get",
+        `Read stale request ${approvalRequestId} and its immutable proposal.`,
+      ),
+      message(
+        "assistant",
+        "Read the current target with its canonical GET tool, then resubmit the intended mutation with a new idempotency key.",
+      ),
+    ];
+  }
+  return [
+    toolMessage(
+      "approval_request_reviews_create",
+      `Retry Review of pending request ${approvalRequestId} with a new idempotency key.`,
+    ),
+  ];
 }
 
 function parseDetails(detailsRaw: unknown): Record<string, unknown> {

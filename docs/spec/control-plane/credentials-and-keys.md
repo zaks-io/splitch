@@ -13,7 +13,7 @@ prod config only.
 | -------------- | ----------------------------------------------- | ------------------------------------------------------------------- |
 | who holds it   | Client-side SDK (browser, mobile)               | Server-side SDK (trusted runtime)                                   |
 | secrecy        | Public — ships in client code                   | Secret — never shipped client-side                                  |
-| capability     | Evaluate + write-only `track`, App+Environment  | Full data-plane access, App+Environment-scoped                      |
+| capability     | Evaluate + write-only Metric/Web Event ingest   | Full data-plane access, App+Environment-scoped                      |
 | agent behavior | Freely retrieved and surfaced by CLI/MCP        | Provisioned once, value surfaces at creation only; never read after |
 | abuse bound    | Origin/referrer allow-list + rate-limit at edge | Secret; never exposed after creation                                |
 | KV cache key   | `ck:{key_material_hash}`                        | `ak:{key_hash}`                                                     |
@@ -87,6 +87,10 @@ Every SDK call presents either a Client Key or an API Key. The Worker validates 
 Key:   ck:{sha256(key_material)}
 Value: { organizationId, app_id, environment_id, capabilities: ["evaluate", "track"], revoked: boolean, origin_allowlist: string[] | null, valid_until: ISO8601 }
 ```
+
+The existing `track` capability authorizes both strict route-specific write surfaces:
+`POST /api/sdk/events` for Metric Events and `POST /api/sdk/web-events` for Web Events. It is not a
+generic event, configuration, or analytics-read capability.
 
 **API Key cache entry:**
 
@@ -173,10 +177,12 @@ layered, not either/or: rate limiting bounds volume, origin/referrer bounds reac
   rate-limited and origin-bound exactly like `evaluate`, so it is not an allocation oracle (unlike a
   silent peek). Under an API Key, `/verify` returns the full resolution reason. See
   [../sdk/exposure-accessor.md](../sdk/exposure-accessor.md) and ADR-0037.
-- **Track is a narrow Client Key surface:** `POST /api/sdk/events` accepts only strict Metric Event
-  writes. It injects App and Environment from the credential, reveals no Event Definition or
-  configuration, and applies the same origin and rate-limit controls as evaluate. See
-  [../pipeline/metric-event-contract.md](../pipeline/metric-event-contract.md).
+- **Event ingest is a narrow Client Key surface:** `POST /api/sdk/events` accepts only strict Metric
+  Event writes and `POST /api/sdk/web-events` accepts only strict Web Event writes. Both inject App
+  and Environment from the credential, reveal no Event Definition, configuration, or analytics
+  data, and apply the same origin and rate-limit controls as evaluate. See
+  [../pipeline/metric-event-contract.md](../pipeline/metric-event-contract.md) and
+  [../sdk/web-analytics-capture.md](../sdk/web-analytics-capture.md).
 - Mechanism throughout: Cloudflare WAF / rate-limiting rules / Turnstile (ADR-0017, all-Cloudflare).
 
 ## Sources

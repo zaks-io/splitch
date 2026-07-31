@@ -1,31 +1,19 @@
 import { Badge } from "@splitch/ui/components/badge";
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { LiveUpdatesClient } from "#components/live-updates-client";
-import { AppShellSwitchers } from "#components/app-shell-switcher";
-import type { ScopedLoaderContext } from "#lib/loader-context";
-import { scopedHref } from "#lib/app-shell-navigation";
-import { useHydrated } from "#lib/use-hydrated";
 import type { QueryClient } from "@tanstack/react-query";
+import { Link, Outlet } from "@tanstack/react-router";
+import { AppShellSwitchers } from "#components/app-shell-switcher";
+import { LiveUpdatesClient } from "#components/live-updates-client";
+import { visibleAppSections } from "#lib/app-shell-navigation";
+import type { ScopedLoaderContext } from "#lib/loader-context";
+import { useHydrated } from "#lib/use-hydrated";
 
 type AppShellProps = {
   context: ScopedLoaderContext;
   queryClient: QueryClient;
 };
 
-const sections = [
-  { label: "Overview", to: "/$orgSlug/$appSlug/$env" },
-  { label: "Flags", to: "/$orgSlug/$appSlug/$env/flags" },
-  { label: "Experiments", to: "/$orgSlug/$appSlug/$env/experiments" },
-  { label: "Segments", to: "/$orgSlug/$appSlug/$env/segments", scope: "App-level" },
-  { label: "Metrics", to: "/$orgSlug/$appSlug/$env/metrics", scope: "App-level" },
-  { label: "Settings", to: "/$orgSlug/$appSlug/$env/settings" },
-] as const;
-
 export function AppShell({ context, queryClient }: AppShellProps) {
   const isHydrated = useHydrated();
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const rootHref = scopedHref(context.scope);
-  const isOverview = pathname === rootHref || pathname === `${rootHref}/`;
 
   return (
     <div
@@ -56,14 +44,14 @@ export function AppShell({ context, queryClient }: AppShellProps) {
             aria-label="App sections"
             className="grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-1"
           >
-            {sections.map((section) => (
+            {visibleAppSections.map((section) => (
               <Link
                 activeOptions={{ exact: section.to === "/$orgSlug/$appSlug/$env" }}
                 activeProps={{
                   className:
                     "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground",
                 }}
-                className="flex min-h-10 items-center justify-between gap-2 rounded-md px-3 py-2 font-medium text-muted-foreground text-sm hover:bg-accent hover:text-accent-foreground"
+                className="flex min-h-10 items-center justify-between gap-2 rounded-md px-3 py-2 font-medium text-muted-foreground text-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
                 key={section.label}
                 params={{
                   appSlug: context.scope.appSlug,
@@ -84,46 +72,9 @@ export function AppShell({ context, queryClient }: AppShellProps) {
         </aside>
 
         <main className="min-w-0 bg-background p-5 sm:p-7">
-          {isOverview ? <OverviewStub context={context} /> : <Outlet />}
+          <Outlet />
         </main>
       </div>
     </div>
-  );
-}
-
-function OverviewStub({ context }: { context: ScopedLoaderContext }) {
-  return (
-    <section className="grid gap-8" aria-labelledby="overview-title">
-      <div className="grid gap-2">
-        <p className="font-mono text-muted-foreground text-xs uppercase tracking-[0.16em]">
-          {context.scope.env} Environment
-        </p>
-        <h1 className="font-semibold text-3xl text-foreground tracking-tight" id="overview-title">
-          Overview
-        </h1>
-        <p className="max-w-2xl text-muted-foreground text-sm leading-6">
-          This App shell is ready. Attention cards and Environment health arrive in the dedicated
-          Overview slice.
-        </p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {[
-          "Experiments needing a decision",
-          "Experiment health",
-          "Recent Flag Configuration",
-          "Environment at a glance",
-        ].map((title) => (
-          <article
-            className="grid min-h-28 content-between rounded-lg border border-dashed border-border bg-muted/20 p-4"
-            key={title}
-          >
-            <h2 className="font-medium text-foreground text-sm">{title}</h2>
-            <p className="text-muted-foreground text-xs">
-              Overview data is not wired in this slice.
-            </p>
-          </article>
-        ))}
-      </div>
-    </section>
   );
 }

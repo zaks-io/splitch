@@ -1,39 +1,60 @@
 {
   "name": "@splitch/cli",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.1",
+  "description": "Agent-first splitch CLI for managing feature flags and experiments",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zaks-io/splitch.git",
+    "directory": "apps/cli"
+  },
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
-    "splitch": "./src/cli.mjs"
+    "splitch": "dist/cli.js"
   },
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "files": [
-    "src"
+    "dist",
+    "!dist/**/*.map"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/build.mjs",
     "clean": "rm -rf dist coverage",
     "lint": "biome lint src",
+    "pack:check": "node scripts/pack-check.mjs",
+    "pack:dry-run": "pnpm pack --dry-run",
+    "postpack": "node scripts/sync-pack-manifest.mjs restore",
+    "prepack": "node scripts/prepack-build.mjs",
     "test": "vitest run --config vitest.config.ts",
+    "test:consumer-smoke": "node scripts/consumer-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
-    "@splitch/contracts": "workspace:*",
-    "@splitch/control-plane-sdk": "workspace:*",
-    "@splitch/observability": "workspace:*",
-    "@splitch/sdk": "workspace:*",
-    "tsx": "4.22.4"
+    "@hono/zod-openapi": "^1.4.0",
+    "@sentry/node": "^10.63.0",
+    "hono": "^4.12.27",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@splitch/contracts": "workspace:*",
+    "@splitch/control-plane-sdk": "workspace:*",
     "@splitch/db": "workspace:*",
+    "@splitch/observability": "workspace:*",
+    "@splitch/sdk": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
-    "hono": "^4.12.27",
     "miniflare": "^4.20260701.0",
+    "tsx": "4.22.4",
     "vitest": "^3.2.4"
   }
 }

@@ -43,7 +43,7 @@ describe("typed Flag Configuration routes", () => {
       fetch: async (_input, init) => {
         capturedBody = init?.body ? JSON.parse(String(init.body)) : undefined;
         capturedAuthorization = new Headers(init?.headers).get("authorization");
-        return Response.json(flagConfig);
+        return Response.json({ config: flagConfig, approvalRequest: null });
       },
     });
 
@@ -53,11 +53,12 @@ describe("typed Flag Configuration routes", () => {
         environmentId: "env_local",
         flagId: "flag_checkout",
         enabled: true,
+        idempotency_key: "config-update-1",
       },
       { authorization: "Bearer control-plane-token" },
     );
 
-    expect(capturedBody).toEqual({ enabled: true });
+    expect(capturedBody).toEqual({ enabled: true, idempotency_key: "config-update-1" });
     expect(capturedAuthorization).toBe("Bearer control-plane-token");
   });
 });

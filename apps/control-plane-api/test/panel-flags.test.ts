@@ -58,6 +58,7 @@ describe("SignedControlPanelEntrypoint Flags operations", () => {
   it("creates the guided boolean catalog through the authoritative Worker handler", async () => {
     const response = await panelRequest("POST", `/apps/${APP_ID}/flags`, {
       appId: APP_ID,
+      idempotency_key: "idem-panel-create-flag",
       key: "new-checkout",
       name: "New Checkout",
       schema: { type: "boolean" },
@@ -155,6 +156,7 @@ describe("SignedControlPanelEntrypoint Flags operations", () => {
   it("does not redeem one delegation for a different request body", async () => {
     const originalBody = {
       appId: APP_ID,
+      idempotency_key: "idem-panel-body-bound",
       key: "body-bound-original",
       name: "Body Bound Original",
       schema: { type: "boolean" },

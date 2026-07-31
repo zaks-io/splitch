@@ -32,9 +32,14 @@ Body:
   schema?: JSONSchema,       // supported subset the Variant values must satisfy
   variants: [                // the App-level Variant catalog
     { name: string, value: boolean|string|number|object, isDefault: boolean }
-  ]
+  ],
+  idempotency_key: string    // also sent as the `Idempotency-Key` header
 }
 ```
+
+Requires an `Idempotency-Key` header. A Flag create re-establishes a key that a
+gated delete may have just refused to free, so a retried create must never mint a
+second definition for the same key.
 
 Returns: `{ id, appId, key, name, schema, variants, defaultVariantId, createdAt, updatedAt }`
 Invariant: exactly one Variant is the Default Variant; every Variant `value` satisfies `schema`.
@@ -57,6 +62,22 @@ tools and must match it. `value` must satisfy the Flag's `schema`. A new catalog
 available in any Environment until **promoted** (ADR-0028).
 Returns: updated Flag definition.
 
+### `PATCH /apps/{app_id}/flags/{flag_id}/variants/{variant_name}`
+
+Updates App-level Variant metadata/value. Body:
+`{ name?, value?, description?, review?: { action: "approve_and_apply" }, idempotency_key: string }`.
+A value change must satisfy the Flag schema and is blocked while any running Experiment Run includes
+the Variant.
+
+Because the value is App-level, its Approval target includes every Environment where the Variant is
+effectively servable. The strictest `targetingRolloutValue` Review authority across those
+Environments wins. Its version token covers the parent `flags.version` plus the sorted impacted
+Flag Configuration and Policy vector. Any vector change before Review makes the request terminal
+`stale`. See
+[../contracts/request-response-envelopes-flag-variant.md](../contracts/request-response-envelopes-flag-variant.md#app-level-variant-value-approval-target).
+Returns: `{ flag: FlagObject, approval_request: ApprovalRequest | null }`. The request is null under
+`allow` and applied under `confirm`.
+
 ### `DELETE /apps/{app_id}/flags/{flag_id}/variants/{variant_name}`
 
 Removes a Variant from the catalog. Blocked if the Variant is available in any Environment or
@@ -68,6 +89,13 @@ Auto-provisioned per-Environment Flag Configurations are **cascade-deleted** wit
 (SPL-164). Blocked if the Flag is referenced by any Experiment in any Environment. A **running**
 Experiment returns `EXPERIMENT_RUNNING`; draft or ended Experiments return `RESOURCE_NOT_EMPTY`
 with `childType: "experiment"`.
+
+Requires an `Idempotency-Key` header. Because the delete destroys every Environment's available
+Variant set and frees the Flag key for immediate re-creation, it is a `variant_availability` change:
+if any Environment serving the Flag is not `allow`, the delete opens an Approval Request
+(`target.type = "flag"`) instead of applying. The target version covers `flags.version` plus the
+sorted vector of configured Environments, their Flag Configuration versions, and their Policy
+levels, so any of those moving before Review renders the request terminal `stale`.
 
 ## Flag Configuration endpoints (per-Environment)
 
@@ -82,10 +110,11 @@ returned for transparency and diffing; it is server-owned and cannot be written 
 
 ### `PATCH /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/config`
 
-Body: `{ enabled?: boolean, available_variant_names?: string[], rollout?: { percentage: number } | null }`.
+Body:
+`{ enabled?: boolean, available_variant_names?: string[], rollout?: { percentage: number } | null, review?: { action: "approve_and_apply" }, idempotency_key: string }`.
 `available_variant_names` must be a subset of the Flag's catalog (ADR-0028). Subject to this
 Environment's Policy (ADR-0029): the "Variant availability" and "enabled state" change types may
-require a Confirmation. **Turning `enabled` off is never gated** (kill-switch exemption).
+require Review. **Turning `enabled` off is never gated** (kill-switch exemption).
 
 `rollout` takes a **percentage only** — a caller-supplied `salt` is rejected. The salt IS the bucket
 assignment, so the server mints it once when the baseline is first established and carries it through
@@ -94,14 +123,19 @@ every later percentage change; letting a caller set it would silently reshuffle 
 A baseline change is a rollout **value** change, so it falls under the `targeting_rollout_value`
 Policy gate. Rejected with `VALIDATION_ERROR` on `rollout` when the resulting state has anything other
 than exactly one non-Default candidate to roll into (see the ambiguity rule below).
-Returns: updated Flag Configuration.
+Returns:
+`{ config: FlagConfiguration, approval_request: ApprovalRequest | null }`. The request is null under
+`allow` and applied under `confirm`.
 
 ### `PUT /apps/{app_id}/envs/{environment_id}/flags/{flag_id}/targeting-rules`
 
 Full replace of this Environment's Targeting Rule list (ordered; first match wins). Body:
-`TargetingRule[]`. Rules may only reference Variants in this Environment's available set. Subject to
-the Environment's "targeting/rollout/value" Policy.
-Returns: updated Flag Configuration.
+`{ targetingRules: TargetingRule[], review?: { action: "approve_and_apply" }, idempotency_key: string }`.
+Rules may only reference Variants in this Environment's available set. Subject to the Environment's
+"targeting/rollout/value" Policy.
+Returns:
+`{ config: FlagConfiguration, approval_request: ApprovalRequest | null }`. The request is null under
+`allow` and applied under `confirm`.
 
 ## Promotion endpoints
 
@@ -120,7 +154,8 @@ only if it is being promoted, so absence means "leave the target's value untouch
     rollout?: true,                     // promote the config-level baseline rollout (percentage only)
     enabled?: true                      // promote the enabled state
   },
-  confirm?: boolean                     // required when the target Policy gates any selected act at confirm
+  review?: { action: "approve_and_apply" }, // inline canonical Review under confirm
+  idempotency_key: string
 }
 ```
 
@@ -138,11 +173,15 @@ sort key, and source and target rule lists routinely differ — that is what Pro
 The baseline moves as a **percentage only**: the target keeps its own salt, or mints a fresh one if it
 had no baseline. Adopting the source's salt would reshuffle every already-bucketed Entity in the target.
 
-Returns: the updated target Flag Configuration + a diff summary `{ before, after }`.
+Returns: the updated target Flag Configuration + the immutable Approval diff +
+`approval_request: ApprovalRequest | null`. The request is null under `allow` and applied under
+`confirm`.
 
 **Validation (Worker-enforced, fail-loud — ADR-0036):**
 
-- Subject to the target Environment's Policy (ADR-0029): a gated Promotion requires `confirm: true`.
+- Subject to the target Environment's Policy (ADR-0029): under `confirm`, the proposer may perform
+  the inline `approve_and_apply` Review. Without it, the durable request remains `pending` and the
+  endpoint returns `APPROVAL_REVIEW_REQUIRED`.
 - **Dangling-reference check:** if the resulting target config would have a promoted targeting rule routing
   to a Variant not in the target's available set (after applying `availability`), the request is **rejected**
   with a structured error naming the missing Variant. The panel offers to also tick that Variant's
@@ -159,6 +198,61 @@ Returns: the updated target Flag Configuration + a diff summary `{ before, after
   that would strand the target's existing baseline (even when `select.rollout` is absent). The same
   rule gates a direct `PATCH .../config` from either side. Clearing the baseline is always permitted,
   including in the same write that widens availability.
+
+## One Approval Request and Review mechanism
+
+Flag Configuration patch, Targeting Rule replacement, Promotion, and App-level Variant value patch
+all use the Approval contract in
+[../contracts/storage-schemas-d1.md](../contracts/storage-schemas-d1.md#approval_requests). There is
+no endpoint-specific Confirmation pipeline:
+
+- `allow` requires no Review and enters the same validated application seam directly;
+- `confirm` authorizes the proposer to invoke `approve_and_apply`;
+- future `approve` forbids self-review and authorizes a distinct principal to invoke that identical
+  action.
+
+Review authorization and target-version validation happen before mutation. The canonical target
+mutation, successful Review, resulting target version, Approval Request transition, and audit
+metadata commit atomically at the owning D1 boundary. Application failure rolls that transaction
+back, records a failed Review attempt, and leaves the request `pending`. Exact retries replay by
+idempotency key; a later application retry uses a new Review key. Error details are canonical in
+[../contracts/error-responses.md](../contracts/error-responses.md#approval-request-and-review-errors).
+
+Multiple pending Approval Requests for the same target are allowed. Each is an independent immutable
+proposal against its captured target version. Applying one changes the live target version, so every
+other pending request for the prior version subsequently renders `stale`.
+
+## Approval Request endpoints
+
+### `GET /apps/{app_id}/approval-requests?status=&target_kind=&limit=&cursor=`
+
+Lists full Approval Request wire projections in the App. `status` optionally filters
+`pending | applied | declined | stale`; `target_kind` optionally filters
+`flag | flag_configuration | flag_variant | experiment_draft`. The response uses the standard cursor page:
+`{ items: ApprovalRequest[], cursor: string | null, limit: number, total: number | null }`.
+
+### `GET /apps/{app_id}/approval-requests/{id}`
+
+Returns one full Approval Request wire projection, including immutable Policy contexts, target,
+diff, proposer, application result, and latest Review.
+
+Both reads compute effective staleness against the live target version. A stored `pending` request
+whose target moved is rendered with `status: stale` without mutating D1, setting `resolved_at`, or
+creating a Review. V1 has no staleness TTL. A subsequent Review of that request rechecks the target
+inside the transaction, materializes the stale Review and terminal state, and returns
+`APPROVAL_REQUEST_STALE`.
+
+### `POST /apps/{app_id}/approval-requests/{id}/reviews`
+
+Body:
+`{ action: "approve_and_apply" | "decline", reason?: string, idempotency_key: string }`.
+Returns the full Approval Request projection after the Review attempt. The Review idempotency key is
+required. The coarse route gate requires App membership; current membership and Policy determine
+the exact Review authority before target validation or mutation.
+
+These three registered routes mechanically derive the MCP tools `approval_requests_list`,
+`approval_requests_get`, and `approval_request_reviews_create`. No hand-written MCP schema is
+required.
 
 ## Segment endpoints
 

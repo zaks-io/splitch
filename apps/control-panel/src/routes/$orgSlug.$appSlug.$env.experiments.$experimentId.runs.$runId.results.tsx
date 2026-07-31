@@ -1,15 +1,29 @@
+import { SectionErrorPage } from "@splitch/ui/state/section-error-page";
+import { TableSkeleton } from "@splitch/ui/state/table-skeleton";
 import { createFileRoute } from "@tanstack/react-router";
-import { ExperimentTabStub } from "#components/experiment-detail";
+import { ExperimentResultsPanel } from "#components/experiment-results-panel";
 import { useExperimentDetailRouteData } from "#lib/experiment-detail-route";
 
 export const Route = createFileRoute(
   "/$orgSlug/$appSlug/$env/experiments/$experimentId/runs/$runId/results",
 )({
+  // A Results read that fails must say so. Rendering nothing would read as an
+  // Experiment with no numbers rather than as a read that did not complete.
+  errorComponent: () => <SectionErrorPage title="Results unavailable" />,
+  pendingComponent: TableSkeleton,
   component: PinnedRunResultsTab,
 });
 
 function PinnedRunResultsTab() {
   const route = useExperimentDetailRouteData();
   const run = route.data.runs.find((item) => item.id === route.selectedRunId);
-  return <ExperimentTabStub run={run} tab="results" />;
+  if (!run) throw new Error("Experiment Run not found");
+  return (
+    <ExperimentResultsPanel
+      appId={route.scope.appId}
+      environmentId={route.scope.environmentId}
+      experimentId={route.data.experiment.id}
+      run={run}
+    />
+  );
 }

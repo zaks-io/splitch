@@ -23,10 +23,15 @@ scale to millions of events. Two planes:
 
 - **Data plane (hot path):** the public SDK calls the Evaluation Worker, which resolves a Variant
   (`assign()` + holdover replay) and fires an Exposure. KV serves reads; per-key Durable Objects
-  serialize first-touch writes; the Event Ingest Worker appends raw events to Tinybird.
+  serialize first-touch writes. The Event Ingest Worker owns strict Metric/Web Event intake,
+  aggregate admission, durable acceptance, and append-only Tinybird delivery. The accepted target is
+  four isolated durable queue-backed NDJSON streams
+  ([ADR-0043](../adr/0043-event-ingest-will-use-durable-queue-backed-tinybird-microbatches.md));
+  the current implemented `raw_events` and `raw_evaluations` paths still post one row per request
+  and have no Queue or Admission Gate binding.
 - **Control plane:** authoring (Org/App/Flag/Experiment/Run/Metric/Segment), auth (WorkOS +
   OAuth PRM + auth.md), and the MCP/CLI surfaces — all thin skins over one Zod-first typed contract. The
-  analytics/stats engine reads the raw Tinybird log.
+  analytics/stats engine reads deduped Tinybird serving layers backed by append-only raw logs.
 
 ## How we build (applies to every slice)
 
@@ -43,8 +48,9 @@ The [vision](../vision.md) says _what_ to build; these are the non-negotiable ru
 ## The spine (read these first)
 
 1. **Assignment** is a pure function `assign(Run, targetingKey) -> variantName` — never recorded.
-2. **Exposure** is the only recorded event; deduped first-touch per `(Entity, Run)`; it is the
-   analysis denominator.
+2. **Exposure** is the only experiment denominator; it is deduped first-touch per `(Entity, Run)`.
+   Metric Events supply values without replacing that denominator, and Web Events remain separate
+   browser telemetry.
 3. **Run** is the immutable unit of analysis; its assignment config is frozen for its life.
    Assignment edits stage on a **draft** and one **Start** opens the next Run; measurement edits
    recompute in place.
@@ -52,19 +58,18 @@ The [vision](../vision.md) says _what_ to build; these are the non-negotiable ru
 ## System map (seams)
 
 ```
-  Public SDK ──evaluate()/peek()──▶  Evaluation Worker ────────────────────────┐
-   (Client Key)                        │  reads Provider config (KV)            │
-                                       │  reads AssignmentStore.getAll (KV)     │ fires
-                                       │  assign() on miss / replay on holdover │ Exposure
-                                       ▼                                        ▼
-                              Provider (config)              Event Ingest Worker
-                              AssignmentStore                 (raw log, Tinybird)
-                               getAll: KV  / put: per-key DO   │ first-touch dedup (query-time)
-                                       ▲ write-through          │ __multiple__ quarantine
-                                       └── put (first-touch) ◀──┘ activation gate (re-anchor)
-                                                                ▼
-                                                         Analysis Worker
-                                                          Stats engine: variance → CUPED → aCS → FDR
+  Public SDK ──evaluate()/peek()──▶ Evaluation Worker
+   (Client Key)                       │ reads Provider config (KV)
+                                      │ reads AssignmentStore.getAll (KV)
+                                      │ assign() on miss / replay on holdover
+                                      ├── durable Exposure seal ──▶ Event Ingest Worker ──▶ Queue/Tinybird
+                                      └── after seal: AssignmentStore.put
+                                                       │
+                                                       ▼
+                                          per-key DO ──write-through──▶ KV
+
+  Event Ingest data ──▶ first-touch dedup / activation gate ──▶ Analysis Worker
+                                                               Stats: variance → CUPED → aCS → FDR
 
   Humans / Agents ──▶ Control Plane API Worker ◀── CLI + remote MCP Worker
   (WorkOS / OAuth PRM) │ Zod-first contract (@splitch/contracts → hc client)
@@ -108,6 +113,24 @@ Some topics are touched by more than one area, each from its own angle. The cano
   (the single spec for this endpoint). Reads the same KV-backed config the data plane reads.
 - **Privacy lifecycle / deletion / export** → [`platform/privacy-data-lifecycle.md`](./platform/privacy-data-lifecycle.md)
   is the source of truth. Narrow storage and endpoint specs link there instead of redefining lifecycle rules.
+- **Metric Event intake** → [`pipeline/metric-event-contract.md`](./pipeline/metric-event-contract.md)
+  owns `track()`, explicit Entity identity, immutable Event Definition resolution, idempotency,
+  admission, durable acceptance, and Experiment join compatibility.
+- **Web Event capture and identity** →
+  [`sdk/web-analytics-capture.md`](./sdk/web-analytics-capture.md) owns browser SDK behavior and
+  adapters; [`pipeline/web-event-identity.md`](./pipeline/web-event-identity.md) owns retry, Web
+  Session, optional Entity identity, and Experiment-exclusion rules.
+- **Event Ingest transport** → [`pipeline/edge-ingest-contract.md`](./pipeline/edge-ingest-contract.md)
+  owns the four queues, DLQs, fixed Tinybird drain governor, Admission Gate, durable acceptance, and
+  write-ahead Tinybird recovery boundary. ADR-0043 records why the current direct path must be
+  replaced.
+- **Metric/Web physical retry collapse** →
+  [`pipeline/physical-dedup-pipes.md`](./pipeline/physical-dedup-pipes.md) owns aggregate-state
+  materialization, merged serving reads, performance gates, and replacement-safe repair. ADR-0045
+  records why the raw logs remain truth but are not the enterprise request-time dedup path.
+- **Web Analytics reads** →
+  [`control-plane/endpoints-web-analytics.md`](./control-plane/endpoints-web-analytics.md) owns the
+  typed Analysis Worker routes; frontend specs own only their URL and presentation behavior.
 - **Agent-verifiable Done** → [`platform/agent-verification.md`](./platform/agent-verification.md)
   is the source of truth for proof commands, local Worker smoke, remote Cursor requirements, and what each
   slice must show before handoff.

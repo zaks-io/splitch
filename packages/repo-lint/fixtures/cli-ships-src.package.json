@@ -1,0 +1,23 @@
+{
+  "name": "@splitch/cli",
+  "version": "0.1.0",
+  "description": "Agent-first splitch CLI for managing feature flags and experiments",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "splitch": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

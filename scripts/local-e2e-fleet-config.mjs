@@ -1,4 +1,5 @@
 export const localBindings = {
+  CONTROL_PANEL_DELEGATION_SECRET: "local-control-panel-delegation-secret",
   SENTRY_DSN: "",
   SPLITCH_DEPLOY_GATE_TOKEN: "local-e2e-deploy-gate",
   WORKOS_API_KEY: "local-e2e-workos-api-key",

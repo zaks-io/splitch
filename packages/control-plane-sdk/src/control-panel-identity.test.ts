@@ -130,7 +130,7 @@ describe("Control Panel delegation", () => {
 });
 
 describe("Control Panel operation allowlist", () => {
-  it("parses the existing App, Experiment, and Flag operations", () => {
+  it("parses the App, Experiment, and Flag operations", () => {
     expect(parseControlPanelOperation("POST", "/orgs/org_1/apps")).toEqual({
       id: "apps_create",
       orgId: "org_1",
@@ -140,6 +140,30 @@ describe("Control Panel operation allowlist", () => {
     });
     expect(parseControlPanelOperation("POST", "/control-panel/experiments/detail")).toEqual({
       id: "experiments_detail",
+    });
+    expect(parseControlPanelOperation("GET", "/apps/app_1/attention-rollup")).toEqual({
+      id: "app_attention_rollup_get",
+      appId: "app_1",
+    });
+    expect(parseControlPanelOperation("POST", "/control-panel/experiments/results")).toEqual({
+      id: "experiments_results",
+    });
+    expect(parseControlPanelOperation("GET", "/control-panel/experiments/results")).toBeNull();
+    expect(
+      parseControlPanelOperation("PATCH", "/apps/app_1/envs/env_1/experiments/experiment_1"),
+    ).toEqual({
+      id: "experiments_update",
+      appId: "app_1",
+      environmentId: "env_1",
+      experimentId: "experiment_1",
+    });
+    expect(
+      parseControlPanelOperation("POST", "/apps/app_1/envs/env_1/experiments/experiment_1/start"),
+    ).toEqual({
+      id: "experiments_start",
+      appId: "app_1",
+      environmentId: "env_1",
+      experimentId: "experiment_1",
     });
     expect(parseControlPanelOperation("GET", "/apps/app_1/flags", "env_1")).toEqual({
       id: "flags_list",

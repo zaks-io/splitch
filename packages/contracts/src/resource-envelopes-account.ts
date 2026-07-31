@@ -103,6 +103,41 @@ export type CreateAppResponse = z.infer<typeof CreateAppResponseSchema>;
 export const AppResponseSchema = AppSchema;
 export type AppResponse = z.infer<typeof AppResponseSchema>;
 
+/**
+ * Minimal per-Environment health signal for the App-list attention rollup.
+ * `state` keeps no data distinct from a measured clear result, while the two
+ * booleans preserve the exact SRM / Guardrail reason when attention is needed.
+ */
+export const EnvironmentAttentionRollupSchema = z
+  .object({
+    environmentId: z.string(),
+    state: z.enum(["no_data", "clear", "attention"]),
+    srm: z.boolean(),
+    guardrail: z.boolean(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const hasAttention = value.srm || value.guardrail;
+    if (value.state === "attention" && !hasAttention) {
+      context.addIssue({ code: "custom", message: "attention requires SRM or Guardrail evidence" });
+    }
+    if (value.state !== "attention" && hasAttention) {
+      context.addIssue({
+        code: "custom",
+        message: "SRM or Guardrail evidence requires the attention state",
+      });
+    }
+  });
+export type EnvironmentAttentionRollup = z.infer<typeof EnvironmentAttentionRollupSchema>;
+
+export const AppAttentionRollupResponseSchema = z
+  .object({
+    appId: z.string(),
+    items: z.array(EnvironmentAttentionRollupSchema),
+  })
+  .strict();
+export type AppAttentionRollupResponse = z.infer<typeof AppAttentionRollupResponseSchema>;
+
 // ---------------------------------------------------------------------------
 // Organization endpoints
 //

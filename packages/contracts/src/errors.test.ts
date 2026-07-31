@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { errorStatusByCode, httpStatusForError } from "./error-status";
-import { ErrorCodeSchema, errorCodes, ErrorResponseSchema } from "./errors";
+import { ErrorCodeSchema, ErrorResponseSchema, errorCodes } from "./errors";
 
 describe("ErrorResponse contract", () => {
   it("parses a structured-detail error and narrows details by code", () => {
@@ -68,8 +68,15 @@ describe("HTTP status map", () => {
     expect(httpStatusForError("VALIDATION_ERROR")).toBe(400);
     expect(httpStatusForError("UNAUTHORIZED")).toBe(401);
     expect(httpStatusForError("FORBIDDEN")).toBe(403);
+    expect(httpStatusForError("APPROVAL_REVIEW_FORBIDDEN")).toBe(403);
     expect(httpStatusForError("FLAG_NOT_FOUND")).toBe(404);
+    expect(httpStatusForError("APPROVAL_REQUEST_NOT_FOUND")).toBe(404);
     expect(httpStatusForError("RUN_FROZEN")).toBe(409);
+    expect(httpStatusForError("APPROVAL_REVIEW_REQUIRED")).toBe(409);
+    expect(httpStatusForError("APPROVAL_REQUEST_STALE")).toBe(409);
+    expect(httpStatusForError("APPROVAL_REQUEST_RESOLVED")).toBe(409);
+    expect(httpStatusForError("APPROVAL_APPLICATION_FAILED")).toBe(409);
+    expect(httpStatusForError("IDEMPOTENCY_KEY_CONFLICT")).toBe(409);
     expect(httpStatusForError("RATE_LIMITED")).toBe(429);
     expect(httpStatusForError("INTERNAL_SERVER_ERROR")).toBe(500);
     expect(httpStatusForError("SERVICE_UNAVAILABLE")).toBe(503);

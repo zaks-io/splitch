@@ -1,5 +1,5 @@
-import type { ApiRouteContract } from "./openapi-route";
 import { isMcpToolRoute } from "./mcp-tools";
+import type { ApiRouteContract } from "./openapi-route";
 import { routeRegistry } from "./route-registry";
 
 /**
@@ -42,6 +42,7 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   apps_list: ORG_MEMBER,
   apps_create: ORG_ADMIN,
   apps_get: APP_MEMBER,
+  app_attention_rollup_get: APP_MEMBER,
   apps_update: APP_ADMIN,
   apps_delete: APP_OWNER,
   environments_list: APP_MEMBER,
@@ -49,6 +50,9 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   environments_get: APP_MEMBER,
   environments_update: APP_ADMIN,
   environments_delete: APP_OWNER,
+  approval_requests_list: APP_MEMBER,
+  approval_requests_get: APP_MEMBER,
+  approval_request_reviews_create: APP_MEMBER,
   flags_list: APP_MEMBER,
   flags_create: APP_ADMIN,
   flags_get: APP_MEMBER,

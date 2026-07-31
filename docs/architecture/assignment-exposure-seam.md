@@ -21,7 +21,7 @@ Three domain terms, one immutable relationship between them:
   `environment_id` co-scope every record because Experiments and their Runs are per-Environment
   (ADR-0027); they ride through dedup as carried scope columns, never collapsing rows.
 - **Run** — a **time-boxed, immutable window** of an Experiment. Config (salt, allocation, Variant
-  set, Targeting) is frozen for the Run's life. The **unit of analysis**. A material config edit ends
+  set, Control identity, Targeting) is frozen for the Run's life. The **unit of analysis**. A material config edit ends
   one Run and opens the next, keeping each Run's dataset clean. Because the Run is immutable,
   assignment is pure over it and re-bucketing within a Run cannot happen by construction.
 
@@ -71,8 +71,9 @@ The Run freezes **bucketing**: a Run means _assignment_ was frozen for its entir
 
 ### Assignment vs measurement vs non-material edits
 
-- **Assignment edit → ends the current Run, opens the next** (changes `assign()`, so prior data is no longer
-  comparable): salt, allocation, Variant set, Targeting/Segment, Targeting Key.
+- **Assignment edit → ends the current Run, opens the next** (changes `assign()` or how its result is
+  interpreted, so prior data is no longer comparable): salt, allocation, Variant set, Control identity,
+  Targeting/Segment, Targeting Key.
 - **Measurement edit → recompute over the existing Run, no reset** (changes what the numbers mean, not who is
   in which arm): Metric definitions, Conversion Window, Guardrail/Activation config. The raw Exposure/event
   log is the system of record (ADR-0010), so the dedup/metric query simply re-runs with the new definition —

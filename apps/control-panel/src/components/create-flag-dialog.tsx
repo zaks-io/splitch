@@ -29,7 +29,7 @@ export function CreateFlagDialog({
       <DialogTrigger render={<Button />}>Create Flag</DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         {createdKey ? (
-          <CreateFlagSuccess flagKey={createdKey} />
+          <CreateFlagSuccess appId={appId} environmentId={environmentId} flagKey={createdKey} />
         ) : (
           <CreateFlagForm appId={appId} environmentId={environmentId} onCreated={setCreatedKey} />
         )}

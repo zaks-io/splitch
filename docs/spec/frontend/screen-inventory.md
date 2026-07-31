@@ -44,8 +44,9 @@ The panel has two nested shells, matching the two URL scope roots:
   (environments live under an App). The org switcher (present only for multi-org users) and the
   user menu live in its top bar.
 - **App shell** — `/{orgSlug}/{appSlug}/{env}/...`. The persistent left sidebar (Flags, Experiments,
-  Segments, Metrics, Settings) and a top bar carrying all **three switchers** (org, app, environment).
-  Everything below the App root is scoped to `(appId, environmentId)` resolved from the URL.
+  Web Analytics, Segments, Metrics, Settings) and a top bar carrying all **three switchers** (org,
+  app, environment). Everything below the App root is scoped to `(appId, environmentId)` resolved
+  from the URL.
 
 ## Org-level screens
 
@@ -256,10 +257,11 @@ The UI realizes this structurally, not with an "are you sure?":
   cannot type into a frozen field, so there is no edit gesture to misfire.
 - **Changing them is a separate, deliberate flow** — not an edit but **configuring the next Run**.
   It opens a **draft of the next Run** (the _same_ draft→**Start** flow a brand-new Experiment uses
-  — one mechanism, not two). The action is named for what it does to the data: the confirm makes
+  — one mechanism, not two). The action is named for what it does to the data: the Review makes
   plain that **Run N is abandoned and a fresh sample starts from zero** — Runs are independent and
   never pooled (ADR-0006), so the prior Run does not extend, it stops accumulating and becomes a
-  frozen archive. This confirm is the Environment Policy "Start a Run" gate (ADR-0029).
+  frozen archive. Under `confirm`, this is the proposer performing the Environment Policy
+  `approve_and_apply` Review (ADR-0029).
 - **Measurement edits stay inline-editable** — they genuinely do not touch the frozen config, so
   they save plainly (server 200 → refetch). The UI does not gate what is safe; gating everything
   breeds "are you sure" blindness and would bury the one edit that actually matters.
@@ -275,10 +277,10 @@ the same invariant on all three skins:
   error (ADR-0002/0003), so `splitch experiment edit --allocation ...` on a running Experiment is
   rejected, not silently obeyed — the same refusal the panel renders as a locked field.
 - Opening Run N+1 is its own explicit command (e.g. `splitch experiment start-run`), the terminal
-  analogue of the draft→Start flow, and it requires confirmation: an interactive
-  `--confirm`/prompt that names the data loss ("Run N abandoned, fresh sample from zero"), with a
-  non-interactive `--yes` for scripts that exists _only_ because the destructive intent is stated
-  explicitly in the command itself. The MCP tool returns the same gate as a structured confirm.
+  analogue of the draft→Start flow. When Policy requires Review, an interactive `--confirm`/prompt
+  names the data loss ("Run N abandoned, fresh sample from zero") and maps to
+  `review.action = "approve_and_apply"`. The non-interactive form requires that same action
+  explicitly. The MCP tool exposes the same typed Review action.
 - Measurement edits succeed plainly on every skin (no gate), matching the panel's inline save.
 
 So "make it hard to nuke a Run" holds whether the operator is in the panel, at a terminal, or an
@@ -354,6 +356,44 @@ sidebar hangs off `/{env}`, so the section is labeled **"Segments (App-level)"**
 applies across all Environments — the same defined-once honesty device the Flag catalog uses, so a
 user never thinks they are editing just this env's Segment.
 
+## Web Analytics
+
+Web Analytics is an Environment-scoped read-only surface, separate from Experiment results. Every App
+role may view it under the existing **View config/results** permission.
+
+Its view state is URL-addressable:
+
+- `/{orgSlug}/{appSlug}/{env}/web-analytics` — **Overview** tab;
+- `/{orgSlug}/{appSlug}/{env}/web-analytics/sessions` — **Sessions** tab;
+- `/{orgSlug}/{appSlug}/{env}/web-analytics/sessions/{sessionIdHash}` — one paginated Web Session
+  journey;
+- `/{orgSlug}/{appSlug}/{env}/web-analytics/vitals` — **Web Vitals** tab.
+
+The selected time window is explicit in `from` and `to` URL query parameters. Overview also carries
+`interval=hour|day`. Sessions carries its optional exact `eventName` and `association` filters in
+the URL. Preset controls rewrite those parameters to concrete UTC timestamps; no tab, window, or
+filter lives only in component state.
+
+Each explicit `from`/`to` pair is a stable Web Analytics snapshot. The panel does not poll it and
+Web Event ingest does not push a per-event WebSocket nudge. **Refresh** reruns the exact same window.
+**Latest** advances `to` to the current UTC instant, preserves the selected duration by moving
+`from`, updates the URL, and then loads that new snapshot.
+
+- **Overview** shows logical Web Event count, Web Session count, anonymous/associated/ambiguous
+  session counts, associated Entity count, the UTC event/session trend, and per-event-name counts.
+- **Sessions** shows the cursor-paginated session summaries. Selecting a row navigates to its stable
+  detail URL, which pages forward through the complete windowed journey without truncation.
+- **Web Vitals** shows p50/p75/p95, exact sample/session counts, and rating counts grouped by Event
+  Definition, metric, unit, and navigation type. It labels the percentiles as t-digest estimates.
+
+The screen never presents Web Events as Metric inputs, joins them to Experiment results, or displays
+raw Targeting Keys. Empty aggregate and collection reads render a zero state. An unavailable
+retention window and a missing session detail render their canonical fail-loud errors with controls
+to select a valid window or return to the Sessions list.
+
+Panel loaders call the same `@splitch/control-plane-sdk` operations used by CLI and MCP. The panel
+never queries Tinybird directly.
+
 ## Metrics — App-level definitions; role is set per-Experiment
 
 `/{orgSlug}/{appSlug}/{env}/metrics` — list + a Metric editor (the fact + the aggregation;
@@ -419,16 +459,34 @@ Each step names the CLI/MCP parity it mirrors. No step is panel-only.
    state teaches "a Flag is a named toggle with Variants." (Parity: `flags_create`.)
 4. **Get your SDK key + install snippet** — the handoff that was the missing link. On flag create,
    a **"Connect your code" card** shows: the active Environment's **Client Key** (public, copyable),
-   an `npm i @splitch/sdk` line, and a **pre-filled copy-paste snippet** with the user's real `appId`,
-   `clientKey`, and the new `flagKey` already substituted:
+   an `npm i @splitch/sdk` line, and a **pre-filled copy-paste snippet** with the user's real
+   `clientKey` and the new `flagKey` already substituted. The snippet carries no `appId`: App and
+   Environment scope come from the credential alone (ADR-0018), and `SplitchClientOptions` has no
+   such field.
+
+   The block below is what `renderConnectSnippet` emits, character for character, with the two
+   substituted values shown as placeholders. It declares `userId` rather than leaving it free: the
+   card promises a copy-paste snippet, so a paste must not throw `ReferenceError`.
 
    ```ts
    import { createSplitchClient } from "@splitch/sdk";
-   const splitch = createSplitchClient({ appId: "app_…", clientKey: "ck_…" });
-   const value = await splitch.evaluate("your-flag-key", { targetingKey: user.id });
+
+   const splitch = createSplitchClient({ clientKey: "ck_…" });
+
+   // Whoever you are deciding for. Swap in your own user id.
+   const userId = "user-1";
+
+   // One stable id per logical Evaluation. Reuse it when you retry that call,
+   // so a retry is not counted as a second Evaluation.
+   const evaluationId = crypto.randomUUID();
+
+   const value = await splitch.evaluate("your-flag-key", {
+     targetingKey: userId,
+     idempotencyKey: evaluationId,
+   });
    ```
 
-   (`idType` defaults to `'user'`, so the snippet is two lines, ADR-0036.) The card links to the
+   (`idType` defaults to `'user'`, so the snippet stays short, ADR-0036.) The card links to the
    API-Key flow for server runtimes (provisioned-and-shown-once, ADR-0022). (Parity: `client_key_get`.)
 
 5. **Verify it resolves** — the first green check. An inline **"Test this Flag"** panel on the card
@@ -453,13 +511,13 @@ The **Client Key** is shown for copy-paste (public); the **API Key** is provisio
 "see it resolve without firing an Exposure" first moment (ADR-0026/0037); and the active Environment
 starts on **`dev`** so the first move never touches production.
 
-## Promotion & the prod-change approval workflow
+## Promotion & the Policy-gated Approval workflow
 
-The governing requirement: **mistakes against production are hard.** Any production-affecting change
-— a Promotion, a direct prod Flag edit, a Variant/value change, or starting a Run — does not commit
-silently. It becomes an **[[Approval Request]]** (the industry-standard pending-change object;
-LaunchDarkly's term, Statsig's "submit for review") carrying a **diff** of proposed-vs-current
-config, and it commits only when **[[Reviewed]]**.
+The governing requirement: **mistakes against a careful Environment are hard.** Any change whose
+Environment Policy requires Review, including Promotion, a direct Flag Configuration edit, a
+Variant/value change, or starting an Experiment Run, does not commit silently. It becomes an
+**[[Approval Request]]** carrying an immutable proposed-vs-current diff, target version, proposer,
+Policy context, and lifecycle state. It commits only through an authorized Review.
 
 ### Built for confirm now, grows into second-person approval
 
@@ -467,14 +525,19 @@ This workflow ships at the `confirm` Policy level (single operator) but is **str
 future `approve` level without a rewrite** (ADR-0029):
 
 - The **Approval Request object exists from day one**, even under `confirm`. Under `confirm` the
-  proposer self-reviews in the same step — feels like one action, but a proposal-was-approved
-  record is written.
+  proposer invokes `approve_and_apply` in the same step — feels like one action, but the durable
+  Approval Request and successful Review are written.
 - Growing to `approve` (a known future direction — reviewer roles, multi-user) is then a
   **permission change** (self-review disallowed → a second principal must Review), not a new
   pipeline. The diff screen, the Approval Request, the audit trail are already there.
 
-This is the explicit "build a system we grow into" choice: confirm-by-default on prod today,
-second-person approval slots in later.
+This is the explicit "build a system we grow into" choice: self-review ships under `confirm` today,
+and second-person approval slots in later.
+
+The positive action is always `approve_and_apply`. There is no approve-only state or deferred
+application. `decline` is terminal. A changed target version moves the request to terminal `stale`.
+Application failure applies nothing, records a failed Review attempt with a machine-stable error,
+and leaves the request `pending` for a new authorized attempt.
 
 ### The Promotion screen is the diff
 
@@ -507,18 +570,21 @@ friction removed, but never a silent side effect. If you submit anyway with the 
 the **Worker rejects** the Approval Request with a structured error naming the missing Variant. The
 strictness is the invariant; the nudge is the affordance.
 
-Ticking and submitting creates the Approval Request; the target env's Policy decides whether it
-self-confirms or (future) waits for a reviewer.
+Ticking and submitting creates a durable Approval Request only when the effective Environment
+Policy requires Review. Under `allow`, the same validated application seam applies directly and
+returns no Approval Request. Under `confirm`, the proposer self-reviews with `approve_and_apply`.
+Future `approve` changes only Review authority and waits for a distinct authorized principal.
 
 The cross-env "all Flags' dev-vs-prod drift at once" bulk view is a useful **secondary** power-user
 surface, not the primary promote flow.
 
 **CLI/MCP parity (ADR-0023, Worker-enforced).** Promotion and the approval gate are operations, not
 panel features. `splitch flag promote --from dev --to prod --flag checkout-model [--only availability]`
-creates the same Approval Request; when the target Policy is `confirm` it prompts (or takes `--yes`),
-and when it is `approve` (future) the command reports the request as pending a reviewer rather than
-applying. The MCP tool returns the Approval Request as a structured result. The diff, the request,
-and the gate live in the Worker; every skin inherits them.
+creates the same Approval Request; when the target Policy is `confirm` it prompts and sends
+`review.action = "approve_and_apply"`, and when it is `approve` (future) the command reports the
+request as pending a distinct reviewer rather than applying. The MCP tool returns the Approval
+Request as a structured result. The diff, target version, request, Review action, and application
+result live in the Worker; every skin inherits them.
 
 ## Sources
 

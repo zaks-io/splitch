@@ -74,15 +74,43 @@ describe("Flags route data", () => {
       data: { items: [{ configuration: null }] },
     });
   });
+
+  it("carries the catalog read's own truncation signal instead of re-deriving one", async () => {
+    // The endpoint OBSERVES truncation one row past its ceiling. Nothing on this
+    // side can reconstruct that from a page, so the page data must pass it
+    // through unchanged — including the case where the two disagree.
+    const flags = flagsClient(
+      vi.fn<FlagsClient["getConfig"]>(async () => ({ ok: true, status: 200, data: prodConfig() })),
+      { readTruncated: true, readLimit: 200 },
+    );
+
+    const result = await readFlagsPage(flags, {
+      appId: "app_checkout",
+      environmentId: "env_prod",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        readTruncated: true,
+        readLimit: 200,
+        items: [{ definition: { key: "new-checkout" } }],
+      },
+    });
+  });
 });
 
-function flagsClient(getConfig: FlagsClient["getConfig"]): Pick<FlagsClient, "list" | "getConfig"> {
+function flagsClient(
+  getConfig: FlagsClient["getConfig"],
+  bound: { readTruncated: boolean; readLimit: number } = { readTruncated: false, readLimit: 200 },
+): Pick<FlagsClient, "list" | "getConfig"> {
   return {
     getConfig,
     list: vi.fn(async () => ({
       ok: true as const,
       status: 200,
       data: {
+        ...bound,
         items: [
           {
             id: "flag_checkout",

@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { OAUTH_STATE_COOKIE_NAME, consumeOAuthState, createOAuthState } from "./oauth-state";
+import { consumeOAuthState, createOAuthState, OAUTH_STATE_COOKIE_NAME } from "./oauth-state";
 import {
-  SESSION_COOKIE_NAME,
-  type StoredSession,
   createSession,
   loadSessionFromCookieHeader,
   refreshSession,
+  SESSION_COOKIE_NAME,
   sessionKey,
 } from "./session";
-
-const NOW = Date.UTC(2026, 6, 5, 12, 0, 0);
+import { MemoryKv, NOW, sessionPrincipal } from "./session-test-harness";
 
 describe("control-panel session cookie and KV validation", () => {
   it("stores an opaque Secure HttpOnly session cookie that maps to one KV principal", async () => {
@@ -211,46 +209,3 @@ describe("OAuth state cookie", () => {
     });
   });
 });
-
-function sessionPrincipal(): Omit<StoredSession, "expiresAt"> {
-  return {
-    userId: "user_1",
-    workosSessionId: "workos_session_1",
-    orgs: [
-      {
-        orgId: "org_1",
-        orgRole: "admin",
-        orgSlug: "acme",
-        isProvisional: false,
-        demoExpiresAt: null,
-        apps: [
-          {
-            appId: "app_1",
-            appSlug: "checkout-api",
-            role: "viewer",
-          },
-        ],
-      },
-    ],
-  };
-}
-
-class MemoryKv {
-  readonly store = new Map<string, string>();
-
-  namespace(): KVNamespace {
-    return this as unknown as KVNamespace;
-  }
-
-  async get(key: string): Promise<string | null> {
-    return this.store.get(key) ?? null;
-  }
-
-  async put(key: string, value: string): Promise<void> {
-    this.store.set(key, value);
-  }
-
-  async delete(key: string): Promise<void> {
-    this.store.delete(key);
-  }
-}

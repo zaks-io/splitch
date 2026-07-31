@@ -64,8 +64,11 @@ describe("Flag Configuration controlling Experiment", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
-      availableVariantNames: ["control"],
-      experiment: { id: ids.experimentId, name: "Checkout experiment" },
+      approvalRequest: null,
+      config: {
+        availableVariantNames: ["control"],
+        experiment: { id: ids.experimentId, name: "Checkout experiment" },
+      },
     });
   });
 });
@@ -81,10 +84,14 @@ async function readConfig(environmentId: string): Promise<Record<string, unknown
 }
 
 async function setExperimentStatus(status: "draft" | "ended"): Promise<void> {
+  const scope = envScope(ids.appId, ids.environmentId);
+  const current = await h.repo.experiments.getExperiment(scope, ids.experimentId);
+  if (!current) throw new Error("setExperimentStatus: Experiment not found");
   await h.repo.experiments.updateExperiment(
-    envScope(ids.appId, ids.environmentId),
+    scope,
     ids.experimentId,
     { status, liveRunId: null, updatedAt: NOW },
+    current.liveRunId,
   );
 }
 

@@ -20,6 +20,7 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
 | [endpoints-metric.md](endpoints-metric.md)                                 | App-level Event Definitions/immutable versions + typed-field Metric CRUD — request/response shapes                                                                                                                                |
 | [endpoints-credentials.md](endpoints-credentials.md)                       | Client Key + API Key management (per-Env) — request/response shapes                                                                                                                                                               |
 | [endpoints-test-eval-analytics.md](endpoints-test-eval-analytics.md)       | Dry-run test-evaluation, analytics proxy reads, OpenAPI schema discovery — request/response shapes                                                                                                                                |
+| [endpoints-web-analytics.md](endpoints-web-analytics.md)                   | Purpose-built Web Analytics overview, paginated Web Session summary and event-journey reads, and Web Vitals reads through the Analysis Worker                                                                                     |
 | [mcp-and-cli-surfaces.md](mcp-and-cli-surfaces.md)                         | CLI credential storage format (keychain + 0600 JSON), CLI command structure, MCP OAuth PRM + auth.md discovery chain, MCP tool naming, parity guarantee                                                                           |
 | [mcp-discovery.md](mcp-discovery.md)                                       | MCP prompts (guided workflows) + resources (glossary, auth, active context, capabilities) over the derived tools; the error → recovery prompt loop; onboarding discovery handshake                                                |
 | [endpoints-privacy-data.md](endpoints-privacy-data.md)                     | Privacy request, export, deletion, and Entity data subject request endpoints                                                                                                                                                      |
@@ -42,8 +43,9 @@ capability Workers. Shared contracts come from `@splitch/contracts`; skins stay 
 - Auth API vs Control Plane API split: Auth API handles identity endpoints only;
   management CRUD, including post-create Org management, lives on the Control Plane API Worker.
 - Client Key immediately usable at creation; `origin_allowlist = null` means no origin restriction
-- Client Key has only two public data-plane capabilities: evaluate and write-only Metric Event
-  `track`; it cannot read Event Definitions, Metric Events, Metrics, or Flag Configuration.
+- Client Key has one Variant-resolution capability, Exposure-bearing `evaluate`, plus strict
+  write-only Metric Event `track` and Web Event `web.track`; it cannot read Event Definitions,
+  Metric Events, Web Events, Metrics, Web Analytics, or Flag Configuration.
 - Tinybird never queried directly; Analysis Worker injects `app_id` and `environment_id` from
   control-plane auth/path context.
 - Privacy requests are first-class Control Plane API operations. Delete jobs commit tombstones before

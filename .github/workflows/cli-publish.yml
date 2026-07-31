@@ -1,0 +1,192 @@
+name: cli-publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cli-publish-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+
+jobs:
+  publish:
+    name: Publish @splitch/cli
+    if: startsWith(github.event.release.tag_name, 'cli-v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      cli_version: ${{ steps.target.outputs.cli_version }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout release tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node for npm trusted publishing
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Resolve CLI release target
+        id: target
+        run: |
+          set -euo pipefail
+          target="$(node scripts/release/resolve-version.mjs cli "$GITHUB_WORKSPACE")"
+          {
+            echo "cli_version=$(printf '%s' "$target" | jq -r '.version')"
+            echo "cli_tag=$(printf '%s' "$target" | jq -r '.tag')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate release source and commit
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TARGET_COMMITISH: ${{ github.event.release.target_commitish }}
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: node scripts/release/validate-publish-context.mjs cli "$GITHUB_WORKSPACE"
+
+      - name: Refresh live release state before npm version check
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/release/validate-live-publish-state.mjs cli "$GITHUB_WORKSPACE"
+
+      - name: Check whether CLI version is already published
+        id: npm-version
+        env:
+          CLI_VERSION: ${{ steps.target.outputs.cli_version }}
+        working-directory: apps/cli
+        run: |
+          set -euo pipefail
+          already_published="$(node "$GITHUB_WORKSPACE/scripts/release/check-published-version.mjs" cli "$CLI_VERSION")"
+          echo "already_published=$already_published" >> "$GITHUB_OUTPUT"
+          if [ "$already_published" = "true" ]; then
+            echo "Skipping immutable npm version @splitch/cli@$CLI_VERSION: it already exists"
+          else
+            echo "@splitch/cli@$CLI_VERSION is not published; publish may proceed"
+          fi
+
+      - name: Install release dependencies
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: pnpm install --frozen-lockfile
+
+      # The CLI bundle inlines @splitch/sdk from its built dist.
+      - name: Build @splitch/sdk dependency
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: pnpm --filter @splitch/sdk build
+
+      - name: Build @splitch/cli
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: pnpm --filter @splitch/cli build
+
+      - name: Check release package contents
+        if: steps.npm-version.outputs.already_published != 'true'
+        run: |
+          pnpm --filter @splitch/cli pack --dry-run
+          pnpm --filter @splitch/cli pack:check
+
+      - name: Publish @splitch/cli with provenance
+        if: steps.npm-version.outputs.already_published != 'true'
+        working-directory: apps/cli
+        run: npm publish --provenance --access public --tag latest
+
+      - name: Publish summary
+        if: always()
+        env:
+          ALREADY_PUBLISHED: ${{ steps.npm-version.outputs.already_published }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TARGET_COMMITISH: ${{ github.event.release.target_commitish }}
+          CLI_VERSION: ${{ steps.target.outputs.cli_version }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$ALREADY_PUBLISHED" in
+            true) decision="skip-already-published" ;;
+            false) decision="publish" ;;
+            *) decision="not-evaluated" ;;
+          esac
+          {
+            echo '## CLI publish'
+            echo
+            echo '- Package: @splitch/cli'
+            echo "- Version: $CLI_VERSION"
+            echo "- Release tag: $RELEASE_TAG"
+            echo "- Release target commit: $RELEASE_TARGET_COMMITISH"
+            echo "- Commit: $GITHUB_SHA"
+            echo '- Runner: ubuntu-24.04 (GitHub-hosted)'
+            echo '- Provenance: npm trusted publishing/OIDC with npm publish --provenance'
+            echo '- npm dist-tag: latest'
+            echo "- Decision: $decision"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  linear-release:
+    name: Track @splitch/cli Linear Release
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    needs: publish
+    environment: production
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check Linear release credential
+        env:
+          CLI_LINEAR_ACCESS_KEY: ${{ secrets.CLI_LINEAR_ACCESS_KEY }}
+        run: |
+          if [ -z "$CLI_LINEAR_ACCESS_KEY" ]; then
+            echo "::error::CLI_LINEAR_ACCESS_KEY is required to track @splitch/cli releases"
+            exit 1
+          fi
+
+      - name: Sync Linear release
+        id: linear-release
+        uses: linear/linear-release-action@c0cb8354a362c24c6d3e0948f37fd66d07588e3f # v0.14.5
+        with:
+          access_key: ${{ secrets.CLI_LINEAR_ACCESS_KEY }}
+          name: "@splitch/cli ${{ needs.publish.outputs.cli_version }}"
+          version: ${{ needs.publish.outputs.cli_version }}
+          include_paths: apps/cli/**,packages/contracts/**,packages/control-plane-sdk/**,packages/observability/**,packages/privacy/**,packages/sdk/**,packages/worker-runtime/**
+          links: |
+            GitHub Release=${{ github.event.release.html_url }}
+            npm=https://www.npmjs.com/package/@splitch/cli/v/${{ needs.publish.outputs.cli_version }}
+            GitHub Actions=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Summary
+        env:
+          CLI_VERSION: ${{ needs.publish.outputs.cli_version }}
+          LINEAR_RELEASE_URL: ${{ steps.linear-release.outputs.release-url }}
+        run: |
+          if [ -z "$LINEAR_RELEASE_URL" ]; then
+            echo "::error::Linear did not return an @splitch/cli release URL"
+            exit 1
+          fi
+          {
+            echo "## @splitch/cli Linear release"
+            echo
+            echo "- Version: \`$CLI_VERSION\`"
+            echo "- Linear: $LINEAR_RELEASE_URL"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -19,15 +19,78 @@ These names are package scripts and CI jobs. Math slices add their own fixtures 
 
 ### Ingest and dedup
 
-- Exposure and Activation rows reject missing `event_id`, `source_id`, `dedup_key`, `server_ts`, or
+- Exposure and Activation intake rejects missing `event_id`, `source_id`, `dedup_key`, or
+  `server_received_at`; Activation intake additionally rejects a missing or null `activation_ts`.
+  The producer must omit `ingest_ts`, and the stored Tinybird row must contain datasource-assigned
   `ingest_ts`.
+- A fresh Evaluation returns its Variant only after the retry-stable Exposure and payload are sealed
+  in the durable `raw_events` outbox. Seal failure returns an error and begins no Assignment Store
+  write; Queue publication failure after the seal is recovered from the outbox without SDK re-fire.
 - Retrying the same raw row with the same `event_id` yields the same `dedup_key`.
 - Exposure and Activation rows with the same identity and `event_id` do not collide because `type` is
   included in the key.
-- `server_ts` controls first-touch ordering.
-- `ingest_ts` controls snapshot/tail boundaries only.
-- Late-arriving events with old `server_ts` but new `ingest_ts` appear in the real-time tail and then
-  dedup correctly against the snapshot.
+- Two physical `metric_events` rows with the same `dedup_key`, inserted in separate blocks and held
+  in separate aggregate-state parts, produce one row from `serve_deduped_metric_events` before
+  Binomial, Count, Revenue, or Ratio aggregation and therefore cannot inflate a result.
+- Two physical `web_events` rows with the same `dedup_key`, inserted in separate blocks and held in
+  separate aggregate-state parts, produce one row from `serve_deduped_web_events` before counts,
+  journeys, or percentiles.
+- Duplicate Activation rows for one Entity/Run/timestamp, inserted across separate blocks and state
+  parts, produce one candidate from `serve_deduped_activations`. A fixture with a pre-Exposure
+  candidate and two later candidates proves the join selects the earliest post-Exposure timestamp; a
+  late physical delivery inside the Run event-time bounds remains visible. The default serving policy
+  excludes `counterfactual = 1`; the explicit inclusion parameter admits both kinds without collapsing
+  their candidate identity before the Exposure-relative predicate.
+- Activation gate and activation-rate query contracts fail if they read physical `raw_events`
+  Activation rows instead of `serve_deduped_activations`.
+- Metric or Web Analytics queries that read the physical event logs directly fail contract tests.
+- Each Metric/Web aggregate-state tuple, materialized grouping key, target sorting key, and serving
+  grouping key are generated from one family definition; type, column, or ordering drift fails
+  contract tests.
+- The Activation aggregate-state type, materialized grouping key, target sorting key, and serving
+  candidate identity are generated from one Activation definition; drift in
+  `(app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash, counterfactual,
+activation_ts)` or its exact types fails contract tests.
+- A Tinybird `422` transitions its durable write-ahead attempt to `indeterminate` and never enters
+  ordinary queue retry. Reconciliation fixtures cover raw-plus-state, raw-only, absent, and
+  mixed/unresolved outcomes.
+- No Tinybird request is sent until its write-ahead delivery attempt is durable. A failed outcome
+  transition leaves the attempt guarded and enters reconciliation without blind redelivery.
+- A permanent response enters nonterminal `poison_pending`. A failed DLQ copy leaves the primary
+  message unacknowledged and redelivery resumes that copy without a Tinybird request; only terminal
+  `poison_transferred` permits acknowledgement.
+- Tinybird `429`, `500`, and `503` use the bounded retry ceiling; permanent responses do not.
+- Raw-only reconciliation populates the missing aggregate state from raw truth without replaying the
+  raw Events API request.
+- A repair fixture proves the scoped read/intake block, in-flight drain, exact target-slice delete,
+  bounded append population, Metric/Web retry-key count and zero-mismatch canonical-row
+  reconciliation, Activation Entity/Run/counterfactual/timestamp candidate counts with zero timestamp
+  mismatches, and resume ordering. Any failed step keeps the scope blocked.
+- Forward deployment fixtures require `BACKFILL skip` on all three state targets and a deploy plan
+  with no automatic all-history population. Initial population uses source App, Environment, and
+  half-open source-time month bounds; Activation additionally filters `type = 'activation'`.
+- Raw and state fixtures at the beginning, middle, and end of a UTC day expire at the same exact
+  timestamp under matching retention.
+- Activation raw/state fixtures expire at the same exact `activation_ts`-derived retention boundary.
+- `server_received_at` controls first-touch ordering.
+- For Exposure and Activation rows, Tinybird stamps `ingest_ts` at physical insertion with
+  `DEFAULT now64(3)`. A delayed Queue delivery after a completed snapshot remains in the tail, and an
+  empty snapshot falls back to the Unix epoch rather than hiding all tail rows.
+- The Exposure snapshot reads `ingest_ts < watermark` and its tenant-scoped tail reads
+  `ingest_ts >= watermark`; an insertion exactly equal to the watermark appears once after final UNION
+  dedup, never zero or twice.
+- Every Exposure serving source requires injected `app_id` and `environment_id` predicates before
+  snapshot read, watermark aggregation, raw-tail read, or final aggregation.
+- Exposure tail `EXPLAIN` fixtures require insertion-month partition pruning and the
+  `(app_id, environment_id, ingest_ts, ...)` primary-key prefix; rows read may scale with the scoped
+  post-snapshot tail, not total retained event-time history.
+- Replacing the same Exposure snapshot twice and rebuilding `cp_srm_counts` and
+  `cp_activation_rate` leaves identical rollup counts. No rollup materialized view is attached to
+  either `raw_events` or `deduped_exposures`.
+- For Metric and Web rows, Tinybird, not the producer, stamps `ingest_ts` at physical insertion with
+  `DEFAULT now64(6)`.
+- Late Metric/Web queue delivery and manual DLQ replay receive a new physical `ingest_ts` and dedup
+  correctly through `argMinMerge` even when `server_received_at` is old.
 
 ### Run Start decision spec
 

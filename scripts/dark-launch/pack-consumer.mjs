@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +18,9 @@ export function installPackedSdkConsumer() {
 
   cpSync(fixtureRoot, consumerRoot, { recursive: true });
 
-  execFileSync("pnpm", ["run", "build"], { cwd: sdkRoot, stdio: "inherit" });
+  if (!existsSync(join(sdkRoot, "dist/index.js"))) {
+    throw new Error("@splitch/sdk dist is missing; run its Turbo build before the CLI test");
+  }
   const packOutput = execFileSync("node", ["scripts/pack-release.mjs", packDir], {
     cwd: sdkRoot,
     encoding: "utf8",
@@ -28,7 +30,11 @@ export function installPackedSdkConsumer() {
     throw new Error(`pack-release did not report a tarball path:\n${packOutput}`);
   }
   const tarballPath = resolve(packDir, tarballName);
-  execFileSync("npm", ["install", tarballPath], { cwd: consumerRoot, stdio: "inherit" });
+  execFileSync("npm", ["install", tarballPath], {
+    cwd: consumerRoot,
+    stdio: "inherit",
+    env: { ...process.env, npm_config_cache: join(consumerRoot, ".npm-cache") },
+  });
 
   const packedManifest = JSON.parse(
     readFileSync(join(consumerRoot, "node_modules/@splitch/sdk/package.json"), "utf8"),

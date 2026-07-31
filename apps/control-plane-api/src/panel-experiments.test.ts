@@ -1,7 +1,15 @@
 import { SCOPED_SERVICE_IDENTITY_HEADER } from "@splitch/control-plane-sdk/panel-experiments";
+import type { StatsOutput } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
 import { panelExperimentDetail, panelExperimentsList } from "./panel-experiments";
+import {
+  analysisEnvelope,
+  experimentRow,
+  type PanelExperimentIds,
+  runRow,
+  statsOutput,
+} from "./panel-experiments-test-fixtures";
 
 const APP_ID = "app_panel_list";
 const ENVIRONMENT_ID = "env_panel_list";
@@ -9,9 +17,22 @@ const ACTOR_ID = "user_panel_list";
 const EXPERIMENT_ID = "exp_panel_list";
 const RUN_ID = "run_panel_list";
 
+const ids: PanelExperimentIds = {
+  appId: APP_ID,
+  environmentId: ENVIRONMENT_ID,
+  experimentId: EXPERIMENT_ID,
+  latestRunId: RUN_ID,
+  previousRunId: "run_panel_previous",
+  actorId: ACTOR_ID,
+  flagId: "flag_panel_list",
+  orgId: "org_panel_list",
+};
+
 describe("panel Experiments composite read", () => {
   it("rechecks live scope and requests health for the exact live Run", async () => {
-    const analysis = vi.fn(async (_request: Request) => Response.json(statsOutput()));
+    const analysis = vi.fn(async (_request: Request) =>
+      Response.json(analysisEnvelope(RUN_ID, allHealthFlagsFiring())),
+    );
     const response = await panelExperimentsList(
       { repo: repository(), analysis: { fetch: analysis } as unknown as Fetcher },
       { actorId: ACTOR_ID, appId: APP_ID, environmentId: ENVIRONMENT_ID },
@@ -43,6 +64,29 @@ describe("panel Experiments composite read", () => {
       environmentId: ENVIRONMENT_ID,
       experimentId: EXPERIMENT_ID,
       runId: RUN_ID,
+    });
+  });
+
+  /**
+   * List health and the ship gate read the same decision family. If health only
+   * looked at `arm_results`, a Run whose decision lives in a Primary Dimension
+   * slice would render "Collecting data" while the gate was ready to ship it.
+   */
+  it.each([
+    ["primary", true],
+    ["secondary", false],
+  ] as const)("reads a significant %s Dimension slice as reached=%s", async (cls, reached) => {
+    const analysis = vi.fn(async (_request: Request) =>
+      Response.json(analysisEnvelope(RUN_ID, sliceOnlySignificance(cls))),
+    );
+
+    const response = await panelExperimentsList(
+      { repo: repository(), analysis: { fetch: analysis } as unknown as Fetcher },
+      { actorId: ACTOR_ID, appId: APP_ID, environmentId: ENVIRONMENT_ID },
+    );
+
+    expect(await response.json()).toMatchObject({
+      items: [{ health: { significanceReached: reached } }],
     });
   });
 
@@ -102,6 +146,7 @@ describe("panel Experiments composite read", () => {
           id: RUN_ID,
           runNumber: 2,
           allocation: { control: 70, treatment: 30 },
+          controlVariantId: "variant_control",
           variantsJson: JSON.stringify([
             { id: "variant_control", name: "control", value: false },
             { id: "variant_treatment", name: "treatment", value: true },
@@ -156,111 +201,33 @@ function repository(
     },
     flags: {
       flags: { findMany: vi.fn(async () => [{ id: "flag_panel_list", name: "Checkout Flag" }]) },
+      listVariants: vi.fn(async () => [
+        { id: "variant_control", name: "control" },
+        { id: "variant_treatment", name: "treatment" },
+      ]),
+      getFlagConfig: vi.fn(async () => ({
+        availableVariantNames: JSON.stringify(["control", "treatment"]),
+      })),
     },
     experiments: {
-      listExperiments: vi.fn(async () => [experimentRow()]),
-      getExperiment: vi.fn(async () => experimentRow()),
-      listRunsForExperiment: vi.fn(async () => [runRow(1), runRow(2)]),
+      metrics: {
+        findMany: vi.fn(async () => [{ id: "metric_signup", name: "Signup" }]),
+      },
+      listExperiments: vi.fn(async () => [experimentRow(ids)]),
+      getExperiment: vi.fn(async () => experimentRow(ids)),
+      listRunsForExperiment: vi.fn(async () => [runRow(ids, 1), runRow(ids, 2)]),
     },
   } as unknown as Repository;
 }
 
-function experimentRow() {
-  return {
-    id: EXPERIMENT_ID,
-    appId: APP_ID,
-    environmentId: ENVIRONMENT_ID,
-    key: "checkout-test",
-    flagId: "flag_panel_list",
-    name: "Checkout Test",
-    description: null,
-    hypothesis: null,
-    status: "running",
-    targetingKeyField: "userId",
-    targetingKeyType: "user",
-    confidenceLevel: 0.95,
-    defaultVariantId: "variant_control",
-    metrics: "[]",
-    guardrailMetrics: "[]",
-    activationMetricId: null,
-    conversionWindowMs: 0,
-    dimensions: "[]",
-    draftAllocation: null,
-    draftSalt: null,
-    draftTargetingRules: null,
-    draftSegmentIds: null,
-    liveRunId: RUN_ID,
-    createdAt: "2026-07-18T00:00:00.000Z",
-    updatedAt: "2026-07-18T00:00:00.000Z",
-  };
-}
-
-function runRow(runNumber: 1 | 2) {
-  const latest = runNumber === 2;
-  return {
-    id: latest ? RUN_ID : "run_panel_previous",
-    appId: APP_ID,
-    environmentId: ENVIRONMENT_ID,
-    experimentId: EXPERIMENT_ID,
-    runNumber,
-    status: latest ? "running" : "ended",
-    targetingKeyField: "userId",
-    targetingKeyType: "user",
-    salt: latest ? "salt-2" : "salt-1",
-    allocation: JSON.stringify(
-      latest ? { control: 70, treatment: 30 } : { control: 50, treatment: 50 },
-    ),
-    variantSet: JSON.stringify([
-      { id: "variant_control", name: "control", value: false },
-      { id: "variant_treatment", name: "treatment", value: true },
-    ]),
-    targetingRules: "[]",
-    confidenceLevel: 0.95,
-    horizon: "sequential",
-    targetN: null,
-    sampleSizeLocked: null,
-    decisionFamily: "[]",
-    guardrailDecisions: "[]",
-    configHash: latest ? "sha256:two" : "sha256:one",
-    startedAt: latest ? "2026-07-19T00:00:00.000Z" : "2026-07-18T00:00:00.000Z",
-    endedAt: latest ? null : "2026-07-18T23:00:00.000Z",
-    startReason: latest ? "Increase treatment traffic" : null,
-    endReason: latest ? null : "Prepared a larger treatment allocation",
-    createdAt: latest ? "2026-07-19T00:00:00.000Z" : "2026-07-18T00:00:00.000Z",
-    createdBy: ACTOR_ID,
-  };
-}
-
-function statsOutput() {
-  return {
-    arm_results: [
-      {
-        variant: "treatment",
-        metric_id: "conversion",
-        sample_size_n: 100,
-        point_estimate: 0.8,
-        relative_lift_pct: 100,
-        ci_lower: 50,
-        ci_upper: 150,
-        p_value: 0.001,
-        is_significant: true,
-        in_bh_family: true,
-        exploratory: false,
-        decision_valid: true,
-        status: "ready",
-        variance_techniques: {
-          winsorized: false,
-          winsorize_pct: null,
-          winsorize_cap: null,
-          cuped_applied: false,
-          cuped_method: null,
-          cuped_attribute: null,
-          cuped_attribute_source: null,
-          cuped_coverage_pct: null,
-          delta_method: false,
-        },
-      },
-    ],
+/**
+ * Every health flag firing at once, so a test that asserts all three cannot pass
+ * on a handler that reads only one of them. Only the branches that differ from
+ * the clean `statsOutput` fixture are spelled out — a hand-rolled copy of the
+ * whole envelope drifts from the shared one and stops proving anything.
+ */
+function allHealthFlagsFiring(): StatsOutput {
+  return statsOutput({
     srm: {
       srm_p_value: 0.001,
       srm_is_mismatch: true,
@@ -282,15 +249,28 @@ function statsOutput() {
         breach_reason: "threshold crossed",
       },
     ],
-    health: {
-      multiple_rate: 0,
-      multiple_count: 0,
-      activation_rates: null,
-      activation_balance_p_value: null,
-      activation_balance_mismatch: null,
-      exposure_counts: { control: 100, treatment: 10 },
-      deduped_counts: { control: 100, treatment: 10 },
-      low_n_warning: false,
-    },
+  });
+}
+
+/** Nothing significant at the top level; the only significant arm is in a slice. */
+function sliceOnlySignificance(dimensionClass: "primary" | "secondary"): StatsOutput {
+  const base = statsOutput();
+  const [arm] = base.arm_results;
+  return {
+    ...base,
+    arm_results: [{ ...arm, is_significant: false, p_value: 0.4 }],
+    dimension_results: [
+      {
+        dimension_id: "country",
+        dimension_value: "US",
+        class: dimensionClass,
+        arm_results: [arm],
+        sample_size_n: 100,
+        low_n_warning: false,
+        in_bh_family: dimensionClass === "primary",
+        exploratory: dimensionClass !== "primary",
+        decision_valid: dimensionClass === "primary",
+      },
+    ],
   };
 }

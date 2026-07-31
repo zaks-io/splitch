@@ -21,6 +21,8 @@ jobs:
     if: startsWith(github.event.release.tag_name, 'sdk-v')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    outputs:
+      sdk_version: ${{ steps.target.outputs.sdk_version }}
     steps:
       - name: Harden runner
         uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
@@ -50,7 +52,7 @@ jobs:
         id: target
         run: |
           set -euo pipefail
-          target="$(node scripts/sdk-release/resolve-version.mjs "$GITHUB_WORKSPACE")"
+          target="$(node scripts/release/resolve-version.mjs sdk "$GITHUB_WORKSPACE")"
           {
             echo "sdk_version=$(printf '%s' "$target" | jq -r '.version')"
             echo "sdk_tag=$(printf '%s' "$target" | jq -r '.tag')"
@@ -61,13 +63,13 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           RELEASE_TARGET_COMMITISH: ${{ github.event.release.target_commitish }}
           REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
-        run: node scripts/sdk-release/validate-publish-context.mjs "$GITHUB_WORKSPACE"
+        run: node scripts/release/validate-publish-context.mjs sdk "$GITHUB_WORKSPACE"
 
       - name: Refresh live release state before npm version check
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/sdk-release/validate-live-publish-state.mjs "$GITHUB_WORKSPACE"
+        run: node scripts/release/validate-live-publish-state.mjs sdk "$GITHUB_WORKSPACE"
 
       - name: Check whether SDK version is already published
         id: npm-version
@@ -76,7 +78,7 @@ jobs:
         working-directory: packages/sdk
         run: |
           set -euo pipefail
-          already_published="$(node "$GITHUB_WORKSPACE/scripts/sdk-release/check-published-version.mjs" "$SDK_VERSION")"
+          already_published="$(node "$GITHUB_WORKSPACE/scripts/release/check-published-version.mjs" sdk "$SDK_VERSION")"
           echo "already_published=$already_published" >> "$GITHUB_OUTPUT"
           if [ "$already_published" = "true" ]; then
             echo "Skipping immutable npm version @splitch/sdk@$SDK_VERSION: it already exists"
@@ -130,4 +132,56 @@ jobs:
             echo '- Provenance: npm trusted publishing/OIDC with npm publish --provenance'
             echo '- npm dist-tag: latest'
             echo "- Decision: $decision"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  linear-release:
+    name: Track @splitch/sdk Linear Release
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    needs: publish
+    environment: production
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check Linear release credential
+        env:
+          SDK_LINEAR_ACCESS_KEY: ${{ secrets.SDK_LINEAR_ACCESS_KEY }}
+        run: |
+          if [ -z "$SDK_LINEAR_ACCESS_KEY" ]; then
+            echo "::error::SDK_LINEAR_ACCESS_KEY is required to track @splitch/sdk releases"
+            exit 1
+          fi
+
+      - name: Sync Linear release
+        id: linear-release
+        uses: linear/linear-release-action@c0cb8354a362c24c6d3e0948f37fd66d07588e3f # v0.14.5
+        with:
+          access_key: ${{ secrets.SDK_LINEAR_ACCESS_KEY }}
+          name: "@splitch/sdk ${{ needs.publish.outputs.sdk_version }}"
+          version: ${{ needs.publish.outputs.sdk_version }}
+          include_paths: packages/sdk/**,packages/contracts/**
+          links: |
+            GitHub Release=${{ github.event.release.html_url }}
+            npm=https://www.npmjs.com/package/@splitch/sdk/v/${{ needs.publish.outputs.sdk_version }}
+            GitHub Actions=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Summary
+        env:
+          LINEAR_RELEASE_URL: ${{ steps.linear-release.outputs.release-url }}
+          SDK_VERSION: ${{ needs.publish.outputs.sdk_version }}
+        run: |
+          if [ -z "$LINEAR_RELEASE_URL" ]; then
+            echo "::error::Linear did not return an @splitch/sdk release URL"
+            exit 1
+          fi
+          {
+            echo "## @splitch/sdk Linear release"
+            echo
+            echo "- Version: \`$SDK_VERSION\`"
+            echo "- Linear: $LINEAR_RELEASE_URL"
           } >> "$GITHUB_STEP_SUMMARY"

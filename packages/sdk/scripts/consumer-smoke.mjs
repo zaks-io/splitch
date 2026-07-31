@@ -2,7 +2,7 @@
 /**
  * Consumer smoke: install the packed SDK tarball outside the monorepo workspace
  * and verify ESM runtime import, TypeScript declaration resolution, and the
- * exact docs/spec/quickstart.md §8 fenced snippet against packed public
+ * exact docs/spec/quickstart.md SDK-section fenced snippet against packed public
  * declarations.
  */
 import { execFileSync } from "node:child_process";
@@ -26,7 +26,11 @@ function run(command, args, options = {}) {
   execFileSync(command, args, {
     cwd: options.cwd ?? consumerRoot,
     stdio: options.stdio ?? "inherit",
-    env: { ...process.env, ...options.env },
+    env: {
+      ...process.env,
+      npm_config_cache: join(consumerRoot, ".npm-cache"),
+      ...options.env,
+    },
   });
 }
 

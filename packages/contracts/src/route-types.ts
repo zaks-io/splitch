@@ -1,5 +1,7 @@
 import { z } from "@hono/zod-openapi";
+import { AppSchema, type ClientKeySchema, EnvironmentSchema } from "./leaf-schemas-runtime";
 import type {
+  AppAttentionRollupResponseSchema,
   CreateAppRequestSchema,
   CreateAppResponseSchema,
   CreateCredentialResponseSchema,
@@ -8,31 +10,34 @@ import type {
   OrganizationResponseSchema,
   PatchAppRequestSchema,
 } from "./resource-envelopes-account";
-import { AppSchema, type ClientKeySchema, EnvironmentSchema } from "./leaf-schemas-runtime";
 import {
   type CreateExperimentRequestSchema,
   ExperimentResponseSchema,
   type PatchExperimentRequestSchema,
-  RunResponseSchema,
   type StartRunRequestSchema,
+  type StartRunResponseSchema,
 } from "./resource-envelopes-experiment";
-import {
-  type CreateFlagRequestSchema,
-  type CreateVariantRequestSchema,
+import type {
+  CreateFlagRequestSchema,
+  CreateVariantRequestSchema,
+  FlagListResponseSchema,
+  FlagMutationResponseSchema,
   FlagResponseSchema,
-  type PatchFlagRequestSchema,
-  type PatchVariantRequestSchema,
+  PatchFlagRequestSchema,
+  PatchVariantRequestSchema,
 } from "./resource-envelopes-flag";
 import type {
   ApiKeyParams,
   ApiKeyRevokeResponseSchema,
   AppParams,
+  ApprovalRequestParams,
   ClientKeyRotateResponseSchema,
   CreateApiKeyRequestSchema,
   CreateEnvironmentRequestSchema,
   EnvFlagParams,
   EnvParams,
   ExperimentParams,
+  FlagConfigMutationResponseSchema,
   FlagConfigResponseSchema,
   FlagParams,
   FlagVariantParams,
@@ -45,6 +50,12 @@ import type {
   PromoteResponseSchema,
   ReplaceTargetingRulesRequestSchema,
 } from "./routes/route-shapes";
+import {
+  ApprovalRequestListQuerySchema,
+  ApprovalRequestSchema,
+  ReviewApprovalRequestSchema,
+} from "./routes/route-shapes-approval-request";
+import { paginatedResponse } from "./wire-envelopes-core";
 
 /**
  * Typed flat inputs/outputs for representative Control Plane operations.
@@ -52,13 +63,8 @@ import type {
  * shapes in the SDK.
  */
 
-const FlagListResponseSchema = z.object({ items: z.array(FlagResponseSchema) });
 const ExperimentListResponseSchema = z.object({ items: z.array(ExperimentResponseSchema) });
-const StartRunResponseSchema = z.object({
-  experimentId: z.string(),
-  run: RunResponseSchema,
-  previousRunId: z.string().nullable(),
-});
+const ApprovalRequestListResponseSchema = paginatedResponse(ApprovalRequestSchema);
 const DeletedResponseSchema = z.object({ deleted: z.literal(true) });
 
 export type FlagsListInput = z.infer<typeof AppParams>;
@@ -75,7 +81,16 @@ export type FlagConfigGetInput = z.infer<typeof EnvFlagParams>;
 export type FlagConfigGetOutput = z.infer<typeof FlagConfigResponseSchema>;
 export type FlagConfigUpdateInput = z.infer<typeof EnvFlagParams> &
   z.infer<typeof PatchFlagConfigRequestSchema>;
-export type FlagConfigUpdateOutput = z.infer<typeof FlagConfigResponseSchema>;
+export type FlagConfigUpdateOutput = z.infer<typeof FlagConfigMutationResponseSchema>;
+
+export type ApprovalRequestsListInput = z.infer<typeof AppParams> &
+  z.infer<typeof ApprovalRequestListQuerySchema>;
+export type ApprovalRequestsListOutput = z.infer<typeof ApprovalRequestListResponseSchema>;
+export type ApprovalRequestsGetInput = z.infer<typeof ApprovalRequestParams>;
+export type ApprovalRequestsGetOutput = z.infer<typeof ApprovalRequestSchema>;
+export type ApprovalRequestReviewsCreateInput = z.infer<typeof ApprovalRequestParams> &
+  z.infer<typeof ReviewApprovalRequestSchema>;
+export type ApprovalRequestReviewsCreateOutput = z.infer<typeof ApprovalRequestSchema>;
 
 export type ExperimentsListInput = z.infer<typeof EnvParams>;
 export type ExperimentsListOutput = z.infer<typeof ExperimentListResponseSchema>;
@@ -98,13 +113,13 @@ export type FlagVariantsCreateInput = z.infer<typeof FlagParams> &
 export type FlagVariantsCreateOutput = z.infer<typeof FlagResponseSchema>;
 export type FlagVariantsUpdateInput = z.infer<typeof FlagVariantParams> &
   z.infer<typeof PatchVariantRequestSchema>;
-export type FlagVariantsUpdateOutput = z.infer<typeof FlagResponseSchema>;
+export type FlagVariantsUpdateOutput = z.infer<typeof FlagMutationResponseSchema>;
 export type FlagVariantsDeleteInput = z.infer<typeof FlagVariantParams>;
 export type FlagVariantsDeleteOutput = z.infer<typeof FlagResponseSchema>;
 
 export type FlagTargetingRulesReplaceInput = z.infer<typeof EnvFlagParams> &
   z.infer<typeof ReplaceTargetingRulesRequestSchema>;
-export type FlagTargetingRulesReplaceOutput = z.infer<typeof FlagConfigResponseSchema>;
+export type FlagTargetingRulesReplaceOutput = z.infer<typeof FlagConfigMutationResponseSchema>;
 
 export type FlagsPromoteInput = z.infer<typeof PromoteParams> &
   z.infer<typeof PromoteRequestSchema>;
@@ -128,6 +143,9 @@ export type AppsUpdateInput = z.infer<typeof AppParams> & z.infer<typeof PatchAp
 export type AppsUpdateOutput = z.infer<typeof AppSchema>;
 export type AppsDeleteInput = z.infer<typeof AppParams>;
 export type AppsDeleteOutput = z.infer<typeof DeletedResponseSchema>;
+
+export type AppAttentionRollupGetInput = z.infer<typeof AppParams>;
+export type AppAttentionRollupGetOutput = z.infer<typeof AppAttentionRollupResponseSchema>;
 
 export type EnvironmentsListInput = z.infer<typeof AppParams>;
 export type EnvironmentsListOutput = z.infer<typeof EnvironmentListResponseSchema>;
@@ -177,12 +195,26 @@ export interface RouteTypeMap {
   apps_get: { input: AppsGetInput; output: AppsGetOutput };
   apps_update: { input: AppsUpdateInput; output: AppsUpdateOutput };
   apps_delete: { input: AppsDeleteInput; output: AppsDeleteOutput };
+  app_attention_rollup_get: {
+    input: AppAttentionRollupGetInput;
+    output: AppAttentionRollupGetOutput;
+  };
 
   environments_list: { input: EnvironmentsListInput; output: EnvironmentsListOutput };
   environments_create: { input: EnvironmentsCreateInput; output: EnvironmentsCreateOutput };
   environments_get: { input: EnvironmentsGetInput; output: EnvironmentsGetOutput };
   environments_update: { input: EnvironmentsUpdateInput; output: EnvironmentsUpdateOutput };
   environments_delete: { input: EnvironmentsDeleteInput; output: EnvironmentsDeleteOutput };
+
+  approval_requests_list: {
+    input: ApprovalRequestsListInput;
+    output: ApprovalRequestsListOutput;
+  };
+  approval_requests_get: { input: ApprovalRequestsGetInput; output: ApprovalRequestsGetOutput };
+  approval_request_reviews_create: {
+    input: ApprovalRequestReviewsCreateInput;
+    output: ApprovalRequestReviewsCreateOutput;
+  };
 
   client_key_get: { input: ClientKeyGetInput; output: ClientKeyGetOutput };
   client_key_update: { input: ClientKeyUpdateInput; output: ClientKeyUpdateOutput };

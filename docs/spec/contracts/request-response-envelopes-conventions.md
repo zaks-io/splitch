@@ -77,6 +77,13 @@ is stable per endpoint:
   100M+ rows. Consumers render "showing X (more available)", never "page N of M", when `total` is
   `null`.
 
+Where a list is **projected after the store returns it** — a status the store does not persist and
+the API computes on read, such as an Approval Request rendering `stale` — `total` counts the rows
+the store matched, so a filter on a projected field narrows `items` without narrowing `total`. That
+is the one case where `items.length` and `total` disagree for reasons other than paging. Agents must
+still loop on `cursor`; a projection-filtered list can legitimately return an empty page with a
+non-null `cursor` and a non-zero `total`.
+
 **Agent iteration.** Loop on `cursor` (`while (cursor !== null)`), not on `total`. `total` is for UI
 display and may be `null`; the `cursor` is the authoritative end-of-list signal on every endpoint.
 

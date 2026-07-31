@@ -6,6 +6,7 @@ configuration mutations.
 ## Owns
 
 - App, Environment, and Flag Configuration authoring.
+- App-level Event Definition and immutable version authoring.
 - Promotion and Environment Policy gates.
 - Approval Request, Review, and Confirmation.
 - Credential provisioning and revocation semantics.
@@ -44,6 +45,13 @@ measurement. Promotion is subject to the target Environment's Policy.
 
 Avoid: deploy; ship; publish; push.
 
+**Event Definition**:
+An App-level schema for one named Metric Event or Web Event with an immutable family selected at
+creation.
+
+Avoid: separate Metric Event and Web Event definition catalogs; changing an Event Definition's
+family after creation.
+
 ## Policy and review terms
 
 **Environment Policy**:
@@ -63,19 +71,22 @@ and configurable, not hardcoded.
 Avoid: guardrail for policy; a separate approval flow; hardcoding prod as special.
 
 **Approval Request**:
-The pending-change record for a proposed production-affecting change while it awaits Review. Carries
-the diff against the target Environment's current config, proposer, status
-(`pending -> applied | declined`), and audit trail. It exists from day one even under `confirm`, where
-the proposer creates and self-reviews the request in one action. Every gated change type becomes an
-Approval Request: Promotion, direct prod Flag edit, Variant or value change, and Start an Experiment
-Run. This lets splitch grow into second-person approval without a domain rewrite.
+The durable pending-change record for a Policy-gated mutation while it awaits Review. Carries the
+immutable proposed-vs-current diff, target version, Policy context, proposer, status
+(`pending -> applied | declined | stale`), application result, and audit trail. It exists from day
+one under `confirm`, where the proposer creates and self-reviews the request in one action. Every
+gated change type becomes an Approval Request: Promotion, direct Flag Configuration edit, Variant
+value change, and Start an Experiment Run. This lets splitch grow into second-person approval
+without a domain rewrite.
 
 Avoid: change proposal; change request; pending change.
 
 **Review**:
-Acting on an Approval Request: approve-and-apply, approve-without-applying, or decline. Who may
-Review is determined by Environment Policy. Under `confirm`, the proposer may self-review. Under
-future `approve`, self-review is disallowed.
+Acting on an Approval Request: `approve_and_apply` or decline. V1 has no approve-only action and no
+deferred application. Who may Review is determined by Environment Policy. Under `confirm`, the
+proposer may self-review. Under future `approve`, self-review is disallowed. Review authorization
+and target-version validation happen before mutation; a changed target makes the request terminal
+`stale`.
 
 The Policy level is only the permission to self-review. Moving from confirm to approval is a
 policy/role change, not a new pipeline.
@@ -103,11 +114,11 @@ Avoid: using it as the client-side SDK credential.
 
 **Client Key**:
 The public, non-secret identifier a client-side SDK presents. Safe to embed in shipped client code.
-It can evaluate Flags and submit strictly validated, write-only Metric Events for its App and
-Environment. It cannot read full flag config, Targeting Rules, Event Definitions, Metric Events,
-mint keys, or reach another App. Abuse is bounded at the edge by controls such as origin/referrer
-allow-listing and rate limiting, not by hiding the value. Control-plane surfaces may retrieve and
-share it freely.
+It can evaluate Flags and submit strictly validated, write-only Metric Events and Web Events for
+its App and Environment. It cannot read full flag config, Targeting Rules, Event Definitions,
+Metric Events, Web Events, mint keys, or reach another App. Abuse is bounded at the edge by controls
+such as origin/referrer allow-listing and rate limiting, not by hiding the value. Control-plane
+surfaces may retrieve and share it freely.
 
 Avoid: treating it as secret; using it for server-side full access.
 
