@@ -3,6 +3,16 @@
   "version": "0.1.1",
   "description": "Agent-first splitch CLI for managing feature flags and experiments",
   "license": "Apache-2.0",
+  "homepage": "https://splitch.dev",
+  "keywords": [
+    "feature-flags",
+    "experiments",
+    "ab-testing",
+    "openfeature",
+    "edge",
+    "cli",
+    "splitch"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/zaks-io/splitch.git",

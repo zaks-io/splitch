@@ -46,6 +46,7 @@ function assertDirectNpmPack() {
       listing: listTarballFiles(tarballPath),
       manifestText: readTarballFile(tarballPath, "package/package.json"),
       cliJs: readTarballFile(tarballPath, "package/dist/cli.js"),
+      readme: readTarballFile(tarballPath, "package/README.md"),
     });
   } finally {
     rmSync(destination, { recursive: true, force: true });

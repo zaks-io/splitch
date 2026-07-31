@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const EXPECTED_DEPENDENCIES = ["@hono/zod-openapi", "@sentry/node", "hono", "zod"];
 const REQUIRED_FILES = [
   "package/LICENSE.md",
+  "package/README.md",
   "package/dist/cli.js",
   "package/dist/index.d.ts",
   "package/dist/index.js",
@@ -89,7 +90,7 @@ export function readTarballFile(tarballPath, entryPath) {
   return execFileSync("tar", ["-xOf", tarballPath, entryPath], { encoding: "utf8" });
 }
 
-export function assertReleaseTarballContents({ listing, manifestText, cliJs }) {
+export function assertReleaseTarballContents({ listing, manifestText, cliJs, readme }) {
   for (const required of REQUIRED_FILES) {
     if (!listing.includes(required)) {
       throw new Error(`release tarball is missing ${required}`);
@@ -111,6 +112,7 @@ export function assertReleaseTarballContents({ listing, manifestText, cliJs }) {
   if (!cliJs.startsWith("#!/usr/bin/env node\n")) {
     throw new Error("dist/cli.js must start with #!/usr/bin/env node");
   }
+  assertPublicReadme(readme);
 
   const manifest = JSON.parse(manifestText);
   if (manifest.devDependencies !== undefined) {
@@ -147,6 +149,21 @@ export function assertReleaseTarballContents({ listing, manifestText, cliJs }) {
   }
 }
 
+function assertPublicReadme(readme) {
+  const nonPublicLink = readme.match(/\]\(((?!https:\/\/)[^)]+)\)/);
+  if (nonPublicLink) {
+    throw new Error(`release README contains non-public link: ${nonPublicLink[1]}`);
+  }
+  const internalReference = readme.match(
+    /(?:^|[\s`(])(?:\.\.\/|\.\/|docs\/|apps\/|packages\/|\.github\/|AGENTS\.md|CONTEXT\.md)|(?:ADR|SPL)-\d+/m,
+  );
+  if (internalReference) {
+    throw new Error(
+      `release README contains repo-internal reference: ${internalReference[0].trim()}`,
+    );
+  }
+}
+
 export function assertDryRunListing(packOutput) {
   const lines = packOutput.split("\n").map((line) => line.trim());
   const contentsIndex = lines.findIndex(
@@ -170,5 +187,6 @@ export function assertDryRunListing(packOutput) {
     listing,
     manifestText: JSON.stringify(readReleaseManifest(getPackageRoot())),
     cliJs: readFileSync(join(getPackageRoot(), "dist/cli.js"), "utf8"),
+    readme: readFileSync(join(getPackageRoot(), "README.md"), "utf8"),
   });
 }

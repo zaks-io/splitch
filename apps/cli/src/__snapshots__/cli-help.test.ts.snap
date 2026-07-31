@@ -1,0 +1,1552 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`published CLI help > snapshots the root, every group, and every registered subcommand 1`] = `
+{
+  "commands": {
+    "api-keys create": "Mint an API Key (raw secret surfaced once only).
+
+Usage:
+  splitch api-keys create [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  API Key is secret and server-side only; a newly created value is shown once and cannot be read back.
+
+Example:
+  splitch api-keys create --body-json '<json>' --json",
+    "api-keys list": "List API Key metadata (no secrets).
+
+Usage:
+  splitch api-keys list [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  API Key is secret and server-side only; a newly created value is shown once and cannot be read back.
+
+Example:
+  splitch api-keys list --json",
+    "api-keys revoke": "Revoke an API Key.
+
+Usage:
+  splitch api-keys revoke <key-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  API Key is secret and server-side only; a newly created value is shown once and cannot be read back.
+
+Example:
+  splitch api-keys revoke <key-id> --body-json '<json>' --json",
+    "app-attention-rollup get": "Read explicit per-Environment SRM and Guardrail attention for one App.
+
+Usage:
+  splitch app-attention-rollup get [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch app-attention-rollup get --json",
+    "app-privacy export": "Export an App's data.
+
+Usage:
+  splitch app-privacy export [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch app-privacy export --json",
+    "approval-request-reviews create": "Review a pending Approval Request and optionally apply its proposal.
+
+Usage:
+  splitch approval-request-reviews create <id> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch approval-request-reviews create <id> --body-json '<json>' --json",
+    "approval-requests get": "Get one full Approval Request projection.
+
+Usage:
+  splitch approval-requests get <id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch approval-requests get <id> --json",
+    "approval-requests list": "List Approval Requests in an App.
+
+Usage:
+  splitch approval-requests list [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch approval-requests list --json",
+    "apps create": "Create an App (provisions dev + prod Environments and Client Keys).
+
+Usage:
+  splitch apps create <org-id> [flags]
+
+Flags:
+  --org <organization>     [type: string; default: none] Organization ID.
+  --name <name>            [type: string; default: none] Resource name.
+  --key <key>              [type: string; default: none] Resource key.
+  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch apps create <org-id> --body-json '<json>' --json",
+    "apps delete": "Delete an App (blocked while any Experiment is running).
+
+Usage:
+  splitch apps delete [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch apps delete --json",
+    "apps get": "Get one App.
+
+Usage:
+  splitch apps get [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch apps get --json",
+    "apps list": "List the Apps in an organization.
+
+Usage:
+  splitch apps list <org-id> [flags]
+
+Flags:
+  --org <organization>  [type: string; default: none] Organization ID.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch apps list <org-id> --json",
+    "apps update": "Rename an App.
+
+Usage:
+  splitch apps update [flags]
+
+Flags:
+  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>       [type: string; default: none] Resource name.
+  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch apps update --body-json '<json>' --json",
+    "audit-log list": "List an App's audit events (cursor-paginated, Tinybird-backed).
+
+Usage:
+  splitch audit-log list [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch audit-log list --json",
+    "client-key get": "Get the Environment's public Client Key (never 404s for a live Env).
+
+Usage:
+  splitch client-key get [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  Client Key is public and safe for untrusted clients; flags verify fetches it automatically.
+
+Example:
+  splitch client-key get --json",
+    "client-key rotate": "Revoke the current Client Key and create its replacement.
+
+Usage:
+  splitch client-key rotate [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  Client Key is public and safe for untrusted clients; flags verify fetches it automatically.
+
+Example:
+  splitch client-key rotate --json",
+    "client-key update": "Update the Client Key's origin allow-list / rate limit.
+
+Usage:
+  splitch client-key update [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  Client Key is public and safe for untrusted clients; flags verify fetches it automatically.
+
+Example:
+  splitch client-key update --body-json '<json>' --json",
+    "current-user delete": "Request deletion of the authenticated User.
+
+Usage:
+  splitch current-user delete [flags]
+
+Flags:
+  --json      [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch current-user delete --json",
+    "current-user-privacy export": "Export the authenticated User's data.
+
+Usage:
+  splitch current-user-privacy export [flags]
+
+Flags:
+  --json      [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch current-user-privacy export --json",
+    "entity-privacy delete": "Delete an Entity's data (tombstones + queued physical purge).
+
+Usage:
+  splitch entity-privacy delete [flags]
+
+Flags:
+  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch entity-privacy delete --body-json '<json>' --json",
+    "entity-privacy export": "Export an Entity's data-subject records (Targeting Key hashed server-side).
+
+Usage:
+  splitch entity-privacy export [flags]
+
+Flags:
+  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch entity-privacy export --body-json '<json>' --json",
+    "env-policy get": "Get the selected Environment Policy.
+
+Usage:
+  splitch env-policy get [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch env-policy get --json",
+    "env-policy set": "Update the selected Environment Policy.
+
+Usage:
+  splitch env-policy set [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --name <name>        [type: string; default: none] Resource name.
+  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch env-policy set --body-json '<json>' --json",
+    "envs create": "Create an Environment (auto-provisions its Client Key).
+
+Usage:
+  splitch envs create [flags]
+
+Flags:
+  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>       [type: string; default: none] Resource name.
+  --key <key>         [type: string; default: none] Resource key.
+  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch envs create --body-json '<json>' --json",
+    "envs delete": "Delete an Environment (blocked if running or last Environment).
+
+Usage:
+  splitch envs delete [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch envs delete --json",
+    "envs get": "Get one Environment (includes its inline Policy).
+
+Usage:
+  splitch envs get [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch envs get --json",
+    "envs list": "List an App's Environments.
+
+Usage:
+  splitch envs list [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch envs list --json",
+    "envs update": "Rename an Environment or edit its Policy.
+
+Usage:
+  splitch envs update [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --name <name>        [type: string; default: none] Resource name.
+  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch envs update --body-json '<json>' --json",
+    "experiment-results get": "Get an Experiment's results envelope (Run id, Control Variant, StatsOutput).
+
+Usage:
+  splitch experiment-results get <experiment-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch experiment-results get <experiment-id> --json",
+    "experiment-results post": "Get an Experiment's results envelope (Run id, Control Variant, StatsOutput).
+
+Usage:
+  splitch experiment-results post <experiment-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch experiment-results post <experiment-id> --body-json '<json>' --json",
+    "experiments create": "Create an Experiment draft.
+
+Usage:
+  splitch experiments create [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --name <name>            [type: string; default: none] Resource name.
+  --key <key>              [type: string; default: none] Resource key.
+  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch experiments create --body-json '<json>' --json",
+    "experiments delete": "Soft-delete an Experiment (blocked while running).
+
+Usage:
+  splitch experiments delete <experiment-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch experiments delete <experiment-id> --json",
+    "experiments get": "Get an Experiment (includes live Run id, draft config).
+
+Usage:
+  splitch experiments get <experiment-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch experiments get <experiment-id> --json",
+    "experiments list": "List Experiments in an Environment.
+
+Usage:
+  splitch experiments list [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch experiments list --json",
+    "experiments start": "Start the draft as a new Run; ends any running Run (Policy-gated).
+
+Usage:
+  splitch experiments start <experiment-id> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch experiments start <experiment-id> --body-json '<json>' --json",
+    "experiments update": "Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED).
+
+Usage:
+  splitch experiments update <experiment-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --name <name>        [type: string; default: none] Resource name.
+  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch experiments update <experiment-id> --body-json '<json>' --json",
+    "flag-config get": "Get a Flag's per-Environment Configuration.
+
+Usage:
+  splitch flag-config get <flag-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-config get <flag-id> --json",
+    "flag-config update": "Update enabled state / available Variants (Policy-gated change types).
+
+Usage:
+  splitch flag-config update <flag-id> [flags]
+
+Flags:
+  --app <app>               [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>       [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --enabled <boolean>       [type: boolean; default: current value] Set the Flag enabled state.
+  --rollout <percent|none>  [type: number | none; default: current value] Set or clear the baseline rollout.
+  --body-json <json>        [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>   [type: string; default: generated] Stable retry key for this mutation.
+  --confirm                 [type: boolean; default: false] Approve and apply a Policy-gated change.
+  --json                    [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-config update <flag-id> --body-json '<json>' --json",
+    "flag-targeting-rules replace": "Full-replace this Environment's ordered Targeting Rule list.
+
+Usage:
+  splitch flag-targeting-rules replace <flag-id> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>      [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-targeting-rules replace <flag-id> --body-json '<json>' --json",
+    "flag-variants create": "Add a Variant to the App-level catalog.
+
+Usage:
+  splitch flag-variants create <flag-id> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>            [type: string; default: none] Resource name.
+  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-variants create <flag-id> --body-json '<json>' --json",
+    "flag-variants delete": "Remove a catalog Variant (blocked if available or in a running Run).
+
+Usage:
+  splitch flag-variants delete <flag-id> <variant-name> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-variants delete <flag-id> <variant-name> --json",
+    "flag-variants update": "Update a catalog Variant (value is Run-frozen).
+
+Usage:
+  splitch flag-variants update <flag-id> <variant-name> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>            [type: string; default: none] Resource name.
+  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --confirm                [type: boolean; default: false] Approve and apply a Policy-gated change.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-variants update <flag-id> <variant-name> --body-json '<json>' --json",
+    "flags create": "Create a Flag definition (key, schema, Variant catalog).
+
+Usage:
+  splitch flags create [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>            [type: string; default: none] Resource name.
+  --key <key>              [type: string; default: none] Flag KEY.
+  --variants <names>       [type: comma-separated strings; default: none] Boolean Variant names.
+  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flags create --key checkout --variants on,off --json",
+    "flags delete": "Delete a Flag (blocked if referenced by a running Experiment).
+
+Usage:
+  splitch flags delete <flag-id> [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flags delete <flag-id> --json",
+    "flags get": "Get a Flag definition.
+
+Usage:
+  splitch flags get <flag-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flags get <flag-id> --json",
+    "flags list": "List Flag definitions in an App (bounded; reports its own truncation).
+
+Usage:
+  splitch flags list [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flags list --json",
+    "flags promote": "Promote selected Flag Configuration field-groups between Environments.
+
+Usage:
+  splitch flags promote <flag-id> [flags]
+
+Flags:
+  --app <app>                 [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>         [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --from-environment-id <id>  [type: string; default: none] Source Environment ID.
+  --body-json <json>          [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>     [type: string; default: generated] Stable retry key for this mutation.
+  --confirm                   [type: boolean; default: false] Approve and apply a Policy-gated change.
+  --json                      [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help                  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flags promote <flag-id> --body-json '<json>' --json",
+    "flags test-eval": "Dry-run resolve a Flag (full reason, fires no Exposure, ADR-0026).
+
+Usage:
+  splitch flags test-eval <flag-id> [flags]
+
+Flags:
+  --app <app>            [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --targeting-key <key>  [type: string; default: none] Entity Targeting Key.
+  --context-json <json>  [type: JSON object; default: {"attributes":{}}] Evaluation Context fields.
+  --body-json <json>     [type: JSON object; default: none] Control-plane request fields.
+  --json                 [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help             [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flags test-eval <flag-id> --targeting-key user-123 --json",
+    "flags update": "Update a Flag definition's name/description/schema.
+
+Usage:
+  splitch flags update <flag-id> [flags]
+
+Flags:
+  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>       [type: string; default: none] Resource name.
+  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flags update <flag-id> --body-json '<json>' --json",
+    "flags verify": "Verify a Flag KEY through the data plane without firing an Exposure.
+
+Usage:
+  splitch flags verify <flag-key> [flags]
+
+Flags:
+  --app <app>            [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>    [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --targeting-key <key>  [type: string; default: none] Entity Targeting Key.
+  --context-json <json>  [type: JSON object; default: {"attributes":{}}] Evaluation Context fields.
+  --json                 [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help             [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  Client Key is public and safe for untrusted clients; flags verify fetches it automatically.
+
+Example:
+  splitch flags verify checkout --targeting-key user-123 --json",
+    "metrics create": "Create a Metric (binomial, count, revenue, ratio, guardrail).
+
+Usage:
+  splitch metrics create [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>            [type: string; default: none] Resource name.
+  --key <key>              [type: string; default: none] Resource key.
+  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch metrics create --body-json '<json>' --json",
+    "metrics delete": "Delete a Metric (blocked if referenced by a running Experiment).
+
+Usage:
+  splitch metrics delete <metric-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch metrics delete <metric-id> --json",
+    "metrics get": "Get a Metric.
+
+Usage:
+  splitch metrics get <metric-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch metrics get <metric-id> --json",
+    "metrics list": "List Metrics in an App.
+
+Usage:
+  splitch metrics list [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch metrics list --json",
+    "metrics update": "Update a Metric (decision-valid edits gated by DECISION_LOCKED).
+
+Usage:
+  splitch metrics update <metric-id> [flags]
+
+Flags:
+  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>       [type: string; default: none] Resource name.
+  --key <key>         [type: string; default: none] Resource key.
+  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch metrics update <metric-id> --body-json '<json>' --json",
+    "organization-members add": "Add a member to an organization.
+
+Usage:
+  splitch organization-members add <org-id> [flags]
+
+Flags:
+  --org <organization>  [type: string; default: none] Organization ID.
+  --body-json <json>    [type: JSON object; default: none] Control-plane request fields.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch organization-members add <org-id> --body-json '<json>' --json",
+    "organization-members list": "List organization members.
+
+Usage:
+  splitch organization-members list <org-id> [flags]
+
+Flags:
+  --org <organization>  [type: string; default: none] Organization ID.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch organization-members list <org-id> --json",
+    "organization-members remove": "Remove a member (rejected if removing the last owner).
+
+Usage:
+  splitch organization-members remove <org-id> <user-id> [flags]
+
+Flags:
+  --org <organization>  [type: string; default: none] Organization ID.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch organization-members remove <org-id> <user-id> --json",
+    "organization-members update": "Change a member's role.
+
+Usage:
+  splitch organization-members update <org-id> <user-id> [flags]
+
+Flags:
+  --org <organization>  [type: string; default: none] Organization ID.
+  --body-json <json>    [type: JSON object; default: none] Control-plane request fields.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch organization-members update <org-id> <user-id> --body-json '<json>' --json",
+    "organization-privacy export": "Export an Organization's data.
+
+Usage:
+  splitch organization-privacy export <org-id> [flags]
+
+Flags:
+  --org <organization>  [type: string; default: none] Organization ID.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch organization-privacy export <org-id> --json",
+    "organization-usage get": "Get an Organization's current-month Evaluation usage breakdown.
+
+Usage:
+  splitch organization-usage get <org-id> [flags]
+
+Flags:
+  --org <organization>  [type: string; default: none] Organization ID.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch organization-usage get <org-id> --json",
+    "orgs create": "Create an organization; the calling principal becomes its owner.
+
+Usage:
+  splitch orgs create [flags]
+
+Flags:
+  --name <name>       [type: string; default: none] Resource name.
+  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch orgs create --body-json '<json>' --json",
+    "orgs delete": "Delete an organization (requires a prior dry-run confirmation token).
+
+Usage:
+  splitch orgs delete <org-id> [flags]
+
+Flags:
+  --org <organization>  [type: string; default: none] Organization ID.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch orgs delete <org-id> --json",
+    "orgs get": "Get one organization.
+
+Usage:
+  splitch orgs get <org-id> [flags]
+
+Flags:
+  --org <organization>  [type: string; default: none] Organization ID.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch orgs get <org-id> --json",
+    "orgs list": "List organizations the token can reach (agent cold-start entry).
+
+Usage:
+  splitch orgs list [flags]
+
+Flags:
+  --json      [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch orgs list --json",
+    "orgs update": "Rename an organization or change its plan.
+
+Usage:
+  splitch orgs update <org-id> [flags]
+
+Flags:
+  --org <organization>  [type: string; default: none] Organization ID.
+  --name <name>         [type: string; default: none] Resource name.
+  --body-json <json>    [type: JSON object; default: none] Control-plane request fields.
+  --json                [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help            [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch orgs update <org-id> --body-json '<json>' --json",
+    "privacy-requests get": "Get a privacy request's status (and its job, if any).
+
+Usage:
+  splitch privacy-requests get <request-id> [flags]
+
+Flags:
+  --json      [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch privacy-requests get <request-id> --json",
+    "runs end": "End a running Run.
+
+Usage:
+  splitch runs end <run-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --body-json <json>   [type: JSON object; default: none] Control-plane request fields.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch runs end <run-id> --body-json '<json>' --json",
+    "runs get": "Get a full Run (frozen assignment + measurement config + status).
+
+Usage:
+  splitch runs get <experiment-id> <run-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch runs get <experiment-id> <run-id> --json",
+    "runs list": "List an Experiment's Runs (newest first).
+
+Usage:
+  splitch runs list <experiment-id> [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch runs list <experiment-id> --json",
+    "segments create": "Create a Segment.
+
+Usage:
+  splitch segments create [flags]
+
+Flags:
+  --app <app>              [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>            [type: string; default: none] Resource name.
+  --body-json <json>       [type: JSON object; default: none] Control-plane request fields.
+  --idempotency-key <key>  [type: string; default: generated] Stable retry key for this mutation.
+  --json                   [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help               [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch segments create --body-json '<json>' --json",
+    "segments delete": "Delete a Segment (blocked if referenced by a running Experiment).
+
+Usage:
+  splitch segments delete <segment-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch segments delete <segment-id> --json",
+    "segments get": "Get a Segment.
+
+Usage:
+  splitch segments get <segment-id> [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch segments get <segment-id> --json",
+    "segments list": "List Segments in an App.
+
+Usage:
+  splitch segments list [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch segments list --json",
+    "segments update": "Update a Segment.
+
+Usage:
+  splitch segments update <segment-id> [flags]
+
+Flags:
+  --app <app>         [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --name <name>       [type: string; default: none] Resource name.
+  --body-json <json>  [type: JSON object; default: none] Control-plane request fields.
+  --json              [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help          [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch segments update <segment-id> --body-json '<json>' --json",
+  },
+  "groups": {
+    "api-keys": "Manage api-keys resources.
+
+Usage:
+  splitch api-keys <action> [arguments] [flags]
+
+Commands:
+  list            List API Key metadata (no secrets).
+  create          Mint an API Key (raw secret surfaced once only).
+  revoke          Revoke an API Key.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch api-keys list --help",
+    "app-attention-rollup": "Manage app-attention-rollup resources.
+
+Usage:
+  splitch app-attention-rollup <action> [arguments] [flags]
+
+Commands:
+  get             Read explicit per-Environment SRM and Guardrail attention for one App.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch app-attention-rollup get --help",
+    "app-privacy": "Manage app-privacy resources.
+
+Usage:
+  splitch app-privacy <action> [arguments] [flags]
+
+Commands:
+  export          Export an App's data.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch app-privacy export --help",
+    "approval-request-reviews": "Manage approval-request-reviews resources.
+
+Usage:
+  splitch approval-request-reviews <action> [arguments] [flags]
+
+Commands:
+  create          Review a pending Approval Request and optionally apply its proposal.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch approval-request-reviews create --help",
+    "approval-requests": "Manage approval-requests resources.
+
+Usage:
+  splitch approval-requests <action> [arguments] [flags]
+
+Commands:
+  list            List Approval Requests in an App.
+  get             Get one full Approval Request projection.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch approval-requests list --help",
+    "apps": "Manage apps resources.
+
+Usage:
+  splitch apps <action> [arguments] [flags]
+
+Commands:
+  list            List the Apps in an organization.
+  create          Create an App (provisions dev + prod Environments and Client Keys).
+  get             Get one App.
+  update          Rename an App.
+  delete          Delete an App (blocked while any Experiment is running).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch apps list --help",
+    "audit-log": "Manage audit-log resources.
+
+Usage:
+  splitch audit-log <action> [arguments] [flags]
+
+Commands:
+  list            List an App's audit events (cursor-paginated, Tinybird-backed).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch audit-log list --help",
+    "client-key": "Manage client-key resources.
+
+Usage:
+  splitch client-key <action> [arguments] [flags]
+
+Commands:
+  get             Get the Environment's public Client Key (never 404s for a live Env).
+  update          Update the Client Key's origin allow-list / rate limit.
+  rotate          Revoke the current Client Key and create its replacement.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch client-key get --help",
+    "current-user": "Manage current-user resources.
+
+Usage:
+  splitch current-user <action> [arguments] [flags]
+
+Commands:
+  delete          Request deletion of the authenticated User.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch current-user delete --help",
+    "current-user-privacy": "Manage current-user-privacy resources.
+
+Usage:
+  splitch current-user-privacy <action> [arguments] [flags]
+
+Commands:
+  export          Export the authenticated User's data.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch current-user-privacy export --help",
+    "entity-privacy": "Manage entity-privacy resources.
+
+Usage:
+  splitch entity-privacy <action> [arguments] [flags]
+
+Commands:
+  export          Export an Entity's data-subject records (Targeting Key hashed server-side).
+  delete          Delete an Entity's data (tombstones + queued physical purge).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch entity-privacy export --help",
+    "env-policy": "Manage env-policy resources.
+
+Usage:
+  splitch env-policy <action> [arguments] [flags]
+
+Commands:
+  get             Get the selected Environment Policy.
+  set             Update the selected Environment Policy.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch env-policy get --help",
+    "envs": "Manage envs resources.
+
+Usage:
+  splitch envs <action> [arguments] [flags]
+
+Commands:
+  list            List an App's Environments.
+  create          Create an Environment (auto-provisions its Client Key).
+  get             Get one Environment (includes its inline Policy).
+  update          Rename an Environment or edit its Policy.
+  delete          Delete an Environment (blocked if running or last Environment).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch envs list --help",
+    "experiment-results": "Manage experiment-results resources.
+
+Usage:
+  splitch experiment-results <action> [arguments] [flags]
+
+Commands:
+  get             Get an Experiment's results envelope (Run id, Control Variant, StatsOutput).
+  post            Get an Experiment's results envelope (Run id, Control Variant, StatsOutput).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch experiment-results get --help",
+    "experiments": "Manage experiments resources.
+
+Usage:
+  splitch experiments <action> [arguments] [flags]
+
+Commands:
+  list            List Experiments in an Environment.
+  create          Create an Experiment draft.
+  get             Get an Experiment (includes live Run id, draft config).
+  update          Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED).
+  start           Start the draft as a new Run; ends any running Run (Policy-gated).
+  delete          Soft-delete an Experiment (blocked while running).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch experiments list --help",
+    "flag-config": "Manage flag-config resources.
+
+Usage:
+  splitch flag-config <action> [arguments] [flags]
+
+Commands:
+  get             Get a Flag's per-Environment Configuration.
+  update          Update enabled state / available Variants (Policy-gated change types).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-config get --help",
+    "flag-targeting-rules": "Manage flag-targeting-rules resources.
+
+Usage:
+  splitch flag-targeting-rules <action> [arguments] [flags]
+
+Commands:
+  replace         Full-replace this Environment's ordered Targeting Rule list.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-targeting-rules replace --help",
+    "flag-variants": "Manage flag-variants resources.
+
+Usage:
+  splitch flag-variants <action> [arguments] [flags]
+
+Commands:
+  create          Add a Variant to the App-level catalog.
+  update          Update a catalog Variant (value is Run-frozen).
+  delete          Remove a catalog Variant (blocked if available or in a running Run).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flag-variants create --help",
+    "flags": "Manage flags resources.
+
+Usage:
+  splitch flags <action> [arguments] [flags]
+
+Commands:
+  list            List Flag definitions in an App (bounded; reports its own truncation).
+  create          Create a Flag definition (key, schema, Variant catalog).
+  get             Get a Flag definition.
+  update          Update a Flag definition's name/description/schema.
+  delete          Delete a Flag (blocked if referenced by a running Experiment).
+  promote         Promote selected Flag Configuration field-groups between Environments.
+  test-eval       Dry-run resolve a Flag (full reason, fires no Exposure, ADR-0026).
+  verify          Verify a Flag KEY through the data plane without firing an Exposure.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch flags list --help",
+    "metrics": "Manage metrics resources.
+
+Usage:
+  splitch metrics <action> [arguments] [flags]
+
+Commands:
+  list            List Metrics in an App.
+  create          Create a Metric (binomial, count, revenue, ratio, guardrail).
+  get             Get a Metric.
+  update          Update a Metric (decision-valid edits gated by DECISION_LOCKED).
+  delete          Delete a Metric (blocked if referenced by a running Experiment).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch metrics list --help",
+    "organization-members": "Manage organization-members resources.
+
+Usage:
+  splitch organization-members <action> [arguments] [flags]
+
+Commands:
+  list            List organization members.
+  add             Add a member to an organization.
+  update          Change a member's role.
+  remove          Remove a member (rejected if removing the last owner).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch organization-members list --help",
+    "organization-privacy": "Manage organization-privacy resources.
+
+Usage:
+  splitch organization-privacy <action> [arguments] [flags]
+
+Commands:
+  export          Export an Organization's data.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch organization-privacy export --help",
+    "organization-usage": "Manage organization-usage resources.
+
+Usage:
+  splitch organization-usage <action> [arguments] [flags]
+
+Commands:
+  get             Get an Organization's current-month Evaluation usage breakdown.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch organization-usage get --help",
+    "orgs": "Manage orgs resources.
+
+Usage:
+  splitch orgs <action> [arguments] [flags]
+
+Commands:
+  list            List organizations the token can reach (agent cold-start entry).
+  create          Create an organization; the calling principal becomes its owner.
+  get             Get one organization.
+  update          Rename an organization or change its plan.
+  delete          Delete an organization (requires a prior dry-run confirmation token).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch orgs list --help",
+    "privacy-requests": "Manage privacy-requests resources.
+
+Usage:
+  splitch privacy-requests <action> [arguments] [flags]
+
+Commands:
+  get             Get a privacy request's status (and its job, if any).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch privacy-requests get --help",
+    "runs": "Manage runs resources.
+
+Usage:
+  splitch runs <action> [arguments] [flags]
+
+Commands:
+  list            List an Experiment's Runs (newest first).
+  get             Get a full Run (frozen assignment + measurement config + status).
+  end             End a running Run.
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch runs list --help",
+    "segments": "Manage segments resources.
+
+Usage:
+  splitch segments <action> [arguments] [flags]
+
+Commands:
+  list            List Segments in an App.
+  create          Create a Segment.
+  get             Get a Segment.
+  update          Update a Segment.
+  delete          Delete a Segment (blocked if referenced by a running Experiment).
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch segments list --help",
+  },
+  "meta": {
+    "context": "Show the resolved App and Environment.
+
+Usage:
+  splitch context [flags]
+
+Flags:
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: SPLITCH_ENV or config] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch context --json",
+    "health": "Check the Control Plane API health endpoint.
+
+Usage:
+  splitch health [flags]
+
+Flags:
+  --endpoint <url>  [type: URL; default: http://localhost:8787] Control Plane API base URL.
+  --json            [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help        [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch health --endpoint https://api.splitch.dev --json",
+    "login": "Authenticate the control-plane session with the browser device flow.
+
+Usage:
+  splitch login [--app <app>] [flags]
+
+Flags:
+  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help   [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch login --app checkout",
+    "logout": "Remove the stored control-plane session.
+
+Usage:
+  splitch logout [flags]
+
+Flags:
+  --json      [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch logout --json",
+    "use": "Select the default App and Environment for the current directory.
+
+Usage:
+  splitch use [--app <app>] [--env <environment>] [flags]
+
+Flags:
+  --app <app>          [type: string; default: unchanged] App ID or slug.
+  --env <environment>  [type: string; default: unchanged] Environment ID or slug.
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
+
+Example:
+  splitch use --app checkout --env dev --json",
+  },
+  "root": "splitch - agent-readable feature flag and experimentation control plane
+
+Usage:
+  splitch <command> [flags]
+  splitch <resource> <action> [arguments] [flags]
+
+Commands:
+  login           Authenticate the control-plane session with the browser device flow.
+  logout          Remove the stored control-plane session.
+  use             Select the default App and Environment for the current directory.
+  context         Show the resolved App and Environment.
+  health          Check the Control Plane API health endpoint.
+
+Resource groups:
+  api-keys
+  app-attention-rollup
+  app-privacy
+  approval-request-reviews
+  approval-requests
+  apps
+  audit-log
+  client-key
+  current-user
+  current-user-privacy
+  entity-privacy
+  env-policy
+  envs
+  experiment-results
+  experiments
+  flag-config
+  flag-targeting-rules
+  flag-variants
+  flags
+  metrics
+  organization-members
+  organization-privacy
+  organization-usage
+  orgs
+  privacy-requests
+  runs
+  segments
+
+Flags:
+  -h, --help  [type: boolean; default: false] Show help and exit.
+
+Credential semantics:
+  Client Key  Public data-plane key for browsers, mobile apps, and other untrusted clients.
+  API Key     Secret data-plane key for trusted servers; a newly created value is shown once.
+
+Example:
+  splitch flags list --app checkout --json
+
+Run \`splitch <command> --help\` or \`splitch <resource> <action> --help\` for details.",
+}
+`;

@@ -72,7 +72,7 @@ function parseFlagToken(
   index: number,
   flags: Record<string, string | boolean>,
 ): number {
-  if (key === "--json" || key === "--confirm") {
+  if (key === "--json" || key === "--confirm" || key === "--help") {
     flags[toCamel(key)] = true;
     return index;
   }
