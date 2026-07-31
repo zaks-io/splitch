@@ -143,13 +143,31 @@ staged by `CreateExperimentRequest` or `PatchExperimentRequest` fields such as `
 `variantSet`, `targetingRules`, and `segmentIds`. Start validates that staged draft, freezes it onto
 the new Run, and then consumes the draft so an unchanged second Start returns `EXPERIMENT_NO_DRAFT`.
 
-The request body is lifecycle metadata only:
+The request body is lifecycle metadata plus the Run-only half of the decision spec. `horizon` and
+`sampleSizeLocked` are columns on `runs` and exist on no Experiment row, so there is nowhere else to
+stage them; every other decision-spec field (`confidenceLevel`, the goal Metric family, the Guardrail
+Metric set, `dimensions`) is staged on the Experiment and frozen from there. All of them lock at
+Start (ADR-0002 Run immutability, ADR-0003 assignment-vs-measurement edits):
 
-| Field             | Required | Notes                                                                                               |
-| ----------------- | -------- | --------------------------------------------------------------------------------------------------- |
-| `review`          | no       | `{ action: 'approve_and_apply' }`; inline use of the canonical Review action under `confirm`        |
-| `reason`          | no       | Human or agent-readable Start reason copied onto the Run                                            |
-| `idempotency_key` | yes      | Idempotently owns Approval Request creation and any inline Review; no assignment config is accepted |
+| Field              | Required | Notes                                                                                               |
+| ------------------ | -------- | --------------------------------------------------------------------------------------------------- |
+| `review`           | no       | `{ action: 'approve_and_apply' }`; inline use of the canonical Review action under `confirm`        |
+| `reason`           | no       | Human or agent-readable Start reason copied onto the Run                                            |
+| `horizon`          | no       | `sequential` (default) or `fixed`; frozen onto `runs.horizon`                                       |
+| `sampleSizeLocked` | no       | Required when `horizon = 'fixed'`, refused when `sequential`; frozen onto `runs.sample_size_locked` |
+| `idempotency_key`  | yes      | Idempotently owns Approval Request creation and any inline Review; no assignment config is accepted |
+
+A `fixed` horizon with no `sampleSizeLocked`, or a `sequential` horizon carrying one, is refused with
+`VALIDATION_ERROR` at `["body","sampleSizeLocked"]` rather than defaulted: a silently chosen stopping
+rule would change what the reported result means (ADR-0036). An absent `horizon` is not that case: it
+is the documented default and applies as `sequential`, on the request and equally on an Approval
+proposal that recorded none.
+
+Both values ride the Approval proposal, so a gated Start freezes the horizon the proposer chose, not
+the one in effect at Review time — and both are part of what `idempotency_key` identifies. A Start
+retried under the same key with a different `horizon`, `sampleSizeLocked`, or `reason` is a different
+request and is refused with `IDEMPOTENCY_KEY_CONFLICT` rather than replaying the proposal it does not
+match. Retried with identical intent, it still replays.
 
 There is no `confirm` boolean or confirmation-retry pipeline. The CLI `--confirm` affordance and the
 panel Confirmation modal produce `review.action = 'approve_and_apply'`. The Control Plane then uses

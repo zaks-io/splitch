@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   appSectionRegistry,
+  deferredDestinationAt,
   environmentSwitchHref,
   type NavigationDestination,
   scopedHref,
@@ -99,6 +100,79 @@ describe("Visible navigation destinations", () => {
     for (const destination of registered) {
       if (destination.status === "shipped") continue;
       expect(destination.hiddenBecause, `${destination.label} hidden reason`).toBeTruthy();
+    }
+  });
+});
+
+describe("Deferred destination deep links", () => {
+  /**
+   * Driven off `appSectionRegistry` rather than hardcoding "Segments", so
+   * this proves the whole `deferred` class: registering a second entry
+   * `deferred` covers it here automatically, with no test change required.
+   */
+  const deferredDestinations = appSectionRegistry.filter(
+    (destination) => destination.status === "deferred",
+  );
+
+  it("has at least one deferred destination to prove the class against", () => {
+    expect(deferredDestinations.length).toBeGreaterThan(0);
+  });
+
+  it("matches a direct request for every deferred destination's href", () => {
+    for (const destination of deferredDestinations) {
+      const href = scopedHref(
+        scope,
+        destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
+      );
+      expect(deferredDestinationAt(href, scope), `${destination.label} (${href})`).toBe(
+        destination,
+      );
+    }
+  });
+
+  it("never matches a shipped destination's href", () => {
+    for (const destination of visibleAppSections) {
+      const href = scopedHref(
+        scope,
+        destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
+      );
+      expect(deferredDestinationAt(href, scope), `${destination.label} (${href})`).toBeUndefined();
+    }
+  });
+
+  it("does not match an unrelated pathname", () => {
+    expect(
+      deferredDestinationAt("/acme-labs/checkout-api/dev/no-such-section", scope),
+    ).toBeUndefined();
+  });
+
+  /**
+   * A deferred destination can still have child route files left behind
+   * (e.g. a deferred `Experiments` would keep `experiments.$experimentId.*`).
+   * A deep link to a descendant must still be caught: an exact-match-only
+   * guard would let it fall through to the child route's own loader and
+   * render the deferred screen after all.
+   */
+  it("matches a descendant path of every deferred destination's href", () => {
+    for (const destination of deferredDestinations) {
+      const href = scopedHref(
+        scope,
+        destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
+      );
+      const descendant = `${href}/child-resource/nested`;
+      expect(deferredDestinationAt(descendant, scope), `${destination.label} (${descendant})`).toBe(
+        destination,
+      );
+    }
+  });
+
+  it("does not match a sibling path that only shares a prefix, not a path segment boundary", () => {
+    for (const destination of deferredDestinations) {
+      const href = scopedHref(
+        scope,
+        destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
+      );
+      expect(deferredDestinationAt(`${href}-extra`, scope)).toBeUndefined();
     }
   });
 });

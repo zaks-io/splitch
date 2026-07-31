@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waitForHydration } from "./hydration";
 import {
   LOCAL_E2E_MEMBER_SESSION_TOKEN,
   LOCAL_E2E_SESSION_TOKEN,
@@ -38,7 +39,7 @@ test.describe("Honest Control Panel shell navigation", () => {
   }, testInfo) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto("/acme-labs/checkout-api/dev");
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
 
     const nav = page.getByRole("navigation", { name: "App sections" });
     const destinations = await nav.getByRole("link").evaluateAll((links) =>
@@ -91,7 +92,11 @@ test.describe("Honest Control Panel shell navigation", () => {
         await header
           .getByRole("link")
           .evaluateAll((links) => links.map((link) => link.getAttribute("href"))),
-      ).toEqual(["/", "/auth/logout"]);
+      ).toEqual(["/"]);
+      // Sign out is a POST submit, never a link: a link is prefetchable and a
+      // prefetch would sign the operator out (SPL-227).
+      await expect(header.locator("form[action='/auth/logout'][method='post']")).toHaveCount(1);
+      await expect(header.locator("a[href='/auth/logout']")).toHaveCount(0);
     }
 
     // Hiding the link is a UI decision only: the development surface itself is
@@ -105,12 +110,14 @@ test.describe("Honest Control Panel shell navigation", () => {
     page,
     request,
   }) => {
-    // Segments is hidden from navigation while SPL-112 is unfinished. Hiding the
-    // link must not change what a direct request gets back.
+    // Segments is hidden from navigation while SPL-112 is unfinished, and
+    // registered `deferred`. A direct request for a `deferred` destination is
+    // the Worker's honest 404 (SPL-253), not a client redirect and not the
+    // implementation-status copy the old stub used to render.
     const hidden = await page.request.get("/acme-labs/checkout-api/dev/segments", {
       maxRedirects: 0,
     });
-    expect(hidden.status()).toBe(200);
+    expect(hidden.status()).toBe(404);
     expect(hidden.headers().location).toBeUndefined();
 
     const signedOut = await request.get("/acme-labs/checkout-api/dev/segments", {
@@ -118,6 +125,18 @@ test.describe("Honest Control Panel shell navigation", () => {
     });
     expect([302, 307]).toContain(signedOut.status());
     expect(signedOut.headers().location).toContain("/auth/login?returnTo=");
+
+    // The deferred 404 is self-explaining and offers no remedy the user
+    // cannot act on (ADR-0036) — no implementation-status copy, no dead link.
+    await page.goto("/acme-labs/checkout-api/dev/segments");
+    const deferredError = page.locator("[data-slot='error-page']");
+    await expect(deferredError).toContainText("404");
+    await expect(page.getByText("This destination is not available yet.")).toBeVisible();
+    const deferredCopy = (await deferredError.innerText()).trim();
+    for (const pattern of IMPLEMENTATION_STATUS_COPY) {
+      expect(deferredCopy).not.toMatch(pattern);
+    }
+    await expect(deferredError.getByRole("button", { name: "No action available" })).toBeVisible();
 
     // An invalid deep link still resolves to the Worker's 404, hidden or not.
     await page.goto("/acme-labs/no-such-app/dev/segments");
@@ -141,7 +160,7 @@ test.describe("Honest Control Panel shell navigation", () => {
   }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto("/acme-labs/checkout-api/dev");
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
 
     const expected = new Set(
       await page

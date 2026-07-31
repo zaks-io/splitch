@@ -1,11 +1,11 @@
 import { Badge } from "@splitch/ui/components/badge";
 import type { QueryClient } from "@tanstack/react-query";
 import { Link, Outlet } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import { AppShellSwitchers } from "#components/app-shell-switcher";
 import { LiveUpdatesClient } from "#components/live-updates-client";
 import { visibleAppSections } from "#lib/app-shell-navigation";
 import type { ScopedLoaderContext } from "#lib/loader-context";
+import { useHydrated } from "#lib/use-hydrated";
 
 type AppShellProps = {
   context: ScopedLoaderContext;
@@ -13,8 +13,7 @@ type AppShellProps = {
 };
 
 export function AppShell({ context, queryClient }: AppShellProps) {
-  const [isHydrated, setIsHydrated] = useState(false);
-  useEffect(() => setIsHydrated(true), []);
+  const isHydrated = useHydrated();
 
   return (
     <div

@@ -5,6 +5,7 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import { syncExperimentConfigFromD1 } from "./experiment-handler-shared";
 import { json } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
+import { decisionSpecFromProposal, startReadinessResponse } from "./experiment-start-decision-spec";
 import { purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
 import { resyncFlagSnapshots } from "./flag-definition-handler-utils";
 
@@ -37,6 +38,11 @@ export function makeOtherApprovalApplication(deps: ApprovalApplicationDeps) {
   };
 }
 
+async function responseError(response: Response) {
+  const body = (await response.json()) as { code: ErrorCode; details: Record<string, unknown> };
+  return { ok: false as const, error: { code: body.code, details: body.details } };
+}
+
 async function applyExperimentStart(
   deps: ApprovalApplicationDeps,
   request: ApprovalRequest,
@@ -60,14 +66,16 @@ async function applyExperimentStart(
       error: { code: "EXPERIMENT_NOT_FOUND" as const, details: {} },
     };
   }
+  // Re-checked at apply rather than only at proposal: nothing freezes the goal
+  // Metric family while an Approval Request is pending, so an Experiment can
+  // lose it in between and a gated Start would open the undecidable Run the
+  // ungated one refuses.
+  const readiness = startReadinessResponse(experiment, commit.reviewId);
+  if (readiness) return await responseError(readiness);
   const prepared = await prepareStart(deps.repo, scope, experiment, commit.reviewId);
-  if (!prepared.ok) {
-    const body = (await prepared.response.json()) as {
-      code: ErrorCode;
-      details: Record<string, unknown>;
-    };
-    return { ok: false as const, error: { code: body.code, details: body.details } };
-  }
+  if (!prepared.ok) return await responseError(prepared.response);
+  const decisionSpec = decisionSpecFromProposal(request.diff.proposed);
+  if (!decisionSpec) return malformedProposal("sampleSizeLocked");
   const committed = await deps.repo.experiments.startRun(scope, {
     experimentId: experiment.id,
     flagId: experiment.flagId,
@@ -83,11 +91,19 @@ async function applyExperimentStart(
       id: commit.resultingResourceId,
       targetingKeyField: experiment.targetingKeyField,
       targetingKeyType: experiment.targetingKeyType,
+      // Frozen here for the same reason the ungated Start freezes it: the
+      // Activation Metric defines the Run's analysis entry population and
+      // window anchor (ADR-0012). Dropping it on the gated path alone would
+      // make a `confirm` Environment measure a different population than an
+      // `allow` one from the same draft.
+      activationMetricId: experiment.activationMetricId,
       salt: prepared.value.salt,
       allocation: json(prepared.value.allocation),
       variantSet: json(prepared.value.variantSet),
       targetingRules: json(prepared.value.targetingRules),
       confidenceLevel: experiment.confidenceLevel,
+      horizon: decisionSpec.horizon,
+      sampleSizeLocked: decisionSpec.sampleSizeLocked,
       decisionFamily: json(prepared.value.decisionFamily),
       guardrailDecisions: json(prepared.value.guardrailDecisions),
       configHash: prepared.value.configHash,
@@ -104,27 +120,29 @@ async function applyExperimentStart(
     updatedBy: commit.reviewedBy,
     approval: commit,
   });
-  if (!committed.ok) {
-    return {
-      ok: false as const,
-      error: {
-        code:
-          committed.reason === "experiment_not_found"
-            ? ("EXPERIMENT_NOT_FOUND" as const)
-            : ("EXPERIMENT_NO_DRAFT" as const),
-        details:
-          committed.reason === "experiment_not_found"
-            ? {}
-            : {
-                experimentId: experiment.id,
-                currentRunId: experiment.liveRunId,
-                recommendedAction: "EDIT_DRAFT_THEN_START",
-              },
-      },
-    };
-  }
+  if (!committed.ok) return startRunFailure(committed.reason, experiment);
   await syncExperimentConfigFromD1(deps.configStore, scope, experiment.id);
   return { ok: true as const };
+}
+
+function startRunFailure(
+  reason: "experiment_not_found" | "stale_draft",
+  experiment: { id: string; liveRunId: string | null },
+) {
+  if (reason === "experiment_not_found") {
+    return { ok: false as const, error: { code: "EXPERIMENT_NOT_FOUND" as const, details: {} } };
+  }
+  return {
+    ok: false as const,
+    error: {
+      code: "EXPERIMENT_NO_DRAFT" as const,
+      details: {
+        experimentId: experiment.id,
+        currentRunId: experiment.liveRunId,
+        recommendedAction: "EDIT_DRAFT_THEN_START",
+      },
+    },
+  };
 }
 
 async function applyVariant(

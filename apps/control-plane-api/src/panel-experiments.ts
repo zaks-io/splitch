@@ -1,3 +1,4 @@
+import type { MetricRef } from "@splitch/contracts";
 import {
   evaluateExperimentDecisionGate,
   experimentSignificanceDisplays,
@@ -11,10 +12,10 @@ import {
   type PanelExperimentListItem,
   type PanelExperimentResultsOutput,
   parseScopedAnalysisResults,
+  ScopedAnalysisError,
   scopedAnalysisResultsRequest,
   srmFiring,
 } from "@splitch/control-plane-sdk/panel-experiments";
-import type { MetricRef } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
 import { experimentResponse, jsonArray, jsonObject } from "./experiment-model";
@@ -64,6 +65,14 @@ export async function panelExperimentsList(
         status: experiment.status,
         flag: { id: experiment.flagId, name: flagName },
         liveRunId: experiment.liveRunId,
+        // Ending a Run returns the Experiment to `draft`, so `draft` alone does
+        // not mean "never ran" and cannot decide whether the Experiment belongs
+        // in the creation flow. Counted only for drafts: every other status has
+        // a Run by definition.
+        hasRuns:
+          experiment.status === "draft"
+            ? (await deps.repo.experiments.countRunsForExperiment(scope, experiment.id)) > 0
+            : true,
         health: await runningHealth(deps.analysis, input.actorId, experiment),
       };
     }),
@@ -105,6 +114,11 @@ export async function panelExperimentDetail(
       targetingKeyType: row.targetingKeyType,
       activationMetricId: row.activationMetricId,
       conversionWindowMs: row.conversionWindowMs,
+      // The decision-spec fields the Panel has to render, and render as LOCKED
+      // once a Run froze them (ADR-0003). Leaving them off the projection would
+      // leave the Panel with nothing to show but an editable-looking blank.
+      confidenceLevel: row.confidenceLevel,
+      dimensions: jsonArray<string>(row.dimensions),
       metricIds: metricIds(row.metrics),
       guardrailMetricIds: metricIds(row.guardrailMetrics),
       draftAllocation: jsonObject<Record<string, number>>(row.draftAllocation),
@@ -137,6 +151,9 @@ export async function panelExperimentDetail(
         targetingRulesJson: run.targetingRules,
         decisionMetricIds: metricIds(run.decisionFamily),
         decisionGuardrailMetricIds: metricIds(run.guardrailDecisions),
+        confidenceLevel: run.confidenceLevel,
+        horizon: run.horizon,
+        sampleSizeLocked: run.sampleSizeLocked,
         configHash: run.configHash,
         startedAt: run.startedAt,
         endedAt: run.endedAt,
@@ -234,19 +251,29 @@ async function runningHealth(
   if (!experiment.liveRunId) {
     throw new Error(`Running Experiment ${experiment.id} has no live Run`);
   }
-  const results = await parseScopedAnalysisResults(
-    await analysis.fetch(
-      scopedAnalysisResultsRequest({
-        operation: "experiment_results_post",
-        actorId,
-        appId: experiment.appId,
-        environmentId: experiment.environmentId,
-        experimentId: experiment.id,
-        runId: experiment.liveRunId,
-      }),
-    ),
-    experiment.liveRunId,
+  const response = await analysis.fetch(
+    scopedAnalysisResultsRequest({
+      operation: "experiment_results_post",
+      actorId,
+      appId: experiment.appId,
+      environmentId: experiment.environmentId,
+      experimentId: experiment.id,
+      runId: experiment.liveRunId,
+    }),
   );
+  // A Run that has just Started has no rows in Analysis yet, and Analysis says so
+  // with RUN_NOT_FOUND. That is the Run's first state, not a fault: reporting it
+  // as one would take the whole Experiment list down for every Environment with a
+  // freshly Started Run. Every other refusal still propagates, because a health
+  // signal that swallows an unreadable result is worse than no list at all.
+  const collecting = { significanceReached: false, srmFiring: false, guardrailBreached: false };
+  const results = await parseScopedAnalysisResults(response, experiment.liveRunId).catch(
+    (cause: unknown) => {
+      if (cause instanceof ScopedAnalysisError && cause.code === "RUN_NOT_FOUND") return null;
+      throw cause;
+    },
+  );
+  if (!results) return collecting;
   const stats = results.stats;
   return {
     // The same family the gate reads, so list health cannot call a Run

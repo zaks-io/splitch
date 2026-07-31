@@ -17,6 +17,7 @@ describe("panel experiments binding transport", () => {
             status: "running",
             flag: { id: "flag_1", name: "Checkout Flag" },
             liveRunId: "run_1",
+            hasRuns: true,
             health: {
               significanceReached: true,
               srmFiring: false,
@@ -54,6 +55,8 @@ describe("panel experiments binding transport", () => {
           targetingKeyType: "user",
           activationMetricId: null,
           conversionWindowMs: 0,
+          confidenceLevel: 0.95,
+          dimensions: [],
           metricIds: [],
           guardrailMetricIds: [],
           draftAllocation: null,
@@ -111,7 +114,73 @@ describe("panel experiments binding transport", () => {
     expect(request.headers.get("authorization")).toBeNull();
     expect(request.headers.get("x-splitch-panel-session")).toBeNull();
   });
+
+  /**
+   * The body → header mirror is applied per call site, so each call site needs
+   * its own assertion: a single test on the shared helper stays green while any
+   * one of the three legs quietly stops passing the decorated options through.
+   * `experiments_start` declares idempotency "required" and the runtime guard
+   * reads the HEADER, not the body, so a Start without it is refused before the
+   * handler ever runs.
+   */
+  it("sends the Start idempotency key as the header the route requires", async () => {
+    const request = await capturedRequest((client) =>
+      client.start({
+        appId: "app_1",
+        environmentId: "env_1",
+        experimentId: "exp_1",
+        idempotency_key: "start-run-1",
+        review: { action: "approve_and_apply" },
+      } as never),
+    );
+
+    expect(request.headers.get("idempotency-key")).toBe("start-run-1");
+  });
+
+  it("sends the create idempotency key as a header, not body-only", async () => {
+    const request = await capturedRequest((client) =>
+      client.create({
+        appId: "app_1",
+        environmentId: "env_1",
+        key: "checkout-copy",
+        name: "Checkout copy",
+        flagId: "flag_1",
+        idempotency_key: "create-exp-1",
+      } as never),
+    );
+
+    expect(request.headers.get("idempotency-key")).toBe("create-exp-1");
+  });
+
+  it("sends the update idempotency key as a header, not body-only", async () => {
+    const request = await capturedRequest((client) =>
+      client.update({
+        appId: "app_1",
+        environmentId: "env_1",
+        experimentId: "exp_1",
+        confidenceLevel: 0.9,
+        idempotency_key: "update-exp-1",
+      } as never),
+    );
+
+    expect(request.headers.get("idempotency-key")).toBe("update-exp-1");
+  });
 });
+
+async function capturedRequest(
+  call: (client: ReturnType<typeof createPanelExperimentsClient>) => Promise<unknown>,
+): Promise<Request> {
+  const requests: Request[] = [];
+  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push(new Request(input, init));
+    return Response.json({ code: "EXPERIMENT_NOT_FOUND", message: "gone", details: {} });
+  });
+
+  await call(createPanelExperimentsClient({ fetch: fetcher }));
+  const request = requests[0];
+  if (!request) throw new Error("the client made no request");
+  return request;
+}
 
 function panelRun() {
   return {
@@ -133,6 +202,9 @@ function panelRun() {
     targetingRulesJson: "[]",
     decisionMetricIds: [],
     decisionGuardrailMetricIds: [],
+    confidenceLevel: 0.95,
+    horizon: "sequential" as const,
+    sampleSizeLocked: null,
     configHash: "sha256:two",
     startedAt: "2026-07-19T00:00:00.000Z",
     endedAt: null,

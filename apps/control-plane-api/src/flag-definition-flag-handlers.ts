@@ -1,5 +1,5 @@
 import type { Variant } from "@splitch/contracts";
-import { appScope, type TenantScope } from "@splitch/db";
+import { appScope, type CreateFlagResult, type TenantScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
@@ -11,7 +11,6 @@ import {
 import { flagNotFound, validationError, validationErrors } from "./flag-definition-errors";
 import {
   type FlagDefinitionDeps,
-  type FlagRow,
   fail,
   type LoadedFlag,
   loadWritableFlag,
@@ -79,7 +78,13 @@ export async function createFlag(
   if (!prepared.ok) return prepared.response;
 
   const now = nowIso(deps);
-  const flag = await insertFlag(deps, appId, body, prepared.value, now, principal.id);
+  const inserted = await insertFlag(deps, appId, body, prepared.value, now, principal.id);
+  // The unique index, not the preceding lookup, is what makes the key unique. A
+  // create that lost the race to a concurrent one lands here and is refused with
+  // the same field error the pre-check produces, never a 500 and never a
+  // duplicate.
+  if (!inserted.ok) return flagKeyTakenError(requestId);
+  const flag = inserted.flag;
   const defaultVariantId =
     prepared.value.variantRows.find((variant) => variant.input.isDefault)?.id ??
     flag.defaultVariantId;
@@ -149,10 +154,12 @@ async function prepareCreateFlag(
   if (catalogIssue) return fail(validationError(requestId, catalogIssue));
 
   const scope = appScope(appId);
-  if (await flagKeyExists(deps, scope, body.key)) {
-    return fail(
-      validationError(requestId, [["body", "key"], "flag key already exists in this App"]),
-    );
+  // Keyed on the `(app_id, key)` unique index rather than filtered out of the
+  // App's Flag set. The set read cannot be bounded here: "is this key taken" has
+  // no honest partial answer, and a row a LIMIT skipped reads back as a free key
+  // (ADR-0036). The index probe answers it exactly, at fixed cost.
+  if (await deps.repo.flags.getFlagByKey(scope, body.key as string)) {
+    return fail(flagKeyTakenError(requestId));
   }
 
   const schema = schemaFromBody(body.schema);
@@ -169,13 +176,9 @@ async function prepareCreateFlag(
   });
 }
 
-async function flagKeyExists(
-  deps: FlagDefinitionDeps,
-  scope: TenantScope,
-  key: unknown,
-): Promise<boolean> {
-  const existing = await deps.repo.flags.flags.findMany(scope);
-  return existing.some((flag) => flag.key === key);
+/** The one duplicate-key answer, shared by the pre-check and the index violation. */
+function flagKeyTakenError(requestId: string): Response {
+  return validationError(requestId, [["body", "key"], "flag key already exists in this App"]);
 }
 
 async function insertFlag(
@@ -185,10 +188,10 @@ async function insertFlag(
   prepared: PreparedCreateFlag,
   now: string,
   actorId: string,
-): Promise<FlagRow> {
+): Promise<CreateFlagResult> {
   const defaultVariant = prepared.variantRows.find((variant) => variant.input.isDefault);
   if (!defaultVariant) throw new Error("createFlag: prepared catalog has no default Variant");
-  return deps.repo.flags.flags.insert(prepared.scope, {
+  return deps.repo.flags.createFlag(prepared.scope, {
     id: `flag_${randomHex(12)}`,
     appId,
     key: body.key as string,

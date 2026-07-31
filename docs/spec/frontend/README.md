@@ -33,4 +33,9 @@ both share one `ui` package and the `contracts` package.
 - **WorkOS session issuer** — WorkOS is the session issuer (AuthKit + SSO/SCIM); the cookie seam is issuer-agnostic
 - **No optimistic writes** — cache updates happen only via refetch after server 200
 - **(appId, environmentId) from URL only** — resolved from `/{orgSlug}/{appSlug}/{env}`; no "current app/environment" in session or React context
+- **Hydration gates interactive SSR controls** — client components use the panel's shared
+  `useHydrated()` hook to keep SSR-rendered triggers disabled until handlers are attached. Every
+  shell root (App, Org, Organization chooser) publishes `data-hydrated`, and Control Panel e2e
+  specs call `waitForHydration()` before their first interaction so a hydration failure times out
+  loudly instead of dropping input.
 - **Branding guide location** — `docs/branding/design-tokens.md` (to be created by design; token names pinned in `packages/ui/src/theme.css`, values deferred)

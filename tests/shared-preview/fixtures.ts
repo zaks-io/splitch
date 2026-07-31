@@ -156,6 +156,17 @@ class SmokeClient {
     return result.structuredContent as T;
   }
 
+  async callToolExpectError<T>(
+    token: string,
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<T> {
+    const result = await this.callToolResult(token, name, args);
+    expectNoRateLimited(result);
+    expect(result.isError, `MCP ${name} should return an operational error`).toBe(true);
+    return result.structuredContent as T;
+  }
+
   async callToolUnauthorized(name: string, args: Record<string, unknown>): Promise<APIResponse> {
     return this.request.post(`${this.config.mcpBaseUrl}/mcp`, {
       data: {

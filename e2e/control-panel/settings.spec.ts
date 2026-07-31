@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { LOCAL_E2E_SESSION_TOKEN } from "../../scripts/local-e2e-fixtures.mjs";
+import { waitForHydration } from "./hydration";
 import { captureThemeScreenshots } from "./screenshot";
 
 const origin = "http://127.0.0.1:18793";
@@ -17,7 +18,7 @@ test.describe("per-Environment Settings", () => {
     await page.setViewportSize({ width: 1280, height: 1100 });
     await page.goto(`/acme-labs/checkout-api/${environmentKey}/settings`);
 
-    await expect(page.locator('[data-app-shell="ready"]')).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
     await expect(page.getByRole("heading", { name: environmentName })).toBeVisible();
     await expect(page.getByText("accepts requests from any origin")).toBeVisible();
     await captureThemeScreenshots(page, testInfo, "settings-environment-open");
@@ -56,6 +57,7 @@ test.describe("per-Environment Settings", () => {
       }
     });
     await page.reload();
+    await waitForHydration(page);
     await expect(page.locator(`[data-api-key-id='${newKeyId}']`)).toContainText("Active");
     await expect(page.getByTestId("once-only-api-key")).toHaveCount(0);
     expect((await Promise.all(postCreationBodies)).join("\n")).not.toContain(secret);
@@ -67,6 +69,7 @@ test.describe("per-Environment Settings", () => {
       .click();
     await expect(page.locator(`[data-api-key-id='${newKeyId}']`)).toContainText("Revoked");
     await page.reload();
+    await waitForHydration(page);
     const revokedRow = page.locator(`[data-api-key-id='${newKeyId}']`);
     await expect(revokedRow).toContainText("Revoked");
     await expect(revokedRow.getByRole("button", { name: "Revoke" })).toBeDisabled();

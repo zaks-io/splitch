@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { waitForHydration } from "./hydration";
 import {
   LOCAL_E2E_ONBOARDING_APP_SLUGS,
   LOCAL_E2E_SESSION_TOKEN,
@@ -55,7 +56,7 @@ test.describe("onboarding: connect your code", () => {
   }, testInfo) => {
     const flagKey = `onboarding-connect-${testInfo.retry}`;
     await page.goto(flagsPath("connect"));
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
 
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
@@ -96,7 +97,7 @@ test.describe("onboarding: connect your code", () => {
   test("fails loud when verify cannot reach the data plane", async ({ page }, testInfo) => {
     const flagKey = `onboarding-verify-${testInfo.retry}`;
     await page.goto(flagsPath("verify"));
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
 
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");
@@ -124,7 +125,7 @@ test.describe("onboarding: connect your code", () => {
   test("points at the first real Exposure as the finish line", async ({ page }, testInfo) => {
     const flagKey = `onboarding-exposure-${testInfo.retry}`;
     await page.goto(flagsPath("exposure"));
-    await expect(page.locator("[data-app-shell='ready']")).toHaveAttribute("data-hydrated", "true");
+    await waitForHydration(page);
 
     await page.getByRole("button", { name: "Create Flag" }).click();
     const dialog = page.getByRole("dialog");

@@ -13,6 +13,7 @@ import type { ControlPanelOperation } from "./control-panel-operation";
 const SCOPED_OPERATION_IDS = [
   "flags_list",
   "flags_create",
+  "experiments_create",
   "metrics_list",
   "metrics_create",
   "overview_get",

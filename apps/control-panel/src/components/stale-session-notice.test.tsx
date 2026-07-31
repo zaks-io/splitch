@@ -23,7 +23,8 @@ describe("StaleSessionNotice", () => {
       "The Control Plane said: control-panel session is missing its WorkOS session identifier",
     );
     expect(html).toContain('data-testid="session-stale-reason"');
-    expect(html).toContain('href="/auth/logout"');
+    expect(html).toContain('action="/auth/logout" method="post"');
+    expect(html).not.toContain('href="/auth/logout"');
     expect(html).toContain("Sign in again to continue");
     expect(html).not.toContain('data-testid="session-stale-reload"');
   });
@@ -45,7 +46,7 @@ describe("StaleSessionNotice", () => {
     );
     expect(html).toContain('data-testid="session-stale-reload"');
     expect(html).toContain("Reload to check again");
-    expect(html).not.toContain('href="/auth/logout"');
+    expect(html).not.toContain("/auth/logout");
   });
 
   it("offers reauth for an App when the fault is the session's own identity", () => {
@@ -61,7 +62,8 @@ describe("StaleSessionNotice", () => {
     expect(html).toContain('data-testid="app-session-stale"');
     expect(html).toContain("App &quot;checkout-api&quot; was created");
     expect(html).toContain("The Control Plane said: refreshSession: session already expired");
-    expect(html).toContain('href="/auth/logout"');
+    expect(html).toContain('action="/auth/logout" method="post"');
+    expect(html).not.toContain('href="/auth/logout"');
     expect(html).not.toContain('data-testid="session-stale-reload"');
   });
 
@@ -79,7 +81,7 @@ describe("StaleSessionNotice", () => {
     expect(html).toContain("The Control Plane said: unknown App role in session materialization");
     expect(html).toContain('data-testid="session-stale-reload"');
     expect(html).toContain("Reload to check again");
-    expect(html).not.toContain('href="/auth/logout"');
+    expect(html).not.toContain("/auth/logout");
   });
 
   it("names the key, not the handle, as the thing already taken for an App", () => {

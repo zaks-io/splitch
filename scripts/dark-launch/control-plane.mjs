@@ -4,14 +4,16 @@
 
 import { DEFAULT_VARIANT, LAUNCH_VARIANT } from "./constants.mjs";
 
-export async function controlPlaneCall(deps, method, path, body) {
+export async function controlPlaneCall(deps, method, path, body, idempotencyKey) {
+  const headers = {
+    authorization: `Bearer ${deps.accessToken}`,
+    "content-type": "application/json",
+    accept: "application/json",
+  };
+  if (idempotencyKey) headers["idempotency-key"] = idempotencyKey;
   const response = await deps.fetch(`${deps.controlPlaneBaseUrl}${path}`, {
     method,
-    headers: {
-      authorization: `Bearer ${deps.accessToken}`,
-      "content-type": "application/json",
-      accept: "application/json",
-    },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await response.text();
@@ -46,18 +48,26 @@ export async function createDarkLaunchApp(deps, keys) {
 }
 
 export async function createDarkLaunchFlag(deps, appId, flagKey) {
+  const idempotencyKey = `dark-launch-flag-create-${deps.runId}`;
   return requireOk(
-    await controlPlaneCall(deps, "POST", `/apps/${appId}/flags`, {
-      appId,
-      key: flagKey,
-      name: flagKey,
-      schema: { type: "boolean" },
-      variants: [
-        { name: LAUNCH_VARIANT, value: true, isDefault: false },
-        { name: DEFAULT_VARIANT, value: false, isDefault: true },
-      ],
-      description: "Transient dark-launch smoke Flag (SPL-168).",
-    }),
+    await controlPlaneCall(
+      deps,
+      "POST",
+      `/apps/${appId}/flags`,
+      {
+        appId,
+        key: flagKey,
+        name: flagKey,
+        schema: { type: "boolean" },
+        variants: [
+          { name: LAUNCH_VARIANT, value: true, isDefault: false },
+          { name: DEFAULT_VARIANT, value: false, isDefault: true },
+        ],
+        description: "Transient dark-launch smoke Flag (SPL-168).",
+        idempotency_key: idempotencyKey,
+      },
+      idempotencyKey,
+    ),
     "flags_create",
   );
 }
@@ -77,33 +87,71 @@ export async function rotateClientKey(deps, appId, environmentId) {
 }
 
 export async function updateFlagConfig(deps, appId, environmentId, flagId, patch) {
+  const state = patch.enabled === true ? "enable" : patch.enabled === false ? "disable" : "update";
+  const idempotencyKey = `dark-launch-flag-config-${state}-${deps.runId}`;
   return requireOk(
     await controlPlaneCall(
       deps,
       "PATCH",
       `/apps/${appId}/envs/${environmentId}/flags/${flagId}/config`,
-      patch,
+      {
+        ...patch,
+        idempotency_key: idempotencyKey,
+      },
+      idempotencyKey,
     ),
     "flag_config_update",
   );
 }
 
 export async function replaceTargetingRules(deps, appId, environmentId, flagId, targetingRules) {
+  const idempotencyKey = `dark-launch-targeting-rules-${deps.runId}`;
   return requireOk(
     await controlPlaneCall(
       deps,
       "PUT",
       `/apps/${appId}/envs/${environmentId}/flags/${flagId}/targeting-rules`,
-      { targetingRules },
+      {
+        targetingRules,
+        idempotency_key: idempotencyKey,
+      },
+      idempotencyKey,
     ),
     "flag_targeting_rules_replace",
   );
 }
 
 export async function deleteFlag(deps, appId, flagId) {
+  const deleteKey = `dark-launch-flag-delete-${deps.runId}`;
+  const deletion = await controlPlaneCall(
+    deps,
+    "DELETE",
+    `/apps/${appId}/flags/${flagId}`,
+    undefined,
+    deleteKey,
+  );
+  if (deletion.ok) return deletion.body;
+  if (deletion.body?.code !== "APPROVAL_REVIEW_REQUIRED") {
+    return requireOk(deletion, "flags_delete");
+  }
+
+  const approvalRequestId = deletion.body.details?.approvalRequestId;
+  if (!approvalRequestId) {
+    throw new Error("flags_delete approval response omitted details.approvalRequestId");
+  }
+  const reviewKey = `dark-launch-flag-delete-review-${deps.runId}`;
   return requireOk(
-    await controlPlaneCall(deps, "DELETE", `/apps/${appId}/flags/${flagId}`),
-    "flags_delete",
+    await controlPlaneCall(
+      deps,
+      "POST",
+      `/apps/${appId}/approval-requests/${approvalRequestId}/reviews`,
+      {
+        action: "approve_and_apply",
+        idempotency_key: reviewKey,
+      },
+      reviewKey,
+    ),
+    "approval_request_reviews_create",
   );
 }
 

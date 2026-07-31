@@ -45,6 +45,40 @@ export function makeFlagRepo(db: Db) {
       return flagsTable.findOne(scope, eq(flags.id, flagId));
     },
 
+    /**
+     * The App's Flag with this key, or null. Keyed on the `(app_id, key)` unique
+     * index, so it costs an index probe whatever the App holds.
+     *
+     * "Is this key taken" has no honest partial answer, so it is the one Flag
+     * read that must never be served from a bounded page of the catalog: a row a
+     * LIMIT skipped reads back as "the key is free" and permits a duplicate write
+     * (ADR-0036). A keyed lookup removes the scan instead of bounding it.
+     */
+    getFlagByKey(scope: TenantScope, key: string) {
+      return flagsTable.findOne(scope, eq(flags.key, key));
+    },
+
+    /**
+     * Insert a Flag, reporting a key collision as a result rather than throwing.
+     *
+     * The `flags_app_key_unique` index is what actually enforces uniqueness; the
+     * caller's preceding `getFlagByKey` only buys a clean field error on the
+     * common path. Between that read and this write, a concurrent create can take
+     * the key — here the loser's INSERT violates the index and comes back as
+     * `key_conflict`, so the race ends in a refused write, not a duplicate.
+     */
+    async createFlag(
+      scope: TenantScope,
+      values: typeof flags.$inferInsert,
+    ): Promise<CreateFlagResult> {
+      try {
+        return { ok: true, flag: await flagsTable.insert(scope, values) };
+      } catch (error) {
+        if (!isFlagKeyConflict(error)) throw error;
+        return { ok: false, reason: "key_conflict" };
+      }
+    },
+
     updateFlag(
       scope: TenantScope,
       flagId: string,
@@ -146,6 +180,87 @@ export function makeFlagRepo(db: Db) {
       return segmentsTable.remove(scope, eq(segments.id, segmentId));
     },
   };
+}
+
+export type CreateFlagResult =
+  | { ok: true; flag: typeof flags.$inferSelect }
+  | { ok: false; reason: "key_conflict" };
+
+/**
+ * SQLite reports a composite unique-index violation by COLUMN LIST, not by index
+ * name, so matching `flags_app_key_unique` would never fire. Matching the whole
+ * constraint string also keeps this from swallowing a different fault on the same
+ * columns (a `NOT NULL constraint failed: flags.key` names that column too, and
+ * answering a broken write with "choose another key" is advice that can never
+ * succeed). Every other error still throws.
+ */
+const FLAG_KEY_UNIQUE_VIOLATION = "UNIQUE constraint failed: flags.app_id, flags.key";
+
+/** SQLite's extended result code for the same failure, which no column list can spell. */
+const SQLITE_UNIQUE_CODE = "SQLITE_CONSTRAINT_UNIQUE";
+
+/**
+ * D1's collision message in full, anchored end to end.
+ *
+ * The `D1_ERROR: ` prefix is optional so the match still holds if the seam ever
+ * throws D1's error unwrapped.
+ */
+const FLAG_KEY_UNIQUE_MESSAGE = new RegExp(
+  `^(D1_ERROR: )?${FLAG_KEY_UNIQUE_VIOLATION.replaceAll(".", "\\.")}: SQLITE_CONSTRAINT \\(extended: ${SQLITE_UNIQUE_CODE}\\)$`,
+);
+
+/**
+ * Classify a write failure WITHOUT ever reading a message that embeds the bound
+ * parameters, and only when the message is D1's collision text *in its entirety*.
+ *
+ * D1 exposes no structured code on the thrown Error — the extended result code
+ * only ever appears in prose — so this has to match text. That makes WHICH text
+ * it reads the whole security property. Drizzle's top-level `DrizzleQueryError`
+ * message carries the SQL *and its parameters*, so a Flag `key`, `name` or
+ * `description` containing the constraint string would classify ANY insert
+ * failure as a collision: a lost connection would come back as "flag key already
+ * exists", telling an operator to pick a different key when the key was free and
+ * nothing was written. A disguised default with an impossible remedy (ADR-0036),
+ * and worse than the 500 it replaces, because the 500 was at least honest.
+ *
+ * Skipping every layer that carries bound parameters is necessary but NOT
+ * sufficient, and the earlier "what is left is D1's own text, which no caller can
+ * author" was simply false. D1 emits a *parameter-free* `D1_TYPE_ERROR` at bind
+ * time that echoes the offending value verbatim:
+ *
+ *   D1_TYPE_ERROR: Type 'object' not supported for value '<the caller's value>'
+ *
+ * so a caller who spells the collision text — extended result code and all —
+ * inside a non-string field reaches a layer the parameter skip happily yields.
+ * Substring matching therefore reopens the exact hole it was meant to close.
+ *
+ * Anchoring kills the class rather than that one instance: every echo vector
+ * arrives wrapped in a prefix and a trailing quote, so it can never equal D1's
+ * message end to end. The parameter skip stays as defence in depth.
+ */
+function isFlagKeyConflict(error: unknown): boolean {
+  for (const message of messagesNotCarryingParameters(error)) {
+    if (FLAG_KEY_UNIQUE_MESSAGE.test(message)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** The `cause` chain, minus every layer that stringifies the caller's values. */
+function* messagesNotCarryingParameters(error: unknown): Generator<string> {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 8; depth += 1) {
+    if (!embedsBoundParameters(current)) {
+      yield current instanceof Error ? current.message : String(current);
+    }
+    current = current instanceof Error ? current.cause : undefined;
+  }
+}
+
+/** A query error, which stringifies the caller's values into its own message. */
+function embedsBoundParameters(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "params" in error;
 }
 
 function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {

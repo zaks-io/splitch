@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CreateOrganizationDialog } from "#components/create-organization-dialog";
 import { OrganizationCard } from "#components/organization-card";
 import { OrganizationsEmptyState } from "#components/organizations-empty-state";
@@ -6,6 +6,7 @@ import { OrganizationsTruncatedNotice } from "#components/organizations-truncate
 import { StaleSessionNotice } from "#components/stale-session-notice";
 import type { OrgMembership } from "#lib/session";
 import type { StaleSession } from "#lib/stale-session";
+import { useHydrated } from "#lib/use-hydrated";
 
 /**
  * The root landing screen. It is a chooser, not a redirect: a single-org user
@@ -41,8 +42,7 @@ export function OrganizationChooser({
   // Create Organization is server-driven and inert until hydration, so the
   // screen publishes when it is actually usable rather than leaving a
   // rendered-but-dead control (the same contract the Org and App shells publish).
-  const [isHydrated, setIsHydrated] = useState(false);
-  useEffect(() => setIsHydrated(true), []);
+  const isHydrated = useHydrated();
 
   // A full document navigation, not a client route change: the Organization the
   // User just created is in a session cookie the server re-reads on load.

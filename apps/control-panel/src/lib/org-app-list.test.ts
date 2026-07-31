@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type AppAttention,
+  appAttentionSeverity,
   appAttentionSummary,
   attentionLabel,
   canCreateApp,
@@ -77,6 +78,36 @@ describe("Org App list attention", () => {
         }),
       ),
     ).toBe("No Experiment needs attention");
+  });
+
+  it("reports unknown, never healthy, when an Environment is missing from an otherwise-ok rollup", () => {
+    // SPL-202: the exact SPL-103 review scenario — the rollup succeeds for
+    // env_dev only, but the App also has env_prod. The per-Environment dot
+    // was already correct (`environmentAttention` returns `unknown`); only
+    // the App-level summary lied and called this a clean bill of health.
+    const partialRollup: AppAttention = {
+      kind: "ready",
+      items: [{ environmentId: "env_dev", state: "clear", srm: false, guardrail: false }],
+    };
+
+    expect(appAttentionSeverity(app(partialRollup))).toBe("unknown");
+    const summary = appAttentionSummary(app(partialRollup));
+    expect(summary).toBe("Health unknown in prod");
+    expect(summary).not.toBe("No Experiment needs attention");
+    expect(summary.toLowerCase()).not.toContain("no experiment needs attention");
+  });
+
+  it("never lets an unknown Environment mask a confirmed problem in the same App", () => {
+    // Ranking decision: `attention` outranks `unknown`. If dev is unknown and
+    // prod is confirmed unhealthy, the operator must be told about prod —
+    // "we don't know about dev" is not license to bury "prod is broken".
+    const mixed: AppAttention = {
+      kind: "ready",
+      items: [{ environmentId: "env_prod", state: "attention", srm: false, guardrail: true }],
+    };
+
+    expect(appAttentionSeverity(app(mixed))).toBe("attention");
+    expect(appAttentionSummary(app(mixed))).toBe("Needs attention in prod");
   });
 });
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { requireFullCommitSha } from "./lib/shared-preview-deployment-evidence.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const mode = process.argv[2];
-if (mode !== "deploy" && mode !== "reset") {
-  fail("usage: render-shared-preview-summary.mjs <deploy|reset>");
+if (mode !== "reset" && mode !== "smoke") {
+  fail("usage: render-shared-preview-summary.mjs <reset|smoke>");
 }
 
 try {
@@ -19,14 +19,16 @@ export function renderSummary(input) {
   const lines = [`## Shared preview ${input.mode}`, "", `- Workflow ref: \`${input.ref}\``];
   if (input.mode === "reset") {
     lines.push(`- Reset outcome: \`${input.resetOutcome}\``);
+    lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
   } else {
-    lines.push(`- Deploy outcome: \`${input.deployOutcome}\``);
-  }
-  lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
-  if (input.mode === "deploy") {
+    lines.push(`- Seed outcome: \`${input.seedOutcome}\``);
+    lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
     lines.push(`- Dark-launch outcome: \`${input.darkLaunchOutcome}\``);
   }
   lines.push(`- Cleanup outcome: \`${input.cleanupOutcome}\``);
+  if (input.mode === "smoke") {
+    lines.push(`- Failure artifact outcome: \`${input.artifactOutcome}\``);
+  }
 
   if (input.evidence) {
     lines.push(
@@ -53,7 +55,7 @@ function summaryInput(summaryMode) {
   );
   const smokeOutcome = process.env.SPLITCH_SMOKE_OUTCOME ?? "unknown";
   const evidence = smokeOutcome === "success" ? readEvidence() : undefined;
-  if (summaryMode === "deploy" && evidence && evidence.deployedCommitSha !== ref) {
+  if (summaryMode === "smoke" && evidence && evidence.deployedCommitSha !== ref) {
     throw new Error(
       `deployed commit ${evidence.deployedCommitSha} differs from deploy workflow ref ${ref}`,
     );
@@ -61,11 +63,12 @@ function summaryInput(summaryMode) {
   return {
     mode: summaryMode,
     ref,
-    deployOutcome: process.env.SPLITCH_DEPLOY_OUTCOME ?? "unknown",
     resetOutcome: process.env.SPLITCH_RESET_OUTCOME ?? "unknown",
+    seedOutcome: process.env.SPLITCH_SEED_OUTCOME ?? "unknown",
     smokeOutcome,
     darkLaunchOutcome: process.env.SPLITCH_DARK_LAUNCH_OUTCOME ?? "unknown",
     cleanupOutcome: process.env.SPLITCH_CLEANUP_OUTCOME ?? "unknown",
+    artifactOutcome: process.env.SPLITCH_ARTIFACT_OUTCOME ?? "unknown",
     evidence,
     tinybirdBranch: "shared_preview",
     migrations: migrationNames(),
