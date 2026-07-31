@@ -61,6 +61,7 @@ test.describe("shared-preview functional API workflow", () => {
           { name: "treatment", value: true, isDefault: false },
         ],
         description: "Created by shared-preview Playwright smoke.",
+        idempotency_key: smoke.uniqueKey("flags-create"),
       });
 
       expect(createdFlag).toMatchObject({ appId: smoke.config.smokeAppId, key });
@@ -84,6 +85,7 @@ test.describe("shared-preview functional API workflow", () => {
         await smoke.callTool(accessToken, "flags_delete", {
           appId: smoke.config.smokeAppId,
           flagId: createdFlag.id,
+          idempotency_key: smoke.uniqueKey("flags-delete"),
         });
       }
     }
@@ -108,6 +110,7 @@ test.describe("shared-preview functional API workflow", () => {
         flagId: smoke.config.smokeFlagId,
         enabled: true,
         availableVariantNames: ["control", "treatment"],
+        idempotency_key: smoke.uniqueKey("flag-config-update"),
       },
     );
     expect(config).toMatchObject({
@@ -131,6 +134,7 @@ test.describe("shared-preview functional API workflow", () => {
           percentageRollout: null,
         },
       ],
+      idempotency_key: smoke.uniqueKey("targeting-rules-replace"),
     });
 
     const evaluation = await smoke.callTool<Record<string, unknown>>(
