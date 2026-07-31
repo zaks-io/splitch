@@ -46,7 +46,7 @@ export async function resyncFlagSnapshots(
   }
 }
 
-export type FlagRow = NonNullable<Awaited<ReturnType<Repository["flags"]["getFlag"]>>>;
+type FlagRow = NonNullable<Awaited<ReturnType<Repository["flags"]["getFlag"]>>>;
 export type Result<T> = { ok: true; value: T } | { ok: false; response: Response };
 
 export interface LoadedFlag {

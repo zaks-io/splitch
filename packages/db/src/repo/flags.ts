@@ -45,6 +45,40 @@ export function makeFlagRepo(db: Db) {
       return flagsTable.findOne(scope, eq(flags.id, flagId));
     },
 
+    /**
+     * The App's Flag with this key, or null. Keyed on the `(app_id, key)` unique
+     * index, so it costs an index probe whatever the App holds.
+     *
+     * "Is this key taken" has no honest partial answer, so it is the one Flag
+     * read that must never be served from a bounded page of the catalog: a row a
+     * LIMIT skipped reads back as "the key is free" and permits a duplicate write
+     * (ADR-0036). A keyed lookup removes the scan instead of bounding it.
+     */
+    getFlagByKey(scope: TenantScope, key: string) {
+      return flagsTable.findOne(scope, eq(flags.key, key));
+    },
+
+    /**
+     * Insert a Flag, reporting a key collision as a result rather than throwing.
+     *
+     * The `flags_app_key_unique` index is what actually enforces uniqueness; the
+     * caller's preceding `getFlagByKey` only buys a clean field error on the
+     * common path. Between that read and this write, a concurrent create can take
+     * the key — here the loser's INSERT violates the index and comes back as
+     * `key_conflict`, so the race ends in a refused write, not a duplicate.
+     */
+    async createFlag(
+      scope: TenantScope,
+      values: typeof flags.$inferInsert,
+    ): Promise<CreateFlagResult> {
+      try {
+        return { ok: true, flag: await flagsTable.insert(scope, values) };
+      } catch (error) {
+        if (!isFlagKeyConflict(error)) throw error;
+        return { ok: false, reason: "key_conflict" };
+      }
+    },
+
     updateFlag(
       scope: TenantScope,
       flagId: string,
@@ -146,6 +180,35 @@ export function makeFlagRepo(db: Db) {
       return segmentsTable.remove(scope, eq(segments.id, segmentId));
     },
   };
+}
+
+export type CreateFlagResult =
+  | { ok: true; flag: typeof flags.$inferSelect }
+  | { ok: false; reason: "key_conflict" };
+
+/**
+ * SQLite reports a composite unique-index violation by COLUMN LIST, not by index
+ * name, so matching `flags_app_key_unique` would never fire. Matching the whole
+ * constraint string also keeps this from swallowing a different fault on the same
+ * columns (a `NOT NULL constraint failed: flags.key` names that column too, and
+ * answering a broken write with "choose another key" is advice that can never
+ * succeed). Every other error still throws.
+ */
+const FLAG_KEY_UNIQUE_VIOLATION = "UNIQUE constraint failed: flags.app_id, flags.key";
+
+/**
+ * Drizzle wraps the D1 failure in a query error whose own message is the SQL it
+ * ran, so the constraint text lives further down the `cause` chain. Reading only
+ * the top-level message classifies every collision as an unknown fault and turns
+ * a refusable duplicate into a 500.
+ */
+function isFlagKeyConflict(error: unknown): boolean {
+  for (let current: unknown = error, depth = 0; current && depth < 8; depth += 1) {
+    const message = current instanceof Error ? current.message : String(current);
+    if (message.includes(FLAG_KEY_UNIQUE_VIOLATION)) return true;
+    current = current instanceof Error ? current.cause : undefined;
+  }
+  return false;
 }
 
 function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
