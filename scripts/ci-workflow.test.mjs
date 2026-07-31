@@ -80,3 +80,63 @@ test("spec lint runs only inside Verify, not as a duplicate job", () => {
   assert.doesNotMatch(workflow, /\n {2}spec-lint:/);
   assert.doesNotMatch(workflow, /run: pnpm spec:lint/);
 });
+
+test("cache-policy changes force the cache off before Verify runs", () => {
+  assert.ok(verifyJob);
+  const forceStepIndex = verifyJob.indexOf("name: Force cache off for cache-policy changes");
+  const verifyStepIndex = verifyJob.indexOf("- name: Verify\n");
+  assert.ok(forceStepIndex > -1, "forcing step must exist");
+  assert.ok(verifyStepIndex > -1, "Verify step must exist");
+  assert.ok(forceStepIndex < verifyStepIndex, "forcing step must run before Verify");
+
+  const forceStep = verifyJob.slice(
+    forceStepIndex,
+    verifyJob.indexOf("- name: Verify\n", forceStepIndex),
+  );
+
+  // The cache-policy surface: files that govern which tasks are cached, how
+  // they're keyed, or how the remote cache is validated.
+  const cachePolicyPaths = [
+    "turbo\\\\.json",
+    "\\\\.github/workflows/ci\\\\.yml",
+    "\\\\.github/workflows/nightly-verify\\\\.yml",
+    "scripts/check-turbo-remote-cache-env\\\\.mjs",
+  ];
+  for (const path of cachePolicyPaths) {
+    assert.match(forceStep, new RegExp(path), `cache-policy pattern must cover ${path}`);
+  }
+
+  assert.match(forceStep, /echo "TURBO_FORCE=true" >> "\$GITHUB_ENV"/);
+  assert.match(forceStep, /::notice title=/);
+});
+
+test("cache-policy detection covers both pull_request and push triggers, forcing off when a diff can't be computed", () => {
+  assert.ok(verifyJob);
+  const forceStep = verifyJob.slice(
+    verifyJob.indexOf("name: Force cache off for cache-policy changes"),
+    verifyJob.indexOf("- name: Verify\n"),
+  );
+
+  assert.match(forceStep, /EVENT_NAME: \$\{\{ github\.event_name \}\}/);
+  assert.match(forceStep, /BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(forceStep, /HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(forceStep, /BEFORE_SHA: \$\{\{ github\.event\.before \}\}/);
+  assert.match(forceStep, /AFTER_SHA: \$\{\{ github\.sha \}\}/);
+
+  assert.match(forceStep, /if \[ "\$EVENT_NAME" = "pull_request" \]/);
+  assert.match(forceStep, /if \[ "\$EVENT_NAME" = "push" \]/);
+  assert.match(forceStep, /git merge-base "\$BASE_SHA" "\$HEAD_SHA"/);
+  assert.match(forceStep, /git diff --name-only "\$BEFORE_SHA" "\$AFTER_SHA"/);
+
+  // No-comparison-available paths must force the cache off, never silently
+  // proceed as if nothing changed (ADR-0036: fail loud, no silent fallback).
+  const noComparisonBranches = forceStep.match(
+    /force_cache_off ".*cannot diff, so the cache is not trusted\."/g,
+  );
+  assert.ok(noComparisonBranches);
+  assert.equal(
+    noComparisonBranches.length,
+    4,
+    "every no-comparison branch (missing PR shas, no merge base, missing push before-sha, unrecognized event) must force the cache off",
+  );
+});
