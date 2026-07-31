@@ -8,7 +8,10 @@ import { createApproval, replayApprovalIfExists } from "./approval-service";
 import { environmentPolicyContexts, requiresReview } from "./approval-target";
 import type { ConfigStoreWriter } from "./config-store";
 import type { ConfigStoreAccess } from "./config-store-do";
+import { configStoreUnavailable, variantNotAvailable } from "./experiment-errors";
+import { flagConfigNotFound, rolloutAmbiguous } from "./flag-config-errors";
 import { flagConfigPatchGates, promotionGates, readEnvironmentPolicy } from "./flag-config-policy";
+import { flagConfigFreezeRefusal, targetingFreezeRefusal } from "./flag-config-run-freeze";
 import { objectBody, pathParam } from "./handler-input";
 import { type MemberProfileResolver, makeOrgHandlers } from "./org-handlers";
 
@@ -103,6 +106,14 @@ export function makeHandlers(deps: HandlerDeps) {
             })
           : flagConfigNotFound(requestId);
       }
+      // Ahead of the Policy gate on purpose: a write a live Run forbids must never
+      // become a pending Approval Request. Gating it first would manufacture a
+      // proposal for a change that can never legitimately be applied, and leave it
+      // sitting in the audit log for a reviewer to approve into a refusal.
+      const target = { appId, environmentId, flagId };
+      const frozen = await flagConfigFreezeRefusal(deps.repo, target, body, requestId);
+      if (frozen) return frozen;
+
       const policy = await readEnvironmentPolicy(deps.repo, appId, environmentId);
       if (!policy) return flagConfigNotFound(requestId);
 
@@ -205,6 +216,15 @@ export function makeHandlers(deps: HandlerDeps) {
             })
           : flagConfigNotFound(requestId);
       }
+      // Same ordering as the Configuration PATCH, and for the same reason: the Run
+      // refusal outranks the Policy gate.
+      const frozen = await targetingFreezeRefusal(
+        deps.repo,
+        { appId, environmentId, flagId },
+        requestId,
+      );
+      if (frozen) return frozen;
+
       const policy = await readEnvironmentPolicy(deps.repo, appId, environmentId);
       if (!policy) return flagConfigNotFound(requestId);
 
@@ -449,28 +469,6 @@ function renderFlagConfigWriteResult(
   return flagConfigNotFound(requestId);
 }
 
-function rolloutAmbiguous(availableVariantNames: string[], requestId: string): Response {
-  return renderError(
-    {
-      code: "VALIDATION_ERROR",
-      message:
-        "a baseline rollout needs exactly one non-Default available Variant to roll traffic into",
-      details: {
-        issues: [
-          {
-            path: ["rollout"],
-            message:
-              `available Variants are [${availableVariantNames.join(", ")}]; narrow ` +
-              "availableVariantNames to the Default Variant plus exactly one other, or use a " +
-              "Targeting Rule with its own percentageRollout instead",
-          },
-        ],
-      },
-    },
-    { requestId },
-  );
-}
-
 function renderPromotionResult(
   result: PromotionResult,
   flagId: string,
@@ -488,43 +486,4 @@ function renderPromotionResult(
     return rolloutAmbiguous(result.availableVariantNames, requestId);
   }
   return flagConfigNotFound(requestId);
-}
-
-function variantNotAvailable(
-  flagId: string,
-  environmentId: string,
-  missingVariants: string[],
-  requestId: string,
-): Response {
-  return renderError(
-    {
-      code: "VARIANT_NOT_AVAILABLE",
-      message: "requested variants are not available for this Flag Configuration",
-      details: {
-        flagId,
-        environmentId,
-        missingVariants,
-        recommendedAction: "ADD_VARIANT_TO_ENV",
-      },
-    },
-    { requestId },
-  );
-}
-
-function flagConfigNotFound(requestId: string): Response {
-  return renderError(
-    { code: "FLAG_NOT_FOUND", message: "flag configuration not found", details: {} },
-    { requestId },
-  );
-}
-
-function configStoreUnavailable(requestId: string): Response {
-  return renderError(
-    {
-      code: "SERVICE_UNAVAILABLE",
-      message: "config store is not configured",
-      details: { retryAfterMs: 1000 },
-    },
-    { requestId },
-  );
 }

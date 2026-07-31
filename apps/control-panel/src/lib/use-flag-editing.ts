@@ -1,7 +1,6 @@
 import { useRouter } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
-import { type MutationErrorSurface, mutationErrorSurface } from "./api";
-import type { ApprovalGateRecord } from "./approval-gate-record";
+import { mutationErrorSurface } from "./api";
 import {
   editControlPanelTargetingRules,
   loadControlPanelApprovalRequest,
@@ -9,6 +8,7 @@ import {
   updateControlPanelFlagConfig,
 } from "./control-plane-flag-mutations";
 import type { FlagEditIntent } from "./flag-edit-intent";
+import { type FlagEditPhase, flagGatePhase } from "./flag-edit-phase";
 import { flagWriteDecision } from "./flag-write-decision";
 
 /**
@@ -25,23 +25,6 @@ import { flagWriteDecision } from "./flag-write-decision";
  * record, so the operator confirms the proposal on file rather than a diff this
  * panel computed for itself.
  */
-
-type FlagEditPhase =
-  | { readonly phase: "idle" }
-  | { readonly phase: "saving" }
-  | {
-      readonly phase: "gate";
-      readonly intent: FlagEditIntent;
-      readonly request: ApprovalGateRecord;
-      readonly confirming: boolean;
-      readonly error: MutationErrorSurface | null;
-    }
-  | {
-      readonly phase: "refused";
-      readonly intent: FlagEditIntent;
-      readonly error: MutationErrorSurface;
-    }
-  | { readonly phase: "applied"; readonly approvalRequest: ApprovalGateRecord | null };
 
 export type FlagEditScope = {
   appId: string;
@@ -88,11 +71,7 @@ export function useFlagEditing(
       });
       // The gate cannot render a proposal it could not read. Falling back to a
       // generic "please try again" would hide a real pending record.
-      setState(
-        request.ok
-          ? { phase: "gate", intent, request: request.data, confirming: false, error: null }
-          : { phase: "refused", intent, error: mutationErrorSurface(request) },
-      );
+      setState(flagGatePhase(intent, request));
     },
     [newKey, router, scope],
   );

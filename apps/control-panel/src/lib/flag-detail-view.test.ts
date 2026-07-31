@@ -83,8 +83,12 @@ describe("Flag detail view model", () => {
 
     expect(isLocked(controlled, "availability")).toBe(true);
     expect(isLocked(controlled, "targeting")).toBe(true);
+    // The baseline rollout locks too: the Worker refuses it with `RUN_FROZEN`
+    // while the Run is live, because the Run's allocation is the sole authority
+    // for its traffic and an accepted baseline edit would move nobody.
+    expect(isLocked(controlled, "rollout")).toBe(true);
+    // Never the kill switch: an incident must always be stoppable.
     expect(isLocked(controlled, "kill-switch")).toBe(false);
-    expect(isLocked(controlled, "rollout")).toBe(false);
   });
 
   it("locks nothing when no Experiment controls the Flag here", () => {

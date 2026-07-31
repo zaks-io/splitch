@@ -109,16 +109,24 @@ export function flagDetailView(data: FlagDetailData, env: string): FlagDetailVie
 }
 
 /**
- * The Variant set and the Targeting a running Experiment owns are read-only while
- * it runs (flag-editing-ux.md "Controlled fields are read-only while a Run is
- * live"). The kill switch is NEVER locked: an operator must always be able to turn
- * a Flag off in an incident. The baseline rollout is not part of the frozen Run
- * config, so it is not locked either.
+ * What a running Experiment's Run owns here, and it owns it in the WORKER: the
+ * Configuration PATCH and the Targeting replace both refuse these field groups
+ * with `RUN_FROZEN` while the Run is live (flag-editing-ux.md, validation-policy.md).
+ * This function decides an affordance for an enforced refusal; it does not invent
+ * one, which is the only reason the screen is allowed to claim a lock at all
+ * (ADR-0023).
+ *
+ * The baseline rollout is included because a live Run's allocation is the sole
+ * authority for its traffic — the config baseline is not applied while it runs
+ * (evaluate-path), so an accepted edit would report "applied" for a change with no
+ * effect until the Run ended.
+ *
+ * The kill switch is NEVER locked and the Worker never freezes `enabled`: an
+ * operator must always be able to turn a Flag off in an incident.
  */
 export function isLocked(view: FlagDetailView, group: FlagDetailFieldGroup): boolean {
   if (group === "kill-switch") return false;
-  if (!view.controllingExperiment) return false;
-  return group === "availability" || group === "targeting";
+  return view.controllingExperiment !== null;
 }
 
 function availabilityOf(

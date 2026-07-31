@@ -56,9 +56,15 @@ test.describe("Incident control and Worker refusals", () => {
     await openFlag(page, confirmEnv, flags.experimentLocked);
 
     // Structurally absent, not disabled: a frozen-but-present control is one stray
-    // click away from proposing a change the Worker would refuse.
+    // click away from proposing a change the Worker would refuse with `RUN_FROZEN`
+    // (apps/control-plane-api/test/flag-config-run-freeze.test.ts is the proof that
+    // the refusal is real; this only checks the screen matches it).
     await expect(page.locator("[data-availability-input]")).toHaveCount(0);
     await expect(page.locator("[data-flag-targeting-editor]")).toHaveCount(0);
+    // The baseline rollout too: the Run's allocation owns this Environment's
+    // traffic, so the current value stays readable while the control does not.
+    await expect(page.locator("[data-baseline-input='true']")).toHaveCount(0);
+    await expect(page.locator("[data-baseline-current='true']")).toBeVisible();
     await expect(page.locator("[data-flag-lock='true']").first()).toContainText(
       "owned by Experiment Edit Locked Run while it runs",
     );

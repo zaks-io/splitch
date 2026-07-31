@@ -123,6 +123,11 @@ every later percentage change; letting a caller set it would silently reshuffle 
 A baseline change is a rollout **value** change, so it falls under the `targeting_rollout_value`
 Policy gate. Rejected with `VALIDATION_ERROR` on `rollout` when the resulting state has anything other
 than exactly one non-Default candidate to roll into (see the ambiguity rule below).
+Blocked while a running Experiment owns this Flag in this Environment: `available_variant_names` and
+`rollout` are frozen by the live Run and return `RUN_FROZEN` with `recommended_action:
+"END_RUNNING_RUN_FIRST"`, naming the Run in `current_run_id`. `enabled` is exempt — the kill switch is
+never frozen. The freeze is checked **before** the Policy gate, so a change the Run forbids never
+becomes a pending Approval Request.
 Returns:
 `{ config: FlagConfiguration, approval_request: ApprovalRequest | null }`. The request is null under
 `allow` and applied under `confirm`.
@@ -132,7 +137,8 @@ Returns:
 Full replace of this Environment's Targeting Rule list (ordered; first match wins). Body:
 `{ targetingRules: TargetingRule[], review?: { action: "approve_and_apply" }, idempotency_key: string }`.
 Rules may only reference Variants in this Environment's available set. Subject to the Environment's
-"targeting/rollout/value" Policy.
+"targeting/rollout/value" Policy. Blocked while a running Experiment owns this Flag in this
+Environment, with the same `RUN_FROZEN` refusal and the same ordering ahead of the Policy gate.
 Returns:
 `{ config: FlagConfiguration, approval_request: ApprovalRequest | null }`. The request is null under
 `allow` and applied under `confirm`.

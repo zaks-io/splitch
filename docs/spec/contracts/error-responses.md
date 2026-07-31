@@ -205,8 +205,18 @@ frozenFields = [
   'salt', 'allocation', 'variantSet', 'targetingRules', 'targetingSegmentId',
   'experiment.targetingKey', // lives on Experiment; changing it triggers RUN_FROZEN with a running Run
   'activationMetricId',      // Activation Metric is an assignment edit
+  // The Flag Configuration fields a live Run owns in its Environment. Prefixed so
+  // an agent can tell a Run-shaped field from a Flag-shaped one without guessing.
+  'flagConfig.availableVariantNames',
+  'flagConfig.rollout',
+  'flagConfig.targetingRules',
 ]
 ```
+
+`currentRunId` names the Run that owns the field, and `recommendedAction` is
+`END_RUNNING_RUN_FIRST` for the `flagConfig.*` entries — not `CREATE_NEW_RUN`, which is the remedy for
+an Experiment assignment edit and would send the operator somewhere that does not change this Flag
+Configuration at all. No additional detail field is required: the existing shape already carries both.
 
 ---
 
@@ -418,6 +428,21 @@ under an API Key `verify` returns the full reason (ADR-0037). The mapping from H
 - `RUN_FROZEN` — if any running Run's `variantSet` includes this Variant (value is frozen per Run)
 - `FLAG_NOT_FOUND` / `VARIANT_NOT_FOUND`
 - `VALIDATION_ERROR`
+
+**PATCH /apps/:appId/envs/:environmentId/flags/:flagId/config**
+
+- `RUN_FROZEN` — if the patch includes `availableVariantNames` or `rollout` and a running Experiment
+  owns this Flag in this Environment. `enabled` is exempt: the kill switch is never frozen, because an
+  operator must always be able to turn a Flag off during an incident.
+  Checked **before** the Environment Policy gate (ADR-0029), so a change the Run forbids never becomes a
+  pending Approval Request that a reviewer could approve into a refusal.
+- `VARIANT_NOT_AVAILABLE` / `FLAG_NOT_FOUND` / `VALIDATION_ERROR`
+
+**PUT /apps/:appId/envs/:environmentId/flags/:flagId/targeting-rules**
+
+- `RUN_FROZEN` — if a running Experiment owns this Flag in this Environment. Same ordering: ahead of the
+  Environment Policy gate.
+- `VARIANT_NOT_AVAILABLE` / `FLAG_NOT_FOUND` / `VALIDATION_ERROR`
 
 **POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval** (dry-run, control-plane token)
 

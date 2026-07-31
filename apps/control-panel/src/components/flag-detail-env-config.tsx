@@ -63,16 +63,39 @@ export function FlagDetailEnvConfig({
         </section>
 
         <section className="grid gap-2" aria-label="Baseline rollout">
-          <FieldLabel>Baseline rollout</FieldLabel>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <FieldLabel>Baseline rollout</FieldLabel>
+            {isLocked(view, "rollout") && experiment ? (
+              <FlagDetailLock experimentName={experiment.name} />
+            ) : null}
+          </div>
           {/*
-            Not locked by an Experiment: the baseline is not part of the frozen Run
-            configuration, so freezing it here would invent a lock the Worker does
-            not enforce.
+            Locked for the same reason as the other two, and the Worker refuses it
+            for the same reason: a live Run's allocation is the sole authority for
+            its traffic, so an accepted baseline edit would confirm "applied" for a
+            change that moves nobody until the Run ends.
           */}
-          <FlagBaselineRolloutEditor editing={editing} view={view} />
+          {renderBaselineRollout(editing, view)}
         </section>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Locked means ABSENT here too, so the read-only value stays visible while the
+ * controls that would propose a refused change do not.
+ */
+function renderBaselineRollout(editing: FlagEditing, view: FlagDetailView) {
+  if (!view.configured || !isLocked(view, "rollout")) {
+    return <FlagBaselineRolloutEditor editing={editing} view={view} />;
+  }
+  return (
+    <p className="text-foreground text-sm leading-6" data-baseline-current="true">
+      {view.baselineRolloutPercentage === null
+        ? "No baseline percentage rollout."
+        : `${view.baselineRolloutPercentage}% of traffic`}
+    </p>
   );
 }
 

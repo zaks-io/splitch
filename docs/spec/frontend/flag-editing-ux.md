@@ -85,15 +85,28 @@ separate copy mechanism is needed. The experiment evaluates against the Run's fr
 the live Flag. Editing the live Flag therefore **cannot** change what an exposed Entity sees; the
 experiment is isolated by construction.
 
-### Controlled fields are read-only while a Run is live (option 3c)
+### Controlled fields are refused by the Worker while a Run is live
 
-While an Experiment controls a Flag, the experiment-controlled fields (Variant set and the
-Targeting the Experiment owns) are **read-only in the UI**, with a banner: _"Controlled by
-Experiment X."_ The banner links to the owning Experiment. To change those fields you must end the
-Experiment.
+While a running Experiment owns a Flag in an Environment, the **Worker refuses** writes to the fields
+that Run owns: `availableVariantNames`, the baseline `rollout`, and this Environment's Targeting
+Rules. Both `PATCH .../config` and `PUT .../targeting-rules` answer `RUN_FROZEN` (409) naming the Run
+and recommending `END_RUNNING_RUN_FIRST`. The refusal is checked ahead of the Environment Policy gate,
+so the change never becomes a pending Approval Request. To change those fields you must end the Run.
 
-Chosen over the alternatives because it is the easiest to reason about: one owner at a time, no
-silent divergence (3a) and no two-sources-of-truth drift (3b).
+The panel renders that enforced refusal, it does not invent it: the controls are **absent** (not
+disabled) with a banner _"Controlled by Experiment X"_ linking to the owning Experiment, and a forced
+write surfaces the Worker's `RUN_FROZEN` refusal notice inline. This is the screen-inventory rule that
+dangerous-action protections are Worker-enforced invariants, never UI tricks (ADR-0023) — a locked
+field the CLI or an agent could write straight past would be a screen that lies.
+
+One owner at a time is also the easiest rule to reason about: no silent divergence between the live
+Flag and the Run, and no second source of truth. Allowing the write and ignoring it would be worse
+than either, because the mutated value would be invisible while the Run lasted and would then take
+effect the moment it ended — a silent delayed action, the disguised default ADR-0036 bans.
+
+The baseline `rollout` is frozen for exactly that reason: the Run's allocation is the sole authority
+for its traffic, so an accepted baseline edit would report "applied" for a change that moves nobody
+until the Run ends.
 
 ### Kill switch is always exempt
 

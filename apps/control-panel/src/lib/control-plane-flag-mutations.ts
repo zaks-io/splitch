@@ -2,6 +2,13 @@ import type { ApprovalRequest, ErrorResponse, TargetingRule } from "@splitch/con
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { type ApprovalGateRecord, approvalGateRecord } from "./approval-gate-record";
+import {
+  ApprovalRequestInputSchema,
+  ReviewInputSchema,
+  type TargetingEditSchema,
+  TargetingEditInputSchema,
+  UpdateConfigInputSchema,
+} from "./flag-mutation-input";
 import { authorizedApprovalsClient, authorizedFlagsClient } from "./panel-authorized-clients";
 
 /**
@@ -33,73 +40,6 @@ export type FlagWriteResult =
 export type ApprovalReadResult =
   | { readonly ok: true; readonly status: number; readonly data: ApprovalGateRecord }
   | { readonly ok: false; readonly status: number; readonly error: ErrorResponse };
-
-const FlagScopeSchema = z.object({
-  appId: z.string().min(1),
-  environmentId: z.string().min(1),
-  flagId: z.string().min(1),
-});
-
-/**
- * Carried from the browser, never minted per handler invocation: a key minted here
- * would be fresh on every retry, leaving the Control Plane no way to recognize a
- * replay of the same submission.
- */
-const IdempotencyKeySchema = z.string().min(1);
-
-/** Variant id -> name, so the gate can name what a rule serves. */
-const VariantLabelsSchema = z.record(z.string(), z.string()).optional();
-
-const ConfigPatchSchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    availableVariantNames: z.array(z.string()).optional(),
-    // Percentage only. The bucketing salt is minted server-side and never
-    // regenerated, so the operator neither sees nor sets it.
-    rollout: z
-      .object({ percentage: z.number().min(0).max(100) })
-      .strict()
-      .nullable()
-      .optional(),
-  })
-  .strict();
-
-const UpdateConfigInputSchema = FlagScopeSchema.extend({
-  patch: ConfigPatchSchema,
-  idempotencyKey: IdempotencyKeySchema,
-  variantLabels: VariantLabelsSchema,
-});
-
-const TargetingEditSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("remove"), ruleId: z.string().min(1) }).strict(),
-  z
-    .object({
-      kind: z.literal("add"),
-      ruleId: z.string().min(1),
-      attribute: z.string().min(1),
-      operator: z.literal("eq"),
-      value: z.string().min(1),
-      variantId: z.string().min(1),
-    })
-    .strict(),
-]);
-
-const TargetingEditInputSchema = FlagScopeSchema.extend({
-  edit: TargetingEditSchema,
-  idempotencyKey: IdempotencyKeySchema,
-  variantLabels: VariantLabelsSchema,
-});
-
-const ApprovalRequestInputSchema = z.object({
-  appId: z.string().min(1),
-  approvalRequestId: z.string().min(1),
-  variantLabels: VariantLabelsSchema,
-});
-
-const ReviewInputSchema = ApprovalRequestInputSchema.extend({
-  action: z.enum(["approve_and_apply", "decline"]),
-  idempotencyKey: IdempotencyKeySchema,
-});
 
 export const updateControlPanelFlagConfig = createServerFn({ method: "POST" })
   .validator((data: unknown) => UpdateConfigInputSchema.safeParse(data))
