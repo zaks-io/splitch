@@ -1,0 +1,119 @@
+name: smoke-shared-preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployed_sha:
+        description: "Immutable commit SHA deployed to shared preview"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-preview-deploy
+  cancel-in-progress: false
+
+env:
+  CI: "true"
+  SPLITCH_PLATFORM_TARGET: shared-preview
+
+jobs:
+  smoke:
+    name: Smoke Shared Preview
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    environment: preview
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout deployed revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.deployed_sha }}
+          persist-credentials: false
+
+      - name: Resolve immutable smoke revision
+        shell: bash
+        env:
+          DISPATCHED_DEPLOYED_SHA: ${{ inputs.deployed_sha }}
+        run: |
+          set -euo pipefail
+          deployed_sha="$(git rev-parse HEAD)"
+          if [[ ! "$DISPATCHED_DEPLOYED_SHA" =~ ^[0-9a-f]{40}$ ]] || [ "$deployed_sha" != "$DISPATCHED_DEPLOYED_SHA" ]; then
+            echo "::error::smoke revision must resolve to the dispatched full commit SHA"
+            exit 1
+          fi
+          echo "SPLITCH_WORKFLOW_REF=$deployed_sha" >> "$GITHUB_ENV"
+          echo "SPLITCH_DEPLOYED_COMMIT_SHA=$deployed_sha" >> "$GITHUB_ENV"
+
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.8.0 --activate
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check smoke credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SPLITCH_SMOKE_CLIENT_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is required for shared-preview smoke"
+              exit 1
+            fi
+          done
+
+      - name: Seed shared preview smoke data
+        id: seed
+        run: pnpm shared-preview:seed-smoke
+
+      - name: Smoke shared preview
+        id: smoke
+        run: SPLITCH_SMOKE_COMMIT_SHA="$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke
+
+      - name: Dark-launch shared preview
+        id: dark_launch
+        env:
+          SPLITCH_SMOKE_COMMIT_SHA: ${{ env.SPLITCH_DEPLOYED_COMMIT_SHA }}
+          SPLITCH_SMOKE_RUNS: "2"
+        run: pnpm smoke:dark-launch:shared-preview
+
+      - name: Clean up shared preview smoke data
+        id: cleanup
+        if: always()
+        run: pnpm shared-preview:cleanup-smoke
+
+      - name: Upload Playwright smoke report
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: shared-preview-playwright-report
+          path: |
+            playwright-report/shared-preview
+            test-results/shared-preview
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        env:
+          SPLITCH_SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+          SPLITCH_DARK_LAUNCH_OUTCOME: ${{ steps.dark_launch.outcome }}
+          SPLITCH_CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
+        run: node scripts/render-shared-preview-summary.mjs smoke >> "$GITHUB_STEP_SUMMARY"

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { requireFullCommitSha } from "./lib/shared-preview-deployment-evidence.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const mode = process.argv[2];
-if (mode !== "deploy" && mode !== "reset") {
-  fail("usage: render-shared-preview-summary.mjs <deploy|reset>");
+if (mode !== "deploy" && mode !== "reset" && mode !== "smoke") {
+  fail("usage: render-shared-preview-summary.mjs <deploy|reset|smoke>");
 }
 
 try {
@@ -19,14 +19,17 @@ export function renderSummary(input) {
   const lines = [`## Shared preview ${input.mode}`, "", `- Workflow ref: \`${input.ref}\``];
   if (input.mode === "reset") {
     lines.push(`- Reset outcome: \`${input.resetOutcome}\``);
-  } else {
+    lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
+  } else if (input.mode === "deploy") {
     lines.push(`- Deploy outcome: \`${input.deployOutcome}\``);
-  }
-  lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
-  if (input.mode === "deploy") {
+    lines.push(`- Smoke workflow dispatch outcome: \`${input.smokeDispatchOutcome}\``);
+  } else {
+    lines.push(`- Smoke outcome: \`${input.smokeOutcome}\``);
     lines.push(`- Dark-launch outcome: \`${input.darkLaunchOutcome}\``);
   }
-  lines.push(`- Cleanup outcome: \`${input.cleanupOutcome}\``);
+  if (input.mode !== "deploy") {
+    lines.push(`- Cleanup outcome: \`${input.cleanupOutcome}\``);
+  }
 
   if (input.evidence) {
     lines.push(
@@ -52,8 +55,8 @@ function summaryInput(summaryMode) {
     "workflow ref",
   );
   const smokeOutcome = process.env.SPLITCH_SMOKE_OUTCOME ?? "unknown";
-  const evidence = smokeOutcome === "success" ? readEvidence() : undefined;
-  if (summaryMode === "deploy" && evidence && evidence.deployedCommitSha !== ref) {
+  const evidence = smokeEvidence(summaryMode, smokeOutcome);
+  if (summaryMode === "smoke" && evidence && evidence.deployedCommitSha !== ref) {
     throw new Error(
       `deployed commit ${evidence.deployedCommitSha} differs from deploy workflow ref ${ref}`,
     );
@@ -62,6 +65,7 @@ function summaryInput(summaryMode) {
     mode: summaryMode,
     ref,
     deployOutcome: process.env.SPLITCH_DEPLOY_OUTCOME ?? "unknown",
+    smokeDispatchOutcome: process.env.SPLITCH_SMOKE_DISPATCH_OUTCOME ?? "unknown",
     resetOutcome: process.env.SPLITCH_RESET_OUTCOME ?? "unknown",
     smokeOutcome,
     darkLaunchOutcome: process.env.SPLITCH_DARK_LAUNCH_OUTCOME ?? "unknown",
@@ -70,6 +74,11 @@ function summaryInput(summaryMode) {
     tinybirdBranch: "shared_preview",
     migrations: migrationNames(),
   };
+}
+
+function smokeEvidence(summaryMode, smokeOutcome) {
+  if (summaryMode === "deploy" || smokeOutcome !== "success") return undefined;
+  return readEvidence();
 }
 
 function readEvidence() {

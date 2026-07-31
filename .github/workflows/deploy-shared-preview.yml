@@ -9,6 +9,7 @@ on:
         default: main
 
 permissions:
+  actions: write
   contents: read
 
 concurrency:
@@ -127,46 +128,20 @@ jobs:
         id: deploy
         run: pnpm deploy:shared-preview
 
-      - name: Seed shared preview smoke data
-        id: seed
-        run: pnpm shared-preview:seed-smoke
-
-      - name: Smoke shared preview
-        id: smoke
+      - name: Dispatch shared preview smoke
+        id: smoke_dispatch
         continue-on-error: true
         env:
-          SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
-        run: SPLITCH_SMOKE_COMMIT_SHA="$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke
-
-      - name: Dark-launch shared preview
-        id: dark_launch
-        if: steps.smoke.outcome == 'success'
-        env:
-          SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
-          SPLITCH_SMOKE_COMMIT_SHA: ${{ env.SPLITCH_DEPLOYED_COMMIT_SHA }}
-          SPLITCH_SMOKE_RUNS: "2"
-        run: pnpm smoke:dark-launch:shared-preview
-
-      - name: Clean up shared preview smoke data
-        id: cleanup
-        if: always()
-        run: pnpm shared-preview:cleanup-smoke
-
-      - name: Upload Playwright smoke report
-        if: steps.smoke.outcome == 'failure'
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: shared-preview-playwright-report
-          path: |
-            playwright-report/shared-preview
-            test-results/shared-preview
-          if-no-files-found: ignore
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh api --method POST
+          "repos/$GITHUB_REPOSITORY/actions/workflows/smoke-shared-preview.yml/dispatches"
+          -f "ref=${{ github.event.repository.default_branch }}"
+          -f "inputs[deployed_sha]=$SPLITCH_DEPLOYED_COMMIT_SHA"
 
       - name: Summary
         if: always()
         env:
           SPLITCH_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
-          SPLITCH_SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
-          SPLITCH_DARK_LAUNCH_OUTCOME: ${{ steps.dark_launch.outcome }}
-          SPLITCH_CLEANUP_OUTCOME: ${{ steps.cleanup.outcome }}
+          SPLITCH_SMOKE_DISPATCH_OUTCOME: ${{ steps.smoke_dispatch.outcome }}
         run: node scripts/render-shared-preview-summary.mjs deploy >> "$GITHUB_STEP_SUMMARY"

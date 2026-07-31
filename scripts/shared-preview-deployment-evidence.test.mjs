@@ -72,7 +72,7 @@ test("resolves the current deployed SHA only from valid shared-preview health me
   );
 });
 
-test("deploy and reset summaries retain the independently verified deployed SHA", () => {
+test("smoke and reset summaries retain the independently verified deployed SHA", () => {
   const fixture = mkdtempSync(join(tmpdir(), "splitch-shared-preview-evidence-"));
   const evidencePath = join(fixture, "evidence.json");
   writeFileSync(
@@ -86,10 +86,16 @@ test("deploy and reset summaries retain the independently verified deployed SHA"
 
   const deploy = summary("deploy", evidencePath, sha);
   assert.equal(deploy.status, 0, deploy.stderr);
-  assert.match(deploy.stdout, new RegExp(String.raw`Deployed commit SHA: \`${sha}\``));
-  assert.match(deploy.stdout, /Dark-launch outcome: `success`/);
-  assert.match(deploy.stdout, /Tinybird Branch/);
-  assert.match(deploy.stdout, /Applied D1 migrations/);
+  assert.match(deploy.stdout, /Deploy outcome: `success`/);
+  assert.match(deploy.stdout, /Smoke workflow dispatch outcome: `success`/);
+  assert.doesNotMatch(deploy.stdout, /Smoke outcome:/);
+
+  const smoke = summary("smoke", evidencePath, sha);
+  assert.equal(smoke.status, 0, smoke.stderr);
+  assert.match(smoke.stdout, new RegExp(String.raw`Deployed commit SHA: \`${sha}\``));
+  assert.match(smoke.stdout, /Dark-launch outcome: `success`/);
+  assert.match(smoke.stdout, /Tinybird Branch/);
+  assert.match(smoke.stdout, /Applied D1 migrations/);
 
   const reset = summary("reset", evidencePath, staleSha);
   assert.equal(reset.status, 0, reset.stderr);
@@ -97,26 +103,29 @@ test("deploy and reset summaries retain the independently verified deployed SHA"
   assert.match(reset.stdout, new RegExp(String.raw`Deployed commit SHA: \`${sha}\``));
 });
 
-test("shared-preview workflow resolves one immutable SHA before deploy and verifies that revision", () => {
-  const workflow = readFileSync(".github/workflows/deploy-shared-preview.yml", "utf8");
-  assert.match(workflow, /deployed_sha="\$\(git rev-parse HEAD\)"/);
-  assert.match(workflow, /SPLITCH_DEPLOYED_COMMIT_SHA=\$deployed_sha/);
+test("shared-preview deploy dispatches separate smoke verification for its immutable SHA", () => {
+  const deployWorkflow = readFileSync(".github/workflows/deploy-shared-preview.yml", "utf8");
+  const smokeWorkflow = readFileSync(".github/workflows/smoke-shared-preview.yml", "utf8");
+
+  assert.match(deployWorkflow, /deployed_sha="\$\(git rev-parse HEAD\)"/);
+  assert.match(deployWorkflow, /SPLITCH_DEPLOYED_COMMIT_SHA=\$deployed_sha/);
+  assert.match(deployWorkflow, /actions: write/);
+  assert.match(deployWorkflow, /actions\/workflows\/smoke-shared-preview\.yml\/dispatches/);
+  assert.match(deployWorkflow, /-f "inputs\[deployed_sha\]=\$SPLITCH_DEPLOYED_COMMIT_SHA"/);
+  assert.doesNotMatch(deployWorkflow, /pnpm shared-preview:smoke/);
+  assert.doesNotMatch(deployWorkflow, /pnpm smoke:dark-launch:shared-preview/);
+
+  assert.match(smokeWorkflow, /ref: \$\{\{ inputs\.deployed_sha \}\}/);
+  assert.match(smokeWorkflow, /DISPATCHED_DEPLOYED_SHA: \$\{\{ inputs\.deployed_sha \}\}/);
+  assert.match(smokeWorkflow, /\[ "\$deployed_sha" != "\$DISPATCHED_DEPLOYED_SHA" \]/);
   assert.match(
-    workflow,
+    smokeWorkflow,
     /SPLITCH_SMOKE_COMMIT_SHA="\$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke/,
   );
-  assert.match(workflow, /- name: Smoke shared preview\n\s+id: smoke\n\s+continue-on-error: true/);
-  assert.match(
-    workflow,
-    /- name: Dark-launch shared preview\n\s+id: dark_launch\n\s+if: steps\.smoke\.outcome == 'success'/,
-  );
-  assert.match(
-    workflow,
-    /- name: Upload Playwright smoke report\n\s+if: steps\.smoke\.outcome == 'failure'/,
-  );
-  assert.match(workflow, /pnpm smoke:dark-launch:shared-preview/);
-  assert.match(workflow, /SPLITCH_SMOKE_RUNS: "2"/);
-  assert.doesNotMatch(workflow, /SPLITCH_SMOKE_COMMIT_SHA="\$\(git rev-parse HEAD\)"/);
+  assert.match(smokeWorkflow, /pnpm smoke:dark-launch:shared-preview/);
+  assert.match(smokeWorkflow, /SPLITCH_SMOKE_RUNS: "2"/);
+  assert.match(smokeWorkflow, /if: always\(\)\n\s+run: pnpm shared-preview:cleanup-smoke/);
+  assert.doesNotMatch(smokeWorkflow, /continue-on-error: true/);
 });
 
 test("shared-preview reset resolves the hosted revision and verifies the whole fleet", () => {
@@ -141,6 +150,7 @@ function summary(mode, evidencePath, workflowRef) {
       SPLITCH_DARK_LAUNCH_OUTCOME: "success",
       SPLITCH_DEPLOY_OUTCOME: "success",
       SPLITCH_RESET_OUTCOME: "success",
+      SPLITCH_SMOKE_DISPATCH_OUTCOME: "success",
       SPLITCH_SMOKE_EVIDENCE_FILE: evidencePath,
       SPLITCH_SMOKE_OUTCOME: "success",
       SPLITCH_WORKFLOW_REF: workflowRef,
