@@ -85,6 +85,7 @@ test.describe("shared-preview functional API workflow", () => {
         await smoke.callTool(accessToken, "flags_delete", {
           appId: smoke.config.smokeAppId,
           flagId: createdFlag.id,
+          review: { action: "approve_and_apply" },
           idempotency_key: smoke.uniqueKey("flags-delete"),
         });
       }
@@ -101,23 +102,25 @@ test.describe("shared-preview functional API workflow", () => {
     });
     const treatment = variant(flag, "treatment");
 
-    const config = await smoke.callTool<Record<string, unknown>>(
-      accessToken,
-      "flag_config_update",
-      {
-        appId: smoke.config.smokeAppId,
-        environmentId: smoke.config.smokeEnvironmentId,
-        flagId: smoke.config.smokeFlagId,
-        enabled: true,
-        availableVariantNames: ["control", "treatment"],
-        idempotency_key: smoke.uniqueKey("flag-config-update"),
-      },
-    );
-    expect(config).toMatchObject({
-      flagId: smoke.config.smokeFlagId,
+    const configMutation = await smoke.callTool<{
+      config: Record<string, unknown>;
+      approvalRequest: unknown | null;
+    }>(accessToken, "flag_config_update", {
+      appId: smoke.config.smokeAppId,
       environmentId: smoke.config.smokeEnvironmentId,
+      flagId: smoke.config.smokeFlagId,
       enabled: true,
       availableVariantNames: ["control", "treatment"],
+      idempotency_key: smoke.uniqueKey("flag-config-update"),
+    });
+    expect(configMutation).toMatchObject({
+      approvalRequest: null,
+      config: {
+        flagId: smoke.config.smokeFlagId,
+        environmentId: smoke.config.smokeEnvironmentId,
+        enabled: true,
+        availableVariantNames: ["control", "treatment"],
+      },
     });
 
     await smoke.callTool(accessToken, "flag_targeting_rules_replace", {
