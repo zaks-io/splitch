@@ -1,17 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { ApprovalGateRecord } from "./approval-gate-record";
-import type { FlagEditIntent } from "./flag-edit-intent";
-import { flagGatePhase } from "./flag-edit-phase";
+import { gatedWritePhase } from "./gated-write-phase";
 
-const intent: FlagEditIntent = {
-  kind: "config",
-  summary: "Turn New Checkout on",
-  patch: { enabled: true },
-};
+const summary = "Turn New Checkout on";
 
-describe("Flag edit gate phase", () => {
+describe("Gated write phase", () => {
   it("opens the confirm gate on the Approval Request the Worker recorded", () => {
-    const phase = flagGatePhase(intent, {
+    const phase = gatedWritePhase(summary, {
       ok: true,
       status: 200,
       data: gateRecord(),
@@ -33,7 +28,7 @@ describe("Flag edit gate phase", () => {
    * silent failure wearing the costume of a successful no-op (ADR-0036).
    */
   it("refuses loudly when the recorded Approval Request cannot be read back", () => {
-    const phase = flagGatePhase(intent, {
+    const phase = gatedWritePhase(summary, {
       ok: false,
       status: 500,
       error: {
@@ -45,19 +40,19 @@ describe("Flag edit gate phase", () => {
 
     expect(phase.phase).toBe("refused");
     expect(phase.phase === "refused" && phase.error.code).toBe("INTERNAL_SERVER_ERROR");
-    // The intent survives the refusal: the notice names the change that was
+    // The summary survives the refusal: the notice names the change that was
     // proposed, not an anonymous failure detached from what the operator did.
     expect(phase.phase === "refused" && phase.error.message).toBe("approvals read failed");
   });
 
   it("keeps an unauthorized read a refusal rather than a dismissible blank state", () => {
-    const phase = flagGatePhase(intent, {
+    const phase = gatedWritePhase(summary, {
       ok: false,
       status: 401,
       error: { code: "UNAUTHORIZED", message: "session expired", details: {} },
     });
 
-    expect(phase).toMatchObject({ phase: "refused", intent });
+    expect(phase).toMatchObject({ phase: "refused", summary });
   });
 });
 

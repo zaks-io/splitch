@@ -116,6 +116,10 @@ const OPERATION_ROUTES: OperationCoverage = {
       flagId: "flag_1",
     },
   },
+  flag_config_promote: {
+    route: { method: "POST", pathname: `/apps/${APP}/envs/${ENV}/flags/flag_1/promote` },
+    operation: { id: "flag_config_promote", appId: APP, environmentId: ENV, flagId: "flag_1" },
+  },
   approval_request_get: {
     route: { method: "GET", pathname: `/apps/${APP}/approval-requests/apr_1` },
     operation: { id: "approval_request_get", appId: APP, approvalRequestId: "apr_1" },
