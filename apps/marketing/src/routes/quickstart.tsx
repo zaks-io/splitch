@@ -11,7 +11,8 @@ export const Route = createFileRoute("/quickstart")({
       { title: "Quickstart · splitch" },
       {
         name: "description",
-        content: "Zero to a resolving Flag: the same eight steps for agents and humans.",
+        content:
+          "Zero to a resolving Flag with the splitch CLI. Agents get the same sequence in-band over MCP.",
       },
     ],
   }),
@@ -33,8 +34,11 @@ function QuickstartRoute() {
             Zero to a resolving Flag<span className="text-arm-control">.</span>
           </h1>
           <p className="max-w-2xl text-lg text-muted-foreground leading-relaxed">
-            The same steps for a human at the CLI, an agent over MCP, and a developer in the panel.
-            Three skins over one typed contract, and every path ends on a verify round-trip.
+            This page walks the CLI path, and every step ends on a verify round-trip. Building with
+            an agent? Don’t paste this page into its context: connect it to{" "}
+            <span className="font-mono text-foreground">mcp.splitch.dev</span> and it discovers the
+            tools, and this same sequence, in-band via{" "}
+            <span className="font-mono text-foreground">splitch://quickstart</span>.
           </p>
           <CodeSnippet
             code={`authenticate → pick an Org → create an App (dev+prod Envs auto-provisioned)

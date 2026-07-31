@@ -16,7 +16,7 @@ const recoveries = [
   [
     "VARIANT_NOT_AVAILABLE",
     "the Variant is not promoted to this Environment",
-    "flags_promote, then retry",
+    "promote the Variant to this Environment, then retry",
   ],
   ["RUN_FROZEN", "the edit touches a running Run", "clone into a new draft Run"],
   ["APP_MISMATCH", "wrong key for this App or Environment", "fetch the credential for this Env"],
