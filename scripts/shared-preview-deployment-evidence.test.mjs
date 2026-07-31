@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { spawnSync } from "node:child_process";
 import {
   createFleetEvidence,
   resolveDeployedCommitSha,
@@ -72,7 +72,7 @@ test("resolves the current deployed SHA only from valid shared-preview health me
   );
 });
 
-test("deploy and reset summaries retain the independently verified deployed SHA", () => {
+test("smoke and reset summaries retain the independently verified deployed SHA", () => {
   const fixture = mkdtempSync(join(tmpdir(), "splitch-shared-preview-evidence-"));
   const evidencePath = join(fixture, "evidence.json");
   writeFileSync(
@@ -84,12 +84,14 @@ test("deploy and reset summaries retain the independently verified deployed SHA"
     }),
   );
 
-  const deploy = summary("deploy", evidencePath, sha);
-  assert.equal(deploy.status, 0, deploy.stderr);
-  assert.match(deploy.stdout, new RegExp(String.raw`Deployed commit SHA: \`${sha}\``));
-  assert.match(deploy.stdout, /Dark-launch outcome: `success`/);
-  assert.match(deploy.stdout, /Tinybird Branch/);
-  assert.match(deploy.stdout, /Applied D1 migrations/);
+  const smoke = summary("smoke", evidencePath, sha);
+  assert.equal(smoke.status, 0, smoke.stderr);
+  assert.match(smoke.stdout, new RegExp(String.raw`Deployed commit SHA: \`${sha}\``));
+  assert.match(smoke.stdout, /Seed outcome: `success`/);
+  assert.match(smoke.stdout, /Dark-launch outcome: `success`/);
+  assert.match(smoke.stdout, /Failure artifact outcome: `skipped`/);
+  assert.match(smoke.stdout, /Tinybird Branch/);
+  assert.match(smoke.stdout, /Applied D1 migrations/);
 
   const reset = summary("reset", evidencePath, staleSha);
   assert.equal(reset.status, 0, reset.stderr);
@@ -97,17 +99,37 @@ test("deploy and reset summaries retain the independently verified deployed SHA"
   assert.match(reset.stdout, new RegExp(String.raw`Deployed commit SHA: \`${sha}\``));
 });
 
-test("shared-preview workflow resolves one immutable SHA before deploy and verifies that revision", () => {
+test("shared-preview deploy keeps every post-deploy smoke phase non-blocking", () => {
   const workflow = readFileSync(".github/workflows/deploy-shared-preview.yml", "utf8");
+  const jobs = workflow.slice(workflow.indexOf("\njobs:\n"));
+  const deployJob = workflow.match(/\n {2}deploy:\n([\s\S]*)$/)?.[1];
+
+  assert.ok(deployJob);
   assert.match(workflow, /deployed_sha="\$\(git rev-parse HEAD\)"/);
   assert.match(workflow, /SPLITCH_DEPLOYED_COMMIT_SHA=\$deployed_sha/);
+  assert.doesNotMatch(jobs, /\n {2}(?!deploy:)[a-z0-9_-]+:\n/);
   assert.match(
-    workflow,
+    deployJob,
+    /name: Seed shared preview smoke data\n\s+id: seed\n\s+continue-on-error: true/,
+  );
+  assert.match(
+    deployJob,
+    /name: Smoke shared preview\n\s+id: smoke\n\s+if: steps\.seed\.outcome == 'success'\n\s+continue-on-error: true/,
+  );
+  assert.match(
+    deployJob,
+    /name: Dark-launch shared preview\n\s+id: dark_launch\n\s+if: steps\.smoke\.outcome == 'success'\n\s+continue-on-error: true/,
+  );
+  assert.match(
+    deployJob,
     /SPLITCH_SMOKE_COMMIT_SHA="\$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke/,
   );
-  assert.match(workflow, /pnpm smoke:dark-launch:shared-preview/);
-  assert.match(workflow, /SPLITCH_SMOKE_RUNS: "2"/);
-  assert.doesNotMatch(workflow, /SPLITCH_SMOKE_COMMIT_SHA="\$\(git rev-parse HEAD\)"/);
+  assert.match(deployJob, /pnpm smoke:dark-launch:shared-preview/);
+  assert.match(deployJob, /SPLITCH_SMOKE_RUNS: "2"/);
+  assert.match(
+    deployJob,
+    /if: always\(\)\n\s+continue-on-error: true\n\s+run: pnpm shared-preview:cleanup-smoke/,
+  );
 });
 
 test("shared-preview reset resolves the hosted revision and verifies the whole fleet", () => {
@@ -130,8 +152,9 @@ function summary(mode, evidencePath, workflowRef) {
       ...process.env,
       SPLITCH_CLEANUP_OUTCOME: "success",
       SPLITCH_DARK_LAUNCH_OUTCOME: "success",
-      SPLITCH_DEPLOY_OUTCOME: "success",
+      SPLITCH_ARTIFACT_OUTCOME: "skipped",
       SPLITCH_RESET_OUTCOME: "success",
+      SPLITCH_SEED_OUTCOME: "success",
       SPLITCH_SMOKE_EVIDENCE_FILE: evidencePath,
       SPLITCH_SMOKE_OUTCOME: "success",
       SPLITCH_WORKFLOW_REF: workflowRef,
