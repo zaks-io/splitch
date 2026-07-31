@@ -82,6 +82,7 @@ runInherit("git", [
 runInherit("git", ["push", "origin", `refs/tags/${target.tag}`, "--force"]);
 
 const releaseTitle = `${target.packageName}@${target.version}`;
+const latestArgs = target.githubLatest === false ? ["--latest=false"] : [];
 const releaseNotes = [
   `Draft ${targetLabel} release for \`${target.packageName}@${target.version}\`.`,
   "",
@@ -105,6 +106,7 @@ if (!existing.exists) {
     releaseNotes,
     "--target",
     commitSha,
+    ...latestArgs,
   ]);
 } else {
   runInherit("gh", [

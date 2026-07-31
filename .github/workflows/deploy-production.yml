@@ -67,7 +67,7 @@ jobs:
       base_sha: ${{ steps.plan.outputs.base_sha }}
       d1: ${{ steps.plan.outputs.d1 }}
       reason: ${{ steps.plan.outputs.reason }}
-      should_deploy: ${{ steps.plan.outputs.should_deploy }}
+      should_deploy: ${{ steps.freshness.outputs.superseded == 'true' && 'false' || steps.plan.outputs.should_deploy }}
       tinybird: ${{ steps.plan.outputs.tinybird }}
       worker_packages: ${{ steps.plan.outputs.worker_packages }}
       workers: ${{ steps.plan.outputs.workers }}
@@ -83,12 +83,15 @@ jobs:
           fi
 
       - name: Reject stale release without explicit recovery
+        id: freshness
         env:
           ALLOW_STALE_RELEASE: ${{ inputs.allow_stale_release && '1' || '0' }}
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ env.SENTRY_RELEASE }}
+          TRIGGER_EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
+          echo "superseded=false" >> "$GITHUB_OUTPUT"
           current_main_sha="$(curl --fail --silent --show-error \
             --header "Accept: application/vnd.github+json" \
             --header "Authorization: Bearer $GH_TOKEN" \
@@ -99,6 +102,18 @@ jobs:
             echo "Release is current main: $RELEASE_SHA"
             exit 0
           fi
+          if [ "$TRIGGER_EVENT" = "push" ]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release $RELEASE_SHA was superseded by $current_main_sha before deploying; skipping. The CI run for $current_main_sha deploys it."
+            {
+              echo "## Production deploy plan"
+              echo
+              echo "- Release: \`$RELEASE_SHA\`"
+              echo "- Deploy: \`false\`"
+              echo "- Reason: superseded by newer main commit \`$current_main_sha\`; its CI run deploys instead"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           if [ "$ALLOW_STALE_RELEASE" != "1" ]; then
             echo "::error::Release $RELEASE_SHA is not current main $current_main_sha. Dispatch current main or explicitly enable allow_stale_release for recovery."
             exit 1
@@ -106,6 +121,7 @@ jobs:
           echo "::warning::Explicit stale release recovery enabled: deploying $RELEASE_SHA while current main is $current_main_sha. This does not roll back D1, KV, Durable Objects, Queues, or Tinybird."
 
       - name: Checkout
+        if: steps.freshness.outputs.superseded != 'true'
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
@@ -113,6 +129,7 @@ jobs:
           persist-credentials: false
 
       - name: Verify checked out release commit
+        if: steps.freshness.outputs.superseded != 'true'
         env:
           EXPECTED_SHA: ${{ env.SENTRY_RELEASE }}
         run: |
@@ -124,6 +141,7 @@ jobs:
           fi
 
       - name: Verify successful CI for release commit
+        if: steps.freshness.outputs.superseded != 'true'
         env:
           CI_RUN_ID: ${{ inputs.ci_run_id }}
           CURRENT_RUN_ID: ${{ github.run_id }}
@@ -162,6 +180,7 @@ jobs:
           echo "Verified CI: $run_url"
 
       - name: Plan production deploy
+        if: steps.freshness.outputs.superseded != 'true'
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -169,6 +188,7 @@ jobs:
         run: node scripts/plan-production-deploy.mjs
 
       - name: Summary
+        if: steps.freshness.outputs.superseded != 'true'
         env:
           BASE_SHA: ${{ steps.plan.outputs.base_sha }}
           D1: ${{ steps.plan.outputs.d1 }}
@@ -198,6 +218,8 @@ jobs:
     needs: validate
     if: needs.validate.outputs.should_deploy == 'true'
     environment: production
+    outputs:
+      superseded: ${{ steps.revalidate.outputs.superseded }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ vars.TURBO_TEAM }}
@@ -302,12 +324,15 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Revalidate current release after production gate
+        id: revalidate
         env:
           ALLOW_STALE_RELEASE: ${{ inputs.allow_stale_release && '1' || '0' }}
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ env.SENTRY_RELEASE }}
+          TRIGGER_EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
+          echo "superseded=false" >> "$GITHUB_OUTPUT"
           current_main_sha="$(curl --fail --silent --show-error \
             --header "Accept: application/vnd.github+json" \
             --header "Authorization: Bearer $GH_TOKEN" \
@@ -318,6 +343,18 @@ jobs:
             echo "Release remains current main: $RELEASE_SHA"
             exit 0
           fi
+          if [ "$TRIGGER_EVENT" = "push" ]; then
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release $RELEASE_SHA was superseded by $current_main_sha while waiting for the production gate; skipping. The CI run for $current_main_sha deploys it."
+            {
+              echo "## Production deploy"
+              echo
+              echo "- Release: \`$RELEASE_SHA\`"
+              echo "- Deploy: \`false\`"
+              echo "- Reason: superseded by newer main commit \`$current_main_sha\` at the production gate; its CI run deploys instead"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           if [ "$ALLOW_STALE_RELEASE" != "1" ]; then
             echo "::error::Release $RELEASE_SHA became stale while waiting for the production gate; current main is $current_main_sha."
             exit 1
@@ -325,17 +362,17 @@ jobs:
           echo "::warning::Production gate approved explicit stale release recovery for $RELEASE_SHA while current main is $current_main_sha."
 
       - name: Deploy Tinybird
-        if: needs.validate.outputs.tinybird == 'true'
+        if: needs.validate.outputs.tinybird == 'true' && steps.revalidate.outputs.superseded != 'true'
         id: tinybird
         run: pnpm tinybird:deploy:production
 
       - name: Apply D1 migrations
-        if: needs.validate.outputs.d1 == 'true'
+        if: needs.validate.outputs.d1 == 'true' && steps.revalidate.outputs.superseded != 'true'
         id: d1
         run: pnpm d1:migrate:production
 
       - name: Deploy Cloudflare Workers
-        if: needs.validate.outputs.workers == 'true'
+        if: needs.validate.outputs.workers == 'true' && steps.revalidate.outputs.superseded != 'true'
         id: workers
         env:
           WORKER_PACKAGES: ${{ needs.validate.outputs.worker_packages }}
@@ -368,6 +405,7 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     needs: deploy
+    if: needs.deploy.outputs.superseded != 'true'
     environment: production
     steps:
       - name: Checkout

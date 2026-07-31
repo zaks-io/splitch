@@ -53,6 +53,56 @@ test("production deploy rejects stale releases unless recovery is explicit", () 
   );
 });
 
+test("superseded continuous releases skip cleanly instead of failing the run", () => {
+  assert.ok(validateJob);
+  assert.match(validateJob, /id: freshness/);
+  assert.match(
+    validateJob,
+    /if \[ "\$TRIGGER_EVENT" = "push" \]; then\n\s+echo "superseded=true" >> "\$GITHUB_OUTPUT"/,
+  );
+  assert.match(validateJob, /was superseded by \$current_main_sha before deploying; skipping/);
+  const guardedValidateSteps = [
+    "Checkout",
+    "Verify checked out release commit",
+    "Verify successful CI for release commit",
+    "Plan production deploy",
+    "Summary",
+  ];
+  for (const step of guardedValidateSteps) {
+    assert.match(
+      validateJob,
+      new RegExp(`name: ${step}\\n\\s+if: steps\\.freshness\\.outputs\\.superseded != 'true'`),
+      `validate step "${step}" must skip once the release is superseded`,
+    );
+  }
+  assert.match(workflow, /id: revalidate/);
+  assert.match(
+    workflow,
+    /was superseded by \$current_main_sha while waiting for the production gate; skipping/,
+  );
+  assert.match(
+    workflow,
+    /if: needs\.validate\.outputs\.tinybird == 'true' && steps\.revalidate\.outputs\.superseded != 'true'/,
+  );
+  assert.match(
+    workflow,
+    /if: needs\.validate\.outputs\.d1 == 'true' && steps\.revalidate\.outputs\.superseded != 'true'/,
+  );
+  assert.match(
+    workflow,
+    /if: needs\.validate\.outputs\.workers == 'true' && steps\.revalidate\.outputs\.superseded != 'true'/,
+  );
+  assert.match(workflow, /superseded: \$\{\{ steps\.revalidate\.outputs\.superseded \}\}/);
+  assert.ok(releaseJob);
+  assert.match(releaseJob, /if: needs\.deploy\.outputs\.superseded != 'true'/);
+  const dispatchStillFails = /if \[ "\$ALLOW_STALE_RELEASE" != "1" \]; then\n\s+echo "::error::/g;
+  assert.equal(
+    workflow.match(dispatchStillFails)?.length,
+    2,
+    "explicit dispatch of a stale SHA must still fail loudly in both guards",
+  );
+});
+
 test("the unstable nightly E2E never blocks production deploys", () => {
   assert.doesNotMatch(workflow, /e2e\.yml/);
   assert.doesNotMatch(workflow, /Verify recent E2E success/);
@@ -62,7 +112,10 @@ test("production deploy plans from the latest successful environment deployment"
   assert.match(validateJob, /name: Plan production deploy/);
   assert.match(validateJob, /id: plan/);
   assert.match(validateJob, /run: node scripts\/plan-production-deploy\.mjs/);
-  assert.match(workflow, /should_deploy: \$\{\{ steps\.plan\.outputs\.should_deploy \}\}/);
+  assert.match(
+    workflow,
+    /should_deploy: \$\{\{ steps\.freshness\.outputs\.superseded == 'true' && 'false' \|\| steps\.plan\.outputs\.should_deploy \}\}/,
+  );
   assert.match(workflow, /worker_packages: \$\{\{ steps\.plan\.outputs\.worker_packages \}\}/);
   assert.match(workflow, /if: needs\.validate\.outputs\.should_deploy == 'true'/);
 });

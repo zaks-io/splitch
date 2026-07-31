@@ -6,6 +6,11 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const RELEASE_SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
+const releaseConstants = readFileSync(path.join(repoRoot, "scripts/release/constants.mjs"), "utf8");
+const publishDraftRelease = readFileSync(
+  path.join(repoRoot, "scripts/release/publish-draft-release.mjs"),
+  "utf8",
+);
 
 interface ReleaseContractOptions {
   targetKey: "sdk" | "cli";
@@ -139,6 +144,21 @@ describe("already-released detection", () => {
     const { isReleasePublished } = await load();
     await expect(isReleasePublished({ ...base, fetchImpl: respond(500) })).rejects.toThrow(
       /HTTP 500/,
+    );
+  });
+});
+
+describe("GitHub latest release policy", () => {
+  it("reserves the repository-wide Latest release for the CLI stream", () => {
+    expect(releaseConstants).toMatch(
+      /sdk: Object\.freeze\(\{[\s\S]*?githubLatest: false,[\s\S]*?\}\),\n {2}cli:/,
+    );
+    expect(releaseConstants).toMatch(/cli: Object\.freeze\(\{[\s\S]*?githubLatest: "automatic",/);
+    expect(publishDraftRelease).toContain(
+      'target.githubLatest === false ? ["--latest=false"] : []',
+    );
+    expect(publishDraftRelease).toMatch(
+      /"release",\n {4}"create",[\s\S]*?"--target",\n {4}commitSha,\n {4}\.\.\.latestArgs,/,
     );
   });
 });
