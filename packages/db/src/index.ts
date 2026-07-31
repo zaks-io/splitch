@@ -15,6 +15,7 @@
  * not a query handle.
  */
 
+export type { CreateFlagResult } from "./repo/flags";
 export type {
   ApprovalCommit,
   ApprovalDisposition,
