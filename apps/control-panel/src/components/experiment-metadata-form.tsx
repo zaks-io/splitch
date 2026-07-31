@@ -13,9 +13,9 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@splitch/ui/com
 import { Input } from "@splitch/ui/components/input";
 import { Spinner } from "@splitch/ui/components/spinner";
 import { Textarea } from "@splitch/ui/components/textarea";
-import { useRouter } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 import { updateControlPanelExperiment } from "#lib/control-plane-experiment-functions";
+import { useExperimentDetailRefresh } from "#lib/use-experiment-detail-refresh";
 
 export function ExperimentMetadataForm({
   appId,
@@ -26,7 +26,7 @@ export function ExperimentMetadataForm({
   environmentId: string;
   experiment: PanelExperimentDetail;
 }) {
-  const router = useRouter();
+  const refresh = useExperimentDetailRefresh({ appId, environmentId }, experiment.id);
   const [description, setDescription] = useState(experiment.description);
   const [owner, setOwner] = useState(experiment.owner);
   const [tags, setTags] = useState(experiment.tags.join(", "));
@@ -49,7 +49,7 @@ export function ExperimentMetadataForm({
         return;
       }
       setState("saved");
-      await router.invalidate();
+      await refresh();
     } catch {
       setState("error");
     }
