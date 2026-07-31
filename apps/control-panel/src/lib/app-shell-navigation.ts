@@ -56,10 +56,21 @@ export function scopedHref(scope: UrlScope, section = ""): string {
 
 const APP_SCOPE_PREFIX = "/$orgSlug/$appSlug/$env";
 
+/**
+ * Every registry entry today is App-scoped. A destination outside that scope
+ * would build a href that can never equal a real pathname, so the guard in
+ * `deferredDestinationAt` would silently never fire for it and it would be
+ * treated as shipped — the disguised-default shape ADR-0036 bans. Fail loud
+ * instead of shipping that gap quietly.
+ */
 function destinationSection(to: string): string {
-  return to.startsWith(APP_SCOPE_PREFIX)
-    ? to.slice(APP_SCOPE_PREFIX.length).replace(/^\/+/, "")
-    : to;
+  if (!to.startsWith(APP_SCOPE_PREFIX)) {
+    throw new Error(
+      `appSectionRegistry entry "${to}" is outside the App scope (${APP_SCOPE_PREFIX}); ` +
+        "deferredDestinationAt only matches App-scoped hrefs.",
+    );
+  }
+  return to.slice(APP_SCOPE_PREFIX.length).replace(/^\/+/, "");
 }
 
 /**
@@ -68,16 +79,23 @@ function destinationSection(to: string): string {
  * matches a direct request's pathname against every `deferred` entry in the
  * registry (not just Segments), so the App-scope loader can answer the whole
  * class uniformly instead of each deferred route file special-casing itself.
+ *
+ * Matches the destination's own path AND everything under it (prefix match,
+ * not `===`): a deferred destination with child routes (e.g. an experiment
+ * detail page under a deferred `Experiments`) must not let a deep link past
+ * the guard just because it targets a descendant rather than the exact href.
  */
 export function deferredDestinationAt(
   pathname: string,
   scope: UrlScope,
 ): NavigationDestination | undefined {
-  return appSectionRegistry.find(
-    (destination) =>
-      destination.status === "deferred" &&
-      scopedHref(scope, destinationSection(destination.to)) === pathname,
-  );
+  return appSectionRegistry.find((destination) => {
+    if (destination.status !== "deferred") {
+      return false;
+    }
+    const href = scopedHref(scope, destinationSection(destination.to));
+    return pathname === href || pathname.startsWith(`${href}/`);
+  });
 }
 
 export function environmentSwitchHref(

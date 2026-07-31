@@ -23,8 +23,9 @@ function sourceFiles(dir: string): string[] {
  */
 describe("no link targets an App without an Environment", () => {
   it("has no route matching /$orgSlug/$appSlug", () => {
-    const routes = readdirSync(join(SRC, "routes")).filter((name) =>
-      name.startsWith("$orgSlug.$appSlug."),
+    const routes = readdirSync(join(SRC, "routes")).filter(
+      (name) =>
+        name.startsWith("$orgSlug.$appSlug.") && name.endsWith(".tsx") && !name.includes(".test."),
     );
 
     expect(routes.length).toBeGreaterThan(0);

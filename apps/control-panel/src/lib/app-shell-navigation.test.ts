@@ -145,6 +145,36 @@ describe("Deferred destination deep links", () => {
       deferredDestinationAt("/acme-labs/checkout-api/dev/no-such-section", scope),
     ).toBeUndefined();
   });
+
+  /**
+   * A deferred destination can still have child route files left behind
+   * (e.g. a deferred `Experiments` would keep `experiments.$experimentId.*`).
+   * A deep link to a descendant must still be caught: an exact-match-only
+   * guard would let it fall through to the child route's own loader and
+   * render the deferred screen after all.
+   */
+  it("matches a descendant path of every deferred destination's href", () => {
+    for (const destination of deferredDestinations) {
+      const href = scopedHref(
+        scope,
+        destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
+      );
+      const descendant = `${href}/child-resource/nested`;
+      expect(deferredDestinationAt(descendant, scope), `${destination.label} (${descendant})`).toBe(
+        destination,
+      );
+    }
+  });
+
+  it("does not match a sibling path that only shares a prefix, not a path segment boundary", () => {
+    for (const destination of deferredDestinations) {
+      const href = scopedHref(
+        scope,
+        destination.to.replace(/^\/\$orgSlug\/\$appSlug\/\$env\/?/, ""),
+      );
+      expect(deferredDestinationAt(`${href}-extra`, scope)).toBeUndefined();
+    }
+  });
 });
 
 describe("App shell navigation", () => {
