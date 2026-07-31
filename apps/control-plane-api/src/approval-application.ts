@@ -5,7 +5,7 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import { syncExperimentConfigFromD1 } from "./experiment-handler-shared";
 import { json } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
-import { decisionSpecFromProposal, startReadinessResponse } from "./experiment-start-decision-spec";
+import { decisionSpecFromProposal } from "./experiment-start-decision-spec";
 import { purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
 import {
   variantFreezeDetails,
@@ -71,12 +71,6 @@ async function applyExperimentStart(
       error: { code: "EXPERIMENT_NOT_FOUND" as const, details: {} },
     };
   }
-  // Re-checked at apply rather than only at proposal: nothing freezes the goal
-  // Metric family while an Approval Request is pending, so an Experiment can
-  // lose it in between and a gated Start would open the undecidable Run the
-  // ungated one refuses.
-  const readiness = startReadinessResponse(experiment, commit.reviewId);
-  if (readiness) return await responseError(readiness);
   const prepared = await prepareStart(deps.repo, scope, experiment, commit.reviewId);
   if (!prepared.ok) return await responseError(prepared.response);
   const decisionSpec = decisionSpecFromProposal(request.diff.proposed);

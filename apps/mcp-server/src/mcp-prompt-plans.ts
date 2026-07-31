@@ -6,7 +6,11 @@ export function onboardNewAppPlan(orgId: string, appName: string): McpPromptPlan
     "context_use",
     "client_key_get",
     "flags_create",
+    "flag_config_update",
+    "experiments_create",
+    "experiments_start",
     "flags_test_eval",
+    "experiment_results_get",
   ] as const;
   return {
     description: promptDescription("onboard_new_app"),
@@ -33,12 +37,28 @@ export function onboardNewAppPlan(orgId: string, appName: string): McpPromptPlan
         "Create an initial Flag in the active App so wiring can be confirmed.",
       ),
       toolMessage(
+        "flag_config_update",
+        "Enable the Flag and make its Variants available in the dev Environment.",
+      ),
+      toolMessage(
+        "experiments_create",
+        "Create the smallest Experiment draft around the Flag: metrics=[], explicit allocation, Targeting Key field and type.",
+      ),
+      toolMessage(
+        "experiments_start",
+        "Start the first Run with a caller-stable idempotency_key. Do not create an Approval Request unless Environment Policy requires it.",
+      ),
+      toolMessage(
         "flags_test_eval",
-        "Run the control-plane confidence round-trip (ADR-0037). Do not treat onboarding as complete until this resolves green. Customer code later uses the Client Key path for the first real Exposure.",
+        "Run a test evaluation to confirm the live Run resolves. A test evaluation records no Exposure (ADR-0037). Customer code then evaluates once through the SDK and retries with the same idempotency key.",
+      ),
+      toolMessage(
+        "experiment_results_get",
+        "After the SDK Evaluation, poll until deduped Exposure counts total exactly one, multiple_count is zero, and __multiple__ is absent.",
       ),
       message(
         "assistant",
-        "If this session authenticated via the anonymous door, tell the human to claim the demo Organization before demoExpiresAt (see splitch://active-context). Onboarding is complete only after the first real Exposure (deploy → evaluate with a real Targeting Key).",
+        "If this session authenticated via the anonymous door, tell the human to claim the demo Organization before demoExpiresAt (see splitch://active-context). Onboarding is complete only after experiment_results_get observes the first real, deduplicated Exposure.",
       ),
     ],
   };

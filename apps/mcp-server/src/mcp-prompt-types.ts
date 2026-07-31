@@ -45,7 +45,7 @@ export const PROMPT_DEFINITIONS: readonly McpPromptDefinition[] = [
   {
     name: "onboard_new_app",
     description:
-      "Plan: create an App, select dev, fetch a Client Key, create a Flag, and confirm with flags_test_eval.",
+      "Plan: create an App and Flag, Start a minimal Experiment Run, verify without Exposure, then observe the first deduplicated Exposure.",
     arguments: [
       { name: "orgId", description: "Organization id that will own the App.", required: true },
       { name: "appName", description: "Display name for the new App.", required: true },

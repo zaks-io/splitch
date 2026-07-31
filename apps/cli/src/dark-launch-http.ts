@@ -1,11 +1,19 @@
-import { expect } from "vitest";
 import { appScope } from "@splitch/db";
-import { quickstartOrigins, type QuickstartHarness } from "./quickstart-local-harness.js";
+import { expect } from "vitest";
+import { type QuickstartHarness, quickstartOrigins } from "./quickstart-local-harness.js";
 
 const FLAG_KEY = "dark-launch-demo";
 
 export type PackedSdk = {
-  createSplitchClient(options: { clientKey: string; endpoint: string; fetch: typeof fetch }): {
+  createSplitchClient(options: {
+    clientKey: string;
+    endpoint: string;
+    fetch: typeof fetch;
+    logger?: {
+      error(message: string, detail: unknown): void;
+      debug(message: string, detail: unknown): void;
+    };
+  }): {
     verify(
       flagKey: string,
       context: { targetingKey: string; attributes?: Record<string, unknown> },
@@ -76,12 +84,16 @@ export async function controlPlanePost<T>(
   body: Record<string, unknown>,
   token = harness.accessToken,
 ): Promise<T> {
+  const idempotencyKey =
+    typeof body.idempotency_key === "string"
+      ? body.idempotency_key
+      : `dark-launch-${crypto.randomUUID()}`;
   const response = await harness.routingFetch(`${quickstartOrigins.controlPlaneBaseUrl}${path}`, {
     method: "POST",
     headers: {
       authorization: `Bearer ${token}`,
       "content-type": "application/json",
-      "idempotency-key": `dark-launch-${crypto.randomUUID()}`,
+      "idempotency-key": idempotencyKey,
     },
     body: JSON.stringify(body),
   });
@@ -116,8 +128,9 @@ export async function deleteFlagThroughApproval(
   harness: QuickstartHarness,
   appId: string,
   flagId: string,
+  token = harness.accessToken,
 ): Promise<void> {
-  const response = await controlPlaneDelete(harness, `/apps/${appId}/flags/${flagId}`);
+  const response = await controlPlaneDelete(harness, `/apps/${appId}/flags/${flagId}`, token);
   if (response.ok) return;
 
   expect(response.status).toBe(409);
@@ -135,7 +148,7 @@ export async function deleteFlagThroughApproval(
     {
       method: "POST",
       headers: {
-        authorization: `Bearer ${harness.accessToken}`,
+        authorization: `Bearer ${token}`,
         "content-type": "application/json",
         "idempotency-key": idempotencyKey,
       },

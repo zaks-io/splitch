@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { ExperimentRow } from "./experiment-model";
 import {
   decisionSpecFromProposal,
   runDecisionSpecFromBody,
-  startReadinessResponse,
 } from "./experiment-start-decision-spec";
 
 const REQUEST_ID = "req_decision_spec";
@@ -14,10 +12,6 @@ async function errorBody(response: Response) {
     message: string;
     details: { issues: Array<{ path: string[]; message: string }> };
   };
-}
-
-function experimentRow(metrics: string): ExperimentRow {
-  return { metrics } as unknown as ExperimentRow;
 }
 
 describe("runDecisionSpecFromBody", () => {
@@ -64,22 +58,6 @@ describe("runDecisionSpecFromBody", () => {
     );
 
     expect(result).toEqual({ ok: true, value: { horizon: "fixed", sampleSizeLocked: 5000 } });
-  });
-});
-
-describe("startReadinessResponse", () => {
-  it("passes an Experiment that has a goal Metric family", () => {
-    expect(startReadinessResponse(experimentRow('[{"id":"met_1"}]'), REQUEST_ID)).toBeNull();
-  });
-
-  it("refuses Start with an empty goal Metric family, naming the field", async () => {
-    const response = startReadinessResponse(experimentRow("[]"), REQUEST_ID);
-
-    expect(response).not.toBeNull();
-    const body = await errorBody(response as Response);
-    expect(body.code).toBe("VALIDATION_ERROR");
-    expect(body.details.issues[0]?.path).toEqual(["experiment", "metrics"]);
-    expect(body.details.issues[0]?.message).toMatch(/goal Metric/);
   });
 });
 

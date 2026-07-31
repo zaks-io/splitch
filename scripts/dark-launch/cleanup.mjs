@@ -1,12 +1,15 @@
 /** Negative proofs and cleanup for the dark-launch journey. */
 
+import { proveWrongAppIsolation } from "./app-isolation-proof.mjs";
+import { captureCleanupFailure, throwPrimaryWithCleanup } from "./cleanup-failures.mjs";
 import { COHORT_ATTRIBUTE, COHORT_VALUE } from "./constants.mjs";
 import {
-  clientKeyMaterialFromCreate,
   controlPlaneCall,
   createDarkLaunchApp,
   deleteApp,
+  deleteExperiment,
   deleteFlag,
+  endRun,
   getClientKey,
   listApps,
   listFlags,
@@ -16,28 +19,26 @@ import {
 /**
  * Negative authorization proofs.
  *
- * Hosted shared-preview: supply `wrongAppClientKey` and `revokedClientKey` from
- * stable seed fixtures (no rotation of the journey App, no orphan Apps).
- * Local / open org tokens: omit those fields to create fully deletable probe Apps.
+ * Each proof owns disposable probe Apps so it can establish the complete
+ * precondition instead of depending on opaque, potentially stale fixture keys.
  */
-export async function runNegativeProofs(deps, resources, keys, resolve) {
-  const probes = { appIds: [] };
+export async function runNegativeProofs(deps, resources, keys, resolve, journeyLiveVariant) {
+  const probes = { apps: [], flags: [] };
+  let result;
+  let proofFailure;
 
   try {
-    const wrongKeyMaterial = await resolveWrongAppClientKey(deps, resources, keys, probes);
-    await assertStructuredAuthFailure(
-      () =>
-        resolve("verify", {
-          clientKey: wrongKeyMaterial,
-          targetingKey: keys.targetedKey,
-          attributes: { [COHORT_ATTRIBUTE]: COHORT_VALUE },
-        }),
-      "FLAG_NOT_FOUND",
-      "wrong-App credentials",
+    const wrongApp = await proveWrongAppIsolation(
+      deps,
+      resources,
+      keys,
+      probes,
+      resolve,
+      journeyLiveVariant,
     );
 
-    const revokedKeyMaterial = await resolveRevokedClientKey(deps, resources, keys, probes);
-    await assertStructuredAuthFailure(
+    const revokedKeyMaterial = await createRevokedClientKey(deps, resources, keys, probes);
+    const revokedCredential = await assertStructuredAuthFailure(
       () =>
         resolve("verify", {
           clientKey: revokedKeyMaterial,
@@ -48,71 +49,67 @@ export async function runNegativeProofs(deps, resources, keys, resolve) {
       "revoked credential",
     );
 
-    await proveCrossOrganizationWriteRejected(deps, keys);
-  } finally {
-    for (const appId of probes.appIds) {
-      await deleteApp(deps, appId);
-    }
+    const crossOrganization = await proveCrossOrganizationWriteRejected(deps, keys, probes);
+    result = { wrongApp, revokedCredential, crossOrganization };
+  } catch (error) {
+    proofFailure = error;
   }
+
+  const cleanupFailures = [];
+  for (const probe of probes.flags.reverse()) {
+    await captureCleanupFailure(cleanupFailures, `delete probe Flag ${probe.flagId}`, () =>
+      deleteFlag(deps, probe.appId, probe.flagId),
+    );
+  }
+  for (const appId of probes.apps.reverse()) {
+    await captureCleanupFailure(cleanupFailures, `delete probe App ${appId}`, () =>
+      deleteApp(deps, appId),
+    );
+  }
+  throwPrimaryWithCleanup(
+    proofFailure,
+    cleanupFailures,
+    "negative authorization proof failed and probe cleanup also failed",
+  );
+  return result;
 }
 
-async function resolveWrongAppClientKey(deps, resources, keys, probes) {
-  if (typeof deps.wrongAppClientKey === "string" && deps.wrongAppClientKey.length > 0) {
-    return deps.wrongAppClientKey;
-  }
-
-  const wrongKeys = {
-    ...keys,
-    appKey: `${keys.appKey}-wrong`,
-    appName: `${keys.appName} Wrong`,
-  };
-  const wrongApp = await createDarkLaunchApp(deps, wrongKeys);
-  probes.appIds.push(wrongApp.app.id);
-  resources.transientAppKeys.push(wrongKeys.appKey);
-  const wrongDev = wrongApp.environments.find((environment) => environment.key === "dev");
-  if (!wrongDev) throw new Error("wrong-App create missing dev Environment");
-  return clientKeyMaterialFromCreate(wrongApp, wrongDev.id);
-}
-
-async function resolveRevokedClientKey(deps, resources, keys, probes) {
-  if (typeof deps.revokedClientKey === "string" && deps.revokedClientKey.length > 0) {
-    return deps.revokedClientKey;
-  }
-
+async function createRevokedClientKey(deps, resources, keys, probes) {
   const probeKeys = {
     ...keys,
     appKey: `${keys.appKey}-revoked`,
     appName: `${keys.appName} Revoked`,
   };
   const probeApp = await createDarkLaunchApp(deps, probeKeys);
-  probes.appIds.push(probeApp.app.id);
+  probes.apps.push(probeApp.app.id);
   resources.transientAppKeys.push(probeKeys.appKey);
   const probeDev = probeApp.environments.find((environment) => environment.key === "dev");
   if (!probeDev) throw new Error("revoked-probe App create missing dev Environment");
-  const priorKey = clientKeyMaterialFromCreate(probeApp, probeDev.id);
+  const priorKey = await getClientKey(deps, probeApp.app.id, probeDev.id);
   await rotateClientKey(deps, probeApp.app.id, probeDev.id);
-  return priorKey;
+  return priorKey.keyMaterial;
 }
 
-async function proveCrossOrganizationWriteRejected(deps, keys) {
+async function proveCrossOrganizationWriteRejected(deps, keys, probes) {
+  if (typeof deps.foreignOrgId !== "string" || deps.foreignOrgId.length === 0) {
+    throw new Error("cross-Organization proof requires a seeded foreignOrgId");
+  }
+  const foreignOrgId = deps.foreignOrgId;
   const crossKey = `${keys.appKey}-cross-org`;
-  const crossOrg = await controlPlaneCall(deps, "POST", `/orgs/org_not_a_member/apps`, {
-    orgId: "org_not_a_member",
-    organizationId: "org_not_a_member",
+  const body = {
+    orgId: foreignOrgId,
+    organizationId: foreignOrgId,
     name: "Should Fail",
     key: crossKey,
     description: "Unauthorized cross-Organization mutation probe.",
     idempotency_key: crossKey,
-  });
+  };
+  const crossOrg = await crossOrgCreate(deps, foreignOrgId, body);
   if (crossOrg.ok) {
-    throw new Error("cross-Organization mutation unexpectedly succeeded");
+    const createdAppId = crossOrg.body?.app?.id ?? crossOrg.body?.id;
+    if (typeof createdAppId === "string") probes.apps.push(createdAppId);
   }
-  const code = crossOrg.body && typeof crossOrg.body === "object" ? crossOrg.body.code : undefined;
-  if (typeof code !== "string" || !["FORBIDDEN", "UNAUTHORIZED", "NOT_FOUND"].includes(code)) {
-    throw new Error(
-      `cross-Organization mutation expected structured auth error, got HTTP ${crossOrg.status} body=${JSON.stringify(crossOrg.body)}`,
-    );
-  }
+  const code = requireForbidden(crossOrg, "cross-Organization mutation");
 
   if (deps.orgId) {
     const apps = await listApps(deps, deps.orgId);
@@ -122,10 +119,33 @@ async function proveCrossOrganizationWriteRejected(deps, keys) {
     }
   }
 
-  const followUp = await controlPlaneCall(deps, "GET", `/orgs/org_not_a_member/apps`);
-  if (followUp.ok) {
-    throw new Error("cross-Organization follow-up list unexpectedly succeeded");
+  const followUp = await crossOrgList(deps, foreignOrgId);
+  const followUpCode = requireForbidden(followUp, "cross-Organization list");
+  return { foreignOrgId, writeCode: code, listCode: followUpCode };
+}
+
+function crossOrgCreate(deps, foreignOrgId, body) {
+  const { orgId: _orgId, ...httpBody } = body;
+  return deps.callToolResult
+    ? deps.callToolResult("apps_create", body)
+    : controlPlaneCall(deps, "POST", `/orgs/${foreignOrgId}/apps`, httpBody, body.idempotency_key);
+}
+
+function crossOrgList(deps, foreignOrgId) {
+  return deps.callToolResult
+    ? deps.callToolResult("apps_list", { orgId: foreignOrgId })
+    : controlPlaneCall(deps, "GET", `/orgs/${foreignOrgId}/apps`);
+}
+
+function requireForbidden(result, label) {
+  if (result.ok) throw new Error(`${label} unexpectedly succeeded`);
+  const code = result.body && typeof result.body === "object" ? result.body.code : undefined;
+  if (code !== "FORBIDDEN") {
+    throw new Error(
+      `${label} expected FORBIDDEN, got HTTP ${result.status} body=${JSON.stringify(result.body)}`,
+    );
   }
+  return code;
 }
 
 export async function assertStructuredAuthFailure(action, expectedErrorCode, label) {
@@ -148,64 +168,151 @@ export async function assertStructuredAuthFailure(action, expectedErrorCode, lab
       `${label}: expected errorCode ${expectedErrorCode}, got ${JSON.stringify(details)}`,
     );
   }
+  return { errorCode: details.errorCode, reason: details.reason };
 }
 
 export async function cleanupDarkLaunch(deps, resources, keys) {
   const activeKeyBefore = resources.clientKeyMaterial;
+  const failures = [];
+  const report = {
+    runEnded: resources.runId === null,
+    experimentDeleted: resources.experimentId === null,
+    flagDeleted: resources.flagId === null,
+    appDeleted: !resources.ownsApp || resources.appId === null,
+    credentialRevoked: !resources.ownsApp,
+  };
+
+  if (resources.runId) {
+    await captureCleanupFailure(
+      failures,
+      `end Run ${resources.runId}`,
+      () => endRun(deps, resources),
+      () => {
+        resources.runId = null;
+        report.runEnded = true;
+      },
+    );
+  }
+
+  if (resources.experimentId) {
+    await captureCleanupFailure(
+      failures,
+      `delete Experiment ${resources.experimentId}`,
+      () => deleteExperiment(deps, resources),
+      () => {
+        resources.experimentId = null;
+        report.experimentDeleted = true;
+      },
+    );
+  }
 
   if (resources.appId && resources.flagId) {
-    await deleteFlag(deps, resources.appId, resources.flagId);
-    resources.flagId = null;
+    await captureCleanupFailure(
+      failures,
+      `delete Flag ${resources.flagId}`,
+      () => deleteFlag(deps, resources.appId, resources.flagId),
+      () => {
+        resources.flagId = null;
+        report.flagDeleted = true;
+      },
+    );
   }
 
   if (resources.ownsApp && resources.appId) {
-    await deleteApp(deps, resources.appId);
-    resources.appId = null;
+    const appId = resources.appId;
+    await captureCleanupFailure(
+      failures,
+      `delete App ${appId}`,
+      () => deleteApp(deps, appId),
+      () => {
+        resources.appId = null;
+        report.appDeleted = true;
+      },
+    );
+    if (report.appDeleted && deps.assertCredentialRevoked && activeKeyBefore) {
+      await captureCleanupFailure(
+        failures,
+        `verify credential revocation for App ${appId}`,
+        () => deps.assertCredentialRevoked({ clientKey: activeKeyBefore, flagKey: keys.flagKey }),
+        () => {
+          report.credentialRevoked = true;
+        },
+      );
+    }
   }
 
-  if (deps.assertCleanup) {
-    await deps.assertCleanup({ resources, keys, activeKeyBefore });
-    return;
-  }
-
-  await assertNoOrphans(deps, resources, keys, activeKeyBefore);
+  let firstScan;
+  await captureCleanupFailure(
+    failures,
+    "first orphan scan",
+    () => assertNoOrphans(deps, resources, keys, activeKeyBefore),
+    (scan) => {
+      firstScan = scan;
+    },
+  );
+  await new Promise((resolvePromise) =>
+    setTimeout(resolvePromise, deps.cleanupStabilityWindowMs ?? 2_000),
+  );
+  let finalScan;
+  await captureCleanupFailure(
+    failures,
+    "final orphan scan",
+    () => assertNoOrphans(deps, resources, keys, activeKeyBefore),
+    (scan) => {
+      finalScan = scan;
+    },
+  );
+  throwPrimaryWithCleanup(undefined, failures, "one or more dark-launch cleanup steps failed");
+  return { ...report, orphanScans: [firstScan, finalScan] };
 }
 
 async function assertNoOrphans(deps, resources, keys, activeKeyBefore) {
-  if (deps.orgId) {
-    const apps = await listApps(deps, deps.orgId);
-    const items = Array.isArray(apps) ? apps : (apps.items ?? apps.apps ?? []);
-    const watchedKeys = new Set([
-      keys.appKey,
-      `${keys.appKey}-wrong`,
-      `${keys.appKey}-revoked`,
-      `${keys.appKey}-cross-org`,
-      ...resources.transientAppKeys,
-    ]);
-    const orphanApp = items.find((app) => watchedKeys.has(app.key));
-    if (orphanApp) {
-      throw new Error(`cleanup left orphaned App ${orphanApp.id} (${orphanApp.key})`);
-    }
-  }
+  const apps = await scanOrphanApps(deps, resources, keys);
+  const appResources = await scanRemainingAppResources(deps, resources, keys, activeKeyBefore);
+  return { apps, ...appResources };
+}
 
-  if (resources.appId) {
-    const flags = await listFlags(deps, resources.appId);
-    const flagItems = Array.isArray(flags) ? flags : (flags.items ?? []);
-    const orphanFlag = flagItems.find((flag) => flag.key === keys.flagKey);
-    if (orphanFlag) {
-      throw new Error(`cleanup left orphaned Flag ${orphanFlag.id} (${orphanFlag.key})`);
-    }
-
-    if (resources.environmentId && activeKeyBefore) {
-      const activeKey = await getClientKey(deps, resources.appId, resources.environmentId);
-      if (activeKey.keyMaterial !== activeKeyBefore) {
-        throw new Error(
-          `cleanup left rotated Client Key on journey App (expected stable material)`,
-        );
-      }
-      if (activeKey.revokedAt) {
-        throw new Error("journey App active Client Key is revoked after cleanup");
-      }
-    }
+async function scanOrphanApps(deps, resources, keys) {
+  if (!deps.orgId) return { checkedKeys: [], matchedKeys: [] };
+  const apps = await listApps(deps, deps.orgId);
+  const items = Array.isArray(apps) ? apps : (apps.items ?? apps.apps ?? []);
+  const watchedKeys = new Set([
+    keys.appKey,
+    `${keys.appKey}-wrong`,
+    `${keys.appKey}-revoked`,
+    `${keys.appKey}-cross-org`,
+    ...resources.transientAppKeys,
+  ]);
+  const orphaned = items.filter((app) => watchedKeys.has(app.key));
+  if (orphaned[0]) {
+    throw new Error(`cleanup left orphaned App ${orphaned[0].id} (${orphaned[0].key})`);
   }
+  return { checkedKeys: [...watchedKeys].sort(), matchedKeys: [] };
+}
+
+async function scanRemainingAppResources(deps, resources, keys, activeKeyBefore) {
+  if (!resources.appId) {
+    return { flags: { checkedKeys: [], matchedKeys: [] }, credentialStable: null };
+  }
+  const flags = await listFlags(deps, resources.appId);
+  const flagItems = Array.isArray(flags) ? flags : (flags.items ?? []);
+  const checkedKeys = [keys.flagKey, `${keys.flagKey}-journey-only`];
+  const orphaned = flagItems.filter((flag) => checkedKeys.includes(flag.key));
+  if (orphaned[0]) {
+    throw new Error(`cleanup left orphaned Flag ${orphaned[0].id} (${orphaned[0].key})`);
+  }
+  const credentialStable = await assertCredentialStable(deps, resources, activeKeyBefore);
+  return { flags: { checkedKeys, matchedKeys: [] }, credentialStable };
+}
+
+async function assertCredentialStable(deps, resources, activeKeyBefore) {
+  if (!resources.environmentId || !activeKeyBefore) return null;
+  const activeKey = await getClientKey(deps, resources.appId, resources.environmentId);
+  if (activeKey.keyMaterial !== activeKeyBefore) {
+    throw new Error("cleanup left rotated Client Key on journey App (expected stable material)");
+  }
+  if (activeKey.revokedAt) {
+    throw new Error("journey App active Client Key is revoked after cleanup");
+  }
+  return true;
 }

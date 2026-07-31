@@ -29,11 +29,7 @@ import {
 } from "./experiment-handler-shared";
 import { type ExperimentRow, json, runResponse } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
-import {
-  runDecisionSpecFromBody,
-  startProposalFields,
-  startReadinessResponse,
-} from "./experiment-start-decision-spec";
+import { runDecisionSpecFromBody, startProposalFields } from "./experiment-start-decision-spec";
 import { validateStartRequest } from "./experiment-start-request";
 import { readEnvironmentPolicy } from "./flag-config-policy";
 import { objectBody, pathParam } from "./handler-input";
@@ -61,9 +57,6 @@ export async function startExperiment(
   if (replay) return replay;
   const startContext = await validateStartRequest(deps, args, scope, experiment);
   if (!startContext.ok) return startContext.response;
-  const readiness = startReadinessResponse(experiment, args.requestId);
-  if (readiness) return readiness;
-
   const prepared = await prepareStartOrReplaySync(
     deps.repo,
     configStore,

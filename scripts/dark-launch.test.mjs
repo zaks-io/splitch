@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertStructuredAuthFailure } from "./dark-launch/cleanup.mjs";
 import {
+  createDarkLaunchApp,
   createDarkLaunchFlag,
   deleteFlag,
   replaceTargetingRules,
@@ -20,6 +20,7 @@ test("syntheticKeys produces stable, lowercase App and Flag keys", () => {
   const keys = syntheticKeys("Run_ABC-123");
   assert.match(keys.appKey, /^dark-launch-app-/);
   assert.match(keys.flagKey, /^dark-launch-/);
+  assert.match(keys.experimentKey, /^dark-launch-experiment-/);
   assert.equal(keys.appKey, keys.appKey.toLowerCase());
   assert.equal(keys.flagKey, keys.flagKey.toLowerCase());
 });
@@ -39,46 +40,6 @@ test("assertVariant rejects ERROR resolutions", () => {
 
 test("propagation window matches the documented 60s KV lag", () => {
   assert.equal(PROPAGATION_WINDOW_MS, 60_000);
-});
-
-test("assertStructuredAuthFailure requires the expected errorCode", async () => {
-  await assertStructuredAuthFailure(
-    async () => ({ reason: "ERROR", errorCode: "FLAG_NOT_FOUND", value: false }),
-    "FLAG_NOT_FOUND",
-    "wrong-App",
-  );
-
-  await assert.rejects(
-    () =>
-      assertStructuredAuthFailure(
-        async () => ({ reason: "ERROR", errorCode: "UNAUTHORIZED", value: false }),
-        "FLAG_NOT_FOUND",
-        "wrong-App",
-      ),
-    /expected errorCode FLAG_NOT_FOUND/,
-  );
-
-  await assert.rejects(
-    () =>
-      assertStructuredAuthFailure(
-        async () => {
-          throw new Error("network down");
-        },
-        "CREDENTIAL_REVOKED",
-        "revoked",
-      ),
-    /but the call threw/,
-  );
-
-  await assert.rejects(
-    () =>
-      assertStructuredAuthFailure(
-        async () => ({ reason: "DEFAULT", value: false }),
-        "CREDENTIAL_REVOKED",
-        "revoked",
-      ),
-    /expected reason ERROR/,
-  );
 });
 
 test("dark-launch Flag mutations use current idempotency and deletion approval contracts", async () => {
@@ -120,24 +81,53 @@ test("dark-launch Flag mutations use current idempotency and deletion approval c
 
   assert.equal(requests[0].body.idempotency_key, "dark-launch-flag-create-run-123");
   assert.equal(requests[0].init.headers["idempotency-key"], "dark-launch-flag-create-run-123");
-  assert.equal(requests[1].body.idempotency_key, "dark-launch-flag-config-enable-run-123");
+  assert.equal(
+    requests[1].body.idempotency_key,
+    "dark-launch-flag-config-enable-run-123-env-123-flag-123",
+  );
   assert.equal(
     requests[1].init.headers["idempotency-key"],
-    "dark-launch-flag-config-enable-run-123",
+    "dark-launch-flag-config-enable-run-123-env-123-flag-123",
   );
-  assert.equal(requests[2].body.idempotency_key, "dark-launch-targeting-rules-run-123");
-  assert.equal(requests[2].init.headers["idempotency-key"], "dark-launch-targeting-rules-run-123");
-  assert.equal(requests[3].init.headers["idempotency-key"], "dark-launch-flag-delete-run-123");
+  assert.equal(
+    requests[2].body.idempotency_key,
+    "dark-launch-targeting-rules-run-123-app-123-env-123-flag-123",
+  );
+  assert.equal(
+    requests[2].init.headers["idempotency-key"],
+    "dark-launch-targeting-rules-run-123-app-123-env-123-flag-123",
+  );
+  assert.equal(
+    requests[3].init.headers["idempotency-key"],
+    "dark-launch-flag-delete-run-123-flag-123",
+  );
   assert.equal(
     requests[4].url,
     "https://control-plane.example.test/apps/app-123/approval-requests/approval-123/reviews",
   );
   assert.deepEqual(requests[4].body, {
     action: "approve_and_apply",
-    idempotency_key: "dark-launch-flag-delete-review-run-123",
+    idempotency_key: "dark-launch-flag-delete-review-run-123-approval-123",
   });
   assert.equal(
     requests[4].init.headers["idempotency-key"],
-    "dark-launch-flag-delete-review-run-123",
+    "dark-launch-flag-delete-review-run-123-approval-123",
   );
+});
+
+test("dark-launch App creation uses HTTP idempotency without duplicating orgId", async () => {
+  const requests = [];
+  const deps = {
+    accessToken: "test-access-token",
+    controlPlaneBaseUrl: "https://control-plane.example.test",
+    orgId: "org-123",
+    fetch: async (url, init) => {
+      requests.push({ url, init, body: JSON.parse(init.body) });
+      return Response.json({ app: { id: "app-123" }, environments: [] });
+    },
+  };
+  await createDarkLaunchApp(deps, { appKey: "app-key", appName: "App name" });
+  assert.equal(requests[0].init.headers["idempotency-key"], "app-key");
+  assert.equal(requests[0].body.organizationId, "org-123");
+  assert.equal("orgId" in requests[0].body, false);
 });

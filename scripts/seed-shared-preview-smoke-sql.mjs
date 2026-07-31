@@ -1,6 +1,6 @@
 /** SQL builders for shared-preview smoke seed / transient cleanup. */
 
-const SMOKE_IDS = {
+export const SMOKE_IDS = {
   app: "app_shared_preview_smoke",
   appOther: "app_shared_preview_smoke_other",
   clientKeyDev: "ck_shared_preview_smoke_dev",
@@ -15,6 +15,9 @@ const SMOKE_IDS = {
   envProd: "env_shared_preview_smoke_prod",
   flag: "flag_shared_preview_smoke",
   org: "org_shared_preview_smoke",
+  isolationApp: "app_shared_preview_isolation",
+  isolationOrg: "org_shared_preview_isolation",
+  isolationUser: "user_shared_preview_isolation_owner",
   user: "user_shared_preview_smoke",
   variantControl: "var_shared_preview_smoke_control",
   variantTreatment: "var_shared_preview_smoke_treatment",
@@ -69,6 +72,25 @@ export function buildSeedSql(now, ids = SMOKE_IDS) {
   });
 
   return `
+INSERT INTO organizations (id, name, slug, plan, created_at, updated_at)
+VALUES (
+  '${ids.isolationOrg}', 'Shared Preview Isolation', '${ids.isolationOrg}',
+  'free', '${now}', '${now}'
+)
+ON CONFLICT(id) DO UPDATE SET name = excluded.name, slug = excluded.slug, updated_at = excluded.updated_at;
+
+INSERT INTO org_memberships (org_id, user_id, role, created_at)
+VALUES ('${ids.isolationOrg}', '${ids.isolationUser}', 'owner', '${now}')
+ON CONFLICT(org_id, user_id) DO UPDATE SET role = excluded.role;
+
+INSERT INTO apps (id, organization_id, name, key, description, created_at, updated_at, created_by)
+VALUES (
+  '${ids.isolationApp}', '${ids.isolationOrg}', 'Shared Preview Isolation Sentinel',
+  'shared-preview-isolation-sentinel', 'Existence witness for cross-Organization denial proofs.',
+  '${now}', '${now}', '${ids.isolationUser}'
+)
+ON CONFLICT(id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at;
+
 INSERT INTO organizations (id, name, slug, plan, created_at, updated_at)
 VALUES ('${ids.org}', 'Shared Preview Smoke', '${ids.org}', 'free', '${now}', '${now}')
 ON CONFLICT(id) DO UPDATE SET name = excluded.name, slug = excluded.slug, updated_at = excluded.updated_at;
