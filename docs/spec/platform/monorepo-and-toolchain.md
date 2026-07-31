@@ -48,19 +48,23 @@ Cached root guards (explicit input globs, so unrelated changes replay from cache
 | `check:cli-mcp-parity` | yes   | inputs: CLI/MCP/contracts source trees and the parity scripts                  |
 | `test:scripts`         | yes   | inputs: `scripts/**`, `.github/workflows/**`, and the files those tests assert |
 | `test:connect-snippet` | yes   | inputs: snippet source + compile guard; chains the `@splitch/sdk#build` hash   |
+| `format:check`         | yes   | inputs: every tracked file (`$TURBO_DEFAULT$`); pure function of file content  |
+| `knip`                 | yes   | inputs: tracked files minus Markdown/`.github/**`; chains SDK/CLI build hashes |
+
+Root-task input rule: use `$TURBO_DEFAULT$` (all tracked, gitignore-respecting files) plus
+exclusions — never bare filesystem globs like `**`, which hash `node_modules/` and build outputs and
+self-invalidate.
 
 Uncached or root-wide tasks:
 
-| Task                                  | Cache | Contract                                                                                                                                                                         |
-| ------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `format:check` / `format:write`       | no    | repo-wide Biome formatting plus Prettier for Markdown only                                                                                                                       |
-| `depcruise`                           | no    | root architecture import graph gate                                                                                                                                              |
-| `duplicates`                          | no    | root duplicate-code detection over source-bearing paths                                                                                                                          |
-| `knip`                                | no    | root unused files/exports/deps gate; runs as `//#knip` inside the verify graph so it parallelizes with other tasks and `dependsOn` provides the SDK/CLI build artifacts it scans |
-| `secrets:*`                           | no    | Gitleaks scans working tree or git history; never cache security scans                                                                                                           |
-| `d1:migrate:local` / `tinybird:local` | no    | local backing-resource validators                                                                                                                                                |
-| `dev`                                 | no    | persistent local dev task                                                                                                                                                        |
-| `deploy:*`, `migrate:*`, `rollback:*` | no    | remote-state mutation; never served from cache                                                                                                                                   |
+| Task                                  | Cache | Contract                                                               |
+| ------------------------------------- | ----- | ---------------------------------------------------------------------- |
+| `depcruise`                           | no    | root architecture import graph gate                                    |
+| `duplicates`                          | no    | root duplicate-code detection over source-bearing paths                |
+| `secrets:*`                           | no    | Gitleaks scans working tree or git history; never cache security scans |
+| `d1:migrate:local` / `tinybird:local` | no    | local backing-resource validators                                      |
+| `dev`                                 | no    | persistent local dev task                                              |
+| `deploy:*`, `migrate:*`, `rollback:*` | no    | remote-state mutation; never served from cache                         |
 
 CI uses Turborepo remote caching with `TURBO_TOKEN`, `TURBO_TEAM`, and
 `TURBO_REMOTE_CACHE_SIGNATURE_KEY`. Remote cache artifact signing is enabled in `turbo.json`. The
@@ -69,6 +73,16 @@ hosted CI has a stable main baseline. Deployment jobs use `--filter=<workspace>.
 Worker/app graph being deployed.
 Every build-affecting environment variable must be listed in `globalEnv` or task `env` so preview and
 production builds cannot reuse the wrong cache entry.
+
+Cache-trust contract: per-PR/per-push runs replay cached results freely because the `nightly-verify`
+workflow re-executes the full `verify:ci` graph with `TURBO_FORCE=true` every day, rewriting fresh
+signed cache entries — a stale or wrong entry survives at most one day. Workflows that run Turbo
+tasks must (a) route builds through `turbo run` (never `pnpm --filter <pkg> build`, which bypasses
+the cache) and (b) set `SPLITCH_PLATFORM_TARGET: pr-ci` to match the `ci` Verify hash-space, unless
+they intentionally build for another platform target. The npm publish workflows (`sdk-publish`,
+`cli-publish`) are the deliberate exception: they rebuild hermetically from the tagged source on
+GitHub-hosted runners because npm provenance should attest a from-source build, not a cache
+restore.
 
 Local hook policy lives in [local-quality-gates.md](./local-quality-gates.md). Commit hooks block
 format, lint, type, Knip, and Gitleaks failures before code is committed. The pre-push hook runs the

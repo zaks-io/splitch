@@ -95,7 +95,8 @@
       "outputs": []
     },
     "//#format:check": {
-      "cache": false
+      "inputs": ["$TURBO_DEFAULT$"],
+      "outputs": []
     },
     "//#spec:lint": {
       "inputs": ["docs/spec/**", "scripts/spec-lint.mjs"],
@@ -344,8 +345,9 @@
       "cache": false
     },
     "//#knip": {
-      "cache": false,
-      "dependsOn": ["@splitch/cli#build", "@splitch/sdk#build"]
+      "dependsOn": ["@splitch/cli#build", "@splitch/sdk#build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "!.github/**"],
+      "outputs": []
     },
     "migrate": {
       "cache": false,
