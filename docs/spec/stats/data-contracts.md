@@ -29,9 +29,11 @@ absent a gate it equals `first_exposure_ts`.
 
 ### Per-Entity Metric value row
 
-For each (Entity, Run, Metric) the pipeline delivers values pre-aggregated in Tinybird (materialized
-views for Binomial / Count / Revenue; query-time for Ratio pairs). The engine **never receives
-event-level rows** — that loses the covariance term for Ratio delta-method variance (ADR-0015).
+For each (Entity, Run, Metric), the Analysis Worker derives one value after
+`serve_deduped_metric_events` has completed its retry-key `argMinMerge`, then aggregates per Entity
+and Run. Binomial, Count, Revenue, and both Ratio operands all follow that ordering. No materialized
+view reads unmerged Metric aggregate state. The stats engine **never receives event-level rows**;
+Ratio inputs remain paired per Entity so the covariance term required by ADR-0015 is preserved.
 
 | Field                | Type      | Required | Meaning                                                                      |
 | -------------------- | --------- | -------- | ---------------------------------------------------------------------------- |
@@ -52,10 +54,10 @@ arrive as a per-Entity pair so the delta-method covariance term is computable �
 independent aggregation. Rows with `denom_value = 0` are retained; dropping them would change the
 randomized population and can bias denominator-sensitive Metrics.
 
-The pipeline derives these values from the separate `metric_events` datasource after first collapsing
-the bounded physical row set to one logical Metric Event per `dedup_key`. A Metric Event joins an
-Entity only on matching `app_id`, `environment_id`, `id_type`, and `targeting_key_hash`, and only
-when `id_type = Run.targeting_key_type`. Metric selection further requires
+The pipeline derives these values from `serve_deduped_metric_events` after its aggregate-state merge
+returns one logical Metric Event per `dedup_key`. A Metric Event joins an Entity only on matching
+`app_id`, `environment_id`, `id_type`, and `targeting_key_hash`, and only when
+`id_type = Run.targeting_key_type`. Metric selection further requires
 `event_definition_id = Metric.event_definition_id` and, for Count and Revenue, the Metric's
 `event_field_name` present on that row's accepting Event Definition Version; the Conversion Window
 filter then keeps events inside the Entity's window. Ratio Metrics resolve numerator and denominator
@@ -64,8 +66,7 @@ per-Entity `(num_value, denom_value)` pair. Metric Events never create denominat
 pipeline left-joins values onto the complete first-touch Exposure population.
 
 Physical retry rows must never inflate Binomial, Count, Revenue, or Ratio inputs. The mandatory
-logical source and ordering are defined in
-[physical-datasources.md](../pipeline/physical-datasources.md#logical-metric-event-source).
+logical source and ordering are defined in [physical-datasources.md](../pipeline/physical-datasources.md#metric-retry-state-deduped_metric_events_state).
 
 For locked non-Ratio decision-family or Guardrail Metrics, `metric_values` may be sparse at the
 beginning of a Run. If no row has arrived for a locked Metric yet, the engine still evaluates that
@@ -93,12 +94,14 @@ exposure, not before activation.
 | -------------------- | ----------- | -------- | -------------------------------------------------------------------------- |
 | `targeting_key_hash` | `string`    | yes      |                                                                            |
 | `run_id`             | `string`    | yes      |                                                                            |
-| `activation_ts`      | `timestamp` | yes      | `MIN(activation_ts)` per (Entity, Run)                                     |
+| `activation_ts`      | `timestamp` | yes      | Earliest candidate satisfying `activation_ts > first_exposure_ts`          |
 | `counterfactual`     | `boolean`   | yes      | `true` for Control-arm would-have-activated; defaults to `false`           |
 | `activated`          | `boolean`   | yes      | `true` if activation event exists with `activation_ts > first_exposure_ts` |
 
 Un-activated Entities (`activated = false`) are excluded from gated analysis but still counted in
-the full-exposed SRM denominator.
+the full-exposed SRM denominator. The pipeline applies the post-Exposure predicate to candidate
+Activations before `MIN(activation_ts)`; reducing all candidates first is forbidden because one
+pre-Exposure event could otherwise hide a later valid Activation.
 
 ## Seam interface
 
@@ -168,8 +171,9 @@ mid-experiment.
 empty. When present, Guardrail breach evaluation uses the treatment Arm's relative-lift CI lower
 bound and only emits a breach once the Arm is decisionable.
 
-The engine is a **pure function**: same input → same output, no internal state. All state lives in
-Tinybird (raw log + deduped snapshots), not the engine.
+The engine is a **pure function**: same input → same output, no internal state. All retained facts and
+derived serving state live in Tinybird (raw logs, the deduped Exposure snapshot, and merged Metric/Web
+aggregate states), not the engine.
 
 ## Sources
 

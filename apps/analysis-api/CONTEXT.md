@@ -20,13 +20,13 @@ Entity. It is what an Experiment moves or guards.
 **Metric Event**:
 An App/Environment/Entity fact validated against an immutable Event Definition Version. Metric
 Events contribute values for named typed fields. They never replace or narrow the first-touch
-Exposure denominator. Analysis collapses at-least-once physical retries to one logical Metric Event
-per `dedup_key` before any statistical aggregation.
+Exposure denominator. Analysis reads `serve_deduped_metric_events`, the aggregate-state logical
+source that yields one Metric Event per `dedup_key` before any statistical aggregation.
 
 **Web Analytics**:
 Exploratory analysis of Web Events by Web Session and optional Entity identity, separate from
-Experiment measurement. Counts, journeys, and percentiles operate on one logical Web Event per
-`dedup_key`.
+Experiment measurement. Counts, journeys, and percentiles read `serve_deduped_web_events`, which
+yields one logical Web Event per `dedup_key`.
 
 **Ambiguous Web Session**:
 A Web Session containing Web Events from more than one distinct explicit Entity. Exploratory
@@ -69,6 +69,9 @@ gated results are untrusted.
 Activation is a first-class logged event with its own row on the Exposure log. Future counterfactual
 triggering, such as would-have-activated for Control, is an additive marker rather than a schema
 change.
+Analysis reads `serve_deduped_activations`, which merges retry-deduplicated candidate timestamps after
+mandatory App, Environment, Run, and activation-time bounds. It rejects pre-Exposure candidates before
+choosing the earliest valid Activation. Gated analysis never scans retained raw Activation rows.
 
 Avoid: trigger or entry-point as separate concepts; gating on a Treatment-affected action without the
 activated-population SRM.

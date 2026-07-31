@@ -49,20 +49,26 @@ Either firing → gated results untrusted. Same fail-loud ethos as the `__multip
 -- exposures already deduped to first-touch per (entity, run), __multiple__ quarantined (ADR-0010/0011)
 -- app_id + environment_id co-scope every CTE and join key — Experiments are per-Environment (ADR-0027)
 WITH exposed AS ( /* ... app_id, environment_id, first_exposure_ts, variant ... */ ),
+activation_candidates AS (
+  SELECT app_id, environment_id, entity, run, activation_ts
+  FROM serve_deduped_activations
+  /* mandatory App, Environment, exact Run, event-time, and counterfactual filters */
+),
 activated AS (
-  SELECT app_id, environment_id, entity, run, MIN(activation_ts) AS activation_ts  -- first-class event row
-  FROM raw_events WHERE type = 'activation'
-  GROUP BY app_id, environment_id, entity, run
+  SELECT e.app_id, e.environment_id, e.entity, e.run, e.variant, e.first_exposure_ts,
+         MIN(a.activation_ts) AS activation_ts
+  FROM exposed e
+  JOIN activation_candidates a
+    ON a.app_id = e.app_id AND a.environment_id = e.environment_id
+   AND a.entity = e.entity AND a.run = e.run
+   AND a.activation_ts > e.first_exposure_ts
+  GROUP BY e.app_id, e.environment_id, e.entity, e.run, e.variant, e.first_exposure_ts
 )
 SELECT
-  e.app_id, e.environment_id, e.entity, e.run, e.variant,
-  a.activation_ts                                       AS anchor_ts,   -- re-anchor (ADR-0012)
-  COALESCE(a.activation_ts, e.first_exposure_ts)        AS window_anchor
-FROM exposed e
-JOIN activated a
-  ON a.app_id = e.app_id AND a.environment_id = e.environment_id
- AND a.entity = e.entity AND a.run = e.run
- AND a.activation_ts > e.first_exposure_ts                             -- activation follows exposure
+  app_id, environment_id, entity, run, variant,
+  activation_ts AS anchor_ts,
+  activation_ts AS window_anchor
+FROM activated
 -- un-activated exposed entities are dropped from the gated population;
 -- activation rate per arm and activated-population SRM are computed from (exposed JOIN/ANTI-JOIN activated)
 ```

@@ -275,20 +275,20 @@ Entity identity, trace context, or Dimension map.
 
 Each endpoint first builds a bounded logical window row set:
 
-1. filter `web_events` immediately by injected `app_id`, injected `environment_id`, inclusive
-   `server_received_at >= from`, and exclusive `server_received_at < to`;
+1. read `serve_deduped_web_events` with injected `app_id`, `environment_id`, partition-date bounds,
+   inclusive `server_received_at >= from`, and exclusive `server_received_at < to`; it filters the
+   state datasource before `argMinMerge` and returns one logical row per `dedup_key`;
 2. apply endpoint-specific fixed filters, such as `capture_source = 'web_vital'`, in the same first
    node;
 3. select only columns needed by the endpoint;
-4. collapse physical retries by `dedup_key`;
-5. perform JSON extraction, grouping, percentile calculation, ordering, and pagination only after
+4. perform JSON extraction, grouping, percentile calculation, ordering, and pagination only after
    the filtered logical row set exists.
 
 Overview, session collection, and session-event detail derive Web Session association in a second
 bounded stage. They take only the candidate `session_id_hash` values present in the logical window
-row set, then read all retained `web_events` rows for those sessions under the same injected
-`app_id` and `environment_id`. That association stage collapses retries by `dedup_key` and counts
-distinct non-null Entity pairs across the retained session history. Out-of-window rows may change
+row set, then read all retained `serve_deduped_web_events` rows for those sessions under the same
+injected `app_id` and `environment_id`. That association stage counts distinct non-null Entity pairs
+across the retained session history. Out-of-window rows may change
 only the session's association state; they never enter requested-window totals, event counts,
 journey ordering, or response payloads. The Web Vitals route does not perform session association.
 

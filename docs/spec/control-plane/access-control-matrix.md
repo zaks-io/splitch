@@ -131,8 +131,8 @@ deploying, and missing secrets or replay bindings fail closed.
 - Public SDK Metric Event `track` (`POST /api/sdk/events`) under Client Key or API Key
 - Public SDK Web Event `web.track` (`POST /api/sdk/web-events`) under Client Key or API Key
 - Evaluation usage, Exposure, Activation, Metric Event, and Web Event validation
-- Per-scope Admission Gate Durable Objects, durable claim/outbox shards, datasource queues, DLQs,
-  and Tinybird microbatch delivery
+- Per-scope Admission Gate Durable Objects, durable claim/outbox shards, datasource queues, write-ahead
+  Tinybird attempt/reconciliation state, DLQs, and microbatch delivery
 - No Variant resolution, no Experiment result calculation, and no control-plane CRUD
 
 **Analysis Worker** owns result reads:

@@ -12,23 +12,27 @@ Storage shapes carry internals that wire shapes must not expose. The product lif
 
 Bounded request ledger. Stores hashes and IDs, not raw Targeting Keys or email.
 
-| Column            | Type        | Constraints                                        |
-| ----------------- | ----------- | -------------------------------------------------- |
-| `request_id`      | text        | PK                                                 |
-| `org_id`          | text        | FK to organizations, not null                      |
-| `app_id`          | text        | nullable, FK to apps                               |
-| `request_type`    | text        | not null                                           |
-| `subject_type`    | text        | not null                                           |
-| `subject_ref`     | text        | not null; ID string or JSON array of Entity hashes |
-| `requested_by`    | text        | WorkOS user ID, not null                           |
-| `status`          | text        | not null                                           |
-| `received_at`     | timestamptz | not null                                           |
-| `ack_due_at`      | timestamptz | not null                                           |
-| `response_due_at` | timestamptz | not null                                           |
-| `completed_at`    | timestamptz | nullable                                           |
-| `denial_reason`   | text        | nullable                                           |
+| Column                    | Type        | Constraints                                        |
+| ------------------------- | ----------- | -------------------------------------------------- |
+| `request_id`              | text        | PK                                                 |
+| `org_id`                  | text        | FK to organizations, not null                      |
+| `app_id`                  | text        | nullable, FK to apps                               |
+| `request_type`            | text        | not null                                           |
+| `subject_type`            | text        | not null                                           |
+| `subject_ref`             | text        | not null; ID, Entity-hash array, or reset sentinel |
+| `subject_ref_redacted_at` | timestamptz | nullable                                           |
+| `requested_by`            | text        | WorkOS user ID, not null                           |
+| `status`                  | text        | not null                                           |
+| `received_at`             | timestamptz | not null                                           |
+| `ack_due_at`              | timestamptz | not null                                           |
+| `response_due_at`         | timestamptz | not null                                           |
+| `completed_at`            | timestamptz | nullable                                           |
+| `denial_reason`           | text        | nullable                                           |
 
-`subject_ref` is a WorkOS user ID, Org/App ID, or JSON array of `targeting_key_hash` values.
+`subject_ref` is a WorkOS user ID, Org/App ID, JSON array of `targeting_key_hash` values, or the
+literal `redacted:app-identity-reset`. A destructive App identity reset must replace every matching
+Entity hash array with that sentinel and stamp `subject_ref_redacted_at` before destroying the old
+identity key.
 
 ## `entity_deletions`
 
@@ -47,6 +51,10 @@ Composite PK: `(app_id, id_type, targeting_key_hash, delete_before_ts)`.
 
 The Analysis Worker excludes matching rows where `server_received_at <= delete_before_ts` immediately after
 the tombstone commits. Physical purge can finish asynchronously.
+
+A destructive App identity reset purges the App's `entity_deletions` rows only after all old-epoch
+outboxes, queues, DLQs, raw facts, derived facts, and result inputs are purged. New credentials and a
+new identity epoch are created only after that purge checkpoint and privacy-request redaction pass.
 
 ## Sources
 

@@ -69,8 +69,9 @@ The Worker performs these steps in order:
 1. Cloudflare rejects a disallowed origin or exceeded rate limit.
 2. Credential validation resolves one App and Environment or rejects the request.
 3. Strict Zod parsing rejects unknown top-level fields and malformed values.
-4. The Worker derives `targeting_key_hash` with the active App privacy salt and builds the stable
-   request fingerprint (see Idempotency). The fingerprint intentionally excludes
+4. The Worker derives `targeting_key_hash` with the active identity epoch's immutable
+   `app_entity_identity_key` and builds the stable request fingerprint (see Idempotency). Routine
+   key-encryption rotation does not change the derived hash. The fingerprint intentionally excludes
    `event_definition_version_id` so retries survive a later publish.
 5. The Worker looks up any existing `(metric, app_id, environment_id, event_id)` idempotency claim:
    - Exact fingerprint match returns `202 { duplicate: true }` with the originally accepted
@@ -130,11 +131,11 @@ attempts.
   does not append a second logical row.
 - Reusing the key with a different fingerprint returns `409 EVENT_ID_CONFLICT` and writes nothing.
 
-At-least-once queue and Tinybird delivery may still produce duplicate physical rows. Tinybird's
-datasource deduplication key is an ingestion optimization, not the statistical correctness
-authority. Every Metric query first collapses `metric_events` to exactly one row per `dedup_key`
-before field extraction, Conversion Window filtering, Entity aggregation, or Ratio operand
-formation. No statistical aggregate may read physical `metric_events` rows directly.
+At-least-once queue and Tinybird delivery may still produce duplicate physical rows. Tinybird does
+not enforce `dedup_key` uniqueness. Every Metric query reads the aggregate-state
+`serve_deduped_metric_events` logical source, which yields exactly one row per `dedup_key` before
+field extraction, Conversion Window filtering, Entity aggregation, or Ratio operand formation. No
+statistical aggregate may read physical `metric_events` rows directly.
 
 ## Response
 
@@ -166,9 +167,9 @@ Every row stores both `event_definition_id` and `event_definition_version_id`.
 A Metric references an App-level Event Definition in the `metric` family and, when it consumes a
 value, a declared named typed field. It never stores an ad hoc JSON path.
 
-The Analysis Worker reads the bounded logical Metric Event relation defined in
-[physical-datasources.md](./physical-datasources.md#logical-metric-event-source), which performs the
-mandatory query-time `dedup_key` collapse. This applies to replay and live-tail queries alike.
+The Analysis Worker reads the bounded aggregate-state Metric Event relation defined in
+[physical-datasources.md](./physical-datasources.md#metric-retry-state-deduped_metric_events_state),
+which performs the mandatory `argMinMerge` retry collapse before returning canonical rows.
 
 A Metric Event can join an Experiment Run only when all of these match:
 

@@ -48,6 +48,12 @@ pipeline hashes this caller value with its authenticated Organization/App/Enviro
 24-hour replay window before storing it. A replay only deduplicates within that scope and window; the
 raw caller value never reaches Tinybird.
 
+For a successful fresh live-Run resolution, Event Ingest atomically seals that scoped Evaluation claim,
+the resolved-result fingerprint, the retry-stable Exposure `event_id`, and the canonical `raw_events`
+outbox payload. An exact retry returns the original logical result without creating another Exposure
+payload. Reusing the key with different canonical Evaluation content fails loud. A failed seal commits
+none of the claim, payload, or Assignment Store side effect.
+
 **`app_id` authority — credential is the sole source.** The route carries no `:appId` path
 parameter (`/api/sdk/evaluate`, not `/apps/:appId/evaluate`): the only `app_id` that reaches
 Provider reads, Assignment Store keys, or the Exposure row is the one bound to the validated
@@ -124,9 +130,12 @@ design. This is a hard endpoint-design constraint, not a later policy bolt-on.
 ## Exposure side effect
 
 Calling this endpoint (via the `evaluate` SDK accessor) for a successful live Experiment Run
-resolution fires an Exposure as a side effect. The Exposure is appended to the raw log by the
-Worker, never by the client. Disabled Flags, Flags without a controlling Experiment, Experiments
-without a live Run, holdovers, and failed resolutions record no new Exposure.
+resolution fires an Exposure as a side effect. Before returning `200`, the Evaluation Worker waits
+only for the retry-stable Exposure and payload to be sealed in the Event Ingest `raw_events` outbox;
+Queue publication and Tinybird remain asynchronous. Outbox-seal failure returns a fail-loud error and
+begins no Assignment Store write. The client never appends the Exposure. Disabled Flags, Flags without
+a controlling Experiment, Experiments without a live Run, holdovers, and failed resolutions record no
+new Exposure.
 See [exposure-accessor.md](./exposure-accessor.md) for the full accessor contract.
 
 The `peekVariant` accessor calls a **separate** peek endpoint that does NOT fire the Exposure.
@@ -209,18 +218,18 @@ This is the contract that makes fail-loud **usable**: the SDK turns every transp
 structured [`ResolutionDetails`](../contracts/leaf-schemas-runtime.md#resolutiondetails-openfeature-sdk-return-shape)
 the caller can branch on. The caller never has to inspect HTTP status itself.
 
-| Transport outcome                     | `reason`   | `value`           | `errorCode`          | Exposure |
-| ------------------------------------- | ---------- | ----------------- | -------------------- | -------- |
-| `200`, rule/rollout resolved          | `SPLIT`    | resolved Variant  | —                    | fires    |
-| `200`, no rule matched                | `DEFAULT`  | Default Variant   | —                    | fires    |
-| `200`, Flag disabled / no Env config  | `DISABLED` | Default Variant   | —                    | fires    |
-| in-memory cache hit (same instance)   | `CACHED`   | cached Variant    | —                    | no       |
-| served from stale cache after failure | `STALE`    | last-good Variant | `PROVIDER_NOT_READY` | no       |
-| `401` / `403`                         | `ERROR`    | Default Variant   | `PROVIDER_FATAL`     | no       |
-| `404 FLAG_NOT_FOUND`                  | `ERROR`    | Default Variant   | `FLAG_NOT_FOUND`     | no       |
-| `400 VALIDATION_ERROR`                | `ERROR`    | Default Variant   | `INVALID_CONTEXT`    | no       |
-| `429 RATE_LIMITED`                    | `ERROR`    | Default Variant   | `GENERAL`            | no       |
-| `503` / network / timeout / parse     | `ERROR`    | Default Variant   | `PROVIDER_NOT_READY` | no       |
+| Transport outcome                          | `reason`   | `value`           | `errorCode`          | Exposure |
+| ------------------------------------------ | ---------- | ----------------- | -------------------- | -------- |
+| `200`, rule/rollout resolved               | `SPLIT`    | resolved Variant  | —                    | fires    |
+| `200`, no rule matched                     | `DEFAULT`  | Default Variant   | —                    | fires    |
+| `200`, Flag disabled / no Env config       | `DISABLED` | Default Variant   | —                    | fires    |
+| in-memory cache hit (same instance)        | `CACHED`   | cached Variant    | —                    | no       |
+| served from stale cache after failure      | `STALE`    | last-good Variant | `PROVIDER_NOT_READY` | no       |
+| `401` / `403`                              | `ERROR`    | Default Variant   | `PROVIDER_FATAL`     | no       |
+| `404 FLAG_NOT_FOUND`                       | `ERROR`    | Default Variant   | `FLAG_NOT_FOUND`     | no       |
+| `400 VALIDATION_ERROR`                     | `ERROR`    | Default Variant   | `INVALID_CONTEXT`    | no       |
+| `429 RATE_LIMITED`                         | `ERROR`    | Default Variant   | `GENERAL`            | no       |
+| `503` / outbox / network / timeout / parse | `ERROR`    | Default Variant   | `PROVIDER_NOT_READY` | no       |
 
 Every `ERROR` row returns the **Default Variant** so the caller's UI still renders, carries a
 non-null `errorCode`, and logs loudly — never a silent default (ADR-0036). The recommended caller
@@ -231,12 +240,12 @@ branch is a single check on `details.reason === 'ERROR'`.
 So a hello-world is genuinely copy-paste, the SDK ships sane defaults; each is overridable at
 construction:
 
-| Setting     | Default                                                                                                                  | Notes                                                                   |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| `endpoint`  | `https://edge.splitch.dev` (the public Evaluation Worker, ADR-0038)                                                      | Override for self-hosted / preview Workers.                             |
-| `timeoutMs` | `1000`                                                                                                                   | On timeout the SDK fails loud to the Default Variant (`reason: ERROR`). |
-| `retries`   | `0` on the Exposure-bearing `evaluate` (a retry is a fresh resolution, not a replay); peek/verify may retry idempotently | Never silently retry an Exposure-firing call.                           |
-| `idType`    | `'user'`                                                                                                                 | Overridable per call.                                                   |
+| Setting     | Default                                                                                  | Notes                                                                        |
+| ----------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `endpoint`  | `https://edge.splitch.dev` (the public Evaluation Worker, ADR-0038)                      | Override for self-hosted / preview Workers.                                  |
+| `timeoutMs` | `1000`                                                                                   | On timeout the SDK fails loud to the Default Variant (`reason: ERROR`).      |
+| `retries`   | `0` automatic retries on Exposure-bearing `evaluate`; peek/verify may retry idempotently | An explicit caller retry reuses the same logical Evaluation idempotency key. |
+| `idType`    | `'user'`                                                                                 | Overridable per call.                                                        |
 
 ```ts
 import { createSplitchClient } from "@splitch/sdk";
@@ -265,11 +274,12 @@ else render(d.value);
 - **Port:** `evaluate(appId, clientKey, flagKey, targetingKey, idType, evaluationContext) -> VariantValue`
 - **Left side:** SDK HTTP client (presents Client Key in Authorization header)
 - **Right side:** Worker that validates credential, loads Provider config + Assignment Store
-  holdover, calls `assign()`, fires Exposure, returns Variant value
+  holdover, calls `assign()`, durably seals Exposure when required, then returns Variant value
 - **Failure contract (fail-loud, ADR-0036):** credential invalid → 401; flag missing → 404 +
   Default Variant with `reason: ERROR`; Provider unreachable → 503 + Default Variant with
   `reason: ERROR`. Every failure-fallback carries `reason: ERROR` + `errorCode` and is
-  logged loudly — never a silent default. No distributed transaction (ADR-0006).
+  logged loudly — never a silent default. The Exposure outbox seal precedes the Assignment Store
+  write; Queue/Tinybird and the later DO write are not one distributed transaction (ADR-0006).
 - **Logical Evaluation identity:** `Idempotency-Key` is required on this Exposure-bearing route.
   The caller owns its value and must reuse the same value for a retry of the same logical Evaluation.
   The pipeline deduplicates usage rows by a scoped hash of that key for one UTC 24-hour replay window.

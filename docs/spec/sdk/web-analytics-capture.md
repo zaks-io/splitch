@@ -459,6 +459,10 @@ the cumulative value and delta and drops the library's free-form metric ID. It n
 library's bounded navigation type into the shared snake-case values above and emits `unknown` rather
 than forwarding an unrecognized string.
 
+The built-in `web_vital` Event Schema declares `value.numberKind = "measurement"` and
+`delta.numberKind = "delta"`. Both numbers are finite and bounded from `-86_400_000` through
+`86_400_000`; the adapter drops non-finite or out-of-contract values before queueing.
+
 The adapter does not enable soft-navigation reporting. It drops raw `PerformanceEntry` objects,
 attribution data, navigation URLs, DOM targets, and every undeclared library value before queueing.
 

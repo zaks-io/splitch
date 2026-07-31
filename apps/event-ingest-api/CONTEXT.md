@@ -87,8 +87,12 @@ See [`../evaluation-api/CONTEXT.md`](../evaluation-api/CONTEXT.md#assignment-sto
   permits anonymous Web Events or a complete matching identity pair.
 - Web Session stitching is exploratory and never participates in Experiment measurement.
 - Dedup and analysis are downstream query behavior, not ingest mutation.
-- Tinybird's datasource deduplication key is only an ingest optimization. Metric and Web Event reads
-  collapse physical retries to one logical row per `dedup_key` before aggregation.
+- Tinybird does not enforce `dedup_key` uniqueness. Metric and Web Event reads use the
+  aggregate-state `serve_deduped_metric_events` and `serve_deduped_web_events` sources, which yield
+  one logical row per `dedup_key` before aggregation.
+- Every Tinybird microbatch has durable write-ahead attempt state before the request. Tinybird `422`
+  and unresolved attempts enter scoped reconciliation without blind retry or row-by-row probing;
+  `429`, `500`, and `503` use the bounded retry path.
 - Event ingest must preserve enough raw evidence for SRM, `__multiple__`, Activation Metrics, and
   Conversion Windows.
 - Event ingest never stores a raw Targeting Key and never accepts client-selected Event Definition

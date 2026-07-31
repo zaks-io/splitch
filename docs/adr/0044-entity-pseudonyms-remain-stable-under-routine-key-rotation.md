@@ -9,24 +9,43 @@ fingerprints, so an exact retry after rotation can fail as conflicting content.
 
 ## Decision
 
-Each App owns one random secret `app_entity_identity_key`. Every durable Entity pseudonym uses:
+Each App identity epoch owns one random secret `app_entity_identity_key`. Every durable Entity
+pseudonym in that epoch uses:
 
 ```text
 targeting_key_hash = HMAC_SHA256(app_entity_identity_key, id_type + ":" + targetingKey)
 ```
 
-The key is immutable for the App lifetime and stored encrypted outside Tinybird. Routine
-cryptographic rotation rotates or rewraps the key-encryption key without changing the underlying App
-identity key or any derived pseudonym.
+The key is immutable for the identity epoch and stored encrypted outside Tinybird. Routine
+cryptographic rotation rotates or rewraps the key-encryption key without changing the underlying
+identity key, identity epoch, or any derived pseudonym.
 
 Web Session pseudonyms use the same stable identity key with a separate
 `web-session:{environment_id}` domain. They cannot collide with Entity pseudonyms or another
 Environment's Web Sessions.
 
-Replacing a compromised App identity key is not routine rotation. It is an explicit destructive
-privacy operation that Ends active Runs, clears Assignment Store state and ingest idempotency claims,
-and starts a non-joining identity epoch for future data. Splitch cannot rekey retained rows because
-it deliberately does not store raw Targeting Keys.
+Replacing a compromised App identity key is not routine rotation. It is an explicit destructive,
+App-wide privacy reset:
+
+1. block Evaluation, event ingest, analytics reads, exports, and new privacy requests for the App;
+2. End active Runs and revoke App SDK credentials;
+3. suppress and purge every App delivery from ingest outboxes, primary queues, both poison states,
+   and DLQs;
+4. purge all App Assignment Store state, ingest idempotency claims, raw events, Metric Events, Web
+   Events, deduped snapshots and aggregate states, rollups, and result inputs;
+5. purge the App's old-epoch `entity_deletions` rows and irreversibly rewrite Entity
+   `privacy_requests.subject_ref` hash arrays to the non-identifying
+   `redacted:app-identity-reset` audit sentinel;
+6. verify every store-specific purge and ledger-redaction checkpoint before destroying the old
+   identity key; and
+7. create a new key and identity epoch, then require explicit credential re-issuance before traffic
+   resumes.
+
+The reset purges all App telemetry, including anonymous Web Events, because every Web Event carries a
+Web Session pseudonym derived from the same key. It never leaves retained old-epoch rows that a later
+Entity export or deletion could no longer locate. Splitch cannot rekey rows because it deliberately
+does not store raw Targeting Keys. The privacy request keeps request type, status, timestamps,
+requester, and per-store completion evidence for audit, but no old pseudonym.
 
 ## Considered options
 
@@ -49,9 +68,9 @@ proof that this migration is complete.
 ## Consequences
 
 Routine rotation no longer changes Entity or Web Session pseudonyms. A true identity-key compromise
-requires a visible destructive reset and intentionally severs future data from retained history.
-Export and deletion compute one stable App-scoped pseudonym rather than probing multiple salt
-versions.
+requires a visible destructive reset that deletes the old epoch before the replacement key can
+serve traffic. Export and deletion compute the one stable App-scoped pseudonym for the active epoch;
+privacy requests submitted before reset are completed by the mandatory App-wide purge.
 
 ## Sources
 

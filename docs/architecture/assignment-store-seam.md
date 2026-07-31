@@ -36,11 +36,12 @@ into the resolver. Two shipping adapters = a real seam by our own rule.
 
 ### 2. Dumb storage, policy on the evaluate path (ADR-0008)
 
-The store does one thing: durable memory. All policy — the holdover predicate, replay-vs-`assign()`,
-first-touch write timing, runId stamping — lives on the evaluate path. This was a deliberate rejection of
-a `resolveAssignment()` that fuses storage with `assign()`: that interface is a three-state superposition
-(replayed / freshly assigned / stamped) you cannot collapse without reading the implementation. Dumb
-get/put keeps the evaluate path a readable straight line.
+The store does one thing: durable memory. The Evaluation Worker owns all behavior outside that store:
+its evaluate policy module owns the holdover predicate, replay-vs-`assign()` decision, write intent,
+and runId stamping; its Exposure orchestration owns write timing after durable Event Ingest
+acceptance. This was a deliberate rejection of a `resolveAssignment()` that fuses storage with
+`assign()`: that interface is a three-state superposition (replayed / freshly assigned / stamped) you
+cannot collapse without reading the implementation. Dumb get/put keeps the evaluate flow explicit.
 
 ## The interface
 

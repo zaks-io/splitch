@@ -48,25 +48,53 @@ Atomically creates and publishes the next immutable version. The parent family s
 strict request branches:
 
 ```typescript
+type NumberKind = "measurement" | "count" | "amount" | "duration" | "ratio" | "score" | "delta";
+
+type NumericDomain =
+  | {
+      allowed_values: number[];
+      minimum?: never;
+      maximum?: never;
+    }
+  | {
+      allowed_values?: never;
+      minimum: number;
+      maximum: number;
+    };
+
+type ScalarDefinitionRequest =
+  | {
+      name: string;
+      type: "boolean";
+      required: boolean;
+      allowed_values?: boolean[];
+    }
+  | {
+      name: string;
+      type: "string";
+      required: boolean;
+      allowed_values: string[];
+    }
+  | ({
+      name: string;
+      type: "number";
+      required: boolean;
+      number_kind: NumberKind;
+    } & NumericDomain);
+
+type EventFieldDefinitionRequest =
+  | ScalarDefinitionRequest
+  | {
+      name: string;
+      type: "json";
+      required: boolean;
+      json_schema: ClosedJsonSchema;
+    };
+
 type MetricEventDefinitionVersionRequest = {
   entity_type: string; // required identity
-  fields: Array<{
-    name: string;
-    type: "boolean" | "string" | "number" | "json";
-    required: boolean;
-    allowed_values?: Array<boolean | string | number>; // required when type = "string"
-    minimum?: number;
-    maximum?: number;
-    json_schema?: ClosedJsonSchema;
-  }>;
-  dimensions: Array<{
-    name: string;
-    type: "boolean" | "string" | "number";
-    required: boolean;
-    allowed_values?: Array<boolean | string | number>; // required when type = "string"
-    minimum?: number;
-    maximum?: number;
-  }>;
+  fields: EventFieldDefinitionRequest[];
+  dimensions: ScalarDefinitionRequest[];
 };
 
 type WebEventDefinitionVersionRequest = {
@@ -79,9 +107,11 @@ type WebEventDefinitionVersionRequest = {
 The Worker enforces unique field names, unique Dimension names, disjoint sets, a JSON Schema only for
 `type = "json"`, and `additionalProperties: false` at every object node. An `allowed_values` list
 must be non-empty, unique, and exactly match its scalar declaration; it is required for every string
-field or Dimension and prohibited on a JSON field, whose every string node requires a JSON Schema
-`enum`. String values must be bounded machine tokens, and top-level or nested property names matching
-the direct-PII denylist fail publication. The exact token and denylist rules live in
+field or Dimension, one valid numeric-domain branch, and prohibited on a JSON field, whose every
+string node requires a JSON Schema `enum`. Every number declares `number_kind` and either a numeric
+allowlist or both finite bounds; recursive JSON number nodes declare the equivalent `numberKind` and
+`enum` or bounds. String values must be bounded machine tokens, and top-level or nested property
+names matching the direct-PII denylist fail publication. The exact token and denylist rules live in
 [leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md#closed-json-schema). Allowlists
 participate in `schema_hash`.
 
@@ -90,8 +120,10 @@ participate in `schema_hash`.
 keywords, references, composition, open object nodes, and malformed bounds fail publication with
 `VALIDATION_ERROR`; the API does not accept an arbitrary JSON Schema document.
 
-`minimum` and `maximum` are allowed only for number declarations, must be finite, and are inclusive.
-Publication rejects `minimum > maximum`. Numeric bounds participate in `schema_hash`.
+`minimum` and `maximum` are the required pair when a number has no numeric allowlist. They are finite
+and inclusive, cannot be combined with a numeric allowlist, and are invalid on non-number
+declarations. Publication rejects `minimum > maximum`. `number_kind` and numeric domains participate
+in `schema_hash`.
 
 The Worker assigns the dense version ordinal, computes `schema_hash`, inserts the version, and
 advances `current_published_version_id` in one transaction.
@@ -175,8 +207,10 @@ Returns the canonical `Metric`.
 ### `PATCH /apps/{app_id}/metrics/{metric_id}`
 
 All create fields except `kind` are patchable subject to the same cross-field validation. A patch is
-a measurement edit and recomputes over raw facts; it never returns `RUN_FROZEN`. If the Metric is in
-a running Run's locked decision family, changing its decision-valid contract returns
+a measurement edit and recomputes over canonical logical facts from `serve_deduped_exposures` and
+`serve_deduped_metric_events`; it never returns `RUN_FROZEN`. The append-only physical logs remain
+replay and reconciliation truth, not direct request-time serving inputs. If the Metric is in a
+running Run's locked decision family, changing its decision-valid contract returns
 `DECISION_LOCKED`; exploratory views may still use the proposed definition separately.
 
 ### `DELETE /apps/{app_id}/metrics/{metric_id}`

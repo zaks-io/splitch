@@ -28,8 +28,9 @@ current Event Ingest Worker posts one implemented row per Tinybird request.
 - **Two timestamps per Exposure row:**
   - `server_received_at` (canonical): server-received-at. Monotonic, no client clock skew. Used for
     `MIN(ts)` first-touch ordering and Conversion Window anchor.
-  - `ingest_ts` (watermark only): raw-log append time. Used for snapshot/tail freshness boundaries,
-    never for first-touch or Metric windows.
+  - `ingest_ts` (watermark only): Tinybird insertion time, assigned by datasource
+    `DEFAULT now64(3)` and omitted by producers. Used for snapshot/tail freshness boundaries, never
+    for first-touch or Metric windows.
   - `client_timestamp` (diagnostics only): client-fired time. Never used for analysis ordering.
 
 ## Raw Exposure row schema
@@ -78,8 +79,9 @@ vs the Run's declared allocation. A second raw-count denominator does not exist.
 
 ## Holdover write timing: eager edge write, pipeline confirms
 
-- **Experience:** the edge fires `DO.putIfAbsent(key, runId, variant)` optimistically on apparent
-  first-touch. The DO's get-then-put-if-absent (ADR-0009) makes concurrent writers safe.
+- **Experience:** after Event Ingest durably seals the retry-stable Exposure outbox row, the edge
+  fires `DO.putIfAbsent(key, runId, variant)` optimistically on apparent first-touch. The DO's
+  get-then-put-if-absent (ADR-0009) makes concurrent writers safe.
 - **Analysis:** the raw log + batch dedup is authoritative for SRM and all metrics.
 
 The two can momentarily disagree (the eager DO write guesses first-touch; the batch confirms it).

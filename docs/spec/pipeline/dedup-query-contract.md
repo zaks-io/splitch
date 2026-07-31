@@ -5,7 +5,8 @@ The canonical first-touch dedup query is the **single place** where first-touch,
 ## Inputs
 
 - `raw_events` rows with `type = 'exposure'` (see [exposure-event-contract.md](./exposure-event-contract.md))
-- Scoped to one `app_id` (mandatory, non-defaulted — injected by the analytics proxy, never defaulted)
+- Scoped to one `app_id` and `environment_id` (both mandatory, non-defaulted, and injected by the
+  analytics proxy)
 - Optionally scoped to `experiment_id` and/or `run_id`
 
 ## Canonical first-touch query
@@ -27,7 +28,8 @@ SELECT
   END                                                   AS variant
 FROM raw_events
 WHERE type = 'exposure'
-  AND app_id = {app_id: String}              -- mandatory
+  AND app_id = {app_id: String}
+  AND environment_id = {environment_id: String}
 GROUP BY app_id, environment_id, experiment_id, run_id, id_type, targeting_key_hash
 ```
 

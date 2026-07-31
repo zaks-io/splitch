@@ -56,13 +56,14 @@ The SDK maintains a per-`(experiment_id, run_id)` seen-set as a **hot-path optim
 | Field                | Source                                                   | Use                                                             |
 | -------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
 | `server_received_at` | Evaluation Worker's `Date.now()` when the Exposure fires | Canonical for `MIN(ts)` first-touch ordering in the dedup query |
-| `ingest_ts`          | Raw-log append / collector receive time                  | Snapshot/tail watermark only; never used for analysis ordering  |
+| `ingest_ts`          | Tinybird insertion time (`DEFAULT now64(3)`)             | Snapshot/tail watermark only; never used for analysis ordering  |
 | `client_timestamp`   | SDK payload from the client runtime                      | Diagnostics only; never used for ordering                       |
 
-`server_received_at` and `ingest_ts` are always populated. `client_timestamp` is optional — if absent,
+`server_received_at` is sealed in the canonical payload. The producer omits `ingest_ts`; Tinybird
+populates it when the Events API inserts the physical row. `client_timestamp` is optional; if absent,
 diagnostics degrade gracefully. Never use `client_timestamp` for first-touch ordering (clock skew
-vulnerability). Never use `ingest_ts` for first-touch ordering either; it exists only so the
-physical snapshot/tail layer can safely catch late-arriving rows.
+vulnerability). Never use `ingest_ts` for first-touch ordering either; it exists only so the physical
+snapshot/tail layer can safely catch late Queue delivery and manual replay.
 
 ## `run_id` stamping
 
@@ -97,30 +98,48 @@ Multiple POPs may fire an Exposure for the same Entity in the same Run within a 
 ## Holdover write trigger
 
 On apparent first-touch (the Evaluation Worker has no KV entry for this
-`(experiment_id, id_type, targeting_key_hash)`), the Evaluation Worker MUST call `DO.putIfAbsent` for the
-Assignment Store (ADR-0009). The sequencing:
+`(experiment_id, id_type, targeting_key_hash)`), Exposure-pipeline orchestration hosted by that Worker
+MUST call `AssignmentStore.put()`. Its DO adapter implements `DO.putIfAbsent` (ADR-0009). The
+sequencing:
 
 1. Evaluate the flag → produce `(run_id, variant)` from `assign()` or KV replay.
-2. Hand the raw Exposure row to the Event Ingest Worker for durable queue-backed `raw_events`
-   delivery. The request handler never posts the row directly to Tinybird. This step is skipped on a
-   holdover replay because a holdover fires no Exposure (see
+2. Synchronously hand the raw Exposure row to the Event Ingest Worker and wait only until its scoped
+   Evaluation idempotency claim, resolved-result fingerprint, retry-stable row, and delivery payload
+   are sealed atomically in the durable `raw_events` outbox. The request handler never waits for Queue
+   publication or Tinybird. This step is skipped on a holdover replay because a holdover fires no
+   Exposure (see
    [evaluation/exposure-firing-and-accessor.md](../evaluation/exposure-firing-and-accessor.md)
    §Holdover path).
-3. If no KV entry was found: call `DO.putIfAbsent(key, run_id, variant)` asynchronously (fire-and-forget with short timeout).
+3. Return the Variant only after step 2 succeeds.
+4. If no KV entry was found: asynchronously call `AssignmentStore.put(key, run_id, variant)`;
+   the DO adapter executes `DO.putIfAbsent` with a short timeout.
 
-The DO write is **non-blocking on the hot path** — it executes with a short timeout (~100ms) and does not delay the response to the SDK caller. If the DO write times out or fails, it is retried asynchronously. A DO write failure is a holdover miss only for the KV propagation window; because `assign()` is deterministic (ADR-0001), the Entity gets the same Variant on the next evaluate even without the holdover. No distributed transaction — experience (DO) and analysis (log) each self-correct.
+The durable Exposure seal is the analysis acceptance boundary and is on the response path; Queue and
+Tinybird delivery remain asynchronous. If the seal fails, evaluation fails loud, no Assignment Store
+write begins, and a client retry reuses the same Evaluation idempotency key. The DO write remains
+non-blocking after acceptance: it executes with a short timeout (~100ms) and does not delay the
+response. A DO write failure is a holdover miss only for the KV propagation window; `assign()` remains
+deterministic on retry.
 
 ## Ingest failure contract
 
-| Failure                                                   | Effect                                                        | Recovery                                                                       |
-| --------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Durable queue handoff fails                               | Raw row is not accepted for delivery                          | Retry the handoff at-least-once; SDK may re-fire on a later evaluate           |
-| Retryable Tinybird microbatch failure after queue handoff | Accepted rows remain unavailable to analysis until redelivery | Bounded queue retry with stable per-row dedup keys                             |
-| Permanent Tinybird failure or quarantined rows            | Affected delivery leaves the primary queue                    | Durable datasource DLQ copy plus critical alert; manual replay only            |
-| DO write fails after queue handoff                        | Holdover miss for up to ~60s + retry window                   | `assign()` is deterministic — same Variant computed on miss; DO retry picks up |
-| KV write-through from DO fails                            | KV miss for ~60s                                              | Next KV read recomputes and re-propagates via DO (self-healing)                |
+| Failure                                                  | Effect                                                         | Recovery                                                                       |
+| -------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Durable Exposure outbox seal fails before response       | Evaluation fails loud; no Assignment Store write begins        | Retry the same Evaluation idempotency key                                      |
+| Queue publication fails after durable outbox seal        | Accepted rows remain unavailable to analysis until publication | Durable outbox retries Queue publication                                       |
+| Retryable Tinybird `429`/`500`/`503` after queue handoff | Accepted rows remain unavailable to analysis until redelivery  | Bounded queue retry with stable per-row dedup keys                             |
+| Tinybird `422` materialized-view interruption            | Raw and derived commit status is indeterminate                 | Durable reconciliation record; no ordinary retry                               |
+| Permanent Tinybird failure or quarantined rows           | Affected delivery leaves the primary queue                     | Durable datasource DLQ copy plus critical alert; manual replay only            |
+| DO write fails after durable outbox seal                 | Holdover miss for up to ~60s + retry window                    | `assign()` is deterministic — same Variant computed on miss; DO retry picks up |
+| KV write-through from DO fails                           | KV miss for ~60s                                               | Next KV read recomputes and re-propagates via DO (self-healing)                |
 
-There is no distributed transaction across Tinybird + DO + KV. The failure modes are cosmetic and self-healing within the ~60s KV propagation window.
+There is no distributed transaction across Tinybird + DO + KV. DO and KV propagation failures are
+cosmetic and self-healing within the ~60s propagation window. Ingest failures are different:
+retryable delivery remains unavailable until queue redelivery succeeds, and permanent or quarantined
+delivery remains unavailable until an operator completes manual DLQ replay. Indeterminate `422`
+delivery remains blocked until scoped reconciliation proves or repairs its state. Accepted delivery
+lag, reconciliation backlog, and DLQ backlog are visible operational failures, never described as
+self-healing.
 
 ## Queue-backed Tinybird microbatch transport
 
@@ -135,9 +154,11 @@ with one dedicated durable Cloudflare Queue per destination:
 An HTTP intake handler validates and stamps canonical rows, then hands accepted delivery units to
 that datasource's queue. It never calls the Tinybird Events API directly. A queue consumer combines
 all rows from up to 100 delivered queue messages or one second of queue wait, whichever comes first.
-It sends those rows as one gzip-compressed NDJSON request to
-`/v0/events?name={datasource}&wait=true` and acknowledges the queue delivery only after Tinybird
-confirms the database commit.
+Before sending, it persists one write-ahead delivery attempt for each resulting bounded request, then
+sends gzip-compressed NDJSON to
+`/v0/events?name={datasource}&wait=true`. It acknowledges the queue delivery only after Tinybird
+confirms a complete `200` commit or after a `422` is durably transferred to indeterminate
+reconciliation.
 
 No queue or delivery message mixes datasources. A consumer never fans a multi-row delivery unit or
 consumer batch into one request per row. A timeout-flushed microbatch may contain one row only when
@@ -161,6 +182,34 @@ durable acceptance. Producers greedily pack multiple rows only while the message
 bytes; larger publication sets are split across calls. Splitting Queue publication does not split a
 claim or change the consumer's cross-message Tinybird microbatching.
 
+### Write-ahead delivery attempts
+
+Before each Tinybird request, the consumer atomically persists a record in the durable recovery store
+keyed by datasource and attempt ID, plus a one-to-many index from every source queue message ID to its
+attempt IDs. It contains `state = 'attempting'`, the exact row references,
+App/Environment/date scopes, retry-stable `dedup_key` values, payload fingerprints, and attempt count.
+If that transaction fails, the consumer does not call Tinybird. Redelivery checks the message-ID index
+before preparing any request, even when only a subset of the original messages returns. A queue
+message is acknowledged only after every indexed split request containing one of its rows reaches a
+terminal `delivered`, `indeterminate`, or `poison_transferred` state.
+
+Response handling transitions the same record before queue acknowledgement or retry:
+
+- a complete `200` becomes `delivered`; redelivery skips Tinybird and resumes acknowledgement;
+- `422` becomes `indeterminate` and enters scoped reconciliation;
+- `429`, `500`, `503`, or HTTP/2 `GOAWAY` becomes `retryable` with the next permitted attempt time;
+  `GOAWAY` also recreates the connection. Before another request, the consumer atomically increments
+  the attempt count and returns the record to `attempting`;
+- a permanent response becomes nonterminal `poison_pending`; and
+- a response-transition failure leaves `state = 'attempting'`.
+
+Redelivery that finds `attempting`, `indeterminate`, `delivered`, `poison_pending`, or
+`poison_transferred` never calls Tinybird. An unresolved `attempting` record is treated as an unknown
+outcome and reconciled by the same bounded App/Environment/date/key procedure as `422`.
+`poison_pending` resumes DLQ copy, while `poison_transferred` resumes acknowledgement. Only an explicit
+`retryable` record may generate another Tinybird request. This guard makes a failed post-response state
+write conservative without turning recovery-store failure into a blind ingest loop.
+
 ### Fixed drain governor
 
 Every datasource queue uses these checked-in consumer settings:
@@ -176,10 +225,11 @@ be in flight, including when a consumer batch is split by the 5 MiB body ceiling
 message age, or producer rate never increases this value automatically. Capacity changes require an
 explicit reviewed configuration change backed by observed Tinybird ingestion capacity.
 
-On Tinybird `429`, the consumer honors `Retry-After` before retrying the unacknowledged delivery.
-Any Tinybird `5xx` and network failure retries with exponential backoff and jitter. The consumer
-records Tinybird rate-limit headers, retry count, queue depth, and oldest-message age. Growing age
-alerts operators but never relaxes the governor.
+On Tinybird `429`, `500`, or `503`, the consumer honors `Retry-After`, when present, before retrying
+the unacknowledged delivery with exponential backoff and jitter. HTTP/2 `GOAWAY` recreates the
+connection before retry. Pre-response network failures use the same bounded path after their
+write-ahead attempt is classified. The consumer records Tinybird rate-limit headers, retry count,
+queue depth, and oldest-message age. Growing age alerts operators but never relaxes the governor.
 
 ### Poison delivery and dead-letter isolation
 
@@ -188,28 +238,52 @@ permanent delivery failures:
 
 - a Tinybird success response with `quarantined_rows > 0`;
 - `successful_rows` not matching the number of rows sent;
-- a non-retryable Tinybird HTTP response.
+- a non-retryable Tinybird HTTP response other than `422`.
 
-For a permanent failure, the consumer copies the original delivery messages plus bounded sanitized
-failure metadata to that datasource's dead-letter queue. Before the first copy attempt, it writes a
-durable poison-transfer marker keyed by datasource and the sorted primary message IDs. A redelivery
-that finds that marker skips Tinybird and resumes the DLQ transfer. Only after the DLQ copy succeeds
-does the consumer acknowledge the primary messages and clear the marker. It emits a critical alert
-containing the datasource, row count, response class, and request correlation ID, but no event
-fields, Dimensions, identity, or request body.
+For a permanent failure, the consumer transitions the write-ahead attempt to nonterminal
+`poison_pending`, then copies the original delivery messages plus bounded sanitized failure metadata
+to that datasource's dead-letter queue. A redelivery that finds `poison_pending` skips Tinybird and
+resumes the DLQ transfer. Only after the DLQ copy succeeds does the consumer transition the attempt to
+terminal `poison_transferred` and acknowledge the primary messages. A redelivery that finds
+`poison_transferred` only resumes acknowledgement. The consumer emits a critical alert containing the
+datasource, row count, response class, and request correlation ID, but no event fields, Dimensions,
+identity, or request body.
 
-After the poison-transfer marker is durable, the consumer does not resubmit the permanent failure,
-recursively split its rows, or replay individual rows to identify a poison item. Tinybird may already
-have committed valid siblings, so probing would create duplicate physical rows and unnecessary
-ingest load. If the marker write itself fails after the Tinybird response, at-least-once redelivery
-may resubmit the original messages; stable dedup keys preserve logical idempotency and the failure is
-alerted. Dead-letter replay is an explicit operator action, preserves each original row and
-`dedup_key`, and rechecks current privacy deletion suppression before publication.
+After `poison_pending` is durable, the consumer does not resubmit the permanent failure, recursively
+split its rows, or replay individual rows to identify a poison item. Tinybird may already have
+committed valid siblings, so probing would create duplicate physical rows and unnecessary ingest
+load. If the poison transition fails after the Tinybird response, the write-ahead record remains
+`attempting`; redelivery reconciles it without resubmission. Dead-letter replay is an explicit
+operator action, preserves each original row and `dedup_key`, and rechecks current privacy deletion
+suppression before publication.
 
-Tinybird `429`, any `5xx`, and network failures are retryable. A delivery receives at most eight
-total attempts, including the initial attempt. Exhaustion moves the original messages to the
-datasource's dead-letter queue and emits the same critical alert. Cloudflare consumer configuration
-therefore uses `max_retries = 7`.
+Tinybird `429`, `500`, `503`, and classified pre-response network failures are retryable. A delivery
+receives at most eight total attempts, including the initial attempt. Exhaustion follows the same
+state machine as a permanent response: transition to `poison_pending`, copy the original messages to
+the datasource's dead-letter queue, transition to `poison_transferred` only after that copy succeeds,
+then acknowledge the primary messages and emit the same critical alert. Cloudflare consumer
+configuration therefore uses `max_retries = 7`.
+
+### Indeterminate materialized-view interruption
+
+Tinybird `422` means a materialized view interrupted ingestion and does not prove whether each raw or
+derived row committed. Retrying can duplicate raw rows; acknowledging without durable follow-up can
+lose a row. The consumer therefore never sends a `422` through ordinary retry or poison transfer.
+The consumer transitions the existing write-ahead attempt from `attempting` to `indeterminate` before
+acknowledging the primary messages. If that transition fails, the record remains `attempting`, so
+redelivery reconciles instead of calling Tinybird. The recovery store cannot clear referenced
+payloads while either state is unresolved.
+
+The reconciliation worker waits for the Tinybird request to settle, then queries the raw datasource
+and any expected materialized target by recorded App, Environment, date, and retry keys:
+
+1. raw rows and expected states present marks the delivery complete;
+2. raw rows present but states absent runs a bounded state populate from raw truth and reconciles it;
+3. raw rows absent permits operator-reviewed replay only after repeated scoped reads confirm absence;
+4. mixed or unresolved evidence remains blocked and alerted without Tinybird replay.
+
+App and Entity deletion suppression applies to these records and their referenced payloads before
+reconciliation or replay. Reconciliation completion is auditable and only then removes the record.
 
 ### Admission before buffering
 
@@ -270,11 +344,10 @@ temporarily exceeds safe Tinybird drain capacity, queue backlog and freshness la
 datasource remains isolated. The system alerts on that lag rather than automatically allowing one
 queue to increase Tinybird pressure or consume another datasource's delivery capacity.
 
-An Evaluation response returned before its background raw-event handoff is not an Event Ingest
-acceptance. A later Admission Gate rejection or failed handoff is recorded through the fail-loud
-ingest error path and may leave that Exposure unavailable to analysis, as defined in
-[holdover-write-contract.md](./holdover-write-contract.md). The no-silent-drop guarantee begins
-after Event Ingest has durably accepted a row.
+The Evaluation Worker returns a Variant only after Event Ingest seals the raw Exposure row in its
+durable outbox. Admission rejection or outbox failure therefore fails the Evaluation before an
+Assignment Store write begins. Queue publication and Tinybird delivery remain asynchronous after
+that boundary; a successful response cannot depend on the SDK re-firing an Exposure.
 
 Admission count and byte budgets are operational fairness controls. They consume no V1 billing unit,
 do not alter the Organization Evaluation quota, and are not customer-configurable spend guards.
@@ -322,10 +395,14 @@ delivery payload are sealed atomically in the durable ingest outbox before the r
 The outbox retries Cloudflare Queue publication until it succeeds, so a committed claim cannot lose
 its row between claim and queue handoff.
 
-Other intake returns an accepted response only after its canonical delivery payload is durably
-sealed in an equivalent outbox or accepted by Cloudflare Queue. The queue consumer then uses
-`wait=true` and acknowledges its queue messages only after Tinybird confirms the datasource
-microbatch commit. Tinybird latency and retries never extend the public SDK request.
+The Evaluation Worker likewise waits for the scoped claim, result fingerprint, retry-stable Exposure
+row, and payload to be sealed atomically in the `raw_events` outbox before returning its Variant; it
+does not wait for Queue or Tinybird. Other intake returns an accepted response only after its
+canonical delivery payload is durably sealed in an equivalent outbox or accepted by Cloudflare Queue.
+The queue consumer then uses `wait=true` and
+acknowledges its queue messages after a complete `200` commit acknowledgement or after a `422` is
+durably transferred to indeterminate reconciliation. Tinybird latency and retries never extend the
+public SDK request beyond the durable acceptance boundary.
 
 ## Non-exposing paths
 

@@ -64,7 +64,9 @@ These change `assign()`, so Exposures collected before and after are in incompar
 
 ### Measurement edits → applied to live Run in place; recompute, no reset
 
-These change what the numbers mean, not who is in which arm. The raw Exposure/event log is the system of record (ADR-0010); the dedup/metric query re-runs with the new definition over the same raw log.
+These change what the numbers mean, not who is in which arm. Append-only raw Exposure and Metric
+Event logs remain replay truth (ADR-0010); the dedup/Metric query re-runs with the new definition over
+the same retry-collapsed logical facts.
 
 | What changed                                                  |
 | ------------------------------------------------------------- |
@@ -73,7 +75,10 @@ These change what the numbers mean, not who is in which arm. The raw Exposure/ev
 | Guardrail Metric config (add/remove/change threshold)         |
 | Secondary Metric config                                       |
 
-**Recompute timing:** eventual. Recomputing re-runs the Tinybird query over the full raw log; the pipeline may buffer recent Exposures. The UI shows stale results with a "recomputing" state indicator and refreshes when ready. There is no blocking SLA; the recompute is background, not synchronous.
+**Recompute timing:** eventual. Recomputing reads the deduped Exposure snapshot plus tail and
+`serve_deduped_metric_events`, not a full physical Metric Event log scan. The UI shows stale results
+with a "recomputing" state indicator and refreshes when ready. There is no blocking SLA; the recompute
+is background, not synchronous.
 
 ### Non-material edits → mutate in place, same Run, no recompute
 

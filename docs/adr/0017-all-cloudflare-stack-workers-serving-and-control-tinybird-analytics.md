@@ -68,12 +68,12 @@ edge) → Tinybird (huge, append-only, analytical)** — each store sized for it
 - **Tinybird is ADR-0010's physical substrate.** The "raw append-only log, deduped at query time"
   decision lands on Tinybird's columnar SQL + materialized views; the physical dedup engine
   (lambda — snapshot + real-time UNION) is pinned in ADR-0024.
-- **Metric rollup MVs feed the deduped snapshot, never the raw log.** A materialized view fires per
-  inserted block and never sees merged or cross-block state, so an AggregatingMergeTree rollup built
-  straight off the raw Exposure log cannot dedup the redundant-by-design edge events (ADR-0004) — they
-  leak in and silently inflate the SRM denominator and every metric count, the exact correctness
-  ADR-0010 exists to protect. Rollups therefore build on the deduped snapshot datasource (ADR-0024),
-  not the raw log. This is a constraint, not an option.
+- **Exposure rollups are ordered replace-mode copies from the deduped snapshot.** A materialized view
+  fires per inserted block and neither sees merged cross-block state nor retracts its target when a
+  replace-mode source changes. A raw-source MV leaks redundant edge events into counts, while a
+  snapshot-source MV appends the same logical population again on every rebuild. After the Exposure
+  snapshot completes, replace-mode rollup Copy Pipes rebuild SRM and activation targets from that
+  snapshot. This ordering is a correctness constraint, not an option (ADR-0024).
 - The shared shell (monorepo layout, contracts-first OpenAPI/Zod, Biome/Vitest/Stryker quality
   gates, Wrangler deploy, Sentry/Axiom observability) is copied from agent-paste wholesale; only the
   analytics layer (Tinybird in place of Postgres/Analytics Engine) diverges. Scaffolding detail is
