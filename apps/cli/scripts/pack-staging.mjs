@@ -155,7 +155,7 @@ function assertPublicReadme(readme) {
     throw new Error(`release README contains non-public link: ${nonPublicLink[1]}`);
   }
   const internalReference = readme.match(
-    /(?:^|[\s`(])(?:\.\.\/|\.\/|docs\/|apps\/|packages\/|\.github\/|AGENTS\.md|CONTEXT\.md)/m,
+    /(?:^|[\s`(])(?:\.\.\/|\.\/|docs\/|apps\/|packages\/|\.github\/|AGENTS\.md|CONTEXT\.md)|(?:ADR|SPL)-\d+/m,
   );
   if (internalReference) {
     throw new Error(

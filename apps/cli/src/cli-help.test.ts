@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { CLI_COMMANDS, META_COMMANDS } from "./command-registry.js";
+import { EXIT_USAGE } from "./exit-codes.js";
 import { renderCommandHelp, renderHelp, renderMetaHelp, renderRootHelp } from "./help.js";
 
 afterEach(() => {
@@ -65,4 +66,25 @@ describe("published CLI help", () => {
     expect(log).toHaveBeenCalledOnce();
     expect(error).not.toHaveBeenCalled();
   });
+
+  it("returns identical stderr for unmatched --help and -h command paths", async () => {
+    const longHelpStderr = await unmatchedHelpStderr("--help");
+    const shortHelpStderr = await unmatchedHelpStderr("-h");
+
+    expect(longHelpStderr).toBe(shortHelpStderr);
+    expect(longHelpStderr).toContain("CLI_USAGE_INVALID: Cause: Unknown command");
+    expect(longHelpStderr).not.toContain("requires a value");
+  });
 });
+
+async function unmatchedHelpStderr(helpFlag: "--help" | "-h"): Promise<string> {
+  const stderr: string[] = [];
+  vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    stderr.push(args.join(" "));
+  });
+  vi.spyOn(console, "log").mockImplementation(() => {});
+
+  await expect(runCli(["flags", "bogus", helpFlag])).resolves.toBe(EXIT_USAGE);
+  vi.restoreAllMocks();
+  return stderr.join("\n");
+}
