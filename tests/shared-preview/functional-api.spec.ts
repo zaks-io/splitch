@@ -17,6 +17,11 @@ interface Flag {
   readonly variants: readonly { id: string; name: string; value: unknown }[];
 }
 
+interface ApprovalRequired {
+  readonly code: "APPROVAL_REVIEW_REQUIRED";
+  readonly details: { readonly approvalRequestId: string };
+}
+
 test.describe("shared-preview functional API workflow", () => {
   test("creates an App and provisions Environments plus Client Keys", async ({
     accessToken,
@@ -82,11 +87,22 @@ test.describe("shared-preview functional API workflow", () => {
       expect(updated).toMatchObject({ id: createdFlag.id, key });
     } finally {
       if (createdFlag) {
-        await smoke.callTool(accessToken, "flags_delete", {
+        const approval = await smoke.callToolExpectError<ApprovalRequired>(
+          accessToken,
+          "flags_delete",
+          {
+            appId: smoke.config.smokeAppId,
+            flagId: createdFlag.id,
+            idempotency_key: smoke.uniqueKey("flags-delete"),
+          },
+        );
+        expect(approval).toMatchObject({ code: "APPROVAL_REVIEW_REQUIRED" });
+
+        await smoke.callTool(accessToken, "approval_request_reviews_create", {
           appId: smoke.config.smokeAppId,
-          flagId: createdFlag.id,
-          review: { action: "approve_and_apply" },
-          idempotency_key: smoke.uniqueKey("flags-delete"),
+          id: approval.details.approvalRequestId,
+          action: "approve_and_apply",
+          idempotency_key: smoke.uniqueKey("flags-delete-review"),
         });
       }
     }

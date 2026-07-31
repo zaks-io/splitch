@@ -133,12 +133,14 @@ jobs:
 
       - name: Smoke shared preview
         id: smoke
+        continue-on-error: true
         env:
           SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
         run: SPLITCH_SMOKE_COMMIT_SHA="$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke
 
       - name: Dark-launch shared preview
         id: dark_launch
+        if: steps.smoke.outcome == 'success'
         env:
           SPLITCH_SMOKE_CLIENT_SECRET: ${{ secrets.SPLITCH_SMOKE_CLIENT_SECRET }}
           SPLITCH_SMOKE_COMMIT_SHA: ${{ env.SPLITCH_DEPLOYED_COMMIT_SHA }}
@@ -151,7 +153,7 @@ jobs:
         run: pnpm shared-preview:cleanup-smoke
 
       - name: Upload Playwright smoke report
-        if: failure()
+        if: steps.smoke.outcome == 'failure'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: shared-preview-playwright-report

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { spawnSync } from "node:child_process";
 import {
   createFleetEvidence,
   resolveDeployedCommitSha,
@@ -104,6 +104,15 @@ test("shared-preview workflow resolves one immutable SHA before deploy and verif
   assert.match(
     workflow,
     /SPLITCH_SMOKE_COMMIT_SHA="\$SPLITCH_DEPLOYED_COMMIT_SHA" pnpm shared-preview:smoke/,
+  );
+  assert.match(workflow, /- name: Smoke shared preview\n\s+id: smoke\n\s+continue-on-error: true/);
+  assert.match(
+    workflow,
+    /- name: Dark-launch shared preview\n\s+id: dark_launch\n\s+if: steps\.smoke\.outcome == 'success'/,
+  );
+  assert.match(
+    workflow,
+    /- name: Upload Playwright smoke report\n\s+if: steps\.smoke\.outcome == 'failure'/,
   );
   assert.match(workflow, /pnpm smoke:dark-launch:shared-preview/);
   assert.match(workflow, /SPLITCH_SMOKE_RUNS: "2"/);
