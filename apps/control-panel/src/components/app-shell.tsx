@@ -4,21 +4,13 @@ import { Link, Outlet } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AppShellSwitchers } from "#components/app-shell-switcher";
 import { LiveUpdatesClient } from "#components/live-updates-client";
+import { visibleAppSections } from "#lib/app-shell-navigation";
 import type { ScopedLoaderContext } from "#lib/loader-context";
 
 type AppShellProps = {
   context: ScopedLoaderContext;
   queryClient: QueryClient;
 };
-
-const sections = [
-  { label: "Overview", to: "/$orgSlug/$appSlug/$env" },
-  { label: "Flags", to: "/$orgSlug/$appSlug/$env/flags" },
-  { label: "Experiments", to: "/$orgSlug/$appSlug/$env/experiments" },
-  { label: "Segments", to: "/$orgSlug/$appSlug/$env/segments", scope: "App-level" },
-  { label: "Metrics", to: "/$orgSlug/$appSlug/$env/metrics", scope: "App-level" },
-  { label: "Settings", to: "/$orgSlug/$appSlug/$env/settings" },
-] as const;
 
 export function AppShell({ context, queryClient }: AppShellProps) {
   const [isHydrated, setIsHydrated] = useState(false);
@@ -53,14 +45,14 @@ export function AppShell({ context, queryClient }: AppShellProps) {
             aria-label="App sections"
             className="grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-1"
           >
-            {sections.map((section) => (
+            {visibleAppSections.map((section) => (
               <Link
                 activeOptions={{ exact: section.to === "/$orgSlug/$appSlug/$env" }}
                 activeProps={{
                   className:
                     "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:text-primary-foreground",
                 }}
-                className="flex min-h-10 items-center justify-between gap-2 rounded-md px-3 py-2 font-medium text-muted-foreground text-sm hover:bg-accent hover:text-accent-foreground"
+                className="flex min-h-10 items-center justify-between gap-2 rounded-md px-3 py-2 font-medium text-muted-foreground text-sm hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
                 key={section.label}
                 params={{
                   appSlug: context.scope.appSlug,
