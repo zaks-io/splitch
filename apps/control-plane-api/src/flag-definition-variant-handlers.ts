@@ -9,11 +9,7 @@ import {
   requiresReview,
   servableVariantEnvironments,
 } from "./approval-target";
-import {
-  flagNotFound,
-  variantNotFound,
-  variantRenameRunFrozenError,
-} from "./flag-definition-errors";
+import { flagNotFound, variantNotFound, variantRunFrozenError } from "./flag-definition-errors";
 import {
   type FlagDefinitionDeps,
   loadWritableFlag,
@@ -134,7 +130,7 @@ export async function updateVariant(
       { updatedAt: now, updatedBy: args.principal.id },
     );
     if (!written.ok && written.reason === "RUN_FROZEN") {
-      return variantRenameRunFrozenError(written.freeze, written.variantName, args.requestId);
+      return variantRunFrozenError(written, args.requestId);
     }
     await resyncFlagSnapshots(deps, loaded.value.appId, loaded.value.flag.id);
   }

@@ -1,15 +1,12 @@
 import type { Repository } from "@splitch/db";
 import {
   resourceNotEmpty,
-  runFrozenError,
   runningExperimentError,
   validationError,
   validationErrors,
+  variantRunFrozenError,
 } from "./flag-definition-errors";
-import {
-  explicitVariantReferenceCount,
-  runningExperimentForVariant,
-} from "./flag-definition-guards";
+import { explicitVariantReferenceCount } from "./flag-definition-guards";
 import {
   type FlagDefinitionDeps,
   fail,
@@ -113,16 +110,12 @@ async function prepareVariantValuePatch(
   const nextValue = JSON.stringify(body.value);
   if (nextValue === variant.value) return ok({});
 
-  const envs = await deps.repo.identity.listEnvironments(loaded.scope);
-  const running = await runningExperimentForVariant(
-    deps.repo,
-    loaded.appId,
-    loaded.flag.id,
-    variant,
-    envs,
-  );
-  return running
-    ? fail(runFrozenError(running, ["variant.value"], `PATCH_VARIANT:${variantName}`, requestId))
+  // Fails fast on the SAME predicate `updateVariant` enforces, so this cannot
+  // drift from the seam that actually refuses the write. Reading it here is not
+  // permission: the repository re-checks before the batch.
+  const freeze = await deps.repo.flags.liveRunUsingVariant(loaded.scope, loaded.flag.id, variant);
+  return freeze
+    ? fail(variantRunFrozenError({ freeze, variantName, frozenChanges: ["value"] }, requestId))
     : ok({ value: nextValue });
 }
 
@@ -163,12 +156,6 @@ export async function variantDeleteBlocker(
     );
   }
 
-  const running = await runningExperimentForVariant(
-    deps.repo,
-    loaded.appId,
-    loaded.flag.id,
-    variant,
-    envs,
-  );
+  const running = await deps.repo.flags.liveRunUsingVariant(loaded.scope, loaded.flag.id, variant);
   return running ? runningExperimentError(running, "DELETE_VARIANT", requestId) : null;
 }

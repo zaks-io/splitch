@@ -9,7 +9,11 @@ import {
 } from "./approval-atomic";
 import type { ApprovalCommit } from "./approval-types";
 import type { Db } from "./client";
-import { liveRunUsingVariant, type VariantRunFreeze } from "./flag-variant-run-freeze";
+import {
+  liveRunUsingVariant,
+  type VariantFrozenChange,
+  type VariantRunFreeze,
+} from "./flag-variant-run-freeze";
 import { assertMintedScope, type TenantScope } from "./scope";
 
 /**
@@ -192,7 +196,14 @@ export type UpdateVariantResult =
   | { ok: false; reason: "NOT_FOUND" }
   /** The Approval-guarded write selected zero rows; no Review landed. */
   | { ok: false; reason: "NOT_APPLIED" }
-  | { ok: false; reason: "RUN_FROZEN"; freeze: VariantRunFreeze; variantName: string };
+  | {
+      ok: false;
+      reason: "RUN_FROZEN";
+      freeze: VariantRunFreeze;
+      variantName: string;
+      /** Which frozen properties this write tried to move, for the renderer. */
+      frozenChanges: VariantFrozenChange[];
+    };
 
 export function makeUpdateVariant(
   db: Db,
@@ -217,12 +228,25 @@ export function makeUpdateVariant(
     if (!flag) return { ok: false, reason: "NOT_FOUND" };
 
     const renaming = patch.name !== undefined && patch.name !== variant.name;
-    // The refusal sits AHEAD of the batch, not inside it: a rename that a live
-    // Run forbids must leave no Review row, no version bump, and no partially
-    // applied Approval Request behind.
-    if (renaming) {
+    const revaluing = patch.value !== undefined && patch.value !== variant.value;
+    // The refusal sits AHEAD of the batch, not inside it: a write that a live Run
+    // forbids must leave no Review row, no version bump, and no partially applied
+    // Approval Request behind.
+    const frozenChanges: VariantFrozenChange[] = [
+      ...(renaming ? (["name"] as const) : []),
+      ...(revaluing ? (["value"] as const) : []),
+    ];
+    if (frozenChanges.length > 0) {
       const freeze = await liveRunUsingVariant(db, scope, flagId, variant);
-      if (freeze) return { ok: false, reason: "RUN_FROZEN", freeze, variantName: variant.name };
+      if (freeze) {
+        return {
+          ok: false,
+          reason: "RUN_FROZEN",
+          freeze,
+          variantName: variant.name,
+          frozenChanges,
+        };
+      }
     }
     const variantWhere = options?.approval
       ? and(

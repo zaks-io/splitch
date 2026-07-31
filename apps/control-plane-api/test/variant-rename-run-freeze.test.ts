@@ -21,8 +21,12 @@ import { makePoolHarness } from "./config-store-pool-harness";
  * carries into every Environment's available set by design (ADR-0028: the
  * catalog is App-level).
  *
- * Both doors are exercised: the direct PATCH, and a proposal filed BEFORE Start
- * and approved AFTER it.
+ * The NAME is not the only frozen property of this mutation: swapping a live
+ * arm's VALUE keeps the name and changes what that name serves, which is the
+ * quieter version of the same contamination. Both are refused at one seam.
+ *
+ * Both doors are exercised for both properties: the direct PATCH, and a
+ * proposal filed BEFORE Start and approved AFTER it.
  */
 
 let h: Harness;
@@ -133,15 +137,71 @@ describe("ATTACK 2 — a proposal filed before Start, approved after", () => {
 });
 
 /**
- * The consequence the refusal exists to prevent, asserted on the published KV
- * blobs the edge actually reads.
- *
- * Before the guard these two disagreed: the Flag snapshot's catalog said
- * `treatment_pwned` while the Run's frozen `allocation` still sent half its
- * traffic to `treatment`, and `apps/evaluation-api/src/evaluate-renamed-run-arm.test.ts`
- * executes what that costs — INTERNAL_SERVER_ERROR for that share of traffic.
+ * The rename is not the only frozen property of this mutation, and the VALUE is
+ * the quieter half. A rename that lands produces a loud 500 and no Exposure; a
+ * value swap that lands returns `200 applied`, republishes KV, and leaves the
+ * live Run serving the same arm NAME with a different payload — exposures
+ * before and after are both attributed to `treatment`, so the analysis
+ * population is silently contaminated with no error surface anywhere. That is
+ * the disguised default ADR-0036 forbids, so the freeze covers both properties
+ * at the same seam.
  */
-describe("BLAST RADIUS — the KV snapshot a live Run's traffic resolves against", () => {
+describe("ATTACK 5 — the same mutation moves the VALUE instead of the name", () => {
+  it("refuses the direct PATCH while run_live is live", async () => {
+    await setProdPolicy(h, allowPolicy);
+    await startSeededExperiment(h.d1);
+
+    const revalued = await patchVariant(h, "treatment", "spl267_value_direct", {
+      value: "PWNED_MID_RUN",
+    });
+    console.log("ATTACK-5 direct PATCH while live:", JSON.stringify(revalued));
+
+    expect(revalued.status).toBe(409);
+    expect(revalued.code).toBe("RUN_FROZEN");
+    const variant = await h.repo.flags.getVariantById(appScope(ids.appId), ids.treatmentVariantId);
+    expect(variant?.value).toBe(JSON.stringify("on"));
+  });
+
+  it("refuses at Review time for a proposal filed before Start", async () => {
+    await setProdPolicy(h, confirmPolicy);
+
+    const proposed = await patchVariant(h, "treatment", "spl267_value_late", {
+      value: "PWNED_MID_RUN",
+    });
+    console.log("ATTACK-5 propose:", JSON.stringify(proposed));
+    expect(proposed.code).toBe("APPROVAL_REVIEW_REQUIRED");
+
+    // The Run starts between the proposal and its Review.
+    await startSeededExperiment(h.d1);
+
+    const applied = await reviewRequest(
+      h,
+      proposed.approvalRequestId as string,
+      "spl267_value_late_r",
+    );
+    const body = await applied.json();
+    console.log("ATTACK-5 REVIEW STATUS:", applied.status, JSON.stringify(body));
+
+    const variant = await h.repo.flags.getVariantById(appScope(ids.appId), ids.treatmentVariantId);
+    console.log("ATTACK-5 variant value after review:", JSON.stringify(variant?.value));
+
+    expect(applied.status).toBeGreaterThanOrEqual(400);
+    expect(variant?.value).toBe(JSON.stringify("on"));
+  });
+});
+
+/**
+ * The published KV blobs a live Run's traffic actually resolves against, read
+ * back after a refused rename.
+ *
+ * Without the guard the two disagree: the Flag snapshot's catalog says
+ * `treatment_pwned` while the Run's frozen `allocation` still sends half its
+ * traffic to `treatment`. This test asserts the invariant that disagreement
+ * breaks — every arm the frozen allocation can select still names a Variant in
+ * the published catalog. What that disagreement COSTS at evaluate time is
+ * executed separately, in `apps/evaluation-api/src/evaluate-renamed-run-arm.test.ts`.
+ */
+describe("published KV stays consistent with the frozen allocation", () => {
   it("keeps the published catalog naming every arm the frozen allocation uses", async () => {
     await setProdPolicy(h, allowPolicy);
     await startSeededExperiment(h.d1);

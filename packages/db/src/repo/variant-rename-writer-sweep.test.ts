@@ -16,6 +16,11 @@ import { type SeededTenants, seedTwoTenants } from "./test-seed";
  *
  * Everything below is DERIVED from the source tree rather than hand-listed, so a
  * module or a call site added later fails a test instead of going unnoticed.
+ *
+ * Scope, stated so it is not mistaken for more: this sweep reads `packages/db/src`
+ * ONLY. Every production caller of `updateVariant` lives in the control plane, so
+ * a caller added there is invisible here and is swept instead by
+ * `apps/control-plane-api/src/variant-freeze-caller-sweep.test.ts`.
  */
 
 const SRC = fileURLToPath(new URL("../", import.meta.url));

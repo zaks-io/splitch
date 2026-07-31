@@ -11,16 +11,13 @@ import { CLIENT_KEY, makeSdkRouteHarness, sdkRouteInit } from "./sdk-route-test-
  * resolves the assigned name against the catalog, not against the Run's own
  * frozen `variantSet`.
  *
- * The blobs below are not invented. They are the shapes the control-plane write
- * path actually produced in
- * `apps/control-plane-api/test/variant-rename-run-freeze.test.ts`
- * ("records the KV snapshot a post-rename evaluate would read") after a rename
- * of `treatment` -> `treatment_pwned` while `run_live` was live:
- *
- *   flag.variants:              [control, treatment_pwned, canary]
- *   flag.availableVariantNames: [control, treatment_pwned]
- *   run.allocation:             { control: 50, treatment: 50 }
- *   run.variantSet:             [control, treatment]
+ * These two suites are NOT wired together, and the join is not claimed to be
+ * automatic: `apps/control-plane-api/test/variant-rename-run-freeze.test.ts`
+ * asserts the invariant ("every arm the frozen allocation can select still names
+ * a Variant in the published catalog") against KV blobs it publishes for real,
+ * and this file hand-builds the one shape that invariant forbids and executes
+ * what it costs. They meet at a literal — the arm name `treatment` present in
+ * `run.allocation` and absent from the catalog — not at a shared fixture.
  */
 
 const PATH = "/api/sdk/evaluate";

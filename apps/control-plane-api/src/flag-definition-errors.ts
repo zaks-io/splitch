@@ -1,37 +1,54 @@
-import type { VariantRunFreeze } from "@splitch/db";
+import type { VariantFrozenChange, VariantRunFreeze } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import type { RunningBlocker } from "./flag-definition-guards";
 import type { ValidationIssue } from "./flag-definition-schema";
 
+export interface VariantFreezeRefusal {
+  freeze: VariantRunFreeze;
+  variantName: string;
+  frozenChanges: VariantFrozenChange[];
+}
+
 /**
- * The rename refusal, raised by the repository seam (`updateVariant`) and only
- * RENDERED here.
+ * The `RUN_FROZEN` details for a Variant write a live Run forbids, derived ONCE
+ * so the direct route and the Approval application cannot drift apart on what
+ * they call the same refusal.
  *
- * `flagConfig.availableVariantNames` is the frozen field named, not some new
- * one: renaming a Variant removes its old name from every Environment's
- * available set, which is the same act SPL-118 already refuses. Naming the field
- * an operator actually sees keeps one refusal for one invariant.
+ * `flagConfig.availableVariantNames` is the field named for a rename, not some
+ * new one: renaming a Variant removes its old name from every Environment's
+ * available set, which is the same act SPL-118 already refuses. A rename's
+ * remedy is `END_RUNNING_RUN_FIRST`, never `CREATE_NEW_RUN` — a new Run cannot
+ * be opened while this one is live, and per `docs/spec/contracts/error-responses.md`
+ * `CREATE_NEW_RUN` is the remedy for an Experiment assignment edit, which would
+ * send the operator somewhere that does not change this Flag Configuration at
+ * all (ADR-0036: no impossible remedy).
  *
- * `END_RUNNING_RUN_FIRST`, never `CREATE_NEW_RUN`: a new Run cannot be opened
- * while this one is live, so offering it would be an impossible remedy
- * (ADR-0036). The Environment is in the message because the `RUN_FROZEN` details
- * contract has no field for it.
+ * A value swap keeps the contract the direct route has always emitted —
+ * `variant.value` / `PATCH_VARIANT` / `CREATE_NEW_RUN` — because cloning the Run
+ * and applying the new payload there IS the achievable remedy for a payload
+ * edit, and changing a shipped wire contract is not this fix's business.
  */
-export function variantRenameRunFrozenError(
-  freeze: VariantRunFreeze,
-  variantName: string,
-  requestId: string,
-): Response {
+export function variantFreezeDetails(refusal: VariantFreezeRefusal) {
+  const renaming = refusal.frozenChanges.includes("name");
+  return {
+    frozenFields: refusal.frozenChanges.map((change) =>
+      change === "name" ? "flagConfig.availableVariantNames" : "variant.value",
+    ),
+    currentRunId: refusal.freeze.runId,
+    attemptedChange: `${renaming ? "RENAME_VARIANT" : "PATCH_VARIANT"}:${refusal.variantName}`,
+    recommendedAction: renaming ? ("END_RUNNING_RUN_FIRST" as const) : ("CREATE_NEW_RUN" as const),
+  };
+}
+
+export function variantRunFrozenError(refusal: VariantFreezeRefusal, requestId: string): Response {
+  const renaming = refusal.frozenChanges.includes("name");
   return renderError(
     {
       code: "RUN_FROZEN",
-      message: `running Run ${freeze.runId} in Environment ${freeze.environmentId} allocates traffic to Variant "${variantName}" by name; end it before renaming this Variant`,
-      details: {
-        frozenFields: ["flagConfig.availableVariantNames"],
-        currentRunId: freeze.runId,
-        attemptedChange: `RENAME_VARIANT:${variantName}`,
-        recommendedAction: "END_RUNNING_RUN_FIRST" as const,
-      },
+      message: renaming
+        ? `running Run ${refusal.freeze.runId} in Environment ${refusal.freeze.environmentId} allocates traffic to Variant "${refusal.variantName}" by name; end it before renaming this Variant`
+        : "running Run freezes this Variant value",
+      details: variantFreezeDetails(refusal),
     },
     { requestId },
   );
@@ -76,27 +93,6 @@ export function runningExperimentError(
         runningRunId: blocker.runId,
         attemptedOp,
         recommendedAction: "END_RUNNING_RUN_FIRST",
-      },
-    },
-    { requestId },
-  );
-}
-
-export function runFrozenError(
-  blocker: RunningBlocker,
-  frozenFields: string[],
-  attemptedChange: string,
-  requestId: string,
-): Response {
-  return renderError(
-    {
-      code: "RUN_FROZEN",
-      message: "running Run freezes this Variant value",
-      details: {
-        frozenFields,
-        currentRunId: blocker.runId,
-        attemptedChange,
-        recommendedAction: "CREATE_NEW_RUN",
       },
     },
     { requestId },

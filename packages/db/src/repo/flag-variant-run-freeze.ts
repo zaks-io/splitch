@@ -4,7 +4,8 @@ import type { Db } from "./client";
 import type { TenantScope } from "./scope";
 
 /**
- * A live Run freezes the NAME of every Variant it allocates traffic to.
+ * A live Run freezes both the NAME and the VALUE of every Variant it allocates
+ * traffic to.
  *
  * A Run's `allocation` and `variantSet` are frozen at Start and keyed by Variant
  * NAME, while the KV Flag snapshot carries the CURRENT App-level catalog. Rename
@@ -13,7 +14,14 @@ import type { TenantScope } from "./scope";
  * the share of traffic the allocation sends to that arm. Executed proof in
  * `apps/evaluation-api/src/evaluate-renamed-run-arm.test.ts`.
  *
- * A rename is therefore the same act as removing the arm from
+ * The VALUE freeze is the quieter of the two and the more damaging. Swapping the
+ * payload under a running arm raises nothing: the write succeeds, KV is
+ * republished, and the edge keeps serving that arm — but exposures recorded
+ * before and after the swap are both attributed to the same Variant name, so the
+ * Run's population silently mixes two different treatments and no error surfaces
+ * anywhere. That is the disguised default ADR-0036 forbids.
+ *
+ * A rename is also the same act as removing the arm from
  * `flag_configs.available_variant_names`, which SPL-118 already refuses. It is
  * checked HERE, at the repository seam, and not in the route handler that
  * happens to reach it: SPL-118 learned twice that a guard bolted onto a subset
@@ -29,20 +37,29 @@ import type { TenantScope } from "./scope";
 export interface VariantRunFreeze {
   experimentId: string;
   runId: string;
-  /** The Environment whose Run owns the name, so the refusal can name it. */
+  /** The Environment whose Run owns the Variant, so the refusal can name it. */
   environmentId: string;
 }
 
-interface VariantIdentity {
+/** The frozen properties a write can try to move, named for the renderer. */
+export type VariantFrozenChange = "name" | "value";
+
+export interface VariantIdentity {
   id: string;
   name: string;
 }
 
 /**
- * The live Run that owns this Variant's name, or null when the rename is free.
+ * The live Run that owns this Variant, or null when the write is free.
  *
  * Returns `null` for "free to proceed" so no caller can read "not frozen" as a
  * refusal.
+ *
+ * This is the ONLY answer to "is this Variant frozen by a Run?" in the tree. The
+ * route layer reaches it through `repo.flags.liveRunUsingVariant` rather than
+ * keeping its own environment-walking copy: two predicates for one question is
+ * how SPL-118 drifted, and the copies had already diverged on whether
+ * `runs.ended_at IS NULL` was part of "live".
  */
 export async function liveRunUsingVariant(
   db: Db,

@@ -13,6 +13,7 @@ import { json } from "./experiment-model";
 import { prepareStart } from "./experiment-start";
 import { decisionSpecFromProposal, startReadinessResponse } from "./experiment-start-decision-spec";
 import { purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
+import { variantFreezeDetails } from "./flag-definition-errors";
 import { resyncFlagSnapshots } from "./flag-definition-handler-utils";
 
 interface ApprovalApplicationDeps {
@@ -182,11 +183,15 @@ async function applyVariant(
     },
   );
   // A proposal filed BEFORE a Run started and approved AFTER it is the second
-  // door onto the rename, and the same repository seam refuses it. The refusal
-  // is recorded on the Review as a machine-stable reason rather than swallowed
-  // as `notApplied`, which reads as a lost race worth retrying — a retry that
-  // can never succeed while the Run lives (ADR-0036: no impossible remedy).
-  if (!updated.ok && updated.reason === "RUN_FROZEN") return renameFrozen(updated);
+  // door onto this mutation — for the name AND for the value — and the same
+  // repository seam refuses both. A value swap landing here is the quieter of
+  // the two: it would return `applied`, republish KV, and leave the live Run
+  // serving the same arm name with a different payload, so the analysis
+  // population mixes two treatments with no error anywhere. The refusal is
+  // recorded on the Review as a machine-stable reason rather than swallowed as
+  // `notApplied`, which reads as a lost race worth retrying — a retry that can
+  // never succeed while the Run lives (ADR-0036: no impossible remedy).
+  if (!updated.ok && updated.reason === "RUN_FROZEN") return reviewRunFrozen(updated);
   // The Variant was read above, so any other failure is the Approval-guarded
   // write reporting that it landed nothing; reconciliation decides stale vs
   // resolved.
@@ -195,18 +200,10 @@ async function applyVariant(
   return { ok: true as const };
 }
 
-function renameFrozen(refusal: Extract<UpdateVariantResult, { reason: "RUN_FROZEN" }>) {
+function reviewRunFrozen(refusal: Extract<UpdateVariantResult, { reason: "RUN_FROZEN" }>) {
   return {
     ok: false as const,
-    error: {
-      code: "RUN_FROZEN" as const,
-      details: {
-        frozenFields: ["flagConfig.availableVariantNames"],
-        currentRunId: refusal.freeze.runId,
-        attemptedChange: `RENAME_VARIANT:${refusal.variantName}`,
-        recommendedAction: "END_RUNNING_RUN_FIRST" as const,
-      },
-    },
+    error: { code: "RUN_FROZEN" as const, details: variantFreezeDetails(refusal) },
   };
 }
 
