@@ -1,5 +1,5 @@
 import { CURRENT_KV_SCHEMA_VERSION, flagConfigKey } from "@splitch/contracts";
-import { envScope } from "@splitch/db";
+import { appScope, envScope } from "@splitch/db";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { narrowSeededAvailability } from "../src/config-store-fixture-data";
 import {
@@ -24,6 +24,76 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await h.dispose();
+});
+
+describe("Promotion source Environment validation", () => {
+  it("rejects a source Environment owned by another App without touching the target", async () => {
+    const foreignEnvironmentId = "env_other_app_source";
+    await h.repo.identity.environments.insert(appScope(ids.otherAppId), {
+      id: foreignEnvironmentId,
+      appId: ids.otherAppId,
+      key: "distinctive-source",
+      name: "Distinctive source",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    await h.repo.flags.flagConfigs.insert(envScope(ids.otherAppId, foreignEnvironmentId), {
+      id: "flag_config_other_app_source",
+      appId: ids.otherAppId,
+      environmentId: foreignEnvironmentId,
+      flagId: ids.flagId,
+      enabled: true,
+      availableVariantNames: JSON.stringify(["treatment"]),
+      defaultVariantId: ids.treatmentVariantId,
+      rollout: JSON.stringify({ percentage: 73, salt: "distinctive-foreign-salt" }),
+      createdAt: NOW,
+      updatedAt: "2026-07-02T03:04:05.000Z",
+    });
+    const before = await targetConfigBytes();
+
+    const res = await promoteFlagConfig(h, {
+      fromEnvironmentId: foreignEnvironmentId,
+      select: { enabled: true, availability: ["treatment"], rollout: true },
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: {
+        issues: [
+          {
+            path: ["fromEnvironmentId"],
+            message: expect.stringContaining(foreignEnvironmentId),
+          },
+        ],
+      },
+    });
+    expect(await targetConfigBytes()).toBe(before);
+    expect(h.nudges).toEqual([]);
+  });
+
+  it("rejects promoting an Environment into itself as a caller error", async () => {
+    const before = await targetConfigBytes();
+
+    const res = await promoteFlagConfig(h, {
+      fromEnvironmentId: ids.environmentId,
+      select: { enabled: true },
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "VALIDATION_ERROR",
+      details: {
+        issues: [
+          {
+            path: ["fromEnvironmentId"],
+            message: expect.stringContaining("must differ"),
+          },
+        ],
+      },
+    });
+    expect(await targetConfigBytes()).toBe(before);
+  });
 });
 
 describe("flag configuration Promotion routes", () => {
@@ -173,6 +243,15 @@ describe("flag configuration Promotion routes", () => {
     expect(h.events.at(-1)).toBe("broadcast");
   });
 });
+
+async function targetConfigBytes(): Promise<string> {
+  const scope = envScope(ids.appId, ids.environmentId);
+  const [config, targetingRules] = await Promise.all([
+    h.repo.flags.getFlagConfig(scope, ids.flagId),
+    h.repo.flags.listTargetingRules(scope, ids.flagId),
+  ]);
+  return JSON.stringify({ config, targetingRules });
+}
 
 describe("Flag Configuration Targeting Rule validation", () => {
   it("rejects Targeting Rules whose variantId is not a catalog ID", async () => {
