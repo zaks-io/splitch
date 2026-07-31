@@ -38,7 +38,7 @@ export function PromotionSourcePicker({
               : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
           )}
           data-promotion-source-option={option.env}
-          href={`${scopeHref}/flags/${flagKey}/promote?from=${encodeURIComponent(option.env)}`}
+          href={`${scopeHref}/flags/${encodeURIComponent(flagKey)}/promote?from=${encodeURIComponent(option.env)}`}
           key={option.environmentId}
         >
           {option.env}

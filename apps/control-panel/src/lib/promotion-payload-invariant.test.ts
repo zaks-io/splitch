@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { promotionDiff } from "./promotion-diff";
@@ -33,9 +33,14 @@ function code(source: string): string {
   return source.replaceAll(/\/\*[\s\S]*?\*\//g, "").replaceAll(/^[ \t]*\/\/.*$/gm, "");
 }
 
+/** POSIX-separated and relative to `SRC`, so the expectations below read the same everywhere. */
+function relative(path: string): string {
+  return path.slice(SRC.length).replaceAll(sep, "/");
+}
+
 function files(needle: string): { path: string; source: string }[] {
   return sourceFiles(SRC)
-    .map((path) => ({ path: path.slice(SRC.length), source: code(readFileSync(path, "utf8")) }))
+    .map((path) => ({ path: relative(path), source: code(readFileSync(path, "utf8")) }))
     .filter(({ path }) => path !== DECLARATION)
     .filter(({ source }) => source.includes(needle));
 }

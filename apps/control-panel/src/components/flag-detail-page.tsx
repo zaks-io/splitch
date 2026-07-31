@@ -65,7 +65,7 @@ export function FlagDetailPage({
             <a
               className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-muted-foreground text-xs transition-colors hover:border-foreground/30 hover:text-foreground"
               data-flag-promote-entry={promotionSourceEnv}
-              href={`${scopeHref}/flags/${view.key}/promote?from=${encodeURIComponent(promotionSourceEnv)}`}
+              href={`${scopeHref}/flags/${encodeURIComponent(view.key)}/promote?from=${encodeURIComponent(promotionSourceEnv)}`}
             >
               Promote from <span className="font-mono">{promotionSourceEnv}</span>
             </a>
