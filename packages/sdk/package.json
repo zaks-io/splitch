@@ -36,6 +36,7 @@
     "generate": "node scripts/sync-pack-manifest.mjs restore && npx tsup --config tsup.contract-surface.config.ts",
     "build": "pnpm run generate && npx tsup --config tsup.config.ts",
     "clean": "rm -rf dist coverage src/generated/contract-surface.js src/generated/contract-surface.d.ts",
+    "dist:settled": "true",
     "lint": "biome lint src",
     "test": "vitest run --passWithNoTests",
     "test:consumer-smoke": "node scripts/consumer-smoke.mjs",

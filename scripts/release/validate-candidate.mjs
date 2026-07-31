@@ -24,10 +24,10 @@ const targetLabel = targetKey.toUpperCase();
 // artifacts are serialized by dependsOn edges in turbo.json, not here:
 // package build -> //#knip -> pack:dry-run -> pack:check -> test:consumer-smoke
 // serializes package-local generated output, and the populated D1 check runs
-// after the local migration check. The CLI pack chain additionally runs after
-// the SDK pack chain (cli#pack:dry-run -> sdk#test:consumer-smoke): every SDK
-// pack task cleans and rebuilds packages/sdk/dist, which the CLI prepack
-// rebuild bundles from, so overlapping them races on that dist.
+// after the local migration check. sdk#dist:settled is a named barrier marking
+// that packages/sdk/dist has no writers left: every SDK pack task cleans and
+// rebuilds that dist (pnpm pack fires prepack), and the CLI prepack rebuild
+// bundles from it, so cli#pack:dry-run waits on the barrier to avoid racing.
 const TASKS = [
   "//#format:check",
   "lint",

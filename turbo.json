@@ -422,8 +422,12 @@
       "inputs": ["src/**", "tsconfig*.json", "tsup*.ts", "package.json"],
       "outputs": ["dist/**"]
     },
+    "@splitch/sdk#dist:settled": {
+      "dependsOn": ["test:consumer-smoke"],
+      "cache": false
+    },
     "@splitch/cli#pack:dry-run": {
-      "dependsOn": ["build", "//#knip", "@splitch/sdk#test:consumer-smoke"],
+      "dependsOn": ["build", "//#knip", "@splitch/sdk#dist:settled"],
       "cache": false
     },
     "@splitch/cli#pack:check": {
