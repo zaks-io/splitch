@@ -1,5 +1,6 @@
 import { routeRegistry } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
+import { captureOutboundRequest } from "./idempotency-probe-capture";
 import { type ControlPlaneSdk, createControlPlaneSdk } from "./index";
 
 /**
@@ -16,6 +17,7 @@ import { type ControlPlaneSdk, createControlPlaneSdk } from "./index";
  * cannot ship without a client that proves it sends the header.
  */
 
+const BASE_URL = "https://control-plane.test";
 const KEY = "idem_contract_probe";
 const SCOPE = { appId: "app_probe", environmentId: "env_probe", flagId: "flag_probe" } as const;
 
@@ -104,24 +106,8 @@ describe("control plane sdk idempotency header contract", () => {
   });
 });
 
-/** Thrown after the outbound Request is captured: the probe asserts on the request, never the response. */
-class RequestCaptured extends Error {}
-
-async function captureRequest(probe: (sdk: ControlPlaneSdk) => Promise<unknown>): Promise<Request> {
-  const requests: Request[] = [];
-  const sdk = createControlPlaneSdk({
-    baseUrl: "https://control-plane.test",
-    fetch: async (input, init) => {
-      requests.push(new Request(input as RequestInfo, init));
-      throw new RequestCaptured("captured");
-    },
-  });
-
-  await probe(sdk).catch((error: unknown) => {
-    if (!(error instanceof RequestCaptured)) throw error;
-  });
-
-  const request = requests[0];
-  if (!request) throw new Error("the SDK method issued no HTTP request");
-  return request;
+function captureRequest(probe: (sdk: ControlPlaneSdk) => Promise<unknown>): Promise<Request> {
+  return captureOutboundRequest((fetchImpl) =>
+    probe(createControlPlaneSdk({ baseUrl: BASE_URL, fetch: fetchImpl })),
+  );
 }

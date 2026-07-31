@@ -1,6 +1,28 @@
+import type { ErrorResponse } from "@splitch/contracts";
 import { getRoute } from "@splitch/contracts";
 
 const IDEMPOTENCY_HEADER = "idempotency-key";
+
+/**
+ * A caller-fixable precondition, not an internal fault. Carries the same
+ * `ErrorResponse` the Worker returns for this exact rule, so a surface that moves
+ * the check closer to the caller (the MCP handler) still hands the agent a typed
+ * refusal it can branch on rather than a generic protocol error (SPL-266).
+ */
+export class IdempotencyKeyRequiredError extends Error {
+  readonly errorResponse: ErrorResponse;
+
+  constructor(operationId: string) {
+    const detail = `${operationId} requires an idempotency key: supply a unique idempotency_key so the mutation can be retried safely`;
+    super(`control-plane-sdk: ${detail}`);
+    this.name = "IdempotencyKeyRequiredError";
+    this.errorResponse = {
+      code: "VALIDATION_ERROR",
+      message: detail,
+      details: { issues: [{ path: ["idempotency_key"], message: "required" }] },
+    };
+  }
+}
 
 /** The per-request options shape `hcRequestOptions` produces. */
 export interface HcRequestOptions {
@@ -34,7 +56,7 @@ export function withIdempotencyHeader(
   }
   if (idempotencyKey === undefined) {
     if (route.idempotency === "required") {
-      throw new Error(`control-plane-sdk: ${operationId} requires an idempotency key`);
+      throw new IdempotencyKeyRequiredError(operationId);
     }
     return options;
   }

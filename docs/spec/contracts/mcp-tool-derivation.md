@@ -286,9 +286,22 @@ that retry should always supply one. (Mirrors the auth-claim idempotency key, au
 
 Approval-controlled mutations (`experiments_start`, `flag_config_update`,
 `flag_targeting_rules_replace`, `flags_promote`, and App-level Variant value updates) require
-`idempotency_key`. It owns durable Approval Request creation and any inline Review. Review calls
-also require their own key. Exact retries return the stored result; a key reused with a different
-payload fails with `IDEMPOTENCY_KEY_CONFLICT`.
+`idempotency_key`, as do the catalog deletes `flags_delete` and `flag_variants_delete`. It owns
+durable Approval Request creation and any inline Review. Review calls also require their own key.
+Exact retries return the stored result; a key reused with a different payload fails with
+`IDEMPOTENCY_KEY_CONFLICT`.
+
+`idempotency_key` is derived from the route body schema wherever the route has one. The two catalog
+deletes have no request body, so derivation **injects** a required `idempotency_key` into their flat
+tool schema instead: a `required` route whose schema cannot express the key advertises an
+unsatisfiable call, and an impossible remedy is exactly what ADR-0036 forbids. The rule is uniform —
+every `idempotency: "required"` route exposes `idempotency_key` as a required tool input, from the
+body when there is one and by injection when there is not.
+
+Omitting the key on a `required` route is refused by the client before any request leaves, in the
+same shape the Worker uses for the same rule: a tool result with `isError: true` carrying
+`VALIDATION_ERROR` and `details.issues[].path` of `["idempotency_key"]`. It is never a JSON-RPC
+`-32603`, which stays reserved for genuinely unexpected faults.
 
 ## Authorization
 

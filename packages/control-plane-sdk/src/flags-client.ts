@@ -131,8 +131,6 @@ export function createFlagsClient(
         ),
       );
     },
-    // `?.` despite the non-optional signature: an untyped caller must still get the
-    // named throw from `withIdempotencyHeader`, not a TypeError (SPL-266).
     delete: (input, callOptions) =>
       invokeHcRoute<FlagsDeleteOutput>("flags_delete", () =>
         hcClient.apps[":appId"].flags[":flagId"].$delete(

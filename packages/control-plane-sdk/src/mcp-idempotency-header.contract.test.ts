@@ -1,5 +1,6 @@
 import { deriveMcpProtocolTools, isMcpToolRoute, routeRegistry } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
+import { captureOutboundRequest } from "./idempotency-probe-capture";
 import { createMcpOperationAdapter } from "./mcp-operation-adapter";
 
 /**
@@ -13,6 +14,7 @@ import { createMcpOperationAdapter } from "./mcp-operation-adapter";
  * route newly flipped to `idempotency: "required"` cannot ship without an MCP probe.
  */
 
+const BASE_URL = "https://control-plane.test";
 const KEY = "idem_mcp_contract_probe";
 const APP = "app_probe";
 const ENV = "env_probe";
@@ -128,24 +130,11 @@ function requiredProbe(id: string): Record<string, unknown> {
   return probe;
 }
 
-/** Thrown after the outbound Request is captured: the probe asserts on the request, never the response. */
-class RequestCaptured extends Error {}
-
-async function captureRequest(operationId: string, input: unknown): Promise<Request> {
-  const requests: Request[] = [];
-  const adapter = createMcpOperationAdapter({
-    baseUrl: "https://control-plane.test",
-    fetch: async (request) => {
-      requests.push(request as Request);
-      throw new RequestCaptured("captured");
-    },
-  });
-
-  await adapter.callOperationById(operationId, input).catch((error: unknown) => {
-    if (!(error instanceof RequestCaptured)) throw error;
-  });
-
-  const request = requests[0];
-  if (!request) throw new Error("the MCP adapter issued no HTTP request");
-  return request;
+function captureRequest(operationId: string, input: unknown): Promise<Request> {
+  return captureOutboundRequest((fetchImpl) =>
+    createMcpOperationAdapter({ baseUrl: BASE_URL, fetch: fetchImpl }).callOperationById(
+      operationId,
+      input,
+    ),
+  );
 }
