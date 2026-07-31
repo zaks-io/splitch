@@ -66,6 +66,28 @@ function assertSkinLocalCapabilities(capabilities) {
   }
 }
 
+const REPO_INTERNAL_REFERENCE =
+  /(?:^|[\s`(])(?:\.\.\/|\.\/|docs\/|apps\/|packages\/|\.github\/|AGENTS\.md|CONTEXT\.md)|(?:ADR|SPL)-\d+/m;
+
+function assertPublicEntries(entries, surface) {
+  for (const entry of entries) {
+    const internalReference = entry.text.match(REPO_INTERNAL_REFERENCE);
+    if (internalReference) {
+      throw new Error(
+        `published-agent-surface: ${surface} "${entry.name}" contains repo-internal reference: ${internalReference[0].trim()}`,
+      );
+    }
+  }
+}
+
+export function assertPublicAgentSurface({ cliHelp, mcpTools }) {
+  assertPublicEntries(cliHelp, "CLI help");
+  assertPublicEntries(
+    mcpTools.map((tool) => ({ name: tool.name, text: tool.description })),
+    "MCP tool description",
+  );
+}
+
 export function assertCliMcpParity({
   contractOperationIds,
   cliOperationIds,

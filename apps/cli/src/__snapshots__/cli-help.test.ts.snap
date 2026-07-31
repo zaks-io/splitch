@@ -663,7 +663,7 @@ Flags:
 
 Example:
   splitch flags promote <flag-id> --body-json '<json>' --json",
-    "flags test-eval": "Dry-run resolve a Flag (full reason, fires no Exposure, ADR-0026).
+    "flags test-eval": "Dry-run resolve a Flag with the full resolution reason without firing an Exposure.
 
 Usage:
   splitch flags test-eval <flag-id> [flags]
@@ -1302,7 +1302,7 @@ Commands:
   update          Update a Flag definition's name/description/schema.
   delete          Delete a Flag (blocked if referenced by a running Experiment).
   promote         Promote selected Flag Configuration field-groups between Environments.
-  test-eval       Dry-run resolve a Flag (full reason, fires no Exposure, ADR-0026).
+  test-eval       Dry-run resolve a Flag with the full resolution reason without firing an Exposure.
   verify          Verify a Flag KEY through the data plane without firing an Exposure.
 
 Flags:

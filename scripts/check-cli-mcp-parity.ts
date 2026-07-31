@@ -1,7 +1,13 @@
 import { CLI_COMMANDS, META_COMMANDS } from "../apps/cli/src/command-registry.js";
+import {
+  renderCommandHelp,
+  renderHelp,
+  renderMetaHelp,
+  renderRootHelp,
+} from "../apps/cli/src/help.js";
 import { MCP_TOOL_DEFINITIONS } from "../apps/mcp-server/src/tool-registry.js";
 import { operationIds } from "../packages/contracts/src/index.js";
-import { assertCliMcpParity } from "./lib/cli-mcp-parity.mjs";
+import { assertCliMcpParity, assertPublicAgentSurface } from "./lib/cli-mcp-parity.mjs";
 
 // These routes intentionally do not have equal CLI and MCP exposure. Keeping
 // the list explicit makes every new exception a reviewed contract decision.
@@ -57,6 +63,23 @@ assertCliMcpParity({
   ],
 });
 
+const groups = [...new Set(CLI_COMMANDS.map((command) => command.path[0]).filter(Boolean))].sort();
+assertPublicAgentSurface({
+  cliHelp: [
+    { name: "root", text: renderRootHelp() },
+    ...groups.map((group) => ({
+      name: group,
+      text: renderHelp([group ?? "", "--help"]) ?? "",
+    })),
+    ...META_COMMANDS.map((command) => ({ name: command, text: renderMetaHelp(command) })),
+    ...CLI_COMMANDS.map((command) => ({
+      name: command.path.join(" "),
+      text: renderCommandHelp(command),
+    })),
+  ],
+  mcpTools: MCP_TOOL_DEFINITIONS,
+});
+
 console.log(
-  `CLI/MCP parity passed: ${cliOperationIds.length} CLI operations, ${mcpOperationIds.length} MCP tools`,
+  `CLI/MCP parity and published-surface gate passed: ${cliOperationIds.length} CLI operations, ${mcpOperationIds.length} MCP tools`,
 );
