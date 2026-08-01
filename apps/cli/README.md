@@ -28,9 +28,13 @@ By default the CLI targets hosted splitch (`https://api.splitch.dev`, `https://a
 export SPLITCH_PLATFORM_TARGET=local
 ```
 
-Individual origins can be overridden with `CONTROL_PLANE_API_ORIGIN`, `AUTH_API_ORIGIN`,
-`EVALUATION_API_ORIGIN`, and `ANALYSIS_API_ORIGIN`. A command fails loudly with
-`CLI_API_ORIGIN_MISSING` when the origin it routes to has no default for the selected target.
+Individual origins can be overridden with `CONTROL_PLANE_API_ORIGIN`, `AUTH_API_ORIGIN`, and
+`EVALUATION_API_ORIGIN`. A command fails loudly with `CLI_API_ORIGIN_MISSING` when the origin it
+routes to has no default for the selected target.
+
+There are only these three. Which origin a command uses follows the credential it presents, not
+which Worker implements it: everything you authenticate for with `splitch login` goes to
+`api.splitch.dev`, and only SDK-credentialled operations go to `edge.splitch.dev`.
 
 ## Authenticate and select an Environment
 
@@ -138,7 +142,6 @@ Run `splitch --help` for the root map, `splitch <resource> --help` for a resourc
 | `app-attention-rollup`     | `get`                                                                         |
 | `experiment-results`       | `get`, `post`                                                                 |
 | `organization-usage`       | `get`                                                                         |
-| `audit-log`                | `list`                                                                        |
 | `current-user-privacy`     | `export`                                                                      |
 | `current-user`             | `delete`                                                                      |
 | `organization-privacy`     | `export`                                                                      |

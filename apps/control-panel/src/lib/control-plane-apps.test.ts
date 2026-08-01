@@ -28,7 +28,6 @@ describe("Control Panel Apps transport", () => {
 
     const result = await apps.create({
       orgId: "org_acme",
-      organizationId: "org_acme",
       name: "Checkout",
       key: "checkout",
     });
@@ -174,7 +173,6 @@ describe("Control Panel Apps transport failures", () => {
     await expect(
       apps.create({
         orgId: "org_acme",
-        organizationId: "org_acme",
         name: "Checkout",
         key: "checkout",
       }),
@@ -199,7 +197,6 @@ describe("Control Panel Apps transport failures", () => {
     await expect(
       apps.create({
         orgId: "org_acme",
-        organizationId: "org_acme",
         name: "Checkout",
         key: "checkout",
       }),

@@ -1,5 +1,6 @@
 import { type ErrorCode, errorCodes } from "./errors";
 import type { ApiRouteContract } from "./openapi-route";
+import { type PublicSurface, publicSurfaceFor, type RouteOwner } from "./route-contract";
 import { accountRoutes } from "./routes/routes-account";
 import { analysisRoutes } from "./routes/routes-analysis";
 import { approvalRoutes } from "./routes/routes-approvals";
@@ -88,3 +89,54 @@ export function getRoute(operationId: string): ApiRouteContract | undefined {
 
 /** Every operationId in registry order — the canonical tool/route name list. */
 export const operationIds: readonly string[] = routeRegistry.map((route) => route.operationId);
+
+/**
+ * Every route one Worker must mount: the ones it is the public surface for, plus
+ * the ones it executes for another surface. A delegated route appears in both
+ * lists — the gateway mounts it to authorize and forward, the owner mounts it to
+ * execute — which is why this is a union and not a choice.
+ *
+ * Both clients and Workers read this, so "the CLI addresses it here" and "that
+ * Worker answers there" cannot drift apart unnoticed (ADR-0046).
+ */
+export function routesMountedBy(worker: RouteOwner): readonly ApiRouteContract[] {
+  return routeRegistry.filter(
+    (route) => route.owner === worker || publicSurfaceFor(route) === worker,
+  );
+}
+
+/**
+ * The routes a public surface answers for but does not execute: it authorizes the
+ * caller and forwards to the owner over a service binding (ADR-0046).
+ *
+ * Read from the surface's side (`routesDelegatedBy`) it is what to forward; read
+ * from the owner's side (`routesDelegatedTo`) it is the allowlist of operations
+ * that may arrive over the binding. One predicate, so the two cannot disagree
+ * about what delegation covers.
+ */
+export function routesDelegatedBy(surface: PublicSurface): readonly ApiRouteContract[] {
+  return routeRegistry.filter(
+    (route) => publicSurfaceFor(route) === surface && route.owner !== surface,
+  );
+}
+
+export function routesDelegatedTo(worker: RouteOwner): readonly ApiRouteContract[] {
+  return routeRegistry.filter(
+    (route) => route.owner === worker && publicSurfaceFor(route) !== worker,
+  );
+}
+
+/**
+ * The operationIds among a Hono app's registered routes, matched by method+path.
+ * Paths the registry does not define (health, Control Panel RPC) are not registry
+ * routes and drop out; a registry route mounted by the wrong Worker does not.
+ */
+export function mountedOperationIds(
+  routes: readonly { readonly method: string; readonly path: string }[],
+): readonly string[] {
+  const ids = routes.map(
+    ({ method, path }) =>
+      routeRegistry.find((route) => route.method === method && route.path === path)?.operationId,
+  );
+  return [...new Set(ids.filter((id): id is string => id !== undefined))];
+}

@@ -3,18 +3,20 @@ import {
   type PlatformTarget,
   PlatformTargetSchema,
   platformTargets,
-  type RouteOwner,
+  type PublicSurface,
+  publicSurfaceFor,
+  type RouteContract,
 } from "@splitch/contracts";
 import { SplitchCliError } from "./errors.js";
 
 const defaultControlPlaneBaseUrl = "http://127.0.0.1:8787";
 const defaultEvaluationBaseUrl = "http://127.0.0.1:8788";
-const defaultAnalysisBaseUrl = "http://127.0.0.1:8790";
 const defaultAuthBaseUrl = "http://127.0.0.1:8789";
 
 // The published binary defaults to hosted production; local development
-// opts in with SPLITCH_PLATFORM_TARGET=local. The analysis API has no
-// hosted hostname yet, so analysis commands fail loud until one exists.
+// opts in with SPLITCH_PLATFORM_TARGET=local. Every hosted origin here is
+// fixed by ADR-0038's subdomain map -- the CLI reads that table, it does not
+// invent hostnames.
 const defaultPlatformTarget: PlatformTarget = "production";
 const productionOrigins: Readonly<Record<string, string>> = {
   CONTROL_PLANE_API_ORIGIN: "https://api.splitch.dev",
@@ -22,15 +24,13 @@ const productionOrigins: Readonly<Record<string, string>> = {
   EVALUATION_API_ORIGIN: "https://edge.splitch.dev",
 };
 
-type RoutableOwner = "control-plane-api" | "evaluation-api" | "analysis-api";
 export type OperationSdk = ReturnType<typeof createMcpOperationAdapter>;
-export type OperationSdks = Record<RoutableOwner, OperationSdk>;
+export type OperationSdks = Record<PublicSurface, OperationSdk>;
 
 export interface SdkFactoryOptions {
   readonly platformTarget?: string;
   readonly controlPlaneBaseUrl?: string;
   readonly evaluationBaseUrl?: string;
-  readonly analysisBaseUrl?: string;
   readonly authBaseUrl?: string;
   readonly fetch?: typeof fetch;
 }
@@ -53,8 +53,8 @@ function requirePlatformTarget(value: string | undefined): PlatformTarget {
   return parsed.data;
 }
 
-// Origins resolve lazily per route owner so a command only demands the
-// origin it actually routes to (the analysis API has no hosted hostname yet).
+// Origins resolve lazily per public surface so a command only demands the
+// origin it actually routes to.
 export function createOperationSdks(options: SdkFactoryOptions = {}): OperationSdks {
   const platformTarget = requirePlatformTarget(options.platformTarget);
   const adapter = (envName: string, configured: string | undefined, localDefault: string) =>
@@ -73,21 +73,34 @@ export function createOperationSdks(options: SdkFactoryOptions = {}): OperationS
     get "evaluation-api"() {
       return adapter("EVALUATION_API_ORIGIN", options.evaluationBaseUrl, defaultEvaluationBaseUrl);
     },
-    get "analysis-api"() {
-      return adapter("ANALYSIS_API_ORIGIN", options.analysisBaseUrl, defaultAnalysisBaseUrl);
-    },
   };
 }
 
-export function sdkForOwner(sdks: OperationSdks, owner: RouteOwner): OperationSdk {
-  if (owner === "control-plane-api" || owner === "evaluation-api" || owner === "analysis-api") {
-    return sdks[owner as RoutableOwner];
+/**
+ * Which origin a client sends an operation to is a property of the credential
+ * the operation takes, not of the Worker that executes it (ADR-0046). A
+ * control-plane-token route is addressed at the control-plane origin even when
+ * another Worker implements it; `route.owner` is the internal delegation target
+ * and never reaches a client.
+ */
+export function sdkForRoute(
+  sdks: OperationSdks,
+  route: Pick<RouteContract, "id" | "auth">,
+): OperationSdk {
+  return sdks[requirePublicSurface(route)];
+}
+
+function requirePublicSurface(route: Pick<RouteContract, "id" | "auth">): PublicSurface {
+  try {
+    return publicSurfaceFor(route);
+  } catch (error) {
+    throw new SplitchCliError({
+      code: "CLI_ROUTE_SURFACE_UNSUPPORTED",
+      causeSummary: `The operation ${route.id} has no public origin the CLI can address`,
+      remediation: "Use an operation exposed on a public API surface",
+      originalError: error,
+    });
   }
-  throw new SplitchCliError({
-    code: "CLI_ROUTE_OWNER_UNSUPPORTED",
-    causeSummary: `No API origin is configured for route owner "${owner}"`,
-    remediation: "Use an operation owned by a CLI-supported API",
-  });
 }
 
 export function resolveControlPlaneBaseUrl(options: SdkFactoryOptions = {}): string {

@@ -219,7 +219,6 @@ the credential their code holds.
 | `web_analytics_sessions_list`       | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions`                       |
 | `web_analytics_session_events_list` | GET    | `/apps/:appId/envs/:environmentId/web-analytics/sessions/:sessionIdHash/events` |
 | `web_analytics_vitals_get`          | GET    | `/apps/:appId/envs/:environmentId/web-analytics/vitals`                         |
-| `audit_log_list`                    | GET    | `/apps/:appId/audit-log`                                                        |
 
 ### Privacy data
 

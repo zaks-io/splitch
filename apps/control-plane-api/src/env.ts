@@ -32,8 +32,10 @@ export interface ControlPlaneApiEnv {
   MCP_DELEGATION_REPLAY?: McpDelegationReplayDurableObjectNamespace;
   /** Cloudflare-native counter keyed by the authenticated Control Plane actor. */
   CONTROL_PLANE_ACTOR_RATE_LIMITER?: RateLimit;
-  /** Binding-only Run-results reader on the Analysis Worker. */
+  /** Binding-only ControlPlaneEntrypoint on the Analysis Worker (ADR-0046). */
   ANALYSIS_API: Fetcher;
+  /** Binding-only ControlPlaneEntrypoint on the Evaluation Worker (ADR-0046). */
+  EVALUATION_API: Fetcher;
   /** CI-only bearer token for the hosted credential-cache rollout gate. */
   SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */

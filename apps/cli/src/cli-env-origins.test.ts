@@ -2,7 +2,15 @@ import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK } from "./exit-codes.js";
-import { authHeader, flagRecord, FakeCliTransport, storedCredential } from "./test-fixtures.js";
+import {
+  authHeader,
+  flagRecord,
+  FakeCliTransport,
+  oauthTokenMint,
+  organizationUsage,
+  storedCredential,
+  testEvaluation,
+} from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
 afterEach(async () => {
@@ -41,6 +49,51 @@ describe("platform target and API origins", () => {
     expect(code).toBe(EXIT_OK);
     expect(transport.requests[0]?.url.startsWith("https://api.splitch.dev/")).toBe(true);
     expect(transport.requests[0]?.authorization).toBe(authHeader());
+  });
+
+  // Every operation the CLI holds a control-plane token for is addressed at the
+  // control-plane origin, whichever Worker implements it (ADR-0046). Both of
+  // these used to leak their implementation owner into the client: Organization
+  // usage went to a hostname that did not exist, test-eval went to the
+  // data-plane edge.
+  it.each([
+    {
+      name: "an Analysis-implemented command",
+      args: ["organization-usage", "get", "org_1", "--json"],
+      path: "/orgs/org_1/usage",
+      body: organizationUsage,
+    },
+    {
+      name: "an Evaluation-implemented command",
+      args: [
+        "flags",
+        "test-eval",
+        "checkout",
+        "--app",
+        "app_1",
+        "--env",
+        "env_1",
+        "--targeting-key",
+        "user-123",
+        "--json",
+      ],
+      path: "/apps/app_1/envs/env_1/flags/checkout/test-eval",
+      body: testEvaluation,
+    },
+  ])("routes $name to the control-plane origin", async ({ args, path, body }) => {
+    const { credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const transport = new FakeCliTransport([
+      oauthTokenMint(),
+      { match: (request) => request.url.includes(path), status: 200, body },
+    ]);
+
+    const code = await runCli(args, { credentialPath, fetch: transport.fetch, env: {} });
+
+    expect(code).toBe(EXIT_OK);
+    expect(transport.requests.find((request) => request.url.includes(path))?.url).toBe(
+      `https://api.splitch.dev${path}`,
+    );
   });
 
   it("SPLITCH_PLATFORM_TARGET=local routes to the local dev stack", async () => {

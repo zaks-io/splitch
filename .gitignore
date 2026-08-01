@@ -18,3 +18,6 @@ test-results/
 !.claude/skills/
 .codex/
 agent/
+# `splitch use` writes the selected scope to the nearest .splitch/config.json,
+# which lands here whenever the CLI is exercised from the repo root.
+.splitch/

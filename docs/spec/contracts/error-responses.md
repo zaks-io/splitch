@@ -377,7 +377,7 @@ regardless of Environment Policy.
 
 ## ResolutionDetails: the SDK-synthesized evaluate/verify result
 
-The data-plane wire response is intentionally minimal — `DataPlaneEvaluateResponse = { variant }`
+The data-plane wire response is intentionally minimal — `DataPlaneEvaluateResponse = { variant, variantName }`
 (see [request-response-envelopes-conventions.md](./request-response-envelopes-conventions.md)). The
 SDK **synthesizes** the OpenFeature `ResolutionDetails` the caller receives from that wire response
 plus the HTTP status. This is the shape every accessor (`evaluate`, `evaluateDetails`, `peekVariant`,

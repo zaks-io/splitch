@@ -71,9 +71,10 @@ export function assertHostedDelegationSecretConfig(rootDir, envName) {
   }
 }
 
-export function validateHostedWorkerSecretEnv(rootDir, envName, env) {
+export async function validateHostedWorkerSecretEnv(rootDir, envName, env, deps = {}) {
   assertHostedDelegationSecretConfig(rootDir, envName);
-  const required = [...hostedWorkerSecrets(rootDir, envName).keys()];
+  const consumers = hostedWorkerSecrets(rootDir, envName);
+  const required = [...consumers.keys()];
   const missing = required.filter((name) => !env[name]);
   if (missing.length > 0) {
     throw new Error(`missing required Worker secret env: ${missing.join(", ")}`);
@@ -87,7 +88,73 @@ export function validateHostedWorkerSecretEnv(rootDir, envName, env) {
   if (required.includes("ACCESS_TOKEN_SECRET")) {
     assertRsaPrivateJwkSecret("ACCESS_TOKEN_SECRET", env.ACCESS_TOKEN_SECRET);
   }
+  if (required.includes(TINYBIRD_INGEST_TOKEN)) {
+    await assertTinybirdIngestToken(
+      rootDir,
+      envName,
+      consumers,
+      env,
+      deps.fetch ?? globalThis.fetch,
+    );
+  }
   return required;
+}
+
+const TINYBIRD_INGEST_TOKEN = "TINYBIRD_INGEST_TOKEN";
+/** Every Data Source the ingest Worker appends to; see apps/event-ingest-api/src/tinybird.ts. */
+const TINYBIRD_INGEST_DATASOURCES = ["raw_events", "raw_evaluations"];
+
+/**
+ * Presence proved nothing here. A wrong, expired, or under-scoped ingest token
+ * deploys clean and then loses every Exposure at runtime, with the loss visible
+ * only in the ingest Worker's logs. So make the deploy exercise the exact call
+ * the Worker makes -- an append to each ingest Data Source -- and fail before
+ * the Worker is replaced. The body carries zero rows, so the probe writes
+ * nothing and is safe to repeat on every deploy.
+ */
+async function assertTinybirdIngestToken(rootDir, envName, consumers, env, fetchImpl) {
+  const apiUrl = tinybirdApiUrl(rootDir, envName, consumers);
+  for (const datasource of TINYBIRD_INGEST_DATASOURCES) {
+    const url = new URL("/v0/events", apiUrl);
+    url.searchParams.set("name", datasource);
+
+    let response;
+    try {
+      response = await fetchImpl(url.toString(), {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${env[TINYBIRD_INGEST_TOKEN]}`,
+          "content-type": "application/x-ndjson",
+        },
+        body: "",
+      });
+    } catch (cause) {
+      throw new Error(
+        `${TINYBIRD_INGEST_TOKEN} could not be exercised against ${url.host}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      );
+    }
+
+    // 401/403 is a rejected credential; 404 is the right credential pointed at a
+    // Workspace or region without this Data Source. Tinybird's error body can
+    // quote the token, so it is deliberately not forwarded.
+    if (response.status === 401 || response.status === 403 || response.status === 404) {
+      throw new Error(
+        `${TINYBIRD_INGEST_TOKEN} was rejected by ${url.host} for Data Source "${datasource}" (HTTP ${response.status}); it must carry APPEND scope on ${TINYBIRD_INGEST_DATASOURCES.join(" and ")} in that region`,
+      );
+    }
+  }
+}
+
+function tinybirdApiUrl(rootDir, envName, consumers) {
+  const [appName] = consumers.get(TINYBIRD_INGEST_TOKEN) ?? [];
+  const config = parseWranglerConfigFile(join(rootDir, "apps", appName, "wrangler.jsonc"));
+  const apiUrl = config.env?.[envName]?.vars?.TINYBIRD_API_URL ?? config.vars?.TINYBIRD_API_URL;
+  if (!apiUrl) {
+    throw new Error(
+      `${appName} ${envName} requires ${TINYBIRD_INGEST_TOKEN} but declares no TINYBIRD_API_URL var to exercise it against`,
+    );
+  }
+  return apiUrl;
 }
 
 /**

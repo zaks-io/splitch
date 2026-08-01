@@ -22,7 +22,7 @@ export interface SplitchClientOptions {
   readonly apiKey?: string;
   /** Override the default edge endpoint for self-hosted or preview targets. */
   readonly endpoint?: string;
-  /** Per-call request timeout in ms (default 1000); on timeout the SDK fails loud (reason: ERROR). */
+  /** Per-call request timeout in ms (default 5000); on timeout the SDK fails loud (reason: ERROR). */
   readonly timeoutMs?: number;
   /** Retries on the Exposure-bearing call. MUST be 0: a retry is a fresh resolution. */
   readonly retries?: number;
@@ -75,7 +75,15 @@ export interface SplitchClient {
 }
 
 const DEFAULT_ENDPOINT = "https://edge.splitch.dev";
-const DEFAULT_TIMEOUT_MS = 1000;
+/**
+ * Covers a cold call, not a warm one. `retries` is structurally 0 (an
+ * Exposure-bearing call must not be repeated), so a timeout is terminal: it
+ * spends the caller's Exposure and returns the Default Variant. At the former
+ * 1000ms a first evaluation against healthy production measured 1935ms and
+ * aborted, which made a new integrator's very first Exposure fail by default.
+ * A caller who wants a tighter latency budget can still set `timeoutMs` down.
+ */
+const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_RETRIES = 0;
 
 /**

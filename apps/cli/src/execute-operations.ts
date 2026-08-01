@@ -9,7 +9,7 @@ import { normalizeCliError, SplitchCliError, writeCliError } from "./errors.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { parseEvaluationContext } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
-import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForOwner } from "./sdks.js";
+import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForRoute } from "./sdks.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { emit } from "./execute-io.js";
 
@@ -199,7 +199,7 @@ export async function executeApiOperation(
           });
         }
         const sdks = createOperationSdks(deps);
-        const sdk = sdkForOwner(sdks, route.owner);
+        const sdk = sdkForRoute(sdks, route);
         const result = await sdk.callOperationById(operationId, input, { authorization });
         return { status: result.ok ? 200 : result.status, value: result };
       },

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createSplitchClient } from "./client";
 import { createFetchTransport } from "./fetch-transport";
 import { SplitchSdkError } from "./errors";
@@ -49,6 +49,38 @@ describe("createSplitchClient: construction", () => {
     expect(() =>
       createSplitchClient({ apiKey: "ak", transport: new FakeTransport([]) }),
     ).not.toThrow();
+  });
+
+  it("default timeout outlives a ~2s cold call (1000ms aborted the first real Exposure)", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = createSplitchClient({
+        clientKey: "ck_test",
+        fetch: ((_url: unknown, init?: RequestInit) =>
+          new Promise<Response>((resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+            setTimeout(
+              () =>
+                resolve(
+                  new Response(JSON.stringify({ variant: true, variantName: "on" }), {
+                    status: 200,
+                  }),
+                ),
+              1935,
+            );
+          })) as typeof fetch,
+      });
+      const pending = client.evaluateDetails("flag", {
+        targetingKey: "u1",
+        idempotencyKey: "cold-start-1",
+      });
+      await vi.advanceTimersByTimeAsync(1935);
+      expect(await pending).toMatchObject({ value: true, reason: "SPLIT" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects a non-zero retries (never retry the Exposure-bearing call)", () => {
@@ -141,7 +173,7 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
       void url;
       seenHeaders = new Headers(init?.headers);
       return Promise.resolve(
-        new Response(JSON.stringify({ variant: true }), {
+        new Response(JSON.stringify({ variant: true, variantName: "on" }), {
           status: 200,
           headers: { "x-run-id": "run-42" },
         }),
@@ -156,7 +188,7 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
   it("200 -> extracts variant from the bare body and runId from the X-Run-Id header", async () => {
     const t = transport(
       stubFetch(
-        new Response(JSON.stringify({ variant: "treatment" }), {
+        new Response(JSON.stringify({ variant: "treatment", variantName: "treatment" }), {
           status: 200,
           headers: { "x-run-id": "run-42" },
         }),
@@ -181,7 +213,7 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
         requests.push(request);
         return Promise.resolve(
           request.path === "/api/sdk/evaluate"
-            ? new Response(JSON.stringify({ variant: "treatment" }), {
+            ? new Response(JSON.stringify({ variant: "treatment", variantName: "treatment" }), {
                 status: 200,
                 headers: { "x-run-id": "run-42" },
               })

@@ -93,7 +93,6 @@ const CANONICAL_OPERATION_IDS = [
   "experiment_results_get",
   "experiment_results_post",
   "organization_usage_get",
-  "audit_log_list",
   "openapi_document_get",
   // Privacy
   "current_user_privacy_export",

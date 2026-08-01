@@ -16,10 +16,34 @@ type FetcherLike =
       fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
     };
 
+/**
+ * Which stage of the commit failed. Every one of these returns the same
+ * SERVICE_UNAVAILABLE to the caller (a public Client Key must not learn how the
+ * platform is wired), so this code is the only thing that tells an operator a
+ * missing secret from an unreachable binding from ingest rejecting the write.
+ * Without it all four collapsed into one log line and the deploy that broke
+ * Exposure delivery read the same as a transient network blip.
+ */
+export type EvaluationCommitSinkFailure =
+  | "ingest_token_missing"
+  | "ingest_binding_missing"
+  | "ingest_transport_failed"
+  | "ingest_rejected";
+
 export class EvaluationCommitSinkError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
+  readonly failure: EvaluationCommitSinkFailure;
+  /** Upstream HTTP status; null unless ingest answered. */
+  readonly status: number | null;
+
+  constructor(
+    failure: EvaluationCommitSinkFailure,
+    message: string,
+    options?: ErrorOptions & { status?: number },
+  ) {
     super(message, options);
     this.name = "EvaluationCommitSinkError";
+    this.failure = failure;
+    this.status = options?.status ?? null;
   }
 }
 
@@ -31,10 +55,16 @@ export function makeHttpEvaluationCommitSink(options: {
   return {
     async write(event) {
       if (!options.token) {
-        throw new EvaluationCommitSinkError("internal ingest token is unavailable");
+        throw new EvaluationCommitSinkError(
+          "ingest_token_missing",
+          "internal ingest token is unavailable",
+        );
       }
       if (options.fetcher === undefined && options.endpoint === undefined) {
-        throw new EvaluationCommitSinkError("Evaluation commit ingest binding is unavailable");
+        throw new EvaluationCommitSinkError(
+          "ingest_binding_missing",
+          "Evaluation commit ingest binding is unavailable",
+        );
       }
 
       let response: Response;
@@ -51,12 +81,18 @@ export function makeHttpEvaluationCommitSink(options: {
           body: JSON.stringify({ ...event.usage, exposures: event.exposures }),
         });
       } catch (cause) {
-        throw new EvaluationCommitSinkError("Evaluation commit ingest transport failed", { cause });
+        throw new EvaluationCommitSinkError(
+          "ingest_transport_failed",
+          "Evaluation commit ingest transport failed",
+          { cause },
+        );
       }
 
       if (!response.ok) {
         throw new EvaluationCommitSinkError(
+          "ingest_rejected",
           `Evaluation commit ingest returned HTTP ${response.status}`,
+          { status: response.status },
         );
       }
     },

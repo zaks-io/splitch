@@ -18,20 +18,27 @@ const testEvaluation = {
   liveRunId: null,
 };
 
-const auditLogPage = {
-  items: [
-    {
-      eventId: "evt_1",
-      environmentId: "env_prod",
-      actor: "user_1",
-      action: "flags_update",
-      at: "2026-07-03T02:00:00.000Z",
-    },
-  ],
-  cursor: null,
-  limit: 10,
-  total: null,
+const organizationUsage = {
+  organizationId: "org_local",
+  period: {
+    month: "2026-07",
+    startsAt: "2026-07-01T00:00:00.000Z",
+    endsAt: "2026-07-31T23:59:59.999Z",
+  },
+  state: "zero",
+  evaluations: 0,
+  breakdown: {
+    byApp: [],
+    byEnvironment: [],
+    byFlag: [],
+    bySdkRuntime: [],
+    byBatch: [],
+    bySource: [],
+    byExposure: [],
+  },
 };
+
+const usagePath = "/orgs/org_local/usage";
 
 let cleanupServers: (() => Promise<void>)[] = [];
 
@@ -40,6 +47,12 @@ afterEach(async () => {
   cleanupServers = [];
 });
 
+/**
+ * The MCP server holds a service binding to every Worker, so it addresses an
+ * operation at its implementation owner. Clients that hold a credential instead
+ * of a binding address the public surface (ADR-0046); these are the two ends of
+ * the same registry entry, and only this one routes by owner.
+ */
 describe("mcp server owner routing", () => {
   it("routes hosted evaluation-owned tools without requiring the Analysis API binding", async () => {
     const controlSeen: SeenRequest[] = [];
@@ -53,7 +66,7 @@ describe("mcp server owner routing", () => {
         arguments: {
           appId: "app_local",
           environmentId: "env_prod",
-          flagId: "flag_checkout",
+          flagKey: "flag_checkout",
           evaluationContext: {
             targetingKey: "user_1",
             idType: "user",
@@ -95,42 +108,23 @@ describe("mcp server owner routing", () => {
     const analysisBaseUrl = await bootApi(analysisSeen, handleAnalysisRequest);
     const response = await mcp(
       "tools/call",
-      {
-        name: "audit_log_list",
-        arguments: {
-          appId: "app_local",
-          limit: "10",
-          environmentId: "env_prod",
-        },
-      },
+      { name: "organization_usage_get", arguments: { orgId: "org_local" } },
       { controlPlaneBaseUrl, analysisBaseUrl },
     );
-    const body = (await response.json()) as JsonRpcSuccess<ToolResult<typeof auditLogPage>>;
+    const body = (await response.json()) as JsonRpcSuccess<ToolResult<typeof organizationUsage>>;
 
     expect(controlSeen).toEqual([]);
     expect(analysisSeen).toEqual([
-      {
-        method: "GET",
-        path: "/apps/app_local/audit-log?limit=10&environmentId=env_prod",
-        authorization: null,
-        body: "",
-      },
+      { method: "GET", path: usagePath, authorization: null, body: "" },
     ]);
-    expect(body.result.structuredContent).toEqual(auditLogPage);
+    expect(body.result.structuredContent).toEqual(organizationUsage);
   });
 
   it("routes analysis-owned tools through the Analysis API service binding for hosted targets", async () => {
     const analysisSeen: SeenRequest[] = [];
     const response = await mcp(
       "tools/call",
-      {
-        name: "audit_log_list",
-        arguments: {
-          appId: "app_local",
-          limit: "10",
-          environmentId: "env_prod",
-        },
-      },
+      { name: "organization_usage_get", arguments: { orgId: "org_local" } },
       {
         platformTarget: "shared-preview",
         controlPlaneBaseUrl: "https://api.preview.splitch.dev",
@@ -138,17 +132,12 @@ describe("mcp server owner routing", () => {
         analysisFetch: analysisServiceFetch(analysisSeen),
       },
     );
-    const body = (await response.json()) as JsonRpcSuccess<ToolResult<typeof auditLogPage>>;
+    const body = (await response.json()) as JsonRpcSuccess<ToolResult<typeof organizationUsage>>;
 
     expect(analysisSeen).toEqual([
-      {
-        method: "GET",
-        path: "/apps/app_local/audit-log?limit=10&environmentId=env_prod",
-        authorization: null,
-        body: "",
-      },
+      { method: "GET", path: usagePath, authorization: null, body: "" },
     ]);
-    expect(body.result.structuredContent).toEqual(auditLogPage);
+    expect(body.result.structuredContent).toEqual(organizationUsage);
   });
 });
 
@@ -210,11 +199,8 @@ function analysisServiceFetch(seen: SeenRequest[]): typeof fetch {
     const request = input instanceof Request ? input : new Request(input, init);
     await recordFetchRequest(request, seen);
     const url = new URL(request.url);
-    if (
-      request.method === "GET" &&
-      `${url.pathname}${url.search}` === "/apps/app_local/audit-log?limit=10&environmentId=env_prod"
-    ) {
-      return Response.json(auditLogPage);
+    if (request.method === "GET" && `${url.pathname}${url.search}` === usagePath) {
+      return Response.json(organizationUsage);
     }
     return Response.json(
       { code: "APP_NOT_FOUND", message: "not found", details: {} },
@@ -264,11 +250,8 @@ async function handleAnalysisRequest(
   seen: SeenRequest[],
 ): Promise<void> {
   await recordRequest(request, seen);
-  if (
-    request.method === "GET" &&
-    request.url === "/apps/app_local/audit-log?limit=10&environmentId=env_prod"
-  ) {
-    writeJson(response, 200, auditLogPage);
+  if (request.method === "GET" && request.url === usagePath) {
+    writeJson(response, 200, organizationUsage);
     return;
   }
   writeJson(response, 404, { code: "APP_NOT_FOUND", message: "not found", details: {} });

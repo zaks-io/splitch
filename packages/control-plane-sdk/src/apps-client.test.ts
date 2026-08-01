@@ -31,7 +31,6 @@ describe("control plane sdk Apps client", () => {
 
     const result = await sdk.apps.create({
       orgId: "org_acme",
-      organizationId: "org_acme",
       name: "Checkout",
       key: "checkout",
     });
@@ -60,7 +59,6 @@ describe("control plane sdk Apps client", () => {
     await expect(
       sdk.apps.create({
         orgId: "org_acme",
-        organizationId: "org_acme",
         name: "Checkout",
         key: "checkout",
       }),

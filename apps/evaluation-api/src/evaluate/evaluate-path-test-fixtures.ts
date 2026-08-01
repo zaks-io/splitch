@@ -167,15 +167,21 @@ export class RecordingProvider implements Provider {
   }
 }
 
-export class RecordingLogger implements Pick<Console, "error" | "warn"> {
-  readonly errors: unknown[] = [];
-  readonly warnings: unknown[] = [];
+/** Captures what the Worker would ship to the log destination. */
+export class RecordingLogger {
+  readonly errors: LogEntry[] = [];
+  readonly warnings: LogEntry[] = [];
 
-  error(message?: unknown, ...optionalParams: unknown[]) {
-    this.errors.push([message, ...optionalParams]);
+  error(message: string, detail?: unknown): void {
+    this.errors.push({ message, detail });
   }
 
-  warn(message?: unknown, ...optionalParams: unknown[]) {
-    this.warnings.push([message, ...optionalParams]);
+  warn(message: string, detail?: unknown): void {
+    this.warnings.push({ message, detail });
   }
+}
+
+interface LogEntry {
+  message: string;
+  detail: unknown;
 }

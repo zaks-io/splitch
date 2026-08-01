@@ -68,31 +68,48 @@ describe("DataPlaneEvaluateRequestSchema", () => {
 });
 
 describe("DataPlaneEvaluateResponseSchema (non-revealing, strict)", () => {
-  it("parses the bare { variant } shape", () => {
-    const res = DataPlaneEvaluateResponseSchema.parse({ variant: "on" });
+  it("parses the { variant, variantName } shape", () => {
+    const res = DataPlaneEvaluateResponseSchema.parse({ variant: "on", variantName: "treatment" });
     expect(res.variant).toBe("on");
+    expect(res.variantName).toBe("treatment");
   });
 
   it("accepts a null variant (flag not found or disabled, no default)", () => {
-    const res = DataPlaneEvaluateResponseSchema.parse({ variant: null });
+    const res = DataPlaneEvaluateResponseSchema.parse({ variant: null, variantName: null });
     expect(res.variant).toBeNull();
+    expect(res.variantName).toBeNull();
   });
 
   it("parses an object variant value", () => {
-    const res = DataPlaneEvaluateResponseSchema.parse({ variant: { color: "blue" } });
+    const res = DataPlaneEvaluateResponseSchema.parse({
+      variant: { color: "blue" },
+      variantName: "blue-arm",
+    });
     expect((res.variant as Record<string, unknown>).color).toBe("blue");
+  });
+
+  it("REQUIRES variantName (present-with-null), so the SDK never invents the arm label", () => {
+    expect(DataPlaneEvaluateResponseSchema.safeParse({ variant: "on" }).success).toBe(false);
   });
 
   it("REJECTS an extra 'reason' field (no internals leak under Client Key)", () => {
     expect(
-      DataPlaneEvaluateResponseSchema.safeParse({ variant: "on", reason: "SPLIT" }).success,
+      DataPlaneEvaluateResponseSchema.safeParse({
+        variant: "on",
+        variantName: "treatment",
+        reason: "SPLIT",
+      }).success,
     ).toBe(false);
   });
 
   it("rejects a stray 'salt' field", () => {
-    expect(DataPlaneEvaluateResponseSchema.safeParse({ variant: "on", salt: "abc" }).success).toBe(
-      false,
-    );
+    expect(
+      DataPlaneEvaluateResponseSchema.safeParse({
+        variant: "on",
+        variantName: "treatment",
+        salt: "abc",
+      }).success,
+    ).toBe(false);
   });
 });
 

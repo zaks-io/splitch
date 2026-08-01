@@ -2,17 +2,14 @@ import { constants } from "node:fs";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
-import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
+import { EXIT_API, EXIT_AUTH, EXIT_OK } from "./exit-codes.js";
 import {
-  authHeader,
-  clientKeyMaterial,
   deviceAuthorizationResponse,
   deviceTokenResponse,
   FakeCliTransport,
   jsonError,
   RefreshRetryTransport,
   storedCredential,
-  verifyResolutionDetails,
 } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
@@ -53,6 +50,57 @@ describe("login exit code", () => {
     };
     expect(saved.credential.refreshToken).toBe("fixture-refresh-token");
     expect(saved.credential.selectedAppId).toBe("app_1");
+  });
+
+  it("names the logged-in principal by its user id and stores no fabricated identity", async () => {
+    // The auth port returns the opaque user_id and nothing PII, so the CLI used
+    // to fill the gap with `email: "unknown"` and greet every operator as
+    // "Logged in as unknown".
+    const { credentialPath } = await makeTempHome();
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => request.url.endsWith("/oauth2/device_authorization"),
+        status: 200,
+        body: deviceAuthorizationResponse(),
+      },
+      {
+        match: (request) => request.url.endsWith("/oauth2/token"),
+        status: 200,
+        body: deviceTokenResponse(),
+      },
+    ]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await runCli(["login"], { credentialPath, fetch: transport.fetch })).toBe(EXIT_OK);
+
+    expect(error.mock.calls.join(" ")).toContain("Logged in as user_test.");
+    const saved = await readFile(credentialPath, "utf8");
+    expect(JSON.parse(saved).principal).toEqual({ userId: "user_test" });
+    expect(saved).not.toContain("unknown");
+  });
+
+  it("fails loud when the token response carries no identity instead of storing a placeholder", async () => {
+    const { credentialPath } = await makeTempHome();
+    const { user_id: _userId, ...anonymousToken } = deviceTokenResponse();
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => request.url.endsWith("/oauth2/device_authorization"),
+        status: 200,
+        body: deviceAuthorizationResponse(),
+      },
+      {
+        match: (request) => request.url.endsWith("/oauth2/token"),
+        status: 200,
+        body: anonymousToken,
+      },
+    ]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await runCli(["login"], { credentialPath, fetch: transport.fetch })).not.toBe(EXIT_OK);
+
+    expect(error.mock.calls.join(" ")).toContain("CLI_DEVICE_TOKEN_EXCHANGE_FAILED");
+    // Nothing half-written: a later command must not find a nameless session.
+    await expect(access(credentialPath, constants.F_OK)).rejects.toThrow();
   });
 
   it("logs in with no App at all and stores an unbound cold-start session", async () => {
@@ -142,120 +190,6 @@ describe("logout exit code", () => {
       fetch: transport.fetch,
     });
     expect(listCode).toBe(EXIT_AUTH);
-  });
-});
-
-describe("flags verify transport", () => {
-  it("names the positional as a Flag key in the coded usage error", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    const code = await runCli([
-      "flags",
-      "verify",
-      "--app",
-      "app_1",
-      "--env",
-      "env_1",
-      "--targeting-key",
-      "user-1",
-    ]);
-
-    expect(code).toBe(EXIT_USAGE);
-    expect(error).toHaveBeenCalledWith(
-      "CLI_USAGE_INVALID: Cause: flags verify requires a Flag key. Remediation: Pass the Flag key as the first positional argument.",
-    );
-  });
-
-  it("flags verify uses the Client Key on the data-plane transport, not the control-plane token", async () => {
-    const { credentialPath } = await makeTempHome();
-    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    const transport = new FakeCliTransport([
-      {
-        match: (request) => request.url.includes("/client-key"),
-        status: 200,
-        body: {
-          keyId: "ck_1",
-          appId: "app_1",
-          environmentId: "env_1",
-          keyMaterial: clientKeyMaterial,
-          isOriginOpen: true,
-          createdAt: "2026-07-03T00:00:00.000Z",
-        },
-      },
-      {
-        match: (request) => request.url.includes("/api/sdk/verify"),
-        status: 200,
-        body: verifyResolutionDetails,
-      },
-    ]);
-
-    const code = await runCli(
-      [
-        "flags",
-        "verify",
-        "--json",
-        "--app",
-        "app_1",
-        "--env",
-        "env_1",
-        "checkout",
-        "--targeting-key",
-        "user-1",
-      ],
-      { credentialPath, fetch: transport.fetch },
-    );
-
-    expect(code).toBe(EXIT_OK);
-    const clientKeyCall = transport.requests.find((request) => request.url.includes("/client-key"));
-    const verifyCall = transport.requests.find((request) =>
-      request.url.includes("/api/sdk/verify"),
-    );
-    expect(clientKeyCall?.authorization).toBe(authHeader());
-    expect(verifyCall?.authorization).toBe(`Bearer ${clientKeyMaterial}`);
-    expect(verifyCall?.authorization).not.toBe(authHeader());
-    expect(verifyCall?.body).toMatchObject({ flagKey: "checkout" });
-  });
-
-  it("flags verify returns EXIT_API when SDK reason is ERROR", async () => {
-    const { credentialPath } = await makeTempHome();
-    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    const transport = new FakeCliTransport([
-      {
-        match: (request) => request.url.includes("/client-key"),
-        status: 200,
-        body: {
-          keyId: "ck_1",
-          appId: "app_1",
-          environmentId: "env_1",
-          keyMaterial: clientKeyMaterial,
-          isOriginOpen: true,
-          createdAt: "2026-07-03T00:00:00.000Z",
-        },
-      },
-      {
-        match: (request) => request.url.includes("/api/sdk/verify"),
-        status: 404,
-        body: jsonError("FLAG_NOT_FOUND", "flag not found"),
-      },
-    ]);
-
-    const code = await runCli(
-      [
-        "flags",
-        "verify",
-        "--json",
-        "--app",
-        "app_1",
-        "--env",
-        "env_1",
-        "missing-flag",
-        "--targeting-key",
-        "user-1",
-      ],
-      { credentialPath, fetch: transport.fetch },
-    );
-
-    expect(code).toBe(EXIT_API);
   });
 });
 

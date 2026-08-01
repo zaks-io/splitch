@@ -1,10 +1,10 @@
 import {
   type PanelExperimentResultsOutput,
   parsePanelExperimentResultsOutput,
-  SCOPED_SERVICE_IDENTITY_HEADER,
 } from "@splitch/control-plane-sdk/panel-experiments";
 import type { AnalysisResultsEnvelope, StatsOutput } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
+import { DELEGATED_IDENTITY_HEADER } from "@splitch/worker-runtime";
 import { describe, expect, it, vi } from "vitest";
 import { panelExperimentResults } from "./panel-experiments";
 import {
@@ -89,10 +89,9 @@ describe("panel Experiment Results read", () => {
     expect(analysis).toHaveBeenCalledTimes(1);
     const request = analysis.mock.calls[0]?.[0];
     expect(await request?.clone().json()).toEqual({ runId: LATEST_RUN_ID });
-    expect(JSON.parse(request?.headers.get(SCOPED_SERVICE_IDENTITY_HEADER) ?? "{}")).toMatchObject({
+    expect(JSON.parse(request?.headers.get(DELEGATED_IDENTITY_HEADER) ?? "{}")).toMatchObject({
       operation: "experiment_results_post",
       actorId: ACTOR_ID,
-      runId: LATEST_RUN_ID,
     });
     expect(await response.json()).toMatchObject({ runId: LATEST_RUN_ID, runNumber: 2 });
   });

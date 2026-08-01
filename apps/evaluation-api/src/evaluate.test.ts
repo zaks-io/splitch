@@ -26,8 +26,9 @@ describe("POST /api/sdk/evaluate", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("x-run-id")).toBe("run-42");
-    expect(body).toEqual({ variant: true });
-    expect(Object.keys(body)).toEqual(["variant"]);
+    // The arm label is public-safe and rides the wire; HOW it was chosen does not.
+    expect(body).toEqual({ variant: true, variantName: "treatment" });
+    expect(Object.keys(body)).toEqual(["variant", "variantName"]);
     expect(JSON.stringify(body)).not.toContain("reason");
     expect(JSON.stringify(body)).not.toContain("rule");
     expect(JSON.stringify(body)).not.toContain("salt");
@@ -157,7 +158,7 @@ describe("POST /api/sdk/evaluate", () => {
     const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY, {}, { appId: APP_ID }));
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ variant: true });
+    await expect(res.json()).resolves.toEqual({ variant: true, variantName: "treatment" });
     expect(exposureSink.writes).toHaveLength(1);
     expect(exposureSink.writes[0]?.appId).toBe(APP_ID);
   });
@@ -251,7 +252,7 @@ describe("POST /api/sdk/evaluate: non-exposing outcomes", () => {
     const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ variant: false });
+    await expect(res.json()).resolves.toEqual({ variant: false, variantName: "control" });
     expect(exposureSink.writes).toEqual([]);
     // A replayed holdover never re-writes the Assignment Store.
     expect(assignmentStore.putCalls).toEqual([]);
@@ -267,7 +268,7 @@ describe("POST /api/sdk/evaluate: non-exposing outcomes", () => {
     const body = (await res.json()) as Record<string, unknown>;
 
     expect(res.status).toBe(200);
-    expect(Object.keys(body)).toEqual(["variant"]);
+    expect(Object.keys(body)).toEqual(["variant", "variantName"]);
     expect(exposureSink.writes).toEqual([]);
   });
 });
@@ -278,6 +279,6 @@ function liveRunHarness() {
 
 class FailingEvaluationCommitSink {
   async write(_event: EvaluationCommitEvent): Promise<void> {
-    throw new EvaluationCommitSinkError("forced failure");
+    throw new EvaluationCommitSinkError("ingest_rejected", "forced failure", { status: 503 });
   }
 }

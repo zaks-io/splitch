@@ -43,6 +43,18 @@ export const EnvFlagParams = z.object({
   environmentId: z.string(),
   flagId: z.string(),
 });
+/**
+ * Data-plane resolution addresses a Flag by key, not by id: the edge reads a
+ * KV entry keyed by `flagKey` and never sees the Flag definition table. Naming
+ * the segment `flagKey` keeps the route, the CLI usage line, and the handler
+ * saying the same thing — `flags test-eval <flag-id>` used to accept only a key
+ * and report a passed id as FLAG_NOT_FOUND.
+ */
+export const EnvFlagKeyParams = z.object({
+  appId: z.string(),
+  environmentId: z.string(),
+  flagKey: z.string(),
+});
 export const SegmentParams = z.object({ appId: z.string(), segmentId: z.string() });
 export const MetricParams = z.object({ appId: z.string(), metricId: z.string() });
 export const ExperimentParams = z.object({

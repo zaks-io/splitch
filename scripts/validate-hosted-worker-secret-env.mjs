@@ -6,7 +6,7 @@ const envName = process.argv[2];
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 try {
-  const names = validateHostedWorkerSecretEnv(repoRoot, envName, process.env);
+  const names = await validateHostedWorkerSecretEnv(repoRoot, envName, process.env);
   console.log(
     `validate-hosted-worker-secret-env: ${envName} has ${names.length} required Worker secret values`,
   );

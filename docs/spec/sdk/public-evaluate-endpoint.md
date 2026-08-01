@@ -80,10 +80,11 @@ EvaluateResponse {
 }
 ```
 
-This is the **SDK-synthesized** return shape, not the HTTP wire body. The wire response is the bare
-`{ variant: VariantValue | null }` (see [contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md));
-the SDK synthesizes `ResolutionDetails` (`reason`, `errorCode`, …) from that wire value plus the HTTP
-status (see [contracts/leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md)). `Reason` is the
+This is the **SDK-synthesized** return shape, not the HTTP wire body. The wire response is
+`{ variant: VariantValue | null, variantName: string | null }` (see [contracts/request-response-envelopes-conventions.md](../contracts/request-response-envelopes-conventions.md));
+`variantName` rides the wire because it is not derivable client-side (two arms may share a value),
+while the SDK synthesizes the rest of `ResolutionDetails` (`reason`, `errorCode`, …) from that wire
+body plus the HTTP status (see [contracts/leaf-schemas-runtime.md](../contracts/leaf-schemas-runtime.md)). `Reason` is the
 `ResolutionReason` enum from `contracts/leaf-schemas-runtime.md` — do not redefine it.
 
 `evaluate` (value accessor) unwraps this to `variant`; `evaluateDetails` returns the whole
@@ -240,12 +241,12 @@ branch is a single check on `details.reason === 'ERROR'`.
 So a hello-world is genuinely copy-paste, the SDK ships sane defaults; each is overridable at
 construction:
 
-| Setting     | Default                                                                                  | Notes                                                                        |
-| ----------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `endpoint`  | `https://edge.splitch.dev` (the public Evaluation Worker, ADR-0038)                      | Override for self-hosted / preview Workers.                                  |
-| `timeoutMs` | `1000`                                                                                   | On timeout the SDK fails loud to the Default Variant (`reason: ERROR`).      |
-| `retries`   | `0` automatic retries on Exposure-bearing `evaluate`; peek/verify may retry idempotently | An explicit caller retry reuses the same logical Evaluation idempotency key. |
-| `idType`    | `'user'`                                                                                 | Overridable per call.                                                        |
+| Setting     | Default                                                                                  | Notes                                                                                                                                                                      |
+| ----------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `endpoint`  | `https://edge.splitch.dev` (the public Evaluation Worker, ADR-0038)                      | Override for self-hosted / preview Workers.                                                                                                                                |
+| `timeoutMs` | `5000`                                                                                   | Sized for a cold call, not a warm one: a first evaluation against healthy production measures ~2s. On timeout the SDK fails loud to the Default Variant (`reason: ERROR`). |
+| `retries`   | `0` automatic retries on Exposure-bearing `evaluate`; peek/verify may retry idempotently | An explicit caller retry reuses the same logical Evaluation idempotency key.                                                                                               |
+| `idType`    | `'user'`                                                                                 | Overridable per call.                                                                                                                                                      |
 
 ```ts
 import { createSplitchClient } from "@splitch/sdk";

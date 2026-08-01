@@ -73,7 +73,7 @@ is stable per endpoint:
 
 - **D1-backed lists** (Flags, Experiments, Runs, Metrics, Segments, Members, credentials) always
   return `total` as a number — the count is cheap.
-- **Tinybird-backed lists** (Exposures, analytics, audit-log) return `total: null` — counting can be
+- **Tinybird-backed lists** (Exposures, analytics) return `total: null` — counting can be
   100M+ rows. Consumers render "showing X (more available)", never "page N of M", when `total` is
   `null`.
 
@@ -164,11 +164,18 @@ No Exposure-related fields. Writes nothing.
 
 ```
 {
-  variant: VariantValue | null  // null if Flag not found or disabled and no Default Variant
+  variant:     VariantValue | null  // null if Flag not found or disabled and no Default Variant
+  variantName: string | null        // the resolved arm's label; null when no arm resolved
 }
 ```
 
-No `reason`. No rule set. No `salt`. No config. Safe under public Client Key (ADR-0018).
+`variantName` is the immutable arm label and is public-safe on every credential tier (the verify
+endpoint already returns it under a Client Key). It rides the wire because the SDK cannot derive it
+— two arms may carry the same value — and `ResolutionDetails.variantName` is part of the documented
+return shape.
+
+No `reason`. No rule set. No `salt`. No config. Safe under public Client Key (ADR-0018): the response
+names WHICH arm was served, never HOW it was chosen.
 Peek uses a separate SDK path/endpoint with the same response shape and no Exposure side effect,
 never a caller-supplied `deferExposure` flag.
 

@@ -63,6 +63,6 @@ describe("a Variant renamed under a live Run", () => {
     const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ variant: false });
+    expect(await res.json()).toEqual({ variant: false, variantName: "control" });
   });
 });

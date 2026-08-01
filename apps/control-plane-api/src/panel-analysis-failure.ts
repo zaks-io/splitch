@@ -1,4 +1,4 @@
-import { ScopedAnalysisError } from "@splitch/control-plane-sdk/panel-experiments";
+import { AnalysisResultsError } from "@splitch/control-plane-sdk/panel-experiments";
 
 /**
  * Turns a failed Panel Experiments read into a refusal that says how permanent
@@ -10,7 +10,7 @@ import { ScopedAnalysisError } from "@splitch/control-plane-sdk/panel-experiment
  * can never clear (ADR-0036).
  */
 export function panelAnalysisFailureResponse(cause: unknown): Response {
-  if (cause instanceof ScopedAnalysisError && !cause.retryable) {
+  if (cause instanceof AnalysisResultsError && !cause.retryable) {
     return Response.json(
       {
         code: "INTERNAL_SERVER_ERROR",

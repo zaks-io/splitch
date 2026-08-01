@@ -91,13 +91,6 @@ Returns `StatsOutput` for the live Run, or a specified `runId`, over this Enviro
 validated control-plane token and path context, then calls the app-scoped Tinybird pipes and
 `StatsEngine.analyze`.
 
-### `GET /apps/{app_id}/audit-log`
-
-Returns cursor-paginated audit events for the App (`?limit=50&cursor=<opaque>`, the shared
-`PaginatedResponse<T>` wrapper; `total` is `null` — Tinybird-backed). App-level (spans Environments);
-each event carries its `environment_id` (null for App-level definition changes). Filter with
-`?environment_id=`.
-
 ### `GET /orgs/{org_id}/usage`
 
 Returns the Organization's current UTC-month Evaluation usage through the Analysis Worker. The

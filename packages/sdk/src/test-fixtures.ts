@@ -79,8 +79,12 @@ export class FakeLogger implements Logger {
   }
 }
 
-export function ok(variant: TransportResult["variant"], runId: string): TransportResult {
-  return { status: 200, variant, runId };
+export function ok(
+  variant: TransportResult["variant"],
+  runId: string,
+  variantName: string | null = null,
+): TransportResult {
+  return { status: 200, variant, variantName, runId };
 }
 
 export function httpError(
@@ -88,11 +92,11 @@ export function httpError(
   errorCode?: TransportResult["errorCode"],
   errorMessage?: string,
 ): TransportResult {
-  return { status, variant: null, runId: null, errorCode, errorMessage };
+  return { status, variant: null, variantName: null, runId: null, errorCode, errorMessage };
 }
 
 export function transportFailure(): TransportResult {
-  return { status: null, variant: null, runId: null };
+  return { status: null, variant: null, variantName: null, runId: null };
 }
 
 export function verifyOk(

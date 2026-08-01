@@ -183,9 +183,13 @@ function resultsScope(
     throw new ResultsForbiddenError("path app_id does not match the authenticated App context");
   }
 
-  const pathEnvironmentId = stringField(params, "environmentId");
-  const environmentId = principalEnvironmentId ?? pathEnvironmentId;
-  if (environmentId !== pathEnvironmentId) {
+  // ADR-0027: a control-plane token binds an App and SELECTS the Environment by
+  // path within it, so an env-unbound principal legitimately names the path's
+  // Environment. A credential that IS env-bound is held to it. Either way the App
+  // check above is the tenant boundary, and both pipe reads below are keyed on
+  // this pair.
+  const environmentId = stringField(params, "environmentId");
+  if (principalEnvironmentId !== null && principalEnvironmentId !== environmentId) {
     throw new ResultsForbiddenError(
       "path environment_id does not match the authenticated Environment context",
     );

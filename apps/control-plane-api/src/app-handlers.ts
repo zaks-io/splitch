@@ -1,3 +1,4 @@
+import { deriveSlug } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
@@ -15,9 +16,9 @@ import {
   environmentResponse,
   firstRunningExperiment,
   nowIso,
-  organizationIdMismatch,
   organizationNotFound,
   provisionEnvironmentClientKeys,
+  unusableAppKey,
 } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
 import { objectBody, pathParam } from "./handler-input";
@@ -46,14 +47,19 @@ export function makeAppHandlers(deps: AppEnvironmentDeps) {
       if (!org) return organizationNotFound(requestId);
 
       const body = objectBody(input);
-      if (body.organizationId !== orgId) return organizationIdMismatch(requestId);
+      const name = body.name as string;
+      // An explicit `key` is already schema-validated by the guard; derivation is
+      // the fallback and can legitimately fail, so it fails loud rather than
+      // inventing a handle the caller never chose. Same contract as an Org slug.
+      const key = typeof body.key === "string" ? body.key : deriveSlug(name);
+      if (!key) return unusableAppKey(name, requestId);
 
       const now = nowIso(deps);
       const app = await deps.repo.identity.createApp({
         id: `app_${randomHex(12)}`,
         organizationId: orgId,
-        name: body.name as string,
-        key: body.key as string,
+        name,
+        key,
         ...(body.description ? { description: body.description as string } : {}),
         createdAt: now,
         updatedAt: now,

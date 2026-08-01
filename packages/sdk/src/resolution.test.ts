@@ -6,14 +6,20 @@ import type { TransportResult } from "./transport";
 const DEFAULT_VALUE = "control";
 
 function result(partial: Partial<TransportResult>): TransportResult {
-  return { status: 200, variant: null, runId: "run-1", ...partial };
+  return { status: 200, variant: null, variantName: null, runId: "run-1", ...partial };
 }
 
 describe("synthesizeDetails: 200 success rows", () => {
-  it("200 with a resolved variant -> SPLIT + unwrapped variant", () => {
-    const details = synthesizeDetails(result({ variant: "treatment" }), DEFAULT_VALUE);
+  it("200 with a resolved variant -> SPLIT + unwrapped variant + the wire arm name", () => {
+    const details = synthesizeDetails(
+      result({ variant: "treatment", variantName: "treatment-arm" }),
+      DEFAULT_VALUE,
+    );
     expect(details.reason).toBe("SPLIT");
     expect(details.value).toBe("treatment");
+    // The arm label comes off the wire, not from the value: the two differ here
+    // precisely because the name is not derivable from the resolved value.
+    expect(details.variantName).toBe("treatment-arm");
     expect(details.errorCode).toBeUndefined();
     expect(ResolutionDetailsSchema.safeParse(details).success).toBe(true);
   });
@@ -22,6 +28,8 @@ describe("synthesizeDetails: 200 success rows", () => {
     const details = synthesizeDetails(result({ variant: null }), DEFAULT_VALUE);
     expect(details.reason).toBe("DEFAULT");
     expect(details.value).toBe(DEFAULT_VALUE);
+    // No arm matched, so no arm name — the value is the caller's default.
+    expect(details.variantName).toBeNull();
     expect(details.errorCode).toBeUndefined();
   });
 

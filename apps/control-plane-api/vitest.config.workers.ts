@@ -3,6 +3,15 @@ import { fileURLToPath } from "node:url";
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
 
+/**
+ * Every `services` binding in wrangler.jsonc must resolve or the pool refuses to
+ * start the whole suite, so each delegation target this Worker forwards to needs
+ * a stand-in here (ADR-0046). Keep in step with wrangler.jsonc: a missing one
+ * reads as "no such service is defined", which names Miniflare rather than the
+ * route that was added.
+ */
+const DELEGATION_TARGETS = ["splitch-analysis-api", "splitch-evaluation-api"];
+
 export default defineConfig(async () => {
   const migrations = await readD1Migrations(
     path.join(fileURLToPath(new URL(".", import.meta.url)), "../../packages/db/migrations"),
@@ -14,17 +23,15 @@ export default defineConfig(async () => {
         wrangler: { configPath: "./wrangler.jsonc" },
         miniflare: {
           bindings: { TEST_MIGRATIONS: migrations },
-          workers: [
-            {
-              name: "splitch-analysis-api",
-              modules: true,
-              script: `
-                import { WorkerEntrypoint } from "cloudflare:workers";
+          workers: DELEGATION_TARGETS.map((name) => ({
+            name,
+            modules: true,
+            script: `
+              import { WorkerEntrypoint } from "cloudflare:workers";
 
-                export class ControlPlaneEntrypoint extends WorkerEntrypoint {}
-              `,
-            },
-          ],
+              export class ControlPlaneEntrypoint extends WorkerEntrypoint {}
+            `,
+          })),
         },
       }),
     ],

@@ -4,6 +4,8 @@ export type { ApprovalRequestId, ApprovalReviewId } from "./approval-identifiers
 export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-identifiers";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped CLI/MCP parity-skin API
 export * from "./barrels/parity-skins";
+// biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped route registry API
+export * from "./barrels/route-registry";
 export type { CanonicalJsonSha256 } from "./canonical-hash";
 export { CanonicalJsonSha256Schema } from "./canonical-hash";
 export {
@@ -188,32 +190,6 @@ export {
 } from "./panel-overview-contract";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped resource envelope API
 export * from "./resource-envelopes";
-export type {
-  AuthDoor,
-  AuthKind,
-  HttpMethod,
-  IdempotencyMode,
-  RateLimitClass,
-  RouteContract,
-  RouteOwner,
-} from "./route-contract";
-export {
-  AuthDoorSchema,
-  AuthKindSchema,
-  authDoors,
-  authKinds,
-  defineRoute,
-  HttpMethodSchema,
-  httpMethods,
-  IdempotencyModeSchema,
-  idempotencyModes,
-  isProvisionalAuthDoor,
-  RateLimitClassSchema,
-  RouteOwnerSchema,
-  rateLimitClasses,
-  routeOwners,
-} from "./route-contract";
-export { getRoute, operationIds, routeRegistry } from "./route-registry";
 export {
   type ApprovalApplicationResult,
   ApprovalApplicationResultSchema,
@@ -261,7 +237,7 @@ export {
   approvalReviewOutcomes,
   approvalTargetTypes,
 } from "./routes/route-shapes-approvals";
-export { SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SLUG_PATTERN, SlugSchema } from "./slug";
+export { deriveSlug, SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SLUG_PATTERN, SlugSchema } from "./slug";
 export type {
   ActivationRow,
   CupedCovariateRow,

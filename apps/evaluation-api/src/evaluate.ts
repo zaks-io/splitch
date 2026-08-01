@@ -208,7 +208,20 @@ async function writeEvaluationCommit(
     if (!(cause instanceof EvaluationCommitSinkError)) {
       throw cause;
     }
-    deps.logger?.error("evaluation_commit_sink_failed", { cause });
+    // Flat, queryable fields: nesting the Error under `cause` reached the log
+    // destination as "[object Object]", so the one signal that an Exposure was
+    // dropped carried nothing to filter or alert on. No Targeting Key here --
+    // the Entity identity never enters a log line.
+    deps.logger?.error("evaluation_commit_sink_failed", {
+      failure: cause.failure,
+      status: cause.status,
+      organizationId: scope.organizationId,
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      flagKey: dimensions.flagKey,
+      exposureCount: exposures.length,
+      causeSummary: cause.cause instanceof Error ? cause.cause.message : cause.message,
+    });
     return {
       ok: false,
       error: errorResponse("SERVICE_UNAVAILABLE", "Evaluation commit ingest is unavailable"),

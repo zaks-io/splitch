@@ -56,7 +56,7 @@ export const createControlPanelApp = createServerFn({ method: "POST" })
       bindings.CONTROL_PLANE_API,
       { actorId: loaded.session.userId, sessionExpiresAt: loaded.session.expiresAt },
       bindings.CONTROL_PANEL_DELEGATION_SECRET,
-    ).create({ orgId, organizationId: orgId, name, key });
+    ).create({ orgId, name, key });
 
     if (!result.ok) {
       return { outcome: "refused", status: result.status, error: result.error };

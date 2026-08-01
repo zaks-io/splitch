@@ -211,7 +211,6 @@ export function deviceTokenResponse() {
     token_type: "Bearer",
     expires_in: 3600,
     user_id: "user_test",
-    email: "test@example.com",
     app_id: "app_1",
   };
 }
@@ -225,6 +224,29 @@ function refreshTokenResponse() {
     app_id: "app_1",
   };
 }
+
+export const testEvaluation = {
+  variantName: "on",
+  value: true,
+  reason: { type: "no_match_default" as const },
+  liveRunId: null,
+};
+
+export const organizationUsage = {
+  organizationId: "org_1",
+  period: { month: "2026-07", startsAt: timestamp, endsAt: timestamp },
+  state: "zero" as const,
+  evaluations: 0,
+  breakdown: {
+    byApp: [],
+    byEnvironment: [],
+    byFlag: [],
+    bySdkRuntime: [],
+    byBatch: [],
+    bySource: [],
+    byExposure: [],
+  },
+};
 
 /**
  * A refresh-grant mint stub for commands that rebind their token to the Org
@@ -241,7 +263,7 @@ export function oauthTokenMint(): FakeResponse {
 export function storedCredential() {
   return {
     version: 1 as const,
-    principal: { userId: "user_test", email: "test@example.com" },
+    principal: { userId: "user_test" },
     credential: {
       type: "device_flow" as const,
       refreshToken,

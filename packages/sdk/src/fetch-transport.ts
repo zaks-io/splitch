@@ -14,7 +14,7 @@ import type {
 import { SplitchSdkError } from "./errors";
 
 // `X-Run-Id` carries the live Run id as non-revealing operational metadata
-// alongside the bare `{ variant }` body, so the seen-set key has its runId
+// alongside the `{ variant, variantName }` body, so the seen-set key has its runId
 // without the response body leaking Run internals (ADR-0018, see transport.ts).
 const RUN_ID_HEADER = "x-run-id";
 
@@ -87,7 +87,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
         );
       } catch {
         // Network error or timeout (abort): a transport-level failure, status null.
-        return { status: null, variant: null, runId: null };
+        return { status: null, variant: null, variantName: null, runId: null };
       }
     },
     async peek(request: TransportRequest): Promise<TransportResult> {
@@ -96,7 +96,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           readPeekResponse(await post("peek", request, signal)),
         );
       } catch {
-        return { status: null, variant: null, runId: null };
+        return { status: null, variant: null, variantName: null, runId: null };
       }
     },
     async verify(request: TransportRequest): Promise<VerifyTransportResult> {
@@ -137,26 +137,31 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
 async function readEvaluateResponse(response: Response): Promise<TransportResult> {
   const runId = response.headers.get(RUN_ID_HEADER);
   if (!response.ok) {
-    return { ...(await readFailure(response)), variant: null, runId: null };
+    return { ...(await readFailure(response)), variant: null, variantName: null, runId: null };
   }
   try {
     const body = DataPlaneEvaluateResponseSchema.parse(await response.json());
-    return { status: response.status, variant: body.variant, runId };
+    return {
+      status: response.status,
+      variant: body.variant,
+      variantName: body.variantName,
+      runId,
+    };
   } catch {
     // A 200 with an unparseable body is a parse failure -> fail loud as status null.
-    return { status: null, variant: null, runId: null };
+    return { status: null, variant: null, variantName: null, runId: null };
   }
 }
 
 async function readPeekResponse(response: Response): Promise<TransportResult> {
   if (!response.ok) {
-    return { ...(await readFailure(response)), variant: null, runId: null };
+    return { ...(await readFailure(response)), variant: null, variantName: null, runId: null };
   }
   try {
     const body = PeekEvaluateResponseSchema.parse(await response.json());
-    return { status: response.status, variant: body.variant, runId: null };
+    return { status: response.status, variant: body.variant, variantName: null, runId: null };
   } catch {
-    return { status: null, variant: null, runId: null };
+    return { status: null, variant: null, variantName: null, runId: null };
   }
 }
 

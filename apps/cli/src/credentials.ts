@@ -3,9 +3,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { SplitchCliError } from "./errors.js";
 
+/**
+ * The opaque `user_id` and nothing else. The auth port deliberately returns no
+ * PII (apps/auth-api/src/workos.ts), so an `email` here could only ever be a
+ * fabricated default -- which is how `Logged in as unknown` shipped.
+ */
 interface CliPrincipal {
   readonly userId: string;
-  readonly email: string;
 }
 
 interface DeviceFlowCredential {

@@ -42,6 +42,12 @@ export interface TransportFailure {
 export interface TransportResult extends TransportFailure {
   /** The bare wire body's `variant`, or `null` when absent / unparseable. */
   readonly variant: VariantValue | null;
+  /**
+   * The resolved arm's name from the wire body. Null on a no-match, on any
+   * error, and on `peek` (whose body carries the value only). Not derivable
+   * from `variant` — two arms may hold the same value.
+   */
+  readonly variantName: string | null;
   /** Live Run id from response metadata; present only on a 200 resolution. */
   readonly runId: string | null;
 }

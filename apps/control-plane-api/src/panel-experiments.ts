@@ -7,16 +7,16 @@ import {
   resolveFrozenControlIdentity,
 } from "@splitch/contracts";
 import {
+  AnalysisResultsError,
   guardrailBreached,
   type PanelExperimentHealth,
   type PanelExperimentListItem,
   type PanelExperimentResultsOutput,
-  parseScopedAnalysisResults,
-  ScopedAnalysisError,
-  scopedAnalysisResultsRequest,
+  parseAnalysisResults,
   srmFiring,
 } from "@splitch/control-plane-sdk/panel-experiments";
 import { appScope, envScope, type Repository } from "@splitch/db";
+import { analysisResultsRequest } from "./analysis-results-request";
 import { experimentNotFound, runNotFound } from "./experiment-errors";
 import { experimentResponse, jsonArray, jsonObject } from "./experiment-model";
 import { panelScopeAccessError } from "./panel-scope-access";
@@ -192,16 +192,17 @@ export async function panelExperimentResults(
       );
   if (!run) return runNotFound(requestId);
 
-  const results = await parseScopedAnalysisResults(
+  const results = await parseAnalysisResults(
     await deps.analysis.fetch(
-      scopedAnalysisResultsRequest({
-        operation: "experiment_results_post",
-        actorId: input.actorId,
-        appId: input.appId,
-        environmentId: input.environmentId,
-        experimentId: input.experimentId,
-        runId: run.id,
-      }),
+      analysisResultsRequest(
+        {
+          appId: input.appId,
+          environmentId: input.environmentId,
+          experimentId: input.experimentId,
+          runId: run.id,
+        },
+        input.actorId,
+      ),
     ),
     run.id,
   );
@@ -252,14 +253,15 @@ async function runningHealth(
     throw new Error(`Running Experiment ${experiment.id} has no live Run`);
   }
   const response = await analysis.fetch(
-    scopedAnalysisResultsRequest({
-      operation: "experiment_results_post",
+    analysisResultsRequest(
+      {
+        appId: experiment.appId,
+        environmentId: experiment.environmentId,
+        experimentId: experiment.id,
+        runId: experiment.liveRunId,
+      },
       actorId,
-      appId: experiment.appId,
-      environmentId: experiment.environmentId,
-      experimentId: experiment.id,
-      runId: experiment.liveRunId,
-    }),
+    ),
   );
   // A Run that has just Started has no rows in Analysis yet, and Analysis says so
   // with RUN_NOT_FOUND. That is the Run's first state, not a fault: reporting it
@@ -267,9 +269,9 @@ async function runningHealth(
   // freshly Started Run. Every other refusal still propagates, because a health
   // signal that swallows an unreadable result is worse than no list at all.
   const collecting = { significanceReached: false, srmFiring: false, guardrailBreached: false };
-  const results = await parseScopedAnalysisResults(response, experiment.liveRunId).catch(
+  const results = await parseAnalysisResults(response, experiment.liveRunId).catch(
     (cause: unknown) => {
-      if (cause instanceof ScopedAnalysisError && cause.code === "RUN_NOT_FOUND") return null;
+      if (cause instanceof AnalysisResultsError && cause.code === "RUN_NOT_FOUND") return null;
       throw cause;
     },
   );

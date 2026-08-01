@@ -50,6 +50,27 @@ describe("seen-set short-circuit: repeat within a Run is CACHED, no call, no sec
     expect(logger.debugs[0]?.message).toContain("seen-set hit");
   });
 
+  it("a CACHED replay names the same arm the live resolution did", async () => {
+    // The name is not derivable client-side (two arms may share a value), so an
+    // unstored name would make evaluateDetails report null on every repeat call.
+    const transport = new FakeTransport([ok(true, "run-1", "treatment")]);
+    const c = clock();
+    const bag = deps(transport, c.now);
+
+    const first = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      idempotencyKey: EVALUATION_ID,
+    });
+    expect(first).toMatchObject({ reason: "SPLIT", variantName: "treatment" });
+
+    c.advance(1);
+    const second = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      idempotencyKey: EVALUATION_ID,
+    });
+    expect(second).toMatchObject({ reason: "CACHED", variantName: "treatment" });
+  });
+
   it("reports a cache hit without billing, exposure, or Targeting Key telemetry", async () => {
     const transport = new FakeTransport([ok("treatment", "run-1")]);
     const cached = [] as { flagKey: string; idempotencyKey: string }[];

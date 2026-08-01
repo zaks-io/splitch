@@ -73,7 +73,6 @@ interface DeviceTokenBody {
   refresh_token: string;
   expires_in?: number;
   user_id?: string;
-  email?: string;
   app_id?: string;
 }
 
@@ -111,11 +110,21 @@ async function pollDeviceApproval(
 }
 
 function buildCredentialFile(body: DeviceTokenBody): CliCredentialFile {
+  if (!body.user_id) {
+    // Storing a placeholder identity is worse than failing: every later command
+    // reads this file, so an unnamed principal turns a broken token response
+    // into a mystery three commands downstream.
+    throw new SplitchCliError({
+      code: "CLI_DEVICE_TOKEN_EXCHANGE_FAILED",
+      causeSummary: "Device token response carried no user_id to identify the session",
+      remediation:
+        "Retry splitch login; if it repeats, the auth service is returning a bad token response",
+    });
+  }
   return {
     version: 1,
     principal: {
-      userId: body.user_id ?? "unknown",
-      email: body.email ?? "unknown",
+      userId: body.user_id,
     },
     credential: {
       type: "device_flow",

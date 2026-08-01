@@ -1,5 +1,13 @@
 // biome-ignore-all lint/performance/noBarrelFile: package public API entry intentionally aggregates the worker runtime surface
 
+export type { DelegatedIdentity, DelegatedInput } from "./delegation";
+export {
+  DELEGATED_IDENTITY_HEADER,
+  delegatedAuthResolver,
+  delegatedIdentityFor,
+  delegatedIdentityFrom,
+  delegatedRequest,
+} from "./delegation";
 export type { Observability, RegistrarDeps, ResolvableAuthKind } from "./deps";
 export { makeMcpDelegationAuthResolver } from "./mcp-delegation-auth";
 export {

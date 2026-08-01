@@ -20,7 +20,6 @@ export interface RunCliOptions {
   readonly platformTarget?: string;
   readonly controlPlaneBaseUrl?: string;
   readonly evaluationBaseUrl?: string;
-  readonly analysisBaseUrl?: string;
   readonly authBaseUrl?: string;
 }
 
@@ -33,7 +32,6 @@ function withEnvOrigins(options: RunCliOptions): RunCliOptions {
     platformTarget: options.platformTarget ?? env.SPLITCH_PLATFORM_TARGET,
     controlPlaneBaseUrl: options.controlPlaneBaseUrl ?? env.CONTROL_PLANE_API_ORIGIN,
     evaluationBaseUrl: options.evaluationBaseUrl ?? env.EVALUATION_API_ORIGIN,
-    analysisBaseUrl: options.analysisBaseUrl ?? env.ANALYSIS_API_ORIGIN,
     authBaseUrl: options.authBaseUrl ?? env.AUTH_API_ORIGIN,
   };
 }
@@ -112,7 +110,6 @@ async function executeParsedInvocation(
       platformTarget: options.platformTarget,
       controlPlaneBaseUrl: options.controlPlaneBaseUrl,
       evaluationBaseUrl: options.evaluationBaseUrl,
-      analysisBaseUrl: options.analysisBaseUrl,
       authBaseUrl: options.authBaseUrl,
     });
     return result.exitCode;

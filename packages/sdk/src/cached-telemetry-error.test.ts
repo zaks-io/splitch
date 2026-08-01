@@ -11,7 +11,7 @@ describe("cached Evaluation telemetry errors", () => {
       fetch: ((url: URL | RequestInfo) =>
         Promise.resolve(
           new URL(String(url)).pathname === "/api/sdk/evaluate"
-            ? new Response(JSON.stringify({ variant: true }), {
+            ? new Response(JSON.stringify({ variant: true, variantName: "on" }), {
                 status: 200,
                 headers: { "x-run-id": "run-42" },
               })

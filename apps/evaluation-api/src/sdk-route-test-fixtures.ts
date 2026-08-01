@@ -22,6 +22,7 @@ import {
   EXPERIMENT_ID,
   FLAG_KEY,
   RecordingAssignmentStore,
+  RecordingLogger,
   targetingRule,
 } from "./evaluate/evaluate-path-test-fixtures";
 import type { AssembledExposure } from "./evaluate/exposure-assembly";
@@ -181,7 +182,9 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
   const evaluationCommitSink =
     options.evaluationCommitSink ??
     new RecordingEvaluationCommitSink(exposureSink, evaluationUsageSink);
+  const logger = new RecordingLogger();
   const app = createApp({
+    logger,
     authResolver: controlPlaneAuthResolver,
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(credentialKv),
     rateLimiter: allowLimiter,
@@ -196,7 +199,15 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
     evaluationCommitSink,
     evaluationUsageSink,
   });
-  return { app, assignmentStore, configKv, credentialKv, exposureSink, evaluationUsageSink };
+  return {
+    app,
+    assignmentStore,
+    configKv,
+    credentialKv,
+    exposureSink,
+    evaluationUsageSink,
+    logger,
+  };
 }
 
 export function sdkRouteInit(
