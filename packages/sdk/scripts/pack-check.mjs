@@ -1,10 +1,14 @@
 #!/usr/bin/env node
-import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { readFileSync, rmSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
-  assertDryRunListing,
+  computeSourceDigest,
+  computeTreeDigest,
+  verifyBuildStamp,
+} from "../../../scripts/release/build-stamp.mjs";
+import {
   assertReleaseTarballContents,
   createPackStagingDir,
   getPackageRoot,
@@ -14,60 +18,57 @@ import {
   readTarballFile,
 } from "./pack-staging.mjs";
 
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const packageRoot = getPackageRoot();
-const backupPath = join(packageRoot, "package.json.pack-backup");
 
-execFileSync("node", ["scripts/prepack-build.mjs"], { cwd: packageRoot, stdio: "inherit" });
+verifyBuildStamp("sdk", repoRoot);
+const digestBefore = computeSourceDigest("sdk", repoRoot);
+const distDigestBefore = computeTreeDigest(join(packageRoot, "dist"));
+const manifestBefore = readFileSync(join(packageRoot, "package.json"), "utf8");
 
-function assertDirectNpmPack(packageRoot) {
-  const destination = mkdtempSync(join(tmpdir(), "splitch-sdk-direct-pack-"));
-  try {
-    const { stdout, stderr, status, error } = spawnSync(
-      "npm",
-      ["pack", "--pack-destination", destination],
-      {
-        cwd: packageRoot,
-        encoding: "utf8",
-        env: { ...process.env, npm_config_cache: join(destination, ".npm-cache") },
-      },
-    );
-    if (error) {
-      throw error;
-    }
-    if (status !== 0) {
-      throw new Error(stderr || stdout || `npm pack failed with exit code ${status}`);
-    }
-    const output = `${stdout}\n${stderr}`;
-    const tarballName = parseTarballName(output);
-    const tarballPath = join(destination, tarballName);
-    const listing = listTarballFiles(tarballPath);
-    const manifestText = readTarballFile(tarballPath, "package/package.json");
-    const declarationText = readTarballFile(tarballPath, "package/dist/index.d.ts");
-    const bundleJs = readTarballFile(tarballPath, "package/dist/index.js");
-    assertReleaseTarballContents({ listing, manifestText, declarationText, bundleJs });
-  } finally {
-    rmSync(destination, { recursive: true, force: true });
+// npm publish runs a manifest fixer that npm pack does not; it can silently
+// drop fields it dislikes. Fail loud if the publish path would ship anything
+// other than the checked manifest.
+function assertPublishKeepsManifest(stagingDir) {
+  const { stdout, stderr, status, error } = spawnSync("npm", ["publish", "--dry-run"], {
+    cwd: stagingDir,
+    encoding: "utf8",
+    env: { ...process.env, npm_config_cache: join(stagingDir, ".npm-cache") },
+  });
+  if (error) throw error;
+  if (status !== 0) {
+    throw new Error(stderr || stdout || `npm publish --dry-run failed with exit code ${status}`);
+  }
+  const output = `${stdout}\n${stderr}`;
+  if (/auto-corrected|errors corrected|was invalid/i.test(output)) {
+    throw new Error(`npm publish would rewrite the release manifest:\n${output}`);
   }
 }
 
-const workspaceManifestBefore = readFileSync(join(packageRoot, "package.json"), "utf8");
 const staging = createPackStagingDir(packageRoot);
-
 try {
-  const output = packStagingDir(staging, { dryRun: true });
-  assertDryRunListing(output);
+  assertPublishKeepsManifest(staging);
+  const output = packStagingDir(staging, { destination: staging });
+  const tarballPath = join(staging, parseTarballName(output));
+  assertReleaseTarballContents({
+    listing: listTarballFiles(tarballPath),
+    manifestText: readTarballFile(tarballPath, "package/package.json"),
+    declarationText: readTarballFile(tarballPath, "package/dist/index.d.ts"),
+    bundleJs: readTarballFile(tarballPath, "package/dist/index.js"),
+  });
 } finally {
   rmSync(staging, { recursive: true, force: true });
 }
 
-assertDirectNpmPack(packageRoot);
-
-const workspaceManifestAfter = readFileSync(join(packageRoot, "package.json"), "utf8");
-if (workspaceManifestAfter !== workspaceManifestBefore) {
-  throw new Error("pack:check mutated packages/sdk/package.json");
+// The no-mutation contract: packing must leave the live tree untouched.
+if (computeSourceDigest("sdk", repoRoot) !== digestBefore) {
+  throw new Error("pack:check mutated packages/sdk build inputs");
 }
-if (existsSync(backupPath)) {
-  throw new Error("pack:check left packages/sdk/package.json.pack-backup behind");
+if (computeTreeDigest(join(packageRoot, "dist")) !== distDigestBefore) {
+  throw new Error("pack:check mutated packages/sdk/dist");
+}
+if (readFileSync(join(packageRoot, "package.json"), "utf8") !== manifestBefore) {
+  throw new Error("pack:check mutated packages/sdk/package.json");
 }
 
 console.log("pack:check passed");

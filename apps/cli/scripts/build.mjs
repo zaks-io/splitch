@@ -3,13 +3,9 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeBuildStamp } from "../../../scripts/release/build-stamp.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-execFileSync("node", ["scripts/sync-pack-manifest.mjs", "restore"], {
-  cwd: packageRoot,
-  stdio: "inherit",
-});
 
 // The bundle inlines @splitch/sdk from its built dist (the same artifact npm
 // consumers get). The sdk build owns packages/sdk generated/dist artifacts;
@@ -28,3 +24,5 @@ execFileSync("npx", ["tsup", "--config", "tsup.config.ts"], {
   cwd: packageRoot,
   stdio: "inherit",
 });
+
+writeBuildStamp("cli", resolve(packageRoot, "../.."));

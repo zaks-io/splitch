@@ -5,7 +5,14 @@ export const RELEASE_TARGETS = Object.freeze({
     packageDir: "packages/sdk",
     tagPrefix: "sdk-v",
     githubLatest: false,
-    buildDependencies: Object.freeze([]),
+    // Build inputs covered by the dist build stamp, relative to packageDir.
+    stampInputs: Object.freeze([
+      "src",
+      "package.json",
+      "tsconfig.json",
+      "tsup.config.ts",
+      "tsup.contract-surface.config.ts",
+    ]),
   }),
   cli: Object.freeze({
     packageName: "@splitch/cli",
@@ -13,8 +20,15 @@ export const RELEASE_TARGETS = Object.freeze({
     packageDir: "apps/cli",
     tagPrefix: "cli-v",
     githubLatest: "automatic",
-    // The CLI bundle inlines @splitch/sdk from its built dist.
-    buildDependencies: Object.freeze(["sdk"]),
+    // The CLI bundle inlines @splitch/sdk from its built dist, so that dist
+    // is part of the CLI's stamped inputs.
+    stampInputs: Object.freeze([
+      "src",
+      "package.json",
+      "tsconfig.json",
+      "tsup.config.ts",
+      "../../packages/sdk/dist",
+    ]),
   }),
 });
 

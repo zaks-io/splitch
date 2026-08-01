@@ -10,6 +10,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyBuildStamp } from "../../../scripts/release/build-stamp.mjs";
 import {
   extractQuickstartSdkSnippet,
   stripIdempotencyKeyFromSnippet,
@@ -82,8 +83,8 @@ try {
 
   const quickstartSnippet = extractQuickstartSdkSnippet(readFileSync(quickstartPath, "utf8"));
 
-  run("npx", ["tsup", "--config", "tsup.contract-surface.config.ts"], { cwd: packageRoot });
-  run("npx", ["tsup", "--config", "tsup.config.ts"], { cwd: packageRoot });
+  // Consumer smoke consumes the stamped build; it never rebuilds.
+  verifyBuildStamp("sdk", repoRoot);
 
   const packOutput = execFileSync("node", ["scripts/pack-release.mjs", consumerRoot], {
     cwd: packageRoot,

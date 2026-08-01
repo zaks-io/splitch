@@ -33,9 +33,12 @@ export function createPackStagingDir(packageRoot) {
   }
   cpSync(distDir, join(staging, "dist"), { recursive: true });
 
-  const licensePath = join(packageRoot, "LICENSE.md");
-  if (existsSync(licensePath)) {
-    cpSync(licensePath, join(staging, "LICENSE.md"));
+  for (const fileName of ["LICENSE.md", "README.md"]) {
+    const source = join(packageRoot, fileName);
+    if (!existsSync(source)) {
+      throw new Error(`${fileName} is missing from @splitch/sdk`);
+    }
+    cpSync(source, join(staging, fileName));
   }
 
   return staging;

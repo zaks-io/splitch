@@ -29,7 +29,10 @@ for (const target of targets) {
 
     assert.ok(publishJob);
     assert.ok(linearJob);
-    assert.match(publishJob, /npm publish --provenance --access public --tag latest/);
+    assert.match(
+      publishJob,
+      /npm publish "\$RUNNER_TEMP\/npm-publish\/\$RELEASE_TARBALL" --provenance --access public --tag latest/,
+    );
     assert.match(
       publishJob,
       new RegExp(`${versionOutput}: \\$\\{\\{ steps\\.target\\.outputs\\.${versionOutput} \\}\\}`),

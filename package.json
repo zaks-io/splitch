@@ -30,7 +30,7 @@
     "shared-preview:cleanup-smoke": "node scripts/seed-shared-preview-smoke.mjs --cleanup-transient",
     "shared-preview:reset": "node scripts/reset-shared-preview.mjs",
     "shared-preview:seed-smoke": "node scripts/seed-shared-preview-smoke.mjs",
-    "sdk:release:check-prepare": "node scripts/release/check-prepare-clean-checkout.mjs sdk",
+    "sdk:release:check-prepare": "node scripts/release/check-prepare-artifacts-contract.mjs sdk",
     "sdk:release:prepare": "node scripts/release/prepare-artifacts.mjs sdk",
     "sdk:release:validate": "node scripts/release/validate-candidate.mjs sdk",
     "shared-preview:smoke": "playwright test -c tests/shared-preview/playwright.config.ts",

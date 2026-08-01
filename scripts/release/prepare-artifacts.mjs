@@ -1,39 +1,11 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { verifyBuildStamp } from "./build-stamp.mjs";
 import { getReleaseTarget } from "./constants.mjs";
 import { readReleaseManifest, resolveReleaseTarget } from "./resolve-version.mjs";
-
-export function ensurePackageBuilt(targetKey, repoRoot) {
-  const config = getReleaseTarget(targetKey);
-  const packageRoot = join(repoRoot, config.packageDir);
-  const distIndex = join(packageRoot, "dist/index.js");
-  if (existsSync(distIndex)) return;
-
-  for (const dependencyKey of config.buildDependencies) {
-    ensurePackageBuilt(dependencyKey, repoRoot);
-  }
-
-  execFileSync("node", ["scripts/prepack-build.mjs"], {
-    cwd: packageRoot,
-    stdio: "inherit",
-    env: { ...process.env, CI: "true" },
-  });
-  if (targetKey === "cli") {
-    execFileSync("node", ["scripts/sync-pack-manifest.mjs", "restore"], {
-      cwd: packageRoot,
-      stdio: "inherit",
-    });
-  }
-
-  if (!existsSync(distIndex)) {
-    throw new Error(
-      `${config.packageDir}/dist/index.js is missing after ${config.packageName} build`,
-    );
-  }
-}
 
 const targetKey = process.argv[2];
 const config = getReleaseTarget(targetKey);
@@ -45,7 +17,9 @@ mkdirSync(outputDir, { recursive: true });
 
 const target = resolveReleaseTarget(targetKey, repoRoot);
 const manifest = readReleaseManifest(targetKey, repoRoot);
-ensurePackageBuilt(targetKey, repoRoot);
+// Artifact preparation only stages and packs the stamped build output; the
+// package build (run via turbo beforehand) is the sole producer of dist.
+verifyBuildStamp(targetKey, repoRoot);
 
 const packOutput = execFileSync("node", ["scripts/pack-release.mjs", outputDir], {
   cwd: join(repoRoot, config.packageDir),

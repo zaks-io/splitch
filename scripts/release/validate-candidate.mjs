@@ -20,11 +20,11 @@ const target = resolveReleaseTarget(targetKey, repoRoot);
 const targetLabel = targetKey.toUpperCase();
 
 // One turbo graph owns candidate validation: turbo schedules independent
-// tasks in parallel and replays warm caches. Tasks that write shared
-// artifacts are serialized by dependsOn edges in turbo.json, not here:
-// package build -> //#knip -> pack:dry-run -> pack:check -> test:consumer-smoke
-// serializes package-local generated output, and the populated D1 check runs
-// after the local migration check.
+// tasks in parallel and replays warm caches. Each package build is the sole
+// writer of its dist (stamped by scripts/release/build-stamp.mjs); pack and
+// smoke tasks stage into temp directories and only read, so they need no
+// ordering beyond dependsOn: ["build"]. The populated D1 check runs after
+// the local migration check.
 const TASKS = [
   "//#format:check",
   "lint",
