@@ -46,7 +46,7 @@ export async function executeUse(
     app?.id ?? current.appId,
   );
 
-  const path = await persistSelection(deps, io, invocation.flags.json === true, {
+  const { path, clearedEnvironmentId } = await persistSelection(deps, {
     current,
     app,
     environment,
@@ -57,42 +57,45 @@ export async function executeUse(
     ...(environment
       ? { environment: { id: environment.id, key: environment.key, name: environment.name } }
       : {}),
+    ...(clearedEnvironmentId ? { clearedEnvironmentId } : {}),
   };
   emit(io, invocation.flags.json, payload);
   if (!invocation.flags.json) {
+    if (clearedEnvironmentId) {
+      io.error(
+        `Cleared the previous Environment selection (${clearedEnvironmentId}); it belonged to the old App. Select one with splitch use --env <env>.`,
+      );
+    }
     io.error("Next: splitch flags create --key <key> --variants on,off | splitch flags list");
   }
   return { exitCode: EXIT_OK, payload };
 }
 
 /**
- * Switching Apps without naming an Environment must not carry the previous
- * App's Environment ID into the new pairing: clear it and say so, rather than
- * persist a config that fails every later Environment-scoped command.
+ * Switching to a DIFFERENT App without naming an Environment must not carry the
+ * previous App's Environment ID into the new pairing: clear it and report it,
+ * rather than persist a config that fails every later Environment-scoped
+ * command. Re-selecting the App already in the config is not a switch, so the
+ * Environment stays: agents re-run `splitch use --app <app>` idempotently, and
+ * dropping a still-valid Environment there would break the next command.
  */
 async function persistSelection(
   deps: CliDeps,
-  io: CliIo,
-  json: boolean,
   selection: {
     current: ResolvedContext;
     app: NamedResource | undefined;
     environment: NamedResource | undefined;
   },
-): Promise<string> {
+): Promise<{ path: string; clearedEnvironmentId?: string }> {
   const { current, app, environment } = selection;
-  const clearStale =
-    app !== undefined && environment === undefined && current.environmentId !== undefined;
+  const switchedApp = app !== undefined && app.id !== current.appId;
+  const staleEnvironmentId =
+    switchedApp && environment === undefined ? current.environmentId : undefined;
   const path = await writeNearestConfig(deps.cwd ?? process.cwd(), {
     app: app?.id,
-    environment: clearStale ? null : environment?.id,
+    environment: staleEnvironmentId ? null : environment?.id,
   });
-  if (clearStale && !json) {
-    io.error(
-      `Cleared the previous Environment selection (${current.environmentId}); it belonged to the old App. Select one with splitch use --env <env>.`,
-    );
-  }
-  return path;
+  return { path, ...(staleEnvironmentId ? { clearedEnvironmentId: staleEnvironmentId } : {}) };
 }
 
 async function callList(

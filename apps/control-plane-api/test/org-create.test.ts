@@ -187,9 +187,11 @@ describe("organizations_create", () => {
     });
     const created = (await create.json()) as OrganizationResponse;
 
-    // No token re-mint: `/orgs` is keyed by the principal, so a just-created
-    // Org is visible to the same token that created it.
-    const list = await request("/orgs", await ownerToken(ALICE), { method: "GET" });
+    // No token re-mint: the CLI's device_flow session reads `/orgs` from live
+    // membership, so the Org it just created is visible immediately. Without
+    // this, `splitch orgs create` would be followed by an empty `orgs list`.
+    const coldStart = await token({ userId: ALICE.userId, scopes: [], authDoor: "device_flow" });
+    const list = await request("/orgs", coldStart, { method: "GET" });
     const body = (await list.json()) as { items: OrganizationResponse[] };
 
     expect(list.status).toBe(200);

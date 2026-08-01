@@ -191,9 +191,18 @@ unique per Organization only, and any user may add another user to an Organizati
 selector is matched against the canonical ID across every reachable App first, and only then
 against keys, where a match count other than one fails `invalid_grant` and demands the ID. Without
 that order, an attacker could key their own App `app_<victim App ID>` and capture a victim's rebind
-by winning enumeration order. App keys are additionally constrained to a lowercase slug alphabet on
-create, so a key can never take the shape of an identifier. `splitch use` applies the identical
-rule client-side; the two must not drift.
+by winning enumeration order. The ID-first pass is what closes this; it holds on its own, because an
+App ID is the `apps` primary key and a duplicate key refuses rather than picks.
+
+App keys accepted through `apps_create` are additionally constrained to the shared slug alphabet
+(`SlugSchema`, no `_`), which is defence in depth rather than the load-bearing control: it is a
+request-schema rule, not a storage invariant, so it does not describe every row. Door B's provisional
+App is written through the repo seam with `key` set to its own App ID, and rows created before the
+constraint were never migrated. Neither is attacker-chosen, but do not rely on "no stored key is
+identifier-shaped" as a property.
+
+`splitch use` applies the identical two-pass rule client-side; the two must not drift, and
+`apps/cli/src/cli-context.test.ts` pins the client half against the same two attacks.
 
 Auth API stores only a hash of the provider refresh token plus its provider session ID, WorkOS
 User grant (and Organization grant when one exists), and the canonical selected App ID or none.

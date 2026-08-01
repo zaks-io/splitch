@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MetricSchema, MetricRefSchema } from "./leaf-schemas-experiment";
+import { MetricRefSchema, MetricSchema } from "./leaf-schemas-experiment";
 import {
   APIKeySchema,
   AppSchema,
@@ -8,6 +8,7 @@ import {
   OrganizationSchema,
 } from "./leaf-schemas-runtime";
 import { OrganizationSlugSchema } from "./organization-slug";
+import { SlugSchema } from "./slug";
 
 /**
  * Create/patch/response wire envelopes for the account-tier resources: Metric,
@@ -77,19 +78,13 @@ export type MetricResponse = z.infer<typeof MetricResponseSchema>;
 
 // An App key is unique per Org only, while an App ID is globally unique, and
 // selector lookups (`splitch use --app`, token rebinds) accept either. A key
-// shaped like an identifier could therefore name another tenant's App, so keys
-// are constrained to a slug alphabet: identifiers carry `_`, slugs never do.
-const AppKeySchema = z
-  .string()
-  .regex(
-    /^[a-z0-9][a-z0-9-]{0,62}$/,
-    "App key must be a lowercase slug (letters, digits, hyphens) and cannot look like an identifier",
-  );
-
+// shaped like an identifier could therefore name another tenant's App, which is
+// why the shared slug alphabet (no `_`) is the constraint rather than a looser
+// App-specific one.
 export const CreateAppRequestSchema = z.object({
   organizationId: z.string(),
   name: z.string(),
-  key: AppKeySchema,
+  key: SlugSchema,
   description: z.string().optional(),
   idempotency_key: z.string().optional(),
 });

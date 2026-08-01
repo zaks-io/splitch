@@ -128,17 +128,34 @@ function buildCredentialFile(body: DeviceTokenBody): CliCredentialFile {
   };
 }
 
+/**
+ * Clear the local credential first, then fail loud if the server kept the
+ * session: dropping the local file is what the caller asked for and must always
+ * happen, but "logged out" while a live refresh session survives on the server
+ * is exactly the silent half-failure the credential holder must not be told.
+ */
 export async function logout(deps: AuthDeps): Promise<void> {
   const stored = await deps.credentialStore.load();
+  let revocation: Response | null = null;
   if (stored?.credential.type === "device_flow") {
     const fetchImpl = deps.fetch ?? fetch;
     const authBaseUrl = resolveAuthBaseUrl(deps);
-    await formPost(fetchImpl, `${authBaseUrl}/oauth2/revoke`, {
+    revocation = await formPost(fetchImpl, `${authBaseUrl}/oauth2/revoke`, {
       token: stored.credential.refreshToken,
       client_id: CLI_CLIENT_ID,
     });
   }
   await deps.credentialStore.clear();
+  if (revocation && !revocation.ok) {
+    throw new SplitchCliError({
+      code: "CLI_LOGOUT_REVOKE_FAILED",
+      causeSummary: `The local credential was removed but the server refused to revoke the session: ${describeOAuthFault(
+        await readOAuthFault(revocation),
+      )}`,
+      remediation:
+        "The refresh session may still be live; revoke it from the Control Panel or retry splitch logout",
+    });
+  }
 }
 
 /**
@@ -231,15 +248,20 @@ async function refreshAccessToken(
  * Refresh tokens are single-use, so a concurrent splitch process may have
  * rotated ours away between our load and this mint. If the file on disk now
  * holds a NEWER token, the session is alive and this mint deserves one retry.
+ *
+ * The principal must match: a concurrent `splitch login` that switched accounts
+ * also leaves a different token on disk, and silently retrying with it would
+ * run the command as someone else while the caller believes it is still theirs.
  */
 async function reloadRotatedCredential(
   deps: AuthDeps,
   stored: CliCredentialFile,
 ): Promise<CliCredentialFile | null> {
   const latest = await deps.credentialStore.load();
-  return latest && latest.credential.refreshToken !== stored.credential.refreshToken
-    ? latest
-    : null;
+  if (!latest || latest.credential.refreshToken === stored.credential.refreshToken) {
+    return null;
+  }
+  return latest.principal.userId === stored.principal.userId ? latest : null;
 }
 
 function mintedCredential(

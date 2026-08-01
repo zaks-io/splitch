@@ -42,12 +42,17 @@ A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-leve
 `org:{org_id}:owner` or `org:{org_id}:admin`.
 
 **Principal-keyed discovery:** `GET /orgs` is the one collection whose tenant key is the principal
-itself rather than a path id or a scope. It answers "which Organizations am I a member of?" from
-live D1 membership and ignores the token's scopes entirely, because the token a cold-start device
-login mints carries none — filtering would return an empty list and deadlock the first step of every
-agent journey. This grants nothing extra: the same session can rebind to any of those Organizations
-through the refresh grant, so listing them exposes no reach the holder does not already have. Every
-other Organization route co-scopes on `:orgId` as usual.
+itself rather than a path id. It answers "which Organizations am I a member of?" from live D1
+membership, because the token a cold-start device login mints carries no scopes — filtering by them
+would return an empty list and deadlock the first step of every agent journey.
+
+The scope filter is dropped **only for the `device_flow` door**, and only because that door's premise
+holds there: its refresh token rebinds to any of the principal's Organizations on demand, so listing
+them exposes no reach the holder does not already have. Doors that mint a refresh-less access token
+(the claim ceremony, `client_credentials`) cannot rebind, so their scopes are a real narrowing and
+`GET /orgs` keeps intersecting against them. Live membership is the floor for every door: a scope
+naming an Organization the principal does not belong to never widens the result. Every other
+Organization route co-scopes on `:orgId` as usual.
 
 **Token validation at the selected protected resource:**
 

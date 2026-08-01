@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   deriveOrganizationSlug,
   isReservedOrganizationSlug,
-  ORGANIZATION_SLUG_MAX_LENGTH,
   OrganizationSlugSchema,
 } from "./organization-slug";
+import { SLUG_MAX_LENGTH } from "./slug";
 
 describe("OrganizationSlugSchema", () => {
   it("accepts lowercase alphanumerics with single internal hyphens", () => {
@@ -31,7 +31,7 @@ describe("OrganizationSlugSchema", () => {
   });
 
   it("rejects a slug longer than the column allows", () => {
-    const tooLong = "a".repeat(ORGANIZATION_SLUG_MAX_LENGTH + 1);
+    const tooLong = "a".repeat(SLUG_MAX_LENGTH + 1);
     expect(OrganizationSlugSchema.safeParse(tooLong).success).toBe(false);
   });
 });

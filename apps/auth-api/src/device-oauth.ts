@@ -162,9 +162,10 @@ export async function exchangeRefreshToken(
     requireUnchangedProviderAuthority(stored, providerToken);
     const nextSession = requireRefreshSession(providerToken, {
       userId: providerToken.userId,
-      // The provider Org pin only ever acquires, never drops: a session that
-      // was pinned stays pinned even if a later provider response omits the
-      // Organization, so the check above cannot be walked past by attrition.
+      // The pin is acquire-once: an unpinned session takes whatever Org the
+      // provider first reports, and from then on the check above rejects any
+      // mint whose provider Org differs, including one that omits it. So this
+      // only ever writes back the value that check just proved unchanged.
       providerOrganizationId: stored.providerOrganizationId ?? providerToken.organizationId ?? null,
       // The session's default binding is its identity; a per-mint rebind
       // (`app`/`org` on this request) never rewrites it.

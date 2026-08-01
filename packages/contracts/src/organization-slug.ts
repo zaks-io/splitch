@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SlugSchema } from "./slug";
 
 /**
  * Organization URL handle rules (SPL-171).
@@ -22,12 +22,6 @@ import { z } from "zod";
  * migration. `organization-slug.test.ts` pins the router half of this, so a new
  * top-level route cannot silently escape the list.
  */
-
-export const ORGANIZATION_SLUG_MIN_LENGTH = 2;
-export const ORGANIZATION_SLUG_MAX_LENGTH = 63;
-
-/** Lowercase alphanumerics with single internal hyphens; no leading/trailing hyphen. */
-const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /** Unicode combining marks (U+0300-U+036F), stripped after NFKD so "Acme" with
  *  a ring above slugs as "acme". Built from code points so the range survives
@@ -70,14 +64,10 @@ export function isReservedOrganizationSlug(slug: string): boolean {
   return RESERVED_ORGANIZATION_SLUGS.includes(slug);
 }
 
-export const OrganizationSlugSchema = z
-  .string()
-  .min(ORGANIZATION_SLUG_MIN_LENGTH)
-  .max(ORGANIZATION_SLUG_MAX_LENGTH)
-  .regex(ORGANIZATION_SLUG_PATTERN, "must be lowercase alphanumerics separated by single hyphens")
-  .refine((slug) => !isReservedOrganizationSlug(slug), {
-    message: "slug is reserved",
-  });
+export const OrganizationSlugSchema = SlugSchema.refine(
+  (slug) => !isReservedOrganizationSlug(slug),
+  { message: "slug is reserved" },
+);
 
 /**
  * Best-effort handle from a display name, for when the caller supplies no slug.
@@ -94,10 +84,10 @@ export function deriveOrganizationSlug(name: string): string | null {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, ORGANIZATION_SLUG_MAX_LENGTH)
+    .slice(0, SLUG_MAX_LENGTH)
     .replace(/-+$/g, "");
 
-  if (slug.length < ORGANIZATION_SLUG_MIN_LENGTH) return null;
+  if (slug.length < SLUG_MIN_LENGTH) return null;
   if (isReservedOrganizationSlug(slug)) return null;
   return slug;
 }

@@ -106,7 +106,18 @@ describe("CreateAppRequestSchema / PatchAppRequestSchema", () => {
     // Selector lookups accept an App ID or an App key, and keys are unique per
     // Org only. A key of `app_<other tenant's id>` would otherwise be a usable
     // impersonation of another Org's App.
-    for (const key of ["app_01hxyz", "org_01hxyz", "Checkout", "check out", ""]) {
+    // `checkout-`/`a` pin that App keys share the Organization slug shape
+    // rather than a looser App-only rule the Panel form would disagree with.
+    for (const key of [
+      "app_01hxyz",
+      "org_01hxyz",
+      "Checkout",
+      "check out",
+      "",
+      "a",
+      "checkout-",
+      "check--out",
+    ]) {
       expect(
         CreateAppRequestSchema.safeParse({ organizationId: "org_1", name: "Checkout", key })
           .success,
