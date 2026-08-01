@@ -86,18 +86,45 @@ export async function resolveAppSelectionForUser(
   selector: string,
 ): Promise<{ appId: string; scope: string }> {
   const orgMemberships = await repo.identity.listOrgMembershipsForUser(userId);
+  const reachable: App[] = [];
   for (const orgMembership of orgMemberships) {
-    const apps = await repo.identity.listAppsForOrg(orgMembership.orgId);
-    const selectedApp =
-      apps.find((app) => app.id === selector) ?? apps.find((app) => app.key === selector);
-    if (!selectedApp) continue;
-    const membership = await repo.identity.getAppMembership(appScope(selectedApp.id), userId);
-    if (!membership) {
-      throw new OAuthError("invalid_grant", "selected App is not authorized by live membership");
-    }
-    return { appId: selectedApp.id, scope: scopeFor("app", selectedApp.id, membership.role) };
+    reachable.push(...(await repo.identity.listAppsForOrg(orgMembership.orgId)));
   }
-  throw new OAuthError("invalid_grant", "selected App is not reachable by live membership");
+  const selectedApp = selectReachableApp(reachable, selector);
+  const membership = await repo.identity.getAppMembership(appScope(selectedApp.id), userId);
+  if (!membership) {
+    throw new OAuthError("invalid_grant", "selected App is not authorized by live membership");
+  }
+  return { appId: selectedApp.id, scope: scopeFor("app", selectedApp.id, membership.role) };
+}
+
+/**
+ * Two passes, in this order, over every App the user can reach:
+ *
+ * 1. canonical ID, which is globally unique, so a hit is unambiguous;
+ * 2. App key, which `apps_org_key_unique` only makes unique *per Org*.
+ *
+ * The order matters for tenant isolation. Anyone can add a user to their own
+ * Org, so a per-Org key pass that ran first would let an attacker key an App
+ * `app_<victimAppId>` and capture a victim's binding by winning enumeration
+ * order. A key that matches more than one App is refused rather than
+ * arbitrated by row order: picking one would be a disguised default.
+ */
+function selectReachableApp(reachable: readonly App[], selector: string): App {
+  const byId = reachable.find((app) => app.id === selector);
+  if (byId) return byId;
+  const byKey = reachable.filter((app) => app.key === selector);
+  const [selectedApp, ambiguous] = byKey;
+  if (!selectedApp) {
+    throw new OAuthError("invalid_grant", "selected App is not reachable by live membership");
+  }
+  if (ambiguous) {
+    throw new OAuthError(
+      "invalid_grant",
+      `App selector "${selector}" matches more than one App across your Organizations; pass the canonical App ID`,
+    );
+  }
+  return selectedApp;
 }
 
 /**

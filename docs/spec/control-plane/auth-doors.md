@@ -183,6 +183,17 @@ or slug) to rebind the minted token to another resource the user's live membersh
 `splitch use` and per-command scoping are rescopes, never re-logins. The single-binding token
 model and the guard's Org/App co-scope checks are unchanged: a mint for a resource outside live
 membership fails `invalid_grant`, and a grant's App selection cannot be widened while polling.
+The binding is resolved **before** the provider is called: WorkOS refresh tokens are single-use, so
+an unresolvable selector must fail the one request rather than burn the session.
+
+**Selector resolution is two-pass, ID before key.** An App ID is globally unique; an App key is
+unique per Organization only, and any user may add another user to an Organization they own. So a
+selector is matched against the canonical ID across every reachable App first, and only then
+against keys, where a match count other than one fails `invalid_grant` and demands the ID. Without
+that order, an attacker could key their own App `app_<victim App ID>` and capture a victim's rebind
+by winning enumeration order. App keys are additionally constrained to a lowercase slug alphabet on
+create, so a key can never take the shape of an identifier. `splitch use` applies the identical
+rule client-side; the two must not drift.
 
 Auth API stores only a hash of the provider refresh token plus its provider session ID, WorkOS
 User grant (and Organization grant when one exists), and the canonical selected App ID or none.

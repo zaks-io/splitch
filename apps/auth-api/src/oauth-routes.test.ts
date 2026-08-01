@@ -28,7 +28,11 @@ describe("OAuth revoke route", () => {
     const res = await app.request("/oauth2/revoke", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: form({ token: "unknown-refresh-token", token_type_hint: "refresh_token" }),
+      body: form({
+        client_id: "splitch-cli",
+        token: "unknown-refresh-token",
+        token_type_hint: "refresh_token",
+      }),
     });
 
     expect(res.status).toBe(400);
@@ -60,7 +64,11 @@ describe("OAuth revoke route", () => {
     const res = await app.request("/oauth2/revoke", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: form({ token: refreshToken, token_type_hint: "refresh_token" }),
+      body: form({
+        client_id: "splitch-cli",
+        token: refreshToken,
+        token_type_hint: "refresh_token",
+      }),
     });
 
     expect(res.status).toBe(200);
@@ -109,7 +117,11 @@ describe("OAuth revoke route", () => {
       const revokeRes = await app.request("/oauth2/revoke", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: form({ token: refresh_token, token_type_hint: "refresh_token" }),
+        body: form({
+          client_id: "splitch-cli",
+          token: refresh_token,
+          token_type_hint: "refresh_token",
+        }),
       });
 
       expect(revokeRes.status).toBe(200);

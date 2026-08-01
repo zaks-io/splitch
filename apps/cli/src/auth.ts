@@ -188,35 +188,78 @@ function storedBinding(stored: CliCredentialFile): string {
   );
 }
 
+interface RefreshTokenBody {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  app_id?: string;
+}
+
 async function refreshAccessToken(
   deps: AuthDeps,
   stored: CliCredentialFile,
   binding: TokenBinding | null,
   explicitBinding: boolean,
+  retryOnRotation = true,
 ): Promise<CliCredentialFile> {
-  const fetchImpl = deps.fetch ?? fetch;
-  const authBaseUrl = resolveAuthBaseUrl(deps);
-  const response = await formPost(fetchImpl, `${authBaseUrl}/oauth2/token`, {
+  const response = await formPost(deps.fetch ?? fetch, `${resolveAuthBaseUrl(deps)}/oauth2/token`, {
     grant_type: REFRESH_GRANT,
     refresh_token: stored.credential.refreshToken,
     client_id: CLI_CLIENT_ID,
     ...(explicitBinding ? bindingParams(binding) : {}),
   });
   if (!response.ok) {
-    throw sessionExpiredError(describeOAuthFault(await readOAuthFault(response)));
+    const fault = await readOAuthFault(response);
+    const rotated =
+      retryOnRotation && fault.error === "invalid_grant"
+        ? await reloadRotatedCredential(deps, stored)
+        : null;
+    if (!rotated) {
+      throw sessionExpiredError(describeOAuthFault(fault));
+    }
+    return refreshAccessToken(deps, rotated, binding, explicitBinding, false);
   }
-  const body = (await response.json()) as {
-    access_token: string;
-    refresh_token?: string;
-    expires_in?: number;
-    app_id?: string;
-  };
-  const mintedBinding = explicitBinding
-    ? bindingKey(binding)
-    : body.app_id
-      ? `app:${body.app_id}`
+  const next = mintedCredential(stored, (await response.json()) as RefreshTokenBody, {
+    binding,
+    explicitBinding,
+  });
+  await deps.credentialStore.save(next);
+  return next;
+}
+
+/**
+ * Refresh tokens are single-use, so a concurrent splitch process may have
+ * rotated ours away between our load and this mint. If the file on disk now
+ * holds a NEWER token, the session is alive and this mint deserves one retry.
+ */
+async function reloadRotatedCredential(
+  deps: AuthDeps,
+  stored: CliCredentialFile,
+): Promise<CliCredentialFile | null> {
+  const latest = await deps.credentialStore.load();
+  return latest && latest.credential.refreshToken !== stored.credential.refreshToken
+    ? latest
+    : null;
+}
+
+function mintedCredential(
+  stored: CliCredentialFile,
+  body: RefreshTokenBody,
+  mint: { binding: TokenBinding | null; explicitBinding: boolean },
+): CliCredentialFile {
+  // Label the token with what the server actually bound, not what we asked
+  // for: a key selector ("checkout") resolves server-side to a canonical ID,
+  // so labelling the request would make every later ID-keyed call re-mint.
+  const mintedBinding = body.app_id
+    ? `app:${body.app_id}`
+    : mint.explicitBinding
+      ? bindingKey(mint.binding)
       : "";
-  const next: CliCredentialFile = {
+  // The session's App is its login-time identity. A per-command rebind must
+  // not rewrite it, exactly as the server refuses to rewrite the session's
+  // selectedAppSelector on a rebind mint.
+  const selectedAppId = mint.explicitBinding ? stored.credential.selectedAppId : body.app_id;
+  return {
     ...stored,
     credential: {
       ...stored.credential,
@@ -224,11 +267,9 @@ async function refreshAccessToken(
       refreshToken: body.refresh_token ?? stored.credential.refreshToken,
       accessTokenExpiresAt: new Date(Date.now() + (body.expires_in ?? 3600) * 1000).toISOString(),
       accessTokenBinding: mintedBinding,
-      ...(body.app_id ? { selectedAppId: body.app_id } : {}),
+      ...(selectedAppId ? { selectedAppId } : {}),
     },
   };
-  await deps.credentialStore.save(next);
-  return next;
 }
 
 async function formPost(

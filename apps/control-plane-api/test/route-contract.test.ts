@@ -115,16 +115,26 @@ describe("control-plane route contract", () => {
     expect(((await privacy.json()) as ErrorResponse).code).toBe("UNAUTHORIZED");
   });
 
-  it("limits organization discovery to the token's scope", async () => {
-    const jwt = await token([`org:${PRIMARY.orgId}:member`]);
+  it("limits organization discovery to live membership, not the token's scope", async () => {
+    // Discovery is keyed by the principal: a token narrowed to one Org still
+    // sees every Org the user belongs to (the cold-start token carries no
+    // scopes at all), while a stranger sees nothing regardless of what its
+    // scopes claim.
+    const narrow = await token([`org:${PRIMARY.orgId}:member`]);
     const response = await h.app.request("/orgs", {
-      headers: { authorization: `Bearer ${jwt}` },
+      headers: { authorization: `Bearer ${narrow}` },
     });
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      items: [expect.objectContaining({ id: PRIMARY.orgId, name: PRIMARY.orgName })],
+    const body = (await response.json()) as { items: Array<{ id: string }> };
+    expect(body.items.map((org) => org.id).sort()).toEqual([PRIMARY.orgId, SECONDARY.orgId].sort());
+
+    const stranger = await token([`org:${PRIMARY.orgId}:owner`], OUTSIDER);
+    const denied = await h.app.request("/orgs", {
+      headers: { authorization: `Bearer ${stranger}` },
     });
+
+    expect(await denied.json()).toEqual({ items: [] });
   });
 
   it("serves generated OpenAPI publicly and unavailable privacy workflows as typed errors", async () => {

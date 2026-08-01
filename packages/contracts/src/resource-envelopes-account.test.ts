@@ -102,6 +102,18 @@ describe("CreateAppRequestSchema / PatchAppRequestSchema", () => {
     expect(req.key).toBe("checkout");
   });
 
+  it("rejects a key shaped like a canonical identifier", () => {
+    // Selector lookups accept an App ID or an App key, and keys are unique per
+    // Org only. A key of `app_<other tenant's id>` would otherwise be a usable
+    // impersonation of another Org's App.
+    for (const key of ["app_01hxyz", "org_01hxyz", "Checkout", "check out", ""]) {
+      expect(
+        CreateAppRequestSchema.safeParse({ organizationId: "org_1", name: "Checkout", key })
+          .success,
+      ).toBe(false);
+    }
+  });
+
   it("rejects an immutable key/organizationId on patch (strict)", () => {
     expect(PatchAppRequestSchema.safeParse({ key: "new" }).success).toBe(false);
     expect(PatchAppRequestSchema.safeParse({ organizationId: "org_2" }).success).toBe(false);

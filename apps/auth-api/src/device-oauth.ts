@@ -38,7 +38,7 @@ interface ResourceBinding {
   appId: string | null;
 }
 
-function requireFirstPartyClient(clientId: string | undefined): void {
+export function requireFirstPartyClient(clientId: string | undefined): void {
   if (!clientId || !FIRST_PARTY_CLIENT_IDS.has(clientId)) {
     throw new OAuthError(
       "invalid_client",
@@ -148,33 +148,42 @@ export async function exchangeRefreshToken(
     if (!stored?.userId || !stored.providerSessionId) {
       throw new OAuthError("invalid_grant", "refresh token authority is unknown");
     }
+    // Resolve the binding BEFORE touching the provider: WorkOS refresh tokens
+    // are single-use, so an unresolvable app/org selector must fail this one
+    // request, not consume the token and strand the whole session.
+    const binding = await resolveRefreshBinding(deps.repo, stored, {
+      app: parsed.data.app,
+      org: parsed.data.org,
+    });
     const providerToken = await deps.deviceFlow.refreshProviderToken({
       refreshToken: parsed.data.refresh_token,
       organizationId: stored.providerOrganizationId ?? undefined,
     });
     requireUnchangedProviderAuthority(stored, providerToken);
-    const binding = await resolveRefreshBinding(deps.repo, stored, {
-      app: parsed.data.app,
-      org: parsed.data.org,
-    });
     const nextSession = requireRefreshSession(providerToken, {
       userId: providerToken.userId,
-      providerOrganizationId: providerToken.organizationId ?? null,
+      // The provider Org pin only ever acquires, never drops: a session that
+      // was pinned stays pinned even if a later provider response omits the
+      // Organization, so the check above cannot be walked past by attrition.
+      providerOrganizationId: stored.providerOrganizationId ?? providerToken.organizationId ?? null,
       // The session's default binding is its identity; a per-mint rebind
       // (`app`/`org` on this request) never rewrites it.
       selectedAppSelector: stored.selectedAppSelector,
     });
-    await deps.deviceRefreshSessions.rotate(
-      parsed.data.refresh_token,
-      providerToken.refreshToken as string,
-      nextSession,
-    );
+    // Sign before rotating: rotation deletes the presented token's hash, so a
+    // signer fault after rotation would strand the client on a forgotten
+    // token. Signing is local and leaves no durable state on failure.
     const accessToken = await deps.tokenSigner.mintAccessToken(
       providerToken.userId,
       binding ? [binding.scope] : [],
       "device_flow",
       nowSeconds,
       resolveAudience(parsed.data.resource),
+    );
+    await deps.deviceRefreshSessions.rotate(
+      parsed.data.refresh_token,
+      providerToken.refreshToken as string,
+      nextSession,
     );
     return tokenResponse(
       accessToken,

@@ -35,12 +35,24 @@ export async function readOAuthFault(response: Response): Promise<OAuthFault> {
     const body = (await response.json()) as { error?: unknown; error_description?: unknown };
     return {
       status: response.status,
-      error: typeof body.error === "string" ? body.error : undefined,
-      description: typeof body.error_description === "string" ? body.error_description : undefined,
+      error: readFaultText(body.error),
+      description: readFaultText(body.error_description),
     };
   } catch {
     return { status: response.status };
   }
+}
+
+/**
+ * OAuth fault text is remote input printed straight to a terminal. Strip the
+ * C0/C1 control range so a hostile or misconfigured auth origin cannot use
+ * escape sequences to rewrite the line and disguise the failure.
+ */
+function readFaultText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
+  const clean = value.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").trim();
+  return clean.slice(0, 300) || undefined;
 }
 
 export function describeOAuthFault(fault: OAuthFault): string {

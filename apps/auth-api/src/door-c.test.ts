@@ -116,6 +116,7 @@ describe("Door C discovery and device flow", () => {
     expect((await before.json()) as { code: string }).toMatchObject({ code: "FORBIDDEN" });
 
     const revoke = await formPost(app, "/oauth2/revoke", {
+      client_id: "splitch-cli",
       token: accessToken,
       token_type_hint: "access_token",
     });
@@ -131,6 +132,7 @@ describe("Door C discovery and device flow", () => {
     const { deviceCode, refreshToken } = await mintDeviceToken(app);
 
     const revoke = await formPost(app, "/oauth2/revoke", {
+      client_id: "splitch-cli",
       token: refreshToken,
       token_type_hint: "refresh_token",
     });

@@ -156,7 +156,7 @@ describe("local Auth-to-MCP integration", () => {
       new Request("https://auth.splitch.test/oauth2/revoke", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ token: accessToken }),
+        body: new URLSearchParams({ client_id: "splitch-cli", token: accessToken }),
       }),
     );
     expect(revoked.status).toBe(200);

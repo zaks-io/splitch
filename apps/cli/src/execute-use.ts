@@ -1,6 +1,6 @@
 import type { TokenBinding } from "./auth-binding.js";
 import { withAuthorizationRetry } from "./auth.js";
-import { resolveContext, writeNearestConfig } from "./context.js";
+import { type ResolvedContext, resolveContext, writeNearestConfig } from "./context.js";
 import { SplitchCliError, writeCliError } from "./errors.js";
 import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
@@ -46,9 +46,10 @@ export async function executeUse(
     app?.id ?? current.appId,
   );
 
-  const path = await writeNearestConfig(deps.cwd ?? process.cwd(), {
-    app: app?.id,
-    environment: environment?.id,
+  const path = await persistSelection(deps, io, invocation.flags.json === true, {
+    current,
+    app,
+    environment,
   });
   const payload = {
     path,
@@ -62,6 +63,36 @@ export async function executeUse(
     io.error("Next: splitch flags create --key <key> --variants on,off | splitch flags list");
   }
   return { exitCode: EXIT_OK, payload };
+}
+
+/**
+ * Switching Apps without naming an Environment must not carry the previous
+ * App's Environment ID into the new pairing: clear it and say so, rather than
+ * persist a config that fails every later Environment-scoped command.
+ */
+async function persistSelection(
+  deps: CliDeps,
+  io: CliIo,
+  json: boolean,
+  selection: {
+    current: ResolvedContext;
+    app: NamedResource | undefined;
+    environment: NamedResource | undefined;
+  },
+): Promise<string> {
+  const { current, app, environment } = selection;
+  const clearStale =
+    app !== undefined && environment === undefined && current.environmentId !== undefined;
+  const path = await writeNearestConfig(deps.cwd ?? process.cwd(), {
+    app: app?.id,
+    environment: clearStale ? null : environment?.id,
+  });
+  if (clearStale && !json) {
+    io.error(
+      `Cleared the previous Environment selection (${current.environmentId}); it belonged to the old App. Select one with splitch use --env <env>.`,
+    );
+  }
+  return path;
 }
 
 async function callList(
@@ -91,31 +122,45 @@ async function callList(
   return (result.data as { items: NamedResource[] }).items;
 }
 
+/**
+ * Mirrors the server's selector rule (membership-authority.ts): the globally
+ * unique ID is matched across every reachable App first, and only then the
+ * per-Org key, which is refused when it matches more than one App. Resolving
+ * these differently here would send `use` and the token rebind to different
+ * Apps, so the two passes must stay in lockstep.
+ */
 async function resolveAppSelector(deps: CliDeps, selector: string): Promise<NamedResource> {
+  // No binding: `/orgs` is keyed by the principal, so whatever token is
+  // already cached answers it, bound or not.
   const orgs = await callList(deps, "organizations_list", {});
-  const seen: string[] = [];
+  const reachable: NamedResource[] = [];
   for (const org of orgs) {
-    const apps = await callList(
-      deps,
-      "apps_list",
-      { orgId: org.id },
-      { kind: "org", selector: org.id },
+    reachable.push(
+      ...(await callList(deps, "apps_list", { orgId: org.id }, { kind: "org", selector: org.id })),
     );
-    const match =
-      apps.find((app) => app.id === selector) ?? apps.find((app) => app.key === selector);
-    if (match) {
-      return match;
-    }
-    seen.push(...apps.map((app) => app.key ?? app.id));
   }
+  const byId = reachable.find((app) => app.id === selector);
+  if (byId) return byId;
+  const byKey = reachable.filter((app) => app.key === selector);
+  if (byKey.length > 1) {
+    throw new SplitchCliError({
+      code: "CLI_SCOPE_UNRESOLVED",
+      causeSummary: `App selector "${selector}" matches more than one App across your Organizations: ${byKey
+        .map((app) => app.id)
+        .join(", ")}`,
+      remediation: "Pass the canonical App ID instead of the key",
+    });
+  }
+  const [match] = byKey;
+  if (match) return match;
   throw new SplitchCliError({
     code: "CLI_SCOPE_UNRESOLVED",
     causeSummary: `No App matching "${selector}" is reachable from your memberships. Reachable Apps: ${
-      seen.length
-        ? seen.join(", ")
+      reachable.length
+        ? reachable.map((app) => app.key ?? app.id).join(", ")
         : "(none — create one with splitch apps create <org-id> --name <name>)"
     }`,
-    remediation: "Pass an existing App ID or slug, or create the App first",
+    remediation: "Pass an existing App ID or key, or create the App first",
   });
 }
 

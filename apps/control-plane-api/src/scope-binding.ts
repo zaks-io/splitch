@@ -57,7 +57,7 @@ export function deriveBinding(scopes: readonly string[]): ScopeBinding {
 }
 
 /** Return every Organization identifier named by a control-plane token. */
-export function organizationIdsInScopes(scopes: readonly string[]): Set<string> {
+function organizationIdsInScopes(scopes: readonly string[]): Set<string> {
   return idsInScopes(scopes, ORG_SCOPE);
 }
 

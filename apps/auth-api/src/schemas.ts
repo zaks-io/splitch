@@ -95,6 +95,7 @@ export const ClientCredentialsRequestSchema = z.object({
 
 /** POST /oauth2/revoke: RFC 7009 token revocation. */
 export const RevokeTokenRequestSchema = z.object({
+  client_id: z.string().min(1),
   token: z.string().min(1),
   token_type_hint: z.string().min(1).optional(),
 });

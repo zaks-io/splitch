@@ -75,10 +75,21 @@ export type MetricResponse = z.infer<typeof MetricResponseSchema>;
 // App plus the default Environments and public Client Keys created with it.
 // ---------------------------------------------------------------------------
 
+// An App key is unique per Org only, while an App ID is globally unique, and
+// selector lookups (`splitch use --app`, token rebinds) accept either. A key
+// shaped like an identifier could therefore name another tenant's App, so keys
+// are constrained to a slug alphabet: identifiers carry `_`, slugs never do.
+const AppKeySchema = z
+  .string()
+  .regex(
+    /^[a-z0-9][a-z0-9-]{0,62}$/,
+    "App key must be a lowercase slug (letters, digits, hyphens) and cannot look like an identifier",
+  );
+
 export const CreateAppRequestSchema = z.object({
   organizationId: z.string(),
   name: z.string(),
-  key: z.string(),
+  key: AppKeySchema,
   description: z.string().optional(),
   idempotency_key: z.string().optional(),
 });
