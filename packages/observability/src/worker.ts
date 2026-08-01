@@ -146,7 +146,7 @@ export function createWorkerObservability(
   env: WorkerEnv,
   options: WorkerObservabilityOptions,
 ): Observability {
-  const emitter = workerEmitter(env, options);
+  const emitter = workerEmitter(env, options, { onStructuredLogEvents: emitToWorkersLogs });
   return {
     onRequest(ctx: { requestId: string; method: string; path: string }) {
       emitter.log("info", "request", ctx);
@@ -168,6 +168,27 @@ export function createWorkerObservability(
       }
     },
   };
+}
+
+/**
+ * Workers Logs and `wrangler tail` collect console output, and the scrubbed
+ * emitter has no sink of its own -- without this a fault row is built, scrubbed,
+ * and dropped, so the thrown value reaches an operator only where `SENTRY_DSN`
+ * is set. That is false in local dev and in the e2e fleet, which is exactly
+ * where a blank 500 has to be diagnosable.
+ *
+ * Only warn/error go out: `onRequest` emits an info row per request, and routing
+ * that to Workers Logs would bill the evaluation hot path per request for rows
+ * nothing reads today. Rows arrive already scrubbed from `createScrubbedEmitter`.
+ */
+function emitToWorkersLogs(events: Record<string, unknown>[]): void {
+  for (const event of events) {
+    if (event.level === "error") {
+      console.error(event);
+    } else if (event.level === "warn") {
+      console.warn(event);
+    }
+  }
 }
 
 async function captureSentryMessage(

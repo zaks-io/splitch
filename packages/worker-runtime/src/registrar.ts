@@ -122,16 +122,31 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
     // body stays generic so nothing internal reaches the caller, which makes the
     // observability hop the only route the thrown value has to an operator --
     // dropping it here is what turns every fault into the same blank 500.
+    reportFault(deps, requestId, cause);
+    return renderError(emptyError("INTERNAL_SERVER_ERROR", "unhandled runtime fault"), {
+      requestId,
+      defaultHeaders: deps.defaultHeaders,
+    });
+  }
+}
+
+/**
+ * Observability is explicitly not a correctness gate (see RegistrarDeps), so a
+ * sink that throws must not escape the one catch that renders the contract 500 --
+ * the caller would get Hono's plain-text default with no code and no request id.
+ * Contained, but never silent: the secondary failure gets its own console record,
+ * because by definition the sink that would have logged it is what just broke.
+ */
+function reportFault(deps: RegistrarDeps, requestId: string, cause: unknown): void {
+  try {
     deps.observability?.onError?.({
       requestId,
       code: "INTERNAL_SERVER_ERROR",
       status: 500,
       cause,
     });
-    return renderError(emptyError("INTERNAL_SERVER_ERROR", "unhandled runtime fault"), {
-      requestId,
-      defaultHeaders: deps.defaultHeaders,
-    });
+  } catch (reportingFault) {
+    console.error("worker-runtime: observability.onError threw", { requestId, reportingFault });
   }
 }
 

@@ -202,4 +202,32 @@ describe("fault path: an unexpected throw", () => {
     expect(seen[0]?.code).toBe("INTERNAL_SERVER_ERROR");
     expect(seen[0]?.cause).toBe(boom);
   });
+
+  /**
+   * Handing the thrown value to a sink gave the fault path a second way to fail:
+   * a sink that throws would escape this catch and the caller would get Hono's
+   * plain-text default, with no code and no request id. Observability is not a
+   * correctness gate, so it must not be able to take the response with it.
+   */
+  it("still renders the contract 500 when the observability sink throws", async () => {
+    const reg = createRegistrar(
+      deps({
+        observability: {
+          onError: () => {
+            throw new Error("sink is down");
+          },
+        },
+      }),
+    );
+    const app = new Hono();
+    reg.mount(app, route({ auth: "public", rateLimit: "none" }), () => {
+      throw new Error("original fault");
+    });
+
+    const res = await app.request("/things", { method: "POST" });
+
+    expect(res.status).toBe(500);
+    expect((await bodyOf(res)).code).toBe("INTERNAL_SERVER_ERROR");
+    expect(res.headers.get("x-request-id")).toBeTruthy();
+  });
 });

@@ -193,6 +193,46 @@ describe("createWorkerObservability onError", () => {
   });
 });
 
+/**
+ * Sentry is the only sink with a DSN behind it, and local dev and the e2e fleet
+ * both run without one. Workers Logs and `wrangler tail` read console output, so
+ * this is what makes a blank 500 diagnosable exactly where it was not.
+ */
+describe("createWorkerObservability without a Sentry DSN", () => {
+  it("writes the fault to Workers Logs when SENTRY_DSN is unset", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const observability = createWorkerObservability({}, { surface: "mcp-server" });
+
+    observability.onError?.({
+      requestId: "req-local",
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      cause: new Error("Network connection lost."),
+    });
+
+    const row = consoleError.mock.calls[0]?.[0] as { message?: string; fault?: string };
+    expect(row.message).toBe("request_fault");
+    expect(row.fault).toContain("Network connection lost.");
+    consoleError.mockRestore();
+  });
+
+  it("keeps per-request info rows out of Workers Logs", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+    const observability = createWorkerObservability({}, { surface: "evaluation-api" });
+
+    observability.onRequest?.({ requestId: "req-1", method: "GET", path: "/flags/:flagKey" });
+
+    // The evaluation hot path emits one of these per request; routing them to
+    // Workers Logs would bill every request for a row nothing reads today.
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
+    expect(consoleLog).not.toHaveBeenCalled();
+    for (const spy of [consoleError, consoleWarn, consoleLog]) spy.mockRestore();
+  });
+});
+
 describe("workerSentryOptions", () => {
   it("passes the deployed release through to Sentry", () => {
     expect(

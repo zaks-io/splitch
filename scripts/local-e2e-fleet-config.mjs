@@ -72,8 +72,10 @@ export function localE2eWorkers(persistPath) {
         // here even when the Analysis Worker executes them (ADR-0046). Without a
         // reachable JWKS the verify step fails at the socket, which the registrar
         // turns into a 500 on a route that should have answered.
-        "--var",
-        "AUTH_API_ORIGIN:http://127.0.0.1:18788",
+        //
+        // These are exactly what `ControlPlaneApiEnv` declares and what the
+        // hosted wrangler.jsonc sets, so the fleet cannot drift from production
+        // by carrying a var this Worker never reads.
         "--var",
         "AUTH_JWKS_URI:http://127.0.0.1:18788/.well-known/jwks.json",
         "--var",

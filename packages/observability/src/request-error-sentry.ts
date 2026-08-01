@@ -49,13 +49,24 @@ export function reduceRequestError(ctx: RequestErrorContext): RequestErrorReport
   return { requestId, code, status, ...(fault === undefined ? {} : { fault }) };
 }
 
+/**
+ * Total by construction: this runs inside the registrar's own catch block, so a
+ * throw here escapes the one handler that renders the contract-shaped 500 and
+ * the caller gets Hono's plain-text default instead -- no code, no request id.
+ * Both `String()` (null-prototype objects, a throwing `toString`) and a `.stack`
+ * getter are real throw sites, so the whole reduction is guarded.
+ */
 function faultIdentity(cause: unknown): string | undefined {
   if (cause === undefined) return undefined;
-  if (cause instanceof Error) {
-    return cause.stack ?? `${cause.name}: ${cause.message}`;
+  try {
+    if (cause instanceof Error) {
+      return cause.stack ?? `${cause.name}: ${cause.message}`;
+    }
+    // A non-Error throw has no stack to give; naming the shape still beats silence.
+    return `non-Error thrown (${typeof cause}): ${String(cause)}`;
+  } catch {
+    return `non-Error thrown (${typeof cause}): <unrepresentable>`;
   }
-  // A non-Error throw has no stack to give; naming the shape still beats silence.
-  return `non-Error thrown (${typeof cause}): ${String(cause)}`;
 }
 
 /**
