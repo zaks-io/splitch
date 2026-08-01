@@ -411,13 +411,11 @@
     },
     "@splitch/sdk#pack:dry-run": {
       "dependsOn": ["build"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/release/**"],
-      "outputs": []
+      "cache": false
     },
     "@splitch/sdk#pack:check": {
       "dependsOn": ["build"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/release/**"],
-      "outputs": []
+      "cache": false
     },
     "@splitch/sdk#test:consumer-smoke": {
       "dependsOn": ["build"],
@@ -437,13 +435,11 @@
     },
     "@splitch/cli#pack:dry-run": {
       "dependsOn": ["build"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/release/**"],
-      "outputs": []
+      "cache": false
     },
     "@splitch/cli#pack:check": {
       "dependsOn": ["build"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/release/**"],
-      "outputs": []
+      "cache": false
     },
     "@splitch/cli#test:consumer-smoke": {
       "dependsOn": ["build"],

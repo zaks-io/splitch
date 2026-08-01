@@ -118,6 +118,9 @@ export function assertReleaseTarballContents({ listing, manifestText, declaratio
       throw new Error(`release tarball must not include sourcemaps: ${file}`);
     }
   }
+  if (!listing.some((file) => file.endsWith("dist/build-stamp.json"))) {
+    throw new Error("release tarball must ship dist/build-stamp.json");
+  }
 
   const manifest = JSON.parse(manifestText);
   if (manifest.dependencies?.["@splitch/contracts"]) {

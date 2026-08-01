@@ -62,6 +62,12 @@ describe("build stamp guard", () => {
     expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/manifest is @splitch\/sdk@0\.3\.0/);
   });
 
+  it("fails loud when dist bytes were modified after the stamp", () => {
+    writeBuildStamp("sdk", scratch);
+    writeFileSync(path.join(packageRoot, "dist/index.js"), "export const a = 999;\n");
+    expect(() => verifyBuildStamp("sdk", scratch)).toThrow(/dist was modified after the build/);
+  });
+
   it("fails loud when the stamp itself was tampered with", () => {
     writeBuildStamp("sdk", scratch);
     const stampFile = path.join(packageRoot, "dist/build-stamp.json");

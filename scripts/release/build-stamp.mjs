@@ -82,6 +82,29 @@ function stampPath(targetKey, repoRoot) {
   return containedPath(repoRoot, target.packageDir, "dist", STAMP_FILENAME);
 }
 
+/** Digest of dist itself, excluding the stamp file the digest is stored in. */
+function computeDistDigest(targetKey, repoRoot) {
+  const target = getReleaseTarget(targetKey);
+  const distDir = containedPath(repoRoot, target.packageDir, "dist");
+  const hash = createHash("sha256");
+  const files = [];
+  if (existsSync(distDir)) {
+    collectFiles(distDir, distDir, files);
+  }
+  files.sort();
+  for (const filePath of files) {
+    const relativePath = relative(distDir, filePath).split(sep).join("/");
+    if (relativePath === STAMP_FILENAME) {
+      continue;
+    }
+    hash.update(relativePath);
+    hash.update("\0");
+    hash.update(readFileSync(filePath));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
 /** Called by each package's build as its final step; the only stamp writer. */
 export function writeBuildStamp(targetKey, repoRoot) {
   const target = getReleaseTarget(targetKey);
@@ -90,6 +113,7 @@ export function writeBuildStamp(targetKey, repoRoot) {
     packageName: target.packageName,
     version: manifest.version,
     sourceDigest: computeSourceDigest(targetKey, repoRoot),
+    distDigest: computeDistDigest(targetKey, repoRoot),
   };
   writeFileSync(stampPath(targetKey, repoRoot), `${JSON.stringify(stamp, null, 2)}\n`);
   return stamp;
@@ -120,6 +144,12 @@ export function verifyBuildStamp(targetKey, repoRoot) {
   if (stamp.sourceDigest !== digest) {
     throw new Error(
       `${target.packageDir}/dist is stale: build stamp digest ${stamp.sourceDigest} does not match current sources (${digest}). Remediation: ${remediation}`,
+    );
+  }
+  const distDigest = computeDistDigest(targetKey, repoRoot);
+  if (stamp.distDigest !== distDigest) {
+    throw new Error(
+      `${target.packageDir}/dist was modified after the build: stamped dist digest ${stamp.distDigest} does not match current dist (${distDigest}). Remediation: ${remediation}`,
     );
   }
   return stamp;
