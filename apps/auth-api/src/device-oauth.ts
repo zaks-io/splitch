@@ -7,7 +7,7 @@ import {
   resolveAppSelectionForUser,
   resolveOrgSelectionForUser,
 } from "./membership-authority";
-import { OAuthError, renderOAuthError } from "./oauth-errors";
+import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
 import {
   DeviceAuthorizationRequestSchema,
   DeviceTokenRequestSchema,
@@ -75,7 +75,7 @@ export async function authorizeDevice(deps: DeviceOAuthDeps, body: unknown): Pro
       ),
     });
   } catch (cause) {
-    return renderDeviceFault(cause);
+    return renderDoorFault(cause);
   }
 }
 
@@ -128,7 +128,7 @@ export async function exchangeDeviceCode(
       binding?.appId ?? null,
     );
   } catch (cause) {
-    return renderDeviceFault(cause);
+    return renderDoorFault(cause);
   }
 }
 
@@ -193,7 +193,7 @@ export async function exchangeRefreshToken(
       binding?.appId ?? null,
     );
   } catch (cause) {
-    return renderDeviceFault(cause);
+    return renderDoorFault(cause);
   }
 }
 
@@ -264,9 +264,4 @@ function tokenResponse(
     user_id: userId,
     ...(appId ? { app_id: appId } : {}),
   });
-}
-
-function renderDeviceFault(cause: unknown): Response {
-  if (cause instanceof OAuthError) return renderOAuthError(cause);
-  return renderOAuthError(new OAuthError("server_error", "auth door fault"));
 }

@@ -1,4 +1,4 @@
-import { accessTokenPrivateJwkFromSecret } from "./access-token-key";
+import { accessTokenPrivateJwkFromSecret, accessTokenSigningKey } from "./access-token-key";
 import { OAuthError } from "./oauth-errors";
 
 /**
@@ -82,16 +82,6 @@ async function signHmacJwt(claims: object, secret: string): Promise<string> {
   return `${signingInput}.${bytesToBase64Url(new Uint8Array(sig))}`;
 }
 
-async function rsaSigningKey(jwk: JsonWebKey): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "jwk",
-    jwk,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-}
-
 async function signRs256Jwt(claims: object, secret: string): Promise<string | null> {
   const jwk = accessTokenPrivateJwkFromSecret(secret);
   if (!jwk) {
@@ -102,7 +92,7 @@ async function signRs256Jwt(claims: object, secret: string): Promise<string | nu
   const signingInput = `${encodeSegment(header)}.${encodeSegment(claims)}`;
   const sig = await crypto.subtle.sign(
     "RSASSA-PKCS1-v1_5",
-    await rsaSigningKey(jwk),
+    await accessTokenSigningKey(jwk),
     new TextEncoder().encode(signingInput) as unknown as BufferSource,
   );
   return `${signingInput}.${bytesToBase64Url(new Uint8Array(sig))}`;

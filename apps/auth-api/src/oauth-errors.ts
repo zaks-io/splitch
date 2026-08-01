@@ -95,3 +95,23 @@ export function renderOAuthError(error: OAuthError): Response {
     headers: { "content-type": "application/json" },
   });
 }
+
+/**
+ * Map any thrown door fault to its OAuth body. An OAuthError already carries a
+ * caller-actionable code and description; anything else is a bug on the door and
+ * collapses to `server_error`.
+ *
+ * WHY the log: the collapsed body deliberately tells the caller nothing about the
+ * internal failure, so without this line the cause leaves no trace at all. The
+ * only evidence is a 500 span with an empty error message, and the fault has to
+ * be reconstructed from the order of the surrounding subrequest spans. A
+ * production ACCESS_TOKEN_SECRET of the wrong shape reached users exactly this
+ * way. The caller's body is unchanged; the operator gets the cause.
+ */
+export function renderDoorFault(cause: unknown): Response {
+  if (cause instanceof OAuthError) {
+    return renderOAuthError(cause);
+  }
+  console.error("auth door fault", cause);
+  return renderOAuthError(new OAuthError("server_error", "auth door fault"));
+}

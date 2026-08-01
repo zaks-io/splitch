@@ -1,5 +1,5 @@
 import { approveClaimConsent, type ClaimDeps, refuseClaimConsent } from "./claim";
-import { OAuthError, renderOAuthError } from "./oauth-errors";
+import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
 import { ClaimConsentRequestSchema } from "./schemas";
 import type { WorkOsAccessTokenVerifier } from "./workos-access-token";
 
@@ -53,9 +53,4 @@ async function consentDecision(request: Request): Promise<"approve" | "deny"> {
   const parsed = ClaimConsentRequestSchema.safeParse(body);
   if (!parsed.success) throw new OAuthError("invalid_request", "malformed consent decision");
   return parsed.data.decision;
-}
-
-function renderDoorFault(cause: unknown): Response {
-  if (cause instanceof OAuthError) return renderOAuthError(cause);
-  return renderOAuthError(new OAuthError("server_error", "auth door fault"));
 }

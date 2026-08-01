@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { SCOPE_REMEDY } from "./context.js";
-import { EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";
+import { EXIT_AUTH, EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";
 import {
   FakeCliTransport,
   flagListPage,
@@ -70,6 +70,45 @@ describe("context resolution", () => {
       true,
     );
     expect(SCOPE_REMEDY).toContain("splitch use");
+  });
+});
+
+/**
+ * `splitch context` is the first command a cold agent runs. It used to print
+ * `{}` at exit 0 with no session, which reads as a successful resolution.
+ */
+describe("splitch context reports the session, never an empty success", () => {
+  it("fails loud with the login remedy when no session exists", async () => {
+    const { dir, credentialPath } = await makeTempHome();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli(["context", "--json"], { credentialPath, cwd: dir });
+
+    expect(code).toBe(EXIT_AUTH);
+    expect(error.mock.calls.join(" ")).toContain("CLI_NOT_AUTHENTICATED");
+    expect(error.mock.calls.join(" ")).toContain("splitch login");
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("reports the principal and the next step when authenticated but unscoped", async () => {
+    const { dir, credentialPath } = await makeTempHome();
+    await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const code = await runCli(["context", "--json"], { credentialPath, cwd: dir });
+
+    expect(code).toBe(EXIT_OK);
+    const payload = JSON.parse(log.mock.calls.join("")) as {
+      authenticated: boolean;
+      principal: { email: string };
+      appId?: string;
+      nextSteps: string[];
+    };
+    expect(payload.authenticated).toBe(true);
+    expect(payload.principal.email).toBe(storedCredential().principal.email);
+    expect(payload.appId).toBeUndefined();
+    expect(payload.nextSteps).toContain("splitch orgs list");
   });
 });
 

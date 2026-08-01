@@ -10,13 +10,13 @@ JSON output for scripts and agents.
 
 ```bash
 npm install --global @splitch/cli
-splitch context --json
+splitch --version
 ```
 
 For a one-off run without a global install:
 
 ```bash
-npx @splitch/cli context --json
+npx @splitch/cli --version
 ```
 
 ## Select a platform target
@@ -106,7 +106,8 @@ The enabled Flag serves its Default Variant (`off`) until targeting rules or a r
 otherwise, so `false` here means the data plane is wired up correctly.
 
 Pass `--app` and `--env` on an individual command when you do not want to persist scope. Run
-`splitch context --json` to see the resolved App and Environment.
+`splitch context --json` to see who you are logged in as and the resolved App and Environment;
+with no session it exits `2` with `CLI_NOT_AUTHENTICATED` rather than reporting empty scope.
 
 ## Command map
 

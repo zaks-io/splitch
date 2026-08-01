@@ -11,7 +11,7 @@ import {
 } from "./device-oauth";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
-import { OAuthError, renderOAuthError } from "./oauth-errors";
+import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
 import type { RevocationStore } from "./revocation";
 import {
   ClientCredentialsRequestSchema,
@@ -287,11 +287,4 @@ function grantTypeOf(body: unknown): string | undefined {
   }
   const grantType = (body as { grant_type?: unknown }).grant_type;
   return typeof grantType === "string" ? grantType : undefined;
-}
-
-function renderDoorFault(cause: unknown): Response {
-  if (cause instanceof OAuthError) {
-    return renderOAuthError(cause);
-  }
-  return renderOAuthError(new OAuthError("server_error", "auth door fault"));
 }

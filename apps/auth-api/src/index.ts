@@ -5,7 +5,10 @@ import {
   workerObservabilityWithWaitUntil,
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
-import { makeEphemeralAccessTokenPrivateJwk } from "./access-token-key";
+import {
+  assertAccessTokenSecretCanSign,
+  makeEphemeralAccessTokenPrivateJwk,
+} from "./access-token-key";
 import { createApp } from "./app";
 import { makeFixtureDeviceFlow, makeWorkOsDeviceFlow } from "./device-flow";
 import { makeD1DeviceRefreshSessionStore } from "./device-session-store";
@@ -29,6 +32,7 @@ const fixtureTurnstile = makeFixtureTurnstile();
 const rateLimiter = makeRateLimiter();
 const idempotency = makeIdempotencyStore();
 let localAccessTokenSecret: Promise<string> | undefined;
+let signableAccessTokenSecret: string | undefined;
 
 const handler = {
   async fetch(request, env, ctx): Promise<Response> {
@@ -48,6 +52,23 @@ const handler = {
       platformTarget: env.SPLITCH_PLATFORM_TARGET,
       secret: env.TURNSTILE_SECRET,
     });
+    // Resolved before /health answers: a Worker whose signing key cannot mint a
+    // token is not healthy, and health is the probe an operator reaches for
+    // first. The reason travels in the body so the diagnosis does not require
+    // reading logs; the cause is logged because the body must not carry it.
+    let accessSecret: string;
+    try {
+      accessSecret = await accessTokenSecret(env);
+    } catch (cause) {
+      console.error("auth-api access-token key is unusable", cause);
+      return Response.json(
+        {
+          error: "server_error",
+          error_description: "ACCESS_TOKEN_SECRET is not a usable RS256 signing key",
+        },
+        { status: 500 },
+      );
+    }
     if (url.pathname === "/health" || url.pathname === "/") {
       return Response.json(
         createHealthResponse(
@@ -63,7 +84,6 @@ const handler = {
     const controlPlaneAudience = env.CONTROL_PLANE_ORIGIN ?? "http://localhost:8787";
     const mcpAudience = env.MCP_ORIGIN;
     const assertionSecret = env.ASSERTION_SIGNING_SECRET ?? "local-dev-assertion-secret";
-    const accessSecret = await accessTokenSecret(env);
     const consentBaseUrl = env.CONTROL_PANEL_ORIGIN ?? "http://localhost:8787";
     const now = () => Date.now();
     const workos = hostedWorkOs(env);
@@ -202,9 +222,26 @@ function workosAccessTokenVerifier(env: AuthApiEnv) {
   });
 }
 
-function accessTokenSecret(env: AuthApiEnv): Promise<string> {
+/**
+ * The signer is RS256-only (`accessTokenTrustContract: "rs256-jwks"` above), so a
+ * secret that cannot import as an RS256 signing key can never mint a token.
+ *
+ * WHY this is checked at config time and not left to the signer: a presence-only
+ * check boots a Worker that reports healthy and then throws on every single mint,
+ * which reaches the caller as an opaque `server_error`. Production ran that way
+ * with a leftover HMAC secret and no door could issue a token. The same check
+ * runs in the deploy gate (scripts/lib/hosted-worker-secrets.mjs) so a bad secret
+ * fails before the Worker is replaced; this is the runtime half of that contract.
+ *
+ * Memoized on the value: the import is per-isolate work, not per-request.
+ */
+async function accessTokenSecret(env: AuthApiEnv): Promise<string> {
   if (env.ACCESS_TOKEN_SECRET) {
-    return Promise.resolve(env.ACCESS_TOKEN_SECRET);
+    if (env.ACCESS_TOKEN_SECRET !== signableAccessTokenSecret) {
+      await assertAccessTokenSecretCanSign(env.ACCESS_TOKEN_SECRET);
+      signableAccessTokenSecret = env.ACCESS_TOKEN_SECRET;
+    }
+    return env.ACCESS_TOKEN_SECRET;
   }
   if (isHostedTarget(env.SPLITCH_PLATFORM_TARGET)) {
     throw new Error("ACCESS_TOKEN_SECRET is required for hosted targets");
