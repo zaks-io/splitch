@@ -13,9 +13,9 @@ import { join } from "node:path";
  * version, because `npm publish --dry-run` also refuses a version already on
  * the registry and that refusal answers a different question. Without this the
  * check would pass only until the package's current version shipped, then fail
- * forever on a manifest it never actually inspected. The real version-collision
- * guard is the release workflow's own publish step
- * (scripts/release/validate-live-publish-state.mjs).
+ * forever on a manifest it never actually inspected. Version collision is
+ * owned by the release workflows, which ask the registry directly via
+ * scripts/release/check-published-version.mjs.
  */
 export function assertPublishKeepsManifest(stagingDir) {
   const probe = mkdtempSync(join(tmpdir(), "splitch-publish-probe-"));
