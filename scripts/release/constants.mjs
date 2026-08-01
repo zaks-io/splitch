@@ -5,7 +5,18 @@ export const RELEASE_TARGETS = Object.freeze({
     packageDir: "packages/sdk",
     tagPrefix: "sdk-v",
     githubLatest: false,
-    buildDependencies: Object.freeze([]),
+    // Build inputs covered by the dist build stamp, relative to packageDir.
+    // The SDK bundles @splitch/contracts from source.
+    stampInputs: Object.freeze([
+      "src",
+      "package.json",
+      "tsconfig.json",
+      "tsconfig.contract-surface.json",
+      "tsup.config.ts",
+      "tsup.contract-surface.config.ts",
+      "scripts/contract-surface-entry.ts",
+      "../../packages/contracts/src",
+    ]),
   }),
   cli: Object.freeze({
     packageName: "@splitch/cli",
@@ -13,8 +24,22 @@ export const RELEASE_TARGETS = Object.freeze({
     packageDir: "apps/cli",
     tagPrefix: "cli-v",
     githubLatest: "automatic",
-    // The CLI bundle inlines @splitch/sdk from its built dist.
-    buildDependencies: Object.freeze(["sdk"]),
+    // The CLI bundle inlines @splitch/sdk from its built dist and the other
+    // workspace deps from their sources; all of them are stamped inputs.
+    stampInputs: Object.freeze([
+      "src",
+      "package.json",
+      "tsconfig.json",
+      "tsup.config.ts",
+      "scripts/build.mjs",
+      "../../packages/sdk/dist",
+      "../../packages/contracts/src",
+      "../../packages/control-plane-sdk/src",
+      "../../packages/db/src",
+      "../../packages/observability/src",
+      "../../packages/privacy/src",
+      "../../packages/worker-runtime/src",
+    ]),
   }),
 });
 

@@ -102,13 +102,27 @@ jobs:
       - name: Check release package contents
         if: steps.npm-version.outputs.already_published != 'true'
         run: |
-          pnpm --filter @splitch/cli pack --dry-run
-          pnpm --filter @splitch/cli pack:check
+          pnpm --filter @splitch/cli run pack:dry-run
+          pnpm --filter @splitch/cli run pack:check
+
+      # Publish the staged tarball: the same bytes pack:check validated and
+      # the draft release attached. The live tree is never packed in place.
+      - name: Pack release tarball
+        if: steps.npm-version.outputs.already_published != 'true'
+        id: pack
+        working-directory: apps/cli
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/npm-publish"
+          tarball="$(node scripts/pack-release.mjs "$RUNNER_TEMP/npm-publish" | tail -n 1)"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
 
       - name: Publish @splitch/cli with provenance
         if: steps.npm-version.outputs.already_published != 'true'
         working-directory: apps/cli
-        run: npm publish --provenance --access public --tag latest
+        env:
+          RELEASE_TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: npm publish "$RUNNER_TEMP/npm-publish/$RELEASE_TARBALL" --provenance --access public --tag latest
 
       - name: Publish summary
         if: always()

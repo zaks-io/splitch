@@ -9,6 +9,7 @@ const EXPECTED_DEPENDENCIES = ["@hono/zod-openapi", "@sentry/node", "hono", "zod
 const REQUIRED_FILES = [
   "package/LICENSE.md",
   "package/README.md",
+  "package/dist/build-stamp.json",
   "package/dist/cli.js",
   "package/dist/index.d.ts",
   "package/dist/index.js",

@@ -17,10 +17,9 @@ function assertNoResolutionErrors(output) {
 }
 
 try {
-  execFileSync("node", ["scripts/build.mjs"], {
-    cwd: packageRoot,
-    stdio: "inherit",
-  });
+  // Consumer smoke consumes the stamped build; it never rebuilds.
+  const { verifyBuildStamp } = await import("../../../scripts/release/build-stamp.mjs");
+  verifyBuildStamp("cli", resolve(packageRoot, "../.."));
   const packOutput = execFileSync("node", ["scripts/pack-release.mjs", consumerRoot], {
     cwd: packageRoot,
     encoding: "utf8",

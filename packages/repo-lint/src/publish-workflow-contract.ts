@@ -58,8 +58,14 @@ export function registerPublishWorkflowContract(options: PublishContractOptions)
       expect(workflow).not.toMatch(/NPM_TOKEN|NODE_AUTH_TOKEN/);
     });
 
-    it(`publishes ${options.packageName} with provenance and latest`, () => {
-      expect(workflow).toContain("npm publish --provenance --access public --tag latest");
+    it(`publishes the staged ${options.packageName} tarball with provenance and latest`, () => {
+      expect(publishJob).toContain(
+        'npm publish "$RUNNER_TEMP/npm-publish/$RELEASE_TARBALL" --provenance --access public --tag latest',
+      );
+      // The staged tarball is the only publish surface; nothing packs the
+      // live package directory in place.
+      expect(publishJob).toContain("pack-release.mjs");
+      expect(publishJob).not.toMatch(/run: npm publish --provenance/);
       expect(workflow).toContain("registry-url: https://registry.npmjs.org");
       expect(workflow).toContain("package-manager-cache: false");
       expect(workflow).toContain(options.packageName);

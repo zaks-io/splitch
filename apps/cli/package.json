@@ -40,9 +40,8 @@
     "clean": "rm -rf dist coverage",
     "lint": "biome lint src",
     "pack:check": "node scripts/pack-check.mjs",
-    "pack:dry-run": "pnpm pack --dry-run",
-    "postpack": "node scripts/sync-pack-manifest.mjs restore",
-    "prepack": "node scripts/prepack-build.mjs",
+    "pack:dry-run": "node scripts/pack-dry-run.mjs",
+    "prepack": "node scripts/prepack-guard.mjs",
     "test": "vitest run --config vitest.config.ts",
     "test:consumer-smoke": "node scripts/consumer-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"

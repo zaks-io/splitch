@@ -392,7 +392,11 @@
     },
     "@splitch/sdk#build": {
       "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/contracts/src/**"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/contracts/src/**",
+        "$TURBO_ROOT$/scripts/release/**"
+      ],
       "outputs": ["dist/**", "src/generated/**"]
     },
     "@splitch/sdk#typecheck": {
@@ -406,32 +410,39 @@
       "outputs": []
     },
     "@splitch/sdk#pack:dry-run": {
-      "dependsOn": ["build", "//#knip"],
+      "dependsOn": ["build"],
       "cache": false
     },
     "@splitch/sdk#pack:check": {
-      "dependsOn": ["pack:dry-run"],
+      "dependsOn": ["build"],
       "cache": false
     },
     "@splitch/sdk#test:consumer-smoke": {
-      "dependsOn": ["pack:check"],
+      "dependsOn": ["build"],
       "cache": false
     },
     "@splitch/cli#build": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "tsconfig*.json", "tsup*.ts", "package.json"],
+      "inputs": [
+        "src/**",
+        "scripts/**",
+        "tsconfig*.json",
+        "tsup*.ts",
+        "package.json",
+        "$TURBO_ROOT$/scripts/release/**"
+      ],
       "outputs": ["dist/**"]
     },
     "@splitch/cli#pack:dry-run": {
-      "dependsOn": ["build", "//#knip"],
+      "dependsOn": ["build"],
       "cache": false
     },
     "@splitch/cli#pack:check": {
-      "dependsOn": ["pack:dry-run"],
+      "dependsOn": ["build"],
       "cache": false
     },
     "@splitch/cli#test:consumer-smoke": {
-      "dependsOn": ["pack:check"],
+      "dependsOn": ["build"],
       "cache": false
     }
   }

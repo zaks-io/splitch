@@ -97,13 +97,13 @@ export function registerReleaseWorkflowContract(options: ReleaseContractOptions)
       expect(workflow).toContain("already has a published release");
     });
 
-    it("prepare-artifacts succeeds without a checked-in dist directory", () => {
+    it("prepare-artifacts stages a stamped dist and refuses an unstamped checkout", () => {
       const output = execFileSync(
         "node",
-        ["scripts/release/check-prepare-clean-checkout.mjs", options.targetKey, repoRoot],
+        ["scripts/release/check-prepare-artifacts-contract.mjs", options.targetKey, repoRoot],
         { cwd: repoRoot, encoding: "utf8" },
       );
-      expect(output.trim()).toBe("prepare clean-checkout check passed");
+      expect(output.trim()).toBe("prepare-artifacts contract check passed");
     }, 60_000);
   });
 }
