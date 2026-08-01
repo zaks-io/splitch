@@ -17,7 +17,7 @@ import type { ScrubOptions } from "@splitch/privacy";
 export const OBSERVABILITY_SCRUB_OPTIONS: ScrubOptions = {
   extraPatterns: [
     // Targeting Keys are opaque per App; this catches the repo's test canary shape.
-    /tk-[a-z0-9-]+/gi,
+    /tk-[a-z0-9-]{1,256}/gi,
     /spl_[a-z0-9_-]{16,256}/gi,
     // Any `sk_`/`pk_` credential, not only the 64-hex splitch shape: a WorkOS
     // `sk_test_...` is just as fatal in a log line as our own.

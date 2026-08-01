@@ -28,13 +28,28 @@ describe("reduceRequestError is total", () => {
     expect(fault(hostile).fault).toContain("unrepresentable");
   });
 
-  it("survives an Error whose stack getter throws", () => {
+  it("keeps an Error's identity when only its stack getter throws", () => {
     const hostile = new Error("boom");
     Object.defineProperty(hostile, "stack", {
       get() {
         throw new Error("nope");
       },
     });
+
+    // Losing the frames is survivable; reporting a real Error as an anonymous
+    // unrepresentable value would throw away the one thing still readable.
+    expect(fault(hostile).fault).toBe("Error: boom");
+  });
+
+  it("survives an Error whose name getter also throws", () => {
+    const hostile = new Error("boom");
+    for (const prop of ["stack", "name"]) {
+      Object.defineProperty(hostile, prop, {
+        get() {
+          throw new Error("nope");
+        },
+      });
+    }
     expect(fault(hostile).fault).toContain("unrepresentable");
   });
 });

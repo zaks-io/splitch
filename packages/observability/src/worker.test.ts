@@ -216,16 +216,20 @@ describe("createWorkerObservability without a Sentry DSN", () => {
     consoleError.mockRestore();
   });
 
-  it("keeps per-request info rows out of Workers Logs", () => {
+  it("keeps caller-driven rows out of Workers Logs", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
     const observability = createWorkerObservability({}, { surface: "evaluation-api" });
 
     observability.onRequest?.({ requestId: "req-1", method: "GET", path: "/flags/:flagKey" });
+    observability.onError?.({ requestId: "req-2", code: "UNAUTHORIZED", status: 401 });
+    observability.onError?.({ requestId: "req-3", code: "RATE_LIMITED", status: 429 });
 
-    // The evaluation hot path emits one of these per request; routing them to
-    // Workers Logs would bill every request for a row nothing reads today.
+    // Workers Logs bills per event, and the volume of both of these is chosen by
+    // the caller: one info row per request on the evaluation hot path, and one
+    // warn row per rejection under a credential-stuffing or rate-limited flood.
+    // Neither tells an operator anything the caller was not already told.
     expect(consoleError).not.toHaveBeenCalled();
     expect(consoleWarn).not.toHaveBeenCalled();
     expect(consoleLog).not.toHaveBeenCalled();
@@ -249,5 +253,20 @@ describe("workerSentryOptions", () => {
       environment: "production",
       release: "splitch-auth-api@abc123",
     });
+  });
+
+  it("drops Sentry's Console integration so fault rows are not double-sent", () => {
+    const options = workerSentryOptions(
+      { SENTRY_DSN: "https://example@sentry.io/1" },
+      { surface: "auth-api" },
+      mockSentryModule(),
+    );
+
+    // emitToWorkersLogs console.errors the fault row, and captureMessage sends
+    // the same row as `extra` immediately after. Left enabled, consoleIntegration
+    // would attach the console line as a breadcrumb on that very event.
+    const kept = options.integrations([{ name: "Console" }, { name: "Dedupe" }]);
+
+    expect(kept.map((i) => i.name)).toEqual(["Dedupe"]);
   });
 });

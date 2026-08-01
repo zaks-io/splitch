@@ -88,6 +88,14 @@ export function workerSentryOptions(
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
     tracesSampleRate: secrets.environment === "production" ? 0.1 : 1,
+    /**
+     * `@sentry/cloudflare` enables `consoleIntegration()` by default, which would
+     * capture our own fault row (emitToWorkersLogs) as a breadcrumb and attach it
+     * to the `captureMessage` fired immediately after -- every fault event would
+     * carry a duplicate of its own payload. The row already reaches Sentry as
+     * `extra`, so the breadcrumb is pure duplication.
+     */
+    integrations: (defaults: { name: string }[]) => defaults.filter((i) => i.name !== "Console"),
     beforeSend(event: SentryErrorEvent) {
       return scrubbedBeforeSend(event as unknown as SentryEventLike) as unknown as SentryErrorEvent;
     },
@@ -177,16 +185,17 @@ export function createWorkerObservability(
  * is set. That is false in local dev and in the e2e fleet, which is exactly
  * where a blank 500 has to be diagnosable.
  *
- * Only warn/error go out: `onRequest` emits an info row per request, and routing
- * that to Workers Logs would bill the evaluation hot path per request for rows
- * nothing reads today. Rows arrive already scrubbed from `createScrubbedEmitter`.
+ * `error` only, and the line is exactly "what the caller cannot see for itself".
+ * A 4xx already returns a contract-shaped body carrying its code and request id,
+ * so an operator log adds nothing an attacker-driven flood of 401s or 429s does
+ * not also multiply -- Workers Logs bills per event, and the volume there is
+ * chosen by the caller. A 500's body is deliberately opaque, so this is its only
+ * channel. Rows arrive already scrubbed from `createScrubbedEmitter`.
  */
 function emitToWorkersLogs(events: Record<string, unknown>[]): void {
   for (const event of events) {
     if (event.level === "error") {
       console.error(event);
-    } else if (event.level === "warn") {
-      console.warn(event);
     }
   }
 }

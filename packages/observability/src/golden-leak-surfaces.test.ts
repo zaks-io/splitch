@@ -1,3 +1,4 @@
+import { REDACTED } from "@splitch/privacy";
 import { describe, expect, it } from "vitest";
 import { createSurfaceEmitter } from "./surface-wiring.js";
 import { OBSERVABILITY_SURFACES } from "./surfaces.js";
@@ -94,6 +95,11 @@ describe("golden-leak canary per observability surface", () => {
 
         emitter.log("error", "request_fault", faultRow(secret));
 
+        // `JSON.stringify([])` contains no secret either, so a dropped row would
+        // satisfy the assertion below without the scrubber doing anything. Pin
+        // the row down first: emitted, and visibly redacted where the secret was.
+        expect(captured).toHaveLength(1);
+        expect(captured[0]?.[0]?.fault).toContain(REDACTED);
         expect(JSON.stringify(captured)).not.toContain(secret);
       });
 

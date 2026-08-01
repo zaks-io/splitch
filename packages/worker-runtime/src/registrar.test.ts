@@ -208,6 +208,11 @@ describe("fault path: an unexpected throw", () => {
    * a sink that throws would escape this catch and the caller would get Hono's
    * plain-text default, with no code and no request id. Observability is not a
    * correctness gate, so it must not be able to take the response with it.
+   *
+   * The two siblings below cover the other hook call sites, which are the ones a
+   * fault-path-only guard leaves open: `fail()` reports from inside the same try,
+   * so a throw there converts a deterministic 4xx into a 500, and `onRequest`
+   * runs before the try, so a throw there escapes the guard entirely.
    */
   it("still renders the contract 500 when the observability sink throws", async () => {
     const reg = createRegistrar(
@@ -228,6 +233,52 @@ describe("fault path: an unexpected throw", () => {
 
     expect(res.status).toBe(500);
     expect((await bodyOf(res)).code).toBe("INTERNAL_SERVER_ERROR");
+    expect(res.headers.get("x-request-id")).toBeTruthy();
+  });
+
+  it("still renders the contract 4xx when the observability sink throws", async () => {
+    const reg = createRegistrar(
+      deps({
+        observability: {
+          onError: () => {
+            throw new Error("sink is down");
+          },
+        },
+      }),
+    );
+    const app = new Hono();
+    reg.mount(app, route({ input: BodyInput }), okHandler);
+
+    const res = await app.request("/things", {
+      method: "POST",
+      body: JSON.stringify({ wrong: "field" }),
+    });
+
+    // A broken sink downgrading a correct 400 into a 500 is worse than the lost
+    // fault report it was introduced to prevent.
+    expect(res.status).toBe(400);
+    expect((await bodyOf(res)).code).toBe("VALIDATION_ERROR");
+  });
+
+  it("still serves the route when the observability onRequest hook throws", async () => {
+    const reg = createRegistrar(
+      deps({
+        observability: {
+          onRequest: () => {
+            throw new Error("sink is down");
+          },
+        },
+      }),
+    );
+    const app = new Hono();
+    reg.mount(app, route({ auth: "public", rateLimit: "none" }), okHandler);
+
+    const res = await app.request("/things", { method: "POST" });
+
+    // onRequest runs before the guard's try, so an unguarded throw here does not
+    // even reach the fault path: Hono answers with its plain-text default and no
+    // request id at all.
+    expect(res.status).toBe(200);
     expect(res.headers.get("x-request-id")).toBeTruthy();
   });
 });

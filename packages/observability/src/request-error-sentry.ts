@@ -60,13 +60,32 @@ function faultIdentity(cause: unknown): string | undefined {
   if (cause === undefined) return undefined;
   try {
     if (cause instanceof Error) {
-      return cause.stack ?? `${cause.name}: ${cause.message}`;
+      return errorIdentity(cause);
     }
     // A non-Error throw has no stack to give; naming the shape still beats silence.
     return `non-Error thrown (${typeof cause}): ${String(cause)}`;
   } catch {
-    return `non-Error thrown (${typeof cause}): <unrepresentable>`;
+    // `String()` on a null-prototype object and a throwing `toString` both land
+    // here. `typeof` cannot throw, so this label is always constructible.
+    return `unrepresentable thrown value (${typeof cause})`;
   }
+}
+
+/**
+ * `.stack` is a getter and can throw, but `name`/`message` normally still read.
+ * Losing the frames is survivable; discarding the error's identity as well would
+ * report a genuine Error as an anonymous non-Error, which is worse than useless.
+ */
+function errorIdentity(cause: Error): string {
+  try {
+    const stack = cause.stack;
+    if (stack) {
+      return stack;
+    }
+  } catch {
+    // Frames are gone; identity below is still worth having.
+  }
+  return `${cause.name}: ${cause.message}`;
 }
 
 /**
