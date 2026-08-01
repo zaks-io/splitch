@@ -28,7 +28,11 @@ describe("OAuth revoke route", () => {
     const res = await app.request("/oauth2/revoke", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: form({ token: "unknown-refresh-token", token_type_hint: "refresh_token" }),
+      body: form({
+        client_id: "splitch-cli",
+        token: "unknown-refresh-token",
+        token_type_hint: "refresh_token",
+      }),
     });
 
     expect(res.status).toBe(400);
@@ -49,7 +53,7 @@ describe("OAuth revoke route", () => {
                 providerSessionId: "session_workos",
                 userId: "user_workos",
                 providerOrganizationId: "org_selected",
-                selectedAppScope: "app:app_selected:owner",
+                selectedAppSelector: "app_selected",
               }
             : null,
         rotate: async () => {},
@@ -60,7 +64,11 @@ describe("OAuth revoke route", () => {
     const res = await app.request("/oauth2/revoke", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: form({ token: refreshToken, token_type_hint: "refresh_token" }),
+      body: form({
+        client_id: "splitch-cli",
+        token: refreshToken,
+        token_type_hint: "refresh_token",
+      }),
     });
 
     expect(res.status).toBe(200);
@@ -97,7 +105,8 @@ describe("OAuth revoke route", () => {
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: form({
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-          device_code: await selectedDeviceCode("device-code", "app_selected", "owner"),
+          client_id: "splitch-cli",
+          device_code: await selectedDeviceCode("device-code", "app_selected"),
           scope: "app:app_selected:owner",
         }),
       });
@@ -108,7 +117,11 @@ describe("OAuth revoke route", () => {
       const revokeRes = await app.request("/oauth2/revoke", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: form({ token: refresh_token, token_type_hint: "refresh_token" }),
+        body: form({
+          client_id: "splitch-cli",
+          token: refresh_token,
+          token_type_hint: "refresh_token",
+        }),
       });
 
       expect(revokeRes.status).toBe(200);
@@ -146,6 +159,7 @@ function selectedMembershipRepo(): MembershipAuthorityRepo {
       listOrgMembershipsForUser: async () => [{ orgId: "org_selected", role: "owner" }],
       listAppsForOrg: async () => [{ id: "app_selected", key: "selected-app" }],
       getAppMembership: async () => ({ role: "owner" }),
+      getOrg: async () => null,
     },
   } as unknown as MembershipAuthorityRepo;
 }

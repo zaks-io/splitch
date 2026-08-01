@@ -4,11 +4,17 @@ import { findCommand } from "./command-registry.js";
 import { parseInvocation } from "./parse-args.js";
 import { executeInvocation } from "./execute.js";
 import { EXIT_OK } from "./exit-codes.js";
-import { createAppResponse, FakeCliTransport, storedCredential } from "./test-fixtures.js";
+import {
+  createAppResponse,
+  FakeCliTransport,
+  oauthTokenMint,
+  storedCredential,
+} from "./test-fixtures.js";
 
 describe("executeInvocation", () => {
   it("calls apps_create with POST", async () => {
     const transport = new FakeCliTransport([
+      oauthTokenMint(),
       {
         match: (request) => request.url.includes("/orgs/org_1/apps") && request.method === "POST",
         status: 200,

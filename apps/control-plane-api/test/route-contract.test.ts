@@ -115,16 +115,40 @@ describe("control-plane route contract", () => {
     expect(((await privacy.json()) as ErrorResponse).code).toBe("UNAUTHORIZED");
   });
 
-  it("limits organization discovery to the token's scope", async () => {
-    const jwt = await token([`org:${PRIMARY.orgId}:member`]);
+  async function listOrgIds(jwt: string): Promise<string[]> {
     const response = await h.app.request("/orgs", {
       headers: { authorization: `Bearer ${jwt}` },
     });
-
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      items: [expect.objectContaining({ id: PRIMARY.orgId, name: PRIMARY.orgName })],
-    });
+    const body = (await response.json()) as { items: Array<{ id: string }> };
+    return body.items.map((org) => org.id).sort();
+  }
+
+  it("shows a device_flow cold-start token every Organization it is a member of", async () => {
+    // The cold-start token carries no scopes at all; filtering by them would
+    // return an empty list and deadlock the first step of every agent journey.
+    const coldStart = await token([], USER, "device_flow");
+
+    expect(await listOrgIds(coldStart)).toEqual([PRIMARY.orgId, SECONDARY.orgId].sort());
+  });
+
+  it("keeps the scope narrowing for doors that cannot rebind", async () => {
+    // A device_flow session can rebind to any of its Orgs through the refresh
+    // grant, so listing them grants it nothing. A refresh-less token (claim
+    // ceremony, client_credentials) is genuinely narrowed by its scopes, so
+    // discovery must not hand it the Orgs it was not scoped to.
+    const narrowed = await token([`org:${PRIMARY.orgId}:member`], USER, "id_jag");
+
+    expect(await listOrgIds(narrowed)).toEqual([PRIMARY.orgId]);
+  });
+
+  it("never lets a scope widen discovery past live membership", async () => {
+    // A stranger sees nothing regardless of what its scopes claim, on either door.
+    const stranger = await token([`org:${PRIMARY.orgId}:owner`], OUTSIDER);
+    const strangerDeviceFlow = await token([`org:${PRIMARY.orgId}:owner`], OUTSIDER, "device_flow");
+
+    expect(await listOrgIds(stranger)).toEqual([]);
+    expect(await listOrgIds(strangerDeviceFlow)).toEqual([]);
   });
 
   it("serves generated OpenAPI publicly and unavailable privacy workflows as typed errors", async () => {
@@ -220,7 +244,7 @@ describe("control-plane route contract", () => {
   });
 });
 
-function token(scopes: string[], userId = USER): Promise<string> {
+function token(scopes: string[], userId = USER, authDoor?: string): Promise<string> {
   const now = Math.floor(NOW_MS / 1000);
   return h.signer.sign({
     sub: userId,
@@ -229,6 +253,7 @@ function token(scopes: string[], userId = USER): Promise<string> {
     iat: now,
     exp: now + 3600,
     scopes,
+    ...(authDoor ? { auth_door: authDoor } : {}),
   });
 }
 

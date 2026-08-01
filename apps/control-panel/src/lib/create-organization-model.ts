@@ -1,8 +1,9 @@
 import {
   deriveOrganizationSlug,
   isReservedOrganizationSlug,
-  ORGANIZATION_SLUG_MAX_LENGTH,
-  ORGANIZATION_SLUG_MIN_LENGTH,
+  SLUG_MAX_LENGTH,
+  SLUG_MIN_LENGTH,
+  SLUG_PATTERN,
 } from "@splitch/contracts";
 
 export interface CreateOrganizationDraft {
@@ -14,8 +15,6 @@ export interface CreateOrganizationIssue {
   readonly path: "name" | "slug";
   readonly message: string;
 }
-
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const emptyOrganizationDraft: CreateOrganizationDraft = { name: "", slug: "" };
 
@@ -32,15 +31,15 @@ export function draftOrganizationIssues(draft: CreateOrganizationDraft): CreateO
   const slug = draft.slug.trim();
   if (slug.length === 0) {
     issues.push({ path: "slug", message: "Give the Organization a URL handle." });
-  } else if (slug.length < ORGANIZATION_SLUG_MIN_LENGTH) {
+  } else if (slug.length < SLUG_MIN_LENGTH) {
     issues.push({
       path: "slug",
-      message: `Use at least ${ORGANIZATION_SLUG_MIN_LENGTH} characters.`,
+      message: `Use at least ${SLUG_MIN_LENGTH} characters.`,
     });
-  } else if (slug.length > ORGANIZATION_SLUG_MAX_LENGTH) {
+  } else if (slug.length > SLUG_MAX_LENGTH) {
     issues.push({
       path: "slug",
-      message: `Use at most ${ORGANIZATION_SLUG_MAX_LENGTH} characters.`,
+      message: `Use at most ${SLUG_MAX_LENGTH} characters.`,
     });
   } else if (!SLUG_PATTERN.test(slug)) {
     issues.push({

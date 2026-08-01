@@ -8,6 +8,7 @@ import {
   flagConfigResponse,
   flagRecord,
   FakeCliTransport,
+  oauthTokenMint,
   promoteResponse,
   startRunResponse,
   storedCredential,
@@ -24,6 +25,7 @@ describe("api command exit codes", () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
+      oauthTokenMint(),
       {
         match: (request) => request.url.includes("/orgs/org_1/apps") && request.method === "POST",
         status: 200,
@@ -36,7 +38,9 @@ describe("api command exit codes", () => {
       fetch: transport.fetch,
     });
     expect(code).toBe(EXIT_OK);
-    expect(transport.requests[0]?.authorization).toBe(authHeader());
+    // apps_create rebinds to the target Org, so the API call carries the
+    // freshly minted org-bound token, not the stored default.
+    expect(transport.requests.at(-1)?.authorization).toBe("Bearer refreshed-access-token");
   });
 
   it("flags create returns 0 on success", async () => {

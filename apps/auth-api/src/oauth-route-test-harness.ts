@@ -23,6 +23,7 @@ const emptyMembershipRepo = {
     listOrgMembershipsForUser: async () => [],
     listAppsForOrg: async () => [],
     getAppMembership: async () => null,
+    getOrg: async () => null,
   },
 } satisfies MembershipAuthorityRepo;
 
@@ -39,11 +40,10 @@ export function form(body: Record<string, string>): string {
 
 export function selectedDeviceCode(
   deviceCode: string,
-  selectedAppSelector: string,
-  requestedRole: "owner" | "admin" | "member",
+  selectedAppSelector: string | null,
 ): Promise<string> {
   return sealDeviceGrant(
-    { deviceCode, selectedAppSelector, requestedRole, expiresAt: 1_780_000_300_000 },
+    { deviceCode, selectedAppSelector, expiresAt: 1_780_000_300_000 },
     "test-access-secret",
   );
 }

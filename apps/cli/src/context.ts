@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { SplitchCliError } from "./errors.js";
 
-export interface SplitchConfig {
+interface SplitchConfig {
   readonly version: 1;
   readonly app?: string;
   readonly environment?: string;
@@ -73,19 +73,22 @@ export function requireEnvironmentScope(
 
 export async function writeNearestConfig(
   cwd: string,
-  update: Partial<Pick<SplitchConfig, "app" | "environment">>,
+  update: { app?: string; environment?: string | null },
 ): Promise<string> {
   // Update the config the read path (discoverConfig) would resolve, walking
   // ancestors so `splitch use` in a subdirectory edits the project config
   // instead of shadowing it with a partial cwd-local file that silently drops
   // the inherited App scope. Fall back to cwd only when none exists.
+  // `environment: null` explicitly clears the stored value (an App switch
+  // invalidates the old App's Environment); undefined leaves it unchanged.
   const discovered = await discoverConfig(cwd);
   const path = discovered?.path ?? join(cwd, ".splitch", "config.json");
   const existing: SplitchConfig = discovered?.config ?? { version: 1 };
   const next: SplitchConfig = {
     version: 1,
     app: update.app ?? existing.app,
-    environment: update.environment ?? existing.environment,
+    environment:
+      update.environment === null ? undefined : (update.environment ?? existing.environment),
   };
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(next, null, 2)}\n`);

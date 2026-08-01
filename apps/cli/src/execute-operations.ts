@@ -1,5 +1,6 @@
 import { ErrorCodeSchema, type ErrorResponse, getRoute } from "@splitch/contracts";
 import { createSplitchClient } from "@splitch/sdk";
+import type { TokenBinding } from "./auth-binding.js";
 import { withAuthorizationRetry } from "./auth.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
@@ -65,15 +66,19 @@ export async function executeFlagsVerify(
 
   try {
     let sdkVerifyError: string | undefined;
-    const clientKeyResult = await withAuthorizationRetry(deps, async (authorization) => {
-      const sdks = createOperationSdks(deps);
-      const result = await sdks["control-plane-api"].callOperationById(
-        "client_key_get",
-        { appId: context.appId, environmentId: context.environmentId },
-        { authorization },
-      );
-      return { status: result.ok ? 200 : result.status, value: result };
-    });
+    const clientKeyResult = await withAuthorizationRetry(
+      deps,
+      async (authorization) => {
+        const sdks = createOperationSdks(deps);
+        const result = await sdks["control-plane-api"].callOperationById(
+          "client_key_get",
+          { appId: context.appId, environmentId: context.environmentId },
+          { authorization },
+        );
+        return { status: result.ok ? 200 : result.status, value: result };
+      },
+      operationBinding({ appId: context.appId }),
+    );
     if (!clientKeyResult.ok) {
       emit(io, invocation.flags.json, clientKeyResult.error);
       writeServerError(io, clientKeyResult.error);
@@ -157,6 +162,22 @@ export async function executeEnvPolicySet(
   );
 }
 
+/**
+ * The token binding an operation needs, derived from the same identifiers its
+ * route path carries: an App-scoped path needs an app-bound token, an
+ * Org-scoped path an org-bound one, and everything else (orgs list/create —
+ * the cold-start surface) runs on whatever session token exists.
+ */
+function operationBinding(input: Record<string, unknown>): TokenBinding | undefined {
+  if (typeof input.appId === "string" && input.appId) {
+    return { kind: "app", selector: input.appId };
+  }
+  if (typeof input.orgId === "string" && input.orgId) {
+    return { kind: "org", selector: input.orgId };
+  }
+  return undefined;
+}
+
 export async function executeApiOperation(
   operationId: string,
   input: Record<string, unknown>,
@@ -166,20 +187,24 @@ export async function executeApiOperation(
   project?: (data: unknown) => unknown,
 ): Promise<CliResult> {
   try {
-    const payload = await withAuthorizationRetry(deps, async (authorization) => {
-      const route = getRoute(operationId);
-      if (!route) {
-        throw new SplitchCliError({
-          code: "CLI_OPERATION_UNKNOWN",
-          causeSummary: `The operation ${operationId} is not registered`,
-          remediation: "Use a command backed by a registered operation",
-        });
-      }
-      const sdks = createOperationSdks(deps);
-      const sdk = sdkForOwner(sdks, route.owner);
-      const result = await sdk.callOperationById(operationId, input, { authorization });
-      return { status: result.ok ? 200 : result.status, value: result };
-    });
+    const payload = await withAuthorizationRetry(
+      deps,
+      async (authorization) => {
+        const route = getRoute(operationId);
+        if (!route) {
+          throw new SplitchCliError({
+            code: "CLI_OPERATION_UNKNOWN",
+            causeSummary: `The operation ${operationId} is not registered`,
+            remediation: "Use a command backed by a registered operation",
+          });
+        }
+        const sdks = createOperationSdks(deps);
+        const sdk = sdkForOwner(sdks, route.owner);
+        const result = await sdk.callOperationById(operationId, input, { authorization });
+        return { status: result.ok ? 200 : result.status, value: result };
+      },
+      operationBinding(input),
+    );
     if (!payload.ok) {
       emit(io, invocation.flags.json, payload.error);
       writeServerError(io, payload.error);

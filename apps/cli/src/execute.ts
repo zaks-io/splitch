@@ -1,6 +1,6 @@
 import type { CliCommandDefinition } from "./command-registry.js";
 import { findCommand } from "./command-registry.js";
-import { resolveContext, writeNearestConfig } from "./context.js";
+import { resolveContext } from "./context.js";
 import { consoleIo, emit } from "./execute-io.js";
 import {
   executeApiOperation,
@@ -60,17 +60,26 @@ async function executeMeta(
         env: deps.env,
         cwd: deps.cwd,
       });
-      if (!context.appId) {
-        writeCliError(io, {
-          code: "CLI_SCOPE_UNRESOLVED",
-          causeSummary: "Login requires a selected App",
-          remediation: "Pass --app with an App ID or slug, or set SPLITCH_APP",
-        });
-        return { exitCode: EXIT_USAGE };
-      }
-      const session = await loginWithDeviceFlow(deps, context.appId);
-      const payload = { principal: session.principal };
+      // Cold start is the first-class path: no App exists yet, so none can be
+      // required. A resolved App context still binds the session to it.
+      const session = await loginWithDeviceFlow(deps, context.appId ?? null);
+      const payload = {
+        principal: session.principal,
+        selectedAppId: session.selectedAppId,
+        nextSteps: session.selectedAppId
+          ? ["splitch use --app <app> --env dev", "splitch flags list"]
+          : [
+              "splitch orgs list",
+              'splitch orgs create --name "<name>"',
+              'splitch apps create <org-id> --name "<name>"',
+              "splitch use --app <app> --env dev",
+            ],
+      };
       emit(io, invocation.flags.json, payload);
+      if (!invocation.flags.json) {
+        io.error(`Logged in as ${session.principal.email}.`);
+        io.error(`Next: ${payload.nextSteps.join(" | ")}`);
+      }
       return { exitCode: EXIT_OK, payload };
     }
     case "logout": {
@@ -80,21 +89,8 @@ async function executeMeta(
       return { exitCode: EXIT_OK, payload: { loggedOut: true } };
     }
     case "use": {
-      if (!invocation.flags.app && !invocation.flags.env) {
-        writeCliError(io, {
-          code: "CLI_USAGE_INVALID",
-          causeSummary: "splitch use requires an App or Environment selection",
-          remediation: "Pass --app, --env, or both",
-        });
-        return { exitCode: EXIT_USAGE };
-      }
-      const path = await writeNearestConfig(deps.cwd ?? process.cwd(), {
-        app: invocation.flags.app,
-        environment: invocation.flags.env,
-      });
-      const payload = { path, app: invocation.flags.app, environment: invocation.flags.env };
-      emit(io, invocation.flags.json, payload);
-      return { exitCode: EXIT_OK, payload };
+      const { executeUse } = await import("./execute-use.js");
+      return executeUse(invocation, deps, io);
     }
     case "context": {
       const context = await resolveContext({

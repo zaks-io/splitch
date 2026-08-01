@@ -41,6 +41,19 @@ user or agent onboarding path.
 A token may carry multiple App scopes (e.g. user is admin on two Apps). Org-level operations require
 `org:{org_id}:owner` or `org:{org_id}:admin`.
 
+**Principal-keyed discovery:** `GET /orgs` is the one collection whose tenant key is the principal
+itself rather than a path id. It answers "which Organizations am I a member of?" from live D1
+membership, because the token a cold-start device login mints carries no scopes — filtering by them
+would return an empty list and deadlock the first step of every agent journey.
+
+The scope filter is dropped **only for the `device_flow` door**, and only because that door's premise
+holds there: its refresh token rebinds to any of the principal's Organizations on demand, so listing
+them exposes no reach the holder does not already have. Doors that mint a refresh-less access token
+(the claim ceremony, `client_credentials`) cannot rebind, so their scopes are a real narrowing and
+`GET /orgs` keeps intersecting against them. Live membership is the floor for every door: a scope
+naming an Organization the principal does not belong to never widens the result. Every other
+Organization route co-scopes on `:orgId` as usual.
+
 **Token validation at the selected protected resource:**
 
 1. Verify JWT signature as RS256 against the configured Auth API `AUTH_JWKS_URI`
@@ -146,7 +159,9 @@ deploying, and missing secrets or replay bindings fail closed.
 
 ## Revocation
 
-- `/oauth2/revoke` (RFC 7009): revokes a resource access token or refresh token
+- `/oauth2/revoke` (RFC 7009): revokes a resource access token or refresh token. Requires a
+  first-party `client_id`, like every other OAuth endpoint: revocation destroys authority, so
+  it must not be the one door that accepts an unidentified caller
 - `POST /agent/event/notify`: receives provider-signed SET (Security Event Token) for session revocation
 - Killing the WorkOS user session revokes agent reach (agent is that user)
 

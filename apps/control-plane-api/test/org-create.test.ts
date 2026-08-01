@@ -187,18 +187,28 @@ describe("organizations_create", () => {
     });
     const created = (await create.json()) as OrganizationResponse;
 
-    // `organizations_list` intersects live D1 membership with the token's scopes,
-    // so reading a just-created Org needs a token re-minted to carry its scope —
-    // the same re-issue a real client performs after create.
-    const jwt = await token({
-      userId: ALICE.userId,
-      scopes: [`org:${ALICE.orgId}:owner`, `org:${created.id}:owner`],
-    });
-    const list = await request("/orgs", jwt, { method: "GET" });
+    // No token re-mint: the CLI's device_flow session reads `/orgs` from live
+    // membership, so the Org it just created is visible immediately. Without
+    // this, `splitch orgs create` would be followed by an empty `orgs list`.
+    const coldStart = await token({ userId: ALICE.userId, scopes: [], authDoor: "device_flow" });
+    const list = await request("/orgs", coldStart, { method: "GET" });
     const body = (await list.json()) as { items: OrganizationResponse[] };
 
     expect(list.status).toBe(200);
     expect(body.items.map((org) => org.id)).toContain(created.id);
+  });
+
+  it("lists Organizations for a scopeless cold-start token", async () => {
+    // The token a fresh `splitch login` mints carries no scopes at all. If
+    // `/orgs` filtered on them, the first step of every agent journey would
+    // return an empty list and the CLI could never find an Org to bind to.
+    const coldStart = await token({ userId: ALICE.userId, scopes: [], authDoor: "device_flow" });
+
+    const list = await request("/orgs", coldStart, { method: "GET" });
+    const body = (await list.json()) as { items: OrganizationResponse[] };
+
+    expect(list.status).toBe(200);
+    expect(body.items.map((org) => org.id)).toEqual([ALICE.orgId]);
   });
 
   it("hides one principal's new Organization from an unrelated principal", async () => {

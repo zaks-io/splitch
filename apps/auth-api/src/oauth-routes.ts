@@ -3,7 +3,12 @@ import { verifyAccessToken } from "./access-token";
 import { accessTokenJwks } from "./access-token-key";
 import { authMarkdown } from "./auth-markdown";
 import { DEVICE_CODE_GRANT, type DeviceFlowPort, REFRESH_TOKEN_GRANT } from "./device-flow";
-import { authorizeDevice, exchangeDeviceCode, exchangeRefreshToken } from "./device-oauth";
+import {
+  authorizeDevice,
+  exchangeDeviceCode,
+  exchangeRefreshToken,
+  requireFirstPartyClient,
+} from "./device-oauth";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
 import { OAuthError, renderOAuthError } from "./oauth-errors";
@@ -108,6 +113,9 @@ export function mountOAuthRoutes(app: Hono, deps: OAuthRouteDeps): void {
     }
 
     try {
+      // Every other OAuth endpoint identifies its caller; revoke is the one
+      // that destroys authority, so it holds the same first-party gate.
+      requireFirstPartyClient(parsed.data.client_id);
       const actor = await verifyRevocableAccessToken(deps, parsed.data.token, nowSeconds());
       if (actor) {
         await deps.revocations.revoke(actor.userId, actor.expiresAt - nowSeconds());

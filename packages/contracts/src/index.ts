@@ -160,8 +160,6 @@ export { type ControlPlaneRpcApp, controlPlaneRpcApp } from "./openapi-rpc";
 export {
   deriveOrganizationSlug,
   isReservedOrganizationSlug,
-  ORGANIZATION_SLUG_MAX_LENGTH,
-  ORGANIZATION_SLUG_MIN_LENGTH,
   OrganizationSlugSchema,
   RESERVED_ORGANIZATION_SLUGS,
 } from "./organization-slug";
@@ -263,6 +261,7 @@ export {
   approvalReviewOutcomes,
   approvalTargetTypes,
 } from "./routes/route-shapes-approvals";
+export { SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SLUG_PATTERN, SlugSchema } from "./slug";
 export type {
   ActivationRow,
   CupedCovariateRow,

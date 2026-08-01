@@ -61,7 +61,7 @@ describe("Door C discovery and device flow", () => {
     expect(skill.status).toBe(200);
     expect(skill.headers.get("content-type")).toContain("text/markdown");
     const skillText = await skill.text();
-    expect(skillText).toContain("one App ID or slug selector");
+    expect(skillText).toContain("App ID or slug selector optional");
     expect(skillText).not.toContain("same scope");
     expect(skillText).not.toContain("ID-JAG");
   });
@@ -116,6 +116,7 @@ describe("Door C discovery and device flow", () => {
     expect((await before.json()) as { code: string }).toMatchObject({ code: "FORBIDDEN" });
 
     const revoke = await formPost(app, "/oauth2/revoke", {
+      client_id: "splitch-cli",
       token: accessToken,
       token_type_hint: "access_token",
     });
@@ -131,6 +132,7 @@ describe("Door C discovery and device flow", () => {
     const { deviceCode, refreshToken } = await mintDeviceToken(app);
 
     const revoke = await formPost(app, "/oauth2/revoke", {
+      client_id: "splitch-cli",
       token: refreshToken,
       token_type_hint: "refresh_token",
     });

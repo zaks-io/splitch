@@ -13,6 +13,12 @@ interface DeviceFlowCredential {
   readonly refreshToken: string;
   readonly accessToken: string;
   readonly accessTokenExpiresAt: string;
+  /**
+   * What `accessToken` is bound to: "" (unbound cold-start token),
+   * `app:<app_id>`, or `org:<selector>`. Absent on files written before
+   * rebinding existed — treated as the legacy app default.
+   */
+  readonly accessTokenBinding?: string;
   readonly selectedAppId?: string;
 }
 
