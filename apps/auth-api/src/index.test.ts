@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { makeEphemeralAccessTokenPrivateJwk } from "./access-token-key";
 import type { AuthApiEnv } from "./env";
 import worker from "./index";
 import { FIXTURE_OTP } from "./otp";
@@ -22,8 +23,15 @@ import { FIXTURE_TURNSTILE_TOKEN } from "./turnstile";
 
 let local: LocalBindings;
 let env: AuthApiEnv;
+/**
+ * Hosted targets sign RS256, so the fixture must be a real RSA private JWK. An
+ * opaque placeholder here used to boot fine and fail on every mint, which is the
+ * shape production actually shipped in.
+ */
+let hostedAccessTokenSecret: string;
 
 beforeAll(async () => {
+  hostedAccessTokenSecret = await makeEphemeralAccessTokenPrivateJwk();
   local = await makeLocalBindings();
   env = {
     DB: local.d1,
@@ -132,7 +140,7 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
       {
         ...env,
         SPLITCH_PLATFORM_TARGET: "shared-preview",
-        ACCESS_TOKEN_SECRET: "test-access-token-secret",
+        ACCESS_TOKEN_SECRET: hostedAccessTokenSecret,
         TURNSTILE_SECRET: "test-turnstile-secret",
         WORKOS_API_KEY: "test-workos-api-key",
         WORKOS_CLIENT_ID: "test-workos-client-id",
@@ -217,5 +225,74 @@ describe("index.ts: module-scoped fixtures persist state across requests", () =>
 
     expect(res.status).toBe(500);
     expect(await rowCount("organizations")).toBe(beforeOrganizations);
+  });
+});
+
+function hostedEnvWith(overrides: Partial<AuthApiEnv>): AuthApiEnv {
+  return {
+    ...env,
+    SPLITCH_PLATFORM_TARGET: "production",
+    WORKOS_API_KEY: "test-workos-api-key",
+    WORKOS_CLIENT_ID: "test-workos-client-id",
+    WORKOS_JWKS_URI: "https://api.workos.test/jwks",
+    WORKOS_ISSUER: "https://api.workos.test",
+    TURNSTILE_SECRET: "test-turnstile-secret",
+    ...overrides,
+  };
+}
+
+/**
+ * Production ran with a leftover HMAC ACCESS_TOKEN_SECRET: presence-only
+ * validation booted a Worker that reported healthy and then threw on every mint,
+ * so every door returned an opaque 500. Signability is config, so it has to fail
+ * at config time.
+ */
+describe("index.ts: hosted ACCESS_TOKEN_SECRET signability is config, not a mint-time surprise", () => {
+  /**
+   * A hand-built JWK carrying only the fields a structural check looks at.
+   * WebCrypto refuses it because the CRT parameters are missing, which is the
+   * same invisible outage one shape narrower than the opaque string.
+   */
+  async function jwkWithoutCrtParams(): Promise<string> {
+    const { kty, n, e, d } = JSON.parse(hostedAccessTokenSecret) as Record<string, string>;
+    return JSON.stringify({ kty, n, e, d });
+  }
+
+  it.each([
+    ["an opaque string", async () => "leftover-hmac-secret"],
+    ["a JWK missing its CRT parameters", jwkWithoutCrtParams],
+  ])("rejects %s on health as well as on the doors", async (_label, makeSecret) => {
+    const hostedEnv = hostedEnvWith({ ACCESS_TOKEN_SECRET: await makeSecret() });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // Health too: an operator reaches for it first, and it must not report a
+    // Worker healthy when that Worker cannot sign a single token.
+    for (const path of ["/health", "/agent/identity"]) {
+      const res = await call(
+        { turnstile_token: turnstileToken() },
+        "198.51.100.95",
+        path,
+        hostedEnv,
+      );
+      expect(res.status).toBe(500);
+      expect(await res.json()).toMatchObject({
+        error: "server_error",
+        error_description: "ACCESS_TOKEN_SECRET is not a usable RS256 signing key",
+      });
+    }
+    expect(logged).toHaveBeenCalled();
+  });
+
+  it("accepts an RSA private JWK and serves its public half at the JWKS route", async () => {
+    const request = new Request("https://auth.splitch.test/.well-known/jwks.json");
+    const res = await worker.fetch(
+      request as unknown as Parameters<typeof worker.fetch>[0],
+      hostedEnvWith({ ACCESS_TOKEN_SECRET: hostedAccessTokenSecret }),
+      testCtx,
+    );
+
+    expect(res.status).toBe(200);
+    const { keys } = (await res.json()) as { keys: Array<{ kty: string; alg: string }> };
+    expect(keys[0]).toMatchObject({ kty: "RSA", alg: "RS256" });
   });
 });

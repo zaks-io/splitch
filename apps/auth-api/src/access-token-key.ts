@@ -79,6 +79,43 @@ export function accessTokenJwks(accessSecret: string): AccessTokenJwks | null {
   return key ? { keys: [key] } : null;
 }
 
+export async function accessTokenSigningKey(jwk: JsonWebKey): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+}
+
+/**
+ * Prove the secret can sign, not merely that it parses as a JWK.
+ *
+ * WHY the import and not the field check alone: WebCrypto needs the CRT
+ * parameters (p, q, dp, dq, qi) an exported RSA private JWK carries, so a
+ * hand-built `{kty, n, e, d}` satisfies every structural rule above and then
+ * fails at importKey on the first mint. That is the same invisible outage as an
+ * opaque secret, one shape narrower. Importing is the only check that asks the
+ * question the signer asks.
+ */
+export async function assertAccessTokenSecretCanSign(secret: string): Promise<void> {
+  const jwk = accessTokenPrivateJwkFromSecret(secret);
+  if (!jwk) {
+    throw new Error(
+      "ACCESS_TOKEN_SECRET must be an exported RSA private JWK (JSON), not an opaque string",
+    );
+  }
+  try {
+    await accessTokenSigningKey(jwk);
+  } catch (cause) {
+    throw new Error(
+      "ACCESS_TOKEN_SECRET is not an importable RS256 signing key; export the full private JWK including its CRT parameters (p, q, dp, dq, qi)",
+      { cause },
+    );
+  }
+}
+
 export async function makeEphemeralAccessTokenPrivateJwk(): Promise<string> {
   const pair = await crypto.subtle.generateKey(
     {

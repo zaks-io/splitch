@@ -6,7 +6,7 @@ import { handleConsent } from "./claim-consent-route";
 import type { DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { verifyIdJag } from "./idjag-verify";
-import { OAuthError, renderOAuthError } from "./oauth-errors";
+import { OAuthError, renderDoorFault, renderOAuthError } from "./oauth-errors";
 import { audienceForResource, mountOAuthRoutes, type SmokeClientCredentials } from "./oauth-routes";
 import { type RegisterDeps, registerAnonymous } from "./register";
 import type { RevocationStore } from "./revocation";
@@ -214,14 +214,6 @@ async function handleClaim(deps: AppDeps, request: Request): Promise<Response> {
   } catch (cause) {
     return renderDoorFault(cause);
   }
-}
-
-/** Map any thrown door fault to its OAuth body; an unexpected throw is server_error. */
-function renderDoorFault(cause: unknown): Response {
-  if (cause instanceof OAuthError) {
-    return renderOAuthError(cause);
-  }
-  return renderOAuthError(new OAuthError("server_error", "auth door fault"));
 }
 
 /** Resolve the Bearer actor for a CRUD route, or 401 UNAUTHORIZED (fail-closed). */

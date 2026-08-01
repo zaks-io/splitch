@@ -1,3 +1,4 @@
+import { createPrivateKey } from "node:crypto";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseWranglerConfigFile } from "./wrangler-config.mjs";
@@ -82,7 +83,39 @@ export function validateHostedWorkerSecretEnv(rootDir, envName, env) {
   if (new Set(delegationValues).size !== delegationValues.length) {
     throw new Error("MCP delegation secrets must be distinct across downstream services");
   }
+
+  if (required.includes("ACCESS_TOKEN_SECRET")) {
+    assertRsaPrivateJwkSecret("ACCESS_TOKEN_SECRET", env.ACCESS_TOKEN_SECRET);
+  }
   return required;
+}
+
+/**
+ * Hosted auth signs access tokens RS256 and publishes the public half at
+ * /.well-known/jwks.json, so this secret is a key, not a passphrase. Presence
+ * alone let a leftover HMAC string reach production: the Worker booted, reported
+ * healthy, and threw on every mint. Loading the key here fails the deploy before
+ * the Worker is replaced. The value never appears in the error.
+ */
+function assertRsaPrivateJwkSecret(name, value) {
+  let jwk;
+  try {
+    jwk = JSON.parse(value);
+  } catch {
+    throw new Error(`${name} must be an exported RSA private JWK (JSON), not an opaque string`);
+  }
+  try {
+    createPrivateKey({ key: jwk, format: "jwk" });
+  } catch {
+    // The underlying error names the offending JWK field and can quote its
+    // value, so it is deliberately not forwarded.
+    throw new Error(
+      `${name} is not a loadable RSA private key; export the full private JWK including its CRT parameters (p, q, dp, dq, qi)`,
+    );
+  }
+  if (jwk.kty !== "RSA") {
+    throw new Error(`${name} must be an RSA private JWK; found kty "${jwk.kty}"`);
+  }
 }
 
 function workerConfigs(rootDir) {

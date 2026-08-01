@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -64,6 +65,38 @@ test("hosted secret validation rejects missing and cross-service reused values",
       }),
     /must be distinct across downstream services/,
   );
+});
+
+test("hosted secret validation rejects an ACCESS_TOKEN_SECRET that cannot sign", () => {
+  const root = delegationFixture();
+  writeWorker(root, "auth-api", ["ACCESS_TOKEN_SECRET"]);
+  const values = Object.fromEntries(
+    MCP_DELEGATION_PAIRS.map(({ name }, index) => [name, `delegation-${index}`]),
+  );
+  const validate = (accessTokenSecret) =>
+    validateHostedWorkerSecretEnv(root, "production", {
+      ...values,
+      ACCESS_TOKEN_SECRET: accessTokenSecret,
+    });
+
+  // The shape production actually shipped: an opaque passphrase where an RS256
+  // signing key belongs. It booted healthy and threw on every mint.
+  assert.throws(() => validate("leftover-hmac-secret"), /must be an exported RSA private JWK/);
+
+  const { kty, n, e, d } = rsaPrivateJwk();
+  assert.throws(
+    () => validate(JSON.stringify({ kty, n, e, d })),
+    /not a loadable RSA private key.*CRT parameters/s,
+  );
+  assert.throws(
+    () => validate(JSON.stringify(ed25519PrivateJwk())),
+    /must be an RSA private JWK; found kty "OKP"/,
+  );
+
+  assert.deepEqual(validate(JSON.stringify(rsaPrivateJwk())), [
+    "ACCESS_TOKEN_SECRET",
+    ...MCP_DELEGATION_PAIRS.map(({ name }) => name).sort(),
+  ]);
 });
 
 test("workflow contract rejects an unmapped or unvalidated required secret", () => {
@@ -147,6 +180,19 @@ function delegationFixture({ controlPlaneSecret = "MCP_CONTROL_PLANE_DELEGATION_
   writeWorker(root, "evaluation-api", ["MCP_EVALUATION_DELEGATION_SECRET"]);
   writeWorker(root, "analysis-api", ["MCP_ANALYSIS_DELEGATION_SECRET"]);
   return root;
+}
+
+let cachedRsaJwk;
+/** Generated once: a 2048-bit keygen per assertion dominates this file's runtime. */
+function rsaPrivateJwk() {
+  cachedRsaJwk ??= generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({
+    format: "jwk",
+  });
+  return cachedRsaJwk;
+}
+
+function ed25519PrivateJwk() {
+  return generateKeyPairSync("ed25519").privateKey.export({ format: "jwk" });
 }
 
 function writeWorker(root, name, required) {

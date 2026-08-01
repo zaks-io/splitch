@@ -93,13 +93,8 @@ async function executeMeta(
       return executeUse(invocation, deps, io);
     }
     case "context": {
-      const context = await resolveContext({
-        flags: { app: invocation.flags.app, env: invocation.flags.env },
-        env: deps.env,
-        cwd: deps.cwd,
-      });
-      emit(io, invocation.flags.json, context);
-      return { exitCode: EXIT_OK, payload: context };
+      const { executeContext } = await import("./execute-context.js");
+      return executeContext(invocation, deps, io);
     }
     default:
       return { exitCode: EXIT_USAGE };

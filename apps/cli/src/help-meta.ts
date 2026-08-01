@@ -6,7 +6,7 @@ export const META_DESCRIPTIONS: Readonly<Record<MetaCommand, string>> = {
   login: "Authenticate the control-plane session with the browser device flow.",
   logout: "Remove the stored control-plane session.",
   use: "Select the default App and Environment for the current directory.",
-  context: "Show the resolved App and Environment.",
+  context: "Show the logged-in principal and the resolved App and Environment.",
   health: "Check the Control Plane API health endpoint.",
 };
 

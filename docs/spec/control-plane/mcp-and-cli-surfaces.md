@@ -93,7 +93,7 @@ Resolution order for `app_id` / `environment_id`, first match wins:
 ```
 splitch use --app <app_id|slug> [--env <environment_id|slug>]   # writes nearest .splitch/config.json
 splitch use --env <environment_id|slug>                          # switch Environment within the current App
-splitch context                                                  # print the resolved app/env and where each came from
+splitch context                                                  # print the principal plus the resolved app/env and where each came from; CLI_NOT_AUTHENTICATED (exit 2) with no session
 ```
 
 `splitch use` accepts slugs (human/agent-readable) and resolves them to canonical IDs (CONTEXT.md:
@@ -122,7 +122,7 @@ override. Flags that resolve from context are marked `[ctx]`.
 splitch login [--app <app_id|slug>]  # cold start needs no App; --app pre-binds the session to one
 splitch logout                       # revokes token; removes credential file entry
 splitch use --app <app|slug> [--env <env|slug>]   # set active context (writes .splitch/config.json)
-splitch context                                    # show resolved app/env and source
+splitch context                                    # show principal + resolved app/env and source
 splitch orgs get <org_id>
 splitch apps list --org <org_id>
 splitch apps create --org <org_id> --name <name>   # provisions dev + prod Environments (DX default)
