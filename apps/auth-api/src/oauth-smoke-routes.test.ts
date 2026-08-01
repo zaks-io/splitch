@@ -21,6 +21,7 @@ const emptyMembershipRepo = {
     listOrgMembershipsForUser: async () => [],
     listAppsForOrg: async () => [],
     getAppMembership: async () => null,
+    getOrg: async () => null,
   },
 } satisfies MembershipAuthorityRepo;
 

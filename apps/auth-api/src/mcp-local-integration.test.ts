@@ -50,7 +50,7 @@ describe("local Auth-to-MCP integration", () => {
       new Request("https://auth.splitch.test/oauth2/device_authorization", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ scope: `app:${SELECTED_APP}:owner` }),
+        body: new URLSearchParams({ client_id: "splitch-cli", scope: `app:${SELECTED_APP}:owner` }),
       }),
     );
     expect(authorization.status).toBe(200);
@@ -61,6 +61,7 @@ describe("local Auth-to-MCP integration", () => {
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+          client_id: "splitch-cli",
           device_code: deviceCode,
           scope: `app:${VICTIM_APP}:owner`,
           resource: "https://mcp.splitch.test/mcp",
@@ -75,6 +76,7 @@ describe("local Auth-to-MCP integration", () => {
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+          client_id: "splitch-cli",
           device_code: deviceCode,
           scope: `app:${SELECTED_APP}:owner`,
           resource: "https://mcp.splitch.test/mcp",

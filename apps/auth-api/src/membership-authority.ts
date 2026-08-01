@@ -17,6 +17,7 @@ export interface MembershipAuthorityRepo {
       scope: ReturnType<typeof appScope>,
       userId: string,
     ): PromiseLike<AppMembership>;
+    getOrg(orgId: string): PromiseLike<{ id: string; slug: string | null } | null>;
   };
 }
 
@@ -58,46 +59,69 @@ export function parseRequestedScopes(scope: string | undefined): string[] | unde
   return scope === undefined ? undefined : scope.trim().split(/\s+/).filter(Boolean);
 }
 
-function parseSelectedAppScope(scope: string | undefined): string[] {
+/**
+ * Extract the App selector from a legacy device-grant scope request
+ * (`app:<selector>:<role>`). The role segment is accepted for wire
+ * compatibility but ignored: since the cold-start redesign the role in a
+ * minted scope always comes from live membership, never from the request.
+ */
+export function parseSelectedAppRequest(scope: string | undefined): { selector: string } {
   const requested = parseRequestedScopes(scope);
-  if (requested?.length !== 1 || parseMembershipScope(requested[0] as string)?.kind !== "app") {
+  const parsed = requested?.length === 1 ? parseMembershipScope(requested[0] as string) : null;
+  if (parsed?.kind !== "app") {
     throw new OAuthError("invalid_request", "device grant requires one canonical App scope");
   }
-  return requested;
+  return { selector: parsed.id };
 }
 
-export function parseSelectedAppRequest(scope: string | undefined): {
-  selector: string;
-  role: MembershipRole;
-} {
-  const [selectedScope] = parseSelectedAppScope(scope);
-  const parsed = parseMembershipScope(selectedScope as string);
-  return { selector: parsed?.id as string, role: parsed?.role as MembershipRole };
-}
-
-export async function resolveSelectedAppAuthority(
+/**
+ * Resolve an App selector (ID or slug) to a live app-bound scope, searching
+ * the user's own Org memberships. Authority derives from live D1 membership
+ * keyed by userId — never from a WorkOS Organization grant, which personal
+ * AuthKit sign-ins do not have.
+ */
+export async function resolveAppSelectionForUser(
   repo: MembershipAuthorityRepo,
   userId: string,
-  providerOrganizationId: string,
   selector: string,
-  requestedRole: MembershipRole,
 ): Promise<{ appId: string; scope: string }> {
-  const apps = await repo.identity.listAppsForOrg(providerOrganizationId);
-  const selectedApp =
-    apps.find((app) => app.id === selector) ?? apps.find((app) => app.key === selector);
-  if (!selectedApp) {
-    throw new OAuthError(
-      "invalid_grant",
-      "selected App does not belong to the approving provider Organization",
-    );
+  const orgMemberships = await repo.identity.listOrgMembershipsForUser(userId);
+  for (const orgMembership of orgMemberships) {
+    const apps = await repo.identity.listAppsForOrg(orgMembership.orgId);
+    const selectedApp =
+      apps.find((app) => app.id === selector) ?? apps.find((app) => app.key === selector);
+    if (!selectedApp) continue;
+    const membership = await repo.identity.getAppMembership(appScope(selectedApp.id), userId);
+    if (!membership) {
+      throw new OAuthError("invalid_grant", "selected App is not authorized by live membership");
+    }
+    return { appId: selectedApp.id, scope: scopeFor("app", selectedApp.id, membership.role) };
   }
-  const requestedScope = `app:${selectedApp.id}:${requestedRole}`;
-  const authority = await resolveMembershipAuthority(repo, userId);
-  const [scope] = narrowMembershipAuthority(authority, [requestedScope]);
-  if (!scope) {
-    throw new OAuthError("invalid_grant", "selected App is not authorized by live membership");
+  throw new OAuthError("invalid_grant", "selected App is not reachable by live membership");
+}
+
+/**
+ * Resolve an Organization selector (ID or slug) to a live org-bound scope
+ * from the user's own memberships.
+ */
+export async function resolveOrgSelectionForUser(
+  repo: MembershipAuthorityRepo,
+  userId: string,
+  selector: string,
+): Promise<{ orgId: string; scope: string }> {
+  const orgMemberships = await repo.identity.listOrgMembershipsForUser(userId);
+  const byId = orgMemberships.find((membership) => membership.orgId === selector);
+  if (byId) return { orgId: byId.orgId, scope: scopeFor("org", byId.orgId, byId.role) };
+  for (const membership of orgMemberships) {
+    const org = await repo.identity.getOrg(membership.orgId);
+    if (org?.slug === selector) {
+      return { orgId: membership.orgId, scope: scopeFor("org", membership.orgId, membership.role) };
+    }
   }
-  return { appId: selectedApp.id, scope };
+  throw new OAuthError(
+    "invalid_grant",
+    "selected Organization is not reachable by live membership",
+  );
 }
 
 function scopeFor(kind: "org" | "app", id: string, role: string): string {

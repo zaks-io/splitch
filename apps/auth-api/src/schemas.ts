@@ -47,13 +47,16 @@ export const TokenExchangeRequestSchema = z.object({
 });
 
 /** POST /oauth2/device_authorization: starts Door C's device-code flow. */
-export const DeviceAuthorizationRequestSchema = z
-  .object({
-    client_id: z.string().min(1).optional(),
-    app: z.string().min(1).optional(),
-    scope: z.string().min(1).optional(),
-  })
-  .refine((value) => value.app !== undefined || value.scope !== undefined);
+/**
+ * Cold-start contract: `app` and `scope` are both optional. A login with no
+ * App yet mints an unbound session, which is exactly what `orgs list` /
+ * `orgs create` need (docs/spec/quickstart.md step 1).
+ */
+export const DeviceAuthorizationRequestSchema = z.object({
+  client_id: z.string().min(1),
+  app: z.string().min(1).optional(),
+  scope: z.string().min(1).optional(),
+});
 
 /** POST /oauth2/token: Door C device-code polling grant. */
 export const DeviceTokenRequestSchema = z.object({
@@ -64,13 +67,22 @@ export const DeviceTokenRequestSchema = z.object({
   resource: z.url().optional(),
 });
 
-/** POST /oauth2/token: rotates a Door C provider refresh token. */
-export const RefreshTokenRequestSchema = z.object({
-  grant_type: z.string(),
-  refresh_token: z.string().min(1),
-  client_id: z.string().min(1).optional(),
-  resource: z.url().optional(),
-});
+/**
+ * POST /oauth2/token: rotates a Door C provider refresh token. `app` / `org`
+ * rebind the minted access token to another resource the user's live
+ * membership allows — one human approval, many rebinds; `splitch use` is a
+ * rescope, never a re-login. At most one of the two may be present.
+ */
+export const RefreshTokenRequestSchema = z
+  .object({
+    grant_type: z.string(),
+    refresh_token: z.string().min(1),
+    client_id: z.string().min(1).optional(),
+    resource: z.url().optional(),
+    app: z.string().min(1).optional(),
+    org: z.string().min(1).optional(),
+  })
+  .refine((value) => value.app === undefined || value.org === undefined);
 
 /** POST /oauth2/token: shared-preview smoke client_credentials grant. */
 export const ClientCredentialsRequestSchema = z.object({

@@ -8,7 +8,7 @@ const SESSION = {
   providerSessionId: "session_workos",
   userId: "user_workos",
   providerOrganizationId: "org_workos",
-  selectedAppScope: "app:app_selected:owner",
+  selectedAppSelector: "app_selected",
 };
 
 function staleMissCache(keys: string[] = []): KVNamespace {
@@ -34,6 +34,51 @@ describe("D1 device refresh session store", () => {
       await store.remember("provider-refresh-token", SESSION);
 
       await expect(store.lookup("provider-refresh-token")).resolves.toEqual(SESSION);
+    } finally {
+      await local.dispose();
+    }
+  });
+
+  it("round-trips an unbound cold-start session through the NOT NULL '' columns", async () => {
+    const local = await makeLocalBindings();
+    try {
+      const store = makeD1DeviceRefreshSessionStore(createRepository(local.d1), {
+        cache: staleMissCache(),
+        now: () => NOW_MS,
+      });
+
+      await store.remember("cold-start-token", {
+        ...SESSION,
+        providerOrganizationId: null,
+        selectedAppSelector: null,
+      });
+
+      await expect(store.lookup("cold-start-token")).resolves.toEqual({
+        ...SESSION,
+        providerOrganizationId: null,
+        selectedAppSelector: null,
+      });
+    } finally {
+      await local.dispose();
+    }
+  });
+
+  it("reads a legacy row that stored a full membership scope as its selector", async () => {
+    const local = await makeLocalBindings();
+    try {
+      const store = makeD1DeviceRefreshSessionStore(createRepository(local.d1), {
+        cache: staleMissCache(),
+        now: () => NOW_MS,
+      });
+      await store.remember("legacy-token", SESSION);
+      await local.d1
+        .prepare("UPDATE device_refresh_sessions SET selected_app_scope = ?")
+        .bind("app:app_selected:owner")
+        .run();
+
+      await expect(store.lookup("legacy-token")).resolves.toMatchObject({
+        selectedAppSelector: "app_selected",
+      });
     } finally {
       await local.dispose();
     }
@@ -80,7 +125,7 @@ describe("D1 device refresh session store", () => {
         provider_session_id: "session_workos",
         user_id: "user_workos",
         provider_organization_id: "org_workos",
-        selected_app_scope: "app:app_selected:owner",
+        selected_app_scope: "app_selected",
       });
       expect(row?.refresh_token_hash).not.toBe(rawRefreshToken);
       expect(row?.refresh_token_hash).not.toContain(rawRefreshToken);
@@ -101,12 +146,12 @@ describe("D1 device refresh session store", () => {
       await store.remember("refresh-old", SESSION);
       await store.rotate("refresh-old", "refresh-new", {
         ...SESSION,
-        selectedAppScope: "app:app_selected:member",
+        selectedAppSelector: "app_other",
       });
 
       await expect(store.lookup("refresh-old")).resolves.toBeNull();
       await expect(store.lookup("refresh-new")).resolves.toMatchObject({
-        selectedAppScope: "app:app_selected:member",
+        selectedAppSelector: "app_other",
       });
     } finally {
       await local.dispose();

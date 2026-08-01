@@ -54,6 +54,68 @@ describe("login exit code", () => {
     expect(saved.credential.refreshToken).toBe("fixture-refresh-token");
     expect(saved.credential.selectedAppId).toBe("app_1");
   });
+
+  it("logs in with no App at all and stores an unbound cold-start session", async () => {
+    const { credentialPath } = await makeTempHome();
+    const { app_id: _appId, ...appLessToken } = deviceTokenResponse();
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => request.url.endsWith("/oauth2/device_authorization"),
+        status: 200,
+        body: deviceAuthorizationResponse(),
+      },
+      {
+        match: (request) =>
+          request.url.endsWith("/oauth2/token") && request.body?.grant_type?.includes("device"),
+        status: 200,
+        body: appLessToken,
+      },
+    ]);
+
+    const code = await runCli(["login", "--json"], {
+      credentialPath,
+      cwd: (await makeTempHome()).dir,
+      fetch: transport.fetch,
+    });
+    expect(code).toBe(EXIT_OK);
+    expect(transport.requests[0]?.body?.app).toBeUndefined();
+    const saved = JSON.parse(await readFile(credentialPath, "utf8")) as {
+      credential: { accessTokenBinding: string; selectedAppId?: string };
+    };
+    expect(saved.credential.accessTokenBinding).toBe("");
+    expect(saved.credential.selectedAppId).toBeUndefined();
+  });
+
+  it("surfaces the OAuth error body when device authorization fails", async () => {
+    const { credentialPath } = await makeTempHome();
+    const transport = new FakeCliTransport([
+      {
+        match: (request) => request.url.endsWith("/oauth2/device_authorization"),
+        status: 401,
+        body: { error: "invalid_client", error_description: "Unknown client." },
+      },
+    ]);
+    const stderrSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCli(["login", "--json"], {
+      credentialPath,
+      cwd: (await makeTempHome()).dir,
+      fetch: transport.fetch,
+    });
+    expect(code).not.toBe(EXIT_OK);
+    const stderr = stderrSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(stderr).toContain("invalid_client");
+    expect(stderr).toContain("Unknown client.");
+  });
+});
+
+describe("version flag", () => {
+  it("prints the package version instead of demanding a value", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const code = await runCli(["--version"]);
+    expect(code).toBe(EXIT_OK);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringMatching(/^\d+\.\d+\.\d+/));
+  });
 });
 
 describe("logout exit code", () => {

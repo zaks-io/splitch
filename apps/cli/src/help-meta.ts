@@ -11,7 +11,7 @@ export const META_DESCRIPTIONS: Readonly<Record<MetaCommand, string>> = {
 };
 
 export const META_EXAMPLES: Readonly<Record<MetaCommand, string>> = {
-  login: "splitch login --app checkout",
+  login: "splitch login",
   logout: "splitch logout --json",
   use: "splitch use --app checkout --env dev --json",
   context: "splitch context --json",

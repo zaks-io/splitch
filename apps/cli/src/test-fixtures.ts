@@ -226,6 +226,18 @@ function refreshTokenResponse() {
   };
 }
 
+/**
+ * A refresh-grant mint stub for commands that rebind their token to the Org
+ * or App the operation targets (auth.ts withAuthorizationRetry).
+ */
+export function oauthTokenMint(): FakeResponse {
+  return {
+    match: (request) => request.url.endsWith("/oauth2/token") && request.method === "POST",
+    status: 200,
+    body: refreshTokenResponse(),
+  };
+}
+
 export function storedCredential() {
   return {
     version: 1 as const,

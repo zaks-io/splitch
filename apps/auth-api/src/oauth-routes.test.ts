@@ -49,7 +49,7 @@ describe("OAuth revoke route", () => {
                 providerSessionId: "session_workos",
                 userId: "user_workos",
                 providerOrganizationId: "org_selected",
-                selectedAppScope: "app:app_selected:owner",
+                selectedAppSelector: "app_selected",
               }
             : null,
         rotate: async () => {},
@@ -97,7 +97,8 @@ describe("OAuth revoke route", () => {
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: form({
           grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-          device_code: await selectedDeviceCode("device-code", "app_selected", "owner"),
+          client_id: "splitch-cli",
+          device_code: await selectedDeviceCode("device-code", "app_selected"),
           scope: "app:app_selected:owner",
         }),
       });
@@ -146,6 +147,7 @@ function selectedMembershipRepo(): MembershipAuthorityRepo {
       listOrgMembershipsForUser: async () => [{ orgId: "org_selected", role: "owner" }],
       listAppsForOrg: async () => [{ id: "app_selected", key: "selected-app" }],
       getAppMembership: async () => ({ role: "owner" }),
+      getOrg: async () => null,
     },
   } as unknown as MembershipAuthorityRepo;
 }

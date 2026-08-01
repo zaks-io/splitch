@@ -119,7 +119,7 @@ approved.
 override. Flags that resolve from context are marked `[ctx]`.
 
 ```
-splitch login --app <app_id|slug>    # Auth canonicalizes within the approved WorkOS Organization
+splitch login [--app <app_id|slug>]  # cold start needs no App; --app pre-binds the session to one
 splitch logout                       # revokes token; removes credential file entry
 splitch use --app <app|slug> [--env <env|slug>]   # set active context (writes .splitch/config.json)
 splitch context                                    # show resolved app/env and source

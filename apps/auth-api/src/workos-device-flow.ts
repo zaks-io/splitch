@@ -84,9 +84,6 @@ function deviceTokenResult(json: WorkOsDeviceTokenBody): DeviceTokenResult {
   if (!json.user || typeof json.user.id !== "string") {
     throw new OAuthError("invalid_grant", "device token response missing user");
   }
-  if (typeof json.organization_id !== "string" || !json.organization_id) {
-    throw new OAuthError("invalid_grant", "device token response missing Organization grant");
-  }
   const refreshToken = typeof json.refresh_token === "string" ? json.refresh_token : undefined;
   const providerSessionId = refreshToken ? sessionIdFromTokenBody(json) : undefined;
   if (refreshToken && !providerSessionId) {
@@ -94,7 +91,12 @@ function deviceTokenResult(json: WorkOsDeviceTokenBody): DeviceTokenResult {
   }
   return {
     userId: json.user.id,
-    organizationId: json.organization_id,
+    // Personal AuthKit sign-ins carry no WorkOS Organization; splitch authority
+    // derives from live D1 membership, never from this grant.
+    organizationId:
+      typeof json.organization_id === "string" && json.organization_id
+        ? json.organization_id
+        : undefined,
     refreshToken,
     providerSessionId,
   };
@@ -147,15 +149,21 @@ export function makeWorkOsDeviceFlow(opts: WorkOsDeviceFlowOptions): DeviceFlowP
     );
   }
 
+  function providerClientId(): string {
+    if (!opts.clientId) {
+      throw new OAuthError("server_error", "WorkOS client id is not configured");
+    }
+    return opts.clientId;
+  }
+
   return {
     async authorizeDevice(params) {
-      const clientId = params.clientId ?? opts.clientId;
       const json = await expectJson(
         await fetcher(`${baseUrl}/authorize/device`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            client_id: clientId,
+            client_id: providerClientId(),
             ...(params.scope ? { scope: params.scope } : {}),
           }),
         }),
@@ -164,7 +172,6 @@ export function makeWorkOsDeviceFlow(opts: WorkOsDeviceFlowOptions): DeviceFlowP
     },
 
     async exchangeDeviceCode(params) {
-      const clientId = params.clientId ?? opts.clientId;
       const json = (await expectJson(
         await fetcher(`${baseUrl}/authenticate`, {
           method: "POST",
@@ -172,7 +179,7 @@ export function makeWorkOsDeviceFlow(opts: WorkOsDeviceFlowOptions): DeviceFlowP
           body: new URLSearchParams({
             grant_type: DEVICE_CODE_GRANT,
             device_code: params.deviceCode,
-            client_id: clientId,
+            client_id: providerClientId(),
           }),
         }),
       )) as WorkOsDeviceTokenBody;
@@ -183,7 +190,6 @@ export function makeWorkOsDeviceFlow(opts: WorkOsDeviceFlowOptions): DeviceFlowP
       if (!opts.apiKey) {
         throw new OAuthError("server_error", "WorkOS API key missing for refresh token exchange");
       }
-      const clientId = params.clientId ?? opts.clientId;
       const json = (await expectJson(
         await fetcher(`${baseUrl}/authenticate`, {
           method: "POST",
@@ -191,9 +197,9 @@ export function makeWorkOsDeviceFlow(opts: WorkOsDeviceFlowOptions): DeviceFlowP
           body: JSON.stringify({
             grant_type: REFRESH_TOKEN_GRANT,
             refresh_token: params.refreshToken,
-            client_id: clientId,
+            client_id: providerClientId(),
             client_secret: opts.apiKey,
-            organization_id: params.organizationId,
+            ...(params.organizationId ? { organization_id: params.organizationId } : {}),
           }),
         }),
       )) as WorkOsDeviceTokenBody;

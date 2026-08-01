@@ -38,12 +38,14 @@ describe("WorkOS device flow adapter", () => {
       },
     });
 
-    await flow.authorizeDevice({ clientId: "client_override" });
+    await flow.authorizeDevice({});
 
     const authorizeCall = expectCall(calls[0]);
     expect(authorizeCall.url).toBe("https://api.workos.test/user_management/authorize/device");
     expect(authorizeCall.init.headers).toEqual({ "content-type": "application/json" });
-    expect(JSON.parse(String(authorizeCall.init.body))).toEqual({ client_id: "client_override" });
+    // The configured WorkOS client id is the ONLY id that ever reaches the
+    // provider — forwarding a caller value is how production login broke.
+    expect(JSON.parse(String(authorizeCall.init.body))).toEqual({ client_id: "client_123" });
   });
 
   it("returns the WorkOS session id from the device-token response", async () => {
@@ -67,10 +69,7 @@ describe("WorkOS device flow adapter", () => {
       fetcher,
     });
 
-    const token = await flow.exchangeDeviceCode({
-      deviceCode: "device_123",
-      clientId: "client_123",
-    });
+    const token = await flow.exchangeDeviceCode({ deviceCode: "device_123" });
 
     expect(token).toMatchObject({
       userId: "user_workos",
@@ -150,17 +149,12 @@ describe("WorkOS device flow adapter", () => {
         }),
     });
 
-    await expect(
-      flow.exchangeDeviceCode({
-        deviceCode: "device_123",
-        clientId: "client_123",
-      }),
-    ).rejects.toMatchObject({
+    await expect(flow.exchangeDeviceCode({ deviceCode: "device_123" })).rejects.toMatchObject({
       code: "server_error",
     });
   });
 
-  it("fails device-token exchange without a WorkOS Organization grant", async () => {
+  it("exchanges a device token without a WorkOS Organization grant (personal AuthKit sign-in)", async () => {
     const flow = makeWorkOsDeviceFlow({
       clientId: "client_123",
       fetcher: async () =>
@@ -171,9 +165,12 @@ describe("WorkOS device flow adapter", () => {
         }),
     });
 
-    await expect(
-      flow.exchangeDeviceCode({ deviceCode: "device_123", clientId: "client_123" }),
-    ).rejects.toMatchObject({ code: "invalid_grant" });
+    await expect(flow.exchangeDeviceCode({ deviceCode: "device_123" })).resolves.toMatchObject({
+      userId: "user_workos",
+      organizationId: undefined,
+      refreshToken: "refresh_original",
+      providerSessionId: "session_workos",
+    });
   });
 });
 
@@ -197,7 +194,6 @@ describe("WorkOS refresh flow adapter", () => {
 
     await expect(
       flow.refreshProviderToken({
-        clientId: "client_123",
         refreshToken: "refresh_original",
         organizationId: "org_workos",
       }),
@@ -211,8 +207,31 @@ describe("WorkOS refresh flow adapter", () => {
     expect(JSON.parse(String(calls[0]?.init.body))).toMatchObject({
       grant_type: "refresh_token",
       organization_id: "org_workos",
+      client_id: "client_123",
       client_secret: "sk_test_123",
     });
+  });
+
+  it("omits organization_id when the session has no WorkOS Organization", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const flow = makeWorkOsDeviceFlow({
+      clientId: "client_123",
+      apiKey: "sk_test_123",
+      baseUrl: "https://api.workos.test/user_management",
+      fetcher: async (input, init) => {
+        calls.push({ url: String(input), init: init ?? {} });
+        return Response.json({
+          user: { id: "user_workos" },
+          access_token: jwtWithClaims({ sub: "user_workos", sid: "session_workos" }),
+          refresh_token: "refresh_rotated",
+        });
+      },
+    });
+
+    await expect(
+      flow.refreshProviderToken({ refreshToken: "refresh_original" }),
+    ).resolves.toMatchObject({ userId: "user_workos", refreshToken: "refresh_rotated" });
+    expect(JSON.parse(String(calls[0]?.init.body))).not.toHaveProperty("organization_id");
   });
 
   it("does not rotate the refresh token before surfacing a failed session revoke", async () => {

@@ -1469,7 +1469,7 @@ Flags:
   -h, --help   [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch login --app checkout",
+  splitch login",
     "logout": "Remove the stored control-plane session.
 
 Usage:

@@ -5,8 +5,14 @@ const DEVICE_REFRESH_SESSION_PREFIX = "device-refresh-session:";
 export interface DeviceRefreshSession {
   providerSessionId: string;
   userId: string;
-  providerOrganizationId: string;
-  selectedAppScope: string;
+  /** Null for personal AuthKit sign-ins, which carry no WorkOS Organization. */
+  providerOrganizationId: string | null;
+  /**
+   * The App the login named, as its canonical ID — or null for a cold-start
+   * session bound to nothing yet. Roles are never stored: authority is
+   * reintersected with live membership at every mint.
+   */
+  selectedAppSelector: string | null;
 }
 
 export interface DeviceRefreshSessionStore {
@@ -34,7 +40,12 @@ export function makeD1DeviceRefreshSessionStore(
       const hash = await refreshTokenHash(refreshToken);
       await repo.identity.rememberDeviceRefreshSession({
         refreshTokenHash: hash,
-        ...session,
+        providerSessionId: session.providerSessionId,
+        userId: session.userId,
+        // The D1 columns are NOT NULL DEFAULT '' (migration 0012); '' is the
+        // storage encoding of "unbound", translated only at this seam.
+        providerOrganizationId: session.providerOrganizationId ?? "",
+        selectedAppScope: session.selectedAppSelector ?? "",
         createdAt: new Date(opts.now()).toISOString(),
       });
       await putCache(opts.cache, cacheKey(hash), session);
@@ -49,8 +60,8 @@ export function makeD1DeviceRefreshSessionStore(
       const session = {
         providerSessionId: row.providerSessionId,
         userId: row.userId,
-        providerOrganizationId: row.providerOrganizationId,
-        selectedAppScope: row.selectedAppScope,
+        providerOrganizationId: row.providerOrganizationId || null,
+        selectedAppSelector: selectorFromStoredScope(row.selectedAppScope),
       };
       await putCache(opts.cache, cacheKey(hash), session);
       return session;
@@ -89,6 +100,17 @@ async function putCache(
   } catch {
     // KV is a cache only; D1 remains the consistency authority.
   }
+}
+
+/**
+ * Rows written before the cold-start redesign stored a full membership scope
+ * (`app:<id>:<role>`); new rows store the bare App ID (or '' for unbound).
+ * Either way the App ID is the durable fact — the role is live-resolved.
+ */
+function selectorFromStoredScope(stored: string): string | null {
+  if (!stored) return null;
+  const legacy = /^app:([^:]+):(?:owner|admin|member)$/.exec(stored);
+  return legacy ? (legacy[1] as string) : stored;
 }
 
 async function refreshTokenHash(refreshToken: string): Promise<string> {

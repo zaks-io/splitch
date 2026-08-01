@@ -2,8 +2,8 @@ import { OAuthError } from "./oauth-errors";
 
 interface DeviceGrant {
   deviceCode: string;
-  selectedAppSelector: string;
-  requestedRole: "owner" | "admin" | "member";
+  /** Null: a cold-start login with no App yet; the token mints unbound. */
+  selectedAppSelector: string | null;
   expiresAt: number;
 }
 
@@ -25,10 +25,7 @@ export async function openDeviceGrant(
     const parsed = JSON.parse(decode(payload)) as Partial<DeviceGrant>;
     if (
       typeof parsed.deviceCode !== "string" ||
-      typeof parsed.selectedAppSelector !== "string" ||
-      (parsed.requestedRole !== "owner" &&
-        parsed.requestedRole !== "admin" &&
-        parsed.requestedRole !== "member") ||
+      (typeof parsed.selectedAppSelector !== "string" && parsed.selectedAppSelector !== null) ||
       typeof parsed.expiresAt !== "number" ||
       parsed.expiresAt <= now
     ) {

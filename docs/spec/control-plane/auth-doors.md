@@ -168,19 +168,29 @@ Org — all through the D1 data-access seam (app_id scoping enforced, never bypa
 ## Door C: Device flow (human at terminal / agent no-IdP fallback)
 
 WorkOS device flow. Auth-issuer Worker exposes the standard `device_authorization` and `token`
-endpoints. The client starts with one App ID or slug selector. After approval, Auth API uses the
-WorkOS `organization_id` grant to resolve that selector to an App owned by the same Organization,
-then intersects the canonical App ID with live D1 Org/App membership before constructing the token
-scope. A multi-App User therefore receives one App-bound token and cannot widen the approved
-selection while polling.
+endpoints. The caller's `client_id` must name a registered first-party public client
+(`splitch-cli`); an unknown id fails `invalid_client` naming the id, and the caller's value is
+**never** forwarded to WorkOS — every provider call authenticates as the one configured WorkOS
+client. An App selector at login is **optional**: cold start is the first-class path
+(quickstart.md step 1 — authenticate, then create the Org and App), and a login with no App mints
+an unbound session token, which is exactly the authority `orgs list` / `orgs create` need.
 
-Auth API stores only a hash of the provider refresh token plus its provider session ID, WorkOS User
-and Organization grants, and canonical selected App scope. `grant_type=refresh_token` rotates the
-WorkOS token and reintersects that durable grant with the provider response and live membership
-before every new access-token mint. Missing or changed authority, expired/revoked provider sessions,
-and removed membership fail loud. The CLI stores the resulting **refresh token** in keychain or
-`~/.splitch/credentials.json` (mode 0600). The MCP server does not touch disk or forward the client
-bearer; MCP clients present their exact-resource access token on transport requests.
+**One approval, many rebinds.** The single human approval mints a durable provider session. Each
+access-token mint binds to at most one resource, resolved against live D1 membership keyed by the
+WorkOS User at mint time — never against a WorkOS Organization grant, which personal AuthKit
+sign-ins do not have. `grant_type=refresh_token` accepts an optional `app` or `org` selector (ID
+or slug) to rebind the minted token to another resource the user's live membership allows;
+`splitch use` and per-command scoping are rescopes, never re-logins. The single-binding token
+model and the guard's Org/App co-scope checks are unchanged: a mint for a resource outside live
+membership fails `invalid_grant`, and a grant's App selection cannot be widened while polling.
+
+Auth API stores only a hash of the provider refresh token plus its provider session ID, WorkOS
+User grant (and Organization grant when one exists), and the canonical selected App ID or none.
+Roles are never stored — the scope's role is reintersected with live membership at every mint.
+Missing or changed authority, expired/revoked provider sessions, and removed membership fail
+loud. The CLI stores the resulting **refresh token** in keychain or `~/.splitch/credentials.json`
+(mode 0600). The MCP server does not touch disk or forward the client bearer; MCP clients present
+their exact-resource access token on transport requests.
 
 ## Shared-preview smoke grant: client_credentials
 
