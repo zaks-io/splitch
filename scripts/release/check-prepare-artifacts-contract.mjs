@@ -11,7 +11,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { writeBuildStamp } from "./build-stamp.mjs";
+import { containedPath, writeBuildStamp } from "./build-stamp.mjs";
 import { getReleaseTarget } from "./constants.mjs";
 
 const targetKey = process.argv[2];
@@ -47,12 +47,12 @@ const repoRoot = join(scratchRoot, "repo");
 const packageRoot = join(repoRoot, target.packageDir);
 
 try {
-  cpSync(join(sourceRepoRoot, "scripts/release"), join(repoRoot, "scripts/release"), {
+  cpSync(containedPath(sourceRepoRoot, "scripts/release"), join(repoRoot, "scripts/release"), {
     recursive: true,
   });
   mkdirSync(packageRoot, { recursive: true });
   for (const entry of SCRATCH_SOURCES) {
-    const source = join(sourceRepoRoot, target.packageDir, entry);
+    const source = containedPath(sourceRepoRoot, target.packageDir, entry);
     if (existsSync(source)) {
       cpSync(source, join(packageRoot, entry), {
         recursive: true,

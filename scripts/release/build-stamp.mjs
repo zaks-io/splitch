@@ -1,9 +1,22 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { getReleaseTarget } from "./constants.mjs";
 
 const STAMP_FILENAME = "build-stamp.json";
+
+/**
+ * Resolves segments against a base directory and fails loud if the result
+ * escapes it, so no declared input or argument can reach outside the repo.
+ */
+export function containedPath(baseDir, ...segments) {
+  const base = resolve(baseDir);
+  const resolved = resolve(base, ...segments);
+  if (resolved !== base && !resolved.startsWith(base + sep)) {
+    throw new Error(`path ${resolved} escapes ${base}`);
+  }
+  return resolved;
+}
 
 function collectFiles(root, entryPath, files) {
   const stats = statSync(entryPath);
@@ -12,7 +25,7 @@ function collectFiles(root, entryPath, files) {
     return;
   }
   for (const name of readdirSync(entryPath).sort()) {
-    collectFiles(root, join(entryPath, name), files);
+    collectFiles(root, containedPath(entryPath, name), files);
   }
 }
 
@@ -23,11 +36,11 @@ function collectFiles(root, entryPath, files) {
  */
 export function computeSourceDigest(targetKey, repoRoot) {
   const target = getReleaseTarget(targetKey);
-  const packageRoot = join(repoRoot, target.packageDir);
+  const packageRoot = containedPath(repoRoot, target.packageDir);
   const hash = createHash("sha256");
   const files = [];
   for (const input of target.stampInputs) {
-    const inputPath = join(packageRoot, input);
+    const inputPath = containedPath(repoRoot, target.packageDir, input);
     if (!existsSync(inputPath)) {
       continue;
     }
@@ -66,13 +79,13 @@ export function computeTreeDigest(dir) {
 
 function stampPath(targetKey, repoRoot) {
   const target = getReleaseTarget(targetKey);
-  return join(repoRoot, target.packageDir, "dist", STAMP_FILENAME);
+  return containedPath(repoRoot, target.packageDir, "dist", STAMP_FILENAME);
 }
 
 /** Called by each package's build as its final step; the only stamp writer. */
 export function writeBuildStamp(targetKey, repoRoot) {
   const target = getReleaseTarget(targetKey);
-  const manifest = JSON.parse(readFileSync(join(repoRoot, target.packagePath), "utf8"));
+  const manifest = JSON.parse(readFileSync(containedPath(repoRoot, target.packagePath), "utf8"));
   const stamp = {
     packageName: target.packageName,
     version: manifest.version,
@@ -97,7 +110,7 @@ export function verifyBuildStamp(targetKey, repoRoot) {
     );
   }
   const stamp = JSON.parse(readFileSync(path, "utf8"));
-  const manifest = JSON.parse(readFileSync(join(repoRoot, target.packagePath), "utf8"));
+  const manifest = JSON.parse(readFileSync(containedPath(repoRoot, target.packagePath), "utf8"));
   if (stamp.packageName !== target.packageName || stamp.version !== manifest.version) {
     throw new Error(
       `${target.packageDir} build stamp is for ${stamp.packageName}@${stamp.version} but the manifest is ${target.packageName}@${manifest.version}. Remediation: ${remediation}`,
