@@ -51,6 +51,7 @@ const authResolver: AuthResolver = (request) => {
 function makeHarness(rows?: RowsByPipe) {
   const tinybird = new FakeTinybird(rows);
   const app = createApp({
+    door: "binding",
     authResolver,
     rateLimiter: allowLimiter,
     tinybird,

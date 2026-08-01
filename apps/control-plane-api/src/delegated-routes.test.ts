@@ -53,6 +53,22 @@ describe("delegated control-plane routes", () => {
     expect(forwarded).toHaveLength(0);
   });
 
+  it("refuses before the hop when the path's Environment belongs to another App", async () => {
+    const forwarded: Request[] = [];
+    const analysis = binding(forwarded, Response.json({ stats: [] }));
+
+    // The caller is a legitimate app_1 operator and passes app_1 in the path, so
+    // every co-scope check the generic guard chain can make passes. Only reading
+    // the Environment under app_1's scope catches that env_9 is app_2's.
+    const response = await createApp(deps({ analysis })).request(
+      "/apps/app_1/envs/env_9/experiments/exp_1/results",
+      { headers: { authorization: "Bearer stub" } },
+    );
+
+    expect(response.status).toBe(404);
+    expect(forwarded).toHaveLength(0);
+  });
+
   it("fails loud naming the owner when its binding is missing", async () => {
     const response = await createApp(deps({})).request(RESULTS_PATH, {
       headers: { authorization: "Bearer stub" },
@@ -91,7 +107,23 @@ function deps(options: { analysis?: Fetcher; appId?: string }) {
   return {
     authResolver,
     rateLimiter,
-    repo: {} as Repository,
+    repo: stubRepo(),
     ...(options.analysis ? { delegationBindings: { "analysis-api": options.analysis } } : {}),
   };
+}
+
+/**
+ * `env_9` exists, but under app_2. The read is scoped by App exactly as D1 is
+ * (ADR-0018), so an Environment id from another tenant simply is not found --
+ * which is the whole check.
+ */
+const ENVIRONMENTS = new Set(["app_1/env_1", "app_2/env_9"]);
+
+function stubRepo(): Repository {
+  return {
+    identity: {
+      getEnvironment: async ({ appId }: { appId: string }, environmentId: string) =>
+        ENVIRONMENTS.has(`${appId}/${environmentId}`) ? { id: environmentId } : null,
+    },
+  } as unknown as Repository;
 }

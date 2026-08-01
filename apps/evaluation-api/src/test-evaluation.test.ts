@@ -69,6 +69,8 @@ function makeHarness() {
   const configKv = seededKv();
   const assignmentStore = new RecordingAssignmentStore();
   const app = createApp({
+    // Addressed at the Control Plane, executed here over the binding (ADR-0046).
+    door: "binding",
     authResolver,
     dataPlaneAuthResolver,
     rateLimiter: allowLimiter,

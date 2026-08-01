@@ -1,5 +1,5 @@
 import { createPrivateKey } from "node:crypto";
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseWranglerConfigFile } from "./wrangler-config.mjs";
 
@@ -101,8 +101,30 @@ export async function validateHostedWorkerSecretEnv(rootDir, envName, env, deps 
 }
 
 const TINYBIRD_INGEST_TOKEN = "TINYBIRD_INGEST_TOKEN";
-/** Every Data Source the ingest Worker appends to; see apps/event-ingest-api/src/tinybird.ts. */
-const TINYBIRD_INGEST_DATASOURCES = ["raw_events", "raw_evaluations"];
+/** The Tinybird token whose APPEND scope this secret carries. */
+const TINYBIRD_INGEST_SCOPE = "TOKEN raw_events_ingest APPEND";
+/** A hung Tinybird must not hang the deploy; the probe writes nothing, so retry is free. */
+const TINYBIRD_PROBE_TIMEOUT_MS = 10_000;
+
+/**
+ * The Data Sources this token must reach, read from the Tinybird project rather
+ * than restated here: the `.datasource` files already declare which token appends
+ * to them, so a new ingest Data Source is probed without a second list to update.
+ */
+function tinybirdIngestDatasources(rootDir) {
+  const dir = join(rootDir, "infra", "tinybird", "datasources");
+  const names = readdirSync(dir)
+    .filter((file) => file.endsWith(".datasource"))
+    .filter((file) => readFileSync(join(dir, file), "utf8").includes(TINYBIRD_INGEST_SCOPE))
+    .map((file) => file.replace(/\.datasource$/, ""))
+    .sort();
+  if (names.length === 0) {
+    throw new Error(
+      `no Data Source in ${dir} declares "${TINYBIRD_INGEST_SCOPE}", so ${TINYBIRD_INGEST_TOKEN} cannot be exercised`,
+    );
+  }
+  return names;
+}
 
 /**
  * Presence proved nothing here. A wrong, expired, or under-scoped ingest token
@@ -114,7 +136,8 @@ const TINYBIRD_INGEST_DATASOURCES = ["raw_events", "raw_evaluations"];
  */
 async function assertTinybirdIngestToken(rootDir, envName, consumers, env, fetchImpl) {
   const apiUrl = tinybirdApiUrl(rootDir, envName, consumers);
-  for (const datasource of TINYBIRD_INGEST_DATASOURCES) {
+  const datasources = tinybirdIngestDatasources(rootDir);
+  for (const datasource of datasources) {
     const url = new URL("/v0/events", apiUrl);
     url.searchParams.set("name", datasource);
 
@@ -127,6 +150,7 @@ async function assertTinybirdIngestToken(rootDir, envName, consumers, env, fetch
           "content-type": "application/x-ndjson",
         },
         body: "",
+        signal: AbortSignal.timeout(TINYBIRD_PROBE_TIMEOUT_MS),
       });
     } catch (cause) {
       throw new Error(
@@ -134,14 +158,34 @@ async function assertTinybirdIngestToken(rootDir, envName, consumers, env, fetch
       );
     }
 
-    // 401/403 is a rejected credential; 404 is the right credential pointed at a
-    // Workspace or region without this Data Source. Tinybird's error body can
-    // quote the token, so it is deliberately not forwarded.
-    if (response.status === 401 || response.status === 403 || response.status === 404) {
-      throw new Error(
-        `${TINYBIRD_INGEST_TOKEN} was rejected by ${url.host} for Data Source "${datasource}" (HTTP ${response.status}); it must carry APPEND scope on ${TINYBIRD_INGEST_DATASOURCES.join(" and ")} in that region`,
-      );
-    }
+    assertTinybirdProbeResponse(response, datasource, url.host, datasources);
+  }
+}
+
+/**
+ * Tinybird's error body can quote the token, so no response text is forwarded --
+ * only the status and what it means for the deploy.
+ *
+ * A 5xx proves nothing about the credential, and the whole point of this probe is
+ * that an unproven ingest token silently drops every Exposure once it ships. So an
+ * unreachable Tinybird blocks the deploy rather than waving it through.
+ *
+ * Other statuses pass: the exact success shape of a zero-row append is Tinybird's
+ * to define, and asserting a specific 2xx here would fail deploys on a credential
+ * that works.
+ */
+function assertTinybirdProbeResponse(response, datasource, host, datasources) {
+  // 401/403 is a rejected credential; 404 is the right credential pointed at a
+  // Workspace or region without this Data Source.
+  if (response.status === 401 || response.status === 403 || response.status === 404) {
+    throw new Error(
+      `${TINYBIRD_INGEST_TOKEN} was rejected by ${host} for Data Source "${datasource}" (HTTP ${response.status}); it must carry APPEND scope on ${datasources.join(" and ")} in that region`,
+    );
+  }
+  if (response.status >= 500) {
+    throw new Error(
+      `${TINYBIRD_INGEST_TOKEN} could not be verified against ${host} for Data Source "${datasource}" (HTTP ${response.status}); deploying an unverified ingest token drops Exposures silently`,
+    );
   }
 }
 
@@ -181,6 +225,9 @@ function assertRsaPrivateJwkSecret(name, value) {
     );
   }
   if (jwk.kty !== "RSA") {
+    // Reachable only after createPrivateKey loaded the key, so `kty` is one of
+    // the key types Node accepts (EC, OKP, oct) and never material from the
+    // secret. CodeQL's js/clear-text-logging cannot see that guard; alert #70.
     throw new Error(`${name} must be an RSA private JWK; found kty "${jwk.kty}"`);
   }
 }

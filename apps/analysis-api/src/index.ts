@@ -81,6 +81,7 @@ async function handleRequest(
   }
 
   const app = createApp({
+    door: authority ? "binding" : "public",
     authResolver: requestAuthResolver(env, authority),
     rateLimiter: allowLimiter,
     tinybird: createTinybirdReadTransport(env),

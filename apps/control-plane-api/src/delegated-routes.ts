@@ -1,4 +1,5 @@
 import { type ApiRouteContract, type RouteOwner, routesDelegatedBy } from "@splitch/contracts";
+import { envScope, type Repository } from "@splitch/db";
 import {
   delegatedIdentityFrom,
   delegatedRequest,
@@ -8,6 +9,8 @@ import {
   type RouteHandler,
 } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
+import { appNotFound } from "./app-environment-model";
+import { environmentExists } from "./experiment-handler-shared";
 import { controlPlaneRoute } from "./routes";
 
 /**
@@ -19,8 +22,10 @@ import { controlPlaneRoute } from "./routes";
  * to the registry gets a door without a second edit.
  *
  * The registrar has already run the whole guard chain by the time these handlers
- * run: delegation forwards an authorized request, it never makes an
- * authorization decision.
+ * run. What is left is the one check the generic chain cannot make, because it
+ * needs the tenant tables: that the Environment in the path belongs to the App in
+ * the path (see environmentScopeError). Nothing crosses the binding until it has
+ * passed, because the owner Worker trusts what arrives over it.
  */
 export type DelegationBindings = Partial<Record<RouteOwner, Fetcher>>;
 
@@ -28,19 +33,42 @@ export function mountDelegatedRoutes(
   app: Hono,
   registrar: Registrar,
   bindings: DelegationBindings,
+  repo: Repository,
 ): void {
   for (const route of routesDelegatedBy("control-plane-api")) {
     registrar.mount(
       app,
       controlPlaneRoute(route.operationId),
-      delegatingHandler(route, bindings[route.owner]),
+      delegatingHandler(route, bindings[route.owner], repo),
     );
   }
+}
+
+/**
+ * The guard chain binds the principal to `:appId`, but nothing binds `:appId` to
+ * `:environmentId`: a control-plane token is legitimately Environment-unbound
+ * (ADR-0027), so the co-scope step passes any Environment in the path. Every
+ * other Environment-scoped control-plane handler closes that by reading the
+ * Environment under the App's scope, and delegation must not be the one door
+ * that skips it -- the owner Worker is downstream of this decision and only sees
+ * an already-authorized request.
+ */
+async function environmentScopeError(
+  repo: Repository,
+  params: Record<string, string>,
+  requestId: string,
+): Promise<Response | null> {
+  const { appId, environmentId } = params;
+  if (appId === undefined || environmentId === undefined) return null;
+  return (await environmentExists({ repo }, envScope(appId, environmentId)))
+    ? null
+    : appNotFound(requestId);
 }
 
 function delegatingHandler(
   route: ApiRouteContract,
   binding: Fetcher | undefined,
+  repo: Repository,
 ): RouteHandler<unknown> {
   return async ({ input, principal, requestId }: HandlerArgs<unknown>): Promise<Response> => {
     if (!binding) {
@@ -56,6 +84,9 @@ function delegatingHandler(
       );
     }
     const parts = inputParts(input);
+    const scopeError = await environmentScopeError(repo, parts.params ?? {}, requestId);
+    if (scopeError) return scopeError;
+
     return binding.fetch(
       delegatedRequest(route, delegatedIdentityFrom(route, principal, parts.params ?? {}), {
         ...parts,

@@ -26,9 +26,12 @@ describe("POST /api/sdk/evaluate", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("x-run-id")).toBe("run-42");
-    // The arm label is public-safe and rides the wire; HOW it was chosen does not.
-    expect(body).toEqual({ variant: true, variantName: "treatment" });
-    expect(Object.keys(body)).toEqual(["variant", "variantName"]);
+    // The arm label is public-safe but rides a header, never the body: published
+    // SDKs parse this body strictly and an added key makes them serve the
+    // caller's default after the Exposure is already committed.
+    expect(res.headers.get("x-variant-name")).toBe("treatment");
+    expect(body).toEqual({ variant: true });
+    expect(Object.keys(body)).toEqual(["variant"]);
     expect(JSON.stringify(body)).not.toContain("reason");
     expect(JSON.stringify(body)).not.toContain("rule");
     expect(JSON.stringify(body)).not.toContain("salt");
@@ -158,7 +161,8 @@ describe("POST /api/sdk/evaluate", () => {
     const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY, {}, { appId: APP_ID }));
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ variant: true, variantName: "treatment" });
+    expect(res.headers.get("x-variant-name")).toBe("treatment");
+    await expect(res.json()).resolves.toEqual({ variant: true });
     expect(exposureSink.writes).toHaveLength(1);
     expect(exposureSink.writes[0]?.appId).toBe(APP_ID);
   });
@@ -252,7 +256,8 @@ describe("POST /api/sdk/evaluate: non-exposing outcomes", () => {
     const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ variant: false, variantName: "control" });
+    expect(res.headers.get("x-variant-name")).toBe("control");
+    await expect(res.json()).resolves.toEqual({ variant: false });
     expect(exposureSink.writes).toEqual([]);
     // A replayed holdover never re-writes the Assignment Store.
     expect(assignmentStore.putCalls).toEqual([]);
@@ -268,7 +273,7 @@ describe("POST /api/sdk/evaluate: non-exposing outcomes", () => {
     const body = (await res.json()) as Record<string, unknown>;
 
     expect(res.status).toBe(200);
-    expect(Object.keys(body)).toEqual(["variant", "variantName"]);
+    expect(Object.keys(body)).toEqual(["variant"]);
     expect(exposureSink.writes).toEqual([]);
   });
 });

@@ -120,13 +120,19 @@ test("hosted secret validation exercises TINYBIRD_INGEST_TOKEN instead of trusti
   // was green and every Exposure was dropped at runtime.
   await assert.rejects(
     () => validate(recording(403)),
-    /TINYBIRD_INGEST_TOKEN was rejected by api\.us-west-2\.aws\.tinybird\.co for Data Source "raw_events" \(HTTP 403\)/,
+    /TINYBIRD_INGEST_TOKEN was rejected by api\.us-west-2\.aws\.tinybird\.co for Data Source "raw_evaluations" \(HTTP 403\)/,
   );
   // A right token in the wrong region reaches the API and 404s on the Data Source.
   await assert.rejects(() => validate(recording(404)), /\(HTTP 404\)/);
   await assert.rejects(
     () => validate(() => Promise.reject(new Error("getaddrinfo ENOTFOUND"))),
     /could not be exercised against api\.us-west-2\.aws\.tinybird\.co: getaddrinfo ENOTFOUND/,
+  );
+  // A 5xx says nothing about the credential. Passing it through would ship the
+  // exact unverified token this probe exists to catch.
+  await assert.rejects(
+    () => validate(recording(503)),
+    /could not be verified against api\.us-west-2\.aws\.tinybird\.co for Data Source "raw_evaluations" \(HTTP 503\); deploying an unverified ingest token drops Exposures silently/,
   );
 
   calls.length = 0;
@@ -139,8 +145,8 @@ test("hosted secret validation exercises TINYBIRD_INGEST_TOKEN instead of trusti
   assert.deepEqual(
     calls.map(({ url }) => url),
     [
-      "https://api.us-west-2.aws.tinybird.co/v0/events?name=raw_events",
       "https://api.us-west-2.aws.tinybird.co/v0/events?name=raw_evaluations",
+      "https://api.us-west-2.aws.tinybird.co/v0/events?name=raw_events",
     ],
   );
   assert.deepEqual(
@@ -148,6 +154,31 @@ test("hosted secret validation exercises TINYBIRD_INGEST_TOKEN instead of trusti
     ["", ""],
   );
   assert.equal(calls[0].headers.authorization, "Bearer p.not-a-real-token");
+});
+
+test("the ingest probe covers every Data Source the token is scoped to, with no second list", async () => {
+  const root = delegationFixture();
+  writeIngestDatasources(root, ["raw_events", "raw_evaluations", "raw_conversions"]);
+  writeWorker(root, "event-ingest-api", ["TINYBIRD_INGEST_TOKEN"], {
+    TINYBIRD_API_URL: "https://api.us-west-2.aws.tinybird.co",
+  });
+
+  const probed = [];
+  await validateHostedWorkerSecretEnv(
+    root,
+    "production",
+    { ...delegationValues(), TINYBIRD_INGEST_TOKEN: "p.not-a-real-token" },
+    {
+      fetch: (url) => {
+        probed.push(new URL(url).searchParams.get("name"));
+        return Promise.resolve(new Response(null, { status: 202 }));
+      },
+    },
+  );
+
+  // A Data Source added to the Tinybird project is probed on the next deploy
+  // without editing the deploy script, which is the only way the two stay honest.
+  assert.deepEqual(probed, ["raw_conversions", "raw_evaluations", "raw_events"]);
 });
 
 test("hosted secret validation fails loud when the ingest Worker declares no Tinybird API URL", async () => {
@@ -246,7 +277,23 @@ function delegationFixture({ controlPlaneSecret = "MCP_CONTROL_PLANE_DELEGATION_
   writeWorker(root, "control-plane-api", controlPlaneSecret ? [controlPlaneSecret] : []);
   writeWorker(root, "evaluation-api", ["MCP_EVALUATION_DELEGATION_SECRET"]);
   writeWorker(root, "analysis-api", ["MCP_ANALYSIS_DELEGATION_SECRET"]);
+  writeIngestDatasources(root, ["raw_events", "raw_evaluations"]);
   return root;
+}
+
+/**
+ * The probe reads which Data Sources the ingest token appends to out of the
+ * Tinybird project, so the fixture ships the same declaration the real
+ * `.datasource` files carry. `deduped_exposures` is written by a Pipe, not by the
+ * token, and must stay out of the probe.
+ */
+function writeIngestDatasources(root, names) {
+  const dir = join(root, "infra", "tinybird", "datasources");
+  mkdirSync(dir, { recursive: true });
+  for (const name of names) {
+    writeFileSync(join(dir, `${name}.datasource`), "TOKEN raw_events_ingest APPEND\n");
+  }
+  writeFileSync(join(dir, "deduped_exposures.datasource"), "TOKEN analysis_read READ\n");
 }
 
 let cachedRsaJwk;

@@ -39,4 +39,5 @@ export {
   routesDelegatedBy,
   routesDelegatedTo,
   routesMountedBy,
+  routesSurfacedBy,
 } from "../route-registry";

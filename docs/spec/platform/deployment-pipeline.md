@@ -430,14 +430,18 @@ recovery. That override does not provide data rollback.
    Tinybird token, then deploy Tinybird to Cloud main.
 5. When D1 migration or Cloudflare toolchain inputs changed, apply D1 migrations to production.
 6. When Worker inputs changed, follow workspace dependencies to the affected deployable Workers, then
-   build or restore only those Worker artifacts through Turborepo. Deploy Analysis first when it is
-   affected. If either Control Plane or Control Panel is affected, preserve the full bounded cutover:
-   deploy the Control Plane with the predecessor session-handle binding entrypoint enabled with a
-   30-minute expiry, deploy the V2 Panel bound to the signed entrypoint, then immediately redeploy the
-   Control Plane from its checked-in config with predecessor session redemption disabled. Complete
-   credential-cache backfill before an affected Evaluation Worker. Turborepo deploys the remaining
-   independent affected Workers together while preserving the Event Ingest before Evaluation
-   dependency.
+   build or restore only those Worker artifacts through Turborepo. A `services` binding resolves when
+   the caller deploys, so every callee deploys first: complete credential-cache backfill through the
+   Control Plane already serving traffic, then Event Ingest, Analysis, and Evaluation, each when
+   affected. Analysis and Evaluation export the named entrypoint the Control Plane delegates to
+   (ADR-0046), so deploying the Control Plane ahead of either binds it to an entrypoint the live
+   Worker does not export yet. If either Control Plane or Control Panel is affected, preserve the full
+   bounded cutover: deploy the Control Plane with the predecessor session-handle binding entrypoint
+   enabled with a 30-minute expiry, deploy the V2 Panel bound to the signed entrypoint, then
+   immediately redeploy the Control Plane from its checked-in config with predecessor session
+   redemption disabled. Turborepo deploys the remaining independent affected Workers together.
+   `scripts/deploy-worker-order.test.mjs` derives these edges from the Workers' own wrangler configs
+   and fails when an added binding has no ordering entry.
 7. Verify cron trigger registration on Control Plane API and Analysis Workers when Workers changed.
 8. Run route and binding smoke checks before marking the GitHub deployment complete when Workers
    changed.

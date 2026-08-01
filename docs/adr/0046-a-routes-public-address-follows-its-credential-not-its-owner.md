@@ -34,9 +34,16 @@ rather than a credential: a `WorkerEntrypoint` is reachable only over a binding,
 cross-checks the path's Org/App/Environment against the identity as defense against a bug in the
 surface Worker, not against a forged header.
 
-Contract tests compare, per Worker, the routes the registry says it mounts against the routes the
-Hono app actually mounted, in both directions. That guard is what makes the address model and the
-mount model provably the same model.
+One address per operation is enforced per door, not per Worker. A Worker's public `fetch` mounts
+only `routesSurfacedBy` itself; the routes it merely executes are mounted on the binding entrypoints
+alone. Otherwise the owner's own hostname would keep answering a delegated route directly, and the
+operation would have two live addresses: the one clients are told about, which goes through the
+surface Worker's authorization, and one that does not. Analysis surfaces nothing, so its public door
+mounts no registry route at all — enforced in code rather than by the absence of a DNS record.
+
+Contract tests compare, per Worker and per door, the routes the registry says it mounts against the
+routes the Hono app actually mounted, in both directions. That guard is what makes the address model
+and the mount model provably the same model.
 
 ## Considered options
 

@@ -66,14 +66,15 @@ const publicSurfaceByAuthKind: Readonly<Record<AuthKind, PublicSurface | null>> 
   "internal-worker": null,
 };
 
-export function publicSurfaceFor(route: Pick<RouteContract, "id" | "auth">): PublicSurface {
-  const surface = publicSurfaceByAuthKind[route.auth];
-  if (!surface) {
-    throw new Error(
-      `route-contract: route "${route.id}" is "${route.auth}" and has no public surface (binding-only)`,
-    );
-  }
-  return surface;
+/**
+ * `null` for a binding-only route, which is a real answer and not a fault: an
+ * `internal-worker` route has no public address by design. It must not throw --
+ * the registry sweeps every route through here at module load on Workers that
+ * mount routes, so one binding-only route would take down every route on the
+ * Worker at init rather than the single caller that asked.
+ */
+export function publicSurfaceFor(route: Pick<RouteContract, "auth">): PublicSurface | null {
+  return publicSurfaceByAuthKind[route.auth];
 }
 
 /**

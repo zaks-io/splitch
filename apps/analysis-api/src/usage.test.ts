@@ -55,6 +55,7 @@ const authResolver: AuthResolver = (request) => {
 function makeHarness(rows?: readonly unknown[]) {
   const tinybird = new FakeTinybird(rows);
   const app = createApp({
+    door: "binding",
     authResolver,
     rateLimiter: allowLimiter,
     tinybird,
@@ -172,6 +173,7 @@ describe("Organization Evaluation usage", () => {
 
   it("maps a Tinybird outage to a retryable usage read failure", async () => {
     const app = createApp({
+      door: "binding",
       authResolver,
       rateLimiter: allowLimiter,
       tinybird: new FailingTinybird(),

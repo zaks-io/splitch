@@ -64,8 +64,9 @@ describe("createSplitchClient: construction", () => {
             setTimeout(
               () =>
                 resolve(
-                  new Response(JSON.stringify({ variant: true, variantName: "on" }), {
+                  new Response(JSON.stringify({ variant: true }), {
                     status: 200,
+                    headers: { "x-variant-name": "on" },
                   }),
                 ),
               1935,
@@ -173,9 +174,9 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
       void url;
       seenHeaders = new Headers(init?.headers);
       return Promise.resolve(
-        new Response(JSON.stringify({ variant: true, variantName: "on" }), {
+        new Response(JSON.stringify({ variant: true }), {
           status: 200,
-          headers: { "x-run-id": "run-42" },
+          headers: { "x-run-id": "run-42", "x-variant-name": "on" },
         }),
       );
     }) as typeof fetch);
@@ -188,9 +189,9 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
   it("200 -> extracts variant from the bare body and runId from the X-Run-Id header", async () => {
     const t = transport(
       stubFetch(
-        new Response(JSON.stringify({ variant: "treatment", variantName: "treatment" }), {
+        new Response(JSON.stringify({ variant: "treatment" }), {
           status: 200,
-          headers: { "x-run-id": "run-42" },
+          headers: { "x-run-id": "run-42", "x-variant-name": "treatment" },
         }),
       ),
     );
@@ -213,9 +214,9 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
         requests.push(request);
         return Promise.resolve(
           request.path === "/api/sdk/evaluate"
-            ? new Response(JSON.stringify({ variant: "treatment", variantName: "treatment" }), {
+            ? new Response(JSON.stringify({ variant: "treatment" }), {
                 status: 200,
-                headers: { "x-run-id": "run-42" },
+                headers: { "x-run-id": "run-42", "x-variant-name": "treatment" },
               })
             : new Response(JSON.stringify({ ok: true }), { status: 200 }),
         );

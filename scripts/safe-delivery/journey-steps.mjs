@@ -157,10 +157,11 @@ export async function proveKillSwitchUngated(deps, keys, flagId, windowMs) {
     windowMs,
   );
 
-  // There is no audit-log surface yet (audit_log_list is declared in the route
-  // registry but not mounted; SPL-161 owns it), so the durable change record
-  // available today is the Flag Configuration version plus the provable absence
-  // of an Approval Request.
+  // There is no audit-log surface yet -- the registry declares no audit route at
+  // all now that a declared-but-unmounted route fails route-surface-mounting
+  // (SPL-161 owns building one). So the durable change record available today is
+  // the Flag Configuration version plus the provable absence of an Approval
+  // Request.
   return {
     ungated: true,
     approvalRequest: null,

@@ -14,9 +14,13 @@ import type {
 import { SplitchSdkError } from "./errors";
 
 // `X-Run-Id` carries the live Run id as non-revealing operational metadata
-// alongside the `{ variant, variantName }` body, so the seen-set key has its runId
-// without the response body leaking Run internals (ADR-0018, see transport.ts).
+// alongside the `{ variant }` body, so the seen-set key has its runId without the
+// response body leaking Run internals (ADR-0018, see transport.ts).
 const RUN_ID_HEADER = "x-run-id";
+// The resolved arm label, which the SDK cannot synthesize (two arms may share a
+// value). It rides a header rather than the body because published SDKs parse
+// that body strictly and would reject an added key; absent means no arm matched.
+const VARIANT_NAME_HEADER = "x-variant-name";
 
 export interface FetchTransportConfig {
   readonly credential: string;
@@ -136,6 +140,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
 
 async function readEvaluateResponse(response: Response): Promise<TransportResult> {
   const runId = response.headers.get(RUN_ID_HEADER);
+  const variantName = response.headers.get(VARIANT_NAME_HEADER);
   if (!response.ok) {
     return { ...(await readFailure(response)), variant: null, variantName: null, runId: null };
   }
@@ -144,7 +149,7 @@ async function readEvaluateResponse(response: Response): Promise<TransportResult
     return {
       status: response.status,
       variant: body.variant,
-      variantName: body.variantName,
+      variantName,
       runId,
     };
   } catch {

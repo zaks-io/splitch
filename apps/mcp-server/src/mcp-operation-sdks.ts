@@ -83,6 +83,12 @@ function createLazyOperationSdk(createSdk: () => OperationSdk): OperationSdkReso
   };
 }
 
+/**
+ * The one origin with no `*_API_ORIGIN` env behind it, deliberately: Analysis has
+ * no public hostname (ADR-0046), so hosted targets address it only through the
+ * service binding, and the URL exists just to carry the path. An env override
+ * would be a way to point this at something reachable, which is the bug.
+ */
 function analysisApiBaseUrl(configured: string | undefined, platformTarget: string): string {
   if (configured) {
     return configured;

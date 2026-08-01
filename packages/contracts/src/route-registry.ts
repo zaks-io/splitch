@@ -98,11 +98,29 @@ export const operationIds: readonly string[] = routeRegistry.map((route) => rout
  *
  * Both clients and Workers read this, so "the CLI addresses it here" and "that
  * Worker answers there" cannot drift apart unnoticed (ADR-0046).
+ *
+ * This is the whole Worker, not one door. Which routes a given door may answer is
+ * `routesSurfacedBy` (the public hostname) or `routesDelegatedTo` (the binding).
  */
 export function routesMountedBy(worker: RouteOwner): readonly ApiRouteContract[] {
   return routeRegistry.filter(
     (route) => route.owner === worker || publicSurfaceFor(route) === worker,
   );
+}
+
+/**
+ * The routes a Worker answers at its OWN public hostname, whether it executes them
+ * or forwards them. This is what its public `fetch` may mount, and nothing more:
+ * a route this Worker merely executes is addressed somewhere else, so mounting it
+ * publicly here would give one operation two live addresses — one the clients are
+ * told about and one they are not (ADR-0046).
+ *
+ * Takes any `RouteOwner`, not just a `PublicSurface`: "this Worker is nobody's
+ * public surface, so its public door answers nothing" is the real answer for
+ * Analysis, and callers should not have to case-split to ask the question.
+ */
+export function routesSurfacedBy(worker: RouteOwner): readonly ApiRouteContract[] {
+  return routeRegistry.filter((route) => publicSurfaceFor(route) === worker);
 }
 
 /**
@@ -115,15 +133,17 @@ export function routesMountedBy(worker: RouteOwner): readonly ApiRouteContract[]
  * about what delegation covers.
  */
 export function routesDelegatedBy(surface: PublicSurface): readonly ApiRouteContract[] {
-  return routeRegistry.filter(
-    (route) => publicSurfaceFor(route) === surface && route.owner !== surface,
-  );
+  return routeRegistry.filter((route) => delegation(route)?.surface === surface);
 }
 
 export function routesDelegatedTo(worker: RouteOwner): readonly ApiRouteContract[] {
-  return routeRegistry.filter(
-    (route) => route.owner === worker && publicSurfaceFor(route) !== worker,
-  );
+  return routeRegistry.filter((route) => delegation(route)?.owner === worker);
+}
+
+/** The one definition of "delegated", so the two views above cannot disagree. */
+function delegation(route: ApiRouteContract): { surface: PublicSurface; owner: RouteOwner } | null {
+  const surface = publicSurfaceFor(route);
+  return surface !== null && surface !== route.owner ? { surface, owner: route.owner } : null;
 }
 
 /**

@@ -229,7 +229,7 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("api_keys_create"), credentialHandlers.createApiKey);
   registrar.mount(app, controlPlaneRoute("api_keys_revoke"), credentialHandlers.revokeApiKey);
   mountUnavailableControlPlaneRoutes(app, registrar, deps.repo);
-  mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {});
+  mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {}, deps.repo);
 
   return app;
 }

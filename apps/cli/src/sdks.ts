@@ -91,16 +91,17 @@ export function sdkForRoute(
 }
 
 function requirePublicSurface(route: Pick<RouteContract, "id" | "auth">): PublicSurface {
-  try {
-    return publicSurfaceFor(route);
-  } catch (error) {
+  const surface = publicSurfaceFor(route);
+  if (surface === null) {
+    // A binding-only route reached a client command: no origin exists to send it
+    // to, so fail here rather than defaulting to a surface that would reject it.
     throw new SplitchCliError({
       code: "CLI_ROUTE_SURFACE_UNSUPPORTED",
       causeSummary: `The operation ${route.id} has no public origin the CLI can address`,
       remediation: "Use an operation exposed on a public API surface",
-      originalError: error,
     });
   }
+  return surface;
 }
 
 export function resolveControlPlaneBaseUrl(options: SdkFactoryOptions = {}): string {

@@ -12,7 +12,7 @@ import {
   runConfigKey,
 } from "@splitch/contracts";
 import type { AuthResolver, RateLimiter } from "@splitch/worker-runtime";
-import { createApp } from "./app";
+import { createApp, type EvaluationDoor } from "./app";
 import { StaticSaltStore } from "./assignment/assignment-store-test-fixtures";
 import { makeDataPlaneAuthResolver, sha256Hex } from "./data-plane-auth";
 import {
@@ -45,6 +45,8 @@ const controlPlaneAuthResolver: AuthResolver = () => ({ ok: false, reason: "UNAU
 const ORGANIZATION_ID = "org_verify";
 
 interface SdkRouteHarnessOptions {
+  /** Defaults to the public edge, which is where every SDK route is addressed. */
+  readonly door?: EvaluationDoor;
   readonly liveRun?: boolean;
   readonly experimentOverrides?: Partial<ExperimentConfigKV>;
   readonly evaluationCommitSink?: EvaluationCommitSink;
@@ -185,6 +187,7 @@ export async function makeSdkRouteHarness(options: SdkRouteHarnessOptions = {}) 
   const logger = new RecordingLogger();
   const app = createApp({
     logger,
+    door: options.door ?? "public",
     authResolver: controlPlaneAuthResolver,
     dataPlaneAuthResolver: makeDataPlaneAuthResolver(credentialKv),
     rateLimiter: allowLimiter,

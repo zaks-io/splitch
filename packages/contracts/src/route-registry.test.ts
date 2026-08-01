@@ -1,8 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { errorCodes } from "./errors";
 import { honoPathToOpenApiPath } from "./openapi-route";
-import { authKinds, httpMethods, idempotencyModes, rateLimitClasses } from "./route-contract";
-import { getRoute, operationIds, routeRegistry } from "./route-registry";
+import {
+  authKinds,
+  httpMethods,
+  idempotencyModes,
+  publicSurfaceFor,
+  publicSurfaces,
+  rateLimitClasses,
+  routeOwners,
+} from "./route-contract";
+import {
+  getRoute,
+  operationIds,
+  routeRegistry,
+  routesDelegatedBy,
+  routesDelegatedTo,
+  routesMountedBy,
+  routesSurfacedBy,
+} from "./route-registry";
 
 /**
  * The registry is cross-cutting: every Worker mounts it, the SDK infers from it,
@@ -195,3 +211,49 @@ describe("route registry: lookup", () => {
     expect(getRoute("not_a_real_tool")).toBeUndefined();
   });
 });
+
+/**
+ * Workers resolve their whole mount table at module load, so this lookup runs
+ * once per route before the first request. If it threw for the binding-only kind
+ * it would not fail that one route -- it would fail Worker init and take down
+ * every route on the Worker, for a route nobody addressed publicly.
+ */
+describe("route registry: public surface is total over AuthKind", () => {
+  it.each(authKinds)("resolves %s without throwing", (auth) => {
+    expect(() => publicSurfaceFor({ auth })).not.toThrow();
+  });
+
+  it("answers null for the binding-only kind and a surface for every other", () => {
+    const bindingOnly = authKinds.filter((auth) => publicSurfaceFor({ auth }) === null);
+    expect(bindingOnly).toEqual(["internal-worker"]);
+  });
+
+  it("agrees from both sides on which routes are delegated", () => {
+    // What a surface forwards and what an owner accepts over the binding are one
+    // set. A route with no public surface is in neither: nobody forwards it, so
+    // nothing may sit in an owner's inbound allowlist claiming otherwise.
+    const forwarded = publicSurfaces.flatMap((surface) => [...routesDelegatedBy(surface)]);
+    const accepted = routeOwners.flatMap((owner) => [...routesDelegatedTo(owner)]);
+    expect(ids(accepted)).toEqual(ids(forwarded));
+
+    const surfaceless = ids(routeRegistry.filter((route) => publicSurfaceFor(route) === null));
+    expect(ids(forwarded).filter((id) => surfaceless.includes(id))).toEqual([]);
+  });
+
+  it("splits every Worker's mount table into its public door and its binding door", () => {
+    // The two doors are what each entrypoint actually mounts, so they must add up
+    // to the whole Worker and never overlap. An overlap is the bug directly: the
+    // same operation answered on a public hostname AND over the binding is the
+    // second address ADR-0046 exists to prevent.
+    for (const worker of routeOwners) {
+      const surfaced = ids(routesSurfacedBy(worker));
+      const delegated = ids(routesDelegatedTo(worker));
+      expect(surfaced.filter((id) => delegated.includes(id))).toEqual([]);
+      expect([...surfaced, ...delegated].sort()).toEqual(ids(routesMountedBy(worker)));
+    }
+  });
+});
+
+function ids(routes: readonly { operationId: string }[]): string[] {
+  return routes.map((route) => route.operationId).sort();
+}

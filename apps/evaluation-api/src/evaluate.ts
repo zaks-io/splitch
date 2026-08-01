@@ -144,6 +144,9 @@ async function evaluateResponse(
   if (output.result.liveRunId !== null) {
     response.headers.set("x-run-id", output.result.liveRunId);
   }
+  if (body.variantName !== null) {
+    response.headers.set("x-variant-name", body.variantName);
+  }
   return response;
 }
 
