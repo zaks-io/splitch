@@ -175,3 +175,31 @@ describe("guard: rate limiting (before scopes, fail-closed)", () => {
     expect(res.status).toBe(429);
   });
 });
+
+describe("fault path: an unexpected throw", () => {
+  /**
+   * The 500 body is deliberately fixed so no internal detail reaches the caller,
+   * which makes the observability hop the thrown value's only route to an
+   * operator. A fault reported without it is indistinguishable from every other
+   * fault, so the handoff is the assertion, not an implementation detail.
+   */
+  it("hands the thrown value to observability while the body stays generic", async () => {
+    const seen: { code: string; cause?: unknown }[] = [];
+    const reg = createRegistrar(deps({ observability: { onError: (ctx) => void seen.push(ctx) } }));
+    const app = new Hono();
+    const boom = new Error("Network connection lost.");
+    reg.mount(app, route({ auth: "public", rateLimit: "none" }), () => {
+      throw boom;
+    });
+
+    const res = await app.request("/things", { method: "POST" });
+
+    expect(res.status).toBe(500);
+    const err = await bodyOf(res);
+    expect(err.code).toBe("INTERNAL_SERVER_ERROR");
+    // The caller learns nothing beyond "something broke".
+    expect(JSON.stringify(err)).not.toContain("Network connection lost.");
+    expect(seen[0]?.code).toBe("INTERNAL_SERVER_ERROR");
+    expect(seen[0]?.cause).toBe(boom);
+  });
+});

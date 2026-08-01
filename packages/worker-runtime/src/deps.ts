@@ -12,7 +12,8 @@ export type ResolvableAuthKind = Exclude<AuthKind, "public">;
  */
 export interface Observability {
   onRequest?(ctx: { requestId: string; method: string; path: string }): void;
-  onError?(ctx: { requestId: string; code: string; status: number }): void;
+  /** `cause` is set only on the fault path, and never reaches the response. */
+  onError?(ctx: { requestId: string; code: string; status: number; cause?: unknown }): void;
 }
 
 /**

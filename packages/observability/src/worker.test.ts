@@ -99,6 +99,62 @@ describe("createWorkerObservability onError", () => {
     expect(addBreadcrumb).not.toHaveBeenCalled();
   });
 
+  /**
+   * The 500 body is a fixed "unhandled runtime fault" so nothing internal leaks
+   * to the caller, which leaves this the only path the thrown value has to an
+   * operator. Without it every distinct fault pages as the same blank 500.
+   */
+  it("carries the thrown value's identity into the fault event", async () => {
+    const observability = createWorkerObservability(
+      { SENTRY_DSN: "https://example@sentry.io/1" },
+      { surface: "analysis-api" },
+    );
+
+    observability.onError?.({
+      requestId: "req-fault",
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      cause: new Error("Network connection lost."),
+    });
+    await flushSentryHooks();
+
+    const extra = captureMessage.mock.calls[0]?.[1]?.extra as { fault?: string };
+    expect(extra.fault).toContain("Network connection lost.");
+  });
+
+  it("names the shape of a non-Error throw rather than reporting nothing", async () => {
+    const observability = createWorkerObservability(
+      { SENTRY_DSN: "https://example@sentry.io/1" },
+      { surface: "analysis-api" },
+    );
+
+    observability.onError?.({
+      requestId: "req-fault",
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      cause: "bare string throw",
+    });
+    await flushSentryHooks();
+
+    const extra = captureMessage.mock.calls[0]?.[1]?.extra as { fault?: string };
+    expect(extra.fault).toContain("bare string throw");
+  });
+
+  it("omits the fault field when nothing was thrown", async () => {
+    const observability = createWorkerObservability(
+      { SENTRY_DSN: "https://example@sentry.io/1" },
+      { surface: "analysis-api" },
+    );
+
+    observability.onError?.({ requestId: "req-domain", code: "FORBIDDEN", status: 0 });
+    await flushSentryHooks();
+
+    const data = addBreadcrumb.mock.calls[0]?.[0]?.data as Record<string, unknown>;
+    expect(data).not.toHaveProperty("fault");
+    // The reduction must not smuggle the raw thrown value alongside its identity.
+    expect(data).not.toHaveProperty("cause");
+  });
+
   it("skips Sentry hooks entirely when SENTRY_DSN is unset", async () => {
     const observability = createWorkerObservability({}, { surface: "mcp-server" });
 

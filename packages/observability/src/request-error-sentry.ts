@@ -4,6 +4,16 @@ export interface RequestErrorContext {
   readonly requestId: string;
   readonly code: string;
   readonly status: number;
+  /** The value that was thrown, on the fault path. Never reaches the response. */
+  readonly cause?: unknown;
+}
+
+/** A fault context ready to emit: `cause` replaced by its identity. */
+export interface RequestErrorReport {
+  readonly requestId: string;
+  readonly code: string;
+  readonly status: number;
+  readonly fault?: string;
 }
 
 const errorCodeSet = new Set<string>(errorCodes);
@@ -21,6 +31,31 @@ export function resolveRequestErrorStatus(ctx: RequestErrorContext): number {
     return httpStatusForError(ctx.code);
   }
   return ctx.status;
+}
+
+/**
+ * Reduce a fault context for emission. The response body for a 500 is only ever
+ * "unhandled runtime fault" -- deliberately, so internals never leak to callers
+ * -- which means this is the ONLY place the thrown value can reach an operator.
+ * Dropping it makes every fault look identical and undiagnosable.
+ *
+ * Reduced to a string rather than passed through so an arbitrary thrown object
+ * cannot widen what gets emitted; the scrubber runs over the result downstream.
+ */
+export function reduceRequestError(ctx: RequestErrorContext): RequestErrorReport {
+  const { requestId, code, cause } = ctx;
+  const status = resolveRequestErrorStatus(ctx);
+  const fault = faultIdentity(cause);
+  return { requestId, code, status, ...(fault === undefined ? {} : { fault }) };
+}
+
+function faultIdentity(cause: unknown): string | undefined {
+  if (cause === undefined) return undefined;
+  if (cause instanceof Error) {
+    return cause.stack ?? `${cause.name}: ${cause.message}`;
+  }
+  // A non-Error throw has no stack to give; naming the shape still beats silence.
+  return `non-Error thrown (${typeof cause}): ${String(cause)}`;
 }
 
 /**

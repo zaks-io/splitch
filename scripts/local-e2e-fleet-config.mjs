@@ -34,12 +34,6 @@ export function localE2eWorkers(persistPath) {
         "--persist-to",
         persistPath,
         "--var",
-        "AUTH_API_ORIGIN:http://127.0.0.1:18788",
-        "--var",
-        "AUTH_JWKS_URI:http://127.0.0.1:18788/.well-known/jwks.json",
-        "--var",
-        "CONTROL_PLANE_ORIGIN:http://127.0.0.1:18790",
-        "--var",
         "TINYBIRD_API_URL:http://127.0.0.1:18788",
         "--var",
         "TINYBIRD_READ_TOKEN:local-e2e-tinybird-read-token",
@@ -73,6 +67,17 @@ export function localE2eWorkers(persistPath) {
         "9230",
         "--persist-to",
         persistPath,
+        // The token minted by analysis-source is issued by 18788 FOR this origin,
+        // and this is the Worker that verifies it: operator-addressed reads land
+        // here even when the Analysis Worker executes them (ADR-0046). Without a
+        // reachable JWKS the verify step fails at the socket, which the registrar
+        // turns into a 500 on a route that should have answered.
+        "--var",
+        "AUTH_API_ORIGIN:http://127.0.0.1:18788",
+        "--var",
+        "AUTH_JWKS_URI:http://127.0.0.1:18788/.well-known/jwks.json",
+        "--var",
+        "CONTROL_PLANE_ORIGIN:http://127.0.0.1:18790",
       ],
     },
     {

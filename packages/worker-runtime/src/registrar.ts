@@ -118,9 +118,16 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
 
     return withDefaults(response, requestId, deps.defaultHeaders);
   } catch (cause) {
-    // Step 8 (fault path): any unexpected throw is a loud 500, never a leak.
-    deps.observability?.onError?.({ requestId, code: "INTERNAL_SERVER_ERROR", status: 500 });
-    void cause;
+    // Step 8 (fault path): any unexpected throw is a loud 500, never a leak. The
+    // body stays generic so nothing internal reaches the caller, which makes the
+    // observability hop the only route the thrown value has to an operator --
+    // dropping it here is what turns every fault into the same blank 500.
+    deps.observability?.onError?.({
+      requestId,
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      cause,
+    });
     return renderError(emptyError("INTERNAL_SERVER_ERROR", "unhandled runtime fault"), {
       requestId,
       defaultHeaders: deps.defaultHeaders,

@@ -7,9 +7,10 @@ import {
   type ScrubbedEmitter,
 } from "./emitter.js";
 import {
-  resolveRequestErrorStatus,
+  reduceRequestError,
   shouldReportRequestErrorToSentry,
   type RequestErrorContext,
+  type RequestErrorReport,
 } from "./request-error-sentry.js";
 import type { ObservabilitySurfaceId } from "./surfaces.js";
 
@@ -151,18 +152,17 @@ export function createWorkerObservability(
       emitter.log("info", "request", ctx);
     },
     onError(ctx: RequestErrorContext) {
-      const status = resolveRequestErrorStatus(ctx);
-      const enriched = { ...ctx, status };
+      const enriched = reduceRequestError(ctx);
 
       if (shouldReportRequestErrorToSentry(ctx)) {
-        emitter.log("error", "request_fault", enriched);
+        emitter.log("error", "request_fault", { ...enriched });
         if (env.SENTRY_DSN) {
           void captureSentryMessage(options, enriched);
         }
         return;
       }
 
-      emitter.log("warn", "request_error", enriched);
+      emitter.log("warn", "request_error", { ...enriched });
       if (env.SENTRY_DSN) {
         void addSentryBreadcrumb(options, enriched);
       }
@@ -172,19 +172,19 @@ export function createWorkerObservability(
 
 async function captureSentryMessage(
   options: WorkerObservabilityOptions,
-  ctx: RequestErrorContext & { status: number },
+  ctx: RequestErrorReport,
 ): Promise<void> {
   const Sentry = await loadSentry();
   Sentry.captureMessage(`worker fault ${ctx.code}`, {
     level: "error",
     tags: { surface: options.surface, code: ctx.code },
-    extra: { requestId: ctx.requestId, code: ctx.code, status: ctx.status },
+    extra: { ...ctx },
   });
 }
 
 async function addSentryBreadcrumb(
   options: WorkerObservabilityOptions,
-  ctx: RequestErrorContext & { status: number },
+  ctx: RequestErrorReport,
 ): Promise<void> {
   const Sentry = await loadSentry();
   Sentry.addBreadcrumb({

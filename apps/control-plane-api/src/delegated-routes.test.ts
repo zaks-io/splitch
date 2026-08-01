@@ -1,3 +1,4 @@
+import { type ApiRouteContract, routesDelegatedBy } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import {
   type AuthResolver,
@@ -6,6 +7,7 @@ import {
 } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
+import type { DelegationBindings } from "./delegated-routes";
 
 /**
  * The gateway half of ADR-0046: `api.splitch.dev` answers for routes the Analysis
@@ -20,9 +22,10 @@ describe("delegated control-plane routes", () => {
     const forwarded: Request[] = [];
     const analysis = binding(forwarded, Response.json({ stats: [] }));
 
-    const response = await createApp(deps({ analysis })).request(`${RESULTS_PATH}?runId=run_7`, {
-      headers: { authorization: "Bearer stub" },
-    });
+    const response = await createApp(deps({ bindings: { "analysis-api": analysis } })).request(
+      `${RESULTS_PATH}?runId=run_7`,
+      { headers: { authorization: "Bearer stub" } },
+    );
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ stats: [] });
@@ -45,27 +48,52 @@ describe("delegated control-plane routes", () => {
     const forwarded: Request[] = [];
     const analysis = binding(forwarded, Response.json({ stats: [] }));
 
-    const response = await createApp(deps({ analysis, appId: "app_other" })).request(RESULTS_PATH, {
-      headers: { authorization: "Bearer stub" },
-    });
+    const response = await createApp(
+      deps({ bindings: { "analysis-api": analysis }, appId: "app_other" }),
+    ).request(RESULTS_PATH, { headers: { authorization: "Bearer stub" } });
 
     expect(response.status).toBe(403);
     expect(forwarded).toHaveLength(0);
   });
 
-  it("refuses before the hop when the path's Environment belongs to another App", async () => {
+  /**
+   * Mounting is derived from the registry, so the Environment check has to hold
+   * for every delegated route rather than for the one this file happened to name.
+   * Driving the table off `routesDelegatedBy` means a route delegated later is
+   * covered the moment it is registered, which is the only way this keeps pace
+   * with a handler that grows its own door list.
+   */
+  const environmentScoped = routesDelegatedBy("control-plane-api").filter(
+    (route) => route.path.includes(":appId") && route.path.includes(":environmentId"),
+  );
+
+  it("covers every Environment-scoped delegated route", () => {
+    // A registry that stopped producing these would make the table below vacuous.
+    expect(environmentScoped.map((route) => route.operationId)).toContain("flags_test_eval");
+    expect(environmentScoped.length).toBeGreaterThan(1);
+  });
+
+  it.each(
+    environmentScoped.map((route) => [route.operationId, route] as const),
+  )("refuses %s before the hop when the path's Environment belongs to another App", async (_operationId, route) => {
     const forwarded: Request[] = [];
-    const analysis = binding(forwarded, Response.json({ stats: [] }));
+    const stub = binding(forwarded, Response.json({ stats: [] }));
 
     // The caller is a legitimate app_1 operator and passes app_1 in the path, so
     // every co-scope check the generic guard chain can make passes. Only reading
     // the Environment under app_1's scope catches that env_9 is app_2's.
-    const response = await createApp(deps({ analysis })).request(
-      "/apps/app_1/envs/env_9/experiments/exp_1/results",
-      { headers: { authorization: "Bearer stub" } },
-    );
+    const response = await createApp(
+      deps({ bindings: { "analysis-api": stub, "evaluation-api": stub } }),
+    ).request(foreignEnvironmentPath(route), {
+      method: route.method,
+      headers: { authorization: "Bearer stub", "content-type": "application/json" },
+      ...(route.method === "POST"
+        ? { body: JSON.stringify(REQUEST_BODIES[route.operationId]) }
+        : {}),
+    });
 
     expect(response.status).toBe(404);
+    expect(((await response.json()) as { code: string }).code).toBe("APP_NOT_FOUND");
     expect(forwarded).toHaveLength(0);
   });
 
@@ -81,6 +109,30 @@ describe("delegated control-plane routes", () => {
   });
 });
 
+/**
+ * The path a route declares, aimed at an Environment that exists under a DIFFERENT
+ * App. `:appId` stays the caller's own App so the generic co-scope guard passes
+ * and the delegation handler's check is the only thing left standing.
+ */
+function foreignEnvironmentPath(route: ApiRouteContract): string {
+  return route.path
+    .replace(":appId", "app_1")
+    .replace(":environmentId", "env_9")
+    .replace(/:[A-Za-z]+/g, "x_1");
+}
+
+/**
+ * Minimum bodies that satisfy each POST route's schema, so validation cannot be
+ * what rejects the request. A route added without an entry here answers 400 and
+ * fails the assertion below, which is the reminder to add one.
+ */
+const REQUEST_BODIES: Record<string, unknown> = {
+  experiment_results_post: {},
+  flags_test_eval: {
+    evaluationContext: { targetingKey: "u_1", idType: "user", attributes: {} },
+  },
+};
+
 function binding(forwarded: Request[], response: Response): Fetcher {
   return {
     fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -90,7 +142,7 @@ function binding(forwarded: Request[], response: Response): Fetcher {
   } as unknown as Fetcher;
 }
 
-function deps(options: { analysis?: Fetcher; appId?: string }) {
+function deps(options: { bindings?: DelegationBindings; appId?: string }) {
   const authResolver: AuthResolver = () => ({
     ok: true as const,
     principal: {
@@ -108,7 +160,7 @@ function deps(options: { analysis?: Fetcher; appId?: string }) {
     authResolver,
     rateLimiter,
     repo: stubRepo(),
-    ...(options.analysis ? { delegationBindings: { "analysis-api": options.analysis } } : {}),
+    ...(options.bindings ? { delegationBindings: options.bindings } : {}),
   };
 }
 
