@@ -153,8 +153,13 @@ async function assertTinybirdIngestToken(rootDir, envName, consumers, env, fetch
         signal: AbortSignal.timeout(TINYBIRD_PROBE_TIMEOUT_MS),
       });
     } catch (cause) {
+      // Same rule as the response path below: this request carries the token in
+      // an Authorization header, so nothing free-text from the failure is
+      // forwarded. The error's class name is a fixed runtime vocabulary
+      // (TimeoutError, TypeError) and separates "Tinybird was slow" from
+      // "Tinybird was unreachable", which is the whole diagnostic need.
       throw new Error(
-        `${TINYBIRD_INGEST_TOKEN} could not be exercised against ${url.host}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        `${TINYBIRD_INGEST_TOKEN} could not be exercised against ${url.host} (${cause instanceof Error ? cause.name : "unknown error"}); deploying an unverified ingest token drops Exposures silently`,
       );
     }
 
@@ -201,6 +206,10 @@ function tinybirdApiUrl(rootDir, envName, consumers) {
   return apiUrl;
 }
 
+/** The other key types a JWK can declare, so a wrong one can be named without
+ * echoing any part of the parsed secret back into an error message. */
+const NON_RSA_KEY_TYPES = ["EC", "OKP", "oct"];
+
 /**
  * Hosted auth signs access tokens RS256 and publishes the public half at
  * /.well-known/jwks.json, so this secret is a key, not a passphrase. Presence
@@ -225,10 +234,14 @@ function assertRsaPrivateJwkSecret(name, value) {
     );
   }
   if (jwk.kty !== "RSA") {
-    // Reachable only after createPrivateKey loaded the key, so `kty` is one of
-    // the key types Node accepts (EC, OKP, oct) and never material from the
-    // secret. CodeQL's js/clear-text-logging cannot see that guard; alert #70.
-    throw new Error(`${name} must be an RSA private JWK; found kty "${jwk.kty}"`);
+    // Naming the type that was exported is the whole diagnostic ("that's the
+    // signing key, not the token key"). It is reported by matching against the
+    // fixed list above rather than by interpolating the parsed value, so no
+    // field of the secret can reach the error text by any path.
+    const found = NON_RSA_KEY_TYPES.find((kty) => kty === jwk.kty);
+    throw new Error(
+      `${name} must be an RSA private JWK; found ${found ? `kty "${found}"` : "a non-RSA key type"}`,
+    );
   }
 }
 

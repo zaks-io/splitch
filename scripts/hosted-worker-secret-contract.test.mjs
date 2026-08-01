@@ -124,9 +124,14 @@ test("hosted secret validation exercises TINYBIRD_INGEST_TOKEN instead of trusti
   );
   // A right token in the wrong region reaches the API and 404s on the Data Source.
   await assert.rejects(() => validate(recording(404)), /\(HTTP 404\)/);
+  // The probe sends the token in an Authorization header, so a transport failure
+  // reports the error's class and nothing free-text out of it.
   await assert.rejects(
-    () => validate(() => Promise.reject(new Error("getaddrinfo ENOTFOUND"))),
-    /could not be exercised against api\.us-west-2\.aws\.tinybird\.co: getaddrinfo ENOTFOUND/,
+    () => validate(() => Promise.reject(new DOMException("socket hang up", "TimeoutError"))),
+    (error) =>
+      /could not be exercised against api\.us-west-2\.aws\.tinybird\.co \(TimeoutError\)/.test(
+        error.message,
+      ) && !error.message.includes("socket hang up"),
   );
   // A 5xx says nothing about the credential. Passing it through would ship the
   // exact unverified token this probe exists to catch.
