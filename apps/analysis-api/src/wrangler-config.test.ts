@@ -10,24 +10,31 @@ describe("Analysis Worker Wrangler runtime config", () => {
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
-  ])("declares the SESSION_STORE binding required by /results auth for %s", (_target, target) => {
-    expect(target?.kv_namespaces).toContainEqual(
-      expect.objectContaining({ binding: "SESSION_STORE" }),
-    );
+  ])("declares Tinybird config for %s", (_target, target) => {
+    expect(target?.vars ?? {}).toMatchObject({
+      TINYBIRD_API_URL: "https://api.us-west-2.aws.tinybird.co",
+    });
   });
 
+  /**
+   * This Worker authenticates nobody: every route it owns is addressed at the
+   * Control Plane, which verifies the caller and forwards a resolved identity
+   * over the binding (ADR-0046). Carrying a session store or a JWKS origin here
+   * would be config for a second, unauthorized way in, so the absence is the
+   * assertion.
+   */
   it.each([
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
-  ])("declares auth and Tinybird config for %s", (_target, target) => {
+  ])("declares no auth-verification config or session store for %s", (_target, target) => {
+    expect(target?.kv_namespaces ?? []).not.toContainEqual(
+      expect.objectContaining({ binding: "SESSION_STORE" }),
+    );
     const vars = target?.vars ?? {};
-    expect(vars).toMatchObject({
-      AUTH_API_ORIGIN: expect.any(String),
-      AUTH_JWKS_URI: expect.any(String),
-      CONTROL_PLANE_ORIGIN: expect.any(String),
-      TINYBIRD_API_URL: "https://api.us-west-2.aws.tinybird.co",
-    });
+    expect(vars.AUTH_API_ORIGIN).toBeUndefined();
+    expect(vars.AUTH_JWKS_URI).toBeUndefined();
+    expect(vars.CONTROL_PLANE_ORIGIN).toBeUndefined();
   });
 
   it.each([

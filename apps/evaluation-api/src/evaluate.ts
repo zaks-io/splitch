@@ -145,7 +145,12 @@ async function evaluateResponse(
     response.headers.set("x-run-id", output.result.liveRunId);
   }
   if (body.variantName !== null) {
-    response.headers.set("x-variant-name", body.variantName);
+    // Variant names are user-authored and unconstrained, but header values are
+    // ByteStrings: a non-ASCII name would reach the SDK as mojibake, and one
+    // containing CR/LF would make `set` throw here -- after the Exposure was
+    // already committed, turning a served Evaluation into a 500. Percent-encoding
+    // keeps this channel ASCII-safe for every name the contract admits.
+    response.headers.set("x-variant-name", encodeURIComponent(body.variantName));
   }
   return response;
 }

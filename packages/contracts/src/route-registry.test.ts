@@ -235,9 +235,6 @@ describe("route registry: public surface is total over AuthKind", () => {
     const forwarded = publicSurfaces.flatMap((surface) => [...routesDelegatedBy(surface)]);
     const accepted = routeOwners.flatMap((owner) => [...routesDelegatedTo(owner)]);
     expect(ids(accepted)).toEqual(ids(forwarded));
-
-    const surfaceless = ids(routeRegistry.filter((route) => publicSurfaceFor(route) === null));
-    expect(ids(forwarded).filter((id) => surfaceless.includes(id))).toEqual([]);
   });
 
   it("splits every Worker's mount table into its public door and its binding door", () => {
@@ -245,6 +242,15 @@ describe("route registry: public surface is total over AuthKind", () => {
     // to the whole Worker and never overlap. An overlap is the bug directly: the
     // same operation answered on a public hostname AND over the binding is the
     // second address ADR-0046 exists to prevent.
+    //
+    // The identity holds only while every route HAS a public surface. A
+    // binding-only (`internal-worker`) route would reach `routesMountedBy` through
+    // ownership while belonging to neither door, so it would be mounted by the
+    // union and addressed by nothing. Assert that precondition rather than let the
+    // loop below pass vacuously: the door model has to grow before such a route is
+    // added, and this is what makes that a failing test instead of a mount gap.
+    expect(ids(routeRegistry.filter((route) => publicSurfaceFor(route) === null))).toEqual([]);
+
     for (const worker of routeOwners) {
       const surfaced = ids(routesSurfacedBy(worker));
       const delegated = ids(routesDelegatedTo(worker));

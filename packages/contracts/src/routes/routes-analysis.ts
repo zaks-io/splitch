@@ -32,7 +32,7 @@ export const analysisRoutes = [
     auth: AUTH,
     rateLimit: RATE,
     idempotency: "none",
-    errors: ["FLAG_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
+    errors: ["APP_NOT_FOUND", "FLAG_NOT_FOUND", "FORBIDDEN", "VALIDATION_ERROR"],
   }),
   defineApiRoute({
     operationId: "experiment_results_get",
@@ -46,6 +46,9 @@ export const analysisRoutes = [
     rateLimit: RATE,
     idempotency: "none",
     errors: [
+      // The delegation hop refuses an Environment that belongs to another App
+      // with APP_NOT_FOUND rather than confirming it exists elsewhere.
+      "APP_NOT_FOUND",
       "EXPERIMENT_NOT_FOUND",
       "RUN_NOT_FOUND",
       "UNAUTHORIZED",
@@ -67,6 +70,9 @@ export const analysisRoutes = [
     rateLimit: RATE,
     idempotency: "none",
     errors: [
+      // The delegation hop refuses an Environment that belongs to another App
+      // with APP_NOT_FOUND rather than confirming it exists elsewhere.
+      "APP_NOT_FOUND",
       "EXPERIMENT_NOT_FOUND",
       "RUN_NOT_FOUND",
       "UNAUTHORIZED",

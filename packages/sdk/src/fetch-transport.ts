@@ -140,16 +140,19 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
 
 async function readEvaluateResponse(response: Response): Promise<TransportResult> {
   const runId = response.headers.get(RUN_ID_HEADER);
-  const variantName = response.headers.get(VARIANT_NAME_HEADER);
   if (!response.ok) {
     return { ...(await readFailure(response)), variant: null, variantName: null, runId: null };
   }
   try {
     const body = DataPlaneEvaluateResponseSchema.parse(await response.json());
+    const encodedVariantName = response.headers.get(VARIANT_NAME_HEADER);
     return {
       status: response.status,
       variant: body.variant,
-      variantName,
+      // Percent-encoded by the edge because header values are ByteStrings and
+      // Variant names are not. A malformed value throws out of decodeURIComponent
+      // into the parse-failure path below rather than being guessed at.
+      variantName: encodedVariantName === null ? null : decodeURIComponent(encodedVariantName),
       runId,
     };
   } catch {

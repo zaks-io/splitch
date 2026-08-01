@@ -7,6 +7,7 @@ import {
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
 import {
+  type AuthResolver,
   type DelegatedIdentity,
   delegatedAuthResolver,
   delegatedIdentityFor,
@@ -16,12 +17,6 @@ import {
   type RateLimiter,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
-import {
-  makeControlPlaneAuthResolver,
-  makeHttpJwksFetcher,
-  makeJwksVerifier,
-  makeSessionStore,
-} from "./auth";
 import type { AnalysisApiEnv } from "./env";
 import { runScheduledSnapshot } from "./scheduled";
 import { createTinybirdCopyTransport, createTinybirdReadTransport } from "./tinybird";
@@ -29,7 +24,6 @@ import { createTinybirdCopyTransport, createTinybirdReadTransport } from "./tiny
 const allowLimiter: RateLimiter = () => ({ limited: false });
 /** The operations `api.splitch.dev` may hand this Worker over the binding (ADR-0046). */
 const delegatedRoutes = routesDelegatedTo("analysis-api");
-const verifierCache = new Map<string, ReturnType<typeof makeJwksVerifier>>();
 const service = "splitch-analysis-api";
 
 const handler = {
@@ -107,8 +101,15 @@ function requestAuthResolver(env: AnalysisApiEnv, authority: AnalysisRequestAuth
   if (authority?.kind === "control-plane") {
     return delegatedAuthResolver(authority.identity);
   }
-  return publicAuthResolver(env);
+  // This Worker surfaces no route of its own (ADR-0046): `/results` and `/usage`
+  // are addressed at the Control Plane, which authorizes the caller and forwards
+  // over the binding carrying an identity. The public door therefore mounts an
+  // empty table and has no credential to verify -- building a real verifier here
+  // would only turn a dropped var into a 500 on a hostname that must 404.
+  return refuseUnauthorized;
 }
+
+const refuseUnauthorized: AuthResolver = () => ({ ok: false, reason: "UNAUTHORIZED" });
 
 function requiredMcpDelegationSecret(secret: string | undefined): string {
   if (!secret) {
@@ -152,38 +153,3 @@ function runScheduled(
 }
 
 export { McpDelegationReplayDurableObject };
-
-function publicAuthResolver(env: AnalysisApiEnv) {
-  const controlPlaneAudience = requiredConfig(env.CONTROL_PLANE_ORIGIN, "CONTROL_PLANE_ORIGIN");
-  const jwksUri = requiredConfig(env.AUTH_JWKS_URI, "AUTH_JWKS_URI");
-  const expectedIssuer = requiredConfig(env.AUTH_API_ORIGIN, "AUTH_API_ORIGIN");
-  return makeControlPlaneAuthResolver({
-    verifier: verifierFor({ jwksUri, controlPlaneAudience, expectedIssuer }),
-    sessions: makeSessionStore(env.SESSION_STORE),
-  });
-}
-function requiredConfig(value: string | undefined, name: string): string {
-  if (value === undefined || value.trim().length === 0) {
-    throw new Error(`analysis-api: ${name} config is required`);
-  }
-  return value;
-}
-
-function verifierFor(input: {
-  jwksUri: string;
-  controlPlaneAudience: string;
-  expectedIssuer: string;
-}): ReturnType<typeof makeJwksVerifier> {
-  const cacheKey = JSON.stringify(input);
-  const cached = verifierCache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-  const verifier = makeJwksVerifier({
-    fetchJwks: makeHttpJwksFetcher(input.jwksUri),
-    controlPlaneAudience: input.controlPlaneAudience,
-    expectedIssuer: input.expectedIssuer,
-  });
-  verifierCache.set(cacheKey, verifier);
-  return verifier;
-}

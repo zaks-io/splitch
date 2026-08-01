@@ -66,21 +66,32 @@ test.describe("Control Panel local full-stack harness", () => {
       .get("http://127.0.0.1:18788/token")
       .then(async (response) => (await response.json()).accessToken);
     expect(typeof accessToken).toBe("string");
+    // Results are addressed at the Control Plane, not at the Analysis Worker that
+    // executes them (ADR-0046). Analysis has no public door, so these requests go
+    // to the surface that authorizes them and forwards over the binding.
     const unauthorized = await page.request.get(
-      "http://127.0.0.1:8790/apps/app_checkout_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
+      "http://127.0.0.1:18790/apps/app_checkout_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
     );
     expect(unauthorized.status()).toBe(401);
+    // Cross-App probe: the Environment belongs to another App, which the Control
+    // Plane refuses as APP_NOT_FOUND rather than confirming it exists elsewhere.
     const wrongApp = await page.request.get(
-      "http://127.0.0.1:8790/apps/app_billing_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
+      "http://127.0.0.1:18790/apps/app_billing_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
       { headers: { authorization: `Bearer ${accessToken}` } },
     );
-    expect(wrongApp.status()).toBe(403);
+    expect(wrongApp.status()).toBe(404);
+    // The old address must stay closed, or the authorization above is optional.
+    const bypass = await page.request.get(
+      "http://127.0.0.1:8790/apps/app_checkout_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
+      { headers: { authorization: `Bearer ${accessToken}` } },
+    );
+    expect(bypass.status()).toBe(404);
 
     const analysisResults = await Promise.all(
       environments.map(async (environment) => {
         const experimentId = `experiment_checkout_${environment.key}_e2e`;
         const response = await page.request.get(
-          `http://127.0.0.1:8790/apps/app_checkout_e2e/envs/${environment.id}/experiments/${experimentId}/results`,
+          `http://127.0.0.1:18790/apps/app_checkout_e2e/envs/${environment.id}/experiments/${experimentId}/results`,
           { headers: { authorization: `Bearer ${accessToken}` } },
         );
         expect(response.status()).toBe(200);
