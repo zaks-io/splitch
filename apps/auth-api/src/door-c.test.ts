@@ -61,7 +61,7 @@ describe("Door C discovery and device flow", () => {
     expect(skill.status).toBe(200);
     expect(skill.headers.get("content-type")).toContain("text/markdown");
     const skillText = await skill.text();
-    expect(skillText).toContain("one App ID or slug selector");
+    expect(skillText).toContain("App ID or slug selector optional");
     expect(skillText).not.toContain("same scope");
     expect(skillText).not.toContain("ID-JAG");
   });

@@ -8,7 +8,8 @@ Use one of the supported auth doors, then exchange the resulting credential at $
 
 - Anonymous: POST ${issuer}/agent/identity
 - Claim ceremony: POST ${issuer}/agent/identity/claim
-- Device flow: POST ${issuer}/oauth2/device_authorization with one App ID or slug selector, then poll ${issuer}/oauth2/token with the sealed device_code grant
+- Device flow: POST ${issuer}/oauth2/device_authorization as client_id splitch-cli (App ID or slug selector optional — cold start needs none), then poll ${issuer}/oauth2/token with the sealed device_code grant
+- Rebind: POST grant_type=refresh_token with an optional app or org selector to mint a token for another resource your live membership allows
 - Revoke: POST ${issuer}/oauth2/revoke
 ${smokeLine}
 `;
