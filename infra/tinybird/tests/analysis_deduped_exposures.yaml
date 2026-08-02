@@ -1,0 +1,31 @@
+- name: lambda_union_re_deduplicates_across_the_watermark_boundary
+  description: An Entity in the snapshot and again in the tail keeps its earliest first_exposure_ts and is quarantined as __multiple__ when the two layers disagree on variant; a NULL variant in the tail quarantines the same way.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
+  expected_http_status: 200
+  expected_result: |
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_conflict","variant":"__multiple__","first_exposure_ts":"2026-07-01 00:02:00.000","window_anchor":"2026-07-01 00:02:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_null_variant","variant":"__multiple__","first_exposure_ts":"2026-07-05 04:00:00.000","window_anchor":"2026-07-05 04:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_straddle","variant":"__multiple__","first_exposure_ts":"2026-07-01 00:03:00.000","window_anchor":"2026-07-01 00:03:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_control_snapshot","variant":"control","first_exposure_ts":"2026-07-01 00:00:00.000","window_anchor":"2026-07-01 00:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_edge","variant":"control","first_exposure_ts":"2026-07-05 00:00:00.000","window_anchor":"2026-07-05 00:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_tail","variant":"treatment","first_exposure_ts":"2026-07-05 01:00:00.000","window_anchor":"2026-07-05 01:00:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_treatment_snapshot","variant":"treatment","first_exposure_ts":"2026-07-01 00:01:00.000","window_anchor":"2026-07-01 00:01:00.000"}
+- name: other_run_is_isolated_from_the_requested_run
+  description: The Run filter, not the watermark, decides membership; a sibling Run in the same App and Environment returns only its own Entity.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_2"
+  expected_http_status: 200
+  expected_result: |
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_2","targeting_key_hash":"tk_other_run","variant":"control","first_exposure_ts":"2026-07-01 00:04:00.000","window_anchor":"2026-07-01 00:04:00.000"}
+    {"app_id":"app_1","environment_id":"env_prod","id_type":"user","run_id":"run_2","targeting_key_hash":"tk_other_run_tail","variant":"control","first_exposure_ts":"2026-07-05 05:00:00.000","window_anchor":"2026-07-05 05:00:00.000"}
+- name: another_tenant_sees_only_its_own_entities_under_identical_identifiers
+  description: A second App using the same Run, Experiment, and Environment identifiers gets its own population and none of the first App's, in both the snapshot and the tail.
+  parameters: "app_id=app_2&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
+  expected_http_status: 200
+  expected_result: |
+    {"app_id":"app_2","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_other_app","variant":"control","first_exposure_ts":"2026-07-01 00:06:00.000","window_anchor":"2026-07-01 00:06:00.000"}
+    {"app_id":"app_2","environment_id":"env_prod","id_type":"user","run_id":"run_1","targeting_key_hash":"tk_other_app_tail","variant":"control","first_exposure_ts":"2026-07-05 07:00:00.000","window_anchor":"2026-07-05 07:00:00.000"}
+- name: missing_run_id_is_rejected
+  description: A required scope parameter is never defaulted; the request fails loudly rather than widening to every Run.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1"
+  expected_http_status: 400
+  expected_result: "Template Syntax Error: Required parameter is not defined. Check the parameters app_id, environment_id, experiment_id and run_id. Please provide a value or set a default value in the pipe code."

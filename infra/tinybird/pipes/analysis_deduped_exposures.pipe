@@ -1,0 +1,34 @@
+DESCRIPTION Returns one deduped first-touch Exposure row per Entity in one Run, shaped as the Stats Engine's DedupeExposureRow.
+
+# `experiment_id` is deliberately absent: DedupeExposureRowSchema is strict, so any
+# column not on it fails the parse in the Analysis Worker. The Run pins the
+# Experiment, and serve_deduped_exposures already filters on both.
+#
+# `__multiple__` rows are deliberately NOT filtered here. The quarantine rule keeps
+# them out of the analysis arms, but the Stats Engine applies that itself
+# (packages/stats/src/exposure-denominator.ts) and counts the same rows into
+# health.multiple_count / multiple_rate. Dropping them in SQL would report zero
+# variant conflicts for a Run that had them -- silencing the exact defect the
+# quarantine exists to surface.
+
+NODE stats_input_rows
+SQL >
+    SELECT
+        app_id,
+        environment_id,
+        id_type,
+        run_id,
+        targeting_key_hash,
+        variant,
+        first_exposure_ts,
+        -- The ungated anchor. The Activation gate re-anchors window_anchor to the
+        -- Entity's activation_ts, but that gate is per-Run configuration held in D1
+        -- (runs.activation_metric_id) which the Analysis Worker cannot read, so no
+        -- Run is gated end to end yet. Emitted explicitly rather than omitted: the
+        -- consumer would otherwise substitute first_exposure_ts for a missing
+        -- column, which reads as a computed anchor and is not one.
+        first_exposure_ts AS window_anchor
+    FROM serve_deduped_exposures
+    ORDER BY variant, targeting_key_hash
+
+TYPE ENDPOINT

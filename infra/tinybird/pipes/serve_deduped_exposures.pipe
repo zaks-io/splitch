@@ -1,0 +1,98 @@
+DESCRIPTION The canonical first-touch Exposure population for one Run: the deduped snapshot plus the raw tail ingested since that snapshot's watermark, re-deduped across the boundary.
+
+NODE snapshot_layer
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(experiment_id) %}
+    {{error('experiment_id is required')}}
+    {% end %}
+    {% if not defined(run_id) %}
+    {{error('run_id is required')}}
+    {% end %}
+    SELECT
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        targeting_key_hash,
+        variant,
+        first_exposure_ts
+    FROM deduped_exposures
+    WHERE app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND experiment_id = {{String(experiment_id)}}
+        AND run_id = {{String(run_id)}}
+
+NODE tail_layer
+SQL >
+    %
+    SELECT
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        targeting_key_hash,
+        if(
+            countIf(isNull(variant)) > 0 OR countDistinct(variant) > 1,
+            '__multiple__',
+            max(assumeNotNull(variant))
+        ) AS variant,
+        min(server_received_at) AS first_exposure_ts
+    FROM raw_events
+    WHERE type = 'exposure'
+        AND app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND experiment_id = {{String(experiment_id)}}
+        AND run_id = {{String(run_id)}}
+        -- Inclusive on both sides of the watermark: the Copy Pipe takes
+        -- `ingest_ts <= copy_watermark`, so a row landing exactly on the boundary
+        -- after that snapshot ran would be lost by a strict `>`. Overlap is safe
+        -- because the union re-reduces with the same first-touch rule.
+        AND ingest_ts >= (
+            SELECT coalesce(
+                max(watermark_ts),
+                toDateTime64('1970-01-01 00:00:00', 3, 'UTC')
+            )
+            FROM deduped_exposures
+            WHERE app_id = {{String(app_id)}}
+                AND environment_id = {{String(environment_id)}}
+        )
+    GROUP BY
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        targeting_key_hash
+
+NODE union_and_final_dedup
+SQL >
+    SELECT
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        targeting_key_hash,
+        if(countDistinct(variant) > 1, '__multiple__', max(variant)) AS variant,
+        min(first_exposure_ts) AS first_exposure_ts
+    FROM (
+        SELECT * FROM snapshot_layer
+        UNION ALL
+        SELECT * FROM tail_layer
+    )
+    GROUP BY
+        app_id,
+        environment_id,
+        experiment_id,
+        run_id,
+        id_type,
+        targeting_key_hash
