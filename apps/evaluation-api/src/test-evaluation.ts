@@ -10,7 +10,7 @@ import type { EvaluatePathDeps, EvaluatePathInput } from "./evaluate/evaluate-pa
 import type { FlagConfig, Provider } from "./provider/provider";
 
 type TestEvaluationInput = {
-  params: { appId: string; environmentId: string; flagId: string };
+  params: { appId: string; environmentId: string; flagKey: string };
   body: { evaluationContext: EvaluatePathInput["evaluationContext"] };
 };
 
@@ -22,14 +22,17 @@ export function makeTestEvaluationHandler(deps: EvaluatePathDeps) {
       {
         appId: parsed.params.appId,
         environmentId: parsed.params.environmentId,
-        flagKey: parsed.params.flagId,
+        flagKey: parsed.params.flagKey,
         evaluationContext: parsed.body.evaluationContext,
       },
       { ...deps, provider },
     );
 
     if (result.kind === "error") {
-      return renderError(errorResponse(result.errorCode, result.errorMessage), { requestId });
+      return renderError(
+        errorResponse(result.errorCode, result.errorMessage, parsed.params.flagKey),
+        { requestId },
+      );
     }
     if (provider.flag === null) {
       return renderError(errorResponse("INTERNAL_SERVER_ERROR", "flag config was not resolved"), {
@@ -68,7 +71,7 @@ function testEvaluationInput(input: unknown): TestEvaluationInput {
     params: {
       appId: stringField(params, "appId"),
       environmentId: stringField(params, "environmentId"),
-      flagId: stringField(params, "flagId"),
+      flagKey: stringField(params, "flagKey"),
     },
     body: {
       evaluationContext: evaluationContext as TestEvaluationInput["body"]["evaluationContext"],
@@ -118,9 +121,18 @@ function valueForVariant(
   return variant === undefined ? { ok: false } : { ok: true, value: variant.value };
 }
 
-function errorResponse(code: ErrorCode, message: string): ErrorResponse {
+function errorResponse(code: ErrorCode, message: string, flagKey?: string): ErrorResponse {
   if (code === "FLAG_NOT_FOUND") {
-    return { code, message: "flag not found", details: {} };
+    // A Flag id here is the near-miss worth naming: this route resolves by key,
+    // and "flag not found" alone sends the caller looking for a missing Flag
+    // rather than at the identifier they passed.
+    return {
+      code,
+      message: flagKey?.startsWith("flag_")
+        ? `no Flag with key "${flagKey}"; this route takes a Flag key, and "${flagKey}" is a Flag id`
+        : "flag not found",
+      details: {},
+    };
   }
   if (code === "VALIDATION_ERROR") {
     return { code, message, details: { issues: [] } };

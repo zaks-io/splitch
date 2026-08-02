@@ -1,5 +1,5 @@
 import { createPrivateKey } from "node:crypto";
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseWranglerConfigFile } from "./wrangler-config.mjs";
 
@@ -71,9 +71,10 @@ export function assertHostedDelegationSecretConfig(rootDir, envName) {
   }
 }
 
-export function validateHostedWorkerSecretEnv(rootDir, envName, env) {
+export async function validateHostedWorkerSecretEnv(rootDir, envName, env, deps = {}) {
   assertHostedDelegationSecretConfig(rootDir, envName);
-  const required = [...hostedWorkerSecrets(rootDir, envName).keys()];
+  const consumers = hostedWorkerSecrets(rootDir, envName);
+  const required = [...consumers.keys()];
   const missing = required.filter((name) => !env[name]);
   if (missing.length > 0) {
     throw new Error(`missing required Worker secret env: ${missing.join(", ")}`);
@@ -87,8 +88,127 @@ export function validateHostedWorkerSecretEnv(rootDir, envName, env) {
   if (required.includes("ACCESS_TOKEN_SECRET")) {
     assertRsaPrivateJwkSecret("ACCESS_TOKEN_SECRET", env.ACCESS_TOKEN_SECRET);
   }
+  if (required.includes(TINYBIRD_INGEST_TOKEN)) {
+    await assertTinybirdIngestToken(
+      rootDir,
+      envName,
+      consumers,
+      env,
+      deps.fetch ?? globalThis.fetch,
+    );
+  }
   return required;
 }
+
+const TINYBIRD_INGEST_TOKEN = "TINYBIRD_INGEST_TOKEN";
+/** The Tinybird token whose APPEND scope this secret carries. */
+const TINYBIRD_INGEST_SCOPE = "TOKEN raw_events_ingest APPEND";
+/** A hung Tinybird must not hang the deploy; the probe writes nothing, so retry is free. */
+const TINYBIRD_PROBE_TIMEOUT_MS = 10_000;
+
+/**
+ * The Data Sources this token must reach, read from the Tinybird project rather
+ * than restated here: the `.datasource` files already declare which token appends
+ * to them, so a new ingest Data Source is probed without a second list to update.
+ */
+function tinybirdIngestDatasources(rootDir) {
+  const dir = join(rootDir, "infra", "tinybird", "datasources");
+  const names = readdirSync(dir)
+    .filter((file) => file.endsWith(".datasource"))
+    .filter((file) => readFileSync(join(dir, file), "utf8").includes(TINYBIRD_INGEST_SCOPE))
+    .map((file) => file.replace(/\.datasource$/, ""))
+    .sort();
+  if (names.length === 0) {
+    throw new Error(
+      `no Data Source in ${dir} declares "${TINYBIRD_INGEST_SCOPE}", so ${TINYBIRD_INGEST_TOKEN} cannot be exercised`,
+    );
+  }
+  return names;
+}
+
+/**
+ * Presence proved nothing here. A wrong, expired, or under-scoped ingest token
+ * deploys clean and then loses every Exposure at runtime, with the loss visible
+ * only in the ingest Worker's logs. So make the deploy exercise the exact call
+ * the Worker makes -- an append to each ingest Data Source -- and fail before
+ * the Worker is replaced. The body carries zero rows, so the probe writes
+ * nothing and is safe to repeat on every deploy.
+ */
+async function assertTinybirdIngestToken(rootDir, envName, consumers, env, fetchImpl) {
+  const apiUrl = tinybirdApiUrl(rootDir, envName, consumers);
+  const datasources = tinybirdIngestDatasources(rootDir);
+  for (const datasource of datasources) {
+    const url = new URL("/v0/events", apiUrl);
+    url.searchParams.set("name", datasource);
+
+    let response;
+    try {
+      response = await fetchImpl(url.toString(), {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${env[TINYBIRD_INGEST_TOKEN]}`,
+          "content-type": "application/x-ndjson",
+        },
+        body: "",
+        signal: AbortSignal.timeout(TINYBIRD_PROBE_TIMEOUT_MS),
+      });
+    } catch (cause) {
+      // Same rule as the response path below: this request carries the token in
+      // an Authorization header, so nothing free-text from the failure is
+      // forwarded. The error's class name is a fixed runtime vocabulary
+      // (TimeoutError, TypeError) and separates "Tinybird was slow" from
+      // "Tinybird was unreachable", which is the whole diagnostic need.
+      throw new Error(
+        `${TINYBIRD_INGEST_TOKEN} could not be exercised against ${url.host} (${cause instanceof Error ? cause.name : "unknown error"}); deploying an unverified ingest token drops Exposures silently`,
+      );
+    }
+
+    assertTinybirdProbeResponse(response, datasource, url.host, datasources);
+  }
+}
+
+/**
+ * Tinybird's error body can quote the token, so no response text is forwarded --
+ * only the status and what it means for the deploy.
+ *
+ * A 5xx proves nothing about the credential, and the whole point of this probe is
+ * that an unproven ingest token silently drops every Exposure once it ships. So an
+ * unreachable Tinybird blocks the deploy rather than waving it through.
+ *
+ * Other statuses pass: the exact success shape of a zero-row append is Tinybird's
+ * to define, and asserting a specific 2xx here would fail deploys on a credential
+ * that works.
+ */
+function assertTinybirdProbeResponse(response, datasource, host, datasources) {
+  // 401/403 is a rejected credential; 404 is the right credential pointed at a
+  // Workspace or region without this Data Source.
+  if (response.status === 401 || response.status === 403 || response.status === 404) {
+    throw new Error(
+      `${TINYBIRD_INGEST_TOKEN} was rejected by ${host} for Data Source "${datasource}" (HTTP ${response.status}); it must carry APPEND scope on ${datasources.join(" and ")} in that region`,
+    );
+  }
+  if (response.status >= 500) {
+    throw new Error(
+      `${TINYBIRD_INGEST_TOKEN} could not be verified against ${host} for Data Source "${datasource}" (HTTP ${response.status}); deploying an unverified ingest token drops Exposures silently`,
+    );
+  }
+}
+
+function tinybirdApiUrl(rootDir, envName, consumers) {
+  const [appName] = consumers.get(TINYBIRD_INGEST_TOKEN) ?? [];
+  const config = parseWranglerConfigFile(join(rootDir, "apps", appName, "wrangler.jsonc"));
+  const apiUrl = config.env?.[envName]?.vars?.TINYBIRD_API_URL ?? config.vars?.TINYBIRD_API_URL;
+  if (!apiUrl) {
+    throw new Error(
+      `${appName} ${envName} requires ${TINYBIRD_INGEST_TOKEN} but declares no TINYBIRD_API_URL var to exercise it against`,
+    );
+  }
+  return apiUrl;
+}
+
+/** The other key types a JWK can declare, so a wrong one can be named without
+ * echoing any part of the parsed secret back into an error message. */
+const NON_RSA_KEY_TYPES = ["EC", "OKP", "oct"];
 
 /**
  * Hosted auth signs access tokens RS256 and publishes the public half at
@@ -114,7 +234,14 @@ function assertRsaPrivateJwkSecret(name, value) {
     );
   }
   if (jwk.kty !== "RSA") {
-    throw new Error(`${name} must be an RSA private JWK; found kty "${jwk.kty}"`);
+    // Naming the type that was exported is the whole diagnostic ("that's the
+    // signing key, not the token key"). It is reported by matching against the
+    // fixed list above rather than by interpolating the parsed value, so no
+    // field of the secret can reach the error text by any path.
+    const found = NON_RSA_KEY_TYPES.find((kty) => kty === jwk.kty);
+    throw new Error(
+      `${name} must be an RSA private JWK; found ${found ? `kty "${found}"` : "a non-RSA key type"}`,
+    );
   }
 }
 

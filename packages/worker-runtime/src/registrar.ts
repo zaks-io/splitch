@@ -1,6 +1,7 @@
 import type { RouteContract } from "@splitch/contracts";
 import type { Context, Hono } from "hono";
 import type { z } from "zod";
+import { containObservability } from "./contained-observability";
 import type { RegistrarDeps } from "./deps";
 import { parseInput } from "./parse-input";
 import { type Principal, PUBLIC_PRINCIPAL } from "./principal";
@@ -40,13 +41,19 @@ export interface Registrar {
  * invariant across every mounted route (see docs/spec/platform/worker-runtime.md).
  */
 export function createRegistrar(deps: RegistrarDeps): Registrar {
+  // Contained once, here, so every hook call below inherits it and no future
+  // call site has to remember (see contained-observability.ts).
+  const contained: RegistrarDeps = {
+    ...deps,
+    observability: containObservability(deps.observability),
+  };
   return {
     mount(app, contract, handler) {
-      assertResolvable(contract, deps);
+      assertResolvable(contract, contained);
 
       const method = contract.method.toLowerCase() as Lowercase<RouteContract["method"]>;
       app[method](contract.path, async (c: Context) => {
-        return runGuard(c, contract, deps, handler);
+        return runGuard(c, contract, contained, handler);
       });
     },
   };
@@ -118,9 +125,16 @@ async function runGuard<Input extends z.ZodTypeAny, Output extends z.ZodTypeAny>
 
     return withDefaults(response, requestId, deps.defaultHeaders);
   } catch (cause) {
-    // Step 8 (fault path): any unexpected throw is a loud 500, never a leak.
-    deps.observability?.onError?.({ requestId, code: "INTERNAL_SERVER_ERROR", status: 500 });
-    void cause;
+    // Step 8 (fault path): any unexpected throw is a loud 500, never a leak. The
+    // body stays generic so nothing internal reaches the caller, which makes the
+    // observability hop the only route the thrown value has to an operator --
+    // dropping it here is what turns every fault into the same blank 500.
+    deps.observability?.onError?.({
+      requestId,
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      cause,
+    });
     return renderError(emptyError("INTERNAL_SERVER_ERROR", "unhandled runtime fault"), {
       requestId,
       defaultHeaders: deps.defaultHeaders,

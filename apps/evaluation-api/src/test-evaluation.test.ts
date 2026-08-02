@@ -69,6 +69,8 @@ function makeHarness() {
   const configKv = seededKv();
   const assignmentStore = new RecordingAssignmentStore();
   const app = createApp({
+    // Addressed at the Control Plane, executed here over the binding (ADR-0046).
+    door: "binding",
     authResolver,
     dataPlaneAuthResolver,
     rateLimiter: allowLimiter,
@@ -100,7 +102,7 @@ function testEvalInit(token?: string): RequestInit {
   };
 }
 
-describe("POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval", () => {
+describe("POST /apps/:appId/envs/:environmentId/flags/:flagKey/test-eval", () => {
   it("returns the full rule_matched reason from KV config with liveRunId null", async () => {
     const { app, assignmentStore, configKv } = makeHarness();
 
@@ -151,6 +153,24 @@ describe("POST /apps/:appId/envs/:environmentId/flags/:flagId/test-eval", () => 
     expect(JSON.stringify(body)).not.toContain("app:");
     expect(assignmentStore.getAllCalls).toEqual([]);
     expect(assignmentStore.putCalls).toEqual([]);
+  });
+
+  it("names the id-vs-key near miss when a Flag id is passed to this key-addressed route", async () => {
+    // `flags create` prints a Flag id, and this is the next command an agent
+    // runs. A bare "flag not found" sends it looking for a deleted Flag instead
+    // of at the identifier it just pasted.
+    const { app } = makeHarness();
+
+    const res = await app.request(
+      `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/flags/flag_01HZ/test-eval`,
+      testEvalInit("cp-app-A"),
+    );
+    const body = (await res.json()) as ErrorResponse;
+
+    expect(res.status).toBe(404);
+    expect(body.code).toBe("FLAG_NOT_FOUND");
+    expect(body.message).toContain("takes a Flag key");
+    expect(body.message).toContain("flag_01HZ");
   });
 
   it("rejects missing, data-plane, and cross-App credentials before evaluation", async () => {

@@ -6,15 +6,45 @@ export async function completeCredentialCacheBackfill({ origin, token, fetchImpl
   if (!token) throw new Error("SPLITCH_DEPLOY_GATE_TOKEN is required");
 
   const gate = new URL("/internal/credential-cache-backfill", origin);
+  /**
+   * This drains through the Control Plane ALREADY serving traffic, because it has
+   * to finish before the schema-v2 Evaluation Worker ships and Evaluation now has
+   * to ship before the Control Plane that binds its entrypoint (ADR-0046). Two
+   * consequences are load-bearing for whoever runs a deploy:
+   *
+   * - an environment that has never been deployed has no gate to drain, so the
+   *   chain stops here, at step one, before anything is deployed;
+   * - a release that changes the gate itself drains through the OLD gate, so it
+   *   cannot ship in a single pass.
+   *
+   * Neither is silently worked around -- a skipped backfill ships an Evaluation
+   * Worker onto credentials it cannot read. The error says which case it is.
+   */
   async function request(path, init) {
     const endpoint = new URL(gate);
     endpoint.pathname = `${gate.pathname}${path}`;
-    const response = await fetchImpl(endpoint, {
-      ...init,
-      headers: { authorization: `Bearer ${token}` },
-    });
-    if (!response.ok)
-      throw new Error(`credential cache backfill gate returned HTTP ${response.status}`);
+    let response;
+    try {
+      response = await fetchImpl(endpoint, {
+        ...init,
+        headers: { authorization: `Bearer ${token}` },
+      });
+    } catch (cause) {
+      // The request carries the deploy gate token, so only the error class is
+      // reported, never a message that could quote the header back.
+      throw new Error(
+        `credential cache backfill gate at ${gate.origin} is unreachable (${cause instanceof Error ? cause.name : "unknown error"}); a never-deployed environment has no gate to drain and must be bootstrapped before this chain can run`,
+      );
+    }
+    if (!response.ok) {
+      const bootstrap =
+        response.status === 404
+          ? "; a 404 here usually means this environment has no Control Plane deployed yet"
+          : "";
+      throw new Error(
+        `credential cache backfill gate returned HTTP ${response.status}${bootstrap}`,
+      );
+    }
     const body = await response.json();
     if (!body || !["client", "api", "done"].includes(body.kind)) {
       throw new Error("credential cache backfill gate returned an invalid checkpoint");

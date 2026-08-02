@@ -13,7 +13,23 @@ import { evaluationRoute } from "./routes";
 import { makeTestEvaluationHandler } from "./test-evaluation";
 import { makeVerifyHandler } from "./verify";
 
+/**
+ * Which door of this Worker the app instance is serving.
+ *
+ * `edge.splitch.dev` must not mount a route whose public address is
+ * `api.splitch.dev`. That route holds a control-plane token and arrives here over
+ * the Control Plane's binding after it has been authorized; answering it on the
+ * public hostname too would be a second live address for the same operation, one
+ * the clients are told about and one they are not (ADR-0046).
+ *
+ * `binding` is the trusted side: the Worker on the other end already picked the
+ * operation and authorized the caller, so it mounts everything this Worker
+ * executes.
+ */
+export type EvaluationDoor = "public" | "binding";
+
 export interface AppDeps extends EvaluatePathDeps {
+  door: EvaluationDoor;
   authResolver: AuthResolver;
   dataPlaneAuthResolver: AuthResolver;
   exposureAssembly: ExposureAssemblyDeps;
@@ -58,7 +74,9 @@ export function createApp(deps: AppDeps): Hono {
   );
   registrar.mount(app, evaluationRoute("sdk_peek"), makePeekHandler(deps));
   registrar.mount(app, evaluationRoute("sdk_verify"), makeVerifyHandler(deps));
-  registrar.mount(app, evaluationRoute("flags_test_eval"), makeTestEvaluationHandler(deps));
+  if (deps.door === "binding") {
+    registrar.mount(app, evaluationRoute("flags_test_eval"), makeTestEvaluationHandler(deps));
+  }
   return app;
 }
 
@@ -68,6 +86,6 @@ function evaluationCorsHeaders(): Headers {
     "access-control-allow-methods": "POST, OPTIONS",
     "access-control-allow-headers":
       "authorization, content-type, idempotency-key, x-splitch-sdk-runtime",
-    "access-control-expose-headers": "x-request-id, x-run-id",
+    "access-control-expose-headers": "x-request-id, x-run-id, x-variant-name",
   });
 }

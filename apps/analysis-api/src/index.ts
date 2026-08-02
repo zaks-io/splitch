@@ -1,6 +1,5 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
-import type { ScopedAnalysisIdentity } from "@splitch/control-plane-sdk/panel-experiments";
+import { createHealthResponse, parsePlatformTarget, routesDelegatedTo } from "@splitch/contracts";
 import {
   createWorkerObservability,
   workerEmitter,
@@ -8,25 +7,24 @@ import {
   wrapWorkerHandler,
 } from "@splitch/observability/worker";
 import {
+  type AuthResolver,
+  type DelegatedIdentity,
+  delegatedAuthResolver,
+  delegatedIdentityFor,
   McpDelegationReplayDurableObject,
   makeDurableMcpDelegationReplayGuard,
   makeMcpDelegationAuthResolver,
+  notDelegatedResponse,
   type RateLimiter,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
-import {
-  makeControlPlaneAuthResolver,
-  makeHttpJwksFetcher,
-  makeJwksVerifier,
-  makeSessionStore,
-} from "./auth";
 import type { AnalysisApiEnv } from "./env";
 import { runScheduledSnapshot } from "./scheduled";
-import { scopedIdentityForRequest } from "./scoped-service-identity";
 import { createTinybirdCopyTransport, createTinybirdReadTransport } from "./tinybird";
 
 const allowLimiter: RateLimiter = () => ({ limited: false });
-const verifierCache = new Map<string, ReturnType<typeof makeJwksVerifier>>();
+/** The operations `api.splitch.dev` may hand this Worker over the binding (ADR-0046). */
+const delegatedRoutes = routesDelegatedTo("analysis-api");
 const service = "splitch-analysis-api";
 
 const handler = {
@@ -47,18 +45,18 @@ export class McpEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
   }
 }
 
-/** Binding-only entrypoint for Run-scoped reads authorized by the Control Plane Worker. */
+/** Binding-only entrypoint for reads the Control Plane Worker already authorized. */
 export class ControlPlaneEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
   override async fetch(request: Request): Promise<Response> {
-    const identity = await scopedIdentityForRequest(request);
-    if (!identity) return new Response("not found", { status: 404 });
+    const identity = delegatedIdentityFor(request, delegatedRoutes);
+    if (!identity) return notDelegatedResponse(request);
     return handleRequest(request, this.env, this.ctx, { kind: "control-plane", identity });
   }
 }
 
 type AnalysisRequestAuthority =
   | { kind: "mcp" }
-  | { kind: "control-plane"; identity: ScopedAnalysisIdentity };
+  | { kind: "control-plane"; identity: DelegatedIdentity };
 
 async function handleRequest(
   request: Request,
@@ -78,6 +76,7 @@ async function handleRequest(
   }
 
   const app = createApp({
+    door: authority ? "binding" : "public",
     authResolver: requestAuthResolver(env, authority),
     rateLimiter: allowLimiter,
     tinybird: createTinybirdReadTransport(env),
@@ -101,24 +100,17 @@ function requestAuthResolver(env: AnalysisApiEnv, authority: AnalysisRequestAuth
     });
   }
   if (authority?.kind === "control-plane") {
-    const { identity } = authority;
-    return async () => ({
-      ok: true as const,
-      principal: {
-        kind: "control-plane-token" as const,
-        id: identity.actorId,
-        scopes: [],
-        orgId: null,
-        appId: identity.appId,
-        environmentId: identity.environmentId,
-        // Internal service-to-service identity minted by the control-plane
-        // Worker, not by an auth door.
-        authDoor: null,
-      },
-    });
+    return delegatedAuthResolver(authority.identity);
   }
-  return publicAuthResolver(env);
+  // This Worker surfaces no route of its own (ADR-0046): `/results` and `/usage`
+  // are addressed at the Control Plane, which authorizes the caller and forwards
+  // over the binding carrying an identity. The public door therefore mounts an
+  // empty table and has no credential to verify -- building a real verifier here
+  // would only turn a dropped var into a 500 on a hostname that must 404.
+  return refuseUnauthorized;
 }
+
+const refuseUnauthorized: AuthResolver = () => ({ ok: false, reason: "UNAUTHORIZED" });
 
 function requiredMcpDelegationSecret(secret: string | undefined): string {
   if (!secret) {
@@ -162,38 +154,3 @@ function runScheduled(
 }
 
 export { McpDelegationReplayDurableObject };
-
-function publicAuthResolver(env: AnalysisApiEnv) {
-  const controlPlaneAudience = requiredConfig(env.CONTROL_PLANE_ORIGIN, "CONTROL_PLANE_ORIGIN");
-  const jwksUri = requiredConfig(env.AUTH_JWKS_URI, "AUTH_JWKS_URI");
-  const expectedIssuer = requiredConfig(env.AUTH_API_ORIGIN, "AUTH_API_ORIGIN");
-  return makeControlPlaneAuthResolver({
-    verifier: verifierFor({ jwksUri, controlPlaneAudience, expectedIssuer }),
-    sessions: makeSessionStore(env.SESSION_STORE),
-  });
-}
-function requiredConfig(value: string | undefined, name: string): string {
-  if (value === undefined || value.trim().length === 0) {
-    throw new Error(`analysis-api: ${name} config is required`);
-  }
-  return value;
-}
-
-function verifierFor(input: {
-  jwksUri: string;
-  controlPlaneAudience: string;
-  expectedIssuer: string;
-}): ReturnType<typeof makeJwksVerifier> {
-  const cacheKey = JSON.stringify(input);
-  const cached = verifierCache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-  const verifier = makeJwksVerifier({
-    fetchJwks: makeHttpJwksFetcher(input.jwksUri),
-    controlPlaneAudience: input.controlPlaneAudience,
-    expectedIssuer: input.expectedIssuer,
-  });
-  verifierCache.set(cacheKey, verifier);
-  return verifier;
-}

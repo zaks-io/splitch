@@ -8,13 +8,19 @@ export function sdkRuntime(request: Request): string {
   return value && value.length <= 64 ? value : "unknown";
 }
 
+/**
+ * The arm label travels beside the body, not in it: the wire body is frozen for
+ * already-published strict SDK parsers (see DataPlaneEvaluateResponseSchema).
+ */
 export function responseBody(
   flag: FlagConfig,
   result: Exclude<EvaluateResult, { kind: "error" }>,
-): { ok: true; value: { variant: Variant["value"] | null } } | { ok: false; error: ErrorResponse } {
+):
+  | { ok: true; value: { variant: Variant["value"] | null }; variantName: string | null }
+  | { ok: false; error: ErrorResponse } {
   const value = valueForVariant(flag.variants, result);
   return value.ok
-    ? { ok: true, value: { variant: value.value } }
+    ? { ok: true, value: { variant: value.value }, variantName: result.variant }
     : {
         ok: false,
         error: errorResponse(

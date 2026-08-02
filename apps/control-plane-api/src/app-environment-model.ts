@@ -221,6 +221,17 @@ export function organizationNotFound(requestId: string): Response {
   );
 }
 
+export function unusableAppKey(name: string, requestId: string): Response {
+  return renderError(
+    {
+      code: "VALIDATION_ERROR",
+      message: `no App key could be derived from name "${name}"; supply an explicit "key"`,
+      details: { issues: [{ path: ["key"], message: "could not be derived from name" }] },
+    },
+    { requestId },
+  );
+}
+
 export function appNotFound(requestId: string): Response {
   return renderError(
     { code: "APP_NOT_FOUND", message: "app not found", details: {} },
@@ -252,24 +263,6 @@ function resourceNotEmpty(
       code: "RESOURCE_NOT_EMPTY",
       message: "resource has children that must be deleted before this operation can continue",
       details: { resourceType, resourceId, childType, childCount, attemptedOp },
-    },
-    { requestId },
-  );
-}
-
-export function organizationIdMismatch(requestId: string): Response {
-  return renderError(
-    {
-      code: "VALIDATION_ERROR",
-      message: "request failed schema validation",
-      details: {
-        issues: [
-          {
-            path: ["body", "organizationId"],
-            message: "organizationId must match the orgId path parameter",
-          },
-        ],
-      },
     },
     { requestId },
   );

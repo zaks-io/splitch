@@ -164,6 +164,10 @@ async function handleRequest(
       workerObservabilityWithWaitUntil("control-plane-api", ctx),
     ),
     analysisResults: createAnalysisResultsReader(env.ANALYSIS_API),
+    delegationBindings: {
+      "analysis-api": env.ANALYSIS_API,
+      "evaluation-api": env.EVALUATION_API,
+    },
   });
 
   return app.fetch(request, env);

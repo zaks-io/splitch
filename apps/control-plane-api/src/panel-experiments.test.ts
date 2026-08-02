@@ -1,4 +1,4 @@
-import { SCOPED_SERVICE_IDENTITY_HEADER } from "@splitch/control-plane-sdk/panel-experiments";
+import { DELEGATED_IDENTITY_HEADER } from "@splitch/worker-runtime";
 import type { StatsOutput } from "@splitch/contracts";
 import type { Repository } from "@splitch/db";
 import { describe, expect, it, vi } from "vitest";
@@ -57,13 +57,12 @@ describe("panel Experiments composite read", () => {
     expect(await request?.clone().json()).toEqual({ runId: RUN_ID });
     expect(request?.headers.get("authorization")).toBeNull();
     expect(request?.headers.get("x-splitch-panel-session")).toBeNull();
-    expect(JSON.parse(request?.headers.get(SCOPED_SERVICE_IDENTITY_HEADER) ?? "{}")).toEqual({
+    expect(JSON.parse(request?.headers.get(DELEGATED_IDENTITY_HEADER) ?? "{}")).toEqual({
       operation: "experiment_results_post",
       actorId: ACTOR_ID,
+      orgId: null,
       appId: APP_ID,
       environmentId: ENVIRONMENT_ID,
-      experimentId: EXPERIMENT_ID,
-      runId: RUN_ID,
     });
   });
 

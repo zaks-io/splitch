@@ -26,6 +26,10 @@ describe("POST /api/sdk/evaluate", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("x-run-id")).toBe("run-42");
+    // The arm label is public-safe but rides a header, never the body: published
+    // SDKs parse this body strictly and an added key makes them serve the
+    // caller's default after the Exposure is already committed.
+    expect(res.headers.get("x-variant-name")).toBe("treatment");
     expect(body).toEqual({ variant: true });
     expect(Object.keys(body)).toEqual(["variant"]);
     expect(JSON.stringify(body)).not.toContain("reason");
@@ -157,6 +161,7 @@ describe("POST /api/sdk/evaluate", () => {
     const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY, {}, { appId: APP_ID }));
 
     expect(res.status).toBe(200);
+    expect(res.headers.get("x-variant-name")).toBe("treatment");
     await expect(res.json()).resolves.toEqual({ variant: true });
     expect(exposureSink.writes).toHaveLength(1);
     expect(exposureSink.writes[0]?.appId).toBe(APP_ID);
@@ -251,6 +256,7 @@ describe("POST /api/sdk/evaluate: non-exposing outcomes", () => {
     const res = await app.request(PATH, sdkRouteInit(CLIENT_KEY));
 
     expect(res.status).toBe(200);
+    expect(res.headers.get("x-variant-name")).toBe("control");
     await expect(res.json()).resolves.toEqual({ variant: false });
     expect(exposureSink.writes).toEqual([]);
     // A replayed holdover never re-writes the Assignment Store.
@@ -278,6 +284,6 @@ function liveRunHarness() {
 
 class FailingEvaluationCommitSink {
   async write(_event: EvaluationCommitEvent): Promise<void> {
-    throw new EvaluationCommitSinkError("forced failure");
+    throw new EvaluationCommitSinkError("ingest_rejected", "forced failure", { status: 503 });
   }
 }

@@ -94,7 +94,6 @@ const MCP_TOOL_MEMBERSHIP_GATES = {
   experiment_results_get: APP_MEMBER,
   experiment_results_post: APP_MEMBER,
   organization_usage_get: ORG_MEMBER,
-  audit_log_list: APP_MEMBER,
   current_user_privacy_export: TOKEN,
   current_user_delete: TOKEN,
   organization_privacy_export: ORG_OWNER,

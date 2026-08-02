@@ -1,6 +1,7 @@
 import type { ErrorResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import { EvaluationCommitSinkError, makeHttpEvaluationCommitSink } from "./evaluation-commit-sink";
+import { baseInput } from "./evaluate/evaluate-path-test-fixtures";
 import { APP_ID, CLIENT_KEY, makeSdkRouteHarness, sdkRouteInit } from "./sdk-route-test-fixtures";
 
 const PATH = "/api/sdk/evaluate";
@@ -89,6 +90,62 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
     expect(((await res.json()) as ErrorResponse).code).toBe("SERVICE_UNAVAILABLE");
   });
 
+  it("logs a dropped Exposure as flat queryable fields naming which stage failed", async () => {
+    // The caller gets the same opaque SERVICE_UNAVAILABLE whichever stage broke,
+    // so this record is the only place an operator can tell a missing ingest
+    // token from ingest rejecting the write.
+    const { app, logger } = await makeSdkRouteHarness({
+      liveRun: true,
+      runOverrides: { allocation: { control: 0, treatment: 100 }, targetingRules: [] },
+      evaluationCommitSink: makeHttpEvaluationCommitSink({ token: "", endpoint: "https://x.test" }),
+    });
+
+    expect((await app.request(PATH, sdkRouteInit(CLIENT_KEY))).status).toBe(503);
+
+    expect(logger.errors).toEqual([
+      {
+        message: "evaluation_commit_sink_failed",
+        detail: {
+          failure: "ingest_token_missing",
+          status: null,
+          organizationId: "org_verify",
+          appId: APP_ID,
+          environmentId: "env-1",
+          flagKey: "checkout-banner",
+          exposureCount: 1,
+          causeSummary: "internal ingest token is unavailable",
+        },
+      },
+    ]);
+    // The Entity identity never enters a log line.
+    expect(JSON.stringify(logger.errors)).not.toContain(baseInput().evaluationContext.targetingKey);
+  });
+
+  it("distinguishes an unreachable binding from ingest rejecting the write", async () => {
+    const rejecting = await makeSdkRouteHarness({
+      evaluationCommitSink: new RejectingFetcherEvaluationCommitSink(),
+    });
+    expect((await rejecting.app.request(PATH, sdkRouteInit(CLIENT_KEY))).status).toBe(503);
+
+    const refused = await makeSdkRouteHarness({
+      evaluationCommitSink: makeHttpEvaluationCommitSink({
+        token: "test-token",
+        fetcher: { fetch: async () => new Response(null, { status: 500 }) },
+      }),
+    });
+    expect((await refused.app.request(PATH, sdkRouteInit(CLIENT_KEY))).status).toBe(503);
+
+    expect(rejecting.logger.errors[0]?.detail).toMatchObject({
+      failure: "ingest_transport_failed",
+      status: null,
+      causeSummary: "binding unavailable",
+    });
+    expect(refused.logger.errors[0]?.detail).toMatchObject({
+      failure: "ingest_rejected",
+      status: 500,
+    });
+  });
+
   it("reuses the Idempotency-Key for a client retry", async () => {
     const { app, evaluationUsageSink } = await makeSdkRouteHarness({
       liveRun: true,
@@ -104,7 +161,9 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
       "eval-retry-1",
     ]);
   });
+});
 
+describe("POST /api/sdk/evaluation-telemetry: cached Evaluation telemetry", () => {
   it("records cache telemetry as non-billable and does not expose a Targeting Key", async () => {
     const { app, evaluationUsageSink } = await makeSdkRouteHarness();
     const res = await app.request("/api/sdk/evaluation-telemetry", {
@@ -151,7 +210,7 @@ describe("POST /api/sdk/evaluate: Evaluation usage telemetry", () => {
 
 class FailingEvaluationCommitSink {
   async write(): Promise<void> {
-    throw new EvaluationCommitSinkError("forced failure");
+    throw new EvaluationCommitSinkError("ingest_rejected", "forced failure", { status: 503 });
   }
 }
 

@@ -27,18 +27,9 @@
   },
   "vars": {
     "SPLITCH_PLATFORM_TARGET": "local",
-    "AUTH_API_ORIGIN": "http://localhost:8791",
-    "AUTH_JWKS_URI": "http://localhost:8791/.well-known/jwks.json",
-    "CONTROL_PLANE_ORIGIN": "http://localhost:8787",
     "MCP_ANALYSIS_DELEGATION_SECRET": "local-mcp-analysis-delegation-secret",
     "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
   },
-  "kv_namespaces": [
-    {
-      "binding": "SESSION_STORE",
-      "id": "00000000000000000000000000000000"
-    }
-  ],
   "durable_objects": {
     "bindings": [
       { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
@@ -76,17 +67,8 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "shared-preview",
-        "AUTH_API_ORIGIN": "https://auth.preview.splitch.dev",
-        "AUTH_JWKS_URI": "https://auth.preview.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.preview.splitch.dev",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
-      "kv_namespaces": [
-        {
-          "binding": "SESSION_STORE",
-          "id": "673d17e768eb45f5bfc5275fbd0e9320"
-        }
-      ],
       "durable_objects": {
         "bindings": [
           { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }
@@ -129,17 +111,8 @@
       },
       "vars": {
         "SPLITCH_PLATFORM_TARGET": "production",
-        "AUTH_API_ORIGIN": "https://auth.splitch.dev",
-        "AUTH_JWKS_URI": "https://auth.splitch.dev/.well-known/jwks.json",
-        "CONTROL_PLANE_ORIGIN": "https://api.splitch.dev",
         "TINYBIRD_API_URL": "https://api.us-west-2.aws.tinybird.co"
       },
-      "kv_namespaces": [
-        {
-          "binding": "SESSION_STORE",
-          "id": "bdfa1197123d4eef945c5a703d63a572"
-        }
-      ],
       "durable_objects": {
         "bindings": [
           { "name": "MCP_DELEGATION_REPLAY", "class_name": "McpDelegationReplayDurableObject" }

@@ -32,13 +32,30 @@ describe("Control Plane API Wrangler runtime config", () => {
     expect(target?.vars?.AUTH_JWKS_URI).toBe(jwksUri);
   });
 
+  // Control Plane authorizes these routes and delegates execution (ADR-0046).
+  // A binding added here also needs an ordering entry in
+  // scripts/deploy-cloudflare-workers.mjs, or Control Plane deploys against an
+  // entrypoint the live callee does not export yet.
   it.each([
-    ["local", config, "splitch-analysis-api"],
-    ["shared-preview", config.env?.["shared-preview"], "splitch-analysis-api-shared-preview"],
-    ["production", config.env?.production, "splitch-analysis-api"],
-  ])("binds %s to the Analysis Worker's named entrypoint", (_target, target, service) => {
+    ["local", config, "ANALYSIS_API", "splitch-analysis-api"],
+    [
+      "shared-preview",
+      config.env?.["shared-preview"],
+      "ANALYSIS_API",
+      "splitch-analysis-api-shared-preview",
+    ],
+    ["production", config.env?.production, "ANALYSIS_API", "splitch-analysis-api"],
+    ["local", config, "EVALUATION_API", "splitch-evaluation-api"],
+    [
+      "shared-preview",
+      config.env?.["shared-preview"],
+      "EVALUATION_API",
+      "splitch-evaluation-api-shared-preview",
+    ],
+    ["production", config.env?.production, "EVALUATION_API", "splitch-evaluation-api"],
+  ])("binds %s %s to the delegated Worker's named entrypoint", (_t, target, binding, service) => {
     expect(target?.services).toContainEqual({
-      binding: "ANALYSIS_API",
+      binding,
       service,
       entrypoint: "ControlPlaneEntrypoint",
     });

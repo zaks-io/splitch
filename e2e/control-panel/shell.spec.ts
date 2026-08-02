@@ -66,21 +66,43 @@ test.describe("Control Panel local full-stack harness", () => {
       .get("http://127.0.0.1:18788/token")
       .then(async (response) => (await response.json()).accessToken);
     expect(typeof accessToken).toBe("string");
+    // Results are addressed at the Control Plane, not at the Analysis Worker that
+    // executes them (ADR-0046). Analysis has no public door, so these requests go
+    // to the surface that authorizes them and forwards over the binding.
     const unauthorized = await page.request.get(
-      "http://127.0.0.1:8790/apps/app_checkout_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
+      "http://127.0.0.1:18790/apps/app_checkout_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
     );
     expect(unauthorized.status()).toBe(401);
+    // Cross-App probe: the token is scoped to app_checkout_e2e, so the generic
+    // co-scope guard refuses the path App before any tenant table is read.
     const wrongApp = await page.request.get(
-      "http://127.0.0.1:8790/apps/app_billing_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
+      "http://127.0.0.1:18790/apps/app_billing_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
       { headers: { authorization: `Bearer ${accessToken}` } },
     );
     expect(wrongApp.status()).toBe(403);
+    // Foreign-Environment probe: the path App IS the credential's App, so the
+    // co-scope guard passes and only the delegation handler's own check stands
+    // between a control-plane token and another App's Environment. A
+    // control-plane token is legitimately Environment-unbound (ADR-0027), so
+    // without that check this reads across the tenant boundary.
+    const foreignEnvironment = await page.request.get(
+      "http://127.0.0.1:18790/apps/app_checkout_e2e/envs/env_billing_prod_e2e/experiments/experiment_checkout_dev_e2e/results",
+      { headers: { authorization: `Bearer ${accessToken}` } },
+    );
+    expect(foreignEnvironment.status()).toBe(404);
+    expect((await foreignEnvironment.json()).code).toBe("APP_NOT_FOUND");
+    // The old address must stay closed, or the authorization above is optional.
+    const bypass = await page.request.get(
+      "http://127.0.0.1:8790/apps/app_checkout_e2e/envs/env_checkout_dev_e2e/experiments/experiment_checkout_dev_e2e/results",
+      { headers: { authorization: `Bearer ${accessToken}` } },
+    );
+    expect(bypass.status()).toBe(404);
 
     const analysisResults = await Promise.all(
       environments.map(async (environment) => {
         const experimentId = `experiment_checkout_${environment.key}_e2e`;
         const response = await page.request.get(
-          `http://127.0.0.1:8790/apps/app_checkout_e2e/envs/${environment.id}/experiments/${experimentId}/results`,
+          `http://127.0.0.1:18790/apps/app_checkout_e2e/envs/${environment.id}/experiments/${experimentId}/results`,
           { headers: { authorization: `Bearer ${accessToken}` } },
         );
         expect(response.status()).toBe(200);

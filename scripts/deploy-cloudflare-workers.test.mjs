@@ -23,10 +23,10 @@ test("deploys one independent Worker without traversing the fleet", () => {
 test("preserves the bounded Control Panel cutover when either side changes", () => {
   for (const changedPackage of ["@splitch/control-panel", "@splitch/control-plane-api"]) {
     assert.deepEqual(deploymentCommands("production", [changedPackage], workspacePackages), [
+      ["run", "credential-cache:backfill:production"],
       ["run", "deploy:cloudflare:control-plane-compat:production"],
       ["run", "deploy:cloudflare:control-panel:production"],
       ["run", "deploy:cloudflare:control-plane:production"],
-      ["run", "credential-cache:backfill:production"],
     ]);
   }
 });
@@ -36,16 +36,26 @@ test("backfills before deploying an affected Evaluation Worker", () => {
     deploymentCommands("production", ["@splitch/evaluation-api"], workspacePackages),
     [
       ["run", "credential-cache:backfill:production"],
-      [
-        "turbo",
-        "run",
-        "deploy",
-        "--filter=@splitch/evaluation-api",
-        "--",
-        "--env",
-        "production",
-        "--strict",
-      ],
+      ["run", "deploy:cloudflare:evaluation:production"],
+    ],
+  );
+});
+
+// Evaluation exports the entrypoint Control Plane binds (ADR-0046), so a release
+// touching both must put Evaluation on the wire before Control Plane rebinds it.
+test("deploys an affected Evaluation Worker before its Control Plane caller", () => {
+  assert.deepEqual(
+    deploymentCommands(
+      "production",
+      ["@splitch/control-plane-api", "@splitch/evaluation-api"],
+      workspacePackages,
+    ),
+    [
+      ["run", "credential-cache:backfill:production"],
+      ["run", "deploy:cloudflare:evaluation:production"],
+      ["run", "deploy:cloudflare:control-plane-compat:production"],
+      ["run", "deploy:cloudflare:control-panel:production"],
+      ["run", "deploy:cloudflare:control-plane:production"],
     ],
   );
 });

@@ -46,10 +46,10 @@ causing under-exposure in the new Run — a correctness error, not just an optim
 
 The key above assumes the SDK already knows the **current** `runId` before it decides to
 suppress. A pure-HTTP client does not: the public data-plane response is the bare
-`{ variant }` (non-revealing, ADR-0018) and the SDK only learns the live `runId` **from** an
-evaluate call — the very call a seen-set hit is trying to skip. The `runId` is surfaced as
-non-revealing operational metadata alongside the body (an `X-Run-Id` response header), not
-inside it, so the response schema stays the closed `{ variant }` shape.
+`{ variant, variantName }` (non-revealing, ADR-0018: which arm, never how it was chosen) and the
+SDK only learns the live `runId` **from** an evaluate call — the very call a seen-set hit is trying
+to skip. The `runId` is surfaced as non-revealing operational metadata alongside the body (an
+`X-Run-Id` response header), not inside it, so the response schema stays closed.
 
 This creates a circular dependency: keying on the **last-seen** `runId` and short-circuiting
 on it forever would make a long-lived instance (browser SPA, warm Worker — the normal case)

@@ -74,10 +74,10 @@ describe("evaluatePath condition validation", () => {
       exposure: null,
     });
     expect(logger.warnings).toHaveLength(1);
-    expect(logger.warnings[0]).toMatchObject([
-      "condition_attribute_null",
-      { attribute: "plan", operator: "eq", ruleId: "rule-null-attribute" },
-    ]);
+    expect(logger.warnings[0]).toMatchObject({
+      message: "condition_attribute_null",
+      detail: { attribute: "plan", operator: "eq", ruleId: "rule-null-attribute" },
+    });
     expect(logger.errors).toHaveLength(1);
     expect(store.putCalls).toEqual([]);
   });

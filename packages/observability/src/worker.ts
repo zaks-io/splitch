@@ -7,9 +7,10 @@ import {
   type ScrubbedEmitter,
 } from "./emitter.js";
 import {
-  resolveRequestErrorStatus,
+  reduceRequestError,
   shouldReportRequestErrorToSentry,
   type RequestErrorContext,
+  type RequestErrorReport,
 } from "./request-error-sentry.js";
 import type { ObservabilitySurfaceId } from "./surfaces.js";
 
@@ -87,6 +88,14 @@ export function workerSentryOptions(
     environment: secrets.environment,
     release: env.SENTRY_RELEASE,
     tracesSampleRate: secrets.environment === "production" ? 0.1 : 1,
+    /**
+     * `@sentry/cloudflare` enables `consoleIntegration()` by default, which would
+     * capture our own fault row (emitToWorkersLogs) as a breadcrumb and attach it
+     * to the `captureMessage` fired immediately after -- every fault event would
+     * carry a duplicate of its own payload. The row already reaches Sentry as
+     * `extra`, so the breadcrumb is pure duplication.
+     */
+    integrations: (defaults: { name: string }[]) => defaults.filter((i) => i.name !== "Console"),
     beforeSend(event: SentryErrorEvent) {
       return scrubbedBeforeSend(event as unknown as SentryEventLike) as unknown as SentryErrorEvent;
     },
@@ -145,24 +154,23 @@ export function createWorkerObservability(
   env: WorkerEnv,
   options: WorkerObservabilityOptions,
 ): Observability {
-  const emitter = workerEmitter(env, options);
+  const emitter = workerEmitter(env, options, { onStructuredLogEvents: emitToWorkersLogs });
   return {
     onRequest(ctx: { requestId: string; method: string; path: string }) {
       emitter.log("info", "request", ctx);
     },
     onError(ctx: RequestErrorContext) {
-      const status = resolveRequestErrorStatus(ctx);
-      const enriched = { ...ctx, status };
+      const enriched = reduceRequestError(ctx);
 
       if (shouldReportRequestErrorToSentry(ctx)) {
-        emitter.log("error", "request_fault", enriched);
+        emitter.log("error", "request_fault", { ...enriched });
         if (env.SENTRY_DSN) {
           void captureSentryMessage(options, enriched);
         }
         return;
       }
 
-      emitter.log("warn", "request_error", enriched);
+      emitter.log("warn", "request_error", { ...enriched });
       if (env.SENTRY_DSN) {
         void addSentryBreadcrumb(options, enriched);
       }
@@ -170,21 +178,43 @@ export function createWorkerObservability(
   };
 }
 
+/**
+ * Workers Logs and `wrangler tail` collect console output, and the scrubbed
+ * emitter has no sink of its own -- without this a fault row is built, scrubbed,
+ * and dropped, so the thrown value reaches an operator only where `SENTRY_DSN`
+ * is set. That is false in local dev and in the e2e fleet, which is exactly
+ * where a blank 500 has to be diagnosable.
+ *
+ * `error` only, and the line is exactly "what the caller cannot see for itself".
+ * A 4xx already returns a contract-shaped body carrying its code and request id,
+ * so an operator log adds nothing an attacker-driven flood of 401s or 429s does
+ * not also multiply -- Workers Logs bills per event, and the volume there is
+ * chosen by the caller. A 500's body is deliberately opaque, so this is its only
+ * channel. Rows arrive already scrubbed from `createScrubbedEmitter`.
+ */
+function emitToWorkersLogs(events: Record<string, unknown>[]): void {
+  for (const event of events) {
+    if (event.level === "error") {
+      console.error(event);
+    }
+  }
+}
+
 async function captureSentryMessage(
   options: WorkerObservabilityOptions,
-  ctx: RequestErrorContext & { status: number },
+  ctx: RequestErrorReport,
 ): Promise<void> {
   const Sentry = await loadSentry();
   Sentry.captureMessage(`worker fault ${ctx.code}`, {
     level: "error",
     tags: { surface: options.surface, code: ctx.code },
-    extra: { requestId: ctx.requestId, code: ctx.code, status: ctx.status },
+    extra: { ...ctx },
   });
 }
 
 async function addSentryBreadcrumb(
   options: WorkerObservabilityOptions,
-  ctx: RequestErrorContext & { status: number },
+  ctx: RequestErrorReport,
 ): Promise<void> {
   const Sentry = await loadSentry();
   Sentry.addBreadcrumb({

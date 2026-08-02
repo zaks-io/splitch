@@ -133,8 +133,14 @@ export async function runEvaluate(
       );
     }
     // A cached `variant: null` records a 200 no-match; re-apply THIS call's
-    // Default Variant rather than replaying a previous caller's.
-    return { value: cached.variant ?? defaultValue, variantName: null, reason: "CACHED" };
+    // Default Variant rather than replaying a previous caller's. The arm label
+    // is replayed as stored, so a CACHED result names the same arm the live
+    // resolution did.
+    return {
+      value: cached.variant ?? defaultValue,
+      variantName: cached.variantName,
+      reason: "CACHED",
+    };
   }
 
   const result = await deps.transport.evaluate({
@@ -168,7 +174,14 @@ export async function runEvaluate(
   // The WIRE variant is stored (null on a no-match), never the caller-supplied
   // defaultValue — a per-call default must not leak into other call sites.
   if (result.runId !== null) {
-    deps.seenSet.set(flagKey, result.runId, idType, targetingKey, result.variant, deps.now());
+    deps.seenSet.set(
+      flagKey,
+      result.runId,
+      idType,
+      targetingKey,
+      { variant: result.variant, variantName: result.variantName },
+      deps.now(),
+    );
   }
   return details;
 }
@@ -207,6 +220,7 @@ export async function runVerify(
       {
         status: result.status,
         variant: null,
+        variantName: null,
         runId: null,
         errorCode: result.errorCode,
         errorMessage: result.errorMessage,

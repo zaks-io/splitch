@@ -40,7 +40,7 @@ const workers = [
     port: 8790,
     response: "json",
     testScheduled: true,
-    guardedResultsPath: "/apps/smoke-app/envs/smoke-env/experiments/smoke-exp/results",
+    unsurfacedResultsPath: "/apps/smoke-app/envs/smoke-env/experiments/smoke-exp/results",
   },
   {
     alias: "auth-api",
@@ -175,20 +175,28 @@ async function smokeWorker(worker) {
   }
 }
 
+/**
+ * Analysis surfaces no route of its own: `/results` is addressed at the Control
+ * Plane, which authorizes the caller and forwards over a service binding
+ * (ADR-0046). Answering it on this Worker's own hostname would be a second live
+ * address for the same operation, reachable without that authorization, so the
+ * public door must not answer it at all.
+ *
+ * The health check above already proved this Worker is up, so a 404 here is the
+ * door being closed rather than the Worker being broken.
+ */
 async function validateWorkerRouteGuards(baseUrl, worker) {
-  if (!worker.guardedResultsPath) {
+  if (!worker.unsurfacedResultsPath) {
     return;
   }
 
-  const response = await fetch(new URL(worker.guardedResultsPath, baseUrl), {
+  const response = await fetch(new URL(worker.unsurfacedResultsPath, baseUrl), {
     signal: AbortSignal.timeout(2000),
   });
-  if (response.status !== 401) {
-    throw new Error(`expected guarded /results HTTP 401, got ${response.status}`);
-  }
-  const body = await response.json();
-  if (body.code !== "UNAUTHORIZED") {
-    throw new Error(`expected guarded /results UNAUTHORIZED, got ${body.code}`);
+  if (response.status !== 404) {
+    throw new Error(
+      `expected unsurfaced /results HTTP 404 on the public door, got ${response.status}`,
+    );
   }
 }
 

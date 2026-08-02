@@ -19,6 +19,7 @@ import { makeAttentionRollupHandler } from "./attention-rollup";
 import type { ConfigStoreAccess } from "./config-store-do";
 import type { CredentialCacheWriterAccess } from "./credential-cache";
 import { makeCredentialHandlers } from "./credential-handlers";
+import { type DelegationBindings, mountDelegatedRoutes } from "./delegated-routes";
 import { makeExperimentHandlers } from "./experiment-handlers";
 import { diagnosableHandlers } from "./flag-config-policy";
 import { makeFlagDefinitionHandlers } from "./flag-definition-handlers";
@@ -59,6 +60,8 @@ export interface AppDeps {
   observability?: RegistrarDeps["observability"];
   logger?: Pick<Console, "warn">;
   analysisResults?: AnalysisResultsReader;
+  /** Service bindings for routes this Worker is the surface for but does not execute. */
+  delegationBindings?: DelegationBindings;
 }
 
 /** Build the registrar bound to this Worker's control-plane-token resolver. */
@@ -226,6 +229,7 @@ export function createApp(deps: AppDeps): Hono {
   registrar.mount(app, controlPlaneRoute("api_keys_create"), credentialHandlers.createApiKey);
   registrar.mount(app, controlPlaneRoute("api_keys_revoke"), credentialHandlers.revokeApiKey);
   mountUnavailableControlPlaneRoutes(app, registrar, deps.repo);
+  mountDelegatedRoutes(app, registrar, deps.delegationBindings ?? {}, deps.repo);
 
   return app;
 }

@@ -43,13 +43,11 @@ test("delegation config rejects a missing or mismatched MCP/downstream pair", ()
   );
 });
 
-test("hosted secret validation rejects missing and cross-service reused values", () => {
+test("hosted secret validation rejects missing and cross-service reused values", async () => {
   const root = delegationFixture();
-  const values = Object.fromEntries(
-    MCP_DELEGATION_PAIRS.map(({ name }, index) => [name, `delegation-${index}`]),
-  );
+  const values = delegationValues();
 
-  assert.throws(
+  await assert.rejects(
     () =>
       validateHostedWorkerSecretEnv(root, "production", {
         ...values,
@@ -57,7 +55,7 @@ test("hosted secret validation rejects missing and cross-service reused values",
       }),
     /missing required Worker secret env: MCP_ANALYSIS_DELEGATION_SECRET/,
   );
-  assert.throws(
+  await assert.rejects(
     () =>
       validateHostedWorkerSecretEnv(root, "production", {
         ...values,
@@ -67,36 +65,141 @@ test("hosted secret validation rejects missing and cross-service reused values",
   );
 });
 
-test("hosted secret validation rejects an ACCESS_TOKEN_SECRET that cannot sign", () => {
+test("hosted secret validation rejects an ACCESS_TOKEN_SECRET that cannot sign", async () => {
   const root = delegationFixture();
   writeWorker(root, "auth-api", ["ACCESS_TOKEN_SECRET"]);
-  const values = Object.fromEntries(
-    MCP_DELEGATION_PAIRS.map(({ name }, index) => [name, `delegation-${index}`]),
-  );
   const validate = (accessTokenSecret) =>
     validateHostedWorkerSecretEnv(root, "production", {
-      ...values,
+      ...delegationValues(),
       ACCESS_TOKEN_SECRET: accessTokenSecret,
     });
 
   // The shape production actually shipped: an opaque passphrase where an RS256
   // signing key belongs. It booted healthy and threw on every mint.
-  assert.throws(() => validate("leftover-hmac-secret"), /must be an exported RSA private JWK/);
+  await assert.rejects(
+    () => validate("leftover-hmac-secret"),
+    /must be an exported RSA private JWK/,
+  );
 
   const { kty, n, e, d } = rsaPrivateJwk();
-  assert.throws(
+  await assert.rejects(
     () => validate(JSON.stringify({ kty, n, e, d })),
     /not a loadable RSA private key.*CRT parameters/s,
   );
-  assert.throws(
+  await assert.rejects(
     () => validate(JSON.stringify(ed25519PrivateJwk())),
     /must be an RSA private JWK; found kty "OKP"/,
   );
 
-  assert.deepEqual(validate(JSON.stringify(rsaPrivateJwk())), [
+  assert.deepEqual(await validate(JSON.stringify(rsaPrivateJwk())), [
     "ACCESS_TOKEN_SECRET",
     ...MCP_DELEGATION_PAIRS.map(({ name }) => name).sort(),
   ]);
+});
+
+test("hosted secret validation exercises TINYBIRD_INGEST_TOKEN instead of trusting its presence", async () => {
+  const root = delegationFixture();
+  writeWorker(root, "event-ingest-api", ["TINYBIRD_INGEST_TOKEN"], {
+    TINYBIRD_API_URL: "https://api.us-west-2.aws.tinybird.co",
+  });
+  const validate = (fetchImpl) =>
+    validateHostedWorkerSecretEnv(
+      root,
+      "production",
+      { ...delegationValues(), TINYBIRD_INGEST_TOKEN: "p.not-a-real-token" },
+      { fetch: fetchImpl },
+    );
+
+  const calls = [];
+  const recording = (status) => (url, init) => {
+    calls.push({ url, ...init });
+    return Promise.resolve(new Response(null, { status }));
+  };
+
+  // A non-empty token that Tinybird refuses is exactly what shipped: the deploy
+  // was green and every Exposure was dropped at runtime.
+  await assert.rejects(
+    () => validate(recording(403)),
+    /TINYBIRD_INGEST_TOKEN was rejected by api\.us-west-2\.aws\.tinybird\.co for Data Source "raw_evaluations" \(HTTP 403\)/,
+  );
+  // A right token in the wrong region reaches the API and 404s on the Data Source.
+  await assert.rejects(() => validate(recording(404)), /\(HTTP 404\)/);
+  // The probe sends the token in an Authorization header, so a transport failure
+  // reports the error's class and nothing free-text out of it.
+  await assert.rejects(
+    () => validate(() => Promise.reject(new DOMException("socket hang up", "TimeoutError"))),
+    (error) =>
+      /could not be exercised against api\.us-west-2\.aws\.tinybird\.co \(TimeoutError\)/.test(
+        error.message,
+      ) && !error.message.includes("socket hang up"),
+  );
+  // A 5xx says nothing about the credential. Passing it through would ship the
+  // exact unverified token this probe exists to catch.
+  await assert.rejects(
+    () => validate(recording(503)),
+    /could not be verified against api\.us-west-2\.aws\.tinybird\.co for Data Source "raw_evaluations" \(HTTP 503\); deploying an unverified ingest token drops Exposures silently/,
+  );
+
+  calls.length = 0;
+  assert.deepEqual(await validate(recording(202)), [
+    ...MCP_DELEGATION_PAIRS.map(({ name }) => name).sort(),
+    "TINYBIRD_INGEST_TOKEN",
+  ]);
+  // Every Data Source the Worker appends to, probed with zero rows so the check
+  // writes nothing. One scoped only to raw_events must not pass.
+  assert.deepEqual(
+    calls.map(({ url }) => url),
+    [
+      "https://api.us-west-2.aws.tinybird.co/v0/events?name=raw_evaluations",
+      "https://api.us-west-2.aws.tinybird.co/v0/events?name=raw_events",
+    ],
+  );
+  assert.deepEqual(
+    calls.map(({ body }) => body),
+    ["", ""],
+  );
+  assert.equal(calls[0].headers.authorization, "Bearer p.not-a-real-token");
+});
+
+test("the ingest probe covers every Data Source the token is scoped to, with no second list", async () => {
+  const root = delegationFixture();
+  writeIngestDatasources(root, ["raw_events", "raw_evaluations", "raw_conversions"]);
+  writeWorker(root, "event-ingest-api", ["TINYBIRD_INGEST_TOKEN"], {
+    TINYBIRD_API_URL: "https://api.us-west-2.aws.tinybird.co",
+  });
+
+  const probed = [];
+  await validateHostedWorkerSecretEnv(
+    root,
+    "production",
+    { ...delegationValues(), TINYBIRD_INGEST_TOKEN: "p.not-a-real-token" },
+    {
+      fetch: (url) => {
+        probed.push(new URL(url).searchParams.get("name"));
+        return Promise.resolve(new Response(null, { status: 202 }));
+      },
+    },
+  );
+
+  // A Data Source added to the Tinybird project is probed on the next deploy
+  // without editing the deploy script, which is the only way the two stay honest.
+  assert.deepEqual(probed, ["raw_conversions", "raw_evaluations", "raw_events"]);
+});
+
+test("hosted secret validation fails loud when the ingest Worker declares no Tinybird API URL", async () => {
+  const root = delegationFixture();
+  writeWorker(root, "event-ingest-api", ["TINYBIRD_INGEST_TOKEN"]);
+
+  await assert.rejects(
+    () =>
+      validateHostedWorkerSecretEnv(
+        root,
+        "production",
+        { ...delegationValues(), TINYBIRD_INGEST_TOKEN: "p.not-a-real-token" },
+        { fetch: () => assert.fail("must not probe without a resolved API URL") },
+      ),
+    /event-ingest-api production requires TINYBIRD_INGEST_TOKEN but declares no TINYBIRD_API_URL/,
+  );
 });
 
 test("workflow contract rejects an unmapped or unvalidated required secret", () => {
@@ -179,7 +282,23 @@ function delegationFixture({ controlPlaneSecret = "MCP_CONTROL_PLANE_DELEGATION_
   writeWorker(root, "control-plane-api", controlPlaneSecret ? [controlPlaneSecret] : []);
   writeWorker(root, "evaluation-api", ["MCP_EVALUATION_DELEGATION_SECRET"]);
   writeWorker(root, "analysis-api", ["MCP_ANALYSIS_DELEGATION_SECRET"]);
+  writeIngestDatasources(root, ["raw_events", "raw_evaluations"]);
   return root;
+}
+
+/**
+ * The probe reads which Data Sources the ingest token appends to out of the
+ * Tinybird project, so the fixture ships the same declaration the real
+ * `.datasource` files carry. `deduped_exposures` is written by a Pipe, not by the
+ * token, and must stay out of the probe.
+ */
+function writeIngestDatasources(root, names) {
+  const dir = join(root, "infra", "tinybird", "datasources");
+  mkdirSync(dir, { recursive: true });
+  for (const name of names) {
+    writeFileSync(join(dir, `${name}.datasource`), "TOKEN raw_events_ingest APPEND\n");
+  }
+  writeFileSync(join(dir, "deduped_exposures.datasource"), "TOKEN analysis_read READ\n");
 }
 
 let cachedRsaJwk;
@@ -195,16 +314,18 @@ function ed25519PrivateJwk() {
   return generateKeyPairSync("ed25519").privateKey.export({ format: "jwk" });
 }
 
-function writeWorker(root, name, required) {
+function delegationValues() {
+  return Object.fromEntries(
+    MCP_DELEGATION_PAIRS.map(({ name }, index) => [name, `delegation-${index}`]),
+  );
+}
+
+function writeWorker(root, name, required, vars) {
   const appDir = join(root, "apps", name);
   mkdirSync(appDir, { recursive: true });
+  const env = { secrets: { required }, ...(vars ? { vars } : {}) };
   writeFileSync(
     join(appDir, "wrangler.jsonc"),
-    JSON.stringify({
-      env: {
-        "shared-preview": { secrets: { required } },
-        production: { secrets: { required } },
-      },
-    }),
+    JSON.stringify({ env: { "shared-preview": env, production: env } }),
   );
 }

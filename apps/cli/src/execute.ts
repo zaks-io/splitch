@@ -77,7 +77,7 @@ async function executeMeta(
       };
       emit(io, invocation.flags.json, payload);
       if (!invocation.flags.json) {
-        io.error(`Logged in as ${session.principal.email}.`);
+        io.error(`Logged in as ${session.principal.userId}.`);
         io.error(`Next: ${payload.nextSteps.join(" | ")}`);
       }
       return { exitCode: EXIT_OK, payload };

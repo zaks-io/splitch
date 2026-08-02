@@ -1,4 +1,4 @@
-import { SCOPED_SERVICE_IDENTITY_HEADER } from "@splitch/control-plane-sdk/panel-experiments";
+import { DELEGATED_IDENTITY_HEADER } from "@splitch/worker-runtime";
 import { describe, expect, it, vi } from "vitest";
 import {
   type AnalysisResultsReader,
@@ -160,19 +160,18 @@ describe("Analysis results boundary", { timeout: ATTENTION_TEST_TIMEOUT }, () =>
 
     const request = fetcher.fetch.mock.calls[0]?.[0];
     expect(request?.url).toBe(
-      `https://analysis.internal/apps/${ids.appId}/envs/${ids.environmentId}/experiments/${ids.experimentId}/results`,
+      `https://delegated.splitch.internal/apps/${ids.appId}/envs/${ids.environmentId}/experiments/${ids.experimentId}/results`,
     );
     expect(request?.method).toBe("POST");
     await expect(request?.clone().json()).resolves.toEqual({ runId: ids.liveRunId });
     expect(request?.headers.get("authorization")).toBeNull();
     expect(request?.headers.get("x-splitch-panel-session")).toBeNull();
-    expect(JSON.parse(request?.headers.get(SCOPED_SERVICE_IDENTITY_HEADER) ?? "{}")).toEqual({
+    expect(JSON.parse(request?.headers.get(DELEGATED_IDENTITY_HEADER) ?? "{}")).toEqual({
       operation: "experiment_results_post",
       actorId: USER_ID,
+      orgId: null,
       appId: ids.appId,
       environmentId: ids.environmentId,
-      experimentId: ids.experimentId,
-      runId: ids.liveRunId,
     });
   });
 

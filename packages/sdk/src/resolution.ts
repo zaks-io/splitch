@@ -7,11 +7,12 @@ import type {
 import type { TransportFailure, TransportResult } from "./transport";
 
 /**
- * Synthesize the OpenFeature `ResolutionDetails` from the bare `{ variant }` wire
- * body plus the HTTP status. The wire response is intentionally non-revealing —
- * variant only (ADR-0018) — so `reason`/`errorCode` are derived here, never sent
- * by the server. This is the contract that makes fail-loud usable: every transport
- * outcome becomes one structured result the caller branches on via `reason`.
+ * Synthesize the OpenFeature `ResolutionDetails` from the `{ variant, variantName }`
+ * wire body plus the HTTP status. The wire response is intentionally non-revealing
+ * — the resolved arm and nothing about how it was chosen (ADR-0018) — so
+ * `reason`/`errorCode` are derived here, never sent by the server. This is the
+ * contract that makes fail-loud usable: every transport outcome becomes one
+ * structured result the caller branches on via `reason`.
  *
  * Canonical mapping (docs/spec/sdk/public-evaluate-endpoint.md
  * §"HTTP status to ResolutionDetails mapping" + §"Error responses").
@@ -85,8 +86,10 @@ function resolveSuccess(result: TransportResult, defaultValue: VariantValue): Re
   const matched = result.variant !== null;
   const reason: ResolutionReason = matched ? "SPLIT" : "DEFAULT";
   return {
+    // The arm label comes off the wire; on a no-match there is no arm, and the
+    // value is the caller's Default Variant, which no Variant name describes.
     value: matched ? result.variant : defaultValue,
-    variantName: null,
+    variantName: matched ? result.variantName : null,
     reason,
   };
 }

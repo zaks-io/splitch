@@ -145,6 +145,31 @@ describe("control-plane App and Environment CRUD", () => {
     }
   });
 
+  it("derives the App key from the name, so a caller with only a name gets an App", async () => {
+    // An agent reads the create tool's required fields, sends a display name,
+    // and must not have to invent a handle. Same contract as an Organization slug.
+    const res = await request("POST", `/orgs/${ORG.orgId}/apps`, await orgToken(), {
+      name: "Mobile Checkout v2",
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { app: { key: string } }).toMatchObject({
+      app: { name: "Mobile Checkout v2", key: "mobile-checkout-v2" },
+    });
+  });
+
+  it("fails loud when no key can be derived, naming the field to supply", async () => {
+    const res = await request("POST", `/orgs/${ORG.orgId}/apps`, await orgToken(), {
+      name: "🚀🚀",
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { code: string; message: string; details: unknown };
+    expect(body.code).toBe("VALIDATION_ERROR");
+    expect(body.message).toContain('supply an explicit "key"');
+    expect(body.details).toMatchObject({ issues: [{ path: ["key"] }] });
+  });
+
   it("round-trips App and Environment CRUD plus prod Policy patch", async () => {
     // A distinct key per test: storage is shared across the file, so reusing
     // "checkout" would collide with the App the previous test created.

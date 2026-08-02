@@ -4,15 +4,10 @@ import {
   type StatsOutput,
   StatsOutputSchema,
 } from "@splitch/contracts";
-import { scopedAnalysisResultsRequest } from "@splitch/control-plane-sdk/panel-experiments";
+import { type AnalysisResultsScope, analysisResultsRequest } from "./analysis-results-request";
 
 /** The Analysis-results transport for the attention rollup: one read per running Run. */
-export interface AnalysisResultsScope {
-  appId: string;
-  environmentId: string;
-  experimentId: string;
-  runId: string;
-}
+export type { AnalysisResultsScope };
 
 export interface AnalysisResultsReader {
   read(scope: AnalysisResultsScope, actorId: string): Promise<StatsOutput | null>;
@@ -48,14 +43,9 @@ export function createAnalysisResultsReader(
       let response: Response;
       try {
         response = await fetcher.fetch(
-          new Request(
-            scopedAnalysisResultsRequest({
-              operation: "experiment_results_post",
-              actorId,
-              ...scope,
-            }),
-            { signal: AbortSignal.timeout(timeoutMs) },
-          ),
+          new Request(analysisResultsRequest(scope, actorId), {
+            signal: AbortSignal.timeout(timeoutMs),
+          }),
         );
       } catch (cause) {
         throw new AnalysisResultsUnavailableError(cause);

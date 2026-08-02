@@ -81,10 +81,15 @@ export type MetricResponse = z.infer<typeof MetricResponseSchema>;
 // shaped like an identifier could therefore name another tenant's App, which is
 // why the shared slug alphabet (no `_`) is the constraint rather than a looser
 // App-specific one.
+// The owning Organization is the `:orgId` path parameter. It was once duplicated
+// here as `organizationId`, which existed only to be compared against the path
+// and discarded, and which every caller had to learn to send twice.
 export const CreateAppRequestSchema = z.object({
-  organizationId: z.string(),
   name: z.string(),
-  key: SlugSchema,
+  // Optional for the same reason an Organization's `slug` is: a caller who has a
+  // display name should not have to invent a handle to get started, and the two
+  // creation calls must not disagree about that. Derived from `name` when absent.
+  key: SlugSchema.optional(),
   description: z.string().optional(),
   idempotency_key: z.string().optional(),
 });

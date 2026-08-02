@@ -41,6 +41,43 @@ export const AuthKindSchema = z.enum(authKinds);
 export type AuthKind = z.infer<typeof AuthKindSchema>;
 
 /**
+ * The public hostname a route is addressed on, as a Worker name resolved through
+ * the ADR-0038 subdomain map.
+ *
+ * A route's public address is a property of the CREDENTIAL its caller holds, not
+ * of the Worker that executes it (ADR-0046). An operator session knocks on the
+ * control plane; a Client Key or API Key shipped in a customer's runtime knocks
+ * on the edge. `owner` stays the internal execution owner, and when the two
+ * differ the surface Worker delegates over a service binding.
+ */
+export const publicSurfaces = ["control-plane-api", "evaluation-api"] as const;
+export type PublicSurface = (typeof publicSurfaces)[number];
+
+/**
+ * Total by construction: adding an AuthKind without deciding its surface fails
+ * typecheck rather than silently addressing the new route at the control plane.
+ */
+const publicSurfaceByAuthKind: Readonly<Record<AuthKind, PublicSurface | null>> = {
+  "control-plane-token": "control-plane-api",
+  public: "control-plane-api",
+  "client-key": "evaluation-api",
+  "api-key": "evaluation-api",
+  "data-plane-key": "evaluation-api",
+  "internal-worker": null,
+};
+
+/**
+ * `null` for a binding-only route, which is a real answer and not a fault: an
+ * `internal-worker` route has no public address by design. It must not throw --
+ * the registry sweeps every route through here at module load on Workers that
+ * mount routes, so one binding-only route would take down every route on the
+ * Worker at init rather than the single caller that asked.
+ */
+export function publicSurfaceFor(route: Pick<RouteContract, "auth">): PublicSurface | null {
+  return publicSurfaceByAuthKind[route.auth];
+}
+
+/**
  * Which door minted the credential, carried as the `auth_door` claim.
  *
  * `anonymous` is the provisional door: nobody has proven an identity, so the

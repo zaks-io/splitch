@@ -28,6 +28,34 @@ export interface ParsedInvocation {
 
 const META_COMMANDS = new Set(["login", "logout", "use", "context", "health"]);
 
+const BOOLEAN_FLAGS = new Set(["json", "confirm", "help"]);
+
+/**
+ * Every flag the CLI reads, keyed as it appears after `toCamel`.
+ *
+ * An unrecognised flag used to be collected and then silently dropped, so
+ * `--org-id org_x` reached the API as a request missing its Organization and
+ * came back as a schema violation pointing at the body. Naming the typo is the
+ * difference between one fix and a search through the source.
+ */
+const KNOWN_FLAGS = new Set([
+  ...BOOLEAN_FLAGS,
+  "app",
+  "env",
+  "org",
+  "endpoint",
+  "name",
+  "key",
+  "targetingKey",
+  "contextJson",
+  "bodyJson",
+  "variants",
+  "fromEnvironmentId",
+  "enabled",
+  "rollout",
+  "idempotencyKey",
+]);
+
 export function parseInvocation(args: readonly string[]): ParsedInvocation {
   const flags: Record<string, string | boolean> = { confirm: false, json: false };
   const positionals: string[] = [];
@@ -72,8 +100,16 @@ function parseFlagToken(
   index: number,
   flags: Record<string, string | boolean>,
 ): number {
-  if (key === "--json" || key === "--confirm" || key === "--help") {
-    flags[toCamel(key)] = true;
+  const name = toCamel(key);
+  if (!KNOWN_FLAGS.has(name)) {
+    throw new SplitchCliError({
+      code: "CLI_USAGE_INVALID",
+      causeSummary: `unknown flag ${key}`,
+      remediation: `Remove ${key} or run the command with --help to list the flags it accepts`,
+    });
+  }
+  if (BOOLEAN_FLAGS.has(name)) {
+    flags[name] = true;
     return index;
   }
   const value = args[index + 1];
@@ -84,7 +120,7 @@ function parseFlagToken(
       remediation: `Pass a value immediately after ${key}`,
     });
   }
-  flags[toCamel(key)] = value;
+  flags[name] = value;
   return index + 1;
 }
 

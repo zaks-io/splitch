@@ -1,4 +1,4 @@
-import { SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SlugSchema } from "./slug";
+import { SlugSchema, deriveSlug } from "./slug";
 
 /**
  * Organization URL handle rules (SPL-171).
@@ -22,14 +22,6 @@ import { SLUG_MAX_LENGTH, SLUG_MIN_LENGTH, SlugSchema } from "./slug";
  * migration. `organization-slug.test.ts` pins the router half of this, so a new
  * top-level route cannot silently escape the list.
  */
-
-/** Unicode combining marks (U+0300-U+036F), stripped after NFKD so "Acme" with
- *  a ring above slugs as "acme". Built from code points so the range survives
- *  source-file normalization intact. */
-const COMBINING_MARKS = new RegExp(
-  `[${String.fromCharCode(0x300)}-${String.fromCharCode(0x36f)}]`,
-  "g",
-);
 
 export const RESERVED_ORGANIZATION_SLUGS: readonly string[] = [
   "api",
@@ -69,25 +61,8 @@ export const OrganizationSlugSchema = SlugSchema.refine(
   { message: "slug is reserved" },
 );
 
-/**
- * Best-effort handle from a display name, for when the caller supplies no slug.
- *
- * Returns null rather than a fallback when the name yields nothing usable (an
- * all-emoji name, or one that slugifies to under the minimum). The caller then
- * fails loud and asks for an explicit slug — silently substituting the
- * Organization id would hand back a URL the user never chose and cannot guess.
- */
+/** {@link deriveSlug}, additionally refusing the Panel's reserved route segments. */
 export function deriveOrganizationSlug(name: string): string | null {
-  const slug = name
-    .normalize("NFKD")
-    .replace(COMBINING_MARKS, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, SLUG_MAX_LENGTH)
-    .replace(/-+$/g, "");
-
-  if (slug.length < SLUG_MIN_LENGTH) return null;
-  if (isReservedOrganizationSlug(slug)) return null;
-  return slug;
+  const slug = deriveSlug(name);
+  return slug && isReservedOrganizationSlug(slug) ? null : slug;
 }

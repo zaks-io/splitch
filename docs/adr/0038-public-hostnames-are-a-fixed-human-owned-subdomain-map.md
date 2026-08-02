@@ -32,7 +32,10 @@ keeps per-Worker routing, WAF rules, CORS, and the Client-Key origin allow-list 
 - `www.splitch.dev` redirects to the apex.
 - The Analysis Worker has **no public hostname**. It is reached by service binding only, matching
   its binding rule in [deployment-pipeline.md](../spec/platform/deployment-pipeline.md) (no public
-  evaluate/ingest bindings).
+  evaluate/ingest bindings). Routes it implements that take a control-plane token are still
+  addressed at `api.splitch.dev`: the Control Plane authorizes the caller and delegates over the
+  binding ([ADR-0046](0046-a-routes-public-address-follows-its-credential-not-its-owner.md)). This
+  table is keyed by hostname, not by which Worker executes a route.
 
 ### 2. Shared-preview hosts mirror the scheme under a `preview` label
 

@@ -144,6 +144,14 @@ async function evaluateResponse(
   if (output.result.liveRunId !== null) {
     response.headers.set("x-run-id", output.result.liveRunId);
   }
+  if (body.variantName !== null) {
+    // Variant names are user-authored and unconstrained, but header values are
+    // ByteStrings: a non-ASCII name would reach the SDK as mojibake, and one
+    // containing CR/LF would make `set` throw here -- after the Exposure was
+    // already committed, turning a served Evaluation into a 500. Percent-encoding
+    // keeps this channel ASCII-safe for every name the contract admits.
+    response.headers.set("x-variant-name", encodeURIComponent(body.variantName));
+  }
   return response;
 }
 
@@ -208,7 +216,20 @@ async function writeEvaluationCommit(
     if (!(cause instanceof EvaluationCommitSinkError)) {
       throw cause;
     }
-    deps.logger?.error("evaluation_commit_sink_failed", { cause });
+    // Flat, queryable fields: nesting the Error under `cause` reached the log
+    // destination as "[object Object]", so the one signal that an Exposure was
+    // dropped carried nothing to filter or alert on. No Targeting Key here --
+    // the Entity identity never enters a log line.
+    deps.logger?.error("evaluation_commit_sink_failed", {
+      failure: cause.failure,
+      status: cause.status,
+      organizationId: scope.organizationId,
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      flagKey: dimensions.flagKey,
+      exposureCount: exposures.length,
+      causeSummary: cause.cause instanceof Error ? cause.cause.message : cause.message,
+    });
     return {
       ok: false,
       error: errorResponse("SERVICE_UNAVAILABLE", "Evaluation commit ingest is unavailable"),

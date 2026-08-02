@@ -1,32 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createSplitchClient } from "./client";
-import { createFetchTransport } from "./fetch-transport";
 import { SplitchSdkError } from "./errors";
-import { FakeLogger, FakeTransport, httpError, ok, transportFailure } from "./test-fixtures";
-import type { Transport, TransportRequest } from "./transport";
-
-const REQ: TransportRequest = {
-  flagKey: "flag",
-  targetingKey: "u1",
-  idType: "user",
-  attributes: {},
-  idempotencyKey: "logical-evaluation-1",
-};
-
-/** Build a stub `fetch` returning a scripted Response — no real network. */
-function stubFetch(response: Response | (() => Promise<Response>)): typeof fetch {
-  return (() =>
-    typeof response === "function" ? response() : Promise.resolve(response)) as typeof fetch;
-}
-
-function transport(fetchImpl: typeof fetch, timeoutMs = 1000) {
-  return createFetchTransport({
-    credential: "ck_test",
-    endpoint: "https://edge.test",
-    timeoutMs,
-    fetchImpl,
-  });
-}
+import {
+  FakeLogger,
+  FakeTransport,
+  fetchTransport,
+  httpError,
+  ok,
+  stubFetch,
+  TRANSPORT_REQUEST,
+  transportFailure,
+} from "./test-fixtures";
+import type { Transport } from "./transport";
 
 function clientWith(transport: Transport, logger = new FakeLogger()) {
   return {
@@ -49,6 +34,39 @@ describe("createSplitchClient: construction", () => {
     expect(() =>
       createSplitchClient({ apiKey: "ak", transport: new FakeTransport([]) }),
     ).not.toThrow();
+  });
+
+  it("default timeout outlives a ~2s cold call (1000ms aborted the first real Exposure)", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = createSplitchClient({
+        clientKey: "ck_test",
+        fetch: ((_url: unknown, init?: RequestInit) =>
+          new Promise<Response>((resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+            setTimeout(
+              () =>
+                resolve(
+                  new Response(JSON.stringify({ variant: true }), {
+                    status: 200,
+                    headers: { "x-variant-name": "on" },
+                  }),
+                ),
+              1935,
+            );
+          })) as typeof fetch,
+      });
+      const pending = client.evaluateDetails("flag", {
+        targetingKey: "u1",
+        idempotencyKey: "cold-start-1",
+      });
+      await vi.advanceTimersByTimeAsync(1935);
+      expect(await pending).toMatchObject({ value: true, reason: "SPLIT" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects a non-zero retries (never retry the Exposure-bearing call)", () => {
@@ -137,32 +155,32 @@ describe("fail-loud: every error row returns Default Variant + reason ERROR + no
 describe("createFetchTransport (real wire adapter): stub fetch, no network", () => {
   it("forwards a caller's stable idempotency key on the wire", async () => {
     let seenHeaders: Headers | undefined;
-    const t = transport(((url: URL | RequestInfo, init?: RequestInit) => {
+    const t = fetchTransport(((url: URL | RequestInfo, init?: RequestInit) => {
       void url;
       seenHeaders = new Headers(init?.headers);
       return Promise.resolve(
         new Response(JSON.stringify({ variant: true }), {
           status: 200,
-          headers: { "x-run-id": "run-42" },
+          headers: { "x-run-id": "run-42", "x-variant-name": "on" },
         }),
       );
     }) as typeof fetch);
 
-    await t.evaluate({ ...REQ, idempotencyKey: "logical-evaluation-1" });
+    await t.evaluate({ ...TRANSPORT_REQUEST, idempotencyKey: "logical-evaluation-1" });
 
     expect(seenHeaders?.get("idempotency-key")).toBe("logical-evaluation-1");
   });
 
   it("200 -> extracts variant from the bare body and runId from the X-Run-Id header", async () => {
-    const t = transport(
+    const t = fetchTransport(
       stubFetch(
         new Response(JSON.stringify({ variant: "treatment" }), {
           status: 200,
-          headers: { "x-run-id": "run-42" },
+          headers: { "x-run-id": "run-42", "x-variant-name": "treatment" },
         }),
       ),
     );
-    const result = await t.evaluate(REQ);
+    const result = await t.evaluate(TRANSPORT_REQUEST);
     expect(result.status).toBe(200);
     expect(result.variant).toBe("treatment");
     expect(result.runId).toBe("run-42");
@@ -183,7 +201,7 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
           request.path === "/api/sdk/evaluate"
             ? new Response(JSON.stringify({ variant: "treatment" }), {
                 status: 200,
-                headers: { "x-run-id": "run-42" },
+                headers: { "x-run-id": "run-42", "x-variant-name": "treatment" },
               })
             : new Response(JSON.stringify({ ok: true }), { status: 200 }),
         );
@@ -204,23 +222,23 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
   });
 
   it("non-2xx -> surfaces the status, no variant, no runId", async () => {
-    const t = transport(stubFetch(new Response("", { status: 404 })));
-    const result = await t.evaluate(REQ);
+    const t = fetchTransport(stubFetch(new Response("", { status: 404 })));
+    const result = await t.evaluate(TRANSPORT_REQUEST);
     expect(result.status).toBe(404);
     expect(result.variant).toBeNull();
     expect(result.runId).toBeNull();
   });
 
   it("200 with an unparseable body -> folds to a transport failure (status null -> ERROR)", async () => {
-    const t = transport(stubFetch(new Response("not json", { status: 200 })));
-    const result = await t.evaluate(REQ);
+    const t = fetchTransport(stubFetch(new Response("not json", { status: 200 })));
+    const result = await t.evaluate(TRANSPORT_REQUEST);
     expect(result.status).toBeNull(); // parse failure -> fail loud
     expect(result.variant).toBeNull();
   });
 
   it("a thrown fetch (network error) -> status null", async () => {
-    const t = transport(stubFetch(() => Promise.reject(new TypeError("network down"))));
-    const result = await t.evaluate(REQ);
+    const t = fetchTransport(stubFetch(() => Promise.reject(new TypeError("network down"))));
+    const result = await t.evaluate(TRANSPORT_REQUEST);
     expect(result.status).toBeNull();
   });
 
@@ -233,14 +251,14 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
         );
       })) as typeof fetch;
 
-    const t = transport(aborting, 5); // 5ms timeout
-    const result = await t.evaluate(REQ);
+    const t = fetchTransport(aborting, 5); // 5ms timeout
+    const result = await t.evaluate(TRANSPORT_REQUEST);
     expect(result.status).toBeNull();
   });
 
   it("peek calls /api/sdk/peek and preserves the route's INSUFFICIENT_SCOPES error", async () => {
     let seenUrl = "";
-    const t = transport(((url: URL | RequestInfo) => {
+    const t = fetchTransport(((url: URL | RequestInfo) => {
       seenUrl = String(url);
       return Promise.resolve(
         new Response(
@@ -254,7 +272,7 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
       );
     }) as typeof fetch);
 
-    const result = await t.peek(REQ);
+    const result = await t.peek(TRANSPORT_REQUEST);
     expect(seenUrl).toBe("https://edge.test/api/sdk/peek");
     expect(result.status).toBe(403);
     expect(result.errorCode).toBe("INSUFFICIENT_SCOPES");
@@ -263,7 +281,7 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
 
   it("verify calls /api/sdk/verify and parses ResolutionDetails", async () => {
     let seenUrl = "";
-    const t = transport(((url: URL | RequestInfo) => {
+    const t = fetchTransport(((url: URL | RequestInfo) => {
       seenUrl = String(url);
       return Promise.resolve(
         new Response(
@@ -273,7 +291,7 @@ describe("createFetchTransport (real wire adapter): stub fetch, no network", () 
       );
     }) as typeof fetch);
 
-    const result = await t.verify(REQ);
+    const result = await t.verify(TRANSPORT_REQUEST);
     expect(seenUrl).toBe("https://edge.test/api/sdk/verify");
     expect(result.status).toBe(200);
     expect(result.details).toEqual({

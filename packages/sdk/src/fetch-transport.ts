@@ -14,9 +14,13 @@ import type {
 import { SplitchSdkError } from "./errors";
 
 // `X-Run-Id` carries the live Run id as non-revealing operational metadata
-// alongside the bare `{ variant }` body, so the seen-set key has its runId
-// without the response body leaking Run internals (ADR-0018, see transport.ts).
+// alongside the `{ variant }` body, so the seen-set key has its runId without the
+// response body leaking Run internals (ADR-0018, see transport.ts).
 const RUN_ID_HEADER = "x-run-id";
+// The resolved arm label, which the SDK cannot synthesize (two arms may share a
+// value). It rides a header rather than the body because published SDKs parse
+// that body strictly and would reject an added key; absent means no arm matched.
+const VARIANT_NAME_HEADER = "x-variant-name";
 
 export interface FetchTransportConfig {
   readonly credential: string;
@@ -87,7 +91,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
         );
       } catch {
         // Network error or timeout (abort): a transport-level failure, status null.
-        return { status: null, variant: null, runId: null };
+        return { status: null, variant: null, variantName: null, runId: null };
       }
     },
     async peek(request: TransportRequest): Promise<TransportResult> {
@@ -96,7 +100,7 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
           readPeekResponse(await post("peek", request, signal)),
         );
       } catch {
-        return { status: null, variant: null, runId: null };
+        return { status: null, variant: null, variantName: null, runId: null };
       }
     },
     async verify(request: TransportRequest): Promise<VerifyTransportResult> {
@@ -137,26 +141,35 @@ export function createFetchTransport(config: FetchTransportConfig): Transport {
 async function readEvaluateResponse(response: Response): Promise<TransportResult> {
   const runId = response.headers.get(RUN_ID_HEADER);
   if (!response.ok) {
-    return { ...(await readFailure(response)), variant: null, runId: null };
+    return { ...(await readFailure(response)), variant: null, variantName: null, runId: null };
   }
   try {
     const body = DataPlaneEvaluateResponseSchema.parse(await response.json());
-    return { status: response.status, variant: body.variant, runId };
+    const encodedVariantName = response.headers.get(VARIANT_NAME_HEADER);
+    return {
+      status: response.status,
+      variant: body.variant,
+      // Percent-encoded by the edge because header values are ByteStrings and
+      // Variant names are not. A malformed value throws out of decodeURIComponent
+      // into the parse-failure path below rather than being guessed at.
+      variantName: encodedVariantName === null ? null : decodeURIComponent(encodedVariantName),
+      runId,
+    };
   } catch {
     // A 200 with an unparseable body is a parse failure -> fail loud as status null.
-    return { status: null, variant: null, runId: null };
+    return { status: null, variant: null, variantName: null, runId: null };
   }
 }
 
 async function readPeekResponse(response: Response): Promise<TransportResult> {
   if (!response.ok) {
-    return { ...(await readFailure(response)), variant: null, runId: null };
+    return { ...(await readFailure(response)), variant: null, variantName: null, runId: null };
   }
   try {
     const body = PeekEvaluateResponseSchema.parse(await response.json());
-    return { status: response.status, variant: body.variant, runId: null };
+    return { status: response.status, variant: body.variant, variantName: null, runId: null };
   } catch {
-    return { status: null, variant: null, runId: null };
+    return { status: null, variant: null, variantName: null, runId: null };
   }
 }
 

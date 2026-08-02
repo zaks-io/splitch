@@ -1,4 +1,5 @@
 import type { Logger } from "./evaluate";
+import { createFetchTransport } from "./fetch-transport";
 import type {
   Transport,
   TransportRequest,
@@ -6,6 +7,31 @@ import type {
   VerifyTransportResult,
   CachedEvaluationTelemetry,
 } from "./transport";
+
+/** A minimal well-formed wire request, for tests asserting on the response side. */
+export const TRANSPORT_REQUEST: TransportRequest = {
+  flagKey: "flag",
+  targetingKey: "u1",
+  idType: "user",
+  attributes: {},
+  idempotencyKey: "logical-evaluation-1",
+};
+
+/** Build a stub `fetch` returning a scripted Response — no real network. */
+export function stubFetch(response: Response | (() => Promise<Response>)): typeof fetch {
+  return (() =>
+    typeof response === "function" ? response() : Promise.resolve(response)) as typeof fetch;
+}
+
+/** The real wire adapter over a stub `fetch`, so response parsing is under test. */
+export function fetchTransport(fetchImpl: typeof fetch, timeoutMs = 1000) {
+  return createFetchTransport({
+    credential: "ck_test",
+    endpoint: "https://edge.test",
+    timeoutMs,
+    fetchImpl,
+  });
+}
 
 /**
  * Test-only fake transport: records each accessor path (no real network) and
@@ -79,8 +105,12 @@ export class FakeLogger implements Logger {
   }
 }
 
-export function ok(variant: TransportResult["variant"], runId: string): TransportResult {
-  return { status: 200, variant, runId };
+export function ok(
+  variant: TransportResult["variant"],
+  runId: string,
+  variantName: string | null = null,
+): TransportResult {
+  return { status: 200, variant, variantName, runId };
 }
 
 export function httpError(
@@ -88,11 +118,11 @@ export function httpError(
   errorCode?: TransportResult["errorCode"],
   errorMessage?: string,
 ): TransportResult {
-  return { status, variant: null, runId: null, errorCode, errorMessage };
+  return { status, variant: null, variantName: null, runId: null, errorCode, errorMessage };
 }
 
 export function transportFailure(): TransportResult {
-  return { status: null, variant: null, runId: null };
+  return { status: null, variant: null, variantName: null, runId: null };
 }
 
 export function verifyOk(

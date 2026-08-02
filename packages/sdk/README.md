@@ -88,7 +88,7 @@ Every option is documented in the shipped type declarations
 | Option      | Default                    | Notes                                       |
 | ----------- | -------------------------- | ------------------------------------------- |
 | `endpoint`  | `https://edge.splitch.dev` | override for self-hosted or preview targets |
-| `timeoutMs` | `1000`                     | per-call timeout; a timeout is an ERROR     |
+| `timeoutMs` | `5000`                     | per-call timeout; a timeout is an ERROR     |
 | `retries`   | `0`                        | must stay `0` (see above)                   |
 | `logger`    | `console`                  | receives every fail-loud report             |
 | `transport` | built-in `fetch` adapter   | injectable seam for tests                   |

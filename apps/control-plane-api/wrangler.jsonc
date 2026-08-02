@@ -27,6 +27,11 @@
       "binding": "ANALYSIS_API",
       "service": "splitch-analysis-api",
       "entrypoint": "ControlPlaneEntrypoint"
+    },
+    {
+      "binding": "EVALUATION_API",
+      "service": "splitch-evaluation-api",
+      "entrypoint": "ControlPlaneEntrypoint"
     }
   ],
   "d1_databases": [
@@ -101,6 +106,11 @@
           "binding": "ANALYSIS_API",
           "service": "splitch-analysis-api-shared-preview",
           "entrypoint": "ControlPlaneEntrypoint"
+        },
+        {
+          "binding": "EVALUATION_API",
+          "service": "splitch-evaluation-api-shared-preview",
+          "entrypoint": "ControlPlaneEntrypoint"
         }
       ],
       "secrets": {
@@ -168,6 +178,11 @@
         {
           "binding": "ANALYSIS_API",
           "service": "splitch-analysis-api",
+          "entrypoint": "ControlPlaneEntrypoint"
+        },
+        {
+          "binding": "EVALUATION_API",
+          "service": "splitch-evaluation-api",
           "entrypoint": "ControlPlaneEntrypoint"
         }
       ],

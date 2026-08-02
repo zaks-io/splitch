@@ -20,11 +20,14 @@ const protocolPairs = new Set(["base:base", "base:compat", "signed:compat", "sig
 for (const environment of ["production", "shared-preview"]) {
   test(`${environment} deploy keeps every protocol transition functional`, () => {
     const rollout = packageJson.scripts[`deploy:cloudflare:${environment}`];
+    // Only the stages whose order this test owns: the Panel/Plane protocol
+    // handover. The full chain is pinned once, by deepEqual, in
+    // deploy-credential-cache-rollout.test.mjs -- restating it here is how the
+    // two drifted when the credential backfill moved.
     const stages = [
       `control-plane-compat:${environment}`,
       `control-panel:${environment}`,
       `control-plane:${environment}`,
-      `credential-cache:backfill:${environment}`,
       `remaining:${environment}`,
     ];
 

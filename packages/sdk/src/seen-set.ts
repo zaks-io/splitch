@@ -37,15 +37,20 @@ const DEFAULT_SEEN_SET_MAX_SIZE = 10_000;
 // Matches the ~60s KV propagation window the platform already tolerates.
 export const DEFAULT_REVALIDATE_MS = 60_000;
 
-export interface SeenEntry {
-  readonly runId: string;
-  /**
-   * The WIRE variant of the cached resolution. `null` records a 200 no-match
-   * (reason DEFAULT) — the replay must re-apply the CURRENT call's Default
-   * Variant, never a previous caller's, so the caller-supplied default is not
-   * stored here.
-   */
+/**
+ * The WIRE resolution of a cached call. `variant: null` records a 200 no-match
+ * (reason DEFAULT) — the replay must re-apply the CURRENT call's Default
+ * Variant, never a previous caller's, so the caller-supplied default is not
+ * stored here. `variantName` rides along because a CACHED replay reports the
+ * same arm the live call did; re-deriving it is impossible client-side.
+ */
+export interface SeenResolution {
   readonly variant: VariantValue | null;
+  readonly variantName: string | null;
+}
+
+export interface SeenEntry extends SeenResolution {
+  readonly runId: string;
   /** Epoch ms when this entry was written; the TTL is measured from here. */
   readonly storedAt: number;
 }
@@ -117,12 +122,12 @@ export class SeenSet {
     runId: string,
     idType: string,
     targetingKey: string,
-    variant: VariantValue | null,
+    resolution: SeenResolution,
     now: number,
   ): void {
     const id = entryId(flagKey, idType, targetingKey);
     this.entries.delete(id);
-    this.entries.set(id, { runId, variant, storedAt: now });
+    this.entries.set(id, { runId, ...resolution, storedAt: now });
     if (this.entries.size > this.maxSize) {
       const oldest = this.entries.keys().next().value;
       if (oldest !== undefined) {

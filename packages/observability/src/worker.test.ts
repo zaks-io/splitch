@@ -99,6 +99,62 @@ describe("createWorkerObservability onError", () => {
     expect(addBreadcrumb).not.toHaveBeenCalled();
   });
 
+  /**
+   * The 500 body is a fixed "unhandled runtime fault" so nothing internal leaks
+   * to the caller, which leaves this the only path the thrown value has to an
+   * operator. Without it every distinct fault pages as the same blank 500.
+   */
+  it("carries the thrown value's identity into the fault event", async () => {
+    const observability = createWorkerObservability(
+      { SENTRY_DSN: "https://example@sentry.io/1" },
+      { surface: "analysis-api" },
+    );
+
+    observability.onError?.({
+      requestId: "req-fault",
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      cause: new Error("Network connection lost."),
+    });
+    await flushSentryHooks();
+
+    const extra = captureMessage.mock.calls[0]?.[1]?.extra as { fault?: string };
+    expect(extra.fault).toContain("Network connection lost.");
+  });
+
+  it("names the shape of a non-Error throw rather than reporting nothing", async () => {
+    const observability = createWorkerObservability(
+      { SENTRY_DSN: "https://example@sentry.io/1" },
+      { surface: "analysis-api" },
+    );
+
+    observability.onError?.({
+      requestId: "req-fault",
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      cause: "bare string throw",
+    });
+    await flushSentryHooks();
+
+    const extra = captureMessage.mock.calls[0]?.[1]?.extra as { fault?: string };
+    expect(extra.fault).toContain("bare string throw");
+  });
+
+  it("omits the fault field when nothing was thrown", async () => {
+    const observability = createWorkerObservability(
+      { SENTRY_DSN: "https://example@sentry.io/1" },
+      { surface: "analysis-api" },
+    );
+
+    observability.onError?.({ requestId: "req-domain", code: "FORBIDDEN", status: 0 });
+    await flushSentryHooks();
+
+    const data = addBreadcrumb.mock.calls[0]?.[0]?.data as Record<string, unknown>;
+    expect(data).not.toHaveProperty("fault");
+    // The reduction must not smuggle the raw thrown value alongside its identity.
+    expect(data).not.toHaveProperty("cause");
+  });
+
   it("skips Sentry hooks entirely when SENTRY_DSN is unset", async () => {
     const observability = createWorkerObservability({}, { surface: "mcp-server" });
 
@@ -137,6 +193,50 @@ describe("createWorkerObservability onError", () => {
   });
 });
 
+/**
+ * Sentry is the only sink with a DSN behind it, and local dev and the e2e fleet
+ * both run without one. Workers Logs and `wrangler tail` read console output, so
+ * this is what makes a blank 500 diagnosable exactly where it was not.
+ */
+describe("createWorkerObservability without a Sentry DSN", () => {
+  it("writes the fault to Workers Logs when SENTRY_DSN is unset", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const observability = createWorkerObservability({}, { surface: "mcp-server" });
+
+    observability.onError?.({
+      requestId: "req-local",
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      cause: new Error("Network connection lost."),
+    });
+
+    const row = consoleError.mock.calls[0]?.[0] as { message?: string; fault?: string };
+    expect(row.message).toBe("request_fault");
+    expect(row.fault).toContain("Network connection lost.");
+    consoleError.mockRestore();
+  });
+
+  it("keeps caller-driven rows out of Workers Logs", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+    const observability = createWorkerObservability({}, { surface: "evaluation-api" });
+
+    observability.onRequest?.({ requestId: "req-1", method: "GET", path: "/flags/:flagKey" });
+    observability.onError?.({ requestId: "req-2", code: "UNAUTHORIZED", status: 401 });
+    observability.onError?.({ requestId: "req-3", code: "RATE_LIMITED", status: 429 });
+
+    // Workers Logs bills per event, and the volume of both of these is chosen by
+    // the caller: one info row per request on the evaluation hot path, and one
+    // warn row per rejection under a credential-stuffing or rate-limited flood.
+    // Neither tells an operator anything the caller was not already told.
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
+    expect(consoleLog).not.toHaveBeenCalled();
+    for (const spy of [consoleError, consoleWarn, consoleLog]) spy.mockRestore();
+  });
+});
+
 describe("workerSentryOptions", () => {
   it("passes the deployed release through to Sentry", () => {
     expect(
@@ -153,5 +253,20 @@ describe("workerSentryOptions", () => {
       environment: "production",
       release: "splitch-auth-api@abc123",
     });
+  });
+
+  it("drops Sentry's Console integration so fault rows are not double-sent", () => {
+    const options = workerSentryOptions(
+      { SENTRY_DSN: "https://example@sentry.io/1" },
+      { surface: "auth-api" },
+      mockSentryModule(),
+    );
+
+    // emitToWorkersLogs console.errors the fault row, and captureMessage sends
+    // the same row as `extra` immediately after. Left enabled, consoleIntegration
+    // would attach the console line as a breadcrumb on that very event.
+    const kept = options.integrations([{ name: "Console" }, { name: "Dedupe" }]);
+
+    expect(kept.map((i) => i.name)).toEqual(["Dedupe"]);
   });
 });

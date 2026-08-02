@@ -69,13 +69,11 @@ describe("DataPlaneEvaluateRequestSchema", () => {
 
 describe("DataPlaneEvaluateResponseSchema (non-revealing, strict)", () => {
   it("parses the bare { variant } shape", () => {
-    const res = DataPlaneEvaluateResponseSchema.parse({ variant: "on" });
-    expect(res.variant).toBe("on");
+    expect(DataPlaneEvaluateResponseSchema.parse({ variant: "on" }).variant).toBe("on");
   });
 
   it("accepts a null variant (flag not found or disabled, no default)", () => {
-    const res = DataPlaneEvaluateResponseSchema.parse({ variant: null });
-    expect(res.variant).toBeNull();
+    expect(DataPlaneEvaluateResponseSchema.parse({ variant: null }).variant).toBeNull();
   });
 
   it("parses an object variant value", () => {
@@ -83,16 +81,19 @@ describe("DataPlaneEvaluateResponseSchema (non-revealing, strict)", () => {
     expect((res.variant as Record<string, unknown>).color).toBe("blue");
   });
 
-  it("REJECTS an extra 'reason' field (no internals leak under Client Key)", () => {
-    expect(
-      DataPlaneEvaluateResponseSchema.safeParse({ variant: "on", reason: "SPLIT" }).success,
-    ).toBe(false);
-  });
-
-  it("rejects a stray 'salt' field", () => {
-    expect(DataPlaneEvaluateResponseSchema.safeParse({ variant: "on", salt: "abc" }).success).toBe(
-      false,
-    );
+  /**
+   * The body is frozen because published SDKs inline this schema and parse
+   * strictly: @splitch/sdk@0.2.0 swallows the resulting throw and serves the
+   * caller's default, after the Worker already committed the Exposure. Adding a
+   * key here silently corrupts every running Experiment, so arm labels and Run
+   * ids ride response headers instead.
+   */
+  it("REJECTS every added field, including the arm label that rides x-variant-name", () => {
+    for (const extra of [{ variantName: "treatment" }, { reason: "SPLIT" }, { salt: "abc" }]) {
+      expect(DataPlaneEvaluateResponseSchema.safeParse({ variant: "on", ...extra }).success).toBe(
+        false,
+      );
+    }
   });
 });
 

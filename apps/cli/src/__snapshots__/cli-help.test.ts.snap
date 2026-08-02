@@ -182,18 +182,6 @@ Flags:
 
 Example:
   splitch apps update --body-json '<json>' --json",
-    "audit-log list": "List an App's audit events (cursor-paginated, Tinybird-backed).
-
-Usage:
-  splitch audit-log list [flags]
-
-Flags:
-  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help   [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch audit-log list --json",
     "client-key get": "Get the Environment's public Client Key (never 404s for a live Env).
 
 Usage:
@@ -666,7 +654,7 @@ Example:
     "flags test-eval": "Dry-run resolve a Flag with the full resolution reason without firing an Exposure.
 
 Usage:
-  splitch flags test-eval <flag-id> [flags]
+  splitch flags test-eval <flag-key> [flags]
 
 Flags:
   --app <app>            [type: string; default: SPLITCH_APP or config] App ID or slug.
@@ -678,7 +666,7 @@ Flags:
   -h, --help             [type: boolean; default: false] Show help and exit.
 
 Example:
-  splitch flags test-eval <flag-id> --targeting-key user-123 --json",
+  splitch flags test-eval <flag-key> --targeting-key user-123 --json",
     "flags update": "Update a Flag definition's name/description/schema.
 
 Usage:
@@ -1117,19 +1105,6 @@ Flags:
 
 Example:
   splitch apps list --help",
-    "audit-log": "Manage audit-log resources.
-
-Usage:
-  splitch audit-log <action> [arguments] [flags]
-
-Commands:
-  list            List an App's audit events (cursor-paginated, Tinybird-backed).
-
-Flags:
-  -h, --help  [type: boolean; default: false] Show help and exit.
-
-Example:
-  splitch audit-log list --help",
     "client-key": "Manage client-key resources.
 
 Usage:
@@ -1515,7 +1490,6 @@ Resource groups:
   approval-request-reviews
   approval-requests
   apps
-  audit-log
   client-key
   current-user
   current-user-privacy

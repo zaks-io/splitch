@@ -18,18 +18,12 @@ import {
   type PanelExperimentsListOutput,
   parsePanelExperimentsListOutput,
 } from "./panel-experiments-list";
-import {
-  parseScopedAnalysisIdentity,
-  parseScopedAnalysisResults,
-  SCOPED_SERVICE_IDENTITY_HEADER,
-  ScopedAnalysisError,
-  scopedAnalysisResultsRequest,
-} from "./panel-experiments-scoped-analysis";
+import { AnalysisResultsError, parseAnalysisResults } from "./panel-analysis-results";
 
 /**
  * The Panel's read/write surface for Experiments. This module is the package
  * subpath consumers import (`@splitch/control-plane-sdk/panel-experiments`), so
- * the list projection and the scoped-analysis protocol are re-exported here even
+ * the list projection and the Analysis results reader are re-exported here even
  * though they live in their own modules.
  */
 
@@ -49,16 +43,12 @@ export type {
   PanelExperimentsListInput,
   PanelExperimentsListOutput,
 } from "./panel-experiments-list";
-export type { ScopedAnalysisIdentity } from "./panel-experiments-scoped-analysis";
 export {
+  AnalysisResultsError,
+  parseAnalysisResults,
   PanelExperimentResultsOutputSchema,
   parsePanelExperimentDetailOutput,
   parsePanelExperimentResultsOutput,
-  parseScopedAnalysisIdentity,
-  parseScopedAnalysisResults,
-  SCOPED_SERVICE_IDENTITY_HEADER,
-  ScopedAnalysisError,
-  scopedAnalysisResultsRequest,
 };
 
 const PANEL_EXPERIMENTS_PATH = "/control-panel/experiments/list";

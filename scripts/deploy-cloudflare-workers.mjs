@@ -6,7 +6,30 @@ const ANALYSIS = "@splitch/analysis-api";
 const CONTROL_PANEL = "@splitch/control-panel";
 const CONTROL_PLANE = "@splitch/control-plane-api";
 const EVALUATION = "@splitch/evaluation-api";
-const SPECIAL_WORKERS = new Set([ANALYSIS, CONTROL_PANEL, CONTROL_PLANE]);
+
+const EVENT_INGEST = "@splitch/event-ingest-api";
+
+/**
+ * Providers before consumers, because a Worker's `services` binding is resolved
+ * when the *caller* deploys: Control Plane delegates to Analysis and Evaluation
+ * over named entrypoints (ADR-0046), and Evaluation writes through Event
+ * Ingest. Deploying a caller first binds it to an entrypoint the live callee
+ * does not export yet.
+ *
+ * deploy-worker-order.test.mjs derives the required edges from every app's
+ * wrangler.jsonc and proves this order satisfies them, so a new binding fails
+ * there rather than mid-cutover in production.
+ */
+const ORDERED_PREREQUISITES = [
+  [EVENT_INGEST, "event-ingest"],
+  [ANALYSIS, "analysis"],
+  [EVALUATION, "evaluation"],
+];
+const SPECIAL_WORKERS = new Set([
+  ...ORDERED_PREREQUISITES.map(([packageName]) => packageName),
+  CONTROL_PANEL,
+  CONTROL_PLANE,
+]);
 
 export function deploymentCommands(environment, requestedPackages, workspacePackages) {
   assertEnvironment(environment);
@@ -25,21 +48,27 @@ export function deploymentCommands(environment, requestedPackages, workspacePack
   }
 
   const commands = [];
-  if (selected.has(ANALYSIS)) {
-    commands.push(["run", `deploy:cloudflare:analysis:${environment}`]);
+  const requiresControlPanelCutover = selected.has(CONTROL_PANEL) || selected.has(CONTROL_PLANE);
+
+  // The backfill drains through the Control Plane already serving traffic, so it
+  // runs before the Evaluation Worker that reads what it wrote, which in turn
+  // has to precede the Control Plane that binds its entrypoint.
+  if (requiresControlPanelCutover || selected.has(EVALUATION)) {
+    commands.push(["run", `credential-cache:backfill:${environment}`]);
   }
 
-  const requiresControlPanelCutover = selected.has(CONTROL_PANEL) || selected.has(CONTROL_PLANE);
+  for (const [packageName, scriptName] of ORDERED_PREREQUISITES) {
+    if (selected.has(packageName)) {
+      commands.push(["run", `deploy:cloudflare:${scriptName}:${environment}`]);
+    }
+  }
+
   if (requiresControlPanelCutover) {
     commands.push(
       ["run", `deploy:cloudflare:control-plane-compat:${environment}`],
       ["run", `deploy:cloudflare:control-panel:${environment}`],
       ["run", `deploy:cloudflare:control-plane:${environment}`],
     );
-  }
-
-  if (requiresControlPanelCutover || selected.has(EVALUATION)) {
-    commands.push(["run", `credential-cache:backfill:${environment}`]);
   }
 
   const remaining = [...selected].filter((packageName) => !SPECIAL_WORKERS.has(packageName)).sort();

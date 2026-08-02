@@ -13,7 +13,7 @@ describe("cached Evaluation telemetry errors", () => {
           new URL(String(url)).pathname === "/api/sdk/evaluate"
             ? new Response(JSON.stringify({ variant: true }), {
                 status: 200,
-                headers: { "x-run-id": "run-42" },
+                headers: { "x-run-id": "run-42", "x-variant-name": "on" },
               })
             : new Response("", { status: 503 }),
         )) as typeof fetch,
