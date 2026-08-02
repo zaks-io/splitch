@@ -7,6 +7,7 @@ export {
   delegatedIdentityFor,
   delegatedIdentityFrom,
   delegatedRequest,
+  notDelegatedResponse,
 } from "./delegation";
 export type { Observability, RegistrarDeps, ResolvableAuthKind } from "./deps";
 export { makeMcpDelegationAuthResolver } from "./mcp-delegation-auth";

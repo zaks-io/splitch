@@ -14,6 +14,7 @@ import {
   McpDelegationReplayDurableObject,
   makeDurableMcpDelegationReplayGuard,
   makeMcpDelegationAuthResolver,
+  notDelegatedResponse,
   type RateLimiter,
 } from "@splitch/worker-runtime";
 import { createApp } from "./app";
@@ -48,7 +49,7 @@ export class McpEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
 export class ControlPlaneEntrypoint extends WorkerEntrypoint<AnalysisApiEnv> {
   override async fetch(request: Request): Promise<Response> {
     const identity = delegatedIdentityFor(request, delegatedRoutes);
-    if (!identity) return new Response("not found", { status: 404 });
+    if (!identity) return notDelegatedResponse(request);
     return handleRequest(request, this.env, this.ctx, { kind: "control-plane", identity });
   }
 }

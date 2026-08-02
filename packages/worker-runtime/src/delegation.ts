@@ -1,5 +1,7 @@
 import type { RouteContract } from "@splitch/contracts";
 import type { AuthResolver, Principal } from "./principal";
+import { resolveRequestId } from "./request-id";
+import { emptyError, renderError } from "./respond";
 
 /**
  * Worker-to-Worker delegation for a route whose public hostname is not its
@@ -129,6 +131,27 @@ export function delegatedIdentityFor(
 }
 
 /**
+ * The response for a request this Worker refuses to treat as delegated.
+ *
+ * The surface Worker returns the binding's response VERBATIM to its caller, so
+ * this is exactly what the CLI receives. A bare-text 404 would make the one path
+ * that reports a surface-Worker bug also the one path that breaks the error
+ * envelope: no code, no request id, nothing an agent can branch on.
+ *
+ * INTERNAL_SERVER_ERROR, not NOT_FOUND, because every route to here is a
+ * platform defect -- the surface Worker named an operation it is not delegated,
+ * or built a path inconsistent with the identity it minted alongside it. The
+ * caller's Experiment is fine; telling them it was not found would blame their
+ * data for our bug, and would not page anyone. A 5xx does.
+ */
+export function notDelegatedResponse(request: Request): Response {
+  return renderError(
+    emptyError("INTERNAL_SERVER_ERROR", "delegated request was not recognized by its owner"),
+    { requestId: resolveRequestId(request) },
+  );
+}
+
+/**
  * The Principal a delegated request resolves to. Scopes are empty because the
  * surface Worker already enforced the route's scope list; what travels is the
  * tenant binding the receiving Worker's own co-scope and handler checks re-apply.
@@ -196,7 +219,27 @@ function matchSegment(
 ): { name?: string; value: string } | null {
   if (value === undefined) return null;
   if (!segment.startsWith(":")) return segment === value ? { value } : null;
-  return value.length > 0 ? { name: segment.slice(1), value: decodeURIComponent(value) } : null;
+  if (value.length === 0) return null;
+  const decoded = decodeParam(value);
+  return decoded === null ? null : { name: segment.slice(1), value: decoded };
+}
+
+/**
+ * `decodeURIComponent` throws URIError on a malformed escape (`%E0%A4%A`, a bare
+ * `%`), and `delegatedIdentityFor` runs in a `WorkerEntrypoint.fetch` with no
+ * guard around it, so that throw escapes the binding and the caller sees a 500
+ * where the documented `null` means 404.
+ *
+ * Null is also the right answer on its merits: an undecodable segment cannot
+ * equal any scope value the surface Worker authorized, so this is not a request
+ * that Worker built.
+ */
+function decodeParam(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 function isNonEmptyString(value: unknown): value is string {

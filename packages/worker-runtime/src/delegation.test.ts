@@ -7,6 +7,7 @@ import {
   delegatedIdentityFor,
   delegatedIdentityFrom,
   delegatedRequest,
+  notDelegatedResponse,
 } from "./delegation";
 import type { Principal } from "./principal";
 
@@ -96,10 +97,13 @@ describe("delegated identity check", () => {
     const request = delegatedRequest(results, identity, { params, body: {} });
     const header = request.headers.get(DELEGATED_IDENTITY_HEADER) ?? "";
 
+    // `allowed`, not a list without this operation: passing one that omits it
+    // returns null at the allowlist check and never reaches the method branch.
     expect(
-      delegatedIdentityFor(new Request(request.url, { method: "GET", headers: request.headers }), [
-        route("experiment_results_get"),
-      ]),
+      delegatedIdentityFor(
+        new Request(request.url, { method: "GET", headers: request.headers }),
+        allowed,
+      ),
     ).toBeNull();
     expect(
       delegatedIdentityFor(
@@ -122,6 +126,50 @@ describe("delegated identity check", () => {
       ).toBeNull();
     }
     expect(delegatedIdentityFor(new Request(request.url, { method: "POST" }), allowed)).toBeNull();
+  });
+
+  /**
+   * This runs in a `WorkerEntrypoint.fetch` with no guard around it, so a throw
+   * here does not become a 404 with a request id -- it escapes the service
+   * binding and the surface Worker reports a 500 for a request it should simply
+   * not have recognized.
+   */
+  it.each([
+    "%E0%A4%A",
+    "%",
+  ])("returns null rather than throwing on the malformed escape %s", (bad) => {
+    const request = delegatedRequest(results, identity, { params, body: {} });
+    const malformed = new Request(
+      `https://delegated.splitch.internal/apps/${bad}/envs/env_1/experiments/exp_1/results`,
+      { method: "POST", headers: request.headers },
+    );
+
+    expect(() => delegatedIdentityFor(malformed, allowed)).not.toThrow();
+    expect(delegatedIdentityFor(malformed, allowed)).toBeNull();
+  });
+});
+
+/**
+ * The Control Plane returns the binding's response verbatim, so this IS the API
+ * response. Bare text here would mean the one path that reports a surface-Worker
+ * bug is also the one path with no code and no request id to correlate on.
+ */
+describe("response for a request the owner will not accept as delegated", () => {
+  it("answers in the canonical envelope and keeps the caller's request id", async () => {
+    const res = notDelegatedResponse(
+      delegatedRequest(results, identity, { params, body: {}, requestId: "req_1" }),
+    );
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get("content-type")).toBe("application/json");
+    expect(res.headers.get("x-request-id")).toBe("req_1");
+    expect(await res.json()).toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+  });
+
+  it("still carries a request id when the delegated request had none", () => {
+    const res = notDelegatedResponse(delegatedRequest(results, identity, { params, body: {} }));
+
+    expect(res.headers.get("x-request-id")).toBeTruthy();
   });
 });
 
