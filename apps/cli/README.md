@@ -38,14 +38,16 @@ which Worker implements it: everything you authenticate for with `splitch login`
 
 ## Authenticate and select an Environment
 
-The CLI authenticates its control-plane session with a browser device flow. A selected App is
-required for login.
+The CLI authenticates its control-plane session with an OAuth device flow. `splitch login` opens the
+approval page in your default browser and also prints the verification URL and code for remote
+terminals. A selected App is optional; App-less login is the cold-start path for creating your first
+Organization and App.
 
 ```bash
 export SPLITCH_APP="<app_id_or_slug>"
 export SPLITCH_ENV="<environment_id_or_slug>"
 
-splitch login --app "$SPLITCH_APP"
+splitch login
 splitch use --app "$SPLITCH_APP" --env "$SPLITCH_ENV" --json
 ```
 
