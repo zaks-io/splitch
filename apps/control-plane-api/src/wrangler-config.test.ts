@@ -9,6 +9,20 @@ describe("Control Plane API Wrangler runtime config", () => {
     ["local", config],
     ["shared-preview", config.env?.["shared-preview"]],
     ["production", config.env?.production],
+  ])("declares Run Snapshot Tinybird delivery for %s", (targetName, target) => {
+    expect(target?.secrets?.required).toContain("TINYBIRD_RUN_SNAPSHOT_TOKEN");
+    expect(target?.vars?.TINYBIRD_API_URL).toBe(
+      targetName === "local" ? "http://127.0.0.1:18788" : "https://api.us-west-2.aws.tinybird.co",
+    );
+    if (targetName !== "local") {
+      expect(target?.vars?.TINYBIRD_RUN_SNAPSHOT_TOKEN).toBeUndefined();
+    }
+  });
+
+  it.each([
+    ["local", config],
+    ["shared-preview", config.env?.["shared-preview"]],
+    ["production", config.env?.production],
   ])("carries the daily demo-reaper cron for %s", (_target, target) => {
     expect(effectiveCrons(target)).toEqual(["0 8 * * *"]);
   });
@@ -115,6 +129,7 @@ interface WranglerConfig {
   ratelimits?: RateLimitConfig[];
   triggers?: { crons?: string[] };
   vars?: Record<string, unknown>;
+  secrets?: { required?: string[] };
 }
 
 interface WranglerTarget {
@@ -126,6 +141,7 @@ interface WranglerTarget {
   ratelimits?: RateLimitConfig[];
   triggers?: { crons?: string[] };
   vars?: Record<string, unknown>;
+  secrets?: { required?: string[] };
 }
 
 interface DurableObjectsConfig {

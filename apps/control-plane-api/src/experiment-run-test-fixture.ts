@@ -31,6 +31,7 @@ export type Fixture = Awaited<ReturnType<typeof experimentFixture>>;
 
 export type StartResponse = {
   previousRunId: string | null;
+  runSnapshotShipped?: boolean;
   run: {
     id: string;
     allocation: Record<string, number>;
@@ -262,7 +263,7 @@ export async function insertSyntheticNewerRun(
   });
 }
 
-function configStoreAccess(
+export function configStoreAccess(
   repo: Repository,
   kv: KVNamespace,
   syncFailures?: SyncFailureControl,

@@ -6,10 +6,12 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import { type ExperimentRow, json, type RunRow } from "./experiment-model";
 import { flagNotFound, validationError } from "./flag-definition-errors";
 import { pathParam } from "./handler-input";
+import type { RunSnapshotDelivery } from "./run-snapshot";
 
 export interface ExperimentDeps {
   repo: Repository;
   configStore?: ConfigStoreAccess;
+  runSnapshotDelivery?: RunSnapshotDelivery;
   nowIso?: () => string;
 }
 
