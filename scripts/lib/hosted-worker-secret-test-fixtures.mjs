@@ -34,6 +34,23 @@ export function writeIngestDatasources(root, names) {
   writeFileSync(join(dir, "deduped_exposures.datasource"), "TOKEN analysis_read READ\n");
 }
 
+/**
+ * The read probe derives which Pipes to exercise from `TYPE ENDPOINT`, the same
+ * declaration the real `.pipe` files carry. The Copy Pipe stays out of the
+ * probe: it is run with TINYBIRD_COPY_TOKEN, not read with the read token.
+ */
+export function writeEndpointPipes(root, names) {
+  const dir = join(root, "infra", "tinybird", "pipes");
+  mkdirSync(dir, { recursive: true });
+  for (const name of names) {
+    writeFileSync(join(dir, `${name}.pipe`), "NODE usage\nSQL >\n    SELECT 1\n\nTYPE ENDPOINT\n");
+  }
+  writeFileSync(
+    join(dir, "cp_deduped_exposures.pipe"),
+    "NODE copy\nSQL >\n    SELECT 1\n\nTYPE COPY\n",
+  );
+}
+
 export function delegationValues() {
   return Object.fromEntries(
     MCP_DELEGATION_PAIRS.map(({ name }, index) => [name, `delegation-${index}`]),

@@ -9,6 +9,7 @@ import {
 import {
   delegationFixture,
   delegationValues,
+  writeEndpointPipes,
   writeIngestDatasources,
   writeWorker,
 } from "./lib/hosted-worker-secret-test-fixtures.mjs";
@@ -157,4 +158,96 @@ test("hosted secret validation fails loud when the ingest Worker declares no Tin
       ),
     /event-ingest-api production requires TINYBIRD_INGEST_TOKEN but declares no TINYBIRD_API_URL/,
   );
+});
+
+test("hosted secret validation exercises TINYBIRD_READ_TOKEN against every endpoint Pipe", async () => {
+  const root = delegationFixture();
+  writeWorker(root, "analysis-api", ["MCP_ANALYSIS_DELEGATION_SECRET", "TINYBIRD_READ_TOKEN"], {
+    TINYBIRD_API_URL: "https://api.us-west-2.aws.tinybird.co",
+  });
+  writeEndpointPipes(root, ["analysis_evaluation_usage", "analysis_run_inputs"]);
+  const env = { ...delegationValues(), TINYBIRD_READ_TOKEN: "p.not-a-real-token" };
+  const validate = (fetchImpl) =>
+    validateHostedWorkerSecretEnv(root, "production", env, { fetch: fetchImpl });
+
+  const calls = [];
+  const recording = (status) => (url, init) => {
+    calls.push({ url, ...init });
+    return Promise.resolve(new Response(null, { status }));
+  };
+
+  // A non-empty token that Tinybird refuses is the outage class this probe
+  // exists for: the deploy was green and every usage read 503ed at runtime.
+  await assert.rejects(
+    () => validate(recording(403)),
+    /TINYBIRD_READ_TOKEN was rejected by api\.us-west-2\.aws\.tinybird\.co for Pipe "analysis_evaluation_usage" \(HTTP 403\)/,
+  );
+  // A right token in the wrong region reaches the API and 404s on the Pipe.
+  await assert.rejects(() => validate(recording(404)), /\(HTTP 404\)/);
+  await assert.rejects(
+    () => validate(() => Promise.reject(new DOMException("socket hang up", "TimeoutError"))),
+    (error) =>
+      /TINYBIRD_READ_TOKEN could not be exercised against api\.us-west-2\.aws\.tinybird\.co \(TimeoutError\)/.test(
+        error.message,
+      ) && !error.message.includes("socket hang up"),
+  );
+  await assert.rejects(
+    () => validate(recording(503)),
+    /TINYBIRD_READ_TOKEN could not be verified against api\.us-west-2\.aws\.tinybird\.co for Pipe "analysis_evaluation_usage" \(HTTP 503\); deploying an unverified token turns every usage and results read into a 503/,
+  );
+
+  // 400 passes: the Pipe refused the parameterless request AFTER accepting the
+  // credential, which is exactly what the probe needs and executes no query.
+  calls.length = 0;
+  await validate(recording(400));
+  assert.deepEqual(
+    calls.map(({ url }) => url),
+    [
+      "https://api.us-west-2.aws.tinybird.co/v0/pipes/analysis_evaluation_usage.json",
+      "https://api.us-west-2.aws.tinybird.co/v0/pipes/analysis_run_inputs.json",
+    ],
+  );
+  assert.equal(calls[0].headers.authorization, "Bearer p.not-a-real-token");
+  // The probe reads; it must never carry a body or a write method.
+  assert.deepEqual(
+    calls.map(({ method, body }) => ({ method, body })),
+    [
+      { method: undefined, body: undefined },
+      { method: undefined, body: undefined },
+    ],
+  );
+});
+
+test("the read probe covers every endpoint Pipe in the project, with no second list", async () => {
+  const root = delegationFixture();
+  writeWorker(root, "analysis-api", ["MCP_ANALYSIS_DELEGATION_SECRET", "TINYBIRD_READ_TOKEN"], {
+    TINYBIRD_API_URL: "https://api.us-west-2.aws.tinybird.co",
+  });
+  writeEndpointPipes(root, [
+    "analysis_evaluation_usage",
+    "analysis_run_inputs",
+    "serve_deduped_exposures",
+  ]);
+
+  const probed = [];
+  await validateHostedWorkerSecretEnv(
+    root,
+    "production",
+    { ...delegationValues(), TINYBIRD_READ_TOKEN: "p.not-a-real-token" },
+    {
+      fetch: (url) => {
+        probed.push(url);
+        return Promise.resolve(new Response(null, { status: 400 }));
+      },
+    },
+  );
+
+  // A Pipe added to the Tinybird project is probed on the next deploy without
+  // editing the deploy script; the Copy Pipe stays out because it is not read
+  // with this token.
+  assert.deepEqual(probed, [
+    "https://api.us-west-2.aws.tinybird.co/v0/pipes/analysis_evaluation_usage.json",
+    "https://api.us-west-2.aws.tinybird.co/v0/pipes/analysis_run_inputs.json",
+    "https://api.us-west-2.aws.tinybird.co/v0/pipes/serve_deduped_exposures.json",
+  ]);
 });
