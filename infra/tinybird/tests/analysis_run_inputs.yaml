@@ -15,3 +15,4 @@
 - name: missing_required_app_id_is_rejected
   parameters: "environment_id=env_prod&experiment_id=exp_checkout"
   expected_http_status: 400
+  expected_result: "app_id is required"
