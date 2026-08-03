@@ -14,10 +14,10 @@ test("new main pushes cannot cancel or coalesce an in-flight production call", (
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}/);
 });
 
-test("Verify keeps its stable check name on the 4 vCPU cost trial", () => {
+test("Verify keeps its stable check name on the measured 8 vCPU runner", () => {
   assert.ok(verifyJob);
   assert.match(verifyJob, /name: Verify/);
-  assert.match(verifyJob, /runs-on: blacksmith-4vcpu-ubuntu-2404/);
+  assert.match(verifyJob, /runs-on: blacksmith-8vcpu-ubuntu-2404/);
 });
 
 test("main CI delegates production build selection to the production deploy planner", () => {

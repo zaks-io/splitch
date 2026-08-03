@@ -49,9 +49,10 @@ routes, DNS, or GitHub environment configuration.
   except `sdk-publish`. npm trusted publishing supports GitHub-hosted runners, not Blacksmith, so that
   release-published workflow uses `ubuntu-24.04` and must not receive an npm token.
 - Use larger Blacksmith Linux runners only for measured bottlenecks, for example large build or test
-  shards. The affected `ci` Verify job uses `blacksmith-4vcpu-ubuntu-2404` while its measured cost
-  trial is active; retain it only while p95 stays below four minutes and normalized compute falls by
-  at least 25%.
+  shards. The affected `ci` Verify job uses `blacksmith-8vcpu-ubuntu-2404`. The 4-vCPU trial was
+  rejected after forced uncached runs exceeded the four-minute target and repeatedly tripped
+  existing five-second test budgets under load. Revisit the smaller runner only after the graph can
+  meet the same p95 and normalized-compute criteria.
 - Keep upstream cache actions such as `actions/cache` and `actions/setup-node`; Blacksmith redirects
   standard caches without workflow-specific cache forks.
 - Every repository that uses `runs-on: blacksmith-*` must have the Blacksmith GitHub App installed.
