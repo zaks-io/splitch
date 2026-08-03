@@ -83,9 +83,11 @@ The root `package.json` exposes these scripts:
 Root scripts own repository-wide static analysis commands that do not belong to one runtime package.
 Biome formats code/config. Prettier formats Markdown only.
 
-`verify:ci` and `verify:push` must stay aligned. The only required difference is that `verify:push`
-does not run hosted smoke tests or any command that mutates Cloudflare, Tinybird, GitHub
-deployments, or secrets. Hosted smoke runs after trusted deploy workflows update the matching target.
+`verify:ci` and `verify:push` must stay aligned on their shared Turbo graph. `verify:push` additionally
+runs Tinybird and D1 validation unconditionally, while the required CI workflow runs those validators
+only when its change planner selects their inputs. `verify:push` does not run hosted smoke tests or any
+command that mutates Cloudflare, Tinybird, GitHub deployments, or secrets. Hosted smoke runs after
+trusted deploy workflows update the matching target.
 
 `verify:push` runs `smoke:local:api` after build. This starts each API/MCP Worker locally with
 Wrangler and fails if the Worker cannot boot or its health response has the wrong service or platform

@@ -79,6 +79,21 @@ test("cache-policy changes force complete uncached verification", () => {
   assert.equal(plan.d1, true);
 });
 
+test("cache-policy-only changes force the Turbo graph without unrelated validators", () => {
+  const plan = createCiVerificationPlan({
+    afterSha: headSha,
+    beforeSha: baseSha,
+    eventName: "push",
+    runGit: () => ok("scripts/check-turbo-remote-cache-env.mjs\n"),
+  });
+
+  assert.equal(plan.cachePolicyChanged, true);
+  assert.equal(plan.useAffected, false);
+  assert.equal(plan.forceFull, true);
+  assert.equal(plan.tinybird, false);
+  assert.equal(plan.d1, false);
+});
+
 test("Tinybird, D1, and production Vite inputs are classified independently", () => {
   assert.deepEqual(classifyCiChanges(["infra/tinybird/pipes/example.pipe"]), {
     cachePolicyChanged: false,
