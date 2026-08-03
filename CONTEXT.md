@@ -80,6 +80,11 @@ nothing on its own.
 **Experiment Run**: the immutable, time-boxed unit of experiment analysis. Start and End are its
 lifecycle verbs. Do not use "publish" for Runs.
 
+**Run Snapshot**: the frozen Experiment Run configuration (allocation, Control Variant, decision
+family, guardrails, dimensions) written to the analytics store at Start as the analysis engine's
+Run input. Not the exposure-side "snapshot refresh" rollups and not `snapshot_ts`; those describe
+Exposure data, never Run config.
+
 **Exposure**: the event that an Entity actually encountered its assigned Variant. Analysis counts
 Exposures, not Assignments. See [`apps/event-ingest-api/CONTEXT.md`](./apps/event-ingest-api/CONTEXT.md).
 
