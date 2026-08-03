@@ -6,6 +6,12 @@ export interface RunSnapshotDelivery {
   apiUrl?: string;
   token?: string;
   fetch?: typeof fetch;
+  /**
+   * Fault sink for a failed ship. The Start response is honestly 200 (the Run
+   * committed), so this is the only channel that reaches Sentry (ADR-0047);
+   * `console.error` alone is stripped from Sentry by the observability wiring.
+   */
+  onFault?: (detail: Record<string, unknown>, cause: unknown) => void;
 }
 
 export interface RunSnapshotRow {
@@ -89,6 +95,19 @@ async function shipRunSnapshot(
   if (!response.ok) {
     throw new Error(`Tinybird Run Snapshot append failed with HTTP ${response.status}`);
   }
+  // A 2xx can still quarantine the row (schema mismatch), which would report
+  // "shipped" for a snapshot the analysis engine can never read. An unparseable
+  // body is accepted: the success shape is Tinybird's to define, and the row
+  // count is only asserted where Tinybird states it.
+  const body = (await response.json().catch(() => null)) as {
+    successful_rows?: number;
+    quarantined_rows?: number;
+  } | null;
+  if (body && ((body.quarantined_rows ?? 0) > 0 || body.successful_rows === 0)) {
+    throw new Error(
+      `Tinybird Run Snapshot append quarantined the row (successful=${body.successful_rows}, quarantined=${body.quarantined_rows})`,
+    );
+  }
 }
 
 export async function shipCommittedRunSnapshot(
@@ -101,10 +120,24 @@ export async function shipCommittedRunSnapshot(
     await shipRunSnapshot(delivery, runSnapshotRow(run, scope, snapshotAt));
     return true;
   } catch (cause) {
-    console.error(
-      `run-snapshot: app=${scope.appId} environment=${scope.environmentId} experiment=${run.experimentId} run=${run.id}`,
-      cause,
-    );
+    const detail = {
+      appId: scope.appId,
+      environmentId: scope.environmentId,
+      experimentId: run.experimentId,
+      runId: run.id,
+      fault: cause instanceof Error ? cause.message : String(cause),
+    };
+    // Same containment rule as `containObservability`: a throwing fault sink
+    // must not corrupt a correct 200 into a 500 on top of the lost report.
+    try {
+      if (delivery?.onFault) {
+        delivery.onFault(detail, cause);
+      } else {
+        console.error("run-snapshot: Run Snapshot did not ship", detail);
+      }
+    } catch {
+      console.error("run-snapshot: fault sink threw", { runId: run.id });
+    }
     return false;
   }
 }

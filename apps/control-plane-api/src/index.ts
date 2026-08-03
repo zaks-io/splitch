@@ -2,6 +2,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import {
+  createWorkerFaultReporter,
   createWorkerObservability,
   workerEmitter,
   workerObservabilityWithWaitUntil,
@@ -162,7 +163,10 @@ async function handleRequest(
     credentialStore: env.CREDENTIAL_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
     configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
-    runSnapshotDelivery: runSnapshotDeliveryFromEnv(env),
+    runSnapshotDelivery: {
+      ...runSnapshotDeliveryFromEnv(env),
+      onFault: (detail) => reportRunSnapshotFault(env, ctx, detail),
+    },
     logger: console,
     memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
     observability: createWorkerObservability(
@@ -237,6 +241,17 @@ async function handleSignedPanelSettings(
     },
     operation,
     auth.principal,
+  );
+}
+
+function reportRunSnapshotFault(
+  env: ControlPlaneApiEnv,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+  detail: Record<string, unknown>,
+): void {
+  createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(
+    "run_snapshot_unshipped",
+    detail,
   );
 }
 

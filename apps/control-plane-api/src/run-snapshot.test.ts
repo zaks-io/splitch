@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { RunRow } from "./experiment-model";
-import { runSnapshotRow } from "./run-snapshot";
+import { runSnapshotRow, shipCommittedRunSnapshot } from "./run-snapshot";
 
 const scope = { appId: "app_1", environmentId: "env_prod" };
 
@@ -37,6 +37,80 @@ describe("runSnapshotRow", () => {
     expect(() => runSnapshotRow(run({ variantSet: "not-json" }), scope, "now")).toThrow(
       "variantSet is unparseable",
     );
+  });
+});
+
+describe("shipCommittedRunSnapshot faults", () => {
+  const delivery = (overrides: Record<string, unknown>) => ({
+    apiUrl: "https://tinybird.local",
+    token: "token",
+    ...overrides,
+  });
+
+  it("routes a ship failure to onFault with the Run identifiers", async () => {
+    const onFault = vi.fn();
+    const shipped = await shipCommittedRunSnapshot(
+      delivery({ fetch: () => Promise.reject(new Error("boom")), onFault }),
+      run(),
+      scope,
+      "now",
+    );
+    expect(shipped).toBe(false);
+    expect(onFault).toHaveBeenCalledOnce();
+    const [detail] = onFault.mock.calls[0] ?? [];
+    expect(detail).toMatchObject({
+      appId: "app_1",
+      environmentId: "env_prod",
+      experimentId: "exp_1",
+      runId: "run_1",
+    });
+  });
+
+  it("does not call onFault on success", async () => {
+    const onFault = vi.fn();
+    const shipped = await shipCommittedRunSnapshot(
+      delivery({
+        fetch: () => Promise.resolve(Response.json({ successful_rows: 1, quarantined_rows: 0 })),
+        onFault,
+      }),
+      run(),
+      scope,
+      "now",
+    );
+    expect(shipped).toBe(true);
+    expect(onFault).not.toHaveBeenCalled();
+  });
+
+  it("treats a 2xx that quarantined the row as a ship failure", async () => {
+    const onFault = vi.fn();
+    const shipped = await shipCommittedRunSnapshot(
+      delivery({
+        fetch: () => Promise.resolve(Response.json({ successful_rows: 0, quarantined_rows: 1 })),
+        onFault,
+      }),
+      run(),
+      scope,
+      "now",
+    );
+    expect(shipped).toBe(false);
+    expect(onFault.mock.calls[0]?.[0]).toMatchObject({
+      fault: expect.stringContaining("quarantined"),
+    });
+  });
+
+  it("a throwing fault sink still reports the ship as failed", async () => {
+    const shipped = await shipCommittedRunSnapshot(
+      delivery({
+        fetch: () => Promise.reject(new Error("boom")),
+        onFault: () => {
+          throw new Error("sink down");
+        },
+      }),
+      run(),
+      scope,
+      "now",
+    );
+    expect(shipped).toBe(false);
   });
 });
 

@@ -179,6 +179,26 @@ export function createWorkerObservability(
 }
 
 /**
+ * Report a fault that corrupts no response: the request itself succeeded, but a
+ * side-channel obligation (e.g. shipping a Run Snapshot to Tinybird) did not.
+ * `onError` cannot carry it -- its Sentry routing keys on the response status,
+ * and here the status is honestly 200. Same sinks as the request fault path:
+ * a scrubbed Workers Logs row always, Sentry only where `SENTRY_DSN` is set.
+ */
+export function createWorkerFaultReporter(
+  env: WorkerEnv,
+  options: WorkerObservabilityOptions,
+): (code: string, detail: Record<string, unknown>) => void {
+  const emitter = workerEmitter(env, options, { onStructuredLogEvents: emitToWorkersLogs });
+  return (code, detail) => {
+    emitter.log("error", code, detail);
+    if (env.SENTRY_DSN) {
+      void captureSentryMessage(options, { code, ...detail });
+    }
+  };
+}
+
+/**
  * Workers Logs and `wrangler tail` collect console output, and the scrubbed
  * emitter has no sink of its own -- without this a fault row is built, scrubbed,
  * and dropped, so the thrown value reaches an operator only where `SENTRY_DSN`
@@ -202,7 +222,7 @@ function emitToWorkersLogs(events: Record<string, unknown>[]): void {
 
 async function captureSentryMessage(
   options: WorkerObservabilityOptions,
-  ctx: RequestErrorReport,
+  ctx: { readonly code: string },
 ): Promise<void> {
   const Sentry = await loadSentry();
   Sentry.captureMessage(`worker fault ${ctx.code}`, {

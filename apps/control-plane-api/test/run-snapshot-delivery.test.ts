@@ -79,7 +79,10 @@ describe("Experiment Start Run Snapshot delivery", () => {
     await expect(
       ctx.repo.experiments.getRun(envScope(fx.appId, fx.environmentId), body.run.id),
     ).resolves.toMatchObject({ id: body.run.id });
-    expect(error).toHaveBeenCalledWith(expect.stringMatching(/^run-snapshot:/u), expect.any(Error));
+    expect(error).toHaveBeenCalledWith(
+      expect.stringMatching(/^run-snapshot:/u),
+      expect.objectContaining({ runId: expect.any(String), fault: expect.any(String) }),
+    );
   });
 
   it("ships an approval-applied Start exactly once", async () => {
@@ -150,7 +153,10 @@ describe("Experiment Start Run Snapshot delivery", () => {
     } else {
       expect(await response.json()).toMatchObject({ approvalRequest: { status: "applied" } });
     }
-    expect(error).toHaveBeenCalledWith(expect.stringMatching(/^run-snapshot:/u), expect.any(Error));
+    expect(error).toHaveBeenCalledWith(
+      expect.stringMatching(/^run-snapshot:/u),
+      expect.objectContaining({ runId: expect.any(String), fault: expect.any(String) }),
+    );
   });
 });
 
