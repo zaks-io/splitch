@@ -1,6 +1,6 @@
 # Agent Config
 
-Last updated: 2026-07-29
+Last updated: 2026-08-03
 
 Scaffold is in place. The repo is now a pnpm/Turborepo workspace with
 package scripts, Lefthook local gates, Blacksmith-backed GitHub Actions config,
@@ -34,8 +34,8 @@ in this config; refresh them from Linear during each workflow run.
 - GitHub read-only checks: `gh repo view`, `gh workflow list`, `gh pr list`,
   `gh pr checks`, `gh run list`, and environment/branch-protection API reads.
 - Configured hosted PR check name: `Verify` from the `ci` workflow (its
-  `verify:ci` graph includes `spec:lint`). `Control Panel E2E` runs
-  nightly in the standalone `e2e` workflow (plus manual dispatch), not in `ci`;
+  affected `verify:ci` graph includes `spec:lint`). `Control Panel E2E` runs
+  weekly in the standalone `e2e` workflow (plus manual dispatch), not in `ci`;
   it is signal-only and never blocks deploys. Secret scanning is
   a step inside `Verify`; the standalone `gitleaks` workflow was removed. See
   `Pull Requests`.
@@ -60,18 +60,16 @@ in this config; refresh them from Linear during each workflow run.
 - Full local pre-push gate: `pnpm verify:push` (one parallel Turbo graph:
   `knip`, `format:check`, `lint`, `typecheck`, `secrets:range`,
   `tinybird:local`, `d1:migrate:local`, `d1:migrate:populated`).
-- CI gate: `.github/workflows/ci.yml` job `Verify` runs `pnpm verify:ci`
+- CI gate: `.github/workflows/ci.yml` job `Verify` runs affected `pnpm verify:ci`
   (`format:check`, `lint`, `typecheck`, `knip`, `spec:lint`, `test:scripts`,
-  `test`, `stats:golden`, `stats:property`, `build`) and then `pnpm secrets:range`.
+  `test`, `stats:golden`, `stats:property`, `build`), conditionally runs local
+  Tinybird and D1 validators for their changed inputs, and then runs `pnpm secrets:range`.
 - Separate hosted checks: `Control Panel E2E` runs the local full-stack
-  Playwright harness nightly in the `e2e` workflow and on manual dispatch; a
-  red run is signal-only (the harness is too flaky to gate deploys). The stats
+  Playwright harness weekly in the `e2e` workflow and on manual dispatch while
+  SPL-181 is open; a red run is signal-only. The stats
   simulation runs only nightly in `stats-simulation-audit` (`--mode=audit`);
   there is no per-push smoke, and no standalone `Spec Lint` job (`spec:lint`
   lives inside `Verify`).
-- Gate parity gap: `pnpm verify:push` runs `tinybird:local` and
-  `d1:migrate:local`, but `pnpm verify:ci` currently does not. Fix the repo
-  gate entrypoints before treating CI and pre-push as equivalent.
 - Commit gate: Lefthook runs `node scripts/check-file-size.mjs` and
   `CI=true pnpm verify:commit` (one parallel Turbo graph: `knip`,
   `format:check`, `lint`, `typecheck`, `secrets:staged`).
@@ -368,11 +366,10 @@ real package API boundary.
 - Local: self-contained. `pnpm install` then `pnpm verify:push`.
 - Git hooks: wired with Lefthook. `pre-commit` runs `pnpm verify:commit`;
   `pre-push` runs `pnpm verify:push`.
-- PR CI: wired in `.github/workflows/ci.yml`, running `pnpm verify:ci` on
-  Blacksmith; `spec:lint` runs inside its `verify:ci` graph.
-  `Control Panel E2E` runs nightly in the `e2e` workflow and on manual
-  dispatch as a signal-only check and does not gate production deploys. See the
-  gate parity gap above for Tinybird Local and D1 local validators.
+- PR CI: wired in `.github/workflows/ci.yml`, running affected `pnpm verify:ci` on
+  Blacksmith; `spec:lint` runs inside its graph, while Tinybird Local and D1 local validators run
+  conditionally from the same exact changed-path plan. `Control Panel E2E` runs weekly in the `e2e`
+  workflow and on manual dispatch as a signal-only check while SPL-181 is open.
 - Shared Preview / Production: workflows are wired. Shared Preview is one
   maintainer-triggered hosted target backed by non-production Cloudflare
   resources plus one Tinybird Branch. Production starts automatically after
@@ -416,7 +413,7 @@ real package API boundary.
       in `Pull Requests`.
 - [x] Hosted PR check name configured: `Verify`; secret scanning and
       `spec:lint` are steps inside it.
-      `Control Panel E2E` is limited to the nightly `e2e` workflow and manual
+      `Control Panel E2E` is limited to the weekly `e2e` workflow and manual
       dispatches.
       See `Pull Requests`.
 - [x] Tinybird datasource project files exist under `infra/tinybird`.
@@ -441,7 +438,8 @@ real package API boundary.
 - [ ] Production approval enforcement is not currently backed by GitHub
       required-reviewer protection. The `production` environment has a branch
       policy only. Revisit plan support or choose a different approval gate.
-- [ ] Gate parity gap: `verify:push` runs Tinybird Local and D1 local validators;
-      `verify:ci` currently does not.
+- [x] CI conditionally runs Tinybird Local and both D1 local migration validators when their inputs
+      change; missing or unresolvable comparison ranges fail closed to all validators and a full
+      uncached `verify:ci` graph.
 - [x] Shared preview branch provisioned. Verifier: Tinybird `shared_preview` Branch and matching
       non-production Cloudflare resources exist for hosted preview.

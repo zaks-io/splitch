@@ -6,8 +6,9 @@ const workflow = readFileSync(".github/workflows/e2e.yml", "utf8");
 const turbo = JSON.parse(readFileSync("turbo.json", "utf8"));
 const controlPanelPlaywright = readFileSync("apps/control-panel/playwright.config.ts", "utf8");
 
-test("E2E runs nightly and on manual dispatch only", () => {
-  assert.match(workflow, /schedule:\n\s+- cron: "17 9 \* \* \*"/);
+test("E2E runs weekly while SPL-181 is open and remains manually dispatchable", () => {
+  assert.match(workflow, /schedule:\n\s+- cron: "17 9 \* \* 1"/);
+  assert.match(workflow, /SPL-181/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /pull_request:/);
   assert.doesNotMatch(workflow, /\n {2}push:/);

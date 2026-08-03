@@ -68,9 +68,9 @@ Uncached or root-wide tasks:
 
 CI uses Turborepo remote caching with `TURBO_TOKEN`, `TURBO_TEAM`, and
 `TURBO_REMOTE_CACHE_SIGNATURE_KEY`. Remote cache artifact signing is enabled in `turbo.json`. The
-current required gate runs `pnpm verify:ci`; later affected-package sharding can use `--affected` once
-hosted CI has a stable main baseline. Deployment jobs use `--filter=<workspace>...` to build only the
-Worker/app graph being deployed.
+required gate runs `pnpm verify:ci --affected` against exact PR or push comparison SHAs. Missing or
+unresolvable ranges fail closed to the full graph with `TURBO_FORCE=true`. Deployment jobs use
+`--filter=<workspace>...` to build only the Worker/app graph being deployed.
 Every build-affecting environment variable must be listed in `globalEnv` or task `env` so preview and
 production builds cannot reuse the wrong cache entry.
 

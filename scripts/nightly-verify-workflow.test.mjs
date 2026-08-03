@@ -22,6 +22,7 @@ test("nightly verify forces execution and rewrites signed cache entries", () => 
   assert.match(workflow, /run: node scripts\/check-turbo-remote-cache-env\.mjs --required/);
   assert.match(workflow, /SPLITCH_PLATFORM_TARGET: pr-ci/);
   assert.match(workflow, /run: pnpm verify:ci/);
+  assert.doesNotMatch(workflow, /Install Tinybird CLI|tinybird\.co/);
 });
 
 test("nightly verify is signal-only and cannot mutate anything", () => {

@@ -83,9 +83,11 @@ The root `package.json` exposes these scripts:
 Root scripts own repository-wide static analysis commands that do not belong to one runtime package.
 Biome formats code/config. Prettier formats Markdown only.
 
-`verify:ci` and `verify:push` must stay aligned. The only required difference is that `verify:push`
-does not run hosted smoke tests or any command that mutates Cloudflare, Tinybird, GitHub
-deployments, or secrets. Hosted smoke runs after trusted deploy workflows update the matching target.
+`verify:ci` and `verify:push` must stay aligned on their shared Turbo graph. `verify:push` additionally
+runs Tinybird and D1 validation unconditionally, while the required CI workflow runs those validators
+only when its change planner selects their inputs. `verify:push` does not run hosted smoke tests or any
+command that mutates Cloudflare, Tinybird, GitHub deployments, or secrets. Hosted smoke runs after
+trusted deploy workflows update the matching target.
 
 `verify:push` runs `smoke:local:api` after build. This starts each API/MCP Worker locally with
 Wrangler and fails if the Worker cannot boot or its health response has the wrong service or platform
@@ -120,10 +122,10 @@ run the matching root script locally, fix the failure, and rerun `verify:push` b
 
 ## CI policy
 
-The required CI check runs on Blacksmith and executes `verify:ci`. It includes everything in
-`verify:push`; hosted smoke checks run in trusted deploy workflows where the target has just been
-updated. The local API Worker smoke is safe in CI and remote Cursor because it uses Wrangler local
-mode and loopback ports only.
+The required CI check runs on Blacksmith and executes the affected `verify:ci` graph. The workflow
+adds `tinybird:local`, `d1:migrate:local`, and `d1:migrate:populated` when their inputs change;
+missing comparison evidence fails closed to all three validators and a full uncached graph. Hosted
+smoke checks run in trusted deploy workflows where the target has just been updated.
 
 Gitleaks runs as a dedicated step in the `ci` workflow (`secrets:range`), after `verify:ci`, scoped
 to the change's commit range rather than the whole tree. It is a separate step (not folded into
@@ -166,7 +168,9 @@ Gitleaks is required in commit, pre-push, and CI gates.
 
 ## D1 and Tinybird local policy
 
-`pnpm d1:migrate:local` and `pnpm tinybird:local` are wired into `verify:push` and `verify:ci`.
+`pnpm d1:migrate:local` and `pnpm tinybird:local` are wired into `verify:push`. The `ci` workflow
+runs them conditionally from its exact changed-path plan rather than placing them in every
+`verify:ci` invocation.
 
 `pnpm d1:migrate:local` is now a real failing validator (SPL-9): committed `@splitch/db` Drizzle
 migrations exist, so it runs `wrangler d1 migrations apply --local` against a fresh local Miniflare D1
