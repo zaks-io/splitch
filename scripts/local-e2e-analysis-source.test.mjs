@@ -13,6 +13,13 @@ test("serves authenticated deterministic Tinybird rows and local JWT evidence", 
   const unauthorized = await fetch(`${base}/v0/pipes/analysis_run_inputs.json`);
   assert.equal(unauthorized.status, 401);
 
+  const appended = await fetch(`${base}/v0/events?name=run_snapshots`, {
+    method: "POST",
+    headers: { authorization: "Bearer local-e2e-tinybird-read-token" },
+  });
+  assert.equal(appended.status, 200);
+  assert.deepEqual(await appended.json(), { successful_rows: 1, quarantined_rows: 0 });
+
   const token = await fetch(`${base}/token`).then((response) => response.json());
   assert.equal(typeof token.accessToken, "string");
   assert.equal(token.accessToken.split(".").length, 3);

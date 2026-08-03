@@ -23,6 +23,10 @@ function handleRequest(request, response, runId) {
     json(response, 401, { error: "unauthorized" }, runId);
     return;
   }
+  if (request.method === "POST" && url.pathname === "/v0/events") {
+    json(response, 200, { successful_rows: 1, quarantined_rows: 0 }, runId);
+    return;
+  }
   const pipeName = url.pathname.match(/^\/v0\/pipes\/([^/]+)\.json$/)?.[1];
   if (!pipeName) {
     response.writeHead(404).end("not found");

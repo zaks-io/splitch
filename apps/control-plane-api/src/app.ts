@@ -47,20 +47,19 @@ import { unavailableControlPlaneOperation } from "./unavailable-handler";
  */
 
 export interface AppDeps {
-  /** Resolver for the `control-plane-token` AuthKind (bearer-JWT). */
   authResolver: AuthResolver;
   rateLimiter: RateLimiter;
   repo: Repository;
   credentialStore?: KVNamespace;
   credentialCacheWriter?: CredentialCacheWriterAccess;
   configStore?: ConfigStoreAccess;
+  runSnapshotDelivery?: import("./run-snapshot").RunSnapshotDelivery;
   memberProfileResolver?: MemberProfileResolver;
   nowIso?: () => string;
   defaultHeaders?: Record<string, string>;
   observability?: RegistrarDeps["observability"];
   logger?: Pick<Console, "warn">;
   analysisResults?: AnalysisResultsReader;
-  /** Service bindings for routes this Worker is the surface for but does not execute. */
   delegationBindings?: DelegationBindings;
 }
 
@@ -108,6 +107,7 @@ export function createApp(deps: AppDeps): Hono {
     makeExperimentHandlers({
       repo: deps.repo,
       configStore: deps.configStore,
+      runSnapshotDelivery: deps.runSnapshotDelivery,
       nowIso: deps.nowIso,
     }),
   );
@@ -127,6 +127,8 @@ export function createApp(deps: AppDeps): Hono {
       applyOther: makeOtherApprovalApplication({
         repo: deps.repo,
         configStore: deps.configStore,
+        runSnapshotDelivery: deps.runSnapshotDelivery,
+        nowIso: deps.nowIso,
       }),
     }),
   );

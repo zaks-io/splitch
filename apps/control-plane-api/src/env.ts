@@ -40,6 +40,8 @@ export interface ControlPlaneApiEnv {
   SPLITCH_DEPLOY_GATE_TOKEN?: string;
   /** This control-plane protected-resource origin; the token `aud` must equal it. */
   CONTROL_PLANE_ORIGIN?: string;
+  TINYBIRD_API_URL?: string;
+  TINYBIRD_RUN_SNAPSHOT_TOKEN?: string;
   /** Auth-api JWKS endpoint the control-plane token signature is verified against. */
   AUTH_JWKS_URI?: string;
   CONTROL_PANEL_DELEGATION_SECRET?: string;

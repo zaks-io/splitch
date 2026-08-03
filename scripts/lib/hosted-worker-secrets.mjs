@@ -88,21 +88,40 @@ export async function validateHostedWorkerSecretEnv(rootDir, envName, env, deps 
   if (required.includes("ACCESS_TOKEN_SECRET")) {
     assertRsaPrivateJwkSecret("ACCESS_TOKEN_SECRET", env.ACCESS_TOKEN_SECRET);
   }
-  if (required.includes(TINYBIRD_INGEST_TOKEN)) {
-    await assertTinybirdIngestToken(
-      rootDir,
-      envName,
-      consumers,
-      env,
-      deps.fetch ?? globalThis.fetch,
-    );
+  for (const append of TINYBIRD_APPEND_TOKENS) {
+    if (required.includes(append.envName)) {
+      await assertTinybirdAppendToken(
+        rootDir,
+        envName,
+        consumers,
+        env,
+        deps.fetch ?? globalThis.fetch,
+        append,
+      );
+    }
   }
   return required;
 }
 
-const TINYBIRD_INGEST_TOKEN = "TINYBIRD_INGEST_TOKEN";
-/** The Tinybird token whose APPEND scope this secret carries. */
-const TINYBIRD_INGEST_SCOPE = "TOKEN raw_events_ingest APPEND";
+/**
+ * Every Tinybird APPEND credential a Worker deploys with, keyed to the token
+ * scope its `.datasource` files declare. Which Data Sources each token must
+ * reach is still read from the Tinybird project, so a new Data Source under an
+ * existing token is probed with no edit here; only a new token NAME adds a row.
+ * `loss` names what a wrong-but-present token silently costs at runtime.
+ */
+const TINYBIRD_APPEND_TOKENS = [
+  {
+    envName: "TINYBIRD_INGEST_TOKEN",
+    scope: "TOKEN raw_events_ingest APPEND",
+    loss: "drops Exposures silently",
+  },
+  {
+    envName: "TINYBIRD_RUN_SNAPSHOT_TOKEN",
+    scope: "TOKEN run_snapshots_ingest APPEND",
+    loss: "leaves every hosted Run invisible to analysis",
+  },
+];
 /** A hung Tinybird must not hang the deploy; the probe writes nothing, so retry is free. */
 const TINYBIRD_PROBE_TIMEOUT_MS = 10_000;
 
@@ -111,16 +130,16 @@ const TINYBIRD_PROBE_TIMEOUT_MS = 10_000;
  * than restated here: the `.datasource` files already declare which token appends
  * to them, so a new ingest Data Source is probed without a second list to update.
  */
-function tinybirdIngestDatasources(rootDir) {
+function tinybirdAppendDatasources(rootDir, append) {
   const dir = join(rootDir, "infra", "tinybird", "datasources");
   const names = readdirSync(dir)
     .filter((file) => file.endsWith(".datasource"))
-    .filter((file) => readFileSync(join(dir, file), "utf8").includes(TINYBIRD_INGEST_SCOPE))
+    .filter((file) => readFileSync(join(dir, file), "utf8").includes(append.scope))
     .map((file) => file.replace(/\.datasource$/, ""))
     .sort();
   if (names.length === 0) {
     throw new Error(
-      `no Data Source in ${dir} declares "${TINYBIRD_INGEST_SCOPE}", so ${TINYBIRD_INGEST_TOKEN} cannot be exercised`,
+      `no Data Source in ${dir} declares "${append.scope}", so ${append.envName} cannot be exercised`,
     );
   }
   return names;
@@ -134,9 +153,9 @@ function tinybirdIngestDatasources(rootDir) {
  * the Worker is replaced. The body carries zero rows, so the probe writes
  * nothing and is safe to repeat on every deploy.
  */
-async function assertTinybirdIngestToken(rootDir, envName, consumers, env, fetchImpl) {
-  const apiUrl = tinybirdApiUrl(rootDir, envName, consumers);
-  const datasources = tinybirdIngestDatasources(rootDir);
+async function assertTinybirdAppendToken(rootDir, envName, consumers, env, fetchImpl, append) {
+  const apiUrl = tinybirdApiUrl(rootDir, envName, consumers, append);
+  const datasources = tinybirdAppendDatasources(rootDir, append);
   for (const datasource of datasources) {
     const url = new URL("/v0/events", apiUrl);
     url.searchParams.set("name", datasource);
@@ -146,7 +165,7 @@ async function assertTinybirdIngestToken(rootDir, envName, consumers, env, fetch
       response = await fetchImpl(url.toString(), {
         method: "POST",
         headers: {
-          authorization: `Bearer ${env[TINYBIRD_INGEST_TOKEN]}`,
+          authorization: `Bearer ${env[append.envName]}`,
           "content-type": "application/x-ndjson",
         },
         body: "",
@@ -159,11 +178,11 @@ async function assertTinybirdIngestToken(rootDir, envName, consumers, env, fetch
       // (TimeoutError, TypeError) and separates "Tinybird was slow" from
       // "Tinybird was unreachable", which is the whole diagnostic need.
       throw new Error(
-        `${TINYBIRD_INGEST_TOKEN} could not be exercised against ${url.host} (${cause instanceof Error ? cause.name : "unknown error"}); deploying an unverified ingest token drops Exposures silently`,
+        `${append.envName} could not be exercised against ${url.host} (${cause instanceof Error ? cause.name : "unknown error"}); deploying an unverified token ${append.loss}`,
       );
     }
 
-    assertTinybirdProbeResponse(response, datasource, url.host, datasources);
+    assertTinybirdProbeResponse(response, datasource, url.host, datasources, append);
   }
 }
 
@@ -179,28 +198,28 @@ async function assertTinybirdIngestToken(rootDir, envName, consumers, env, fetch
  * to define, and asserting a specific 2xx here would fail deploys on a credential
  * that works.
  */
-function assertTinybirdProbeResponse(response, datasource, host, datasources) {
+function assertTinybirdProbeResponse(response, datasource, host, datasources, append) {
   // 401/403 is a rejected credential; 404 is the right credential pointed at a
   // Workspace or region without this Data Source.
   if (response.status === 401 || response.status === 403 || response.status === 404) {
     throw new Error(
-      `${TINYBIRD_INGEST_TOKEN} was rejected by ${host} for Data Source "${datasource}" (HTTP ${response.status}); it must carry APPEND scope on ${datasources.join(" and ")} in that region`,
+      `${append.envName} was rejected by ${host} for Data Source "${datasource}" (HTTP ${response.status}); it must carry APPEND scope on ${datasources.join(" and ")} in that region`,
     );
   }
   if (response.status >= 500) {
     throw new Error(
-      `${TINYBIRD_INGEST_TOKEN} could not be verified against ${host} for Data Source "${datasource}" (HTTP ${response.status}); deploying an unverified ingest token drops Exposures silently`,
+      `${append.envName} could not be verified against ${host} for Data Source "${datasource}" (HTTP ${response.status}); deploying an unverified token ${append.loss}`,
     );
   }
 }
 
-function tinybirdApiUrl(rootDir, envName, consumers) {
-  const [appName] = consumers.get(TINYBIRD_INGEST_TOKEN) ?? [];
+function tinybirdApiUrl(rootDir, envName, consumers, append) {
+  const [appName] = consumers.get(append.envName) ?? [];
   const config = parseWranglerConfigFile(join(rootDir, "apps", appName, "wrangler.jsonc"));
   const apiUrl = config.env?.[envName]?.vars?.TINYBIRD_API_URL ?? config.vars?.TINYBIRD_API_URL;
   if (!apiUrl) {
     throw new Error(
-      `${appName} ${envName} requires ${TINYBIRD_INGEST_TOKEN} but declares no TINYBIRD_API_URL var to exercise it against`,
+      `${appName} ${envName} requires ${append.envName} but declares no TINYBIRD_API_URL var to exercise it against`,
     );
   }
   return apiUrl;

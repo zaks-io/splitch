@@ -2,6 +2,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { createHealthResponse, parsePlatformTarget } from "@splitch/contracts";
 import { createRepository } from "@splitch/db";
 import {
+  createWorkerFaultReporter,
   createWorkerObservability,
   workerEmitter,
   workerObservabilityWithWaitUntil,
@@ -15,9 +16,15 @@ import {
 import { createApp } from "./app";
 import { createAnalysisResultsReader } from "./attention-analysis-reader";
 import { authJwksUri } from "./auth-jwks-config";
-import { type ControlPlaneAuthOptions, makeControlPlaneAuthResolver } from "./auth-resolver";
+import { makeControlPlaneAuthResolver } from "./auth-resolver";
 import { ConfigStoreDurableObject, durableConfigStoreAccess } from "./config-store-do";
 import { parseControlPanelBindingOperation } from "./control-panel-operation";
+import {
+  boundedPanelSessionEnabled,
+  controlPanelAuthOptions,
+  requiredMcpDelegationSecret,
+  requiredMcpReplayBinding,
+} from "./control-plane-runtime-config";
 import { CredentialCacheBackfillDurableObject } from "./credential-cache-backfill-do";
 import {
   CredentialCacheWriterDurableObject,
@@ -33,12 +40,11 @@ import { makeHttpJwksFetcher, makeJwksVerifier } from "./jwks-verify";
 import { makeSessionCacheMemberProfileResolver } from "./member-profile-cache";
 import { PanelDelegationReplayDurableObject } from "./panel-delegation-replay-do";
 import { handleSignedPanelExperiments } from "./panel-experiments-route";
-import { makePanelDelegationReplayStore } from "./panel-identity-replay";
 import { panelOverviewRead } from "./panel-overview";
-import { makePanelSessionAccess } from "./panel-session-access";
+import { runSnapshotDeliveryFromEnv } from "./run-snapshot";
 import { panelSettingsRead } from "./panel-settings";
 import { rateLimiterForTarget } from "./rate-limit";
-import { makePanelSessionStore, makeSessionStore } from "./session-store";
+import { makeSessionStore } from "./session-store";
 import { unauthorized } from "./unauthorized";
 
 const service = "splitch-control-plane-api";
@@ -157,6 +163,10 @@ async function handleRequest(
     credentialStore: env.CREDENTIAL_STORE,
     credentialCacheWriter: durableCredentialCacheWriterAccess(env.CREDENTIAL_CACHE_WRITER),
     configStore: durableConfigStoreAccess(env.CONFIG_STORE_WRITER),
+    runSnapshotDelivery: {
+      ...runSnapshotDeliveryFromEnv(env),
+      onFault: (detail) => reportRunSnapshotFault(env, ctx, detail),
+    },
     logger: console,
     memberProfileResolver: makeSessionCacheMemberProfileResolver(env.SESSION_STORE),
     observability: createWorkerObservability(
@@ -234,6 +244,17 @@ async function handleSignedPanelSettings(
   );
 }
 
+function reportRunSnapshotFault(
+  env: ControlPlaneApiEnv,
+  ctx: Pick<ExecutionContext, "waitUntil">,
+  detail: Record<string, unknown>,
+): void {
+  createWorkerFaultReporter(env, workerObservabilityWithWaitUntil("control-plane-api", ctx))(
+    "run_snapshot_unshipped",
+    detail,
+  );
+}
+
 async function runDemoReaper(
   env: ControlPlaneApiEnv,
   event: ScheduledController,
@@ -264,52 +285,3 @@ export {
   McpDelegationReplayDurableObject,
   PanelDelegationReplayDurableObject,
 };
-
-function requiredMcpDelegationSecret(secret: string | undefined): string {
-  if (!secret) {
-    throw new Error("control-plane-api: MCP_CONTROL_PLANE_DELEGATION_SECRET is required");
-  }
-  return secret;
-}
-
-function requiredMcpReplayBinding(
-  binding: ControlPlaneApiEnv["MCP_DELEGATION_REPLAY"],
-): NonNullable<ControlPlaneApiEnv["MCP_DELEGATION_REPLAY"]> {
-  if (!binding) throw new Error("control-plane-api: MCP_DELEGATION_REPLAY is required");
-  return binding;
-}
-
-function requiredPanelDelegationSecret(env: ControlPlaneApiEnv): string {
-  if (env.CONTROL_PANEL_DELEGATION_SECRET) return env.CONTROL_PANEL_DELEGATION_SECRET;
-  throw new Error("control-plane-api: CONTROL_PANEL_DELEGATION_SECRET is required");
-}
-
-function controlPanelAuthOptions(
-  env: ControlPlaneApiEnv,
-  repo: ReturnType<typeof createRepository>,
-  protocol: PanelProtocol,
-): ControlPlaneAuthOptions {
-  if (protocol === "none") return {};
-  if (protocol === "signed") {
-    return {
-      allowPanelDelegation: true,
-      panelDelegationSecret: requiredPanelDelegationSecret(env),
-      panelAccess: makePanelSessionAccess(repo),
-      panelDelegationReplay: makePanelDelegationReplayStore(env.PANEL_DELEGATION_REPLAY),
-    };
-  }
-  return {
-    allowBoundedPanelSession: true,
-    boundedPanelSessions: makePanelSessionStore(env.SESSION_STORE),
-  };
-}
-
-function boundedPanelSessionEnabled(env: ControlPlaneApiEnv): boolean {
-  const expiresAt = env.CONTROL_PANEL_LEGACY_SESSION_EXPIRES_AT;
-  return (
-    env.CONTROL_PANEL_LEGACY_SESSION_MODE === "bounded-rollout" &&
-    typeof expiresAt === "string" &&
-    /^\d{10}$/u.test(expiresAt) &&
-    Number(expiresAt) > Math.floor(Date.now() / 1000)
-  );
-}

@@ -10,6 +10,7 @@ import type { ConfigStoreAccess } from "./config-store-do";
 import { type FixtureSigner, makeFixtureSigner } from "./fixture-signer";
 import { makeJwksVerifier } from "./jwks-verify";
 import { makeSessionStore } from "./session-store";
+import type { RunSnapshotDelivery } from "./run-snapshot";
 import type { LocalBindings } from "./test-fixtures";
 import { resetOrganizationGraph, seedOrgApp, seedOrgMember } from "./test-seeds";
 
@@ -72,6 +73,7 @@ export function makeAppForRepo(
   repo: Repository,
   configStore?: ConfigStoreAccess,
   credentialStore: KVNamespace = h.bindings.credentialKv,
+  runSnapshotDelivery?: RunSnapshotDelivery,
 ): Hono {
   const verifier = makeJwksVerifier({
     fetchJwks: async () => h.signer.jwks,
@@ -86,6 +88,7 @@ export function makeAppForRepo(
     rateLimiter: allowLimiter,
     repo,
     configStore,
+    runSnapshotDelivery,
     credentialStore,
     nowIso: () => NOW_ISO,
   });
