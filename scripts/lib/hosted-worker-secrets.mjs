@@ -100,6 +100,9 @@ export async function validateHostedWorkerSecretEnv(rootDir, envName, env, deps 
       );
     }
   }
+  if (required.includes(TINYBIRD_READ_TOKEN.envName)) {
+    await assertTinybirdReadToken(rootDir, envName, consumers, env, deps.fetch ?? globalThis.fetch);
+  }
   return required;
 }
 
@@ -122,6 +125,17 @@ const TINYBIRD_APPEND_TOKENS = [
     loss: "leaves every hosted Run invisible to analysis",
   },
 ];
+/**
+ * The READ credential the Analysis Worker queries endpoint Pipes with. Which
+ * Pipes it must reach is read from the Tinybird project (`TYPE ENDPOINT`), so a
+ * new endpoint Pipe is probed with no edit here. This token went through the
+ * same present-but-wrong outage as the append tokens but had no use-it check,
+ * so a rejected credential deployed green and every usage read returned 503.
+ */
+const TINYBIRD_READ_TOKEN = {
+  envName: "TINYBIRD_READ_TOKEN",
+  loss: "turns every usage and results read into a 503",
+};
 /** A hung Tinybird must not hang the deploy; the probe writes nothing, so retry is free. */
 const TINYBIRD_PROBE_TIMEOUT_MS = 10_000;
 
@@ -210,6 +224,69 @@ function assertTinybirdProbeResponse(response, datasource, host, datasources, ap
     throw new Error(
       `${append.envName} could not be verified against ${host} for Data Source "${datasource}" (HTTP ${response.status}); deploying an unverified token ${append.loss}`,
     );
+  }
+}
+
+/**
+ * The endpoint Pipes this token must read, taken from the Tinybird project: a
+ * Pipe with `TYPE ENDPOINT` is served at /v0/pipes/<name>.json and the Analysis
+ * Worker reads it with TINYBIRD_READ_TOKEN.
+ */
+function tinybirdEndpointPipes(rootDir) {
+  const dir = join(rootDir, "infra", "tinybird", "pipes");
+  const names = readdirSync(dir)
+    .filter((file) => file.endsWith(".pipe"))
+    .filter((file) => /^TYPE ENDPOINT\s*$/m.test(readFileSync(join(dir, file), "utf8")))
+    .map((file) => file.replace(/\.pipe$/, ""))
+    .sort();
+  if (names.length === 0) {
+    throw new Error(
+      `no Pipe in ${dir} declares TYPE ENDPOINT, so ${TINYBIRD_READ_TOKEN.envName} cannot be exercised`,
+    );
+  }
+  return names;
+}
+
+/**
+ * Exercises the exact call the Analysis Worker makes: a GET against each
+ * endpoint Pipe. The request carries no template parameters, so a Pipe with
+ * required parameters answers 400 after the credential is accepted -- which is
+ * the proof this probe needs -- and executes no query.
+ */
+async function assertTinybirdReadToken(rootDir, envName, consumers, env, fetchImpl) {
+  const read = TINYBIRD_READ_TOKEN;
+  const apiUrl = tinybirdApiUrl(rootDir, envName, consumers, read);
+  const pipes = tinybirdEndpointPipes(rootDir);
+  for (const pipe of pipes) {
+    const url = new URL(`/v0/pipes/${pipe}.json`, apiUrl);
+
+    let response;
+    try {
+      response = await fetchImpl(url.toString(), {
+        headers: { authorization: `Bearer ${env[read.envName]}` },
+        signal: AbortSignal.timeout(TINYBIRD_PROBE_TIMEOUT_MS),
+      });
+    } catch (cause) {
+      // As with the append probes: the request carries the token, so only the
+      // error's class name is forwarded, never its free text.
+      throw new Error(
+        `${read.envName} could not be exercised against ${url.host} (${cause instanceof Error ? cause.name : "unknown error"}); deploying an unverified token ${read.loss}`,
+      );
+    }
+
+    // 401/403 is a rejected credential; 404 is the right credential pointed at
+    // a Workspace or region without this Pipe. 400 passes: the Pipe refused the
+    // parameterless request AFTER accepting the token, which is the whole check.
+    if (response.status === 401 || response.status === 403 || response.status === 404) {
+      throw new Error(
+        `${read.envName} was rejected by ${url.host} for Pipe "${pipe}" (HTTP ${response.status}); it must carry READ scope on ${pipes.join(" and ")} in that region`,
+      );
+    }
+    if (response.status >= 500) {
+      throw new Error(
+        `${read.envName} could not be verified against ${url.host} for Pipe "${pipe}" (HTTP ${response.status}); deploying an unverified token ${read.loss}`,
+      );
+    }
   }
 }
 
