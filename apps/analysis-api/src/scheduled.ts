@@ -1,8 +1,7 @@
-import type { TinybirdCopyTransport } from "./tinybird";
+import { type TinybirdCopyTransport, tinybirdDateTime64 } from "./tinybird";
 
 const SNAPSHOT_COPY_PIPE = "cp_deduped_exposures";
 const SNAPSHOT_COPY_MODE = "replace";
-const COPY_WATERMARK_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/;
 
 export interface ScheduledSnapshotDeps {
   cron: string;
@@ -38,9 +37,5 @@ export function copyWatermarkFromScheduledTime(scheduledTimeMs: number): string 
     throw new Error("analysis-api: malformed snapshot copy watermark");
   }
 
-  const watermarkTs = date.toISOString().replace("T", " ").replace("Z", "");
-  if (!COPY_WATERMARK_PATTERN.test(watermarkTs)) {
-    throw new Error("analysis-api: malformed snapshot copy watermark");
-  }
-  return watermarkTs;
+  return tinybirdDateTime64(date.toISOString());
 }

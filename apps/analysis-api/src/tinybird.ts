@@ -26,6 +26,25 @@ export class TinybirdCopyError extends Error {
   }
 }
 
+const DATETIME64_PATTERN = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/;
+
+/**
+ * Tinybird's DateTime64 template type rejects ISO 8601 ("2026-08-01T00:00:00.000Z")
+ * with HTTP 400 TYPE_MISMATCH; it accepts "2026-08-01 00:00:00.000" (UTC). Every
+ * DateTime parameter crosses here so a call site cannot ship the ISO form again.
+ */
+export function tinybirdDateTime64(isoUtc: string): string {
+  const ms = Date.parse(isoUtc);
+  if (!Number.isFinite(ms)) {
+    throw new Error(`analysis-api: "${isoUtc}" is not a timestamp Tinybird DateTime64 can carry`);
+  }
+  const value = new Date(ms).toISOString().replace("T", " ").replace("Z", "");
+  if (!DATETIME64_PATTERN.test(value)) {
+    throw new Error(`analysis-api: "${isoUtc}" is not a timestamp Tinybird DateTime64 can carry`);
+  }
+  return value;
+}
+
 export function scopedPipeParams(input: {
   appId: string | null | undefined;
   environmentId: string | null | undefined;
@@ -49,8 +68,8 @@ export function scopedUsagePipeParams(input: {
 }): PipeParams {
   return {
     organization_id: requiredParam(input.organizationId, "organization_id"),
-    period_start: requiredParam(input.periodStart, "period_start"),
-    period_end: requiredParam(input.periodEnd, "period_end"),
+    period_start: tinybirdDateTime64(requiredParam(input.periodStart, "period_start")),
+    period_end: tinybirdDateTime64(requiredParam(input.periodEnd, "period_end")),
   };
 }
 

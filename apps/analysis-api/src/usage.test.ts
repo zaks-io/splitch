@@ -121,8 +121,8 @@ describe("Organization Evaluation usage", () => {
         pipeName: "analysis_evaluation_usage",
         params: {
           organization_id: ORG_ID,
-          period_start: "2026-07-01T00:00:00.000Z",
-          period_end: "2026-08-01T00:00:00.000Z",
+          period_start: "2026-07-01 00:00:00.000",
+          period_end: "2026-08-01 00:00:00.000",
         },
       },
     ]);
