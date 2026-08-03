@@ -14,29 +14,16 @@ test("new main pushes cannot cancel or coalesce an in-flight production call", (
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}/);
 });
 
-test("main CI warms the production build cache on the existing Verify runner", () => {
+test("Verify keeps its stable check name on the 4 vCPU cost trial", () => {
   assert.ok(verifyJob);
-  assert.match(verifyJob, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
-  assert.doesNotMatch(workflow, /\n {2}warm-production-build-cache:/);
-  assert.doesNotMatch(verifyJob, /environment: production/);
+  assert.match(verifyJob, /name: Verify/);
+  assert.match(verifyJob, /runs-on: blacksmith-4vcpu-ubuntu-2404/);
 });
 
-test("production cache warming matches deploy build inputs without deployment credentials", () => {
+test("main CI delegates production build selection to the production deploy planner", () => {
   assert.ok(verifyJob);
-  assert.match(verifyJob, /TURBO_TOKEN: \$\{\{ secrets\.TURBO_TOKEN \}\}/);
-  assert.match(verifyJob, /TURBO_TEAM: \$\{\{ vars\.TURBO_TEAM \}\}/);
-  assert.match(
-    verifyJob,
-    /TURBO_REMOTE_CACHE_SIGNATURE_KEY: \$\{\{ secrets\.TURBO_REMOTE_CACHE_SIGNATURE_KEY \}\}/,
-  );
-  assert.match(verifyJob, /SPLITCH_PLATFORM_TARGET: production/);
-  assert.match(verifyJob, /CLOUDFLARE_ENV: production/);
-  assert.match(verifyJob, /SPLITCH_GENERATED_WRANGLER_ENV: production/);
-  assert.match(verifyJob, /SENTRY_RELEASE: \$\{\{ github\.sha \}\}/);
-  assert.match(
-    verifyJob,
-    /run: pnpm turbo run build --filter=@splitch\/control-panel --filter=@splitch\/marketing/,
-  );
+  assert.doesNotMatch(verifyJob, /Build production-target Vite Workers/);
+  assert.doesNotMatch(verifyJob, /SPLITCH_PLATFORM_TARGET: production/);
   assert.match(verifyJob, /run: node scripts\/check-turbo-remote-cache-env\.mjs --required/);
   assert.doesNotMatch(verifyJob, /CLOUDFLARE_API_TOKEN|TB_TOKEN|SENTRY_AUTH_TOKEN/);
   assert.doesNotMatch(verifyJob, /run: .*deploy/);
@@ -81,62 +68,32 @@ test("spec lint runs only inside Verify, not as a duplicate job", () => {
   assert.doesNotMatch(workflow, /run: pnpm spec:lint/);
 });
 
-test("cache-policy changes force the cache off before Verify runs", () => {
+test("one plan step controls affected verification and conditional validators", () => {
   assert.ok(verifyJob);
-  const forceStepIndex = verifyJob.indexOf("name: Force cache off for cache-policy changes");
+  const planStepIndex = verifyJob.indexOf("name: Plan CI verification");
   const verifyStepIndex = verifyJob.indexOf("- name: Verify\n");
-  assert.ok(forceStepIndex > -1, "forcing step must exist");
+  assert.ok(planStepIndex > -1, "planning step must exist");
   assert.ok(verifyStepIndex > -1, "Verify step must exist");
-  assert.ok(forceStepIndex < verifyStepIndex, "forcing step must run before Verify");
-
-  const forceStep = verifyJob.slice(
-    forceStepIndex,
-    verifyJob.indexOf("- name: Verify\n", forceStepIndex),
-  );
-
-  // The cache-policy surface: files that govern which tasks are cached, how
-  // they're keyed, or how the remote cache is validated.
-  const cachePolicyPaths = [
-    "turbo\\\\.json",
-    "\\\\.github/workflows/ci\\\\.yml",
-    "\\\\.github/workflows/nightly-verify\\\\.yml",
-    "scripts/check-turbo-remote-cache-env\\\\.mjs",
-  ];
-  for (const path of cachePolicyPaths) {
-    assert.match(forceStep, new RegExp(path), `cache-policy pattern must cover ${path}`);
-  }
-
-  assert.match(forceStep, /echo "TURBO_FORCE=true" >> "\$GITHUB_ENV"/);
-  assert.match(forceStep, /::notice title=/);
+  assert.ok(planStepIndex < verifyStepIndex, "planning step must run before Verify");
+  assert.match(verifyJob, /id: plan/);
+  assert.match(verifyJob, /run: node scripts\/plan-ci-verification\.mjs/);
+  assert.match(verifyJob, /if: steps\.plan\.outputs\.tinybird == 'true'/);
+  assert.match(verifyJob, /run: pnpm tinybird:local/);
+  assert.match(verifyJob, /if: steps\.plan\.outputs\.d1 == 'true'/);
+  assert.match(verifyJob, /run: pnpm d1:migrate:local && pnpm d1:migrate:populated/);
+  assert.match(verifyJob, /pnpm verify:ci --affected --output-logs=new-only/);
+  assert.match(verifyJob, /pnpm verify:ci --output-logs=new-only/);
 });
 
-test("cache-policy detection covers both pull_request and push triggers, forcing off when a diff can't be computed", () => {
+test("CI planning receives exact pull request and push range endpoints", () => {
   assert.ok(verifyJob);
-  const forceStep = verifyJob.slice(
-    verifyJob.indexOf("name: Force cache off for cache-policy changes"),
+  const planStep = verifyJob.slice(
+    verifyJob.indexOf("name: Plan CI verification"),
     verifyJob.indexOf("- name: Verify\n"),
   );
 
-  assert.match(forceStep, /EVENT_NAME: \$\{\{ github\.event_name \}\}/);
-  assert.match(forceStep, /BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
-  assert.match(forceStep, /HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
-  assert.match(forceStep, /BEFORE_SHA: \$\{\{ github\.event\.before \}\}/);
-  assert.match(forceStep, /AFTER_SHA: \$\{\{ github\.sha \}\}/);
-
-  assert.match(forceStep, /if \[ "\$EVENT_NAME" = "pull_request" \]/);
-  assert.match(forceStep, /if \[ "\$EVENT_NAME" = "push" \]/);
-  assert.match(forceStep, /git merge-base "\$BASE_SHA" "\$HEAD_SHA"/);
-  assert.match(forceStep, /git diff --name-only "\$BEFORE_SHA" "\$AFTER_SHA"/);
-
-  // No-comparison-available paths must force the cache off, never silently
-  // proceed as if nothing changed (ADR-0036: fail loud, no silent fallback).
-  const noComparisonBranches = forceStep.match(
-    /force_cache_off ".*cannot diff, so the cache is not trusted\."/g,
-  );
-  assert.ok(noComparisonBranches);
-  assert.equal(
-    noComparisonBranches.length,
-    4,
-    "every no-comparison branch (missing PR shas, no merge base, missing push before-sha, unrecognized event) must force the cache off",
-  );
+  assert.match(planStep, /PR_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(planStep, /PR_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(planStep, /PUSH_BEFORE_SHA: \$\{\{ github\.event\.before \}\}/);
+  assert.match(planStep, /PUSH_AFTER_SHA: \$\{\{ github\.sha \}\}/);
 });

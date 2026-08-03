@@ -17,7 +17,7 @@ concurrency:
 jobs:
   verify:
     name: Verify
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -55,7 +55,23 @@ jobs:
       - name: Check Turbo remote cache inputs
         run: node scripts/check-turbo-remote-cache-env.mjs
 
+      # A change to how we cache is invisible to its own cache-first run: the
+      # commit that broke wrangler-secrets.test.ts (SPL-258) landed alongside
+      # SPL-252's cache-first CI change and shipped green because the old
+      # result was replayed from cache instead of re-executed. The nightly
+      # forced backstop catches this within 24h, but a caching-policy PR must
+      # prove itself on the same run that changes the policy.
+      - name: Plan CI verification
+        id: plan
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_AFTER_SHA: ${{ github.sha }}
+        run: node scripts/plan-ci-verification.mjs
+
       - name: Install Tinybird CLI
+        if: steps.plan.outputs.tinybird == 'true'
         timeout-minutes: 5
         shell: bash
         run: |
@@ -63,69 +79,24 @@ jobs:
           curl -fsSL --max-time 120 https://tinybird.co | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      # A change to how we cache is invisible to its own cache-first run: the
-      # commit that broke wrangler-secrets.test.ts (SPL-258) landed alongside
-      # SPL-252's cache-first CI change and shipped green because the old
-      # result was replayed from cache instead of re-executed. The nightly
-      # forced backstop catches this within 24h, but a caching-policy PR must
-      # prove itself on the same run that changes the policy.
-      - name: Force cache off for cache-policy changes
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BEFORE_SHA: ${{ github.event.before }}
-          AFTER_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
+      - name: Validate Tinybird locally
+        if: steps.plan.outputs.tinybird == 'true'
+        run: pnpm tinybird:local
 
-          # Anything that governs which tasks are cached, how they're keyed,
-          # or how the remote cache is validated. Deliberately narrow: other
-          # workflow files don't touch caching and would just burn the cache
-          # for no reason.
-          CACHE_POLICY_PATTERN='(^|/)turbo\.json$|^\.github/workflows/ci\.yml$|^\.github/workflows/nightly-verify\.yml$|^scripts/check-turbo-remote-cache-env\.mjs$'
-
-          force_cache_off() {
-            local reason="$1"
-            echo "TURBO_FORCE=true" >> "$GITHUB_ENV"
-            echo "::notice title=Cache policy changed, forcing full re-execution::${reason}"
-            if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-              echo "- **Cache forced off:** ${reason}" >> "$GITHUB_STEP_SUMMARY"
-            fi
-          }
-
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            if [ -z "${BASE_SHA:-}" ] || [ -z "${HEAD_SHA:-}" ]; then
-              force_cache_off "pull_request base/head SHA unavailable; cannot diff, so the cache is not trusted."
-              exit 0
-            fi
-            if ! MERGE_BASE=$(git merge-base "$BASE_SHA" "$HEAD_SHA" 2>/dev/null); then
-              force_cache_off "could not compute a merge base between $BASE_SHA and $HEAD_SHA; cannot diff, so the cache is not trusted."
-              exit 0
-            fi
-            CHANGED=$(git diff --name-only "$MERGE_BASE" "$HEAD_SHA")
-          elif [ "$EVENT_NAME" = "push" ]; then
-            if [ -z "${BEFORE_SHA:-}" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
-              force_cache_off "no previous commit available for this push (new branch or force-push); cannot diff, so the cache is not trusted."
-              exit 0
-            fi
-            CHANGED=$(git diff --name-only "$BEFORE_SHA" "$AFTER_SHA")
-          else
-            force_cache_off "unrecognized trigger event ($EVENT_NAME); cannot diff, so the cache is not trusted."
-            exit 0
-          fi
-
-          MATCHED=$(printf '%s\n' "$CHANGED" | grep -E "$CACHE_POLICY_PATTERN" || true)
-          if [ -n "$MATCHED" ]; then
-            force_cache_off "changed files touch the cache-policy surface: $(printf '%s' "$MATCHED" | tr '\n' ' ')"
-          else
-            echo "Cache-policy surface unchanged; Verify will use the remote cache normally."
-          fi
+      - name: Validate D1 migrations locally
+        if: steps.plan.outputs.d1 == 'true'
+        run: pnpm d1:migrate:local && pnpm d1:migrate:populated
 
       - name: Verify
         timeout-minutes: 15
-        run: pnpm verify:ci
+        env:
+          USE_AFFECTED: ${{ steps.plan.outputs.use_affected }}
+        run: |
+          if [ "$USE_AFFECTED" = "true" ]; then
+            pnpm verify:ci --affected --output-logs=new-only
+          else
+            pnpm verify:ci --output-logs=new-only
+          fi
 
       - name: Install gitleaks
         timeout-minutes: 5
@@ -152,15 +123,6 @@ jobs:
       - name: Require signed Turbo remote cache
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: node scripts/check-turbo-remote-cache-env.mjs --required
-
-      - name: Build production-target Vite Workers
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          SPLITCH_PLATFORM_TARGET: production
-          CLOUDFLARE_ENV: production
-          SPLITCH_GENERATED_WRANGLER_ENV: production
-          SENTRY_RELEASE: ${{ github.sha }}
-        run: pnpm turbo run build --filter=@splitch/control-panel --filter=@splitch/marketing
 
   deploy-production:
     name: Deploy Production

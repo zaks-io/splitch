@@ -56,14 +56,6 @@ jobs:
       - name: Require signed Turbo remote cache
         run: node scripts/check-turbo-remote-cache-env.mjs --required
 
-      - name: Install Tinybird CLI
-        timeout-minutes: 5
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -fsSL --max-time 120 https://tinybird.co | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
       - name: Verify (forced, no cache reads)
         timeout-minutes: 20
         run: pnpm verify:ci

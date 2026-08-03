@@ -49,8 +49,9 @@ routes, DNS, or GitHub environment configuration.
   except `sdk-publish`. npm trusted publishing supports GitHub-hosted runners, not Blacksmith, so that
   release-published workflow uses `ubuntu-24.04` and must not receive an npm token.
 - Use larger Blacksmith Linux runners only for measured bottlenecks, for example large build or test
-  shards. The `ci` verify job is one: it fans the whole Turbo graph out on
-  `blacksmith-8vcpu-ubuntu-2404`.
+  shards. The affected `ci` Verify job uses `blacksmith-4vcpu-ubuntu-2404` while its measured cost
+  trial is active; retain it only while p95 stays below four minutes and normalized compute falls by
+  at least 25%.
 - Keep upstream cache actions such as `actions/cache` and `actions/setup-node`; Blacksmith redirects
   standard caches without workflow-specific cache forks.
 - Every repository that uses `runs-on: blacksmith-*` must have the Blacksmith GitHub App installed.
@@ -84,10 +85,9 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
   environment-scoped runtime secret cannot split otherwise identical build hashes.
 - CI sets `TURBO_TOKEN`, `TURBO_TEAM`, and `TURBO_REMOTE_CACHE_SIGNATURE_KEY` for signed remote cache.
   Secrets used only by deploy/provision tasks are not part of cacheable task outputs.
-- After main verification succeeds, CI builds the production-target Control Panel and Marketing Vite
-  graphs with the exact production cache inputs. The warmer is not bound to the GitHub `production`
-  environment, because that would create a deployment record and corrupt the affected-deploy
-  baseline. TypeScript-only Worker builds reuse the target-independent artifacts produced by Verify.
+- After main verification succeeds, the production planner remains the sole authority for selecting
+  deploy phases and Worker packages. The deploy job builds only the selected Worker graph with the
+  exact production inputs; CI does not prebuild Control Panel or Marketing unconditionally.
 - Debugging starts with `turbo run <task> --dry-run=json` to inspect the task graph, inputs, outputs,
   and cache hits before changing workflow YAML.
 
@@ -95,8 +95,8 @@ false`. Anything that mutates Cloudflare, Tinybird, GitHub deployments, or secre
 
 | Workflow                | Trigger                                                       | Concurrency                      | Required result                                                                                                                                                                                                                 |
 | ----------------------- | ------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci`                    | PR and push to main                                           | cancel in-progress per branch/PR | wired: `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, local D1/Tinybird checks, an in-job main-only production Vite cache warm, and an exact-SHA reusable production call        |
-| `e2e`                   | nightly schedule, manual dispatch                             | `e2e-main`, queued               | wired: full-stack Control Panel Playwright harness against `main`; signal-only, never blocks deploys                                                                                                                            |
+| `ci`                    | PR and push to main                                           | cancel in-progress per branch/PR | wired: affected `verify:ci`, format, lint, typecheck, test, build, dependency-cruiser, jscpd, Knip, Gitleaks, conditional local D1/Tinybird checks, and an exact-SHA reusable production call                                   |
+| `e2e`                   | weekly schedule, manual dispatch                              | `e2e-main`, queued               | wired: full-stack Control Panel Playwright harness against `main`; signal-only while SPL-181 remains open, never blocks deploys                                                                                                 |
 | `deploy-shared-preview` | manual dispatch                                               | `shared-preview-deploy`, queued  | wired: deploy selected ref to the one hosted preview target through Tinybird Branch build, D1 migrations, Turborepo Worker deploy tasks, and hosted smoke                                                                       |
 | `reset-shared-preview`  | manual dispatch                                               | `shared-preview-deploy`, queued  | wired: rebuild the Tinybird Branch, migrate and clear preview-only D1/KV state, reseed fixtures, run Copy Pipe on demand, and verify hosted smoke                                                                               |
 | `deploy-production`     | reusable call from successful `ci` on `main`, manual dispatch | `production-deploy`, queued      | wired: current-main and exact-SHA validation, successful CI verification, affected-phase and Worker planning from the latest successful production deployment, conditional Tinybird/D1/Worker mutation, and Linear release sync |
@@ -416,11 +416,10 @@ recovery. That override does not provide data rollback.
 
 1. Verify successful `ci` evidence for the exact release SHA. Automatic runs trust the completed
    `Verify` dependency in the same CI run and require the reusable call's run ID and SHA to match.
-   Manual runs query the `ci` workflow's successful `main` push runs. Main CI has already
-   warmed the signed production cache for target-specific Vite builds on its existing Verify runner,
-   without entering the GitHub `production` environment or creating a deployment record. The
-   Playwright harness runs nightly in `e2e` as a signal-only check; it is too flaky to gate deploys,
-   so a red nightly is triaged from the Actions UI and never blocks a release.
+   Manual runs query the `ci` workflow's successful `main` push runs. The production deploy planner
+   selects the exact Worker graph, and the deploy job builds it with production-target inputs after
+   the environment gate. The Playwright harness runs weekly in `e2e` as a signal-only check while
+   SPL-181 is open, so a red run never blocks a release.
 2. Resolve the latest successful `production` deployment SHA, compute the exact changed path set, and
    stop when no production deploy input changed.
 3. Wait for GitHub `production` environment approval. Required reviewers and prevent-self-review should
