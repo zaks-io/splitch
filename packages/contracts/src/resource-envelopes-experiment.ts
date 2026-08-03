@@ -143,6 +143,11 @@ export const StartRunResponseSchema = z
     run: RunSchema,
     previousRunId: z.string().nullable(),
     approvalRequest: ApprovalRequestSchema.nullable(),
+    // Present only when this request itself committed the Start (the direct
+    // door, ADR-0047). Approval-gated responses have no committed Run to have
+    // shipped a snapshot for, and Approval-applied Starts report shipping at
+    // application time instead.
+    runSnapshotShipped: z.boolean().optional(),
   })
   .strict();
 export type StartRunResponse = z.infer<typeof StartRunResponseSchema>;
