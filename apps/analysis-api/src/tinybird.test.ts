@@ -4,6 +4,7 @@ import {
   createTinybirdReadTransport,
   scopedUsagePipeParams,
   TinybirdCopyError,
+  tinybirdDateTime64,
   TinybirdReadError,
 } from "./tinybird";
 
@@ -104,9 +105,23 @@ describe("Tinybird read transport", () => {
       }),
     ).toEqual({
       organization_id: "org_1",
-      period_start: "2026-07-01T00:00:00.000Z",
-      period_end: "2026-08-01T00:00:00.000Z",
+      period_start: "2026-07-01 00:00:00.000",
+      period_end: "2026-08-01 00:00:00.000",
     });
+  });
+
+  it("carries period parameters in the DateTime64 form Tinybird accepts, never ISO 8601", () => {
+    // The ISO form deployed once and every production usage read 400ed with
+    // TYPE_MISMATCH, rendered to callers as 503 "usage data is unavailable".
+    const params = scopedUsagePipeParams({
+      organizationId: "org_1",
+      periodStart: "2026-08-01T00:00:00.000Z",
+      periodEnd: "2026-09-01T00:00:00.000Z",
+    });
+    expect(params.period_start).not.toContain("T");
+    expect(params.period_start).not.toContain("Z");
+    expect(tinybirdDateTime64("2026-08-01T00:00:00.000Z")).toBe("2026-08-01 00:00:00.000");
+    expect(() => tinybirdDateTime64("not-a-timestamp")).toThrow(/DateTime64/);
   });
 });
 
