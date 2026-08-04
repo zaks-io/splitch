@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
-import { afterEach, describe, expect, it, vi } from "vitest";
 import { SplitchSdkError } from "@splitch/sdk";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import {
   cliClientErrorCodes,
@@ -10,8 +10,9 @@ import {
   SplitchCliError,
   writeCliError,
 } from "./errors.js";
-import { EXIT_API, EXIT_AUTH, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { writeServerError } from "./execute-operations.js";
+import { EXIT_API, EXIT_AUTH, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
+import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import { FakeCliTransport, jsonError, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
@@ -109,6 +110,7 @@ describe("CLI fatal stderr contract", () => {
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const serverError = jsonError("APPROVAL_REVIEW_REQUIRED", "approval review required");
     const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
       {
         match: (request) => request.url.includes("/flags"),
         status: 409,

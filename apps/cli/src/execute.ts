@@ -9,6 +9,7 @@ import {
   executeFlagsVerify,
   handleExecutionError,
   validateCommandScope,
+  validateFlagsVerifyUsage,
 } from "./execute-operations.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
@@ -16,6 +17,7 @@ import { CliInputError } from "./flag-create-input.js";
 import { writeCliError } from "./errors.js";
 import { buildOperationInput } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
+import { resolveContextSelectors } from "./scope-resolve.js";
 
 export type { CliDeps, CliResult } from "./execute-types.js";
 
@@ -107,7 +109,7 @@ async function executeCommand(
   deps: CliDeps,
   io: CliIo,
 ): Promise<CliResult> {
-  const context = await resolveContext({
+  let context = await resolveContext({
     flags: { app: invocation.flags.app, env: invocation.flags.env },
     env: deps.env,
     cwd: deps.cwd,
@@ -116,6 +118,19 @@ async function executeCommand(
   const scopeError = validateCommandScope(command, context, io);
   if (scopeError) {
     return scopeError;
+  }
+
+  if (command.kind === "flags_verify") {
+    const usageError = validateFlagsVerifyUsage(invocation, io);
+    if (usageError) {
+      return usageError;
+    }
+  }
+
+  try {
+    context = await resolveContextSelectors(deps, context, command);
+  } catch (error) {
+    return handleExecutionError(error, io);
   }
 
   if (command.kind === "flags_verify") {

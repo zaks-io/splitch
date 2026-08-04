@@ -1,5 +1,5 @@
-import { CreateFlagRequestSchema } from "@splitch/contracts";
 import { writeFile } from "node:fs/promises";
+import { CreateFlagRequestSchema } from "@splitch/contracts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
@@ -7,11 +7,12 @@ import { parseBooleanVariantsFlag } from "./flag-create-input.js";
 import {
   findFlagByKey,
   makeQuickstartHarness,
+  type QuickstartHarness,
   quickstartOrigins,
   readConfigRollout,
   storedHarnessCredential,
-  type QuickstartHarness,
 } from "./quickstart-local-harness.js";
+import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import { authHeader, FakeCliTransport, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
@@ -49,6 +50,7 @@ describe("quickstart flag create drift", () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
       {
         match: (request) => request.url.includes("/apps/app_1/flags") && request.method === "POST",
         status: 200,
@@ -79,7 +81,7 @@ describe("quickstart flag create drift", () => {
   it("rejects ambiguous Variant input before any write", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
-    const transport = new FakeCliTransport([]);
+    const transport = new FakeCliTransport([...scopeResolutionStubs()]);
 
     const code = await runCli(
       [
@@ -97,9 +99,12 @@ describe("quickstart flag create drift", () => {
     );
 
     expect(code).toBe(EXIT_USAGE);
-    expect(transport.requests).toHaveLength(0);
+    expect(
+      transport.requests.some(
+        (request) => request.url.includes("/flags") && request.method === "POST",
+      ),
+    ).toBe(false);
   });
-
   it('rejects a --rollout that is neither a 0-100 number nor "none"', async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);

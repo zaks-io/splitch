@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { SCOPE_REMEDY } from "./context.js";
 import { EXIT_AUTH, EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";
+import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import {
   FakeCliTransport,
   flagListPage,
@@ -48,7 +49,7 @@ describe("context resolution", () => {
       '{"version":1,"app":"app_cfg","environment":"env_cfg"}\n',
     );
     const transport = new FakeCliTransport([
-      oauthTokenMint(),
+      ...scopeResolutionStubs({ appId: "app_flag" }),
       {
         match: (request) => request.url.includes("/apps/app_flag/flags"),
         status: 200,

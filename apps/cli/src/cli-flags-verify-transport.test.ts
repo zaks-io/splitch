@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_API, EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
+import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import {
   authHeader,
   clientKeyMaterial,
@@ -49,6 +50,7 @@ describe("flags verify transport", () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
       clientKeyStub(),
       {
         match: (request) => request.url.includes("/api/sdk/verify"),
@@ -77,6 +79,7 @@ describe("flags verify transport", () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
       clientKeyStub(),
       {
         match: (request) => request.url.includes("/api/sdk/verify"),
@@ -93,7 +96,6 @@ describe("flags verify transport", () => {
     expect(code).toBe(EXIT_API);
   });
 });
-
 function clientKeyStub() {
   return {
     match: (request: { url: string }) => request.url.includes("/client-key"),
