@@ -1,0 +1,44 @@
+DESCRIPTION Returns per-Entity Metric value rows for one Run, shaped as the Stats Engine's PerEntityMetricRow.
+
+# SPLITCH_EMPTY_STUB_UNTIL=metric_events
+# Metric Event ingest (`metric_events` / `serve_deduped_metric_events`) is not
+# deployed yet (PR #284 deferred these pipes on that dependency). Until it is,
+# this endpoint is an empty, scoped stub: a Run with Exposures and no Metric
+# rows is a valid early-Run state (docs/spec/stats/data-contracts.md), and the
+# Stats Engine evaluates locked Metrics over the Exposure denominator as zeros.
+# Returning HTTP 404 for a missing pipe was being mapped to SERVICE_UNAVAILABLE
+# (SPL-290), which conflated "no Metric data yet" with an upstream outage.
+# scripts/lib/tinybird-metric-stub-tripwire.mjs fails tinybird:local the moment
+# metric_events.datasource exists while this marker remains.
+
+NODE empty_metric_values
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(experiment_id) %}
+    {{error('experiment_id is required')}}
+    {% end %}
+    {% if not defined(run_id) %}
+    {{error('run_id is required')}}
+    {% end %}
+    SELECT
+        cast('' AS String) AS targeting_key_hash,
+        cast('' AS String) AS run_id,
+        cast('' AS String) AS metric_id,
+        cast('' AS String) AS metric_type,
+        cast(0 AS Float64) AS value,
+        cast(NULL AS Nullable(Float64)) AS num_value,
+        cast(NULL AS Nullable(Float64)) AS denom_value,
+        cast(0 AS UInt8) AS in_window
+    WHERE 0
+        AND {{String(app_id)}} = {{String(app_id)}}
+        AND {{String(environment_id)}} = {{String(environment_id)}}
+        AND {{String(experiment_id)}} = {{String(experiment_id)}}
+        AND {{String(run_id)}} = {{String(run_id)}}
+
+TYPE ENDPOINT

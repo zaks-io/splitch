@@ -80,6 +80,33 @@ describe("attention rollup Organization isolation", { timeout: ATTENTION_TEST_TI
     });
   });
 
+  // Layer consistency with Analysis Worker results.ts: a Run-provenance mismatch
+  // is permanent. Emitting SERVICE_UNAVAILABLE would invite polling through a
+  // fault that waiting never clears (ADR-0036).
+  it("refuses a Run-provenance mismatch as non-retryable INTERNAL_SERVER_ERROR", async () => {
+    const app = harness(
+      createAnalysisResultsReader({
+        fetch: async () =>
+          Response.json({
+            run_id: "run_some_other_run",
+            control_variant: "control",
+            stats: statsOutput(),
+          }),
+      }),
+      authFor(ids.appId, USER_ID),
+    );
+
+    const response = await app.request(`/apps/${ids.appId}/attention-rollup`, {
+      headers: { authorization: "Bearer valid" },
+    });
+    const body = (await response.json()) as { code: string; details: unknown };
+
+    expect(response.status).toBe(500);
+    expect(body.code).toBe("INTERNAL_SERVER_ERROR");
+    expect(body.details).not.toHaveProperty("retryAfterMs");
+    expect(response.headers.get("retry-after")).toBeNull();
+  });
+
   it("rejects cross-App scope and stale membership before analysis reads", async () => {
     const read = vi.fn<AnalysisResultsReader["read"]>();
     const reader = { read };
@@ -142,7 +169,13 @@ describe("attention rollup Organization isolation", { timeout: ATTENTION_TEST_TI
 describe("Analysis results boundary", { timeout: ATTENTION_TEST_TIMEOUT }, () => {
   it("uses a least-privilege scoped identity over the service binding", async () => {
     const fetcher = {
-      fetch: vi.fn(async (_request: Request) => Response.json(statsOutput({ srm: true }))),
+      fetch: vi.fn(async (_request: Request) =>
+        Response.json({
+          run_id: ids.liveRunId,
+          control_variant: "control",
+          stats: statsOutput({ srm: true }),
+        }),
+      ),
     };
     const reader = createAnalysisResultsReader(fetcher);
 

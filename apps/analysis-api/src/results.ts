@@ -29,6 +29,10 @@ import { scopedPipeParams, TinybirdReadError, type TinybirdReadTransport } from 
 
 const RUN_INPUTS_PIPE = "analysis_run_inputs";
 const EXPOSURES_PIPE = "analysis_deduped_exposures";
+// Metric Event ingest is not deployed yet; these pipes are empty scoped stubs
+// (infra/tinybird/pipes/analysis_metric_values.pipe and
+// analysis_pre_period_covariates.pipe). Calling missing pipes returned HTTP 404
+// → SERVICE_UNAVAILABLE and hid valid Exposure-only early-Run results (SPL-290).
 const METRIC_VALUES_PIPE = "analysis_metric_values";
 const PRE_PERIOD_PIPE = "analysis_pre_period_covariates";
 const ACTIVATION_PIPE = "analysis_activation_rows";

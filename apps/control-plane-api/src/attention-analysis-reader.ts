@@ -1,10 +1,11 @@
 import {
+  AnalysisResultsEnvelopeSchema,
   type ErrorResponse,
   ErrorResponseSchema,
   type StatsOutput,
-  StatsOutputSchema,
 } from "@splitch/contracts";
 import { type AnalysisResultsScope, analysisResultsRequest } from "./analysis-results-request";
+import { ExperimentIntegrityError } from "./attention-rollup-errors";
 
 /** The Analysis-results transport for the attention rollup: one read per running Run. */
 export type { AnalysisResultsScope };
@@ -50,20 +51,40 @@ export function createAnalysisResultsReader(
       } catch (cause) {
         throw new AnalysisResultsUnavailableError(cause);
       }
-      return parseAnalysisResponse(response);
+      return parseAnalysisResponse(response, scope.runId);
     },
   };
 }
 
-async function parseAnalysisResponse(response: Response): Promise<StatsOutput | null> {
+async function parseAnalysisResponse(
+  response: Response,
+  expectedRunId: string,
+): Promise<StatsOutput | null> {
   if (!response.ok) {
     const error = await safeError(response);
     if (response.status === 404 && isMissingAnalysisResult(error)) return null;
     throw new AnalysisResultsUnavailableError(error);
   }
   try {
-    return StatsOutputSchema.parse(await response.json());
+    // Analysis answers with AnalysisResultsEnvelope ({ run_id, control_variant,
+    // stats }), not bare StatsOutput. Parsing the envelope as StatsOutput fails
+    // Zod and was promoted to SERVICE_UNAVAILABLE for every successful read
+    // (SPL-290). Panel results already unwrap via parseAnalysisResults; this
+    // reader must do the same and keep the no-pooling Run check.
+    const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+    // Match the Analysis Worker (results.ts): a Run-provenance mismatch is a
+    // permanent integrity failure. Mapping it to AnalysisResultsUnavailableError
+    // would render as retryable SERVICE_UNAVAILABLE and teach a polling agent to
+    // wait out a fault that waiting cannot clear (ADR-0036 / SPL-290 review).
+    if (envelope.run_id !== expectedRunId) {
+      throw new ExperimentIntegrityError(
+        `analysis answered for Run ${envelope.run_id}, not Run ${expectedRunId}`,
+      );
+    }
+    return envelope.stats;
   } catch (cause) {
+    if (cause instanceof AnalysisResultsUnavailableError) throw cause;
+    if (cause instanceof ExperimentIntegrityError) throw cause;
     throw new AnalysisResultsUnavailableError(cause);
   }
 }

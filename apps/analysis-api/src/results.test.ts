@@ -1,8 +1,13 @@
 import { AnalysisResultsEnvelopeSchema, type ErrorResponse } from "@splitch/contracts";
-import type { AuthResolver, Principal, RateLimiter } from "@splitch/worker-runtime";
 import { describe, expect, it } from "vitest";
-import { createApp } from "./app";
 import { makeResultsHandler, readStatsInputFromTinybird } from "./results";
+import {
+  makeResultsHarness,
+  principal,
+  RESULTS_PATH,
+  RESULTS_REQUEST,
+  resultsAuthInit,
+} from "./results-test-harness";
 import {
   APP_ID,
   ENVIRONMENT_ID,
@@ -14,61 +19,10 @@ import {
   rowsByPipe,
 } from "./results-test-support";
 
-const PATH = `/apps/${APP_ID}/envs/${ENVIRONMENT_ID}/experiments/${EXPERIMENT_ID}/results`;
-const REQUEST = new Request(`https://analysis.test${PATH}`);
-
-const allowLimiter: RateLimiter = () => ({ limited: false });
-
-function principal(appId: string | null, environmentId: string | null = null): Principal {
-  return {
-    kind: "control-plane-token",
-    id: "actor-1",
-    scopes: appId === null ? [] : [`app:${appId}:admin`],
-    orgId: null,
-    appId,
-    environmentId,
-    authDoor: "id_jag",
-  };
-}
-
-const authResolver: AuthResolver = (request) => {
-  const authorization = request.headers.get("authorization");
-  if (authorization === "Bearer cp-app") {
-    return { ok: true, principal: principal(APP_ID) };
-  }
-  if (authorization === "Bearer cp-other-app") {
-    return { ok: true, principal: principal(OTHER_APP_ID) };
-  }
-  if (authorization === "Bearer cp-no-app") {
-    return { ok: true, principal: principal(null) };
-  }
-  if (authorization === "Bearer cp-other-env") {
-    return { ok: true, principal: principal(APP_ID, "env_other") };
-  }
-  return { ok: false, reason: "UNAUTHORIZED" };
-};
+const PATH = RESULTS_PATH;
 
 function makeHarness(rows?: RowsByPipe) {
-  const tinybird = new FakeTinybird(rows);
-  const app = createApp({
-    door: "binding",
-    authResolver,
-    rateLimiter: allowLimiter,
-    tinybird,
-    platformTarget: "local",
-  });
-  return { app, tinybird };
-}
-
-function authInit(method: "GET" | "POST", body?: unknown): RequestInit {
-  return {
-    method,
-    headers: {
-      authorization: "Bearer cp-app",
-      ...(body === undefined ? {} : { "content-type": "application/json" }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  };
+  return makeResultsHarness(rows);
 }
 
 describe("Analysis Worker health", () => {
@@ -90,7 +44,7 @@ describe("GET/POST experiment results", () => {
   it("materializes Tinybird rows into StatsInput, calls StatsEngine, and returns StatsOutput", async () => {
     const { app, tinybird } = makeHarness();
 
-    const res = await app.request(`${PATH}?runId=${RUN_ID}`, authInit("GET"));
+    const res = await app.request(`${PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
 
     expect(res.status).toBe(200);
     const envelope = AnalysisResultsEnvelopeSchema.parse(await res.json());
@@ -127,7 +81,7 @@ describe("GET/POST experiment results", () => {
   it("supports POST with runId in the body without accepting client app_id", async () => {
     const { app, tinybird } = makeHarness();
 
-    const res = await app.request(PATH, authInit("POST", { runId: RUN_ID }));
+    const res = await app.request(PATH, resultsAuthInit("POST", { runId: RUN_ID }));
 
     expect(res.status).toBe(200);
     AnalysisResultsEnvelopeSchema.parse(await res.json());
@@ -142,7 +96,7 @@ describe("GET/POST experiment results", () => {
   it("supports POST without a body for the live Run selector path", async () => {
     const { app, tinybird } = makeHarness();
 
-    const res = await app.request(PATH, authInit("POST"));
+    const res = await app.request(PATH, resultsAuthInit("POST"));
 
     expect(res.status).toBe(200);
     AnalysisResultsEnvelopeSchema.parse(await res.json());
@@ -161,7 +115,7 @@ describe("GET/POST experiment results isolation", () => {
       analysis_run_inputs: [],
     });
 
-    const res = await app.request(`${PATH}?runId=${RUN_ID}`, authInit("GET"));
+    const res = await app.request(`${PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
 
     expect(res.status).toBe(404);
     expect(((await res.json()) as ErrorResponse).code).toBe("RUN_NOT_FOUND");
@@ -174,7 +128,7 @@ describe("GET/POST experiment results isolation", () => {
       analysis_run_inputs: [],
     });
 
-    const res = await app.request(PATH, authInit("GET"));
+    const res = await app.request(PATH, resultsAuthInit("GET"));
 
     expect(res.status).toBe(404);
     expect(((await res.json()) as ErrorResponse).code).toBe("EXPERIMENT_NOT_FOUND");
@@ -238,7 +192,7 @@ describe("GET/POST experiment results isolation", () => {
       },
       principal: principal(APP_ID),
       requestId: "req_1",
-      request: REQUEST,
+      request: RESULTS_REQUEST,
     });
 
     expect(res.status).toBe(403);
@@ -248,7 +202,10 @@ describe("GET/POST experiment results isolation", () => {
 
   it("rejects client-supplied app_id in query or body before any Tinybird read", async () => {
     const queryHarness = makeHarness();
-    const query = await queryHarness.app.request(`${PATH}?app_id=${OTHER_APP_ID}`, authInit("GET"));
+    const query = await queryHarness.app.request(
+      `${PATH}?app_id=${OTHER_APP_ID}`,
+      resultsAuthInit("GET"),
+    );
 
     expect(query.status).toBe(400);
     expect(((await query.json()) as ErrorResponse).code).toBe("VALIDATION_ERROR");
@@ -257,7 +214,7 @@ describe("GET/POST experiment results isolation", () => {
     const bodyHarness = makeHarness();
     const body = await bodyHarness.app.request(
       PATH,
-      authInit("POST", { runId: RUN_ID, app_id: OTHER_APP_ID }),
+      resultsAuthInit("POST", { runId: RUN_ID, app_id: OTHER_APP_ID }),
     );
 
     expect(body.status).toBe(400);
@@ -298,7 +255,7 @@ describe("GET/POST experiment results isolation", () => {
       analysis_run_inputs: [{ ...runInput, run_id: "run_some_other_run" }],
     });
 
-    const res = await app.request(`${PATH}?runId=${RUN_ID}`, authInit("GET"));
+    const res = await app.request(`${PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
 
     expect(res.status).toBe(500);
     const body = (await res.json()) as ErrorResponse;

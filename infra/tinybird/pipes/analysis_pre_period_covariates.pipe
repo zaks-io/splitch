@@ -1,0 +1,37 @@
+DESCRIPTION Returns pre-period CUPED covariate rows for one Run, shaped as the Stats Engine's PrePeriodRow.
+
+# SPLITCH_EMPTY_STUB_UNTIL=metric_events
+# Same stub rationale as `analysis_metric_values`: pre-period covariates need
+# Metric Event history that is not ingested yet. An absent covariate set is
+# optional on StatsInput (`pre_period_covariates?`); empty rows here mean CUPED
+# is not applied (`cuped_method = none`), not that analysis is unavailable.
+# scripts/lib/tinybird-metric-stub-tripwire.mjs fails tinybird:local the moment
+# metric_events.datasource exists while this marker remains.
+
+NODE empty_pre_period_covariates
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(experiment_id) %}
+    {{error('experiment_id is required')}}
+    {% end %}
+    {% if not defined(run_id) %}
+    {{error('run_id is required')}}
+    {% end %}
+    SELECT
+        cast('' AS String) AS targeting_key_hash,
+        cast('' AS String) AS metric_id,
+        cast(0 AS Float64) AS pre_period_value,
+        cast('pre_period' AS String) AS covariate_source
+    WHERE 0
+        AND {{String(app_id)}} = {{String(app_id)}}
+        AND {{String(environment_id)}} = {{String(environment_id)}}
+        AND {{String(experiment_id)}} = {{String(experiment_id)}}
+        AND {{String(run_id)}} = {{String(run_id)}}
+
+TYPE ENDPOINT

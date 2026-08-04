@@ -1,0 +1,10 @@
+- name: scoped_run_with_no_metric_ingest_returns_empty
+  description: Until metric_events ingest exists, a correctly scoped read returns zero rows (HTTP 200), never a missing-pipe failure.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
+  expected_http_status: 200
+  expected_result: ""
+- name: missing_run_id_is_rejected
+  description: A required scope parameter is never defaulted; the request fails loudly rather than widening to every Run.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1"
+  expected_http_status: 400
+  expected_result: "run_id is required"
