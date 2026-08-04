@@ -1,6 +1,6 @@
 {
   "name": "@splitch/cli",
-  "version": "0.2.2",
+  "version": "0.2.1",
   "description": "Agent-first splitch CLI for managing feature flags and experiments",
   "license": "Apache-2.0",
   "homepage": "https://splitch.dev",
@@ -50,9 +50,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@hono/zod-openapi": "^1.4.0",
-    "@sentry/node": "^10.63.0",
-    "hono": "^4.12.27",
+    "@hono/zod-openapi": "^1.5.1",
+    "@sentry/node": "^10.68.0",
+    "hono": "^4.12.32",
     "open": "^11.0.0",
     "zod": "^4.4.3"
   },
@@ -63,8 +63,8 @@
     "@splitch/observability": "workspace:*",
     "@splitch/sdk": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
-    "miniflare": "^4.20260701.0",
-    "tsx": "4.22.4",
+    "miniflare": "^4.20260722.0",
+    "tsx": "4.23.1",
     "vitest": "^4.1.10"
   }
 }

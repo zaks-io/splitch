@@ -32,6 +32,6 @@
   },
   "devDependencies": {
     "drizzle-kit": "^0.31.10",
-    "miniflare": "^4.20260701.0"
+    "miniflare": "^4.20260722.0"
   }
 }

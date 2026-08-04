@@ -30,8 +30,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@hono/zod-openapi": "^1.4.0",
-    "hono": "^4.12.27",
+    "@hono/zod-openapi": "^1.5.1",
+    "hono": "^4.12.32",
     "zod": "^4.4.3"
   }
 }

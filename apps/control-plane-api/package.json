@@ -20,10 +20,10 @@
     "@splitch/db": "workspace:*",
     "@splitch/observability": "workspace:*",
     "@splitch/worker-runtime": "workspace:*",
-    "hono": "^4.12.27"
+    "hono": "^4.12.32"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.18.0",
-    "miniflare": "^4.20260701.0"
+    "@cloudflare/vitest-pool-workers": "0.18.8",
+    "miniflare": "^4.20260722.0"
   }
 }

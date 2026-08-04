@@ -21,6 +21,6 @@
     "@splitch/observability": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "0.18.0"
+    "@cloudflare/vitest-pool-workers": "0.18.8"
   }
 }
