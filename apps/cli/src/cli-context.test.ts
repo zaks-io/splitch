@@ -13,6 +13,7 @@ import {
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await cleanupTempHomes();
 });
 
