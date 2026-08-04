@@ -36,10 +36,10 @@ const variant = await splitch.evaluate("new-checkout", {
 
 Construct the client with exactly one credential (anything else throws):
 
-| Option      | Credential                | Where it may live                                   | Unlocks                                 |
-| ----------- | ------------------------- | --------------------------------------------------- | --------------------------------------- |
-| `clientKey` | public Client Key (`pk_`) | browsers, mobile, servers — anything that evaluates | `evaluate`, `evaluateDetails`, `verify` |
-| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client             | `peekVariant`, `verify`                 |
+| Option      | Credential                | Where it may live                                  | Unlocks                                 |
+| ----------- | ------------------------- | -------------------------------------------------- | --------------------------------------- |
+| `clientKey` | public Client Key (`pk_`) | browsers, mobile, servers: anything that evaluates | `evaluate`, `evaluateDetails`, `verify` |
+| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client            | `peekVariant`, `verify`                 |
 
 A server-side integration that fires Exposures uses a Client Key, not an API
 Key. The API Key cannot call `evaluate` or `evaluateDetails`; present a Client
