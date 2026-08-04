@@ -19,10 +19,11 @@ export interface NamedResource {
  * IDs from `splitch use`; only flag/env sources need this pass. Uses the same
  * ID-then-key rule as `use` so a slug never reaches the wire as a path segment.
  *
- * Selectors that already look like canonical IDs (`app_…` / `env_…`) pass
- * through without a list round-trip: the control-plane path co-scopes on those
- * IDs, and a membership miss still fails loud on the operation itself. Slugs
- * and keys always resolve against the session's reachable memberships.
+ * App selectors that already look like canonical IDs (`app_…`) pass through
+ * without a list round-trip: App keys use the shared slug alphabet (no `_`),
+ * so an `app_` prefix cannot be a key. Environment selectors always resolve —
+ * Environment keys are unconstrained and could otherwise collide with `env_…`
+ * ID shapes.
  */
 export async function resolveContextSelectors(
   deps: CliDeps,
@@ -36,12 +37,7 @@ export async function resolveContextSelectors(
     appId = (await resolveAppSelector(deps, appId)).id;
   }
 
-  if (
-    command.needsEnvironment &&
-    environmentId &&
-    isLiveSelector(context.environmentSource) &&
-    !looksLikeEnvironmentId(environmentId)
-  ) {
+  if (command.needsEnvironment && environmentId && isLiveSelector(context.environmentSource)) {
     if (!appId) {
       throw new SplitchCliError({
         code: "CLI_SCOPE_UNRESOLVED",
@@ -64,10 +60,6 @@ function isLiveSelector(source: ResolvedContext["appSource"]): boolean {
 
 function looksLikeAppId(selector: string): boolean {
   return selector.startsWith("app_");
-}
-
-function looksLikeEnvironmentId(selector: string): boolean {
-  return selector.startsWith("env_");
 }
 
 /**
