@@ -110,7 +110,7 @@ Use the **Client Key** for browser/mobile, the **API Key** for a trusted server.
 and snippets are in [sdk/credentials.md](sdk/credentials.md#which-key-goes-where-first-run-placement).
 
 ```
-splitch client-key get          # public, safe to ship
+splitch client-key get          # public, safe to ship — paste keyMaterial (pk_…), not keyId (ck_…)
 api_keys_create                 # secret, surfaced once — store it in a secret manager
 ```
 
@@ -211,7 +211,7 @@ product:
 ```ts
 import { createSplitchClient } from "@splitch/sdk";
 
-const splitch = createSplitchClient({ clientKey: "ck_live_..." }); // defaults: edge endpoint, 1s timeout
+const splitch = createSplitchClient({ clientKey: "pk_..." }); // paste keyMaterial from `splitch client-key get`
 
 const evaluationId = crypto.randomUUID(); // retain for retries of this logical Evaluation
 const variant = await splitch.evaluate("new-checkout", {

@@ -16,7 +16,7 @@ import type { Transport } from "./transport";
  * is fully testable without a network or a real clock.
  */
 export interface SplitchClientOptions {
-  /** Public Client Key (`ck_...`). Mutually exclusive with `apiKey`. */
+  /** Public Client Key material (`pk_...` from `client-key get`). Mutually exclusive with `apiKey`. */
   readonly clientKey?: string;
   /** Secret API Key (`sk_...`), servers only. Mutually exclusive with `clientKey`. */
   readonly apiKey?: string;
@@ -94,7 +94,8 @@ const DEFAULT_RETRIES = 0;
  * @example
  * import { createSplitchClient } from "@splitch/sdk";
  *
- * const splitch = createSplitchClient({ clientKey: "ck_live_..." });
+ * // Paste keyMaterial from `splitch client-key get` (pk_…; not the ck_… keyId).
+ * const splitch = createSplitchClient({ clientKey: "pk_..." });
  * const variant = await splitch.evaluate("new-checkout", {
  *   targetingKey: user.id,
  *   idempotencyKey: crypto.randomUUID(),

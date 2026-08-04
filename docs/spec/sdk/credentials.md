@@ -29,8 +29,8 @@ that ships to users; API Key only in a trusted server you control.**
 | Backend, edge function, trusted server runtime   | **API Key**    | `splitch api-keys create` / `api_keys_create` | A secret manager — never shipped |
 
 ```ts
-// Browser / mobile — Client Key (public, safe to ship):
-const splitch = createSplitchClient({ clientKey: "ck_live_..." });
+// Browser / mobile — paste keyMaterial from `splitch client-key get` (pk_…; not the ck_… keyId):
+const splitch = createSplitchClient({ clientKey: "pk_..." });
 
 // Backend / trusted server — API Key (secret; from your secret manager):
 const splitch = createSplitchClient({ apiKey: process.env.SPLITCH_API_KEY });
