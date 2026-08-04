@@ -65,9 +65,8 @@ describe("login exit code", () => {
 
 describe("login exit code", () => {
   it("names the logged-in principal by its user id and stores no fabricated identity", async () => {
-    // The auth port returns the opaque user_id and nothing PII, so the CLI used
-    // to fill the gap with `email: "unknown"` and greet every operator as
-    // "Logged in as unknown".
+    // The auth port returns the opaque user_id plus the verified email so the
+    // CLI never has to invent a placeholder like `email: "unknown"`.
     const { credentialPath } = await makeTempHome();
     const transport = new FakeCliTransport([
       {
@@ -87,7 +86,10 @@ describe("login exit code", () => {
 
     expect(error.mock.calls.join(" ")).toContain("Logged in as user_test.");
     const saved = await readFile(credentialPath, "utf8");
-    expect(JSON.parse(saved).principal).toEqual({ userId: "user_test" });
+    expect(JSON.parse(saved).principal).toEqual({
+      userId: "user_test",
+      email: "user_test@splitch.test",
+    });
     expect(saved).not.toContain("unknown");
   });
 

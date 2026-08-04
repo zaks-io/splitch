@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
 import worker from "../src/index.js";
-import { memberProfileCacheKey } from "../src/member-profile-cache.js";
+import { rememberMemberProfile } from "../src/member-profile-cache.js";
 
 const AUDIENCE = "https://cp.splitch.test";
 const JWKS_URI = "https://auth.splitch.test/.well-known/jwks.json";
@@ -25,8 +25,8 @@ let testEnv: ControlPlaneApiEnv;
 beforeAll(async () => {
   await seedOrgApp(env.DB, ORG);
   await seedOrgMember(env.DB, { orgId: ORG.orgId, userId: OWNER, role: "owner" });
-  await cacheMemberProfile(OWNER, "owner@index.test");
-  await cacheMemberProfile(NEW_MEMBER, "new@index.test");
+  await rememberMemberProfile(env.SESSION_STORE, OWNER, "owner@index.test");
+  await rememberMemberProfile(env.SESSION_STORE, NEW_MEMBER, "new@index.test");
 
   signer = await makeFixtureSigner();
   const realFetch = globalThis.fetch.bind(globalThis);
@@ -100,10 +100,6 @@ function call(method: string, path: string, jwt: string, body?: unknown): Promis
       testCtx,
     ),
   );
-}
-
-async function cacheMemberProfile(userId: string, email: string): Promise<void> {
-  await env.SESSION_STORE.put(memberProfileCacheKey(userId), JSON.stringify({ email }));
 }
 
 async function seedOrgApp(d1: D1Database, row: typeof ORG): Promise<void> {

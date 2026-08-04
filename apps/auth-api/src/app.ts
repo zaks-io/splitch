@@ -50,6 +50,8 @@ export interface AppDeps {
   deviceFlow: DeviceFlowPort;
   /** Resolves provider refresh tokens to provider session ids for fail-loud revoke. */
   deviceRefreshSessions: DeviceRefreshSessionStore;
+  /** Shared SESSION_STORE — member-profile cache writes at login. */
+  sessionStore: KVNamespace;
   /** Shared revocation marker writer/reader for control-plane access tokens. */
   revocations: RevocationStore;
   /** Shared-preview-only smoke OAuth client credentials. */

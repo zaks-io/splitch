@@ -9,7 +9,7 @@ import {
 import { OAuthError, type OAuthErrorCode } from "./oauth-errors";
 
 interface WorkOsDeviceTokenBody {
-  user?: { id?: unknown };
+  user?: { id?: unknown; email?: unknown; email_verified?: unknown };
   access_token?: unknown;
   refresh_token?: unknown;
   session_id?: unknown;
@@ -89,8 +89,10 @@ function deviceTokenResult(json: WorkOsDeviceTokenBody): DeviceTokenResult {
   if (refreshToken && !providerSessionId) {
     throw new OAuthError("server_error", "device token response missing session id");
   }
+  const email = deviceUserEmail(json.user);
   return {
     userId: json.user.id,
+    ...(email ? { email } : {}),
     // Personal AuthKit sign-ins carry no WorkOS Organization; splitch authority
     // derives from live D1 membership, never from this grant.
     organizationId:
@@ -100,6 +102,16 @@ function deviceTokenResult(json: WorkOsDeviceTokenBody): DeviceTokenResult {
     refreshToken,
     providerSessionId,
   };
+}
+
+/**
+ * Prefer a verified email; accept an unverified non-empty address only when the
+ * provider omitted `email_verified` (fixture paths). Never invent a placeholder.
+ */
+function deviceUserEmail(user: { id?: unknown; email?: unknown; email_verified?: unknown }): string | undefined {
+  if (typeof user.email !== "string" || user.email.length === 0) return undefined;
+  if (user.email_verified === false) return undefined;
+  return user.email;
 }
 
 async function expectJson(

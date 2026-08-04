@@ -153,7 +153,12 @@ export interface DoorBFixtures {
 export function makeDoorBDeps(
   repo: Repository,
   now: () => number,
-  opts: { consentBaseUrl?: string; rateLimits?: RateLimitConfig; tokenSigner?: TokenSigner } = {},
+  opts: {
+    consentBaseUrl?: string;
+    rateLimits?: RateLimitConfig;
+    tokenSigner?: TokenSigner;
+    sessionStore?: KVNamespace;
+  } = {},
 ): DoorBFixtures {
   const tokenSigner = opts.tokenSigner ?? makeTokenSigner(TEST_SIGNER_CONFIG);
   const workos = makeFixtureWorkOs();
@@ -178,6 +183,22 @@ export function makeDoorBDeps(
       consentBaseUrl: opts.consentBaseUrl ?? "https://cp.splitch.test",
       defaultResource: "https://cp.splitch.test",
       now,
+      sessionStore: opts.sessionStore ?? memorySessionStore(),
     },
   };
+}
+
+function memorySessionStore(): KVNamespace {
+  const values = new Map<string, string>();
+  return {
+    get: async (key: string) => values.get(key) ?? null,
+    put: async (key: string, value: string) => {
+      values.set(key, value);
+    },
+    delete: async (key: string) => {
+      values.delete(key);
+    },
+    list: async () => ({ keys: [], list_complete: true, cacheStatus: null }),
+    getWithMetadata: async () => ({ value: null, metadata: null, cacheStatus: null }),
+  } as unknown as KVNamespace;
 }

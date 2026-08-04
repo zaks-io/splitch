@@ -213,6 +213,21 @@ export const AssignmentStoreValueSchema = z.record(z.string(), AssignmentStoreEn
 export type AssignmentStoreValue = z.infer<typeof AssignmentStoreValueSchema>;
 
 // ---------------------------------------------------------------------------
+// MemberProfileCache (SESSION_STORE identity cache)
+//
+// Email for Org member wire responses. Written at login; never a D1 column.
+// No schemaVersion envelope: this blob is a single-field identity projection,
+// not a config/credential cache that evolves through versioned rollouts.
+// ---------------------------------------------------------------------------
+
+export const MemberProfileCacheSchema = z
+  .object({
+    email: z.string().min(1),
+  })
+  .strict();
+export type MemberProfileCache = z.infer<typeof MemberProfileCacheSchema>;
+
+// ---------------------------------------------------------------------------
 // KVEnvelope<T> (schema-version envelope, contracts-and-validation.md)
 //
 // schemaVersion is carried ONLY at this envelope level — never on the payload or

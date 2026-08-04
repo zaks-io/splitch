@@ -25,6 +25,8 @@ export interface ClaimDeps {
   consentBaseUrl: string;
   defaultResource: string;
   now: () => number;
+  /** Shared SESSION_STORE — writes member-profile:{userId} when claim verifies. */
+  sessionStore: KVNamespace;
   /** Legacy local fixture seams; hosted claims never use them. */
   otp?: unknown;
   idempotency?: unknown;

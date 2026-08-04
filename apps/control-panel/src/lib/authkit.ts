@@ -1,3 +1,4 @@
+import { memberProfileCacheKey, MemberProfileCacheSchema } from "@splitch/contracts";
 import { createRepository, type Repository } from "@splitch/db";
 import { WorkOS } from "@workos-inc/node/worker";
 import type { ControlPanelBindings } from "./bindings";
@@ -16,7 +17,7 @@ export interface AuthKitClient {
 }
 
 interface AuthKitAuthentication {
-  user: { id: string };
+  user: { id: string; email: string };
   accessToken: string;
 }
 
@@ -53,7 +54,7 @@ export function createAuthKitClient(bindings: ControlPanelBindings): AuthKitClie
         userAgent,
       });
       return {
-        user: { id: response.user.id },
+        user: { id: response.user.id, email: response.user.email },
         accessToken: response.accessToken,
       };
     },
@@ -83,6 +84,11 @@ export async function completeAuthKitCallback(input: CompleteAuthKitCallbackInpu
     workosSessionId: accessClaims.sessionId,
   });
 
+  if (!authentication.user.email) {
+    throw new Error("WorkOS AuthKit callback returned a user without email");
+  }
+  await rememberMemberProfile(input.kv, authentication.user.id, authentication.user.email);
+
   const session = await createSession(
     input.kv,
     {
@@ -93,6 +99,15 @@ export async function completeAuthKitCallback(input: CompleteAuthKitCallbackInpu
     input.now,
   );
   return { cookie: session.cookie };
+}
+
+async function rememberMemberProfile(
+  kv: KVNamespace,
+  userId: string,
+  email: string,
+): Promise<void> {
+  const profile = MemberProfileCacheSchema.parse({ email });
+  await kv.put(memberProfileCacheKey(userId), JSON.stringify(profile));
 }
 
 export function callbackRedirectUri(request: Request): string {

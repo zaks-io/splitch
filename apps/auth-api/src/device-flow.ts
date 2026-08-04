@@ -41,6 +41,7 @@ export function makeFixtureDeviceFlow(): DeviceFlowPort {
       }
       return {
         userId: "user_device_fixture",
+        email: "device-fixture@splitch.test",
         organizationId: "org_device",
         refreshToken,
         providerSessionId,
@@ -59,6 +60,7 @@ export function makeFixtureDeviceFlow(): DeviceFlowPort {
       refreshToken = `fixture-refresh-token-${refreshSequence}`;
       return {
         userId: "user_device_fixture",
+        email: "device-fixture@splitch.test",
         organizationId: "org_device",
         refreshToken,
         providerSessionId,

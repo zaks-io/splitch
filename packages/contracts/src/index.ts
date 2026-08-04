@@ -302,6 +302,7 @@ export {
   experimentConfigKey,
   flagConfigKey,
   liveRunKey,
+  memberProfileCacheKey,
   runConfigKey,
 } from "./storage-keys-kv";
 export type {
@@ -312,6 +313,7 @@ export type {
   ExperimentConfigKV,
   FlagConfigKV,
   LiveRunKV,
+  MemberProfileCache,
   RunConfigKV,
 } from "./storage-schemas-kv";
 export {
@@ -326,6 +328,7 @@ export {
   FlagConfigKVSchema,
   kvEnvelope,
   LiveRunKVSchema,
+  MemberProfileCacheSchema,
   RunConfigKVSchema,
 } from "./storage-schemas-kv";
 export type {

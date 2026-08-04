@@ -22,6 +22,7 @@ const refreshOnlyDeviceFlow = (organizationId?: string): DeviceFlowPort => ({
   },
   refreshProviderToken: async () => ({
     userId: "user_device",
+    email: "device@splitch.test",
     organizationId,
     refreshToken: "refresh_rotated",
     providerSessionId: "session_selected",

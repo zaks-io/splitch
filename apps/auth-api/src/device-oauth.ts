@@ -1,6 +1,7 @@
 import type { DeviceFlowPort } from "./device-flow";
 import { openDeviceGrant, sealDeviceGrant } from "./device-grant";
 import type { DeviceRefreshSession, DeviceRefreshSessionStore } from "./device-session-store";
+import { rememberMemberProfile } from "./member-profile-cache";
 import {
   type MembershipAuthorityRepo,
   parseSelectedAppRequest,
@@ -28,6 +29,8 @@ export interface DeviceOAuthDeps {
   tokenSigner: TokenSigner;
   deviceFlow: DeviceFlowPort;
   deviceRefreshSessions: DeviceRefreshSessionStore;
+  /** Shared SESSION_STORE — writes member-profile:{userId} at login/refresh. */
+  sessionStore: KVNamespace;
   accessSecret: string;
   now: () => number;
   repo: MembershipAuthorityRepo;
@@ -105,6 +108,8 @@ export async function exchangeDeviceCode(
     const deviceToken = await deps.deviceFlow.exchangeDeviceCode({
       deviceCode: grant.deviceCode,
     });
+    const email = requireDeviceEmail(deviceToken);
+    await rememberMemberProfile(deps.sessionStore, deviceToken.userId, email);
     const binding = grant.selectedAppSelector
       ? await resolveAppSelectionForUser(deps.repo, deviceToken.userId, grant.selectedAppSelector)
       : null;
@@ -125,6 +130,7 @@ export async function exchangeDeviceCode(
       accessToken,
       deviceToken.refreshToken as string,
       deviceToken.userId,
+      email,
       binding?.appId ?? null,
     );
   } catch (cause) {
@@ -160,6 +166,10 @@ export async function exchangeRefreshToken(
       organizationId: stored.providerOrganizationId ?? undefined,
     });
     requireUnchangedProviderAuthority(stored, providerToken);
+    // Refresh is the backfill path for sessions minted before the identity
+    // cache existed: every successful mint rewrites member-profile:{userId}.
+    const email = requireDeviceEmail(providerToken);
+    await rememberMemberProfile(deps.sessionStore, providerToken.userId, email);
     const nextSession = requireRefreshSession(providerToken, {
       userId: providerToken.userId,
       // The pin is acquire-once: an unpinned session takes whatever Org the
@@ -190,6 +200,7 @@ export async function exchangeRefreshToken(
       accessToken,
       providerToken.refreshToken as string,
       providerToken.userId,
+      email,
       binding?.appId ?? null,
     );
   } catch (cause) {
@@ -240,6 +251,16 @@ async function resolveRefreshBinding(
   return null;
 }
 
+function requireDeviceEmail(token: { userId: string; email?: string }): string {
+  if (!token.email) {
+    throw new OAuthError(
+      "server_error",
+      "device token response missing verified email for the authenticated user",
+    );
+  }
+  return token.email;
+}
+
 function requireRefreshSession(
   token: { refreshToken?: string; providerSessionId?: string },
   authority: Omit<DeviceRefreshSession, "providerSessionId">,
@@ -254,6 +275,7 @@ function tokenResponse(
   accessToken: string,
   refreshToken: string,
   userId: string,
+  email: string,
   appId: string | null,
 ): Response {
   return Response.json({
@@ -262,6 +284,7 @@ function tokenResponse(
     expires_in: 3600,
     refresh_token: refreshToken,
     user_id: userId,
+    email,
     ...(appId ? { app_id: appId } : {}),
   });
 }

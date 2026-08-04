@@ -51,6 +51,7 @@ export function selectedDeviceCode(
 export function routeApp(params: {
   deviceFlow: DeviceFlowPort;
   deviceRefreshSessions: DeviceRefreshSessionStore;
+  sessionStore?: KVNamespace;
   repo?: MembershipAuthorityRepo;
   tokenSigner?: TokenSigner;
 }): Hono {
@@ -59,6 +60,7 @@ export function routeApp(params: {
     tokenSigner: params.tokenSigner ?? tokenSigner,
     deviceFlow: params.deviceFlow,
     deviceRefreshSessions: params.deviceRefreshSessions,
+    sessionStore: params.sessionStore ?? memorySessionStore(),
     revocations,
     accessSecret: "test-access-secret",
     controlPlaneAudience: "https://cp.splitch.test",
@@ -66,4 +68,19 @@ export function routeApp(params: {
     repo: params.repo ?? emptyMembershipRepo,
   });
   return app;
+}
+
+function memorySessionStore(): KVNamespace {
+  const values = new Map<string, string>();
+  return {
+    get: async (key: string) => values.get(key) ?? null,
+    put: async (key: string, value: string) => {
+      values.set(key, value);
+    },
+    delete: async (key: string) => {
+      values.delete(key);
+    },
+    list: async () => ({ keys: [], list_complete: true, cacheStatus: null }),
+    getWithMetadata: async () => ({ value: null, metadata: null, cacheStatus: null }),
+  } as unknown as KVNamespace;
 }

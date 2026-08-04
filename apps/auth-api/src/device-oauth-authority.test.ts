@@ -17,6 +17,7 @@ const exchangeOnlyDeviceFlow = (organizationId?: string): DeviceFlowPort => ({
   },
   exchangeDeviceCode: async () => ({
     userId: "user_device",
+    email: "device@splitch.test",
     organizationId,
     refreshToken: "refresh_selected",
     providerSessionId: "session_selected",
@@ -115,7 +116,11 @@ describe("OAuth device token authority", () => {
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body).toMatchObject({ access_token: "cold-start-token", user_id: "user_device" });
+    expect(body).toMatchObject({
+      access_token: "cold-start-token",
+      user_id: "user_device",
+      email: "device@splitch.test",
+    });
     expect(body).not.toHaveProperty("app_id");
     expect(minted).toEqual([[]]);
     expect(remembered).toEqual([

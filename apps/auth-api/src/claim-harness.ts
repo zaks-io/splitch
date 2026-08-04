@@ -84,6 +84,7 @@ export function setupClaimHarness(): ClaimHarness {
     return makeDoorBDeps(createRepository(local.d1), () => NOW_MS, {
       ...opts,
       tokenSigner: signer,
+      sessionStore: opts?.sessionStore ?? local.sessionKv,
     });
   }
 

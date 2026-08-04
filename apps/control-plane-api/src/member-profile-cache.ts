@@ -1,34 +1,29 @@
+import { memberProfileCacheKey, MemberProfileCacheSchema } from "@splitch/contracts";
 import type { MemberProfileResolver } from "./org-handlers";
 
-const MEMBER_PROFILE_PREFIX = "member-profile:";
+export { memberProfileCacheKey };
 
-interface CachedMemberProfile {
-  email: string;
-}
-
-export function memberProfileCacheKey(userId: string): string {
-  return `${MEMBER_PROFILE_PREFIX}${userId}`;
-}
-
+/**
+ * Resolve Org-member email from the shared SESSION_STORE identity cache.
+ * Auth-api (device flow / claim) and the Control Panel AuthKit callback write
+ * `member-profile:{userId}` at login; this Worker only reads.
+ */
 export function makeSessionCacheMemberProfileResolver(kv: KVNamespace): MemberProfileResolver {
   return async ({ userId }) => {
     const raw = await kv.get(memberProfileCacheKey(userId));
     if (!raw) return null;
 
-    const profile = parseCachedMemberProfile(raw);
+    const profile = MemberProfileCacheSchema.parse(JSON.parse(raw));
     return { email: profile.email };
   };
 }
 
-function parseCachedMemberProfile(raw: string): CachedMemberProfile {
-  const value = JSON.parse(raw) as unknown;
-  if (
-    !value ||
-    typeof value !== "object" ||
-    typeof (value as CachedMemberProfile).email !== "string" ||
-    (value as CachedMemberProfile).email.length === 0
-  ) {
-    throw new Error("member profile cache entry is invalid");
-  }
-  return value as CachedMemberProfile;
+/** Test and writer helper — same key/value shape auth-api persists at login. */
+export async function rememberMemberProfile(
+  kv: KVNamespace,
+  userId: string,
+  email: string,
+): Promise<void> {
+  const profile = MemberProfileCacheSchema.parse({ email });
+  await kv.put(memberProfileCacheKey(userId), JSON.stringify(profile));
 }

@@ -34,6 +34,7 @@ describe("Door A: paused", () => {
       claim: {} as AppDeps["claim"],
       deviceFlow: {} as AppDeps["deviceFlow"],
       deviceRefreshSessions: {} as AppDeps["deviceRefreshSessions"],
+      sessionStore: {} as AppDeps["sessionStore"],
       revocations: {} as AppDeps["revocations"],
     });
 

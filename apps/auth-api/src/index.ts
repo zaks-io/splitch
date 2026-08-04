@@ -121,6 +121,7 @@ const handler = {
         consentBaseUrl,
         defaultResource: controlPlaneAudience,
         now,
+        sessionStore: env.SESSION_STORE,
       },
       workosAccessTokens: workosAccessTokenVerifier(env),
       deviceFlow,
@@ -128,6 +129,7 @@ const handler = {
         cache: env.SESSION_STORE,
         now,
       }),
+      sessionStore: env.SESSION_STORE,
       revocations: makeKvRevocationStore(env.SESSION_STORE),
       smokeClientCredentials: sharedPreviewSmokeClient(env),
     });

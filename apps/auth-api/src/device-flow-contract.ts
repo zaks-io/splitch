@@ -34,6 +34,13 @@ interface RefreshTokenParams {
 export interface DeviceTokenResult {
   userId: string;
   /**
+   * Verified WorkOS email when the provider session carries one. Written into
+   * the shared SESSION_STORE member-profile cache at token mint so Org member
+   * reads resolve without a D1 PII column. Absent only when the provider user
+   * has no email yet (should not happen for device-flow AuthKit sign-ins).
+   */
+  email?: string;
+  /**
    * WorkOS Organization grant when the provider session carries one. Personal
    * AuthKit sign-ins have none; splitch authority always derives from live D1
    * membership keyed by userId, so this is observability-only.

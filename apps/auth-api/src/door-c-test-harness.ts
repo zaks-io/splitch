@@ -47,7 +47,10 @@ export function setupDoorCHarness() {
 
   function buildApp() {
     const repo = createRepository(local.d1);
-    const doorB = makeDoorBDeps(repo, () => NOW_MS, { tokenSigner: signer });
+    const doorB = makeDoorBDeps(repo, () => NOW_MS, {
+      tokenSigner: signer,
+      sessionStore: local.sessionKv,
+    });
     return createApp({
       repo,
       accessSecret: ACCESS_SECRET,
@@ -70,6 +73,7 @@ export function setupDoorCHarness() {
         cache: local.sessionKv,
         now: () => NOW_MS,
       }),
+      sessionStore: local.sessionKv,
       revocations: makeKvRevocationStore(local.sessionKv),
     });
   }

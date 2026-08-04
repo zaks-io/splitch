@@ -68,7 +68,11 @@ function build(opts?: Parameters<typeof makeDoorBDeps>[2]): {
   doorB: DoorBFixtures;
 } {
   const repo = createRepository(local.d1);
-  const doorB = makeDoorBDeps(repo, () => NOW_MS, { ...opts, tokenSigner: signer });
+  const doorB = makeDoorBDeps(repo, () => NOW_MS, {
+    ...opts,
+    tokenSigner: signer,
+    sessionStore: opts?.sessionStore ?? local.sessionKv,
+  });
   const app = createApp({
     repo,
     accessSecret: ACCESS_SECRET,
@@ -80,6 +84,7 @@ function build(opts?: Parameters<typeof makeDoorBDeps>[2]): {
       cache: local.sessionKv,
       now: () => NOW_MS,
     }),
+    sessionStore: local.sessionKv,
     revocations: makeKvRevocationStore(local.sessionKv),
     idJag: {
       repo,

@@ -8,7 +8,7 @@ import {
 } from "./auth-binding.js";
 import { openDeviceApproval } from "./auth-device-approval.js";
 import type { CliCredentialFile, CredentialStore } from "./credentials.js";
-import { isAccessTokenExpired } from "./credentials.js";
+import { isAccessTokenExpired, principalNeedsEmailBackfill } from "./credentials.js";
 import { SplitchCliError } from "./errors.js";
 import { resolveAuthBaseUrl, type SdkFactoryOptions } from "./sdks.js";
 
@@ -77,6 +77,7 @@ interface DeviceTokenBody {
   refresh_token: string;
   expires_in?: number;
   user_id?: string;
+  email?: string;
   app_id?: string;
 }
 
@@ -125,10 +126,19 @@ function buildCredentialFile(body: DeviceTokenBody): CliCredentialFile {
         "Retry splitch login; if it repeats, the auth service is returning a bad token response",
     });
   }
+  if (!body.email || body.email === "unknown") {
+    throw new SplitchCliError({
+      code: "CLI_DEVICE_TOKEN_EXCHANGE_FAILED",
+      causeSummary: "Device token response carried no verified email for the session principal",
+      remediation:
+        "Retry splitch login; if it repeats, the auth service is returning a bad token response",
+    });
+  }
   return {
     version: 1,
     principal: {
       userId: body.user_id,
+      email: body.email,
     },
     credential: {
       type: "device_flow",
@@ -139,6 +149,23 @@ function buildCredentialFile(body: DeviceTokenBody): CliCredentialFile {
       ...(body.app_id ? { selectedAppId: body.app_id } : {}),
     },
   };
+}
+
+/**
+ * Ensure the stored principal carries a real email. Sessions minted before the
+ * auth-api identity-cache write (or files that still hold `"unknown"`) are
+ * backfilled by one refresh grant — the same path that rewrites
+ * member-profile:{userId} server-side.
+ */
+export async function ensurePrincipalEmail(deps: AuthDeps): Promise<CliCredentialFile> {
+  const stored = await deps.credentialStore.load();
+  if (!stored) {
+    throw notAuthenticatedError();
+  }
+  if (!principalNeedsEmailBackfill(stored.principal)) {
+    return stored;
+  }
+  return refreshAccessToken(deps, stored, null, false);
 }
 
 /**
@@ -222,6 +249,7 @@ interface RefreshTokenBody {
   access_token: string;
   refresh_token?: string;
   expires_in?: number;
+  email?: string;
   app_id?: string;
 }
 
@@ -294,8 +322,15 @@ function mintedCredential(
   // not rewrite it, exactly as the server refuses to rewrite the session's
   // selectedAppSelector on a rebind mint.
   const selectedAppId = mint.explicitBinding ? stored.credential.selectedAppId : body.app_id;
+  const email =
+    typeof body.email === "string" && body.email.length > 0 && body.email !== "unknown"
+      ? body.email
+      : stored.principal.email;
   return {
     ...stored,
+    principal: email
+      ? { userId: stored.principal.userId, email }
+      : { userId: stored.principal.userId },
     credential: {
       ...stored.credential,
       accessToken: body.access_token,
