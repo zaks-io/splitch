@@ -73,9 +73,10 @@ function applyContextFields(
     }
     return;
   }
-  // App-scoped routes that still accept an optional Environment filter
-  // (e.g. approval_requests_list) forward scope when the caller set it.
-  if (operationInputHasEnvironmentId(command.operationId)) {
+  // Optional Environment filters (e.g. approval_requests_list) are opt-in via
+  // `--env` only. Config / SPLITCH_ENV must not silently narrow an App-scoped
+  // list — unfiltered means the full App set (SPL-294).
+  if (context.environmentSource === "flag" && operationInputHasEnvironmentId(command.operationId)) {
     input.environmentId = context.environmentId;
   }
 }

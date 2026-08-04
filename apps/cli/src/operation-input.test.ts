@@ -203,7 +203,7 @@ describe("canonical approval input", () => {
         "--env",
         "env_prod",
       ]),
-      { appId: "app_cli", environmentId: "env_prod" },
+      { appId: "app_cli", environmentId: "env_prod", environmentSource: "flag" },
     );
     expect(withEnv).toMatchObject({ appId: "app_cli", environmentId: "env_prod" });
 
@@ -215,12 +215,29 @@ describe("canonical approval input", () => {
     expect(withoutEnv.environmentId).toBeUndefined();
   });
 
+  it("approval-requests list ignores config and SPLITCH_ENV without --env", () => {
+    const command = requireCommand(["approval-requests", "list"]);
+    const fromConfig = buildOperationInput(
+      command,
+      parseInvocation(["approval-requests", "list", "--json", "--app", "app_cli"]),
+      { appId: "app_cli", environmentId: "env_prod", environmentSource: "config" },
+    );
+    expect(fromConfig.environmentId).toBeUndefined();
+
+    const fromSplitchEnv = buildOperationInput(
+      command,
+      parseInvocation(["approval-requests", "list", "--json", "--app", "app_cli"]),
+      { appId: "app_cli", environmentId: "env_prod", environmentSource: "env" },
+    );
+    expect(fromSplitchEnv.environmentId).toBeUndefined();
+  });
+
   it("flags list stays app-scoped and does not forward environmentId", () => {
     const command = requireCommand(["flags", "list"]);
     const input = buildOperationInput(
       command,
       parseInvocation(["flags", "list", "--json", "--app", "app_cli", "--env", "env_prod"]),
-      { appId: "app_cli", environmentId: "env_prod" },
+      { appId: "app_cli", environmentId: "env_prod", environmentSource: "flag" },
     );
     expect(input).toEqual({ appId: "app_cli" });
   });

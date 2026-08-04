@@ -39,7 +39,8 @@ export async function resolveContextSelectors(
   }
 
   const needsEnvResolution =
-    command.needsEnvironment || operationInputHasEnvironmentId(command.operationId);
+    command.needsEnvironment ||
+    (operationInputHasEnvironmentId(command.operationId) && context.environmentSource === "flag");
   if (needsEnvResolution && environmentId && isLiveSelector(context.environmentSource)) {
     if (!appId) {
       throw new SplitchCliError({
