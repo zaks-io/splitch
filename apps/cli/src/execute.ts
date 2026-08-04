@@ -4,9 +4,12 @@ import { findCommand } from "./command-registry.js";
 import {
   assertPathParamsPresent,
   commandUsageLine,
+  conflictingPositionalError,
+  conflictingSuppliedPositional,
   missingPositionalError,
   missingRequiredPositional,
 } from "./command-positionals.js";
+
 import { type ResolvedContext, resolveContext } from "./context.js";
 import { writeCliError } from "./errors.js";
 import { consoleIo, emit } from "./execute-io.js";
@@ -173,11 +176,17 @@ function validateRequiredPositionals(
   invocation: ParsedInvocation,
   io: CliIo,
 ): CliResult | null {
+  const conflict = conflictingSuppliedPositional(command, invocation);
+  if (conflict) {
+    writeCliError(io, conflictingPositionalError(conflict));
+    io.log(`Usage:\n  ${commandUsageLine(command)}`);
+    return { exitCode: EXIT_USAGE };
+  }
   const missing = missingRequiredPositional(command, invocation);
   if (!missing) {
     return null;
   }
-  writeCliError(io, missingPositionalError(command, missing));
+  writeCliError(io, missingPositionalError(missing));
   io.log(`Usage:\n  ${commandUsageLine(command)}`);
   return { exitCode: EXIT_USAGE };
 }

@@ -3,6 +3,7 @@ import { runCli } from "./cli.js";
 import { CLI_COMMANDS, findCommand, type CliCommandDefinition } from "./command-registry.js";
 import {
   commandUsageLine,
+  conflictingSuppliedPositional,
   missingRequiredPositional,
   requiredPositionalSpecs,
   requiredPositionals,
@@ -145,11 +146,12 @@ describe("required positionals (SPL-306)", () => {
       ),
     ).toBeUndefined();
   });
+});
 
-  describe("mixed body-json + argv on multi-positional routes", () => {
-    it.each(
-      MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })),
-    )("first via --body-json plus second via argv succeeds for $path", ({ segments }) => {
+describe("mixed path-param sources on multi-positional routes (SPL-306)", () => {
+  it.each(MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })))(
+    "first via --body-json plus second via argv succeeds for $path",
+    ({ segments }) => {
       const command = requireCommand(segments);
       const specs = requiredPositionalSpecs(command);
       expect(specs.length).toBeGreaterThanOrEqual(2);
@@ -166,6 +168,7 @@ describe("required positionals (SPL-306)", () => {
       ]);
 
       expect(missingRequiredPositional(command, invocation)).toBeUndefined();
+      expect(conflictingSuppliedPositional(command, invocation)).toBeUndefined();
 
       const input = buildOperationInput(command, invocation, {
         appId: "app_1",
@@ -173,11 +176,12 @@ describe("required positionals (SPL-306)", () => {
       });
       expect(input[first.param]).toBe("from_body");
       expect(input[second.param]).toBe("from_argv");
-    });
+    },
+  );
 
-    it.each(
-      MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })),
-    )("first via argv plus second omitted names the second for $path", ({ segments }) => {
+  it.each(MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })))(
+    "first via argv plus second omitted names the second for $path",
+    ({ segments }) => {
       const command = requireCommand(segments);
       const specs = requiredPositionalSpecs(command);
       expect(specs.length).toBeGreaterThanOrEqual(2);
@@ -189,6 +193,57 @@ describe("required positionals (SPL-306)", () => {
       expect(missingRequiredPositional(command, parseInvocation([...segments, "only_first"]))).toBe(
         second.display,
       );
-    });
+    },
+  );
+
+  it.each(MULTI_POSITIONAL_PATHS.map((path) => ({ path: path.join(" "), segments: path })))(
+    "positional colliding with --body-json field is CLI_USAGE_INVALID for $path",
+    ({ segments }) => {
+      const command = requireCommand(segments);
+      const specs = requiredPositionalSpecs(command);
+      const [first, second] = specs;
+      if (!first || !second) {
+        throw new Error(`expected two path params for ${segments.join(" ")}`);
+      }
+
+      const invocation = parseInvocation([
+        ...segments,
+        "--body-json",
+        JSON.stringify({ [first.param]: "from_body" }),
+        "from_argv_first",
+        "from_argv_second",
+      ]);
+
+      expect(conflictingSuppliedPositional(command, invocation)).toBe(first.display);
+      expect(() =>
+        buildOperationInput(command, invocation, { appId: "app_1", environmentId: "env_1" }),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "CLI_USAGE_INVALID",
+          causeSummary: expect.stringContaining(`<${first.display}> was supplied more than once`),
+        }),
+      );
+    },
+  );
+
+  it.each(
+    (["organization-members update", "organization-members remove"] as const).map((path) => ({
+      path,
+      segments: path.split(" ") as [string, string],
+    })),
+  )("--org plus both positionals is CLI_USAGE_INVALID for $path", ({ segments }) => {
+    const command = requireCommand(segments);
+    const specs = requiredPositionalSpecs(command);
+    expect(specs[0]?.param).toBe("orgId");
+
+    const invocation = parseInvocation([...segments, "--org", "org_1", "org_1", "user_1"]);
+
+    expect(conflictingSuppliedPositional(command, invocation)).toBe("org-id");
+    expect(() => buildOperationInput(command, invocation, {})).toThrowError(
+      expect.objectContaining({
+        code: "CLI_USAGE_INVALID",
+        causeSummary: expect.stringContaining("<org-id> was supplied more than once"),
+      }),
+    );
   });
 });

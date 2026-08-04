@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import type { EvaluateContext } from "@splitch/sdk";
 import type { CliCommandDefinition } from "./command-registry.js";
+import {
+  conflictingPositionalError,
+  requiredPositionalSpecs,
+  SCOPE_PATH_PARAMS,
+} from "./command-positionals.js";
 import type { ResolvedContext } from "./context.js";
 import { SplitchCliError } from "./errors.js";
 import {
@@ -92,42 +97,27 @@ function applyPositionalFields(
   invocation: ParsedInvocation,
   input: Record<string, unknown>,
 ): void {
-  const route = getRoute(command.operationId);
-  const pathParams = (
-    route ? [...route.path.matchAll(/:([A-Za-z0-9_]+)/g)].map((m) => m[1]) : []
-  ).filter(
-    (param): param is string =>
-      Boolean(param) &&
-      param !== "appId" &&
-      param !== "environmentId" &&
-      param !== "targetEnvironmentId",
+  // Same rule as missingRequiredPositional: argv fills only slots still empty
+  // after --body-json / --org. Excess argv means a param was supplied twice —
+  // fail loud rather than sliding tokens into the wrong slots (ADR-0036).
+  const specs = requiredPositionalSpecs(command).filter(
+    (spec) => !SCOPE_PATH_PARAMS.has(spec.param),
   );
-
   const alreadyFilled = (param: string): boolean => {
     const existing = input[param];
     return typeof existing === "string" && existing.length > 0;
   };
-
-  const unfilled = pathParams.filter((param) => !alreadyFilled(param));
-  const positionals = invocation.positionals;
-
-  // When --body-json / --org already filled some slots and argv has enough tokens
-  // for the remainder, bind argv only to the empty slots (mixed-source case).
-  // Otherwise keep classic by-index overwrite so an explicit positional still
-  // beats a body value for the same path param.
-  if (unfilled.length > 0 && positionals.length >= unfilled.length) {
-    let positionalIndex = 0;
-    for (const param of unfilled) {
-      input[param] = positionals[positionalIndex];
-      positionalIndex += 1;
-    }
-    return;
+  const unfilled = specs.filter((spec) => !alreadyFilled(spec.param));
+  if (invocation.positionals.length > unfilled.length) {
+    const conflict =
+      specs.find((spec) => alreadyFilled(spec.param))?.display ?? specs[0]?.display ?? "argument";
+    throw conflictingPositionalError(conflict);
   }
-
   let positionalIndex = 0;
-  for (const param of pathParams) {
-    if (positionalIndex < positionals.length) {
-      input[param] = positionals[positionalIndex];
+  for (const spec of unfilled) {
+    const token = invocation.positionals[positionalIndex];
+    if (token) {
+      input[spec.param] = token;
       positionalIndex += 1;
     }
   }

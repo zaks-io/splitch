@@ -4,7 +4,7 @@ import { SplitchCliError } from "./errors.js";
 import type { ParsedInvocation } from "./parse-args.js";
 
 /** Path params filled from `--app` / `--env` context, never as CLI positionals. */
-const SCOPE_PATH_PARAMS = new Set(["appId", "environmentId", "targetEnvironmentId"]);
+export const SCOPE_PATH_PARAMS = new Set(["appId", "environmentId", "targetEnvironmentId"]);
 
 export interface RequiredPositionalSpec {
   /** Control-plane path / input field name, e.g. `experimentId`. */
@@ -81,6 +81,28 @@ export function missingRequiredPositional(
   return undefined;
 }
 
+/**
+ * When argv has more tokens than unfilled path slots, a param was supplied twice
+ * (`--org` / `--body-json` plus a positional). Returns that param's display name.
+ */
+export function conflictingSuppliedPositional(
+  command: CliCommandDefinition,
+  invocation: ParsedInvocation,
+): string | undefined {
+  const specs = requiredPositionalSpecs(command);
+  const body = parseBodyJsonRecord(invocation.flags.bodyJson);
+  const unfilledCount = specs.filter(
+    (spec) => !pathParamAlreadyFilled(spec.param, invocation.flags.org, body),
+  ).length;
+  if (invocation.positionals.length <= unfilledCount) {
+    return undefined;
+  }
+  return (
+    specs.find((spec) => pathParamAlreadyFilled(spec.param, invocation.flags.org, body))?.display ??
+    specs[0]?.display
+  );
+}
+
 /** True when `--org` or a non-empty `--body-json` string already fills this path param. */
 function pathParamAlreadyFilled(
   param: string,
@@ -128,18 +150,23 @@ export function assertPathParamsPresent(
     if (typeof value === "string" && value.length > 0) {
       continue;
     }
-    throw missingPositionalError(command, spec.display);
+    throw missingPositionalError(spec.display);
   }
 }
 
-export function missingPositionalError(
-  _command: CliCommandDefinition,
-  display: string,
-): SplitchCliError {
+export function missingPositionalError(display: string): SplitchCliError {
   return new SplitchCliError({
     code: "CLI_USAGE_INVALID",
     causeSummary: `Missing required argument <${display}>`,
     // Usage is printed as its own block by execute.ts — keep remediation one clause.
     remediation: `Pass <${display}>`,
+  });
+}
+
+export function conflictingPositionalError(display: string): SplitchCliError {
+  return new SplitchCliError({
+    code: "CLI_USAGE_INVALID",
+    causeSummary: `<${display}> was supplied more than once`,
+    remediation: `Pass <${display}> only once (positional or via --org / --body-json)`,
   });
 }
