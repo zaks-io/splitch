@@ -71,13 +71,26 @@ describe("SeenSet: hit / miss within the revalidation window", () => {
     }
   });
 
-  it("a re-set under a NEW runId overwrites the entry (Run boundary re-cache)", () => {
+  it("within-TTL set replaces the fingerprint value but keeps the first-touch runId", () => {
+    // A fresh Exposure slot is written under run-1. A later set for the same
+    // identity within the TTL (the context-miss merge path) updates the cached
+    // Variant but must not pretend a new Run was discovered — verify carries no
+    // runId, and Run-boundary detection is the TTL miss path.
     const seen = new SeenSet();
     seen.set("flag", "run-1", "user", "user-1", EMPTY, arm("a"), T0);
     seen.set("flag", "run-2", "user", "user-1", EMPTY, arm("b"), T0 + 100);
     const lookup = seen.get("flag", "user", "user-1", EMPTY, T0 + 200);
-    expect(lookup.kind === "hit" && lookup.entry.variant).toBe("b");
+    expect(lookup.kind).toBe("hit");
+    if (lookup.kind === "hit") {
+      expect(lookup.entry.variant).toBe("b");
+      expect(lookup.entry.runId).toBe("run-1");
+    }
     expect(seen.size).toBe(1);
+    // A different fingerprint against the same slot still reports the first-touch runId.
+    expect(seen.get("flag", "user", "user-1", { other: true }, T0 + 200)).toEqual({
+      kind: "context-miss",
+      runId: "run-1",
+    });
   });
 });
 

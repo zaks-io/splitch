@@ -40,9 +40,16 @@ empty / omitted attribute map fingerprints as `{}`.
 "user 42" and "workspace 42" are different Entities that may hold different Variants,
 so one must never replay the other's cached value.
 
-The cached value is the WIRE variant of the resolution; a 200 no-match is cached as
-an explicit no-match marker, and a replay re-applies the CURRENT call's Default
-Variant — one call site's local `defaultValue` must never leak into another's result.
+The cached value depends on which path wrote the entry:
+
+- **Exposure-bearing `evaluate` (miss):** the WIRE variant is stored. A 200 no-match
+  (`variant: null`) is cached as an explicit no-match marker, and a `CACHED` replay
+  re-applies the CURRENT call's Default Variant — one call site's local `defaultValue`
+  must never leak into another's result from a wire null.
+- **Context-miss (`verify` re-resolve):** the resolved `details.value` is stored for
+  every non-ERROR reason, including `DEFAULT` and `DISABLED`. A later `CACHED` replay
+  returns that same served value so identical inputs cannot flip between the server
+  result and the caller's `defaultValue`.
 
 `runId` is required in the Exposure key. Without it, a Run-boundary event would be
 incorrectly suppressed:
@@ -65,8 +72,9 @@ arm when attributes change. The seen-set therefore:
    window → `reason: CACHED`, no transport call, no second Exposure.
 2. **Context miss** — same `ExposureKey` still fresh, but `attributesFingerprint`
    differs → re-resolve the Variant through the non-exposing `verify` transport
-   (Client Key and API Key), cache the new value under its fingerprint, and return
-   the live reason (not `CACHED`). No second Exposure-bearing `evaluate`.
+   (Client Key and API Key), cache the resolved `details.value` under its fingerprint
+   (including `DEFAULT` / `DISABLED`; never collapse those to a null marker), and
+   return the live reason (not `CACHED`). No second Exposure-bearing `evaluate`.
 3. **Miss** — never seen, or past the revalidation window → Exposure-bearing
    `evaluate` as today.
 
@@ -104,10 +112,11 @@ of seen-set staleness, and the seen-set is a wire optimization, not the dedup au
 
 ```
 SeenSet config {
-  maxSize:             number    -- LRU capacity for Exposure identities; default 10,000
-  maxValuesPerEntry:   number    -- LRU capacity for attribute fingerprints per identity; default 64
+  maxSize:             number    -- client option; LRU capacity for Exposure identities; default 10,000
+  revalidateMs:        number    -- client option; revalidation window; default 60,000 (see above)
+  maxValuesPerEntry:   number    -- internal constant (not a client option); LRU capacity for
+                                    attribute fingerprints per identity; default 64
   evictionPolicy:      'lru'     -- least-recently-used eviction when at capacity
-  revalidateMs:        number    -- revalidation window; default 60,000 (see above)
 }
 ```
 
@@ -115,7 +124,8 @@ When at Exposure-identity capacity, the oldest identity is evicted. The evicted 
 redundant Exposure on the next `evaluate` call — acceptable, because the pipeline dedup collapses
 it. Within one identity, attribute-fingerprint values are also LRU-capped so high-cardinality
 context churn cannot grow unbounded inside a single TTL window; an evicted fingerprint re-resolves
-via the context-miss path (no second Exposure while the identity is still fresh).
+via the context-miss path (no second Exposure while the identity is still fresh). Exposing
+`maxValuesPerEntry` as a client option is a separate slice; 64 is the shipped internal default.
 
 ## What the seen-set does NOT prevent
 

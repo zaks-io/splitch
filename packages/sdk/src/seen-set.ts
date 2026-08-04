@@ -49,11 +49,12 @@ export const DEFAULT_VALUES_PER_ENTRY = 64;
 export const DEFAULT_REVALIDATE_MS = 60_000;
 
 /**
- * The WIRE resolution of a cached call. `variant: null` records a 200 no-match
- * (reason DEFAULT) — the replay must re-apply the CURRENT call's Default
- * Variant, never a previous caller's, so the caller-supplied default is not
- * stored here. `variantName` rides along because a CACHED replay reports the
- * same arm the live call did; re-deriving it is impossible client-side.
+ * A cached resolution. For an Exposure-bearing evaluate miss, `variant: null`
+ * records a wire 200 no-match so a CACHED replay can re-apply the CURRENT call's
+ * Default Variant. For a context-miss verify result, `variant` is the served
+ * value (including DEFAULT / DISABLED) so identical inputs replay identically.
+ * `variantName` rides along because a CACHED replay reports the same arm the
+ * live call did; re-deriving it is impossible client-side.
  */
 export interface SeenResolution {
   readonly variant: VariantValue | null;
