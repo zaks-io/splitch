@@ -55,7 +55,7 @@ export interface SeenResolution {
   readonly variantName: string | null;
 }
 
-export interface SeenEntry extends SeenResolution {
+interface SeenEntry extends SeenResolution {
   readonly runId: string;
   /** Epoch ms when this entry was written; the TTL is measured from here. */
   readonly storedAt: number;
