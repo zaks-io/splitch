@@ -60,6 +60,17 @@ describe("CreateExperimentRequestSchema (defaultVariantId is Worker-copied)", ()
     void targetingKey;
     expect(CreateExperimentRequestSchema.safeParse(noKey).success).toBe(false);
   });
+
+  it("rejects an unrecognized targetingKeyType and lists the accepted values", () => {
+    const result = CreateExperimentRequestSchema.safeParse({
+      ...validCreateExperiment,
+      targetingKeyType: "bogus",
+    });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]?.path).toEqual(["targetingKeyType"]);
+    expect(result.error.issues[0]?.message).toContain("allowed targetingKeyType values:");
+  });
 });
 
 describe("PatchExperimentRequestSchema", () => {
@@ -91,6 +102,14 @@ describe("PatchExperimentRequestSchema", () => {
 
   it("rejects an unknown field (strict)", () => {
     expect(PatchExperimentRequestSchema.safeParse({ liveRunId: "run_1" }).success).toBe(false);
+  });
+
+  it("rejects an unrecognized targetingKeyType and lists the accepted values", () => {
+    const result = PatchExperimentRequestSchema.safeParse({ targetingKeyType: "bogus" });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues[0]?.path).toEqual(["targetingKeyType"]);
+    expect(result.error.issues[0]?.message).toContain("allowed targetingKeyType values:");
   });
 });
 

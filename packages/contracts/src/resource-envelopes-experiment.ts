@@ -5,6 +5,7 @@ import {
   ApprovalRequestSchema,
   InlineApproveAndApplyReviewSchema,
 } from "./routes/route-shapes-approval-request";
+import { TargetingKeyTypeSchema } from "./targeting-key-type";
 
 /**
  * Create/patch/response wire envelopes for the Experiment and Experiment Run
@@ -42,7 +43,7 @@ export const CreateExperimentRequestSchema = z.object({
   flagId: z.string(),
   // EC field + Entity type bucketed on; inherited by all Runs.
   targetingKey: z.string(),
-  targetingKeyType: z.string(),
+  targetingKeyType: TargetingKeyTypeSchema,
   description: z.string().optional(),
   hypothesis: z.string().optional(),
   confidenceLevel: ExperimentSchema.shape.confidenceLevel.default(0.95),
@@ -78,7 +79,7 @@ export const PatchExperimentRequestSchema = z
     tags: z.array(z.string()).optional(),
     flagId: z.string().optional(),
     targetingKey: z.string().optional(),
-    targetingKeyType: z.string().optional(),
+    targetingKeyType: TargetingKeyTypeSchema.optional(),
     activationMetricId: z.string().nullable().optional(),
     allocation: DraftAllocationSchema.optional(),
     salt: z.string().optional(),

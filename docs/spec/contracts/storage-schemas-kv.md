@@ -96,7 +96,7 @@ non-null.
   environmentId:    string
   flagId:           string
   targetingKey:     string         // Evaluation Context field name to bucket on (e.g. "userId")
-  targetingKeyType: string         // Entity type label stamped as id_type on Exposure (e.g. "user")
+  targetingKeyType: string         // Entity type stamped as id_type on Exposure ('user' | 'session' | 'workspace' at write time)
   status:           'draft' | 'running' | 'ended' | 'archived'   // lifecycle state; reuses the Experiment leaf's ExperimentStatus
   liveRunId:        string | null
 }

@@ -81,31 +81,31 @@ A possible value a Flag can return, referenced by a semantic name.
 
 Test comparing Variants of a Flag to measure their effect on Metrics for a population of Entities. First-class sibling to Flags under an App; controls Flags while running, does not own them.
 
-| Field                | Type                             | Req | Meaning                                                                        |
-| -------------------- | -------------------------------- | --- | ------------------------------------------------------------------------------ |
-| `experiment_id`      | `string` (ULID)                  | ✓   | Internal identifier                                                            |
-| `app_id`             | `string` (ULID)                  | ✓   | Owning App                                                                     |
-| `environment_id`     | `string` (ULID)                  | ✓   | Owning Environment; Experiments are per-Environment (ADR-0027)                 |
-| `flag_id`            | `string` (ULID)                  | ✓   | The single controlled Flag                                                     |
-| `name`               | `string`                         | ✓   | Display name                                                                   |
-| `description`        | `string`                         | ✗   | Non-material                                                                   |
-| `hypothesis`         | `string`                         | ✗   | Formal expected-effect statement                                               |
-| `targeting_key_type` | `string`                         | ✓   | Entity type name the Targeting Key identifies (e.g. `"user"`, `"workspace"`)   |
-| `status`             | `ExperimentStatus`               | ✓   | See Run lifecycle spec                                                         |
-| `live_run_id`        | `string \| null`                 | ✓   | The Experiment Run currently serving Entities; null when no Start has occurred |
-| `confidence_level`   | `number`                         | ✓   | Default `0.95`; per-Experiment                                                 |
-| `metrics`            | `ExperimentMetric[]`             | ✓   | Goal, guardrail, and secondary Metrics                                         |
-| `activation_metric`  | `ActivationMetricConfig \| null` | ✗   | Gate config; when set, freezes per Run                                         |
-| `dimensions`         | `string[]`                       | ✗   | Attribute names used to slice results                                          |
-| `owner`              | `string`                         | ✗   | Non-material                                                                   |
-| `tags`               | `string[]`                       | ✗   | Non-material                                                                   |
-| `created_at`         | `timestamp`                      | ✓   | ISO 8601 UTC                                                                   |
+| Field                | Type                             | Req | Meaning                                                                                       |
+| -------------------- | -------------------------------- | --- | --------------------------------------------------------------------------------------------- |
+| `experiment_id`      | `string` (ULID)                  | ✓   | Internal identifier                                                                           |
+| `app_id`             | `string` (ULID)                  | ✓   | Owning App                                                                                    |
+| `environment_id`     | `string` (ULID)                  | ✓   | Owning Environment; Experiments are per-Environment (ADR-0027)                                |
+| `flag_id`            | `string` (ULID)                  | ✓   | The single controlled Flag                                                                    |
+| `name`               | `string`                         | ✓   | Display name                                                                                  |
+| `description`        | `string`                         | ✗   | Non-material                                                                                  |
+| `hypothesis`         | `string`                         | ✗   | Formal expected-effect statement                                                              |
+| `targeting_key_type` | `TargetingKeyType`               | ✓   | Entity type the Targeting Key identifies (`'user' \| 'session' \| 'workspace'` at write time) |
+| `status`             | `ExperimentStatus`               | ✓   | See Run lifecycle spec                                                                        |
+| `live_run_id`        | `string \| null`                 | ✓   | The Experiment Run currently serving Entities; null when no Start has occurred                |
+| `confidence_level`   | `number`                         | ✓   | Default `0.95`; per-Experiment                                                                |
+| `metrics`            | `ExperimentMetric[]`             | ✓   | Goal, guardrail, and secondary Metrics                                                        |
+| `activation_metric`  | `ActivationMetricConfig \| null` | ✗   | Gate config; when set, freezes per Run                                                        |
+| `dimensions`         | `string[]`                       | ✗   | Attribute names used to slice results                                                         |
+| `owner`              | `string`                         | ✗   | Non-material                                                                                  |
+| `tags`               | `string[]`                       | ✗   | Non-material                                                                                  |
+| `created_at`         | `timestamp`                      | ✓   | ISO 8601 UTC                                                                                  |
 
 **Experiment constraint:** exactly one Flag per Experiment. The schema uses a single `flag_id` field. A multi-Flag extension adds a `flag_ids: string[]`, but implementations must not assume it.
 
 ## Entity
 
-The randomization unit — what the Targeting Key identifies. Not a persisted entity; it is what the Targeting Key represents at runtime (user, session, workspace, etc.).
+The randomization unit — what the Targeting Key identifies. Not a persisted entity; it is what the Targeting Key represents at runtime. The accepted Entity types are `'user'`, `'session'`, and `'workspace'`.
 
 The term "Entity" names the **concept**: an App may experiment on multiple Entity types (identified by `targeting_key_type` on Experiment). There is no separate `Entity` table — Entities appear as `targeting_key_hash` values in Exposure and Assignment Store records.
 

@@ -16,37 +16,37 @@ No table has RLS — app_id scoping is enforced by the Worker data-access layer 
 
 ### `experiments`
 
-| Column                  | Type        | Constraints                                                                                                                                           |
-| ----------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                    | text        | PK                                                                                                                                                    |
-| `app_id`                | text        | FK → apps, not null                                                                                                                                   |
-| `environment_id`        | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027)                                                                                       |
-| `key`                   | text        | not null, unique per `(app_id, environment_id)`                                                                                                       |
-| `flag_id`               | text        | FK → flags, not null                                                                                                                                  |
-| `name`                  | text        | not null                                                                                                                                              |
-| `description`           | text        | nullable                                                                                                                                              |
-| `hypothesis`            | text        | nullable                                                                                                                                              |
-| `owner`                 | text        | nullable; non-material Experiment owner label                                                                                                         |
-| `tags`                  | text        | not null, default `[]` (JSON string array); non-material                                                                                              |
-| `status`                | text        | not null, default `'draft'`                                                                                                                           |
-| `targeting_key_field`   | text        | not null; Evaluation Context **field name** read as the Targeting Key (e.g. `"userId"`)                                                               |
-| `targeting_key_type`    | text        | not null; **Entity type label** the key identifies (e.g. `"user"`); stamped as `id_type` on every Exposure row and validated against inbound requests |
-| `confidence_level`      | real        | not null, default 0.95                                                                                                                                |
-| `default_variant_id`    | text        | FK → variants                                                                                                                                         |
-| `metrics`               | text        | not null (JSON array of MetricRef)                                                                                                                    |
-| `guardrail_metrics`     | text        | not null (JSON array of MetricRef)                                                                                                                    |
-| `activation_metric_id`  | text        | nullable, FK → metrics                                                                                                                                |
-| `conversion_window_ms`  | integer     | not null, default 0                                                                                                                                   |
-| `dimensions`            | text        | not null (JSON string array)                                                                                                                          |
-| `draft_allocation`      | text        | nullable (JSON `{ [variantName]: number }`); staged allocation for the next Run                                                                       |
-| `draft_salt`            | text        | nullable; optional salt override staged for the next Run                                                                                              |
-| `draft_targeting_rules` | text        | nullable (JSON `TargetingRule[]`); staged targeting for the next Run                                                                                  |
-| `draft_segment_ids`     | text        | nullable (JSON string array); staged Segments to resolve into rules at Start                                                                          |
-| `live_run_id`           | text        | nullable, FK → runs                                                                                                                                   |
-| `created_at`            | timestamptz | not null                                                                                                                                              |
-| `updated_at`            | timestamptz | not null                                                                                                                                              |
-| `created_by`            | text        | WorkOS user ID or deleted-user tombstone                                                                                                              |
-| `updated_by`            | text        | WorkOS user ID or deleted-user tombstone                                                                                                              |
+| Column                  | Type        | Constraints                                                                                                                                                                            |
+| ----------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                    | text        | PK                                                                                                                                                                                     |
+| `app_id`                | text        | FK → apps, not null                                                                                                                                                                    |
+| `environment_id`        | text        | FK → environments, not null (co-scoped with `app_id`, ADR-0027)                                                                                                                        |
+| `key`                   | text        | not null, unique per `(app_id, environment_id)`                                                                                                                                        |
+| `flag_id`               | text        | FK → flags, not null                                                                                                                                                                   |
+| `name`                  | text        | not null                                                                                                                                                                               |
+| `description`           | text        | nullable                                                                                                                                                                               |
+| `hypothesis`            | text        | nullable                                                                                                                                                                               |
+| `owner`                 | text        | nullable; non-material Experiment owner label                                                                                                                                          |
+| `tags`                  | text        | not null, default `[]` (JSON string array); non-material                                                                                                                               |
+| `status`                | text        | not null, default `'draft'`                                                                                                                                                            |
+| `targeting_key_field`   | text        | not null; Evaluation Context **field name** read as the Targeting Key (e.g. `"userId"`)                                                                                                |
+| `targeting_key_type`    | text        | not null; **Entity type** the key identifies (`'user' \| 'session' \| 'workspace'` at create/patch); stamped as `id_type` on every Exposure row and validated against inbound requests |
+| `confidence_level`      | real        | not null, default 0.95                                                                                                                                                                 |
+| `default_variant_id`    | text        | FK → variants                                                                                                                                                                          |
+| `metrics`               | text        | not null (JSON array of MetricRef)                                                                                                                                                     |
+| `guardrail_metrics`     | text        | not null (JSON array of MetricRef)                                                                                                                                                     |
+| `activation_metric_id`  | text        | nullable, FK → metrics                                                                                                                                                                 |
+| `conversion_window_ms`  | integer     | not null, default 0                                                                                                                                                                    |
+| `dimensions`            | text        | not null (JSON string array)                                                                                                                                                           |
+| `draft_allocation`      | text        | nullable (JSON `{ [variantName]: number }`); staged allocation for the next Run                                                                                                        |
+| `draft_salt`            | text        | nullable; optional salt override staged for the next Run                                                                                                                               |
+| `draft_targeting_rules` | text        | nullable (JSON `TargetingRule[]`); staged targeting for the next Run                                                                                                                   |
+| `draft_segment_ids`     | text        | nullable (JSON string array); staged Segments to resolve into rules at Start                                                                                                           |
+| `live_run_id`           | text        | nullable, FK → runs                                                                                                                                                                    |
+| `created_at`            | timestamptz | not null                                                                                                                                                                               |
+| `updated_at`            | timestamptz | not null                                                                                                                                                                               |
+| `created_by`            | text        | WorkOS user ID or deleted-user tombstone                                                                                                                                               |
+| `updated_by`            | text        | WorkOS user ID or deleted-user tombstone                                                                                                                                               |
 
 The `draft_*` columns are the **staging area for the next Run** (run-state-machine: "Assignment edits
 accumulate on the draft; Start is the single reset point"). Assignment-affecting PATCHes write here;
