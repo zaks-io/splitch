@@ -79,6 +79,9 @@ function recoverySteps(
   if (isApprovalRecoveryAction(action)) {
     return approvalRecoverySteps(action, details);
   }
+  if (action === "CHOOSE_DIFFERENT_SLUG" || action === "CHOOSE_DIFFERENT_KEY") {
+    return chooseDifferentSteps(action, details);
+  }
 
   switch (action) {
     case "CREATE_NEW_RUN":
@@ -133,18 +136,6 @@ function recoverySteps(
         ),
       ];
     }
-    case "CHOOSE_DIFFERENT_SLUG": {
-      const taken =
-        typeof details.conflictingSlug === "string"
-          ? `"${details.conflictingSlug}"`
-          : "<conflictingSlug>";
-      return [
-        message(
-          "assistant",
-          `The URL handle ${taken} is already taken. Resend the same call with a different "slug". No different tool is required.`,
-        ),
-      ];
-    }
     case "READ_PER_ENVIRONMENT": {
       const environments =
         typeof details.environments === "number" ? details.environments : "<environments>";
@@ -165,6 +156,35 @@ function recoverySteps(
       ];
     }
   }
+}
+
+function chooseDifferentSteps(
+  action: "CHOOSE_DIFFERENT_SLUG" | "CHOOSE_DIFFERENT_KEY",
+  details: Record<string, unknown>,
+): readonly McpPromptMessage[] {
+  if (action === "CHOOSE_DIFFERENT_SLUG") {
+    const taken =
+      typeof details.conflictingSlug === "string"
+        ? `"${details.conflictingSlug}"`
+        : "<conflictingSlug>";
+    return [
+      message(
+        "assistant",
+        `The URL handle ${taken} is already taken. Resend the same call with a different "slug". No different tool is required.`,
+      ),
+    ];
+  }
+  const key = typeof details.key === "string" ? `"${details.key}"` : "<key>";
+  const archivedId =
+    typeof details.archivedExperimentId === "string"
+      ? details.archivedExperimentId
+      : "<archivedExperimentId>";
+  return [
+    message(
+      "assistant",
+      `Key ${key} is still held by archived Experiment ${archivedId}. Resend experiments_create with a different "key". Keys are not freed on archive.`,
+    ),
+  ];
 }
 
 function approvalRecoverySteps(

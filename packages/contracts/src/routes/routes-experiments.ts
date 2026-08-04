@@ -75,6 +75,7 @@ export const experimentRoutes = [
       "APP_NOT_FOUND",
       "FLAG_NOT_FOUND",
       "VARIANT_NOT_AVAILABLE",
+      "EXPERIMENT_KEY_CONFLICT",
       "FORBIDDEN",
       "VALIDATION_ERROR",
     ],

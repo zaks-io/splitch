@@ -2,7 +2,11 @@ import { type EnvScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
-import { experimentDeleteConflict, experimentNotFound } from "./experiment-errors";
+import {
+  experimentDeleteConflict,
+  experimentKeyConflict,
+  experimentNotFound,
+} from "./experiment-errors";
 import {
   draftPatch,
   type ExperimentDeps,
@@ -54,6 +58,12 @@ async function createExperiment(
   const body = objectBody(input);
   const writeError = await requireWritableEnvironment(deps, scope, principal, requestId);
   if (writeError) return writeError;
+
+  const key = body.key as string;
+  const existingKey = await deps.repo.experiments.findExperimentByKey(scope, key);
+  if (existingKey?.status === "archived") {
+    return experimentKeyConflict(key, existingKey.id, requestId);
+  }
 
   const ready = await validateCreateExperiment(deps, scope, body, requestId);
   if (!ready.ok) return ready.response;
@@ -175,11 +185,11 @@ async function deleteExperiment(
     pathParam(args.input, "experimentId"),
   );
   if (!experiment) return experimentNotFound(args.requestId);
+  const writeError = await requireWritableEnvironment(deps, scope, args.principal, args.requestId);
+  if (writeError) return writeError;
   if (experiment.status === "archived") {
     return Response.json({ deleted: true });
   }
-  const writeError = await requireWritableEnvironment(deps, scope, args.principal, args.requestId);
-  if (writeError) return writeError;
   const runningRun = await runningRunForExperiment(deps.repo, scope, experiment);
   if (runningRun) {
     return runningExperimentError(
@@ -192,11 +202,10 @@ async function deleteExperiment(
   // report `{ deleted: true }` while the Experiment remains non-archived. If
   // live_run_id / a running Run exists at commit time, D1 applies zero changes
   // and we fail closed with EXPERIMENT_RUNNING. Run rows are retained.
-  const archived = await deps.repo.experiments.archiveExperiment(
-    scope,
-    experiment.id,
-    nowIso(deps),
-  );
+  const archived = await deps.repo.experiments.archiveExperiment(scope, experiment.id, {
+    updatedAt: nowIso(deps),
+    updatedBy: args.principal.id,
+  });
   if (archived === 0) {
     return resolveArchiveRace(deps, scope, experiment.id, args.requestId);
   }

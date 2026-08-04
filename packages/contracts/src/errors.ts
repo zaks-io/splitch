@@ -30,6 +30,7 @@ export const recommendedActions = [
   "REFRESH_AND_REPROPOSE",
   "RETRY_REVIEW",
   "CHOOSE_DIFFERENT_SLUG",
+  "CHOOSE_DIFFERENT_KEY",
   "READ_PER_ENVIRONMENT",
 ] as const;
 
@@ -195,6 +196,16 @@ const errorMembers = [
       // A slug collision has exactly one remedy. The open enum would let an
       // unrelated action typecheck here and send a caller somewhere useless.
       recommendedAction: z.literal("CHOOSE_DIFFERENT_SLUG"),
+    }),
+  ),
+  // An archived Experiment still holds `(app, env, key)`. Naming its id is safe:
+  // the caller already has Environment write scope and owned the archived row.
+  member(
+    "EXPERIMENT_KEY_CONFLICT",
+    z.object({
+      key: z.string(),
+      archivedExperimentId: z.string(),
+      recommendedAction: z.literal("CHOOSE_DIFFERENT_KEY"),
     }),
   ),
 

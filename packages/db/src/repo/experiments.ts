@@ -1,6 +1,10 @@
 import { and, eq, isNull, ne } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index";
 import type { Db } from "./client";
+import {
+  makePurgeArchivedExperimentsForFlag,
+  makePurgeArchivedExperimentsInEnvironment,
+} from "./experiment-archive-purge";
 import { makeEndRun } from "./experiment-end-run";
 import { makeStartRun } from "./experiment-start-run";
 import { assertMintedScope, type EnvScope, type TenantScope } from "./scope";
@@ -31,11 +35,14 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
   const startRun = makeStartRun(d1, experimentsTable, runsTable);
   const endRun = makeEndRun(d1, experimentsTable, runsTable);
   const archiveExperiment = makeArchiveExperiment(d1);
+  const purgeArchivedExperimentsInEnvironment = makePurgeArchivedExperimentsInEnvironment(d1);
+  const purgeArchivedExperimentsForFlag = makePurgeArchivedExperimentsForFlag(d1);
   const findRunningExperimentsForFlag = (scope: EnvScope, flagId: string) =>
     experimentsTable.findMany(
       scope,
       and(eq(experiments.flagId, flagId), eq(experiments.status, "running")),
     );
+  const lookups = makeExperimentLookups(experimentsTable);
 
   return {
     experiments: experimentsTable,
@@ -44,67 +51,17 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
     runs: runsWithoutUpdate,
     metrics: metricsTable,
 
-    getExperiment: makeGetExperiment(experimentsTable),
-    /** Includes archived rows — delete idempotency and retention-aware callers. */
-    peekExperiment: (scope: EnvScope, experimentId: string) =>
-      experimentsTable.findOne(scope, eq(experiments.id, experimentId)),
-    listExperiments: (scope: EnvScope) =>
-      experimentsTable.findMany(scope, ne(experiments.status, ARCHIVED)),
+    ...lookups,
 
     /**
      * Compare-and-set on `liveRunId`, the same token `startRun` and `endRun`
-     * guard on. A caller reads the Experiment, decides which fields it may
-     * write against the Run that read showed, and then passes that Run id back
-     * here; the UPDATE matches no row if a Run started or ended in between.
-     *
-     * Without it a PATCH decided while the Experiment was a draft could land on
-     * a row that a Run has since frozen, re-bucketing a live sample. ADR-0002
-     * makes that impossible by construction, and this is the write-path half of
-     * "by construction".
-     * `expectedLiveRunId` is required, not optional, so no caller can skip the
-     * check by forgetting it. A `null` result means either "no such Experiment"
-     * or "lost the race" — the caller re-reads to tell them apart.
+     * guard on. See `makeUpdateExperiment`.
      */
-    updateExperiment(
-      scope: EnvScope,
-      experimentId: string,
-      patch: Partial<
-        Pick<
-          typeof experiments.$inferInsert,
-          | "key"
-          | "flagId"
-          | "name"
-          | "description"
-          | "hypothesis"
-          | "owner"
-          | "tags"
-          | "status"
-          | "targetingKeyField"
-          | "targetingKeyType"
-          | "confidenceLevel"
-          | "defaultVariantId"
-          | "metrics"
-          | "guardrailMetrics"
-          | "activationMetricId"
-          | "conversionWindowMs"
-          | "dimensions"
-          | "draftAllocation"
-          | "draftSalt"
-          | "draftTargetingRules"
-          | "draftSegmentIds"
-          | "liveRunId"
-          | "updatedAt"
-          | "updatedBy"
-        >
-      >,
-      expectedLiveRunId: string | null,
-    ): Promise<typeof experiments.$inferSelect | null> {
-      return experimentsTable
-        .update(scope, patch, and(eq(experiments.id, experimentId), liveRunIdIs(expectedLiveRunId)))
-        .then((rows) => rows[0] ?? null);
-    },
+    updateExperiment: makeUpdateExperiment(experimentsTable),
 
     archiveExperiment,
+    purgeArchivedExperimentsInEnvironment,
+    purgeArchivedExperimentsForFlag,
 
     findRunningExperimentsForFlag,
 
@@ -222,6 +179,73 @@ function liveRunIdIs(expected: string | null) {
 
 type ExperimentsTable = ReturnType<typeof scopedTable<typeof experiments>>;
 
+type ExperimentUpdatePatch = Partial<
+  Pick<
+    typeof experiments.$inferInsert,
+    | "key"
+    | "flagId"
+    | "name"
+    | "description"
+    | "hypothesis"
+    | "owner"
+    | "tags"
+    | "status"
+    | "targetingKeyField"
+    | "targetingKeyType"
+    | "confidenceLevel"
+    | "defaultVariantId"
+    | "metrics"
+    | "guardrailMetrics"
+    | "activationMetricId"
+    | "conversionWindowMs"
+    | "dimensions"
+    | "draftAllocation"
+    | "draftSalt"
+    | "draftTargetingRules"
+    | "draftSegmentIds"
+    | "liveRunId"
+    | "updatedAt"
+    | "updatedBy"
+  >
+>;
+
+/**
+ * Compare-and-set on `liveRunId`, the same token `startRun` and `endRun` guard
+ * on. A caller reads the Experiment, decides which fields it may write against
+ * the Run that read showed, and then passes that Run id back here; the UPDATE
+ * matches no row if a Run started or ended in between.
+ *
+ * Without it a PATCH decided while the Experiment was a draft could land on a
+ * row that a Run has since frozen, re-bucketing a live sample. ADR-0002 makes
+ * that impossible by construction, and this is the write-path half of "by
+ * construction". `expectedLiveRunId` is required, not optional, so no caller
+ * can skip the check by forgetting it. A `null` result means either "no such
+ * Experiment" or "lost the race" — the caller re-reads to tell them apart.
+ */
+function makeUpdateExperiment(table: ExperimentsTable) {
+  return (
+    scope: EnvScope,
+    experimentId: string,
+    patch: ExperimentUpdatePatch,
+    expectedLiveRunId: string | null,
+  ): Promise<typeof experiments.$inferSelect | null> =>
+    table
+      .update(scope, patch, and(eq(experiments.id, experimentId), liveRunIdIs(expectedLiveRunId)))
+      .then((rows) => rows[0] ?? null);
+}
+
+function makeExperimentLookups(table: ExperimentsTable) {
+  return {
+    getExperiment: makeGetExperiment(table),
+    /** Includes archived rows — delete idempotency and retention-aware callers. */
+    peekExperiment: (scope: EnvScope, experimentId: string) =>
+      table.findOne(scope, eq(experiments.id, experimentId)),
+    findExperimentByKey: (scope: EnvScope, key: string) =>
+      table.findOne(scope, eq(experiments.key, key)),
+    listExperiments: (scope: EnvScope) => table.findMany(scope, ne(experiments.status, ARCHIVED)),
+  };
+}
+
 /** Default get hides archived rows (soft-delete list/read surfaces). */
 function makeGetExperiment(table: ExperimentsTable) {
   return async (scope: EnvScope, experimentId: string) => {
@@ -243,13 +267,13 @@ function makeArchiveExperiment(d1: D1Database) {
   return async function archiveExperiment(
     scope: EnvScope,
     experimentId: string,
-    updatedAt: string,
+    audit: { updatedAt: string; updatedBy: string },
   ): Promise<number> {
     assertMintedScope(scope);
     const result = await d1
       .prepare(
         `UPDATE experiments
-         SET status = 'archived', live_run_id = NULL, updated_at = ?
+         SET status = 'archived', live_run_id = NULL, updated_at = ?, updated_by = ?
          WHERE app_id = ? AND environment_id = ? AND id = ?
            AND live_run_id IS NULL
            AND status != 'archived'
@@ -261,7 +285,8 @@ function makeArchiveExperiment(d1: D1Database) {
          RETURNING id`,
       )
       .bind(
-        updatedAt,
+        audit.updatedAt,
+        audit.updatedBy,
         scope.appId,
         scope.environmentId,
         experimentId,

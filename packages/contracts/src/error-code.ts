@@ -20,6 +20,7 @@ export const errorCodes = [
 
   // Uniqueness
   "SLUG_CONFLICT",
+  "EXPERIMENT_KEY_CONFLICT",
 
   // Not found
   "EXPERIMENT_NOT_FOUND",

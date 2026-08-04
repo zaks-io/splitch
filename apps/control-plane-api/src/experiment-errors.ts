@@ -7,6 +7,25 @@ export function experimentNotFound(requestId: string): Response {
   );
 }
 
+export function experimentKeyConflict(
+  key: string,
+  archivedExperimentId: string,
+  requestId: string,
+): Response {
+  return renderError(
+    {
+      code: "EXPERIMENT_KEY_CONFLICT",
+      message: "an archived Experiment already holds this key in this Environment",
+      details: {
+        key,
+        archivedExperimentId,
+        recommendedAction: "CHOOSE_DIFFERENT_KEY",
+      },
+    },
+    { requestId },
+  );
+}
+
 export function runNotFound(requestId: string): Response {
   return renderError(
     { code: "RUN_NOT_FOUND", message: "Run not found", details: {} },

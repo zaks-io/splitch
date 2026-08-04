@@ -1,5 +1,5 @@
 import { deriveSlug } from "@splitch/contracts";
-import { appScope } from "@splitch/db";
+import { appScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
 import { deleteEnvironmentCredentials } from "./app-environment-credentials";
@@ -167,6 +167,7 @@ async function deleteAppRows(
   const scope = appScope(appId);
   for (const env of environments) {
     await deleteEnvironmentCredentials(deps, appId, env.id);
+    await deps.repo.experiments.purgeArchivedExperimentsInEnvironment(envScope(appId, env.id));
     if ((await deps.repo.identity.deleteEnvironment(scope, env.id)) !== 1) {
       throw new Error("environment delete did not reach D1");
     }

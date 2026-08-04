@@ -88,6 +88,14 @@ export async function deleteFlagD1Cascade(
 ): Promise<void> {
   const scope = appScope(appId);
   const environments = await deps.repo.identity.listEnvironments(scope);
+  // Archived Experiments retain flag_id; purge them (and their Runs) before the
+  // Flag row delete so the FK does not 500 the cascade.
+  for (const environment of environments) {
+    await deps.repo.experiments.purgeArchivedExperimentsForFlag(
+      envScope(appId, environment.id),
+      flagId,
+    );
+  }
   await deps.repo.flags.deleteFlagCascade(
     scope,
     flagId,

@@ -43,6 +43,10 @@ Status is always `draft` on creation; no Run yet.
 `environment_id` (ADR-0028). A Variant not promoted into this Environment is rejected with
 `VARIANT_NOT_AVAILABLE` — a Run cannot test a Variant that cannot be served here.
 
+`(app_id, environment_id, key)` stays unique including archived rows. Creating a draft whose key is
+still held by an archived Experiment returns `409 EXPERIMENT_KEY_CONFLICT` with
+`details.archivedExperimentId` (keys are not freed or renamed on archive).
+
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}`
 
 Returns: Experiment including `live_run_id` (null if no running Run), draft allocation, draft targeting.
@@ -160,10 +164,13 @@ canonical in [../contracts/error-responses.md](../contracts/error-responses.md#a
 ### `DELETE /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}`
 
 Blocked if a Run is `running` (`EXPERIMENT_RUNNING`). Otherwise soft-deletes: sets
-`status = archived`, clears `live_run_id`, and retains the Experiment row and every Run row for
-analysis replayability. Archived Experiments are omitted from default list/get surfaces (GET returns
-`EXPERIMENT_NOT_FOUND`). Repeat DELETE of an already-archived Experiment is a no-op success
-(`{ deleted: true }`). Hard-delete / purge of archived Experiments and their Runs is future work.
+`status = archived`, clears `live_run_id`, and retains the Experiment row and every Run row in D1.
+Archived Experiments are omitted from default list/get surfaces (GET returns `EXPERIMENT_NOT_FOUND`).
+Repeat DELETE of an already-archived Experiment is a no-op success (`{ deleted: true }`) after
+authz. Retention is storage-internal for analysis joins (Tinybird / warehouse keys); there is no
+control-plane list of archived Experiments or their Runs in this surface. `GET …/runs/{run_id}` by
+id remains readable. Parent teardown (Flag / Environment / App delete) hard-deletes archived
+Experiments and their Runs as part of the cascade once no non-archived Experiment remains.
 
 ## Experiment Run endpoints
 

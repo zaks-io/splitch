@@ -142,8 +142,9 @@ Auth: App `owner` or `admin`.
 ### `DELETE /apps/{app_id}`
 
 Blocked if any Experiment has `status = running` in any Environment. Returns `EXPERIMENT_RUNNING`.
-Also blocked with `RESOURCE_NOT_EMPTY` while non-credential child resources remain, until a full
-cascade/tombstone delete path is implemented.
+Also blocked with `RESOURCE_NOT_EMPTY` while non-credential child resources remain, including
+non-archived Experiments. Archived Experiments (and their Runs) are hard-purged as part of App /
+Environment teardown once only archived rows remain.
 Auth: App `owner`.
 Account-closure privacy deletion is the only exception; see
 [endpoints-privacy-data.md](endpoints-privacy-data.md).
@@ -181,7 +182,8 @@ Auth: App `owner` or `admin`.
 ### `DELETE /apps/{app_id}/envs/{environment_id}`
 
 Blocked if any Experiment is `running` in this Environment, if it is the last Environment, or if
-non-credential child resources remain.
+non-credential child resources remain (non-archived Experiments count; archived Experiments and
+their Runs are hard-purged on teardown).
 Auth: App `owner`.
 
 ## Sources

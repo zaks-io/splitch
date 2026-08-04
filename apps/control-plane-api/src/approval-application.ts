@@ -1,5 +1,5 @@
 import type { ApprovalRequest } from "@splitch/contracts";
-import { type ApprovalCommit, appScope, type Repository } from "@splitch/db";
+import { type ApprovalCommit, appScope, envScope, type Repository } from "@splitch/db";
 import { applyExperimentStart } from "./approval-application-experiment-start";
 import type { ApplicationOutcome } from "./approval-service-types";
 import type { ConfigStoreAccess } from "./config-store-do";
@@ -208,6 +208,12 @@ async function applyFlagDelete(
     return { ok: false as const, error: { code: "FLAG_NOT_FOUND" as const, details: {} } };
   }
   const environments = await deps.repo.identity.listEnvironments(appScope(request.appId));
+  for (const environment of environments) {
+    await deps.repo.experiments.purgeArchivedExperimentsForFlag(
+      envScope(request.appId, environment.id),
+      flagId,
+    );
+  }
   const deleted = await deps.repo.flags.deleteFlagCascade(
     appScope(request.appId),
     flagId,

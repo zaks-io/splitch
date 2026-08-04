@@ -93,9 +93,11 @@ export async function runningSegmentReference(
   segmentId: string,
 ): Promise<RunningBlocker | null> {
   // Segment references live ONLY on draft experiments (Start NULLs
-  // `draftSegmentIds`), so scanning running experiments alone never matches —
-  // scan every experiment so a draft's Segment cannot be deleted out from under
-  // it (which would silently widen the audience at Start).
+  // `draftSegmentIds`), so scanning running experiments alone never matches.
+  // listExperiments omits archived rows: archived Experiments do not block
+  // Segment delete (retention is storage-internal). Drafts and any Experiment
+  // that still surfaces on the list do block, so a draft's Segment cannot be
+  // deleted out from under it (which would silently widen the audience at Start).
   return anyReference(deps, appId, (experiment) =>
     jsonArray(experiment.draftSegmentIds).includes(segmentId),
   );

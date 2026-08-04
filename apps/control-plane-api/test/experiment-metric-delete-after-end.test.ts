@@ -5,8 +5,8 @@ import {
   type ExperimentRunHarness,
   experimentFixture,
   makeExperimentRunHarness,
-  startExperiment,
   type StartResponse,
+  startExperiment,
 } from "../src/experiment-run-test-fixture";
 import { errorBody, request } from "../src/flag-definition-test-harness";
 import { makePoolBindings as makeLocalBindings } from "./pool-bindings";

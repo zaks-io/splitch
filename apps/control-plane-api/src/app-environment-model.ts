@@ -168,11 +168,34 @@ export async function deleteEnvironmentBlockedByChildren(
   requestId: string,
 ): Promise<Response | null> {
   const scope = envScope(appId, environmentId);
+  const experimentRows = await deps.repo.experiments.experiments.findMany(scope);
+  const activeExperiments = experimentRows.filter((row) => row.status !== "archived");
+  if (activeExperiments.length > 0) {
+    return resourceNotEmpty(
+      "environment",
+      environmentId,
+      "experiments",
+      activeExperiments.length,
+      attemptedOp,
+      requestId,
+    );
+  }
+  const activeExperimentIds = new Set(activeExperiments.map((row) => row.id));
+  const runRows = await deps.repo.experiments.runs.findMany(scope);
+  const blockingRuns = runRows.filter((run) => activeExperimentIds.has(run.experimentId));
+  if (blockingRuns.length > 0) {
+    return resourceNotEmpty(
+      "environment",
+      environmentId,
+      "runs",
+      blockingRuns.length,
+      attemptedOp,
+      requestId,
+    );
+  }
   for (const check of [
     ["flag_configs", deps.repo.flags.flagConfigs.findMany(scope)],
     ["targeting_rules", deps.repo.flags.targetingRules.findMany(scope)],
-    ["experiments", deps.repo.experiments.experiments.findMany(scope)],
-    ["runs", deps.repo.experiments.runs.findMany(scope)],
   ] as const) {
     const [childType, rows] = check;
     const childCount = (await rows).length;
