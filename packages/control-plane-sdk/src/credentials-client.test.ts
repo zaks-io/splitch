@@ -15,7 +15,7 @@ const apiKeyMetadata = {
   keyId: "key_ci",
   appId: "app_checkout",
   environmentId: "env_staging",
-  scopes: ["flags:read"],
+  scopes: ["data-plane:evaluate"],
   createdAt: "2026-07-18T00:00:00.000Z",
 };
 
@@ -136,11 +136,11 @@ describe("control plane sdk API Key operations", () => {
     const result = await sdk.credentials.apiKeys.create({
       appId: "app_checkout",
       environmentId: "env_staging",
-      scopes: ["flags:read"],
+      scopes: ["data-plane:evaluate"],
     });
 
     expect(requests[0]?.method).toBe("POST");
-    await expect(requests[0]?.json()).resolves.toEqual({ scopes: ["flags:read"] });
+    await expect(requests[0]?.json()).resolves.toEqual({ scopes: ["data-plane:evaluate"] });
     expect(result.ok && result.data.value).toBe("sk_once_only");
   });
 

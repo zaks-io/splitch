@@ -52,7 +52,7 @@ async function typeChecks() {
   await sdk.credentials.apiKeys.create({
     appId: "app_local",
     environmentId: "env_local",
-    scopes: ["flags:read"],
+    scopes: ["data-plane:evaluate"],
   });
   await sdk.credentials.apiKeys.revoke({
     appId: "app_local",

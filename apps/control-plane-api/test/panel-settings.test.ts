@@ -173,7 +173,7 @@ describe("SignedControlPanelEntrypoint Environment settings security", () => {
     expect(bound.status).toBe(401);
   });
 
-  it("refuses scopes outside the Control Panel API Key allowlist", async () => {
+  it("refuses scopes outside the canonical API Key vocabulary", async () => {
     const before = await apiKeyCount();
     const refused = await panelRequest("POST", apiKeysPath(), {
       scopes: ["data-plane:evaluate", "control-plane:admin"],
@@ -185,7 +185,7 @@ describe("SignedControlPanelEntrypoint Environment settings security", () => {
       details: {
         issues: [
           {
-            path: ["scopes"],
+            path: ["body", "scopes", "1"],
             message: "allowed scopes: data-plane:evaluate, data-plane:write",
           },
         ],

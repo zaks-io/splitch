@@ -1,3 +1,6 @@
+import { apiKeyScopes } from "./api-key-scopes";
+
 export const CONTROL_PANEL_DELEGATION_HEADER = "x-splitch-panel-delegation";
 
-export const PANEL_API_KEY_SCOPES = ["data-plane:evaluate", "data-plane:write"] as const;
+/** Control Panel mint path uses the canonical API Key scope vocabulary. */
+export const PANEL_API_KEY_SCOPES = apiKeyScopes;
