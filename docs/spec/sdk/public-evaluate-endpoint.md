@@ -251,8 +251,8 @@ construction:
 ```ts
 import { createSplitchClient } from "@splitch/sdk";
 
-// Minimal: only the Client Key is required.
-const splitch = createSplitchClient({ clientKey: "ck_live_..." });
+// Minimal: paste keyMaterial from `splitch client-key get` (pk_…; not the ck_… keyId).
+const splitch = createSplitchClient({ clientKey: "pk_..." });
 
 // Hello-world resolution (idType defaults to 'user'):
 const evaluationId = crypto.randomUUID(); // retain this value if the call must be retried
