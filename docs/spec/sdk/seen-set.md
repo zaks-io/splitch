@@ -19,11 +19,24 @@ The seen-set is:
 
 ## Seen-set key
 
+The seen-set keeps **two** concerns under one Exposure slot. They must not share a
+single undifferentiated key:
+
 ```
-SeenKey = (flagKey, runId, idType, targetingKey)
+ExposureKey = (flagKey, runId, idType, targetingKey)
+ValueKey    = (ExposureKey, attributesFingerprint)
 ```
 
-`idType` is required in the key because Entity identity is `(idType, targetingKey)`:
+`attributesFingerprint` is a stable serialization of the Evaluation Context
+`attributes` map (sorted keys, so insertion order does not affect equality). An
+empty / omitted attribute map fingerprints as `{}`.
+
+| Concern              | Key           | Behavior within the revalidation window                                       |
+| -------------------- | ------------- | ----------------------------------------------------------------------------- |
+| Exposure suppression | `ExposureKey` | One Exposure per Entity/Run. Attribute churn must not fire a second Exposure. |
+| Value replay         | `ValueKey`    | A cached Variant is valid only for the attribute set that produced it.        |
+
+`idType` is required in the Exposure key because Entity identity is `(idType, targetingKey)`:
 "user 42" and "workspace 42" are different Entities that may hold different Variants,
 so one must never replay the other's cached value.
 
@@ -31,7 +44,7 @@ The cached value is the WIRE variant of the resolution; a 200 no-match is cached
 an explicit no-match marker, and a replay re-applies the CURRENT call's Default
 Variant — one call site's local `defaultValue` must never leak into another's result.
 
-`runId` is required in the key. Without it, a Run-boundary event would be
+`runId` is required in the Exposure key. Without it, a Run-boundary event would be
 incorrectly suppressed:
 
 - Entity is exposed under Run N → seen-set entry created for `(flagKey, runN, targetingKey)`.
@@ -42,9 +55,27 @@ incorrectly suppressed:
 Without `runId`, the key `(flagKey, targetingKey)` would suppress the Run N+1 Exposure,
 causing under-exposure in the new Run — a correctness error, not just an optimization gap.
 
+### Attributes and value replay
+
+Replaying a resolved Variant across different Evaluation Contexts is incorrect: a
+Targeting Rule that keys on an attribute (for example `plan`) can resolve a different
+arm when attributes change. The seen-set therefore:
+
+1. **Value hit** — same `ExposureKey` and same `attributesFingerprint` within the
+   window → `reason: CACHED`, no transport call, no second Exposure.
+2. **Context miss** — same `ExposureKey` still fresh, but `attributesFingerprint`
+   differs → re-resolve the Variant through the non-exposing `verify` transport
+   (Client Key and API Key), cache the new value under its fingerprint, and return
+   the live reason (not `CACHED`). No second Exposure-bearing `evaluate`.
+3. **Miss** — never seen, or past the revalidation window → Exposure-bearing
+   `evaluate` as today.
+
+Never serve a plausible wrong value from cache. A cache may only replay a result for
+inputs that would resolve identically.
+
 ### Bounded optimistic suppression for a pure-HTTP client (revalidation TTL)
 
-The key above assumes the SDK already knows the **current** `runId` before it decides to
+The Exposure key above assumes the SDK already knows the **current** `runId` before it decides to
 suppress. A pure-HTTP client does not: the public data-plane response is the bare
 `{ variant, variantName }` (non-revealing, ADR-0018: which arm, never how it was chosen) and the
 SDK only learns the live `runId` **from** an evaluate call — the very call a seen-set hit is trying

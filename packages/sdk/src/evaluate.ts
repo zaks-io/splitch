@@ -81,23 +81,150 @@ function requestFor(flagKey: string, context: EvaluateContext): TransportRequest
   };
 }
 
+function logEvaluateError(
+  deps: EvaluateDeps,
+  flagKey: string,
+  targetingKey: string,
+  details: ResolutionDetails,
+  status: number | null,
+): void {
+  deps.logger.error(
+    formatSdkErrorMessage({
+      code: details.errorCode ?? errorCodeForStatus(status),
+      causeSummary: "Evaluation failed loud to the Default Variant",
+      remediation: SERVER_ERROR_REMEDIATION,
+      status,
+    }),
+    {
+      flagKey,
+      targetingKey,
+      status,
+      errorCode: details.errorCode,
+    },
+  );
+}
+
+function replayCachedHit(
+  deps: EvaluateDeps,
+  flagKey: string,
+  context: EvaluationContext,
+  cached: { variant: VariantValue | null; variantName: string | null },
+  defaultValue: VariantValue,
+): ResolutionDetails {
+  deps.logger.debug("[splitch] seen-set hit: suppress Exposure", {
+    flagKey,
+    targetingKey: context.targetingKey,
+  });
+  const recordCachedEvaluation = deps.transport.recordCachedEvaluation;
+  if (recordCachedEvaluation) {
+    void recordCachedEvaluation({ flagKey, idempotencyKey: context.idempotencyKey }).catch(
+      (cause) => {
+        const error =
+          cause instanceof SplitchSdkError
+            ? cause
+            : new SplitchSdkError({
+                code: "SDK_CACHED_TELEMETRY_FAILED",
+                causeSummary:
+                  cause instanceof Error
+                    ? cause.message
+                    : "Cached Evaluation telemetry failed with a non-error rejection",
+                remediation: "Check data-plane availability before retrying the logical Evaluation",
+                originalError: cause,
+              });
+        deps.logger.error(error.message, { flagKey, errorCode: error.code });
+      },
+    );
+  }
+  // A cached `variant: null` records a 200 no-match; re-apply THIS call's
+  // Default Variant rather than replaying a previous caller's. The arm label
+  // is replayed as stored, so a CACHED result names the same arm the live
+  // resolution did.
+  return {
+    value: cached.variant ?? defaultValue,
+    variantName: cached.variantName,
+    reason: "CACHED",
+  };
+}
+
+/**
+ * Same Entity/Run already exposed within the TTL, but attributes changed.
+ * Re-resolve through verify so Targeting sees the new context without a second
+ * billable Exposure (seen-set.md: Exposure key excludes attributes).
+ */
+async function resolveContextMiss(
+  deps: EvaluateDeps,
+  flagKey: string,
+  context: EvaluationContext,
+  idType: string,
+  attributes: Readonly<Record<string, AttributeValue>>,
+  defaultValue: VariantValue,
+  runId: string,
+): Promise<ResolutionDetails> {
+  const { targetingKey } = context;
+  deps.logger.debug("[splitch] seen-set context-miss: re-resolve without Exposure", {
+    flagKey,
+    targetingKey,
+  });
+  const verified = await deps.transport.verify(requestFor(flagKey, context));
+  const details =
+    verified.details ??
+    synthesizeDetails(
+      {
+        status: verified.status,
+        variant: null,
+        variantName: null,
+        runId: null,
+        errorCode: verified.errorCode,
+        errorMessage: verified.errorMessage,
+      },
+      defaultValue,
+    );
+
+  if (details.reason === "ERROR") {
+    logEvaluateError(deps, flagKey, targetingKey, details, verified.status);
+    return details;
+  }
+
+  // Store under the new attribute fingerprint; Exposure slot stays the same.
+  deps.seenSet.set(
+    flagKey,
+    runId,
+    idType,
+    targetingKey,
+    attributes,
+    {
+      // Wire no-match: verify may surface DEFAULT with the caller's defaultValue
+      // already applied. Persist null so a later CACHED replay re-applies THIS
+      // call site's default, matching the evaluate success path.
+      variant: details.reason === "DEFAULT" ? null : details.value,
+      variantName: details.variantName ?? null,
+    },
+    deps.now(),
+  );
+  return details;
+}
+
 /**
  * The single evaluate path shared by `evaluate` and `evaluateDetails`. Ordering
  * follows docs/spec/sdk/exposure-accessor.md and seen-set.md:
  *
  *   1. Default idType to 'user'; resolve the Default Variant value.
- *   2. Seen-set short-circuit: a FRESH (within-TTL) entry for this
- *      (flagKey, targetingKey) replays as CACHED with NO transport call and NO
- *      second Exposure. Bounded optimistic suppression — past the revalidation
- *      window the entry is treated as a MISS so a Run boundary is detected within
- *      the TTL (see seen-set.md), never suppressed forever.
- *   3. Miss -> call the transport ONCE (the server fires the Exposure as a side
+ *   2. Seen-set value hit: a FRESH (within-TTL) entry for this
+ *      (flagKey, idType, targetingKey, attributes) replays as CACHED with NO
+ *      transport call and NO second Exposure. Bounded optimistic suppression —
+ *      past the revalidation window the entry is treated as a MISS so a Run
+ *      boundary is detected within the TTL (see seen-set.md), never suppressed
+ *      forever.
+ *   3. Seen-set context-miss: Exposure identity is still fresh but attributes
+ *      differ → re-resolve via `verify` (no Exposure) and cache the new value
+ *      under its attribute fingerprint. Never replay another context's Variant.
+ *   4. Miss -> call the transport ONCE (the server fires the Exposure as a side
  *      effect). NEVER retried — a retry is a fresh resolution, not a replay.
- *   4. ERROR -> return Default Variant + reason:ERROR + errorCode, emit a LOUD
+ *   5. ERROR -> return Default Variant + reason:ERROR + errorCode, emit a LOUD
  *      log, do NOT cache (never cache an error), fire NO Exposure.
- *   5. Success -> record (flagKey, runId, targetingKey, storedAt) -> value. A
- *      later call past the TTL that returns a NEW runId stores a new triple, so a
- *      Run boundary fires a fresh Exposure (the prior entry no longer matches).
+ *   6. Success -> record (flagKey, runId, targetingKey, attributes, storedAt) ->
+ *      value. A later call past the TTL that returns a NEW runId stores a new
+ *      Exposure slot, so a Run boundary fires a fresh Exposure.
  */
 export async function runEvaluate(
   deps: EvaluateDeps,
@@ -107,40 +234,22 @@ export async function runEvaluate(
   const { targetingKey } = context;
   const idType = context.idType ?? DEFAULT_ID_TYPE;
   const defaultValue = context.defaultValue ?? FALLBACK_DEFAULT_VALUE;
+  const attributes = context.attributes ?? {};
 
-  const cached = deps.seenSet.get(flagKey, idType, targetingKey, deps.now());
-  if (cached !== undefined) {
-    deps.logger.debug("[splitch] seen-set hit: suppress Exposure", { flagKey, targetingKey });
-    const recordCachedEvaluation = deps.transport.recordCachedEvaluation;
-    if (recordCachedEvaluation) {
-      void recordCachedEvaluation({ flagKey, idempotencyKey: context.idempotencyKey }).catch(
-        (cause) => {
-          const error =
-            cause instanceof SplitchSdkError
-              ? cause
-              : new SplitchSdkError({
-                  code: "SDK_CACHED_TELEMETRY_FAILED",
-                  causeSummary:
-                    cause instanceof Error
-                      ? cause.message
-                      : "Cached Evaluation telemetry failed with a non-error rejection",
-                  remediation:
-                    "Check data-plane availability before retrying the logical Evaluation",
-                  originalError: cause,
-                });
-          deps.logger.error(error.message, { flagKey, errorCode: error.code });
-        },
-      );
-    }
-    // A cached `variant: null` records a 200 no-match; re-apply THIS call's
-    // Default Variant rather than replaying a previous caller's. The arm label
-    // is replayed as stored, so a CACHED result names the same arm the live
-    // resolution did.
-    return {
-      value: cached.variant ?? defaultValue,
-      variantName: cached.variantName,
-      reason: "CACHED",
-    };
+  const lookup = deps.seenSet.get(flagKey, idType, targetingKey, attributes, deps.now());
+  if (lookup.kind === "hit") {
+    return replayCachedHit(deps, flagKey, context, lookup.entry, defaultValue);
+  }
+  if (lookup.kind === "context-miss") {
+    return resolveContextMiss(
+      deps,
+      flagKey,
+      context,
+      idType,
+      attributes,
+      defaultValue,
+      lookup.runId,
+    );
   }
 
   const result = await deps.transport.evaluate({
@@ -152,20 +261,7 @@ export async function runEvaluate(
   if (details.reason === "ERROR") {
     // Loud, never silent: observable in logs AND via the ERROR reason the caller
     // branches on. No cache write, no Exposure, no retry.
-    deps.logger.error(
-      formatSdkErrorMessage({
-        code: details.errorCode ?? errorCodeForStatus(result.status),
-        causeSummary: "Evaluation failed loud to the Default Variant",
-        remediation: SERVER_ERROR_REMEDIATION,
-        status: result.status,
-      }),
-      {
-        flagKey,
-        targetingKey,
-        status: result.status,
-        errorCode: details.errorCode,
-      },
-    );
+    logEvaluateError(deps, flagKey, targetingKey, details, result.status);
     return details;
   }
 
@@ -179,6 +275,7 @@ export async function runEvaluate(
       result.runId,
       idType,
       targetingKey,
+      attributes,
       { variant: result.variant, variantName: result.variantName },
       deps.now(),
     );

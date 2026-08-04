@@ -1,5 +1,6 @@
 import type { VariantValue } from "./generated/contract-surface.js";
 import { SplitchSdkError } from "./errors";
+import type { AttributeValue } from "./transport";
 
 /**
  * Per-instance in-memory Exposure dedup cache (docs/spec/sdk/seen-set.md). It is
@@ -7,9 +8,14 @@ import { SplitchSdkError } from "./errors";
  * is to short-circuit a repeat `evaluate` for the same Entity/Run so no redundant
  * transport call and no redundant Exposure fire (`reason: CACHED`).
  *
- * Key = (flagKey, runId, idType, targetingKey). `runId` is required so a
- * Run-boundary re-evaluation is NOT wrongly suppressed: a new Run stores a new
- * entry, and the prior one no longer matches (seen-set.md §"Seen-set key").
+ * Two keys, deliberately:
+ * - Exposure identity = (flagKey, runId, idType, targetingKey). One Exposure per
+ *   Entity/Run regardless of Evaluation Context churn.
+ * - Value replay = that identity plus a stable fingerprint of `attributes`. A
+ *   cached Variant is valid only for the attribute set that produced it; a
+ *   different context must re-resolve (without a second Exposure while the
+ *   Exposure entry is still fresh).
+ *
  * `idType` is required because Entity identity is (idType, targetingKey) — two
  * Entities of different types sharing a bare key ("user 42" vs "workspace 42")
  * must not replay each other's Variant.
@@ -55,17 +61,68 @@ export interface SeenEntry extends SeenResolution {
   readonly storedAt: number;
 }
 
+/**
+ * Lookup against the seen-set for one evaluate call.
+ *
+ * - `hit`: same Exposure identity AND same attributes → replay value, suppress Exposure.
+ * - `context-miss`: Exposure identity still fresh, but attributes differ (or were
+ *   never stored for this fingerprint) → re-resolve value WITHOUT a second Exposure.
+ * - `miss`: never seen, or past the revalidation window → Exposure-bearing evaluate.
+ */
+export type SeenLookupResult =
+  | { readonly kind: "hit"; readonly entry: SeenEntry }
+  | { readonly kind: "context-miss"; readonly runId: string }
+  | { readonly kind: "miss" };
+
+interface StoredEntry {
+  readonly runId: string;
+  readonly storedAt: number;
+  /** Attribute-fingerprint → wire resolution. Multiple contexts share one Exposure slot. */
+  readonly values: Map<string, SeenResolution>;
+}
+
 function entryId(flagKey: string, idType: string, targetingKey: string): string {
   // Joined with NUL (escaped): the one byte the components will not contain,
   // so no two distinct (flagKey, idType, targetingKey) triples can collide.
   return `${flagKey}\u0000${idType}\u0000${targetingKey}`;
 }
 
+/**
+ * Canonicalize a value so fingerprint equality does not depend on object-key
+ * order. Arrays keep element order (arrays are ordered); plain objects sort
+ * their keys recursively.
+ */
+function stableJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableJsonValue);
+  }
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(record).sort()) {
+      sorted[key] = stableJsonValue(record[key]);
+    }
+    return sorted;
+  }
+  return value;
+}
+
+/**
+ * Stable fingerprint of an Evaluation Context attribute map. Two maps that
+ * differ only in property insertion order produce the same string; maps that
+ * differ in any key or value do not.
+ */
+export function fingerprintAttributes(
+  attributes: Readonly<Record<string, AttributeValue>>,
+): string {
+  return JSON.stringify(stableJsonValue(attributes));
+}
+
 export class SeenSet {
-  // Keyed by (flagKey, idType, targetingKey); the entry carries the runId +
-  // storedAt so a lookup can confirm the run has not advanced AND the entry is
-  // still fresh.
-  private readonly entries = new Map<string, SeenEntry>();
+  // Keyed by Exposure identity (flagKey, idType, targetingKey). The entry
+  // carries runId + storedAt (Exposure / TTL) and a per-attribute-fingerprint
+  // value map (value replay).
+  private readonly entries = new Map<string, StoredEntry>();
 
   constructor(
     private readonly maxSize: number = DEFAULT_SEEN_SET_MAX_SIZE,
@@ -89,45 +146,89 @@ export class SeenSet {
   }
 
   /**
-   * The cached entry for this (flagKey, idType, targetingKey) when it is still
-   * within the revalidation window, or `undefined` on a miss (never seen, OR the
-   * entry has aged past `ttlMs` and must be revalidated against the server). A
-   * hit is an LRU touch. `now` is injected (the caller passes the clock) so the
+   * Look up this (flagKey, idType, targetingKey, attributes) against the
+   * revalidation window. A value hit is an LRU touch. `now` is injected so the
    * TTL is testable without real time.
    */
-  get(flagKey: string, idType: string, targetingKey: string, now: number): SeenEntry | undefined {
+  get(
+    flagKey: string,
+    idType: string,
+    targetingKey: string,
+    attributes: Readonly<Record<string, AttributeValue>>,
+    now: number,
+  ): SeenLookupResult {
     const id = entryId(flagKey, idType, targetingKey);
     const entry = this.entries.get(id);
     if (entry === undefined) {
-      return undefined;
+      return { kind: "miss" };
     }
     if (now - entry.storedAt >= this.ttlMs) {
       // Stale: force a revalidation so a Run boundary is detected within the TTL.
       this.entries.delete(id);
-      return undefined;
+      return { kind: "miss" };
+    }
+    const fingerprint = fingerprintAttributes(attributes);
+    const resolution = entry.values.get(fingerprint);
+    if (resolution === undefined) {
+      // Exposure still fresh for this Entity/Run; attributes differ → re-resolve
+      // value without a second Exposure-bearing evaluate.
+      return { kind: "context-miss", runId: entry.runId };
     }
     // Re-insert to move the key to the most-recently-used tail.
     this.entries.delete(id);
     this.entries.set(id, entry);
-    return entry;
+    return {
+      kind: "hit",
+      entry: {
+        runId: entry.runId,
+        storedAt: entry.storedAt,
+        variant: resolution.variant,
+        variantName: resolution.variantName,
+      },
+    };
   }
 
   /**
-   * Record a resolved Variant under its runId. NEVER call this for an ERROR result
-   * — caching a failure-fallback would mask a later real resolution (ADR-0036).
-   * The caller in evaluate.ts only reaches this on a successful resolution.
+   * Record a resolved Variant under its runId and attribute fingerprint. NEVER
+   * call this for an ERROR result — caching a failure-fallback would mask a
+   * later real resolution (ADR-0036). The caller in evaluate.ts only reaches
+   * this on a successful resolution.
+   *
+   * When an Exposure entry for this identity is already fresh, the new
+   * resolution is added under its fingerprint without resetting `storedAt`, so
+   * the revalidation window (and Exposure suppression) stays anchored to the
+   * first touch.
    */
   set(
     flagKey: string,
     runId: string,
     idType: string,
     targetingKey: string,
+    attributes: Readonly<Record<string, AttributeValue>>,
     resolution: SeenResolution,
     now: number,
   ): void {
     const id = entryId(flagKey, idType, targetingKey);
-    this.entries.delete(id);
-    this.entries.set(id, { runId, ...resolution, storedAt: now });
+    const fingerprint = fingerprintAttributes(attributes);
+    const existing = this.entries.get(id);
+    if (existing !== undefined && now - existing.storedAt < this.ttlMs) {
+      existing.values.set(fingerprint, resolution);
+      // Keep storedAt from first touch; refresh runId if the server advanced.
+      const updated: StoredEntry = {
+        runId,
+        storedAt: existing.storedAt,
+        values: existing.values,
+      };
+      this.entries.delete(id);
+      this.entries.set(id, updated);
+    } else {
+      this.entries.delete(id);
+      this.entries.set(id, {
+        runId,
+        storedAt: now,
+        values: new Map([[fingerprint, resolution]]),
+      });
+    }
     if (this.entries.size > this.maxSize) {
       const oldest = this.entries.keys().next().value;
       if (oldest !== undefined) {
