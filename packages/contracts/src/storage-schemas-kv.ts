@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ExperimentStatusSchema } from "./leaf-schemas-experiment";
 import { PercentageRolloutSchema, TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
+import { memberProfileCacheKey } from "./storage-keys-kv";
 
 /**
  * The one schema version every KV blob is written and read at. The envelope below
@@ -211,6 +212,43 @@ export type AssignmentStoreEntry = z.infer<typeof AssignmentStoreEntrySchema>;
 
 export const AssignmentStoreValueSchema = z.record(z.string(), AssignmentStoreEntrySchema);
 export type AssignmentStoreValue = z.infer<typeof AssignmentStoreValueSchema>;
+
+// ---------------------------------------------------------------------------
+// MemberProfileCache (SESSION_STORE identity cache)
+//
+// Email for Org member wire responses. Written at login; never a D1 column.
+// No schemaVersion envelope: this blob is a single-field identity projection,
+// not a config/credential cache that evolves through versioned rollouts.
+// ---------------------------------------------------------------------------
+
+export const MemberProfileCacheSchema = z
+  .object({
+    email: z.string().min(1),
+  })
+  .strict();
+export type MemberProfileCache = z.infer<typeof MemberProfileCacheSchema>;
+
+/**
+ * Minimal put surface for the shared SESSION_STORE identity cache. Auth-api,
+ * Control Panel, and control-plane tests write through this; Cloudflare's
+ * KVNamespace satisfies it without coupling contracts to Worker types.
+ */
+export interface MemberProfileKv {
+  put(key: string, value: string): Promise<void> | void;
+}
+
+/**
+ * Persist `member-profile:{userId}` so Org member endpoints can resolve email
+ * without a D1 PII column. Callers pass a verified address only.
+ */
+export async function rememberMemberProfile(
+  kv: MemberProfileKv,
+  userId: string,
+  email: string,
+): Promise<void> {
+  const profile = MemberProfileCacheSchema.parse({ email });
+  await kv.put(memberProfileCacheKey(userId), JSON.stringify(profile));
+}
 
 // ---------------------------------------------------------------------------
 // KVEnvelope<T> (schema-version envelope, contracts-and-validation.md)

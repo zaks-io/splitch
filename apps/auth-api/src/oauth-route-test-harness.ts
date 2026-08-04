@@ -1,10 +1,11 @@
-import { Hono } from "hono";
 import type { DeviceFlowPort } from "./device-flow";
-import { sealDeviceGrant } from "./device-grant";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
 import { mountOAuthRoutes } from "./oauth-routes";
+import { memoryKvNamespace } from "./test-kv";
 import type { TokenSigner } from "./token-exchange";
+import { Hono } from "hono";
+import { sealDeviceGrant } from "./device-grant";
 
 export const tokenSigner = {
   mintIdentityAssertion: async () => "identity-assertion",
@@ -51,6 +52,7 @@ export function selectedDeviceCode(
 export function routeApp(params: {
   deviceFlow: DeviceFlowPort;
   deviceRefreshSessions: DeviceRefreshSessionStore;
+  sessionStore?: KVNamespace;
   repo?: MembershipAuthorityRepo;
   tokenSigner?: TokenSigner;
 }): Hono {
@@ -59,6 +61,7 @@ export function routeApp(params: {
     tokenSigner: params.tokenSigner ?? tokenSigner,
     deviceFlow: params.deviceFlow,
     deviceRefreshSessions: params.deviceRefreshSessions,
+    sessionStore: params.sessionStore ?? memoryKvNamespace(),
     revocations,
     accessSecret: "test-access-secret",
     controlPlaneAudience: "https://cp.splitch.test",

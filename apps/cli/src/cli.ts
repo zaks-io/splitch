@@ -1,12 +1,12 @@
 import { createRequire } from "node:module";
 import { initCliObservability, shutdownCliObservability } from "@splitch/observability";
-import { createFileCredentialStore } from "./credentials.js";
 import { CLI_COMMANDS, findCommand } from "./command-registry.js";
+import { createFileCredentialStore } from "./credentials.js";
+import { normalizeCliError, writeCliError } from "./errors.js";
 import { executeInvocation } from "./execute.js";
 import { consoleIo } from "./execute-io.js";
 import { EXIT_AUTH, EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
 import { renderHelp, renderRootHelp } from "./help.js";
-import { normalizeCliError, writeCliError } from "./errors.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { longestMatchingCommandPath, parseInvocation } from "./parse-args.js";
 
@@ -117,7 +117,9 @@ async function executeParsedInvocation(
     cliObservability.captureException(error);
     const cliError = normalizeCliError(error);
     writeCliError(consoleIo(), cliError);
-    return cliError.code === "CLI_NOT_AUTHENTICATED" || cliError.code === "CLI_SESSION_EXPIRED"
+    return cliError.code === "CLI_NOT_AUTHENTICATED" ||
+      cliError.code === "CLI_SESSION_EXPIRED" ||
+      cliError.code === "CLI_EMAIL_UNVERIFIED"
       ? EXIT_AUTH
       : EXIT_USAGE;
   }

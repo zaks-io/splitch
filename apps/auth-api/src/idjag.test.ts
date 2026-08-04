@@ -69,7 +69,7 @@ function buildVerifierDeps(jwksOverride?: Jwks): Parameters<typeof verifyIdJag>[
 
 function buildApp() {
   const repo = createRepository(local.d1);
-  const doorB = makeDoorBDeps(repo, () => NOW_MS);
+  const doorB = makeDoorBDeps(repo, () => NOW_MS, { sessionStore: local.sessionKv });
   return createApp({
     repo,
     accessSecret: ACCESS_SECRET,
@@ -84,6 +84,7 @@ function buildApp() {
       cache: local.sessionKv,
       now: () => NOW_MS,
     }),
+    sessionStore: local.sessionKv,
     revocations: makeKvRevocationStore(local.sessionKv),
   });
 }

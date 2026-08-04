@@ -21,6 +21,43 @@ function expectCall(call: { url: string; init: RequestInit } | undefined): {
   return call as { url: string; init: RequestInit };
 }
 
+describe("WorkOS device flow verified email gate", () => {
+  it("omits email when WorkOS reports email_verified other than true", async () => {
+    const fetcher: typeof fetch = async () =>
+      Response.json({
+        user: { id: "user_workos", email: "user_workos@example.com", email_verified: false },
+        access_token: jwtWithClaims({ sub: "user_workos", sid: "session_workos" }),
+        refresh_token: "refresh_original",
+      });
+    const flow = makeWorkOsDeviceFlow({
+      clientId: "client_123",
+      baseUrl: "https://api.workos.test/user_management",
+      fetcher,
+    });
+
+    const token = await flow.exchangeDeviceCode({ deviceCode: "device_123" });
+    expect(token.userId).toBe("user_workos");
+    expect(token.email).toBeUndefined();
+  });
+
+  it("omits email when WorkOS omits email_verified", async () => {
+    const fetcher: typeof fetch = async () =>
+      Response.json({
+        user: { id: "user_workos", email: "user_workos@example.com" },
+        access_token: jwtWithClaims({ sub: "user_workos", sid: "session_workos" }),
+        refresh_token: "refresh_original",
+      });
+    const flow = makeWorkOsDeviceFlow({
+      clientId: "client_123",
+      baseUrl: "https://api.workos.test/user_management",
+      fetcher,
+    });
+
+    const token = await flow.exchangeDeviceCode({ deviceCode: "device_123" });
+    expect(token.email).toBeUndefined();
+  });
+});
+
 describe("WorkOS device flow adapter", () => {
   it("starts device authorization with the documented JSON contract", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
@@ -55,7 +92,7 @@ describe("WorkOS device flow adapter", () => {
       calls.push({ url, init: init ?? {} });
       if (url.endsWith("/authenticate")) {
         return Response.json({
-          user: { id: "user_workos" },
+          user: { id: "user_workos", email: "user_workos@example.com", email_verified: true },
           access_token: jwtWithClaims({ sub: "user_workos", sid: "session_workos" }),
           refresh_token: "refresh_original",
           organization_id: "org_workos",
@@ -73,6 +110,7 @@ describe("WorkOS device flow adapter", () => {
 
     expect(token).toMatchObject({
       userId: "user_workos",
+      email: "user_workos@example.com",
       refreshToken: "refresh_original",
       providerSessionId: "session_workos",
       organizationId: "org_workos",
@@ -142,7 +180,7 @@ describe("WorkOS device flow adapter", () => {
       apiKey: "sk_test_123",
       fetcher: async () =>
         Response.json({
-          user: { id: "user_workos" },
+          user: { id: "user_workos", email: "user_workos@example.com", email_verified: true },
           access_token: jwtWithClaims({ sub: "user_workos" }),
           refresh_token: "refresh_rotated",
           organization_id: "org_workos",
@@ -159,7 +197,7 @@ describe("WorkOS device flow adapter", () => {
       clientId: "client_123",
       fetcher: async () =>
         Response.json({
-          user: { id: "user_workos" },
+          user: { id: "user_workos", email: "user_workos@example.com", email_verified: true },
           access_token: jwtWithClaims({ sub: "user_workos", sid: "session_workos" }),
           refresh_token: "refresh_original",
         }),
@@ -184,7 +222,7 @@ describe("WorkOS refresh flow adapter", () => {
       fetcher: async (input, init) => {
         calls.push({ url: String(input), init: init ?? {} });
         return Response.json({
-          user: { id: "user_workos" },
+          user: { id: "user_workos", email: "user_workos@example.com", email_verified: true },
           organization_id: "org_workos",
           access_token: jwtWithClaims({ sub: "user_workos", sid: "session_workos" }),
           refresh_token: "refresh_rotated",
@@ -221,7 +259,7 @@ describe("WorkOS refresh flow adapter", () => {
       fetcher: async (input, init) => {
         calls.push({ url: String(input), init: init ?? {} });
         return Response.json({
-          user: { id: "user_workos" },
+          user: { id: "user_workos", email: "user_workos@example.com", email_verified: true },
           access_token: jwtWithClaims({ sub: "user_workos", sid: "session_workos" }),
           refresh_token: "refresh_rotated",
         });

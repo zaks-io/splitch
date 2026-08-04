@@ -35,6 +35,8 @@ export interface OAuthRouteDeps {
   tokenSigner: TokenSigner;
   deviceFlow: DeviceFlowPort;
   deviceRefreshSessions: DeviceRefreshSessionStore;
+  /** Shared SESSION_STORE for member-profile writes at device login/refresh. */
+  sessionStore: KVNamespace;
   revocations: RevocationStore;
   accessSecret: string;
   controlPlaneAudience: string;

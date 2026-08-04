@@ -1,8 +1,21 @@
+import { rememberMemberProfile } from "@splitch/contracts";
 import { createRepository, type Repository } from "@splitch/db";
 import { WorkOS } from "@workos-inc/node/worker";
 import type { ControlPanelBindings } from "./bindings";
 import { buildSessionPrincipal } from "./membership";
 import { createSession } from "./session";
+
+/**
+ * Fail-loud when AuthKit returns an account without a verified email. The
+ * callback maps this to a 403 with the same verify-then-sign-in guidance the
+ * CLI gives for `CLI_EMAIL_UNVERIFIED` — never an opaque 500.
+ */
+export class AuthKitEmailUnverifiedError extends Error {
+  constructor() {
+    super("Verify your email address with the identity provider, then sign in again");
+    this.name = "AuthKitEmailUnverifiedError";
+  }
+}
 
 export interface AuthKitClient {
   getAuthorizationUrl(options: { clientId: string; redirectUri: string; state: string }): string;
@@ -16,7 +29,7 @@ export interface AuthKitClient {
 }
 
 interface AuthKitAuthentication {
-  user: { id: string };
+  user: { id: string; email: string; emailVerified: boolean };
   accessToken: string;
 }
 
@@ -53,7 +66,11 @@ export function createAuthKitClient(bindings: ControlPanelBindings): AuthKitClie
         userAgent,
       });
       return {
-        user: { id: response.user.id },
+        user: {
+          id: response.user.id,
+          email: response.user.email,
+          emailVerified: response.user.emailVerified,
+        },
         accessToken: response.accessToken,
       };
     },
@@ -82,6 +99,13 @@ export async function completeAuthKitCallback(input: CompleteAuthKitCallbackInpu
     userId: authentication.user.id,
     workosSessionId: accessClaims.sessionId,
   });
+
+  // Same gate as ID-JAG / device flow: only a verified address may enter the
+  // member-profile identity cache (spoofable display identity otherwise).
+  if (!authentication.user.email || authentication.user.emailVerified !== true) {
+    throw new AuthKitEmailUnverifiedError();
+  }
+  await rememberMemberProfile(input.kv, authentication.user.id, authentication.user.email);
 
   const session = await createSession(
     input.kv,

@@ -46,4 +46,38 @@ describe("executeInvocation", () => {
     expect(result.exitCode).toBe(EXIT_OK);
     expect(transport.requests[0]?.method).toBe("POST");
   });
+
+  it("refreshes before an authorized call when the stored principal still has unknown email", async () => {
+    let saved = {
+      ...storedCredential(),
+      principal: { userId: "user_test", email: "unknown" as string | undefined },
+    };
+    const transport = new FakeCliTransport([
+      oauthTokenMint(),
+      {
+        match: (request) => request.url.includes("/orgs/org_1/apps") && request.method === "POST",
+        status: 200,
+        body: createAppResponse,
+      },
+    ]);
+
+    const result = await executeInvocation(
+      parseInvocation(["apps", "create", "--json", "--org", "org_1", "--name", "New App"]),
+      {
+        fetch: transport.fetch,
+        credentialStore: {
+          load: async () => saved,
+          save: async (file) => {
+            saved = file;
+          },
+          clear: async () => {},
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(EXIT_OK);
+    expect(transport.requests[0]?.url).toContain("/oauth2/token");
+    expect(saved.principal.email).toBe("user_test@splitch.test");
+    expect(JSON.stringify(saved)).not.toContain("unknown");
+  });
 });

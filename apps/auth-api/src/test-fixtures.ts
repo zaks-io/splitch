@@ -10,6 +10,7 @@ import {
 } from "./otp";
 import { makeRateLimiter, type RateLimitConfig } from "./rate-limit";
 import type { RegisterDeps } from "./register";
+import { memoryKvNamespace } from "./test-kv";
 import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import { makeFixtureTurnstile } from "./turnstile";
 import { makeFixtureWorkOs, type WorkOsPort } from "./workos";
@@ -153,7 +154,12 @@ export interface DoorBFixtures {
 export function makeDoorBDeps(
   repo: Repository,
   now: () => number,
-  opts: { consentBaseUrl?: string; rateLimits?: RateLimitConfig; tokenSigner?: TokenSigner } = {},
+  opts: {
+    consentBaseUrl?: string;
+    rateLimits?: RateLimitConfig;
+    tokenSigner?: TokenSigner;
+    sessionStore?: KVNamespace;
+  } = {},
 ): DoorBFixtures {
   const tokenSigner = opts.tokenSigner ?? makeTokenSigner(TEST_SIGNER_CONFIG);
   const workos = makeFixtureWorkOs();
@@ -178,6 +184,7 @@ export function makeDoorBDeps(
       consentBaseUrl: opts.consentBaseUrl ?? "https://cp.splitch.test",
       defaultResource: "https://cp.splitch.test",
       now,
+      sessionStore: opts.sessionStore ?? memoryKvNamespace(),
     },
   };
 }

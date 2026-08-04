@@ -221,7 +221,10 @@ export async function readConfigRollout(
 export function storedHarnessCredential(harness: QuickstartHarness) {
   return {
     version: 1 as const,
-    principal: { userId: "user_flag_definition_owner" },
+    principal: {
+      userId: "user_flag_definition_owner",
+      email: "user_flag_definition_owner@splitch.test",
+    },
     credential: {
       type: "device_flow" as const,
       refreshToken: "quickstart-refresh-token",

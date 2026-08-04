@@ -1,17 +1,17 @@
 import { ErrorCodeSchema, type ErrorResponse, getRoute } from "@splitch/contracts";
 import { createSplitchClient } from "@splitch/sdk";
-import type { TokenBinding } from "./auth-binding.js";
 import { withAuthorizationRetry } from "./auth.js";
+import type { TokenBinding } from "./auth-binding.js";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { requireAppScope, requireEnvironmentScope } from "./context.js";
 import { normalizeCliError, SplitchCliError, writeCliError } from "./errors.js";
+import { emit } from "./execute-io.js";
+import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK, EXIT_SCOPE, EXIT_USAGE } from "./exit-codes.js";
 import { parseEvaluationContext } from "./operation-input.js";
 import type { ParsedInvocation } from "./parse-args.js";
 import { createOperationSdks, resolveDataPlaneBaseUrl, sdkForRoute } from "./sdks.js";
-import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
-import { emit } from "./execute-io.js";
 
 export function validateCommandScope(
   command: CliCommandDefinition,
@@ -235,7 +235,11 @@ export async function executeApiOperation(
 export function handleExecutionError(error: unknown, io: CliIo): CliResult {
   const cliError = normalizeCliError(error);
   writeCliError(io, cliError);
-  if (cliError.code === "CLI_NOT_AUTHENTICATED" || cliError.code === "CLI_SESSION_EXPIRED") {
+  if (
+    cliError.code === "CLI_NOT_AUTHENTICATED" ||
+    cliError.code === "CLI_SESSION_EXPIRED" ||
+    cliError.code === "CLI_EMAIL_UNVERIFIED"
+  ) {
     return { exitCode: EXIT_AUTH };
   }
   if (cliError.code === "CLI_SCOPE_UNRESOLVED") {

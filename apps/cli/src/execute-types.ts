@@ -1,4 +1,4 @@
-import type { AuthDeps } from "./auth.js";
+import type { AuthDeps } from "./auth-token.js";
 import type { SdkFactoryOptions } from "./sdks.js";
 
 export interface CliIo {

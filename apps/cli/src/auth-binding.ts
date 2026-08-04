@@ -23,6 +23,7 @@ interface OAuthFault {
   readonly status: number;
   readonly error?: string;
   readonly description?: string;
+  readonly refreshToken?: string;
 }
 
 /**
@@ -32,11 +33,16 @@ interface OAuthFault {
  */
 export async function readOAuthFault(response: Response): Promise<OAuthFault> {
   try {
-    const body = (await response.json()) as { error?: unknown; error_description?: unknown };
+    const body = (await response.json()) as {
+      error?: unknown;
+      error_description?: unknown;
+      refresh_token?: unknown;
+    };
     return {
       status: response.status,
       error: readFaultText(body.error),
       description: readFaultText(body.error_description),
+      refreshToken: readFaultText(body.refresh_token),
     };
   } catch {
     return { status: response.status };

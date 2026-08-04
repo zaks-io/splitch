@@ -1,3 +1,4 @@
+import { rememberMemberProfile } from "@splitch/contracts";
 import type { DeviceFlowPort } from "./device-flow";
 import { openDeviceGrant, sealDeviceGrant } from "./device-grant";
 import type { DeviceRefreshSession, DeviceRefreshSessionStore } from "./device-session-store";
@@ -28,6 +29,8 @@ export interface DeviceOAuthDeps {
   tokenSigner: TokenSigner;
   deviceFlow: DeviceFlowPort;
   deviceRefreshSessions: DeviceRefreshSessionStore;
+  /** Shared SESSION_STORE — writes member-profile:{userId} at login/refresh. */
+  sessionStore: KVNamespace;
   accessSecret: string;
   now: () => number;
   repo: MembershipAuthorityRepo;
@@ -105,6 +108,8 @@ export async function exchangeDeviceCode(
     const deviceToken = await deps.deviceFlow.exchangeDeviceCode({
       deviceCode: grant.deviceCode,
     });
+    const email = requireDeviceEmail(deviceToken);
+    await rememberMemberProfile(deps.sessionStore, deviceToken.userId, email);
     const binding = grant.selectedAppSelector
       ? await resolveAppSelectionForUser(deps.repo, deviceToken.userId, grant.selectedAppSelector)
       : null;
@@ -125,6 +130,7 @@ export async function exchangeDeviceCode(
       accessToken,
       deviceToken.refreshToken as string,
       deviceToken.userId,
+      email,
       binding?.appId ?? null,
     );
   } catch (cause) {
@@ -171,9 +177,22 @@ export async function exchangeRefreshToken(
       // (`app`/`org` on this request) never rewrites it.
       selectedAppSelector: stored.selectedAppSelector,
     });
-    // Sign before rotating: rotation deletes the presented token's hash, so a
-    // signer fault after rotation would strand the client on a forgotten
-    // token. Signing is local and leaves no durable state on failure.
+    // WorkOS refresh tokens are single-use. If the verified-email gate fails
+    // after the provider already rotated, persist that rotation first so the
+    // session stays coherent and the CLI can retry with the returned token
+    // after the user verifies — never leave the client holding a dead R1.
+    const email = await requireDeviceEmailAfterRefreshRotate(deps, {
+      presentedRefreshToken: parsed.data.refresh_token,
+      providerToken,
+      nextSession,
+    });
+    // Refresh is the backfill path for sessions minted before the identity
+    // cache existed: every successful mint rewrites member-profile:{userId}.
+    await rememberMemberProfile(deps.sessionStore, providerToken.userId, email);
+    // Sign before rotating on the happy path: rotation deletes the presented
+    // token's hash, so a signer fault after rotation would strand the client
+    // on a forgotten token. Signing is local and leaves no durable state on
+    // failure. (The unverified-email path above already rotated.)
     const accessToken = await deps.tokenSigner.mintAccessToken(
       providerToken.userId,
       binding ? [binding.scope] : [],
@@ -190,6 +209,7 @@ export async function exchangeRefreshToken(
       accessToken,
       providerToken.refreshToken as string,
       providerToken.userId,
+      email,
       binding?.appId ?? null,
     );
   } catch (cause) {
@@ -240,6 +260,54 @@ async function resolveRefreshBinding(
   return null;
 }
 
+function requireDeviceEmail(token: { userId: string; email?: string }): string {
+  if (!token.email) {
+    throw new OAuthError(
+      "email_unverified",
+      "authenticated user has no verified email; verify the email address with the identity provider before retrying login",
+    );
+  }
+  return token.email;
+}
+
+/**
+ * On refresh, the provider has already consumed the presented token. When the
+ * verified-email gate fails, rotate first and attach the new refresh_token to
+ * the 403 so the CLI can store it and retry after verification — without this,
+ * verify-then-retry collapses to invalid_grant / forced re-login.
+ */
+async function requireDeviceEmailAfterRefreshRotate(
+  deps: DeviceOAuthDeps,
+  input: {
+    presentedRefreshToken: string;
+    providerToken: {
+      userId: string;
+      email?: string;
+      refreshToken?: string;
+      providerSessionId?: string;
+    };
+    nextSession: DeviceRefreshSession;
+  },
+): Promise<string> {
+  if (input.providerToken.email) {
+    return input.providerToken.email;
+  }
+  const nextRefresh = input.providerToken.refreshToken;
+  if (!nextRefresh) {
+    throw new OAuthError("server_error", "device token response missing refresh session");
+  }
+  await deps.deviceRefreshSessions.rotate(
+    input.presentedRefreshToken,
+    nextRefresh,
+    input.nextSession,
+  );
+  throw new OAuthError(
+    "email_unverified",
+    "authenticated user has no verified email; verify the email address with the identity provider before retrying login",
+    { refresh_token: nextRefresh },
+  );
+}
+
 function requireRefreshSession(
   token: { refreshToken?: string; providerSessionId?: string },
   authority: Omit<DeviceRefreshSession, "providerSessionId">,
@@ -254,6 +322,7 @@ function tokenResponse(
   accessToken: string,
   refreshToken: string,
   userId: string,
+  email: string,
   appId: string | null,
 ): Response {
   return Response.json({
@@ -262,6 +331,7 @@ function tokenResponse(
     expires_in: 3600,
     refresh_token: refreshToken,
     user_id: userId,
+    email,
     ...(appId ? { app_id: appId } : {}),
   });
 }

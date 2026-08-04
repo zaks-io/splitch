@@ -91,6 +91,7 @@ describe("OAuth revoke route", () => {
           ...unusedDeviceFlow((params) => providerRevokes.push(params)),
           exchangeDeviceCode: async () => ({
             userId: "user_workos",
+            email: "user_workos@splitch.test",
             organizationId: "org_selected",
             refreshToken: providerRefreshToken,
             providerSessionId: "session_workos",

@@ -1,3 +1,4 @@
+import { rememberMemberProfile } from "@splitch/contracts";
 import type { ClaimDeps, ClaimResult } from "./claim";
 import { type claimHashes, iso, type Provisional } from "./claim-identity";
 import { OAuthError } from "./oauth-errors";
@@ -67,6 +68,7 @@ export async function tokenize(
   now: number,
   audience: string,
 ): Promise<ClaimResult> {
+  await rememberMemberProfile(deps.sessionStore, userId, claimant.email);
   return {
     access_token: await deps.tokenSigner.mintAccessToken(
       userId,

@@ -103,12 +103,15 @@ describe("splitch context reports the session, never an empty success", () => {
     expect(code).toBe(EXIT_OK);
     const payload = JSON.parse(log.mock.calls.join("")) as {
       authenticated: boolean;
-      principal: { userId: string };
+      principal: { userId: string; email: string };
       appId?: string;
       nextSteps: string[];
     };
     expect(payload.authenticated).toBe(true);
-    expect(payload.principal.userId).toBe(storedCredential().principal.userId);
+    expect(payload.principal).toEqual({
+      userId: storedCredential().principal.userId,
+      email: storedCredential().principal.email,
+    });
     expect(payload.appId).toBeUndefined();
     expect(payload.nextSteps).toContain("splitch orgs list");
   });

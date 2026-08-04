@@ -59,6 +59,15 @@ export function apiKeyCacheKey(keyHash: string): string {
 }
 
 /**
+ * `member-profile:{userId}` — SESSION_STORE identity cache for Org member email.
+ * Written at login (auth-api / Control Panel); read by control-plane member
+ * endpoints. Email is never stored in D1 (organization-and-membership.md).
+ */
+export function memberProfileCacheKey(userId: string): string {
+  return `member-profile:${userId}`;
+}
+
+/**
  * `assignment:{appId}:{idType}:{targetingKeyHash}` — Assignment Store per-Entity
  * read key. NO `environmentId`: experimentId (inside the value) implies the
  * Environment, and the read must return holdovers across every Experiment in one

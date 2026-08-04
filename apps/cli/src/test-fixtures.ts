@@ -213,6 +213,7 @@ export function deviceTokenResponse() {
     token_type: "Bearer",
     expires_in: 3600,
     user_id: "user_test",
+    email: "user_test@splitch.test",
     app_id: "app_1",
   };
 }
@@ -223,6 +224,7 @@ function refreshTokenResponse() {
     refresh_token: refreshToken,
     token_type: "Bearer",
     expires_in: 3600,
+    email: "user_test@splitch.test",
     app_id: "app_1",
   };
 }
@@ -265,7 +267,7 @@ export function oauthTokenMint(): FakeResponse {
 export function storedCredential() {
   return {
     version: 1 as const,
-    principal: { userId: "user_test" },
+    principal: { userId: "user_test", email: "user_test@splitch.test" },
     credential: {
       type: "device_flow" as const,
       refreshToken,

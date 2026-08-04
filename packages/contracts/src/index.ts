@@ -6,8 +6,7 @@ export { ApprovalRequestIdSchema, ApprovalReviewIdSchema } from "./approval-iden
 export * from "./barrels/parity-skins";
 // biome-ignore lint/performance/noReExportAll: package entry point intentionally exposes the grouped route registry API
 export * from "./barrels/route-registry";
-export type { CanonicalJsonSha256 } from "./canonical-hash";
-export { CanonicalJsonSha256Schema } from "./canonical-hash";
+export { type CanonicalJsonSha256, CanonicalJsonSha256Schema } from "./canonical-hash";
 export {
   ClientOriginSchema,
   NormalizedOriginAllowlistSchema,
@@ -302,6 +301,7 @@ export {
   experimentConfigKey,
   flagConfigKey,
   liveRunKey,
+  memberProfileCacheKey,
   runConfigKey,
 } from "./storage-keys-kv";
 export type {
@@ -312,6 +312,7 @@ export type {
   ExperimentConfigKV,
   FlagConfigKV,
   LiveRunKV,
+  MemberProfileCache,
   RunConfigKV,
 } from "./storage-schemas-kv";
 export {
@@ -326,7 +327,9 @@ export {
   FlagConfigKVSchema,
   kvEnvelope,
   LiveRunKVSchema,
+  MemberProfileCacheSchema,
   RunConfigKVSchema,
+  rememberMemberProfile,
 } from "./storage-schemas-kv";
 export type {
   DataPlaneEvaluateRequest,

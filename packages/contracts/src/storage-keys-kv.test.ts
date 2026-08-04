@@ -6,6 +6,7 @@ import {
   experimentConfigKey,
   flagConfigKey,
   liveRunKey,
+  memberProfileCacheKey,
   runConfigKey,
 } from "./storage-keys-kv";
 
@@ -38,6 +39,12 @@ describe("credential cache key-pattern constructors", () => {
 
   it("apiKeyCacheKey produces ak:{keyHash}", () => {
     expect(apiKeyCacheKey("def456")).toBe("ak:def456");
+  });
+});
+
+describe("member profile identity-cache key", () => {
+  it("memberProfileCacheKey produces member-profile:{userId}", () => {
+    expect(memberProfileCacheKey("user_01ABC")).toBe("member-profile:user_01ABC");
   });
 });
 

@@ -70,6 +70,7 @@ function isolationApp(params: {
       params.onProviderRefresh?.();
       return {
         userId: "user_device",
+        email: "device@splitch.test",
         organizationId: params.organizationId,
         refreshToken: "refresh_rotated",
         providerSessionId: "session_isolated",
@@ -177,6 +178,7 @@ describe("refresh rebind tenant isolation", () => {
         },
         refreshProviderToken: async () => ({
           userId: "user_device",
+          email: "device@splitch.test",
           refreshToken: "refresh_rotated",
           providerSessionId: "session_isolated",
         }),

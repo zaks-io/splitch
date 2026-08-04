@@ -81,6 +81,13 @@ function routeApp(params: {
       rotate: async () => {},
       forget: async () => {},
     },
+    sessionStore: {
+      get: async () => null,
+      put: async () => {},
+      delete: async () => {},
+      list: async () => ({ keys: [], list_complete: true, cacheStatus: null }),
+      getWithMetadata: async () => ({ value: null, metadata: null, cacheStatus: null }),
+    } as unknown as KVNamespace,
     revocations,
     accessSecret: params.accessSecret ?? "test-access-secret",
     controlPlaneAudience: "https://cp.splitch.test",

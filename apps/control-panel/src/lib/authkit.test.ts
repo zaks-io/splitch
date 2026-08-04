@@ -1,7 +1,7 @@
 import type { Repository } from "@splitch/db";
 import { describe, expect, it } from "vitest";
 import type { AuthKitClient } from "./authkit";
-import { completeAuthKitCallback } from "./authkit";
+import { AuthKitEmailUnverifiedError, completeAuthKitCallback } from "./authkit";
 
 const NOW = Date.UTC(2026, 6, 5, 12, 0, 0);
 
@@ -16,7 +16,7 @@ describe("WorkOS AuthKit callback materialization", () => {
         authRequest = request;
         return {
           accessToken,
-          user: { id: "user_1" },
+          user: { id: "user_1", email: "user_1@example.com", emailVerified: true },
         };
       },
       getAuthorizationUrl: () => "https://workos.example/authorize",
@@ -48,21 +48,47 @@ describe("WorkOS AuthKit callback materialization", () => {
     expect(callback.cookie).toContain("Secure");
     expect(callback.cookie).not.toContain(accessToken);
 
-    const stored = [...kv.store.values()].join("\n");
-    expect(stored).toContain("workos_session_1");
-    expect(stored).toContain("user_1");
-    expect(stored).toContain("checkout-api");
-    expect(stored).toContain(accessToken);
-    expect(stored).toContain(`"expiresAt":${expiresAt}`);
-    expect(stored).toContain("isProvisional");
+    const stored = [...kv.store.entries()];
+    const joined = stored.map(([, value]) => value).join("\n");
+    expect(joined).toContain("workos_session_1");
+    expect(joined).toContain("user_1");
+    expect(joined).toContain("checkout-api");
+    expect(joined).toContain(accessToken);
+    expect(joined).toContain(`"expiresAt":${expiresAt}`);
+    expect(joined).toContain("isProvisional");
     expect(callback.cookie).toContain("Max-Age=300");
+    const profile = kv.store.get("member-profile:user_1");
+    expect(profile).toBe(JSON.stringify({ email: "user_1@example.com" }));
+  });
+
+  it("refuses to materialize a session when the WorkOS email is not verified", async () => {
+    const authKit: AuthKitClient = {
+      authenticateWithCode: async () => ({
+        accessToken: jwt({ sid: "workos_session_1", exp: Math.floor(NOW / 1000) + 300 }),
+        user: { id: "user_1", email: "user_1@example.com", emailVerified: false },
+      }),
+      getAuthorizationUrl: () => "https://workos.example/authorize",
+      getLogoutUrl: () => "https://workos.example/logout",
+    };
+
+    await expect(
+      completeAuthKitCallback({
+        authKit,
+        clientId: "client_123",
+        code: "workos_code",
+        kv: new MemoryKv().namespace(),
+        now: NOW,
+        repo: repository(),
+        request: new Request("https://app.splitch.dev/auth/callback"),
+      }),
+    ).rejects.toThrow(AuthKitEmailUnverifiedError);
   });
 
   it("rejects a WorkOS access token without a bounded JWT expiry", async () => {
     const authKit: AuthKitClient = {
       authenticateWithCode: async () => ({
         accessToken: jwt({ sid: "workos_session_1" }),
-        user: { id: "user_1" },
+        user: { id: "user_1", email: "user_1@example.com", emailVerified: true },
       }),
       getAuthorizationUrl: () => "https://workos.example/authorize",
       getLogoutUrl: () => "https://workos.example/logout",
