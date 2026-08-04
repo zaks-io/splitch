@@ -43,6 +43,7 @@ describe("control plane sdk approvals client", () => {
     const listed = await sdk.approvals.list({
       appId: "app_checkout",
       status: "pending",
+      environmentId: "env_prod",
       limit: 10,
       cursor: null,
     });
@@ -52,7 +53,7 @@ describe("control plane sdk approvals client", () => {
     });
 
     expect(requests[0]?.url).toContain(
-      "/apps/app_checkout/approval-requests?status=pending&limit=10",
+      "/apps/app_checkout/approval-requests?status=pending&environmentId=env_prod&limit=10",
     );
     expect(listed.ok && listed.data.items[0]?.id).toBe(request.id);
     expect(fetched.ok && fetched.data.id).toBe(request.id);

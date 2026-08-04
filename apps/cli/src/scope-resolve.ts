@@ -4,6 +4,7 @@ import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
 import { SplitchCliError } from "./errors.js";
 import type { CliDeps } from "./execute-types.js";
+import { operationInputHasEnvironmentId } from "./operation-input.js";
 import { createOperationSdks } from "./sdks.js";
 
 export interface NamedResource {
@@ -28,7 +29,7 @@ export interface NamedResource {
 export async function resolveContextSelectors(
   deps: CliDeps,
   context: ResolvedContext,
-  command: Pick<CliCommandDefinition, "needsApp" | "needsEnvironment">,
+  command: Pick<CliCommandDefinition, "needsApp" | "needsEnvironment" | "operationId">,
 ): Promise<ResolvedContext> {
   let appId = context.appId;
   let environmentId = context.environmentId;
@@ -37,7 +38,10 @@ export async function resolveContextSelectors(
     appId = (await resolveAppSelector(deps, appId)).id;
   }
 
-  if (command.needsEnvironment && environmentId && isLiveSelector(context.environmentSource)) {
+  const needsEnvResolution =
+    command.needsEnvironment ||
+    (operationInputHasEnvironmentId(command.operationId) && context.environmentSource === "flag");
+  if (needsEnvResolution && environmentId && isLiveSelector(context.environmentSource)) {
     if (!appId) {
       throw new SplitchCliError({
         code: "CLI_SCOPE_UNRESOLVED",

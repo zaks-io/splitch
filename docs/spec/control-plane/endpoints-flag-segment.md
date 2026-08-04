@@ -245,11 +245,13 @@ other pending request for the prior version subsequently renders `stale`.
 
 ## Approval Request endpoints
 
-### `GET /apps/{app_id}/approval-requests?status=&target_kind=&limit=&cursor=`
+### `GET /apps/{app_id}/approval-requests?status=&target_kind=&environmentId=&limit=&cursor=`
 
 Lists full Approval Request wire projections in the App. `status` optionally filters
 `pending | applied | declined | stale`; `target_kind` optionally filters
-`flag | flag_configuration | flag_variant | experiment_draft`. The response uses the standard cursor page:
+`flag | flag_configuration | flag_variant | experiment_draft`; `environmentId` optionally
+keeps only Requests whose Policy context targets that Environment (narrows within the App).
+The response uses the standard cursor page:
 `{ items: ApprovalRequest[], cursor: string | null, limit: number, total: number | null }`.
 
 ### `GET /apps/{app_id}/approval-requests/{id}`

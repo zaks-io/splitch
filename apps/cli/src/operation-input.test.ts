@@ -187,4 +187,58 @@ describe("canonical approval input", () => {
     expect(input.confirm).toBeUndefined();
     expect(input.idempotency_key).toEqual(expect.stringMatching(/^cli_/));
   });
+
+  it("approval-requests list forwards optional --env as environmentId filter", () => {
+    const command = requireCommand(["approval-requests", "list"]);
+    expect(command.needsEnvironment).toBe(false);
+
+    const withEnv = buildOperationInput(
+      command,
+      parseInvocation([
+        "approval-requests",
+        "list",
+        "--json",
+        "--app",
+        "app_cli",
+        "--env",
+        "env_prod",
+      ]),
+      { appId: "app_cli", environmentId: "env_prod", environmentSource: "flag" },
+    );
+    expect(withEnv).toMatchObject({ appId: "app_cli", environmentId: "env_prod" });
+
+    const withoutEnv = buildOperationInput(
+      command,
+      parseInvocation(["approval-requests", "list", "--json", "--app", "app_cli"]),
+      { appId: "app_cli" },
+    );
+    expect(withoutEnv.environmentId).toBeUndefined();
+  });
+
+  it("approval-requests list ignores config and SPLITCH_ENV without --env", () => {
+    const command = requireCommand(["approval-requests", "list"]);
+    const fromConfig = buildOperationInput(
+      command,
+      parseInvocation(["approval-requests", "list", "--json", "--app", "app_cli"]),
+      { appId: "app_cli", environmentId: "env_prod", environmentSource: "config" },
+    );
+    expect(fromConfig.environmentId).toBeUndefined();
+
+    const fromSplitchEnv = buildOperationInput(
+      command,
+      parseInvocation(["approval-requests", "list", "--json", "--app", "app_cli"]),
+      { appId: "app_cli", environmentId: "env_prod", environmentSource: "env" },
+    );
+    expect(fromSplitchEnv.environmentId).toBeUndefined();
+  });
+
+  it("flags list stays app-scoped and does not forward environmentId", () => {
+    const command = requireCommand(["flags", "list"]);
+    const input = buildOperationInput(
+      command,
+      parseInvocation(["flags", "list", "--json", "--app", "app_cli", "--env", "env_prod"]),
+      { appId: "app_cli", environmentId: "env_prod", environmentSource: "flag" },
+    );
+    expect(input).toEqual({ appId: "app_cli" });
+  });
 });

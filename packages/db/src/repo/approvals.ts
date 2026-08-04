@@ -12,6 +12,11 @@ export interface ApprovalPageFilters {
   /** Persisted `status` values the page may contain. */
   storedStatus?: readonly string[];
   targetType?: string;
+  /**
+   * Keep Requests whose stored `policy_contexts` JSON array includes at least
+   * one object with this `environmentId`. Narrows within the App; never widens.
+   */
+  environmentId?: string;
 }
 
 function pageFilters(
@@ -22,6 +27,11 @@ function pageFilters(
     conditions.push(inArray(approvalRequests.status, [...filters.storedStatus]));
   }
   if (filters.targetType) conditions.push(eq(approvalRequests.targetType, filters.targetType));
+  if (filters.environmentId) {
+    conditions.push(
+      sql`EXISTS (SELECT 1 FROM json_each(${approvalRequests.policyContexts}) WHERE json_extract(value, '$.environmentId') = ${filters.environmentId})`,
+    );
+  }
   // Keyset continuation on the (proposed_at desc, id desc) ordering. Unlike an
   // offset into a post-filtered array it stays valid when rows around the
   // cursor change status between pages.

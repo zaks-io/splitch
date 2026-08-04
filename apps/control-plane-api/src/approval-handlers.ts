@@ -61,6 +61,7 @@ async function listApprovalRequests(
   query: {
     status?: string;
     target_kind?: string;
+    environmentId?: string;
     limit?: number;
     cursor?: string | null;
   },
@@ -88,6 +89,7 @@ async function listApprovalRequests(
   const filters = {
     storedStatus: statusFilter(query.status),
     targetType: query.target_kind,
+    environmentId: query.environmentId,
   };
   const rows = await deps.repo.approvals.listRequestPage(scope, {
     ...filters,
@@ -124,6 +126,7 @@ function queryInput(input: unknown) {
     ? (query as {
         status?: string;
         target_kind?: string;
+        environmentId?: string;
         limit?: number;
         cursor?: string | null;
       })

@@ -110,9 +110,10 @@ Usage:
   splitch approval-requests list [flags]
 
 Flags:
-  --app <app>  [type: string; default: SPLITCH_APP or config] App ID or slug.
-  --json       [type: boolean; default: false] Write machine-readable JSON to stdout.
-  -h, --help   [type: boolean; default: false] Show help and exit.
+  --app <app>          [type: string; default: SPLITCH_APP or config] App ID or slug.
+  --env <environment>  [type: string; default: none] Optional Environment ID or slug filter (Policy context).
+  --json               [type: boolean; default: false] Write machine-readable JSON to stdout.
+  -h, --help           [type: boolean; default: false] Show help and exit.
 
 Example:
   splitch approval-requests list --json",
