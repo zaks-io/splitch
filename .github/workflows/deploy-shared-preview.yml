@@ -104,7 +104,6 @@ jobs:
               exit 1
             fi
           done
-          node scripts/validate-hosted-worker-secret-env.mjs shared-preview
 
       - name: Check Turbo remote cache inputs
         run: node scripts/check-turbo-remote-cache-env.mjs

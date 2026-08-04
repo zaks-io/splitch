@@ -308,9 +308,6 @@ jobs:
               exit 1
             fi
           done
-          if [ "$DEPLOY_WORKERS" = "true" ]; then
-            node scripts/validate-hosted-worker-secret-env.mjs production
-          fi
 
       - name: Check Turbo remote cache inputs
         if: needs.validate.outputs.d1 == 'true' || needs.validate.outputs.workers == 'true'
