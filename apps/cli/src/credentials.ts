@@ -83,17 +83,15 @@ export function createFileCredentialStore(path = CREDENTIALS_PATH): CredentialSt
  * and in-memory principal is one shape: `{ userId }` or `{ userId, email }`
  * with a real address — never a stand-in.
  */
-export function normalizeCredentialFile(file: CliCredentialFile): CliCredentialFile {
+function normalizeCredentialFile(file: CliCredentialFile): CliCredentialFile {
   const email = realPrincipalEmail(file.principal.email);
   return {
     ...file,
-    principal: email
-      ? { userId: file.principal.userId, email }
-      : { userId: file.principal.userId },
+    principal: email ? { userId: file.principal.userId, email } : { userId: file.principal.userId },
   };
 }
 
-export function realPrincipalEmail(email: string | undefined): string | undefined {
+function realPrincipalEmail(email: string | undefined): string | undefined {
   if (typeof email !== "string" || email.length === 0 || email === "unknown") {
     return undefined;
   }
