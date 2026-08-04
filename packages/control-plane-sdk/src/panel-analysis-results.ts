@@ -88,7 +88,13 @@ export function isAnalysisInsufficientData(
   return issues.some((issue) => {
     if (!issue || typeof issue !== "object" || !("path" in issue)) return false;
     const path = (issue as { path?: unknown }).path;
-    return Array.isArray(path) && (path[0] === "metric_events" || path[0] === "exposures");
+    // Exact single-element paths only. A Zod path like ["exposures", 0, "variant"]
+    // is a schema fault, not the SPL-302 insufficient-data signal.
+    return (
+      Array.isArray(path) &&
+      path.length === 1 &&
+      (path[0] === "metric_events" || path[0] === "exposures")
+    );
   });
 }
 
