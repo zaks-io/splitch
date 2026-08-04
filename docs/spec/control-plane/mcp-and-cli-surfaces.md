@@ -109,9 +109,10 @@ session context is never persisted server-side beyond the session and never wide
 silently. Device refresh tokens rotate. Auth API retains the canonical selected App authority and
 reintersects it with the WorkOS Organization grant and live membership before minting. Only prompts
 for re-login if refresh fails because the provider session, selected authority, or live membership is
-no longer valid. On re-login for device flow, CLI opens the complete verification URL in the default
-browser, prints the URL and code as a remote-terminal fallback, and polls until approved. A browser
-launch failure is visible but does not prevent manual approval.
+no longer valid. On re-login for device flow, CLI opens `verification_uri_complete` when supplied,
+otherwise `verification_uri`, in the default browser, prints the URL and code as a remote-terminal
+fallback, and polls until approved. A browser launch failure is visible but does not prevent manual
+approval.
 
 ### Command structure (illustrative; mirrors endpoint inventory)
 
