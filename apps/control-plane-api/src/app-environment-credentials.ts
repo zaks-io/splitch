@@ -42,12 +42,12 @@ export async function deleteEnvironmentCredentials(
 }
 
 /**
- * Write revoked KV tombstones for every credential in the Environment without
- * mutating D1. Used by App delete before the atomic cascade batch so a rolled-
- * back D1 transaction cannot leave memberships gone while hot validation still
- * serves live key material (SPL-298).
+ * Revoke + tombstone any credentials still present without removing D1 rows.
+ * Used immediately before the App-delete cascade batch so a key minted after the
+ * quiescing wipe is still invalidated in KV before its D1 row is deleted in the
+ * same transaction as memberships (SPL-298).
  */
-export async function tombstoneEnvironmentCredentials(
+export async function revokeRemainingEnvironmentCredentials(
   deps: CredentialDeleteDeps,
   appId: string,
   environmentId: string,
@@ -57,12 +57,8 @@ export async function tombstoneEnvironmentCredentials(
     deps.repo.credentials.listApiKeys(scope),
     deps.repo.credentials.listClientKeys(scope),
   ]);
-  for (const row of apiKeys) {
-    await writeApiKeyCache(deps, row, true, null, true);
-  }
-  for (const row of clientKeys) {
-    await writeClientKeyCache(deps, row, true, null, true);
-  }
+  if (apiKeys.length === 0 && clientKeys.length === 0) return;
+  await writeRevokedTombstones(deps, scope, apiKeys, clientKeys);
 }
 
 async function writeRevokedTombstones(

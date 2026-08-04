@@ -2,7 +2,10 @@ import { deriveSlug } from "@splitch/contracts";
 import { appScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { requireAppDelete, requireAppWrite } from "./app-authz";
-import { tombstoneEnvironmentCredentials } from "./app-environment-credentials";
+import {
+  deleteEnvironmentCredentials,
+  revokeRemainingEnvironmentCredentials,
+} from "./app-environment-credentials";
 import {
   ALLOW_POLICY,
   type AppEnvironmentDeps,
@@ -164,11 +167,17 @@ async function deleteAppRows(
   appId: string,
   environments: readonly EnvironmentRow[],
 ): Promise<void> {
-  // KV tombstones first (fail-closed for hot validation). D1 credential rows,
-  // Environments, memberships, and the App commit in one batch so a late FK
-  // failure cannot strand the App without live membership (SPL-298).
+  // Credential revoke + KV tombstone + D1 remove must happen through the
+  // quiescing helper so the durable cache writer sees matching revokedAt
+  // (SPL-298 author QA). Memberships and the App row stay in the atomic
+  // cascade below so a late FK failure cannot strand live membership.
   for (const env of environments) {
-    await tombstoneEnvironmentCredentials(deps, appId, env.id);
+    await deleteEnvironmentCredentials(deps, appId, env.id);
+  }
+  // Catch keys minted after the wipe returned empty; leave D1 rows for the
+  // cascade batch so memberships and App still roll back together on FK fault.
+  for (const env of environments) {
+    await revokeRemainingEnvironmentCredentials(deps, appId, env.id);
   }
   await deps.repo.identity.deleteAppCascade(appScope(appId));
 }
