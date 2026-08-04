@@ -36,10 +36,14 @@ const variant = await splitch.evaluate("new-checkout", {
 
 Construct the client with exactly one credential (anything else throws):
 
-| Option      | Credential                | Where it may live                       | Unlocks                                 |
-| ----------- | ------------------------- | --------------------------------------- | --------------------------------------- |
-| `clientKey` | public Client Key (`pk_`) | browsers, mobile, anything you ship     | `evaluate`, `evaluateDetails`, `verify` |
-| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client | everything, including `peekVariant`     |
+| Option      | Credential                | Where it may live                                  | Unlocks                                 |
+| ----------- | ------------------------- | -------------------------------------------------- | --------------------------------------- |
+| `clientKey` | public Client Key (`pk_`) | browsers, mobile, servers: anything that evaluates | `evaluate`, `evaluateDetails`, `verify` |
+| `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client            | `peekVariant`, `verify`                 |
+
+A server-side integration that fires Exposures uses a Client Key, not an API
+Key. The API Key cannot call `evaluate` or `evaluateDetails`; present a Client
+Key on that path (Client Keys are safe to use from servers).
 
 ## The four methods
 
@@ -48,8 +52,8 @@ analysis counts. Which methods fire one is the core thing to get right:
 
 | Method            | Returns                  | Fires an Exposure | Credential            |
 | ----------------- | ------------------------ | ----------------- | --------------------- |
-| `evaluate`        | the Variant value        | yes               | Client Key or API Key |
-| `evaluateDetails` | full `ResolutionDetails` | yes               | Client Key or API Key |
+| `evaluate`        | the Variant value        | yes               | Client Key only       |
+| `evaluateDetails` | full `ResolutionDetails` | yes               | Client Key only       |
 | `peekVariant`     | the Variant value        | no                | API Key only          |
 | `verify`          | full `ResolutionDetails` | no                | Client Key or API Key |
 
