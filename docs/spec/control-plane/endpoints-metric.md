@@ -215,7 +215,10 @@ running Run's locked decision family, changing its decision-valid contract retur
 
 ### `DELETE /apps/{app_id}/metrics/{metric_id}`
 
-Blocked while any active Experiment references it.
+Blocked while any **running** Experiment references it (`EXPERIMENT_RUNNING`). Draft or ended
+Experiments that still name the Metric do not use that code — delete succeeds so a finished Run
+cannot trap Metric (and therefore Flag/App) cleanup. Start still freezes Metric refs into the Run;
+callers that delete a Metric a draft still names will fail loud at Start rather than on delete.
 
 ## Entity compatibility guard
 

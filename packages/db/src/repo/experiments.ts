@@ -3,7 +3,7 @@ import { experiments, metrics, runs } from "../schema/index";
 import type { Db } from "./client";
 import { makeEndRun } from "./experiment-end-run";
 import { makeStartRun } from "./experiment-start-run";
-import type { EnvScope, TenantScope } from "./scope";
+import { assertMintedScope, type EnvScope, type TenantScope } from "./scope";
 import { type ReadOptions, scopedTable } from "./scoped-table";
 
 const RUN_STATUS_UPDATE_KEYS = new Set(["status", "endedAt", "endReason"]);
@@ -29,6 +29,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
   const metricsTable = scopedTable(db, metrics);
   const startRun = makeStartRun(d1, experimentsTable, runsTable);
   const endRun = makeEndRun(d1, experimentsTable, runsTable);
+  const removeExperiment = makeRemoveExperiment(d1);
   const findRunningExperimentsForFlag = (scope: EnvScope, flagId: string) =>
     experimentsTable.findMany(
       scope,
@@ -103,9 +104,7 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
         .then((rows) => rows[0] ?? null);
     },
 
-    removeExperiment(scope: EnvScope, experimentId: string): Promise<number> {
-      return experimentsTable.remove(scope, eq(experiments.id, experimentId));
-    },
+    removeExperiment,
 
     findRunningExperimentsForFlag,
 
@@ -219,6 +218,39 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
 
 function liveRunIdIs(expected: string | null) {
   return expected === null ? isNull(experiments.liveRunId) : eq(experiments.liveRunId, expected);
+}
+
+/**
+ * Delete an Experiment and every D1 Run row it owns, in one D1 batch.
+ *
+ * `runs.experiment_id` is a real FK with ON DELETE NO ACTION, so a bare
+ * Experiment DELETE 500s once any ended Run exists (SPL-289). Cascading the
+ * Run rows here is intentional: D1 Run snapshots are Experiment-owned
+ * control-plane history and leave with the Experiment. Tinybird raw event
+ * logs remain the system of record for analysis replay (assignment-store
+ * prune on Experiment delete). Both statements are tenant-scoped
+ * (`app_id` + `environment_id`) so a forged experiment id cannot reach
+ * another tenant's Runs.
+ */
+function makeRemoveExperiment(d1: D1Database) {
+  return async function removeExperiment(scope: EnvScope, experimentId: string): Promise<number> {
+    assertMintedScope(scope);
+    const results = await d1.batch([
+      d1
+        .prepare(
+          `DELETE FROM runs
+           WHERE app_id = ? AND environment_id = ? AND experiment_id = ?`,
+        )
+        .bind(scope.appId, scope.environmentId, experimentId),
+      d1
+        .prepare(
+          `DELETE FROM experiments
+           WHERE app_id = ? AND environment_id = ? AND id = ?`,
+        )
+        .bind(scope.appId, scope.environmentId, experimentId),
+    ]);
+    return results[1]?.meta.changes ?? 0;
+  };
 }
 
 function assertRunStatusUpdate(patch: Record<string, unknown>): void {

@@ -159,8 +159,11 @@ canonical in [../contracts/error-responses.md](../contracts/error-responses.md#a
 
 ### `DELETE /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}`
 
-Blocked if status is `running`. Soft-deletes; archived experiments and their Runs are retained for
-analysis replayability. Hard-delete on explicit archive/purge (future).
+Blocked if a Run is `running` (`EXPERIMENT_RUNNING`). Otherwise deletes the Experiment and every D1
+Run row it owns (including ended Runs) in one tenant-scoped batch — `runs.experiment_id` is a hard
+FK, so leaving those rows behind 500s the delete. Tinybird raw event logs remain the system of
+record for analysis replay; D1 Run snapshots are Experiment-owned control-plane history and leave
+with the Experiment. Soft-delete / archive retention of Experiments is future work.
 
 ## Experiment Run endpoints
 

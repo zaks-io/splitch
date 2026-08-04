@@ -35,10 +35,14 @@ export async function runningRunForExperiment(
   scope: EnvScope,
   experiment: ExperimentRow,
 ): Promise<RunRow | null> {
-  return (
-    (experiment.liveRunId ? await repo.experiments.getRun(scope, experiment.liveRunId) : null) ??
-    repo.experiments.findRunningRunForExperiment(scope, experiment.id)
-  );
+  // liveRunId can briefly disagree with Run.status under races; only a Run
+  // whose status is still `running` may block delete/edit. An ended Run left
+  // behind after End must never surface as EXPERIMENT_RUNNING (SPL-289).
+  const live = experiment.liveRunId
+    ? await repo.experiments.getRun(scope, experiment.liveRunId)
+    : null;
+  if (live?.status === "running") return live;
+  return repo.experiments.findRunningRunForExperiment(scope, experiment.id);
 }
 
 export async function blockingRunningExperimentForStart(

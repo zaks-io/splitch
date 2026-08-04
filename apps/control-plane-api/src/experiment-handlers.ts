@@ -181,5 +181,7 @@ async function deleteExperiment(
     );
   }
   await deps.repo.experiments.removeExperiment(scope, experiment.id);
+  // Ended (and any other non-running) D1 Run rows for this Experiment were
+  // removed with it inside removeExperiment. Tinybird event logs are untouched.
   return Response.json({ deleted: true });
 }
