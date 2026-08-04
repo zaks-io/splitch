@@ -8,8 +8,10 @@ const scopeStamp = "2026-07-03T00:00:00.000Z";
  * these ahead of the operation stub so FakeCliTransport matches the list
  * calls first.
  *
- * Also stubs `flags_list` when `flags` is provided (ID-then-key Flag resolution).
- * Omit it for commands that ARE `flags_list` — that operation shares the URL.
+ * Does NOT stub `flags_list` — that operation shares a URL with Flag key
+ * resolution. Compose `flagsListStub` explicitly when a `:flagId` command needs
+ * catalog resolution, so a future `flags list` test cannot pass against a
+ * buried scope stub by accident.
  */
 export function scopeResolutionStubs(options?: {
   readonly appId?: string;
@@ -20,13 +22,6 @@ export function scopeResolutionStubs(options?: {
     readonly key: string;
     readonly name?: string;
   }>;
-  readonly flags?: ReadonlyArray<{
-    readonly id: string;
-    readonly key: string;
-    readonly name?: string;
-  }>;
-  readonly flagsReadTruncated?: boolean;
-  readonly flagsReadLimit?: number;
 }): FakeResponse[] {
   const appId = options?.appId ?? "app_1";
   const appKey = options?.appKey ?? "checkout";
@@ -70,7 +65,7 @@ export function scopeResolutionStubs(options?: {
       createdAt: scopeStamp,
       updatedAt: scopeStamp,
     }));
-  const stubs: FakeResponse[] = [
+  return [
     oauthTokenMint(),
     {
       match: (request) =>
@@ -108,24 +103,14 @@ export function scopeResolutionStubs(options?: {
       body: { items: envItemsFor("app_flag") },
     },
   ];
-  if (options?.flags) {
-    stubs.push(
-      flagKeyResolutionStub({
-        appId,
-        flags: options.flags,
-        readTruncated: options.flagsReadTruncated,
-        readLimit: options.flagsReadLimit,
-      }),
-    );
-  }
-  return stubs;
 }
 
 /**
- * Stub for Flag ID-then-key resolution via `flags_list`. Prefer passing `flags`
- * through `scopeResolutionStubs` so the list sits with the other scope stubs.
+ * Stub for Flag ID-then-key resolution via `flags_list`. Compose after
+ * `scopeResolutionStubs` and before the operation under test — never embed this
+ * inside App/Env scope stubs, so `flags list` tests stay explicit.
  */
-function flagKeyResolutionStub(options?: {
+export function flagsListStub(options?: {
   readonly appId?: string;
   readonly flags?: ReadonlyArray<{
     readonly id: string;

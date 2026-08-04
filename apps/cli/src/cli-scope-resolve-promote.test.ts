@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";
-import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
+import { flagsListStub, scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import { FakeCliTransport, promoteResponse, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
@@ -18,7 +18,8 @@ describe("flags promote --env slug resolution", () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
-      ...scopeResolutionStubs({ flags: FLAG_1 }),
+      ...scopeResolutionStubs(),
+      flagsListStub({ flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "POST" &&
@@ -57,7 +58,8 @@ describe("flags promote --env slug resolution", () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
-      ...scopeResolutionStubs({ flags: FLAG_1 }),
+      ...scopeResolutionStubs(),
+      flagsListStub({ flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "POST" &&

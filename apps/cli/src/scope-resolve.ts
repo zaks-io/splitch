@@ -26,9 +26,10 @@ export interface NamedResource {
  * ID shapes.
  *
  * Flag positionals (`:flagId`) follow the same seam via `resolveFlagSelector`:
- * always ID-then-key within the selected App (Flag keys are unconstrained and
- * may collide with `flag_…` ID shapes). When the catalog read is truncated and
- * the selector is absent from the page, fail loud.
+ * ID and key matches within the selected App (Flag keys are unconstrained and
+ * may collide with `flag_…` ID shapes). Ambiguous ID/key hits refuse loudly.
+ * Truncated catalogs fall through to a verbatim selector so canonical IDs past
+ * the ceiling still reach the server lookup.
  */
 export async function resolveContextSelectors(
   deps: CliDeps,
@@ -140,11 +141,16 @@ export async function resolveEnvironmentSelector(
 /**
  * Resolve a Flag positional that may be a canonical `flag_…` ID or a Flag key.
  * There is no by-key API route, so selectors resolve via `flags_list` within
- * the selected App. Always match ID then key — Flag keys are unconstrained
+ * the selected App. Match ID and key separately — Flag keys are unconstrained
  * `z.string()` values and may equal a `flag_…` ID shape, so a prefix fast path
- * would skip a real key (the SPL-288 collision class). When the catalog read is
- * truncated and the selector is absent from the page, fail loud — never treat a
- * partial page as proof the Flag does not exist.
+ * would skip a real key (the SPL-288 collision class). When ID and key hit
+ * different rows, refuse the ambiguity (same pattern as App key collisions).
+ *
+ * `flags_list` is hard-bounded with no pagination. When the page is truncated
+ * and the selector is absent, fall through and pass the selector verbatim:
+ * the server's exact ID lookup remains authoritative (FLAG_NOT_FOUND), and the
+ * CLI must not claim non-existence it cannot prove. An untruncated miss still
+ * fails with CLI_SCOPE_UNRESOLVED.
  */
 export async function resolveFlagSelector(
   deps: CliDeps,
@@ -152,17 +158,21 @@ export async function resolveFlagSelector(
   selector: string,
 ): Promise<NamedResource> {
   const listed = await listFlagsForResolution(deps, appId);
-  const match =
-    listed.items.find((flag) => flag.id === selector) ??
-    listed.items.find((flag) => flag.key === selector);
-  if (match) return match;
-  if (listed.readTruncated) {
+  const byId = listed.items.find((flag) => flag.id === selector);
+  const byKey = listed.items.find((flag) => flag.key === selector);
+  if (byId && byKey && byId.id !== byKey.id) {
     throw new SplitchCliError({
       code: "CLI_SCOPE_UNRESOLVED",
-      causeSummary: `Flag selector "${selector}" was not found among the first ${listed.readLimit} Flags of App ${appId}, and that App's catalog exceeds the flags-list read ceiling`,
-      remediation:
-        "Pass a Flag ID or key that appears in the current flags list page, or reduce the App's Flag count below the read ceiling before resolving by key",
+      causeSummary: `Flag selector "${selector}" matches more than one Flag on App ${appId}: id ${byId.id} and key of ${byKey.id}`,
+      remediation: "Pass the canonical Flag ID of the Flag you intend to address",
     });
+  }
+  const match = byId ?? byKey;
+  if (match) return match;
+  if (listed.readTruncated) {
+    // Catalog is incomplete — cannot prove absence. Pass the selector through
+    // so a canonical ID past the ceiling still reaches the server lookup.
+    return { id: selector };
   }
   throw new SplitchCliError({
     code: "CLI_SCOPE_UNRESOLVED",
