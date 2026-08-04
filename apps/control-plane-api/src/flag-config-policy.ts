@@ -6,6 +6,7 @@ import {
 import { appScope, type Repository } from "@splitch/db";
 import { type HandlerArgs, renderError } from "@splitch/worker-runtime";
 import type { ConfigStoreWriter } from "./config-store";
+import { takeEnvironmentPolicyGateCacheMiss } from "./environment-policy-gate-cache";
 
 type PromotionSelect = Parameters<ConfigStoreWriter["promoteFlagConfig"]>[0]["select"];
 type HandlerFn = (args: HandlerArgs<unknown>) => Promise<Response>;
@@ -73,11 +74,24 @@ export function diagnosableHandlers<T extends Record<string, HandlerFn>>(handler
   ) as unknown as T;
 }
 
+/**
+ * Authoritative Environment Policy read for the approval gate (SPL-292).
+ *
+ * Read path: `repo.identity.getEnvironment` → `environments.policy` (D1). There
+ * is no KV or read-through isolate cache on this seam. Any seeded isolate-local
+ * entry is dropped before the D1 read so a stale cache cannot bypass
+ * `confirm` after an Environment Policy write has acked.
+ *
+ * Fail closed: out-of-contract JSON throws `EnvironmentPolicyContractError`,
+ * which `diagnosableHandlers` maps to a named fault — never treated as `allow`.
+ */
 export async function readEnvironmentPolicy(
   repo: Repository,
   appId: string,
   environmentId: string,
 ): Promise<EnvironmentPolicy | null> {
+  // Drop isolate-local seed/cache before the D1 read (read-your-writes).
+  takeEnvironmentPolicyGateCacheMiss(appId, environmentId);
   const row = await repo.identity.getEnvironment(appScope(appId), environmentId);
   if (!row) return null;
   const parsed = EnvironmentPolicySchema.safeParse(
@@ -114,6 +128,11 @@ export function flagConfigPatchGates(payload: Record<string, unknown>): PolicyCh
   // The baseline rollout is a rollout VALUE, so it falls under the same gate the
   // per-rule rollout does — a prod percentage change is not a free action.
   if (payload.rollout !== undefined) gates.push("targeting_rollout_value");
+  // Kill-switch-off is never gated (ADR-0029): `enabled: false` does not push
+  // `enabled_state`, so a confirm Policy cannot block turning a Flag off. A
+  // cold-agent observation of `--enabled false` applying with
+  // `approvalRequest: null` under all-confirm is this exemption, not a stale
+  // Policy read (SPL-292).
   if (payload.enabled === true) gates.push("enabled_state");
   return gates;
 }

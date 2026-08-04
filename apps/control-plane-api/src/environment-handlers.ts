@@ -15,6 +15,7 @@ import {
   runningExperimentError,
 } from "./app-environment-model";
 import { provisionClientKey } from "./client-key-provisioning";
+import { invalidateEnvironmentPolicyGateCache } from "./environment-policy-gate-cache";
 import {
   initializeFlagConfigsForEnvironment,
   rollbackCreatedEnvironment,
@@ -87,16 +88,7 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       const writeError = await requireAppWrite(deps, appId, principal, requestId);
       if (writeError) return writeError;
 
-      const body = objectBody(input);
-      const updated = await deps.repo.identity.updateEnvironment(appScope(appId), environmentId, {
-        ...(body.name !== undefined ? { name: body.name as string } : {}),
-        ...(body.policy !== undefined
-          ? { policy: JSON.stringify(body.policy as EnvironmentPolicy) }
-          : {}),
-        updatedAt: nowIso(deps),
-      });
-      if (!updated) return appNotFound(requestId);
-      return Response.json(environmentResponse(updated));
+      return applyEnvironmentUpdate(deps, appId, environmentId, objectBody(input), requestId);
     },
 
     async deleteEnvironment({
@@ -115,6 +107,28 @@ export function makeEnvironmentHandlers(deps: AppEnvironmentDeps) {
       return deleteEnvironmentAfterAuth(deps, appId, environmentId, requestId);
     },
   };
+}
+
+async function applyEnvironmentUpdate(
+  deps: AppEnvironmentDeps,
+  appId: string,
+  environmentId: string,
+  body: Record<string, unknown>,
+  requestId: string,
+): Promise<Response> {
+  const policy = body.policy as EnvironmentPolicy | undefined;
+  const updated = await deps.repo.identity.updateEnvironment(appScope(appId), environmentId, {
+    ...(body.name !== undefined ? { name: body.name as string } : {}),
+    ...(policy !== undefined ? { policy: JSON.stringify(policy) } : {}),
+    updatedAt: nowIso(deps),
+  });
+  if (!updated) return appNotFound(requestId);
+  // SPL-292: Policy write acked — drop any isolate-local gate cache entry so
+  // the next gated mutation in this isolate cannot observe a pre-write value.
+  if (policy !== undefined) {
+    invalidateEnvironmentPolicyGateCache(appId, environmentId);
+  }
+  return Response.json(environmentResponse(updated));
 }
 
 async function deleteEnvironmentAfterAuth(
