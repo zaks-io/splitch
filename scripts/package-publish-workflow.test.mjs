@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const action = "linear/linear-release-action@c0cb8354a362c24c6d3e0948f37fd66d07588e3f";
+const action = "linear/linear-release-action@3858a5d7892435dc63302ac76b0cdb587435caa9";
 
 const targets = [
   {
