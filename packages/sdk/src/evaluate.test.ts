@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type EvaluateDeps, runEvaluate } from "./evaluate";
 import { SeenSet } from "./seen-set";
-import { FakeLogger, FakeTransport, httpError, ok } from "./test-fixtures";
+import { FakeLogger, FakeTransport, httpError, ok, verifyOk } from "./test-fixtures";
 
 const T0 = 1_000_000;
 const TTL = 60_000;
@@ -213,5 +213,183 @@ describe("never cache an ERROR result", () => {
     });
     expect(recovered.reason).toBe("SPLIT");
     expect(transport.calls).toHaveLength(2);
+  });
+});
+
+describe("attributes participate in value replay (SPL-308)", () => {
+  it("same targetingKey, different attributes, within TTL → transport re-resolves; not CACHED from the earlier context", async () => {
+    const transport = new FakeTransport([ok("free-arm", "run-1", "free")], {
+      verify: [
+        verifyOk({
+          value: "enterprise-arm",
+          variantName: "enterprise",
+          reason: "SPLIT",
+        }),
+      ],
+    });
+    const c = clock();
+    const bag = deps(transport, c.now);
+
+    const first = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "free" },
+      idempotencyKey: EVALUATION_ID,
+    });
+    expect(first).toMatchObject({ reason: "SPLIT", value: "free-arm" });
+    expect(transport.evaluateCalls).toHaveLength(1);
+
+    c.advance(1);
+    const second = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "enterprise" },
+      idempotencyKey: "eval-enterprise",
+    });
+    // Must not replay the free-plan Variant. Transport is consulted again
+    // (verify) so Targeting sees the new attributes.
+    expect(second.reason).not.toBe("CACHED");
+    expect(second.value).toBe("enterprise-arm");
+    expect(second.variantName).toBe("enterprise");
+    expect(transport.verifyCalls).toHaveLength(1);
+    expect(transport.verifyCalls[0]?.attributes).toEqual({ plan: "enterprise" });
+  });
+
+  it("same targetingKey, identical attributes, within TTL → cache hit, no transport, no second Exposure", async () => {
+    const transport = new FakeTransport([ok("free-arm", "run-1", "free")]);
+    const c = clock();
+    const bag = deps(transport, c.now);
+
+    await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "free", tier: 1 },
+      idempotencyKey: EVALUATION_ID,
+    });
+    c.advance(1);
+    const second = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "free", tier: 1 },
+      idempotencyKey: EVALUATION_ID,
+    });
+    expect(second).toMatchObject({ reason: "CACHED", value: "free-arm", variantName: "free" });
+    expect(transport.evaluateCalls).toHaveLength(1);
+    expect(transport.verifyCalls).toHaveLength(0);
+  });
+
+  it("attribute maps that differ only in property order are treated as identical", async () => {
+    const transport = new FakeTransport([ok("v", "run-1", "arm")]);
+    const c = clock();
+    const bag = deps(transport, c.now);
+
+    await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { z: true, a: "one", m: 2 },
+      idempotencyKey: EVALUATION_ID,
+    });
+    c.advance(1);
+    const second = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { a: "one", m: 2, z: true },
+      idempotencyKey: EVALUATION_ID,
+    });
+    expect(second.reason).toBe("CACHED");
+    expect(second.value).toBe("v");
+    expect(transport.evaluateCalls).toHaveLength(1);
+    expect(transport.verifyCalls).toHaveLength(0);
+  });
+});
+
+describe("Exposure suppression stays attribute-independent (SPL-308)", () => {
+  it("a context change does not produce a duplicate Exposure for the same (flag, run, targetingKey)", async () => {
+    // Mutation proof (with the first test): if attributes were folded into the
+    // Exposure key, this second call would be a full miss and fire evaluate
+    // again. If attributes were omitted from value replay, the first test
+    // would accept a stale CACHED Variant. Both must hold together.
+    const transport = new FakeTransport([ok("free-arm", "run-1", "free")], {
+      verify: [
+        verifyOk({
+          value: "enterprise-arm",
+          variantName: "enterprise",
+          reason: "SPLIT",
+        }),
+      ],
+    });
+    const c = clock();
+    const bag = deps(transport, c.now);
+
+    await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "free" },
+      idempotencyKey: EVALUATION_ID,
+    });
+    c.advance(1);
+    const second = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "enterprise" },
+      idempotencyKey: "eval-enterprise",
+    });
+
+    expect(second.value).toBe("enterprise-arm");
+    // Exactly one Exposure-bearing evaluate for this (flag, run, targetingKey).
+    expect(transport.evaluateCalls).toHaveLength(1);
+    expect(bag.seenSet.size).toBe(1);
+
+    // Both contexts remain cached under the single Exposure slot.
+    c.advance(1);
+    const replayFree = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "free" },
+      idempotencyKey: "replay-free",
+    });
+    const replayEnt = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "enterprise" },
+      idempotencyKey: "replay-ent",
+    });
+    expect(replayFree).toMatchObject({ reason: "CACHED", value: "free-arm" });
+    expect(replayEnt).toMatchObject({ reason: "CACHED", value: "enterprise-arm" });
+    expect(transport.evaluateCalls).toHaveLength(1);
+    expect(transport.verifyCalls).toHaveLength(1);
+  });
+
+  it("DISABLED context-miss preserves the served value across a later CACHED replay", async () => {
+    // Server returns DISABLED with value "control"; the caller supplies a
+    // different defaultValue. Both the live resolve and the within-TTL replay
+    // must return "control" — never substitute the caller's default.
+    const transport = new FakeTransport([ok("free-arm", "run-1", "free")], {
+      verify: [
+        verifyOk({
+          value: "control",
+          variantName: null,
+          reason: "DISABLED",
+        }),
+      ],
+    });
+    const c = clock();
+    const bag = deps(transport, c.now);
+
+    await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "free" },
+      idempotencyKey: EVALUATION_ID,
+    });
+    c.advance(1);
+    const disabled = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "enterprise" },
+      defaultValue: false,
+      idempotencyKey: "eval-disabled",
+    });
+    expect(disabled).toMatchObject({ reason: "DISABLED", value: "control" });
+
+    c.advance(1);
+    const replay = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "enterprise" },
+      defaultValue: false,
+      idempotencyKey: "replay-disabled",
+    });
+    expect(replay.reason).toBe("CACHED");
+    expect(replay.value).toBe("control");
+    expect(transport.evaluateCalls).toHaveLength(1);
+    expect(transport.verifyCalls).toHaveLength(1);
   });
 });
