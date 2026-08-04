@@ -420,7 +420,7 @@ Flags:
 
 Example:
   splitch experiments create --body-json '<json>' --json",
-    "experiments delete": "Soft-delete an Experiment (blocked while running).
+    "experiments delete": "Archive an Experiment; Runs are retained (blocked while a Run is running).
 
 Usage:
   splitch experiments delete <experiment-id> [flags]
@@ -1217,7 +1217,7 @@ Commands:
   get             Get an Experiment (includes live Run id, draft config).
   update          Edit an Experiment (assignment edits gated by RUN_FROZEN / DECISION_LOCKED).
   start           Start the draft as a new Run; ends any running Run (Policy-gated).
-  delete          Soft-delete an Experiment (blocked while running).
+  delete          Archive an Experiment; Runs are retained (blocked while a Run is running).
 
 Flags:
   -h, --help  [type: boolean; default: false] Show help and exit.

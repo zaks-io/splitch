@@ -138,6 +138,9 @@ async function deleteEnvironmentAfterAuth(
   if (blocker) return blocker;
 
   await deleteEnvironmentCredentials(deps, appId, environmentId);
+  // Archived Experiments (and their Runs) are Experiment-level soft-deletes;
+  // Environment teardown hard-purges them so the environment_id FK can clear.
+  await deps.repo.experiments.purgeArchivedExperimentsInEnvironment(envScope(appId, environmentId));
   if ((await deps.repo.identity.deleteEnvironment(scope, environmentId)) !== 1) {
     throw new Error("environment delete did not reach D1");
   }

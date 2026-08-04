@@ -62,9 +62,13 @@ async function firstFlagExperimentReference(
   flagId: string,
 ): Promise<ExperimentReference | null> {
   let fallback: ExperimentReference | null = null;
-  const experiments = await repo.experiments.listExperiments(scope);
+  // Unfiltered: archived Experiments leave listExperiments but still hold the
+  // flag_id FK. Skip archived so only live (draft/running/ended) rows block;
+  // Flag delete then hard-purges archived rows before removing the Flag.
+  const experiments = await repo.experiments.experiments.findMany(scope);
   for (const experiment of experiments) {
     if (experiment.flagId !== flagId) continue;
+    if (experiment.status === "archived") continue;
     if (experiment.status === "running") {
       return runningExperimentReference(repo, scope, experiment);
     }

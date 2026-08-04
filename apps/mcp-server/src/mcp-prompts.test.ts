@@ -142,6 +142,7 @@ describe("MCP prompts workflows", () => {
     expect(RECOVERY_OPERATION_IDS.ADD_VARIANT_TO_ENV).toEqual(["flags_promote"]);
     expect(RECOVERY_OPERATION_IDS.RETRY_AFTER).toEqual([]);
     expect(RECOVERY_OPERATION_IDS.CHOOSE_DIFFERENT_SLUG).toEqual([]);
+    expect(RECOVERY_OPERATION_IDS.CHOOSE_DIFFERENT_KEY).toEqual([]);
     expect(RECOVERY_OPERATION_IDS.READ_PER_ENVIRONMENT).toEqual([
       "experiments_list",
       "experiment_results_get",

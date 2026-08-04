@@ -9,6 +9,7 @@ import {
   countApprovalReviews,
   createFlagRequest,
   deleteFlagRequest,
+  NOW_APPROVAL,
   reviewRequest,
 } from "./approval-harness";
 import { makePoolHarness } from "./config-store-pool-harness";
@@ -114,5 +115,66 @@ describe("a Flag delete is gated where an Environment is not `allow`", () => {
     expect(removed.status).toBe(200);
     expect(await flagRow()).toBeNull();
     expect(await countApprovalReviews(h)).toBe(0);
+  });
+
+  it("keeps archived Experiments and Runs when a Flag delete Review is declined", async () => {
+    const scope = envScope(ids.appId, ids.devEnvironmentId);
+    await h.repo.experiments.experiments.insert(scope, {
+      id: "exp_archived_declined_delete",
+      appId: ids.appId,
+      environmentId: ids.devEnvironmentId,
+      key: "archived-declined-delete",
+      flagId: ids.flagId,
+      name: "Archived declined delete",
+      status: "archived",
+      targetingKeyField: "targetingKey",
+      targetingKeyType: "user",
+      metrics: "[]",
+      guardrailMetrics: "[]",
+      dimensions: "[]",
+      createdAt: NOW_APPROVAL,
+      updatedAt: NOW_APPROVAL,
+    });
+    await h.repo.experiments.runs.insert(scope, {
+      id: "run_archived_declined_delete",
+      appId: ids.appId,
+      environmentId: ids.devEnvironmentId,
+      experimentId: "exp_archived_declined_delete",
+      runNumber: 1,
+      status: "ended",
+      targetingKeyField: "targetingKey",
+      targetingKeyType: "user",
+      salt: "archived-declined-delete-salt",
+      allocation: JSON.stringify({ control: 100 }),
+      variantSet: JSON.stringify([{ id: "variant_control", name: "control", value: false }]),
+      controlVariantId: "variant_control",
+      targetingRules: "[]",
+      confidenceLevel: 0.95,
+      decisionFamily: "[]",
+      guardrailDecisions: "[]",
+      configHash: "sha256:archived-declined-delete",
+      startedAt: NOW_APPROVAL,
+      endedAt: NOW_APPROVAL,
+      createdAt: NOW_APPROVAL,
+    });
+
+    const removed = await deleteFlagRequest(h, "flag_delete_declined_archive");
+    expect(removed.status).toBe(409);
+    const requestId = removed.approvalRequestId;
+    expect(requestId).toBeTruthy();
+
+    const declined = await reviewRequest(h, requestId ?? "", "flag_delete_decline", "decline");
+    expect(declined.status).toBe(200);
+
+    expect(await flagRow()).toBeTruthy();
+    expect(
+      await h.repo.experiments.peekExperiment(scope, "exp_archived_declined_delete"),
+    ).toMatchObject({
+      status: "archived",
+      flagId: ids.flagId,
+    });
+    expect(
+      await h.repo.experiments.listRunsForExperiment(scope, "exp_archived_declined_delete"),
+    ).toHaveLength(1);
   });
 });

@@ -1,5 +1,13 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { flagConfigs, flags, segments, targetingRules, variants } from "../schema/index";
+import {
+  experiments,
+  flagConfigs,
+  flags,
+  runs,
+  segments,
+  targetingRules,
+  variants,
+} from "../schema/index";
 import {
   appliedRequestUpdate,
   appliedReviewInsert,
@@ -268,7 +276,8 @@ function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
    * When an Approval Review authorizes the delete, EVERY statement in the
    * cascade is guarded by that Review's Request still being pending. Guarding
    * only the parent row would let a resolved or stale Request still wipe a
-   * `confirm` Environment's Configurations and targeting rules.
+   * `confirm` Environment's Configurations and targeting rules — including
+   * archived Experiments / Runs purged for the `flag_id` FK (same batch).
    */
   return async function deleteFlagCascade(
     scope: TenantScope,
@@ -285,6 +294,7 @@ function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
       ...environmentIds.flatMap((environmentId) => {
         const env = envScope(scope.appId, environmentId);
         return [
+          ...archivedExperimentPurgeForFlag(db, env.appId, environmentId, flagId, pending),
           db
             .delete(targetingRules)
             .where(and(scopedTargetingRule(env, flagId), ...pending))
@@ -310,4 +320,40 @@ function makeDeleteFlagCascade(db: Db, flagInScope: FlagInScope) {
     await db.batch(batch as unknown as Parameters<Db["batch"]>[0]);
     return approval ? (await flagInScope(scope, flagId)) === null : true;
   };
+}
+
+/** Runs first, then Experiments — both share the Approval pending guard. */
+function archivedExperimentPurgeForFlag(
+  db: Db,
+  appId: string,
+  environmentId: string,
+  flagId: string,
+  pending: ReturnType<typeof approvalPendingCondition>[],
+) {
+  const archivedForFlag = and(
+    eq(experiments.appId, appId),
+    eq(experiments.environmentId, environmentId),
+    eq(experiments.flagId, flagId),
+    eq(experiments.status, "archived"),
+  );
+  return [
+    db
+      .delete(runs)
+      .where(
+        and(
+          eq(runs.appId, appId),
+          eq(runs.environmentId, environmentId),
+          inArray(
+            runs.experimentId,
+            db.select({ id: experiments.id }).from(experiments).where(archivedForFlag),
+          ),
+          ...pending,
+        ),
+      )
+      .returning({ id: runs.id }),
+    db
+      .delete(experiments)
+      .where(and(archivedForFlag, ...pending))
+      .returning({ id: experiments.id }),
+  ] as const;
 }

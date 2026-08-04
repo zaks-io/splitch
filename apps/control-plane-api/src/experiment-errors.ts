@@ -7,6 +7,29 @@ export function experimentNotFound(requestId: string): Response {
   );
 }
 
+export function experimentKeyConflict(
+  key: string,
+  holder: { id: string; status: string },
+  requestId: string,
+): Response {
+  const archived = holder.status === "archived";
+  return renderError(
+    {
+      code: "EXPERIMENT_KEY_CONFLICT",
+      message: archived
+        ? "an archived Experiment already holds this key in this Environment"
+        : "an Experiment already holds this key in this Environment",
+      details: {
+        key,
+        status: holder.status as "draft" | "running" | "ended" | "archived",
+        ...(archived ? { archivedExperimentId: holder.id } : {}),
+        recommendedAction: "CHOOSE_DIFFERENT_KEY",
+      },
+    },
+    { requestId },
+  );
+}
+
 export function runNotFound(requestId: string): Response {
   return renderError(
     { code: "RUN_NOT_FOUND", message: "Run not found", details: {} },
@@ -219,6 +242,18 @@ export function configStoreUnavailable(requestId: string): Response {
       code: "SERVICE_UNAVAILABLE",
       message: "config store is not configured",
       details: { retryAfterMs: 1000 },
+    },
+    { requestId },
+  );
+}
+
+/** Archive UPDATE refused on a still-visible Experiment (e.g. concurrent End). */
+export function experimentDeleteConflict(requestId: string): Response {
+  return renderError(
+    {
+      code: "SERVICE_UNAVAILABLE",
+      message: "experiment archive lost a race; retry",
+      details: { retryAfterMs: 0 },
     },
     { requestId },
   );

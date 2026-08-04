@@ -86,9 +86,10 @@ referenced in a running Experiment.
 ### `DELETE /apps/{app_id}/flags/{flag_id}`
 
 Auto-provisioned per-Environment Flag Configurations are **cascade-deleted** with the Flag
-(SPL-164). Blocked if the Flag is referenced by any Experiment in any Environment. A **running**
-Experiment returns `EXPERIMENT_RUNNING`; draft or ended Experiments return `RESOURCE_NOT_EMPTY`
-with `childType: "experiment"`.
+(SPL-164). Blocked if the Flag is referenced by any **non-archived** Experiment in any Environment.
+A **running** Experiment returns `EXPERIMENT_RUNNING`; draft or ended Experiments return
+`RESOURCE_NOT_EMPTY` with `childType: "experiment"`. Archived Experiments (and their retained Runs)
+are hard-deleted as part of the Flag cascade once no non-archived reference remains.
 
 Requires an `Idempotency-Key` header. Because the delete destroys every Environment's available
 Variant set and frees the Flag key for immediate re-creation, it is a `variant_availability` change:

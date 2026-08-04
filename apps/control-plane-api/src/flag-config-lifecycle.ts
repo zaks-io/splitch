@@ -88,6 +88,8 @@ export async function deleteFlagD1Cascade(
 ): Promise<void> {
   const scope = appScope(appId);
   const environments = await deps.repo.identity.listEnvironments(scope);
+  // Archived Experiment + Run purge lives inside deleteFlagCascade (same batch /
+  // Approval guard) so a declined Review cannot destroy retained rows.
   await deps.repo.flags.deleteFlagCascade(
     scope,
     flagId,

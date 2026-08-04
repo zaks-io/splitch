@@ -1,16 +1,15 @@
 import {
-  EnvironmentPolicySchema,
   type App,
   type ClientKey,
   type Environment,
   type EnvironmentPolicy,
+  EnvironmentPolicySchema,
 } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning";
-import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
-
 import type { ConfigStoreAccess } from "./config-store-do";
+import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
 
 export interface AppEnvironmentDeps {
   repo: Repository;
@@ -168,11 +167,21 @@ export async function deleteEnvironmentBlockedByChildren(
   requestId: string,
 ): Promise<Response | null> {
   const scope = envScope(appId, environmentId);
+  const experimentRows = await deps.repo.experiments.experiments.findMany(scope);
+  const activeExperiments = experimentRows.filter((row) => row.status !== "archived");
+  if (activeExperiments.length > 0) {
+    return resourceNotEmpty(
+      "environment",
+      environmentId,
+      "experiments",
+      activeExperiments.length,
+      attemptedOp,
+      requestId,
+    );
+  }
   for (const check of [
     ["flag_configs", deps.repo.flags.flagConfigs.findMany(scope)],
     ["targeting_rules", deps.repo.flags.targetingRules.findMany(scope)],
-    ["experiments", deps.repo.experiments.experiments.findMany(scope)],
-    ["runs", deps.repo.experiments.runs.findMany(scope)],
   ] as const) {
     const [childType, rows] = check;
     const childCount = (await rows).length;

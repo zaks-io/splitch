@@ -2,7 +2,11 @@ import { type EnvScope, envScope } from "@splitch/db";
 import type { HandlerArgs } from "@splitch/worker-runtime";
 import { appNotFound, nowIso } from "./app-environment-model";
 import { randomHex } from "./credential-cache";
-import { experimentNotFound } from "./experiment-errors";
+import {
+  experimentDeleteConflict,
+  experimentKeyConflict,
+  experimentNotFound,
+} from "./experiment-errors";
 import {
   draftPatch,
   type ExperimentDeps,
@@ -54,6 +58,12 @@ async function createExperiment(
   const body = objectBody(input);
   const writeError = await requireWritableEnvironment(deps, scope, principal, requestId);
   if (writeError) return writeError;
+
+  const key = body.key as string;
+  const existingKey = await deps.repo.experiments.findExperimentByKey(scope, key);
+  if (existingKey) {
+    return experimentKeyConflict(key, existingKey, requestId);
+  }
 
   const ready = await validateCreateExperiment(deps, scope, body, requestId);
   if (!ready.ok) return ready.response;
@@ -168,10 +178,18 @@ async function deleteExperiment(
   args: HandlerArgs<unknown>,
 ): Promise<Response> {
   const scope = envScope(pathParam(args.input, "appId"), pathParam(args.input, "environmentId"));
-  const experiment = await experimentFromPath(deps, args.input);
+  // peek includes archived rows so repeat DELETE can be an idempotent success;
+  // getExperiment / experimentFromPath hide archived (soft-delete surfaces).
+  const experiment = await deps.repo.experiments.peekExperiment(
+    scope,
+    pathParam(args.input, "experimentId"),
+  );
   if (!experiment) return experimentNotFound(args.requestId);
   const writeError = await requireWritableEnvironment(deps, scope, args.principal, args.requestId);
   if (writeError) return writeError;
+  if (experiment.status === "archived") {
+    return Response.json({ deleted: true });
+  }
   const runningRun = await runningRunForExperiment(deps.repo, scope, experiment);
   if (runningRun) {
     return runningExperimentError(
@@ -180,6 +198,38 @@ async function deleteExperiment(
       args.requestId,
     );
   }
-  await deps.repo.experiments.removeExperiment(scope, experiment.id);
+  // Guaranteed UPDATE: a concurrent Start winning the race cannot make DELETE
+  // report `{ deleted: true }` while the Experiment remains non-archived. If
+  // live_run_id / a running Run exists at commit time, D1 applies zero changes
+  // and we fail closed with EXPERIMENT_RUNNING. Run rows are retained.
+  const archived = await deps.repo.experiments.archiveExperiment(scope, experiment.id, {
+    updatedAt: nowIso(deps),
+    updatedBy: args.principal.id,
+  });
+  if (archived === 0) {
+    return resolveArchiveRace(deps, scope, experiment.id, args.requestId);
+  }
   return Response.json({ deleted: true });
+}
+
+async function resolveArchiveRace(
+  deps: ExperimentDeps,
+  scope: EnvScope,
+  experimentId: string,
+  requestId: string,
+): Promise<Response> {
+  const current = await deps.repo.experiments.peekExperiment(scope, experimentId);
+  if (!current) return experimentNotFound(requestId);
+  if (current.status === "archived") {
+    return Response.json({ deleted: true });
+  }
+  const raced = await runningRunForExperiment(deps.repo, scope, current);
+  if (raced) {
+    return runningExperimentError(
+      { experimentId: current.id, runId: raced.id },
+      "DELETE_EXPERIMENT",
+      requestId,
+    );
+  }
+  return experimentDeleteConflict(requestId);
 }

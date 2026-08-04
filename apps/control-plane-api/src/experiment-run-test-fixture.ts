@@ -58,25 +58,42 @@ export async function makeExperimentRunHarness(
      * say anything about whether the write is guarded.
      */
     beforeExperimentUpdate?: () => Promise<void>;
+    /**
+     * Same seam for Experiment delete: fires after the running-Run guard and
+     * before `archiveExperiment`, so a Start can land in that window.
+     */
+    beforeArchiveExperiment?: () => Promise<void>;
   },
 ): Promise<ExperimentRunHarness> {
   const h = await makeFlagDefinitionHarness(makeBindings);
   const repo = createRepository(h.bindings.d1);
-  const appRepo = interleavedRepo(repo, options?.beforeExperimentUpdate);
+  const appRepo = interleavedRepo(repo, options);
   h.app = makeAppForRepo(h, appRepo, configStoreAccess(repo, h.bindings.kv, options?.syncFailures));
   return { h, repo };
 }
 
-function interleavedRepo(repo: Repository, before?: () => Promise<void>): Repository {
-  if (!before) return repo;
+function interleavedRepo(
+  repo: Repository,
+  options?: {
+    beforeExperimentUpdate?: () => Promise<void>;
+    beforeArchiveExperiment?: () => Promise<void>;
+  },
+): Repository {
+  const beforeUpdate = options?.beforeExperimentUpdate;
+  const beforeArchive = options?.beforeArchiveExperiment;
+  if (!beforeUpdate && !beforeArchive) return repo;
   const experiments = repo.experiments;
   return {
     ...repo,
     experiments: {
       ...experiments,
       async updateExperiment(...args: Parameters<typeof experiments.updateExperiment>) {
-        await before();
+        await beforeUpdate?.();
         return experiments.updateExperiment(...args);
+      },
+      async archiveExperiment(...args: Parameters<typeof experiments.archiveExperiment>) {
+        await beforeArchive?.();
+        return experiments.archiveExperiment(...args);
       },
     },
   };

@@ -5,9 +5,9 @@ import type { ApplicationOutcome } from "./approval-service-types";
 import type { ConfigStoreAccess } from "./config-store-do";
 import { purgeFlagConfigsKvForKey } from "./flag-config-lifecycle";
 import {
+  type VariantWriteRefusal,
   variantFreezeDetails,
   variantFreezeMessage,
-  type VariantWriteRefusal,
 } from "./flag-definition-errors";
 import { resyncFlagSnapshots } from "./flag-definition-handler-utils";
 import type { RunSnapshotDelivery } from "./run-snapshot";
