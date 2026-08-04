@@ -229,9 +229,7 @@ function workosAccessTokenVerifier(env: AuthApiEnv) {
  * WHY this is checked at config time and not left to the signer: a presence-only
  * check boots a Worker that reports healthy and then throws on every single mint,
  * which reaches the caller as an opaque `server_error`. Production ran that way
- * with a leftover HMAC secret and no door could issue a token. The same check
- * runs in the deploy gate (scripts/lib/hosted-worker-secrets.mjs) so a bad secret
- * fails before the Worker is replaced; this is the runtime half of that contract.
+ * with a leftover HMAC secret and no door could issue a token.
  *
  * Memoized on the value: the import is per-isolate work, not per-request.
  */
