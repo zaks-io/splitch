@@ -2,10 +2,11 @@ import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK } from "./exit-codes.js";
+import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import {
   authHeader,
-  flagRecord,
   FakeCliTransport,
+  flagRecord,
   oauthTokenMint,
   organizationUsage,
   storedCredential,
@@ -31,6 +32,7 @@ const createArgs = [
 
 function controlPlaneTransport(): FakeCliTransport {
   return new FakeCliTransport([
+    ...scopeResolutionStubs(),
     {
       match: (request) => request.url.includes("/flags") && request.method === "POST",
       status: 200,
@@ -47,8 +49,11 @@ describe("platform target and API origins", () => {
 
     const code = await runCli([...createArgs], { credentialPath, fetch: transport.fetch, env: {} });
     expect(code).toBe(EXIT_OK);
-    expect(transport.requests[0]?.url.startsWith("https://api.splitch.dev/")).toBe(true);
-    expect(transport.requests[0]?.authorization).toBe(authHeader());
+    const create = transport.requests.find(
+      (request) => request.url.includes("/flags") && request.method === "POST",
+    );
+    expect(create?.url.startsWith("https://api.splitch.dev/")).toBe(true);
+    expect(create?.authorization).toBe(authHeader());
   });
 
   // Every operation the CLI holds a control-plane token for is addressed at the
@@ -84,6 +89,7 @@ describe("platform target and API origins", () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
       oauthTokenMint(),
       { match: (request) => request.url.includes(path), status: 200, body },
     ]);
@@ -107,7 +113,11 @@ describe("platform target and API origins", () => {
       env: { SPLITCH_PLATFORM_TARGET: "local" },
     });
     expect(code).toBe(EXIT_OK);
-    expect(transport.requests[0]?.url.startsWith("http://127.0.0.1:8787/")).toBe(true);
+    expect(
+      transport.requests
+        .find((request) => request.url.includes("/flags") && request.method === "POST")
+        ?.url.startsWith("http://127.0.0.1:8787/"),
+    ).toBe(true);
   });
 
   it("CONTROL_PLANE_API_ORIGIN overrides the baked default", async () => {
@@ -121,7 +131,11 @@ describe("platform target and API origins", () => {
       env: { CONTROL_PLANE_API_ORIGIN: "https://env.example" },
     });
     expect(code).toBe(EXIT_OK);
-    expect(transport.requests[0]?.url.startsWith("https://env.example/")).toBe(true);
+    expect(
+      transport.requests
+        .find((request) => request.url.includes("/flags") && request.method === "POST")
+        ?.url.startsWith("https://env.example/"),
+    ).toBe(true);
   });
 
   it("explicit options win over environment origins", async () => {
@@ -136,7 +150,11 @@ describe("platform target and API origins", () => {
       env: { CONTROL_PLANE_API_ORIGIN: "https://env.example" },
     });
     expect(code).toBe(EXIT_OK);
-    expect(transport.requests[0]?.url.startsWith("https://option.example/")).toBe(true);
+    expect(
+      transport.requests
+        .find((request) => request.url.includes("/flags") && request.method === "POST")
+        ?.url.startsWith("https://option.example/"),
+    ).toBe(true);
   });
 
   it("rejects an invalid SPLITCH_PLATFORM_TARGET instead of falling back to local", async () => {

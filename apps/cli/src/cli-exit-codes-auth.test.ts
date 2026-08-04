@@ -4,6 +4,7 @@ import open from "open";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_API, EXIT_AUTH, EXIT_OK } from "./exit-codes.js";
+import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import {
   deviceAuthorizationResponse,
   deviceTokenResponse,
@@ -210,6 +211,7 @@ describe("api and auth error exit codes", () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
+      ...scopeResolutionStubs(),
       {
         match: (request) => request.url.includes("/flags"),
         status: 409,

@@ -1,19 +1,14 @@
-import type { TokenBinding } from "./auth-binding.js";
-import { withAuthorizationRetry } from "./auth.js";
 import { type ResolvedContext, resolveContext, writeNearestConfig } from "./context.js";
 import { SplitchCliError, writeCliError } from "./errors.js";
 import { emit } from "./execute-io.js";
 import type { CliDeps, CliIo, CliResult } from "./execute-types.js";
 import { EXIT_OK, EXIT_USAGE } from "./exit-codes.js";
-import { createOperationSdks } from "./sdks.js";
 import type { ParsedInvocation } from "./parse-args.js";
-
-interface NamedResource {
-  id: string;
-  key?: string;
-  slug?: string;
-  name?: string;
-}
+import {
+  type NamedResource,
+  resolveAppSelector,
+  resolveEnvironmentSelector,
+} from "./scope-resolve.js";
 
 /**
  * `splitch use` resolves the selectors to canonical IDs against the live
@@ -98,75 +93,6 @@ async function persistSelection(
   return { path, ...(staleEnvironmentId ? { clearedEnvironmentId: staleEnvironmentId } : {}) };
 }
 
-async function callList(
-  deps: CliDeps,
-  operationId: string,
-  input: Record<string, unknown>,
-  binding?: TokenBinding,
-): Promise<NamedResource[]> {
-  const result = await withAuthorizationRetry(
-    deps,
-    async (authorization) => {
-      const sdks = createOperationSdks(deps);
-      const response = await sdks["control-plane-api"].callOperationById(operationId, input, {
-        authorization,
-      });
-      return { status: response.ok ? 200 : response.status, value: response };
-    },
-    binding,
-  );
-  if (!result.ok) {
-    throw new SplitchCliError({
-      code: "CLI_SCOPE_UNRESOLVED",
-      causeSummary: `${operationId} failed while resolving the selection: ${result.error.code}: ${result.error.message}`,
-      remediation: "Fix the reported API failure and rerun splitch use",
-    });
-  }
-  return (result.data as { items: NamedResource[] }).items;
-}
-
-/**
- * Mirrors the server's selector rule (membership-authority.ts): the globally
- * unique ID is matched across every reachable App first, and only then the
- * per-Org key, which is refused when it matches more than one App. Resolving
- * these differently here would send `use` and the token rebind to different
- * Apps, so the two passes must stay in lockstep.
- */
-async function resolveAppSelector(deps: CliDeps, selector: string): Promise<NamedResource> {
-  // No binding: `/orgs` is keyed by the principal, so whatever token is
-  // already cached answers it, bound or not.
-  const orgs = await callList(deps, "organizations_list", {});
-  const reachable: NamedResource[] = [];
-  for (const org of orgs) {
-    reachable.push(
-      ...(await callList(deps, "apps_list", { orgId: org.id }, { kind: "org", selector: org.id })),
-    );
-  }
-  const byId = reachable.find((app) => app.id === selector);
-  if (byId) return byId;
-  const byKey = reachable.filter((app) => app.key === selector);
-  if (byKey.length > 1) {
-    throw new SplitchCliError({
-      code: "CLI_SCOPE_UNRESOLVED",
-      causeSummary: `App selector "${selector}" matches more than one App across your Organizations: ${byKey
-        .map((app) => app.id)
-        .join(", ")}`,
-      remediation: "Pass the canonical App ID instead of the key",
-    });
-  }
-  const [match] = byKey;
-  if (match) return match;
-  throw new SplitchCliError({
-    code: "CLI_SCOPE_UNRESOLVED",
-    causeSummary: `No App matching "${selector}" is reachable from your memberships. Reachable Apps: ${
-      reachable.length
-        ? reachable.map((app) => app.key ?? app.id).join(", ")
-        : "(none — create one with splitch apps create <org-id> --name <name>)"
-    }`,
-    remediation: "Pass an existing App ID or key, or create the App first",
-  });
-}
-
 async function resolveRequestedEnvironment(
   deps: CliDeps,
   selector: string | undefined,
@@ -181,30 +107,4 @@ async function resolveRequestedEnvironment(
     });
   }
   return resolveEnvironmentSelector(deps, appId, selector);
-}
-
-async function resolveEnvironmentSelector(
-  deps: CliDeps,
-  appId: string,
-  selector: string,
-): Promise<NamedResource> {
-  const environments = await callList(
-    deps,
-    "environments_list",
-    { appId },
-    { kind: "app", selector: appId },
-  );
-  const match =
-    environments.find((environment) => environment.id === selector) ??
-    environments.find((environment) => environment.key === selector);
-  if (!match) {
-    throw new SplitchCliError({
-      code: "CLI_SCOPE_UNRESOLVED",
-      causeSummary: `No Environment matching "${selector}" exists on App ${appId}. Available: ${environments
-        .map((environment) => environment.key ?? environment.id)
-        .join(", ")}`,
-      remediation: "Pass one of the listed Environment keys or IDs",
-    });
-  }
-  return match;
 }

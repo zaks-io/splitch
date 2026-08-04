@@ -49,7 +49,8 @@ export function jsonError(code: ErrorResponse["code"], message: string): ErrorRe
       },
     };
   }
-  return { code, message, details: {} };
+  // Test stubs only need a code + message; details vary by ErrorResponse member.
+  return { code, message, details: {} } as ErrorResponse;
 }
 
 const timestamp = "2026-07-03T00:00:00.000Z";

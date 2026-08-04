@@ -46,22 +46,9 @@ export async function executeFlagsVerify(
   io: CliIo,
   context: ResolvedContext,
 ): Promise<CliResult> {
-  const flagKey = invocation.positionals[0];
-  if (!flagKey) {
-    writeCliError(io, {
-      code: "CLI_USAGE_INVALID",
-      causeSummary: "flags verify requires a Flag key",
-      remediation: "Pass the Flag key as the first positional argument",
-    });
-    return { exitCode: EXIT_USAGE };
-  }
-  if (!invocation.flags.targetingKey) {
-    writeCliError(io, {
-      code: "CLI_USAGE_INVALID",
-      causeSummary: "flags verify requires --targeting-key",
-      remediation: "Pass the Entity Targeting Key with --targeting-key",
-    });
-    return { exitCode: EXIT_USAGE };
+  const usageError = validateFlagsVerifyUsage(invocation, io);
+  if (usageError) {
+    return usageError;
   }
 
   try {
@@ -100,6 +87,10 @@ export async function executeFlagsVerify(
         debug: () => {},
       },
     });
+    const flagKey = invocation.positionals[0];
+    if (!flagKey) {
+      return validateFlagsVerifyUsage(invocation, io) ?? { exitCode: EXIT_USAGE };
+    }
     const verifyDetails = await client.verify(flagKey, evaluationContext);
     emit(io, invocation.flags.json, verifyDetails);
     if (verifyDetails.reason === "ERROR") {
@@ -119,6 +110,29 @@ export async function executeFlagsVerify(
   } catch (error) {
     return handleExecutionError(error, io);
   }
+}
+
+export function validateFlagsVerifyUsage(
+  invocation: ParsedInvocation,
+  io: CliIo,
+): CliResult | null {
+  if (!invocation.positionals[0]) {
+    writeCliError(io, {
+      code: "CLI_USAGE_INVALID",
+      causeSummary: "flags verify requires a Flag key",
+      remediation: "Pass the Flag key as the first positional argument",
+    });
+    return { exitCode: EXIT_USAGE };
+  }
+  if (!invocation.flags.targetingKey) {
+    writeCliError(io, {
+      code: "CLI_USAGE_INVALID",
+      causeSummary: "flags verify requires --targeting-key",
+      remediation: "Pass the Entity Targeting Key with --targeting-key",
+    });
+    return { exitCode: EXIT_USAGE };
+  }
+  return null;
 }
 
 export async function executeEnvPolicyGet(
@@ -223,6 +237,9 @@ export function handleExecutionError(error: unknown, io: CliIo): CliResult {
   writeCliError(io, cliError);
   if (cliError.code === "CLI_NOT_AUTHENTICATED" || cliError.code === "CLI_SESSION_EXPIRED") {
     return { exitCode: EXIT_AUTH };
+  }
+  if (cliError.code === "CLI_SCOPE_UNRESOLVED") {
+    return { exitCode: EXIT_SCOPE };
   }
   return { exitCode: EXIT_USAGE };
 }
