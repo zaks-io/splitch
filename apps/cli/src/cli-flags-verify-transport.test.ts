@@ -28,6 +28,7 @@ afterEach(async () => {
 describe("flags verify transport", () => {
   it("names the positional as a Flag key in the coded usage error", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
     const code = await runCli([
       "flags",
@@ -42,8 +43,12 @@ describe("flags verify transport", () => {
 
     expect(code).toBe(EXIT_USAGE);
     expect(error).toHaveBeenCalledWith(
-      "CLI_USAGE_INVALID: Cause: flags verify requires a Flag key. Remediation: Pass the Flag key as the first positional argument.",
+      expect.stringContaining("CLI_USAGE_INVALID: Cause: Missing required argument <flag-key>."),
     );
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("Usage: splitch flags verify <flag-key> [flags]"),
+    );
+    expect(log).toHaveBeenCalledWith("Usage:\n  splitch flags verify <flag-key> [flags]");
   });
 
   it("uses the Client Key on the data-plane transport, not the control-plane token", async () => {

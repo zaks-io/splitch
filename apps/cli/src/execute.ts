@@ -1,6 +1,12 @@
 import { getRoute } from "@splitch/contracts";
 import type { CliCommandDefinition } from "./command-registry.js";
 import { findCommand } from "./command-registry.js";
+import {
+  assertPathParamsPresent,
+  commandUsageLine,
+  missingPositionalError,
+  missingRequiredPositional,
+} from "./command-positionals.js";
 import { type ResolvedContext, resolveContext } from "./context.js";
 import { writeCliError } from "./errors.js";
 import { consoleIo, emit } from "./execute-io.js";
@@ -110,6 +116,13 @@ async function executeCommand(
   deps: CliDeps,
   io: CliIo,
 ): Promise<CliResult> {
+  // Positionals before scope / SDK so misuse never reaches control-plane-sdk
+  // path building (and never needs credentials to learn the argument is required).
+  const positionalError = validateRequiredPositionals(command, invocation, io);
+  if (positionalError) {
+    return positionalError;
+  }
+
   let context = await resolveContext({
     flags: { app: invocation.flags.app, env: invocation.flags.env },
     env: deps.env,
@@ -147,11 +160,26 @@ async function executeCommand(
   let input: Record<string, unknown>;
   try {
     input = buildOperationInput(command, invocation, context);
+    assertPathParamsPresent(command, input);
     input = await resolveFlagIdInInput(deps, command, context, input);
   } catch (error) {
     return handleInputError(error, invocation, io);
   }
   return executeApiOperation(command.operationId, input, invocation, deps, io);
+}
+
+function validateRequiredPositionals(
+  command: CliCommandDefinition,
+  invocation: ParsedInvocation,
+  io: CliIo,
+): CliResult | null {
+  const missing = missingRequiredPositional(command, invocation);
+  if (!missing) {
+    return null;
+  }
+  writeCliError(io, missingPositionalError(command, missing));
+  io.log(`Usage:\n  ${commandUsageLine(command)}`);
+  return { exitCode: EXIT_USAGE };
 }
 
 /**

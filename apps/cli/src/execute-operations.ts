@@ -116,14 +116,7 @@ export function validateFlagsVerifyUsage(
   invocation: ParsedInvocation,
   io: CliIo,
 ): CliResult | null {
-  if (!invocation.positionals[0]) {
-    writeCliError(io, {
-      code: "CLI_USAGE_INVALID",
-      causeSummary: "flags verify requires a Flag key",
-      remediation: "Pass the Flag key as the first positional argument",
-    });
-    return { exitCode: EXIT_USAGE };
-  }
+  // Flag-key positional is validated earlier via requiredPositionals (SPL-306).
   if (!invocation.flags.targetingKey) {
     writeCliError(io, {
       code: "CLI_USAGE_INVALID",
