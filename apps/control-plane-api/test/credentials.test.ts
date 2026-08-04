@@ -5,7 +5,7 @@ import {
   type ErrorResponse,
   kvEnvelope,
 } from "@splitch/contracts";
-import { createRepository } from "@splitch/db";
+import { createRepository, envScope } from "@splitch/db";
 import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -279,3 +279,60 @@ describe("control-plane credential endpoints", () => {
     expect((await bodyOf(res)).code).toBe("INSUFFICIENT_SCOPES");
   });
 });
+
+describe("control-plane API Key scope vocabulary", () => {
+  it("rejects unknown API Key scopes with VALIDATION_ERROR and does not mint", async () => {
+    const before = await apiKeyCount();
+    const res = await request("POST", credentialPath("/api-keys"), await token(ADMIN, "admin"), {
+      scopes: ["bogus"],
+    });
+    expect(res.status).toBe(400);
+    const err = await bodyOf(res);
+    expect(err.code).toBe("VALIDATION_ERROR");
+    if (err.code === "VALIDATION_ERROR") {
+      expect(err.details.issues).toEqual([
+        {
+          path: ["body", "scopes", "0"],
+          message: "allowed scopes: data-plane:evaluate, data-plane:write",
+        },
+      ]);
+    }
+    expect(await apiKeyCount()).toBe(before);
+  });
+
+  it("accepts a known scope set and round-trips through api-keys list", async () => {
+    const jwt = await token(ADMIN, "admin");
+    const created = await request("POST", credentialPath("/api-keys"), jwt, {
+      scopes: ["data-plane:evaluate"],
+    });
+    expect(created.status).toBe(200);
+    const createdBody = (await created.json()) as {
+      credential: { keyId: string; scopes: string[] };
+      value: string;
+    };
+    expect(createdBody.value).toMatch(/^sk_/);
+    expect(createdBody.credential.scopes).toEqual(["data-plane:evaluate"]);
+
+    const listed = await request("GET", credentialPath("/api-keys"), jwt);
+    expect(listed.status).toBe(200);
+    const listBody = (await listed.json()) as {
+      items: Array<{ keyId: string; scopes: string[] }>;
+    };
+    expect(listBody.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          keyId: createdBody.credential.keyId,
+          scopes: ["data-plane:evaluate"],
+        }),
+      ]),
+    );
+    expect(JSON.stringify(listBody)).not.toContain(createdBody.value);
+  });
+});
+
+async function apiKeyCount(): Promise<number> {
+  const rows = await createRepository(h.bindings.d1).credentials.listApiKeys(
+    envScope(APP.appId, ENV.environmentId),
+  );
+  return rows.length;
+}

@@ -1,4 +1,5 @@
 import { z } from "@hono/zod-openapi";
+import { ApiKeyScopeSchema } from "../api-key-scopes";
 import { ApprovalRequestIdSchema } from "../approval-identifiers";
 import { OriginAllowlistSchema } from "../client-origin";
 import {
@@ -230,7 +231,7 @@ export const PatchClientKeyRequestSchema = z
   .strict();
 
 export const CreateApiKeyRequestSchema = z.object({
-  scopes: z.array(z.string()),
+  scopes: z.array(ApiKeyScopeSchema),
   idempotency_key: z.string().optional(),
 });
 
