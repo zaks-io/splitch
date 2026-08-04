@@ -39,18 +39,14 @@ export async function refreshAccessToken(
     ...(explicitBinding ? bindingParams(binding) : {}),
   });
   if (!response.ok) {
-    const fault = await readOAuthFault(response);
-    if (fault.error === "email_unverified") {
-      throw emailUnverifiedError(fault.description);
-    }
-    const rotated =
-      retryOnRotation && fault.error === "invalid_grant"
-        ? await reloadRotatedCredential(deps, stored)
-        : null;
-    if (!rotated) {
-      throw sessionExpiredError(describeOAuthFault(fault));
-    }
-    return refreshAccessToken(deps, rotated, binding, explicitBinding, false);
+    return refreshAccessTokenFault(
+      deps,
+      stored,
+      binding,
+      explicitBinding,
+      response,
+      retryOnRotation,
+    );
   }
   const next = mintedCredential(stored, (await response.json()) as RefreshTokenBody, {
     binding,
@@ -58,6 +54,37 @@ export async function refreshAccessToken(
   });
   await deps.credentialStore.save(next);
   return next;
+}
+
+async function refreshAccessTokenFault(
+  deps: AuthDeps,
+  stored: CliCredentialFile,
+  binding: TokenBinding | null,
+  explicitBinding: boolean,
+  response: Response,
+  retryOnRotation: boolean,
+): Promise<CliCredentialFile> {
+  const fault = await readOAuthFault(response);
+  if (fault.error === "email_unverified") {
+    // Auth-api rotates the provider token before the email gate and returns
+    // the new refresh_token on the 403 — persist it so verify-then-retry
+    // still holds a token WorkOS will honor.
+    if (fault.refreshToken && fault.refreshToken !== stored.credential.refreshToken) {
+      await deps.credentialStore.save({
+        ...stored,
+        credential: { ...stored.credential, refreshToken: fault.refreshToken },
+      });
+    }
+    throw emailUnverifiedError(fault.description);
+  }
+  const rotated =
+    retryOnRotation && fault.error === "invalid_grant"
+      ? await reloadRotatedCredential(deps, stored)
+      : null;
+  if (!rotated) {
+    throw sessionExpiredError(describeOAuthFault(fault));
+  }
+  return refreshAccessToken(deps, rotated, binding, explicitBinding, false);
 }
 
 export async function formPost(

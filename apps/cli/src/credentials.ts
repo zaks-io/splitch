@@ -149,17 +149,24 @@ export function withEmailBackfillUnavailable(file: CliCredentialFile): CliCreden
   };
 }
 
-export type EmailUnavailableReason = "backfill_unavailable" | "unverified";
+export type EmailUnavailableReason = "backfill_unavailable" | "backfill_pending" | "unverified";
 
+/**
+ * Reason the principal has no email, derived from the miss marker's actual
+ * presence — never invent `backfill_unavailable` when the next command will
+ * still attempt a refresh (rotated-file early return writes no marker).
+ */
 export function emailUnavailableReason(
   file: CliCredentialFile,
 ): EmailUnavailableReason | undefined {
   if (realPrincipalEmail(file.principal.email) !== undefined) {
     return undefined;
   }
-  // Success-path absences are backfill misses. Permanent unverified-email
-  // faults fail loud via CLI_EMAIL_UNVERIFIED before context emits.
-  return "backfill_unavailable";
+  if (emailBackfillBlocked(file)) {
+    return "backfill_unavailable";
+  }
+  // Email absent but no sticky marker — backfill will retry on the next call.
+  return "backfill_pending";
 }
 
 function credentialStoreError(error: unknown, operation: "read" | "clear"): SplitchCliError {

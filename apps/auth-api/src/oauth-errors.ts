@@ -38,12 +38,16 @@ export interface OAuthErrorBody {
   error_description: string;
   /**
    * `interaction_required` carries the consent link and opaque verification id
-   * the human must visit (auth-doors.md). Other codes leave these absent. Kept on the one body shape
-   * (not a forked type) so the whole door speaks one error wire contract.
+   * the human must visit (auth-doors.md). `email_unverified` on refresh may
+   * carry the rotated `refresh_token` so the CLI can keep a coherent session
+   * after WorkOS already consumed the presented token. Other codes leave
+   * these absent. Kept on the one body shape (not a forked type) so the whole
+   * door speaks one error wire contract.
    */
   consent_url?: string;
   consent_expires_at?: string;
   verification_id?: string;
+  refresh_token?: string;
 }
 
 /** HTTP status for each OAuth error code (OAuth 2.0 / auth.md mapping). */
@@ -69,7 +73,7 @@ const statusByCode: Record<OAuthErrorCode, number> = {
 /** Optional extra body fields some codes carry (e.g. the consent link). */
 type OAuthErrorExtra = Pick<
   OAuthErrorBody,
-  "consent_url" | "consent_expires_at" | "verification_id"
+  "consent_url" | "consent_expires_at" | "verification_id" | "refresh_token"
 >;
 
 /** A typed door failure carrying its OAuth code + human description. */

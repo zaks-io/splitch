@@ -132,6 +132,106 @@ describe("device login writes the shared member-profile identity cache", () => {
   });
 });
 
+describe("refresh rotates before email_unverified so verify-then-retry stays live", () => {
+  it("persists the rotated provider token, then succeeds with that same token after verification", async () => {
+    const values = new Map<string, string>();
+    const sessionStore = memoryKvNamespace(values);
+    const sessions = new Map<string, DeviceRefreshSession>();
+    sessions.set("refresh_original", {
+      providerSessionId: "session_selected",
+      userId: "user_device",
+      providerOrganizationId: null,
+      selectedAppSelector: null,
+    });
+
+    let emailVerified = false;
+    const rotations: Array<{ previous: string; next: string }> = [];
+    const app = routeApp({
+      deviceFlow: {
+        authorizeDevice: async () => {
+          throw new Error("not used");
+        },
+        exchangeDeviceCode: async () => {
+          throw new Error("not used");
+        },
+        refreshProviderToken: async ({ refreshToken }) => {
+          if (!sessions.has(refreshToken)) {
+            throw new Error(`provider rejected unknown refresh token ${refreshToken}`);
+          }
+          return {
+            userId: "user_device",
+            ...(emailVerified ? { email: "verified@splitch.test" } : {}),
+            refreshToken: "refresh_rotated",
+            providerSessionId: "session_selected",
+          };
+        },
+        revokeProviderToken: async () => {
+          throw new Error("not used");
+        },
+      },
+      deviceRefreshSessions: {
+        remember: async (token, session) => {
+          sessions.set(token, session);
+        },
+        lookup: async (token) => sessions.get(token) ?? null,
+        rotate: async (previous, next, session) => {
+          rotations.push({ previous, next });
+          sessions.set(next, session);
+          sessions.delete(previous);
+        },
+        forget: async (token) => {
+          sessions.delete(token);
+        },
+      },
+      sessionStore,
+    });
+
+    const first = await app.request("/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form({
+        grant_type: "refresh_token",
+        client_id: "splitch-cli",
+        refresh_token: "refresh_original",
+      }),
+    });
+    expect(first.status).toBe(403);
+    const firstBody = (await first.json()) as {
+      error: string;
+      refresh_token?: string;
+    };
+    expect(firstBody).toMatchObject({
+      error: "email_unverified",
+      refresh_token: "refresh_rotated",
+    });
+    expect(rotations).toEqual([{ previous: "refresh_original", next: "refresh_rotated" }]);
+    expect(sessions.has("refresh_original")).toBe(false);
+    expect(sessions.has("refresh_rotated")).toBe(true);
+
+    emailVerified = true;
+    const second = await app.request("/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form({
+        grant_type: "refresh_token",
+        client_id: "splitch-cli",
+        refresh_token: firstBody.refresh_token as string,
+      }),
+    });
+    expect(second.status).toBe(200);
+    expect(await second.json()).toMatchObject({
+      user_id: "user_device",
+      email: "verified@splitch.test",
+      refresh_token: "refresh_rotated",
+    });
+    expect(
+      MemberProfileCacheSchema.parse(
+        JSON.parse(values.get(memberProfileCacheKey("user_device")) as string),
+      ),
+    ).toEqual({ email: "verified@splitch.test" });
+  });
+});
+
 function deviceFlowWithEmail(email: string | undefined): DeviceFlowPort {
   return {
     authorizeDevice: async () => {
