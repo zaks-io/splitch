@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ExperimentStatusSchema } from "./leaf-schemas-experiment";
 import { PercentageRolloutSchema, TargetingRuleSchema, VariantSchema } from "./leaf-schemas-flag";
+import { memberProfileCacheKey } from "./storage-keys-kv";
 
 /**
  * The one schema version every KV blob is written and read at. The envelope below
@@ -226,6 +227,28 @@ export const MemberProfileCacheSchema = z
   })
   .strict();
 export type MemberProfileCache = z.infer<typeof MemberProfileCacheSchema>;
+
+/**
+ * Minimal put surface for the shared SESSION_STORE identity cache. Auth-api,
+ * Control Panel, and control-plane tests write through this; Cloudflare's
+ * KVNamespace satisfies it without coupling contracts to Worker types.
+ */
+export interface MemberProfileKv {
+  put(key: string, value: string): Promise<void> | void;
+}
+
+/**
+ * Persist `member-profile:{userId}` so Org member endpoints can resolve email
+ * without a D1 PII column. Callers pass a verified address only.
+ */
+export async function rememberMemberProfile(
+  kv: MemberProfileKv,
+  userId: string,
+  email: string,
+): Promise<void> {
+  const profile = MemberProfileCacheSchema.parse({ email });
+  await kv.put(memberProfileCacheKey(userId), JSON.stringify(profile));
+}
 
 // ---------------------------------------------------------------------------
 // KVEnvelope<T> (schema-version envelope, contracts-and-validation.md)

@@ -1,6 +1,6 @@
+import { rememberMemberProfile } from "@splitch/contracts";
 import type { ClaimDeps, ClaimResult } from "./claim";
 import { type claimHashes, iso, type Provisional } from "./claim-identity";
-import { rememberMemberProfile } from "./member-profile-cache";
 import { OAuthError } from "./oauth-errors";
 
 const COMPLETED_REPLAY_TTL_MS = 24 * 60 * 60 * 1000;

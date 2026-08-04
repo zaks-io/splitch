@@ -105,8 +105,9 @@ function deviceTokenResult(json: WorkOsDeviceTokenBody): DeviceTokenResult {
 }
 
 /**
- * Prefer a verified email; accept an unverified non-empty address only when the
- * provider omitted `email_verified` (fixture paths). Never invent a placeholder.
+ * Require a verified email. Prefer `email_verified === true` only — omitted or
+ * false means the address is not proven (same gate as ID-JAG). Never invent a
+ * placeholder.
  */
 function deviceUserEmail(user: {
   id?: unknown;
@@ -114,7 +115,7 @@ function deviceUserEmail(user: {
   email_verified?: unknown;
 }): string | undefined {
   if (typeof user.email !== "string" || user.email.length === 0) return undefined;
-  if (user.email_verified === false) return undefined;
+  if (user.email_verified !== true) return undefined;
   return user.email;
 }
 

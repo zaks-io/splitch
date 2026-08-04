@@ -10,6 +10,7 @@ import {
 } from "./otp";
 import { makeRateLimiter, type RateLimitConfig } from "./rate-limit";
 import type { RegisterDeps } from "./register";
+import { memoryKvNamespace } from "./test-kv";
 import { makeTokenSigner, type TokenSigner } from "./token-exchange";
 import { makeFixtureTurnstile } from "./turnstile";
 import { makeFixtureWorkOs, type WorkOsPort } from "./workos";
@@ -183,22 +184,7 @@ export function makeDoorBDeps(
       consentBaseUrl: opts.consentBaseUrl ?? "https://cp.splitch.test",
       defaultResource: "https://cp.splitch.test",
       now,
-      sessionStore: opts.sessionStore ?? memorySessionStore(),
+      sessionStore: opts.sessionStore ?? memoryKvNamespace(),
     },
   };
-}
-
-function memorySessionStore(): KVNamespace {
-  const values = new Map<string, string>();
-  return {
-    get: async (key: string) => values.get(key) ?? null,
-    put: async (key: string, value: string) => {
-      values.set(key, value);
-    },
-    delete: async (key: string) => {
-      values.delete(key);
-    },
-    list: async () => ({ keys: [], list_complete: true, cacheStatus: null }),
-    getWithMetadata: async () => ({ value: null, metadata: null, cacheStatus: null }),
-  } as unknown as KVNamespace;
 }

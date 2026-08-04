@@ -25,6 +25,7 @@ const oauthErrorCodes = [
   "expired_token", // device_code/user_code expired before approval
   "interaction_required", // claim email maps to an existing verified user (no merge)
   "access_denied", // Turnstile verification failed (anon register, ADR-0034)
+  "email_unverified", // device/AuthKit: provider user has no verified email
   "too_many_requests", // per-IP or global anon-create rate ceiling hit (ADR-0034)
   "server_error", // genuine fault on the door
 ] as const;
@@ -60,6 +61,7 @@ const statusByCode: Record<OAuthErrorCode, number> = {
   expired_token: 400,
   interaction_required: 401, // RFC 8628/OIDC: the request needs end-user interaction
   access_denied: 403, // bot challenge (Turnstile) refused the request
+  email_unverified: 403, // verify the email with the IdP, then retry login
   too_many_requests: 429,
   server_error: 500,
 };

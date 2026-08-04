@@ -26,6 +26,11 @@ interface DeviceFlowCredential {
    */
   readonly accessTokenBinding?: string;
   readonly selectedAppId?: string;
+  /**
+   * Set after a best-effort email backfill refresh that failed or returned no
+   * email, so later commands do not burn refresh-token rotations forever.
+   */
+  readonly emailBackfillUnavailable?: boolean;
 }
 
 export interface CliCredentialFile {
@@ -98,8 +103,18 @@ function realPrincipalEmail(email: string | undefined): string | undefined {
   return email;
 }
 
-export function principalNeedsEmailBackfill(principal: CliPrincipal): boolean {
-  return realPrincipalEmail(principal.email) === undefined;
+export function principalNeedsEmailBackfill(file: CliCredentialFile): boolean {
+  if (file.credential.emailBackfillUnavailable) {
+    return false;
+  }
+  return realPrincipalEmail(file.principal.email) === undefined;
+}
+
+export function withEmailBackfillUnavailable(file: CliCredentialFile): CliCredentialFile {
+  return {
+    ...file,
+    credential: { ...file.credential, emailBackfillUnavailable: true },
+  };
 }
 
 function credentialStoreError(error: unknown, operation: "read" | "clear"): SplitchCliError {

@@ -1,9 +1,9 @@
 import {
   formatSdkErrorMessage,
   resolveErrorDocsUrl,
-  sdkErrorCodes,
   SplitchSdkError,
   type SplitchSdkErrorCode,
+  sdkErrorCodes,
 } from "@splitch/sdk";
 import type { CliIo } from "./execute-types.js";
 
@@ -13,6 +13,7 @@ export const cliClientErrorCodes = [
   "CLI_SCOPE_UNRESOLVED",
   "CLI_NOT_AUTHENTICATED",
   "CLI_SESSION_EXPIRED",
+  "CLI_EMAIL_UNVERIFIED",
   "CLI_DEVICE_AUTHORIZATION_FAILED",
   "CLI_DEVICE_TOKEN_EXCHANGE_FAILED",
   "CLI_DEVICE_APPROVAL_TIMEOUT",

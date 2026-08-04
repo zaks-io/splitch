@@ -1,10 +1,11 @@
-import { Hono } from "hono";
 import type { DeviceFlowPort } from "./device-flow";
-import { sealDeviceGrant } from "./device-grant";
 import type { DeviceRefreshSessionStore } from "./device-session-store";
 import type { MembershipAuthorityRepo } from "./membership-authority";
 import { mountOAuthRoutes } from "./oauth-routes";
+import { memoryKvNamespace } from "./test-kv";
 import type { TokenSigner } from "./token-exchange";
+import { Hono } from "hono";
+import { sealDeviceGrant } from "./device-grant";
 
 export const tokenSigner = {
   mintIdentityAssertion: async () => "identity-assertion",
@@ -60,7 +61,7 @@ export function routeApp(params: {
     tokenSigner: params.tokenSigner ?? tokenSigner,
     deviceFlow: params.deviceFlow,
     deviceRefreshSessions: params.deviceRefreshSessions,
-    sessionStore: params.sessionStore ?? memorySessionStore(),
+    sessionStore: params.sessionStore ?? memoryKvNamespace(),
     revocations,
     accessSecret: "test-access-secret",
     controlPlaneAudience: "https://cp.splitch.test",
@@ -68,19 +69,4 @@ export function routeApp(params: {
     repo: params.repo ?? emptyMembershipRepo,
   });
   return app;
-}
-
-function memorySessionStore(): KVNamespace {
-  const values = new Map<string, string>();
-  return {
-    get: async (key: string) => values.get(key) ?? null,
-    put: async (key: string, value: string) => {
-      values.set(key, value);
-    },
-    delete: async (key: string) => {
-      values.delete(key);
-    },
-    list: async () => ({ keys: [], list_complete: true, cacheStatus: null }),
-    getWithMetadata: async () => ({ value: null, metadata: null, cacheStatus: null }),
-  } as unknown as KVNamespace;
 }

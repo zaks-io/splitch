@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
+import { rememberMemberProfile } from "@splitch/contracts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ControlPlaneApiEnv } from "../src/env.js";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer.js";
 import worker from "../src/index.js";
-import { rememberMemberProfile } from "../src/member-profile-cache.js";
 
 const AUDIENCE = "https://cp.splitch.test";
 const JWKS_URI = "https://auth.splitch.test/.well-known/jwks.json";

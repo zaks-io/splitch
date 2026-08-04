@@ -1,4 +1,4 @@
-import { memberProfileCacheKey, MemberProfileCacheSchema } from "@splitch/contracts";
+import { MemberProfileCacheSchema, memberProfileCacheKey } from "@splitch/contracts";
 import type { MemberProfileResolver } from "./org-handlers";
 
 /**
@@ -14,14 +14,4 @@ export function makeSessionCacheMemberProfileResolver(kv: KVNamespace): MemberPr
     const profile = MemberProfileCacheSchema.parse(JSON.parse(raw));
     return { email: profile.email };
   };
-}
-
-/** Test and writer helper — same key/value shape auth-api persists at login. */
-export async function rememberMemberProfile(
-  kv: KVNamespace,
-  userId: string,
-  email: string,
-): Promise<void> {
-  const profile = MemberProfileCacheSchema.parse({ email });
-  await kv.put(memberProfileCacheKey(userId), JSON.stringify(profile));
 }

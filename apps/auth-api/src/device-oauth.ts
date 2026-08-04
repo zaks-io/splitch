@@ -1,7 +1,7 @@
+import { rememberMemberProfile } from "@splitch/contracts";
 import type { DeviceFlowPort } from "./device-flow";
 import { openDeviceGrant, sealDeviceGrant } from "./device-grant";
 import type { DeviceRefreshSession, DeviceRefreshSessionStore } from "./device-session-store";
-import { rememberMemberProfile } from "./member-profile-cache";
 import {
   type MembershipAuthorityRepo,
   parseSelectedAppRequest,
@@ -254,8 +254,8 @@ async function resolveRefreshBinding(
 function requireDeviceEmail(token: { userId: string; email?: string }): string {
   if (!token.email) {
     throw new OAuthError(
-      "server_error",
-      "device token response missing verified email for the authenticated user",
+      "email_unverified",
+      "authenticated user has no verified email; verify the email address with the identity provider before retrying login",
     );
   }
   return token.email;

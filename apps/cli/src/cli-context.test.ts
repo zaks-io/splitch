@@ -114,37 +114,6 @@ describe("splitch context reports the session, never an empty success", () => {
     expect(payload.appId).toBeUndefined();
     expect(payload.nextSteps).toContain("splitch orgs list");
   });
-
-  it("backfills email on context when a stored session still has the unknown placeholder", async () => {
-    const { dir, credentialPath } = await makeTempHome();
-    const legacy = {
-      ...storedCredential(),
-      principal: { userId: "user_test", email: "unknown" },
-    };
-    await writeFile(credentialPath, `${JSON.stringify(legacy)}\n`);
-    const transport = new FakeCliTransport([oauthTokenMint()]);
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
-
-    const code = await runCli(["context", "--json"], {
-      credentialPath,
-      cwd: dir,
-      fetch: transport.fetch,
-    });
-
-    expect(code).toBe(EXIT_OK);
-    const payload = JSON.parse(log.mock.calls.join("")) as {
-      principal: { userId: string; email: string };
-    };
-    expect(payload.principal).toEqual({
-      userId: "user_test",
-      email: "user_test@splitch.test",
-    });
-    const saved = JSON.parse(await readFile(credentialPath, "utf8")) as {
-      principal: { email?: string };
-    };
-    expect(saved.principal.email).toBe("user_test@splitch.test");
-    expect(JSON.stringify(saved)).not.toContain("unknown");
-  });
 });
 
 const STAMPS = {

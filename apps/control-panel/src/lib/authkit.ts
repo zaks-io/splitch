@@ -1,4 +1,4 @@
-import { memberProfileCacheKey, MemberProfileCacheSchema } from "@splitch/contracts";
+import { rememberMemberProfile } from "@splitch/contracts";
 import { createRepository, type Repository } from "@splitch/db";
 import { WorkOS } from "@workos-inc/node/worker";
 import type { ControlPanelBindings } from "./bindings";
@@ -17,7 +17,7 @@ export interface AuthKitClient {
 }
 
 interface AuthKitAuthentication {
-  user: { id: string; email: string };
+  user: { id: string; email: string; emailVerified: boolean };
   accessToken: string;
 }
 
@@ -54,7 +54,11 @@ export function createAuthKitClient(bindings: ControlPanelBindings): AuthKitClie
         userAgent,
       });
       return {
-        user: { id: response.user.id, email: response.user.email },
+        user: {
+          id: response.user.id,
+          email: response.user.email,
+          emailVerified: response.user.emailVerified,
+        },
         accessToken: response.accessToken,
       };
     },
@@ -84,8 +88,12 @@ export async function completeAuthKitCallback(input: CompleteAuthKitCallbackInpu
     workosSessionId: accessClaims.sessionId,
   });
 
-  if (!authentication.user.email) {
-    throw new Error("WorkOS AuthKit callback returned a user without email");
+  // Same gate as ID-JAG / device flow: only a verified address may enter the
+  // member-profile identity cache (spoofable display identity otherwise).
+  if (!authentication.user.email || authentication.user.emailVerified !== true) {
+    throw new Error(
+      "WorkOS AuthKit callback returned a user without a verified email; verify the email address before signing in",
+    );
   }
   await rememberMemberProfile(input.kv, authentication.user.id, authentication.user.email);
 
@@ -99,15 +107,6 @@ export async function completeAuthKitCallback(input: CompleteAuthKitCallbackInpu
     input.now,
   );
   return { cookie: session.cookie };
-}
-
-async function rememberMemberProfile(
-  kv: KVNamespace,
-  userId: string,
-  email: string,
-): Promise<void> {
-  const profile = MemberProfileCacheSchema.parse({ email });
-  await kv.put(memberProfileCacheKey(userId), JSON.stringify(profile));
 }
 
 export function callbackRedirectUri(request: Request): string {

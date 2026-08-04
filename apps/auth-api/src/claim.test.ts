@@ -1,7 +1,9 @@
+import { MemberProfileCacheSchema, memberProfileCacheKey } from "@splitch/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { EMAIL, setupClaimHarness } from "./claim-harness";
 import { initiateClaim, verifyClaim } from "./claim";
+import { EMAIL, setupClaimHarness } from "./claim-harness";
 import { FIXTURE_OTP } from "./otp";
+import { memoryKvNamespace } from "./test-kv";
 
 /**
  * Door B CLAIM ceremony — behavioral surface (happy path, OTP binding, atomic
@@ -29,6 +31,18 @@ describe("Door B claim: happy path", () => {
     expect(result.org_id).toBe(orgId);
     expect(result.access_token.split(".")).toHaveLength(3);
     expect(await isProvisional(orgId)).toBe(false);
+  });
+
+  it("writes member-profile:{userId} to SESSION_STORE when claim verifies", async () => {
+    const values = new Map<string, string>();
+    const d = deps({ sessionStore: memoryKvNamespace(values) });
+    const { assertion } = await register(d);
+    const result = (await fullClaim(d, assertion)) as { user_id: string };
+    const cached = values.get(memberProfileCacheKey(result.user_id));
+    expect(cached).toBeDefined();
+    expect(MemberProfileCacheSchema.parse(JSON.parse(cached as string))).toEqual({
+      email: EMAIL,
+    });
   });
 });
 

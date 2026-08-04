@@ -1,4 +1,4 @@
-import { ensurePrincipalEmail } from "./auth.js";
+import { ensurePrincipalEmail } from "./auth-email-backfill.js";
 import { type ResolvedContext, resolveContext } from "./context.js";
 import { writeCliError } from "./errors.js";
 import { emit } from "./execute-io.js";
@@ -34,22 +34,14 @@ export async function executeContext(
     return { exitCode: EXIT_AUTH };
   }
 
-  // One principal shape for fresh and stored sessions: `{ userId, email }` with
-  // a real address. Refresh backfills older files that omitted email or still
-  // carry the forbidden `"unknown"` placeholder.
+  // Prefer a real email when refresh can backfill one. When the Worker cannot
+  // supply it yet, proceed with `{ userId }` only — never invent `"unknown"`.
   const session = await ensurePrincipalEmail(deps);
-  if (!session.principal.email) {
-    writeCliError(io, {
-      code: "CLI_SESSION_EXPIRED",
-      causeSummary: "The CLI login session could not resolve a verified email for the principal",
-      remediation: "Run splitch login again before retrying the command",
-    });
-    return { exitCode: EXIT_AUTH };
-  }
-
   const payload = {
     authenticated: true,
-    principal: { userId: session.principal.userId, email: session.principal.email },
+    principal: session.principal.email
+      ? { userId: session.principal.userId, email: session.principal.email }
+      : { userId: session.principal.userId },
     ...context,
     nextSteps: nextSteps(context),
   };

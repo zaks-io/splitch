@@ -1,8 +1,9 @@
-import { memberProfileCacheKey, MemberProfileCacheSchema } from "@splitch/contracts";
+import { MemberProfileCacheSchema, memberProfileCacheKey } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import type { DeviceFlowPort } from "./device-flow";
 import type { DeviceRefreshSession } from "./device-session-store";
 import { form, routeApp, selectedDeviceCode, unusedRefreshStore } from "./oauth-route-test-harness";
+import { memoryKvNamespace } from "./test-kv";
 
 /**
  * SPL-293: device-flow login must write member-profile:{userId} so a subsequent
@@ -12,7 +13,7 @@ import { form, routeApp, selectedDeviceCode, unusedRefreshStore } from "./oauth-
 describe("device login writes the shared member-profile identity cache", () => {
   it("stores the verified email on device-code exchange and returns it on the token", async () => {
     const values = new Map<string, string>();
-    const sessionStore = memoryKv(values);
+    const sessionStore = memoryKvNamespace(values);
     const remembered: DeviceRefreshSession[] = [];
     const app = routeApp({
       deviceFlow: deviceFlowWithEmail("owner@splitch.test"),
@@ -50,7 +51,7 @@ describe("device login writes the shared member-profile identity cache", () => {
 
   it("backfills member-profile on refresh for an existing session", async () => {
     const values = new Map<string, string>();
-    const sessionStore = memoryKv(values);
+    const sessionStore = memoryKvNamespace(values);
     const app = routeApp({
       deviceFlow: {
         authorizeDevice: async () => {
@@ -107,7 +108,7 @@ describe("device login writes the shared member-profile identity cache", () => {
     ).toEqual({ email: "backfill@splitch.test" });
   });
 
-  it("fails loud when the provider user has no verified email", async () => {
+  it("fails loud with email_unverified when the provider user has no verified email", async () => {
     const app = routeApp({
       deviceFlow: deviceFlowWithEmail(undefined),
       deviceRefreshSessions: unusedRefreshStore,
@@ -123,8 +124,11 @@ describe("device login writes the shared member-profile identity cache", () => {
       }),
     });
 
-    expect(res.status).toBe(500);
-    expect(await res.json()).toMatchObject({ error: "server_error" });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({
+      error: "email_unverified",
+      error_description: expect.stringContaining("verified email"),
+    });
   });
 });
 
@@ -146,18 +150,4 @@ function deviceFlowWithEmail(email: string | undefined): DeviceFlowPort {
       throw new Error("not used");
     },
   };
-}
-
-function memoryKv(values: Map<string, string>): KVNamespace {
-  return {
-    get: async (key: string) => values.get(key) ?? null,
-    put: async (key: string, value: string) => {
-      values.set(key, value);
-    },
-    delete: async (key: string) => {
-      values.delete(key);
-    },
-    list: async () => ({ keys: [], list_complete: true, cacheStatus: null }),
-    getWithMetadata: async () => ({ value: null, metadata: null, cacheStatus: null }),
-  } as unknown as KVNamespace;
 }
