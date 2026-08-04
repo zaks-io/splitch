@@ -209,10 +209,9 @@ export async function withAuthorizationRetry<T>(
   run: (authorization: string) => Promise<{ status: number; value: T }>,
   binding?: TokenBinding,
 ): Promise<T> {
-  const stored = await deps.credentialStore.load();
-  if (!stored) {
-    throw notAuthenticatedError();
-  }
+  // Refresh first when the principal lacks a real email so member-profile
+  // backfill runs before any control-plane call (SPL-293).
+  const stored = await ensurePrincipalEmail(deps);
   const usable = binding === undefined || storedBinding(stored) === bindingKey(binding);
   const current =
     usable && !isAccessTokenExpired(stored.credential.accessTokenExpiresAt)
