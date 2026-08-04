@@ -171,27 +171,29 @@ function appendQuery(url: URL, route: ApiRouteContract, input: unknown): void {
 }
 
 function bodyForRoute(route: ApiRouteContract, input: unknown): unknown {
-  const bodySchema = safeParseSchema(
-    route.openapi.request?.body?.content?.["application/json"]?.schema,
-  );
+  const rawBodySchema = route.openapi.request?.body?.content?.["application/json"]?.schema;
+  const bodySchema = safeParseSchema(rawBodySchema);
   if (!bodySchema) {
     return undefined;
   }
-  const direct = bodySchema.safeParse(input);
-  if (direct.success) {
-    return direct.data;
-  }
 
-  const withoutRouteFields = stripKeys(input, [
+  // Path/query keys that the body schema does not declare belong only on the URL.
+  // Always strip those — including when the remaining body fails schema validation —
+  // so VALIDATION_ERROR issues blame only caller-sent body keys, not CLI-/MCP-injected
+  // context ids (SPL-296). Keys declared on both path and body (e.g. CreateFlag's
+  // `appId`) stay in the JSON body.
+  const bodyDeclared = new Set(objectSchemaKeys(rawBodySchema));
+  const routeOnlyKeys = [
     ...pathParamNames(route.path),
     ...objectSchemaKeys(route.openapi.request?.query),
-  ]);
-  const stripped = bodySchema.safeParse(withoutRouteFields);
-  if (stripped.success) {
-    return stripped.data;
-  }
+  ].filter((key) => key.length > 0 && !bodyDeclared.has(key));
 
-  return input;
+  const bodyCandidate = stripKeys(input, routeOnlyKeys);
+  const parsed = bodySchema.safeParse(bodyCandidate);
+  if (parsed.success) {
+    return parsed.data;
+  }
+  return bodyCandidate;
 }
 
 type SafeParseResult = { success: true; data: unknown } | { success: false };
