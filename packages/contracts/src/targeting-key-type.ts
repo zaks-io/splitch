@@ -14,5 +14,3 @@ export const targetingKeyTypes = ["user", "session", "workspace"] as const;
 export const TargetingKeyTypeSchema = z.enum(targetingKeyTypes, {
   error: () => `allowed targetingKeyType values: ${targetingKeyTypes.join(", ")}`,
 });
-
-export type TargetingKeyType = z.infer<typeof TargetingKeyTypeSchema>;
