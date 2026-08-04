@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getRoute } from "@splitch/contracts";
+import { deriveMcpTools, getRoute } from "@splitch/contracts";
 import type { EvaluateContext } from "@splitch/sdk";
 import type { CliCommandDefinition } from "./command-registry.js";
 import type { ResolvedContext } from "./context.js";
@@ -9,6 +9,15 @@ import {
   assertContractValidFlagsCreateInput,
 } from "./flag-create-input.js";
 import type { ParsedGlobalFlags, ParsedInvocation } from "./parse-args.js";
+
+const TOOL_BY_OPERATION = new Map(deriveMcpTools().map((tool) => [tool.name, tool]));
+
+/** True when the operation's flat input schema accepts an `environmentId` field. */
+export function operationInputHasEnvironmentId(operationId: string): boolean {
+  const schema = TOOL_BY_OPERATION.get(operationId)?.inputSchema;
+  if (!schema || !("shape" in schema)) return false;
+  return "environmentId" in (schema.shape as Record<string, unknown>);
+}
 
 export function buildOperationInput(
   command: CliCommandDefinition,
@@ -53,12 +62,22 @@ function applyContextFields(
   if (command.needsApp && context.appId) {
     input.appId = context.appId;
   }
-  if (command.needsEnvironment && context.environmentId) {
+  if (!context.environmentId) {
+    return;
+  }
+  if (command.needsEnvironment) {
     if (command.operationId === "flags_promote") {
       input.targetEnvironmentId = context.environmentId;
     } else {
       input.environmentId = context.environmentId;
     }
+    return;
+  }
+  // Optional Environment filters (e.g. approval_requests_list) are opt-in via
+  // `--env` only. Config / SPLITCH_ENV must not silently narrow an App-scoped
+  // list — unfiltered means the full App set (SPL-294).
+  if (context.environmentSource === "flag" && operationInputHasEnvironmentId(command.operationId)) {
+    input.environmentId = context.environmentId;
   }
 }
 

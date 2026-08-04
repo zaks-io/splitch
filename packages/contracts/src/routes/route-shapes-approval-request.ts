@@ -186,6 +186,8 @@ export const ReviewApprovalRequestSchema = z
 export const ApprovalRequestListQuerySchema = PaginationQuerySchema.extend({
   status: ApprovalRequestStatusSchema.optional(),
   target_kind: ApprovalTargetTypeSchema.optional(),
+  /** When set, keep only Requests whose Policy context targets this Environment. */
+  environmentId: z.string().min(1).optional(),
 });
 
 export type ApprovalApplicationResult = z.infer<typeof ApprovalApplicationResultSchema>;

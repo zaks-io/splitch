@@ -133,6 +133,76 @@ describe("Approval Request list paging", () => {
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({ code: "INVALID_PAGINATION" });
   });
+
+  it("filters by Policy-context Environment and leaves unfiltered lists app-scoped", async () => {
+    const version = `sha256:${"a".repeat(64)}`;
+    const prodId = "apr_01J00000000000000000000001";
+    const devId = "apr_01J00000000000000000000002";
+    const base = {
+      operation: "flag_config_update" as const,
+      targetType: "flag_configuration" as const,
+      targetVersion: version,
+      diff: JSON.stringify({
+        current: { enabled: true },
+        proposed: { enabled: false },
+        entries: [{ path: "/enabled", operation: "replace", current: true, proposed: false }],
+      }),
+      status: "pending",
+      proposedBy: "user_config_admin",
+      proposedVia: "id_jag",
+      proposedAt: "2026-07-02T12:00:00.000Z",
+      resolvedAt: null,
+      resultingTargetVersion: null,
+      resultingResourceType: null,
+      resultingResourceId: null,
+      requestHash: version,
+    };
+    const prod = await h.repo.approvals.createRequest(appScope(ids.appId), {
+      ...base,
+      id: prodId,
+      targetId: ids.configId,
+      policyContexts: JSON.stringify([
+        { environmentId: ids.environmentId, changeTypes: ["enabled_state"], level: "confirm" },
+      ]),
+      idempotencyKey: "idem_env_filter_prod",
+    });
+    const dev = await h.repo.approvals.createRequest(appScope(ids.appId), {
+      ...base,
+      id: devId,
+      targetId: ids.devConfigId,
+      proposedAt: "2026-07-02T12:00:01.000Z",
+      policyContexts: JSON.stringify([
+        {
+          environmentId: ids.devEnvironmentId,
+          changeTypes: ["enabled_state"],
+          level: "confirm",
+        },
+      ]),
+      idempotencyKey: "idem_env_filter_dev",
+    });
+    expect(prod.ok && !prod.replay).toBe(true);
+    expect(dev.ok && !dev.replay).toBe(true);
+
+    const unfiltered = await list("");
+    expect(unfiltered.status).toBe(200);
+    expect(unfiltered.body.items.map((item) => item.id).sort()).toEqual([devId, prodId].sort());
+    expect(unfiltered.body.total).toBe(2);
+
+    const prodOnly = await list(`?environmentId=${ids.environmentId}`);
+    expect(prodOnly.status).toBe(200);
+    expect(prodOnly.body.items.map((item) => item.id)).toEqual([prodId]);
+    expect(prodOnly.body.total).toBe(1);
+
+    const devOnly = await list(`?environmentId=${ids.devEnvironmentId}`);
+    expect(devOnly.status).toBe(200);
+    expect(devOnly.body.items.map((item) => item.id)).toEqual([devId]);
+    expect(devOnly.body.total).toBe(1);
+
+    const foreign = await list("?environmentId=env_other_app");
+    expect(foreign.status).toBe(200);
+    expect(foreign.body.items).toEqual([]);
+    expect(foreign.body.total).toBe(0);
+  });
 });
 
 describe("an Approval Request whose target no longer resolves", () => {

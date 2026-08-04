@@ -161,10 +161,20 @@ function scopeFlags(command: CliCommandDefinition, fields: ReadonlySet<string>):
   const flags: HelpFlag[] = [];
   if (command.needsApp)
     flags.push(flag("--app <app>", "string", "SPLITCH_APP or config", "App ID or slug."));
-  if (command.needsEnvironment)
+  if (command.needsEnvironment) {
     flags.push(
       flag("--env <environment>", "string", "SPLITCH_ENV or config", "Environment ID or slug."),
     );
+  } else if (fields.has("environmentId")) {
+    flags.push(
+      flag(
+        "--env <environment>",
+        "string",
+        "none",
+        "Optional Environment ID or slug filter (Policy context).",
+      ),
+    );
+  }
   if (fields.has("orgId"))
     flags.push(flag("--org <organization>", "string", "none", "Organization ID."));
   if (fields.has("name")) flags.push(flag("--name <name>", "string", "none", "Resource name."));

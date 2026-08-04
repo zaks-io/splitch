@@ -47,7 +47,8 @@ const steps: Step[] = [
     body: "evaluate() fires the first real Exposure and closes the loop. Fail-loud is one check: an error resolution names its code instead of hiding behind a default.",
     code: `import { createSplitchClient } from "@splitch/sdk";
 
-const splitch = createSplitchClient({ clientKey: "ck_live_..." });
+// Paste keyMaterial from \`splitch client-key get\` (pk_…; not the ck_… keyId).
+const splitch = createSplitchClient({ clientKey: "pk_..." });
 
 const d = await splitch.evaluateDetails("new-checkout", { targetingKey: userId });
 if (d.reason === "ERROR") renderFallback(d.errorCode);

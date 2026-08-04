@@ -17,10 +17,13 @@ ESM only. Node >= 20, browsers, and edge runtimes. `zod` is the sole dependency.
 
 ## Hello world
 
+Paste the `keyMaterial` field from `splitch client-key get` (a `pk_…` value). The response's
+`keyId` (`ck_…`) identifies the key; it is not the credential.
+
 ```ts
 import { createSplitchClient } from "@splitch/sdk";
 
-const splitch = createSplitchClient({ clientKey: "ck_live_..." });
+const splitch = createSplitchClient({ clientKey: "pk_..." });
 
 const variant = await splitch.evaluate("new-checkout", {
   targetingKey: user.id,
@@ -35,7 +38,7 @@ Construct the client with exactly one credential (anything else throws):
 
 | Option      | Credential                | Where it may live                       | Unlocks                                 |
 | ----------- | ------------------------- | --------------------------------------- | --------------------------------------- |
-| `clientKey` | public Client Key (`ck_`) | browsers, mobile, anything you ship     | `evaluate`, `evaluateDetails`, `verify` |
+| `clientKey` | public Client Key (`pk_`) | browsers, mobile, anything you ship     | `evaluate`, `evaluateDetails`, `verify` |
 | `apiKey`    | secret API Key (`sk_`)    | servers only; never ship it to a client | everything, including `peekVariant`     |
 
 ## The four methods

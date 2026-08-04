@@ -17,10 +17,19 @@ test("extractQuickstartSdkSnippet returns the SDK section fenced block verbatim"
   const snippet = extractQuickstartSdkSnippet(markdown);
 
   assert.match(snippet, /^import \{ createSplitchClient \} from "@splitch\/sdk";/);
+  assert.match(snippet, /clientKey: "pk_\.\.\."/);
   assert.match(snippet, /idempotencyKey: evaluationId/);
   assert.match(snippet, /await splitch\.evaluate\(/);
   assert.match(snippet, /await splitch\.evaluateDetails\(/);
+  assert.doesNotMatch(snippet, /ck_live_/);
   assert.doesNotMatch(snippet, /ResolutionDetails/);
+});
+
+test("SDK README hello-world uses client-key get keyMaterial (pk_), not keyId", () => {
+  const readme = readFileSync(join(repoRoot, "packages/sdk/README.md"), "utf8");
+  assert.match(readme, /clientKey: "pk_\.\.\."/);
+  assert.match(readme, /keyMaterial/);
+  assert.doesNotMatch(readme, /ck_live_/);
 });
 
 test("wrapQuickstartSnippetForTypecheck preserves the extracted snippet body", () => {

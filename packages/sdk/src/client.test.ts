@@ -36,6 +36,15 @@ describe("createSplitchClient: construction", () => {
     ).not.toThrow();
   });
 
+  it("accepts public Client Key material issued as pk_… (client-key get keyMaterial)", () => {
+    const transport = new FakeTransport([ok(true)]);
+    const client = createSplitchClient({
+      clientKey: "pk_test_client_key",
+      transport,
+    });
+    expect(client).toBeDefined();
+  });
+
   it("default timeout outlives a ~2s cold call (1000ms aborted the first real Exposure)", async () => {
     vi.useFakeTimers();
     try {
