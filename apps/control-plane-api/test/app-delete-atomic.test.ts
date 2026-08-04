@@ -4,6 +4,7 @@ import type { RateLimiter } from "@splitch/worker-runtime";
 import type { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app";
+import { revokeEnvironmentCredentialsForAppDelete } from "../src/app-environment-credentials";
 import { makeControlPlaneAuthResolver } from "../src/auth-resolver";
 import { type FixtureSigner, makeFixtureSigner } from "../src/fixture-signer";
 import { makeJwksVerifier } from "../src/jwks-verify";
@@ -162,6 +163,12 @@ describe("apps delete atomicity and emptiness guards (SPL-298)", () => {
     const created = await createDefaultApp("flag-child");
     const jwt = await appToken(created.app.id);
     await seedFlag(created.app.id, "guard");
+    const repo = createRepository(h.bindings.d1);
+    const keysBefore = await Promise.all(
+      created.environments.map((env) =>
+        repo.credentials.listClientKeys(envScope(created.app.id, env.id)),
+      ),
+    );
 
     const del = await h.app.request(`/apps/${created.app.id}`, {
       method: "DELETE",
@@ -179,11 +186,15 @@ describe("apps delete atomicity and emptiness guards (SPL-298)", () => {
     expect(read.status).toBe(200);
     expect(await read.json()).toMatchObject({ id: created.app.id });
 
-    const repo = createRepository(h.bindings.d1);
     expect(await repo.identity.getAppMembership(appScope(created.app.id), OWNER)).toMatchObject({
       role: "owner",
     });
     expect(await repo.identity.listEnvironments(appScope(created.app.id))).toHaveLength(2);
+    for (const [index, env] of created.environments.entries()) {
+      expect(await repo.credentials.listClientKeys(envScope(created.app.id, env.id))).toEqual(
+        keysBefore[index],
+      );
+    }
 
     const clientKey = created.clientKeys[0];
     expect(clientKey).toBeDefined();
@@ -228,14 +239,21 @@ describe("apps delete atomicity and emptiness guards (SPL-298)", () => {
     ).toMatchObject({ n: 0 });
   });
 
-  it("keeps live membership after a cascade FK failure races past the guard", async () => {
+  it("keeps Client Key rows after revoke+tombstone when cascade hits a late Flag FK", async () => {
     const created = await createDefaultApp("cascade-race");
     const jwt = await appToken(created.app.id);
     const repo = createRepository(h.bindings.d1);
 
-    // Simulate the pre-fix path: emptiness guard skipped, cascade hits a
-    // non-cascaded Flag FK. Membership and credentials must survive the rollback.
+    // Handler path past the emptiness guard: revoke/tombstone, then cascade.
+    // A Flag FK (skipped by the guard) must roll back without removing keys.
     await seedFlag(created.app.id, "race");
+    for (const env of created.environments) {
+      await revokeEnvironmentCredentialsForAppDelete(
+        { repo, credentialStore: h.bindings.credentialKv, nowIso: () => NOW_ISO },
+        created.app.id,
+        env.id,
+      );
+    }
     await expect(repo.identity.deleteAppCascade(appScope(created.app.id))).rejects.toThrow(
       /FOREIGN KEY constraint failed|app delete did not reach D1/,
     );
@@ -245,10 +263,28 @@ describe("apps delete atomicity and emptiness guards (SPL-298)", () => {
     });
     expect(await repo.identity.listEnvironments(appScope(created.app.id))).toHaveLength(2);
     for (const env of created.environments) {
-      expect(await repo.credentials.listClientKeys(envScope(created.app.id, env.id))).toHaveLength(
-        1,
-      );
+      const keys = await repo.credentials.listClientKeys(envScope(created.app.id, env.id));
+      expect(keys).toHaveLength(1);
+      expect(keys[0]?.revokedAt).toBe(NOW_ISO);
     }
+
+    const clientKey = created.clientKeys[0];
+    expect(clientKey).toBeDefined();
+    const rotate = await h.app.request(
+      `/apps/${created.app.id}/envs/${clientKey?.environmentId}/client-key/revoke`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${jwt}` },
+      },
+    );
+    expect(rotate.status).toBe(200);
+    // After the failed delete, keys remain in D1 (revoked). Rotate may mint a
+    // fresh active key first, then revoke it — either way revocation stays
+    // reachable on the surviving App.
+    expect(await rotate.json()).toMatchObject({
+      revokedKeyId: expect.any(String),
+      newKey: { keyId: expect.any(String), keyMaterial: expect.any(String) },
+    });
 
     const read = await h.app.request(`/apps/${created.app.id}`, {
       headers: { authorization: `Bearer ${jwt}` },

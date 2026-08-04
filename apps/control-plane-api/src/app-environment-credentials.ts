@@ -42,23 +42,30 @@ export async function deleteEnvironmentCredentials(
 }
 
 /**
- * Revoke + tombstone any credentials still present without removing D1 rows.
- * Used immediately before the App-delete cascade batch so a key minted after the
- * quiescing wipe is still invalidated in KV before its D1 row is deleted in the
- * same transaction as memberships (SPL-298).
+ * Quiescing revoke + KV tombstone without removing D1 rows (SPL-298).
+ *
+ * App delete must invalidate credentials in the durable cache writer before the
+ * cascade batch deletes those rows, but must not `remove*` them first: a late
+ * FK failure after remove would leave the App alive with no Client Keys to
+ * rotate or revoke. D1 removal stays inside `deleteAppCascade`.
  */
-export async function revokeRemainingEnvironmentCredentials(
+export async function revokeEnvironmentCredentialsForAppDelete(
   deps: CredentialDeleteDeps,
   appId: string,
   environmentId: string,
 ): Promise<void> {
   const scope = envScope(appId, environmentId);
-  const [apiKeys, clientKeys] = await Promise.all([
-    deps.repo.credentials.listApiKeys(scope),
-    deps.repo.credentials.listClientKeys(scope),
-  ]);
-  if (apiKeys.length === 0 && clientKeys.length === 0) return;
-  await writeRevokedTombstones(deps, scope, apiKeys, clientKeys);
+  for (let pass = 0; pass < MAX_CREDENTIAL_DELETE_PASSES; pass += 1) {
+    const [apiKeys, clientKeys] = await Promise.all([
+      deps.repo.credentials.listApiKeys(scope),
+      deps.repo.credentials.listClientKeys(scope),
+    ]);
+    const liveApi = apiKeys.filter((row) => row.revokedAt === null);
+    const liveClient = clientKeys.filter((row) => row.revokedAt === null);
+    if (liveApi.length === 0 && liveClient.length === 0) return;
+    await writeRevokedTombstones(deps, scope, liveApi, liveClient);
+  }
+  throw new Error("credential revoke did not quiesce");
 }
 
 async function writeRevokedTombstones(
