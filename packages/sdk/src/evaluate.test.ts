@@ -350,11 +350,14 @@ describe("Exposure suppression stays attribute-independent (SPL-308)", () => {
     expect(transport.verifyCalls).toHaveLength(1);
   });
 
-  it("context-miss DISABLED stores a no-match marker so CACHED replay uses THIS call's defaultValue", async () => {
+  it("DISABLED context-miss preserves the served value across a later CACHED replay", async () => {
+    // Server returns DISABLED with value "control"; the caller supplies a
+    // different defaultValue. Both the live resolve and the within-TTL replay
+    // must return "control" — never substitute the caller's default.
     const transport = new FakeTransport([ok("free-arm", "run-1", "free")], {
       verify: [
         verifyOk({
-          value: "verify-site-default",
+          value: "control",
           variantName: null,
           reason: "DISABLED",
         }),
@@ -372,21 +375,20 @@ describe("Exposure suppression stays attribute-independent (SPL-308)", () => {
     const disabled = await runEvaluate(bag, "flag", {
       targetingKey: "u1",
       attributes: { plan: "enterprise" },
-      defaultValue: "verify-site-default",
+      defaultValue: false,
       idempotencyKey: "eval-disabled",
     });
-    expect(disabled).toMatchObject({ reason: "DISABLED", value: "verify-site-default" });
+    expect(disabled).toMatchObject({ reason: "DISABLED", value: "control" });
 
     c.advance(1);
     const replay = await runEvaluate(bag, "flag", {
       targetingKey: "u1",
       attributes: { plan: "enterprise" },
-      defaultValue: "other-site-default",
+      defaultValue: false,
       idempotencyKey: "replay-disabled",
     });
     expect(replay.reason).toBe("CACHED");
-    // Must re-apply THIS call's default, not the verify call site's embedded value.
-    expect(replay.value).toBe("other-site-default");
+    expect(replay.value).toBe("control");
     expect(transport.evaluateCalls).toHaveLength(1);
     expect(transport.verifyCalls).toHaveLength(1);
   });

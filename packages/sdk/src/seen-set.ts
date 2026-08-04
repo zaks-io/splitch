@@ -33,13 +33,18 @@ import type { AttributeValue } from "./transport";
  * detected within at most `ttlMs`, never "never". The window mirrors the ~60s KV
  * config-propagation window the platform already tolerates (five-runtimes.md).
  *
- * Eviction is LRU: a `get` hit and a `set` both mark the key most-recently-used
- * (Map preserves insertion order, so delete+set moves the key to the tail). At
- * capacity the oldest (head) entry is evicted; an evicted key causes at most one
- * redundant Exposure, which the pipeline collapses.
+ * Eviction is LRU at two levels: a `get` hit and a `set` both mark the Exposure
+ * identity most-recently-used (Map preserves insertion order, so delete+set
+ * moves the key to the tail). At capacity the oldest (head) Exposure entry is
+ * evicted; an evicted key causes at most one redundant Exposure, which the
+ * pipeline collapses. Within one Exposure slot, attribute-fingerprint values
+ * are also LRU-capped so high-cardinality context churn cannot grow unbounded
+ * inside a single TTL window.
  */
 
 const DEFAULT_SEEN_SET_MAX_SIZE = 10_000;
+/** Max attribute-fingerprint resolutions retained per Exposure identity. */
+export const DEFAULT_VALUES_PER_ENTRY = 64;
 // Matches the ~60s KV propagation window the platform already tolerates.
 export const DEFAULT_REVALIDATE_MS = 60_000;
 
@@ -127,6 +132,7 @@ export class SeenSet {
   constructor(
     private readonly maxSize: number = DEFAULT_SEEN_SET_MAX_SIZE,
     private readonly ttlMs: number = DEFAULT_REVALIDATE_MS,
+    private readonly maxValuesPerEntry: number = DEFAULT_VALUES_PER_ENTRY,
   ) {
     if (maxSize < 1) {
       // Fail loud: a zero/negative cache is a misconfiguration, not a silent no-op.
@@ -141,6 +147,13 @@ export class SeenSet {
         code: "SDK_SEEN_SET_TTL_INVALID",
         causeSummary: `The seen-set ttlMs must be at least 0 but received ${ttlMs}`,
         remediation: "Set revalidateMs to 0 or a positive duration in milliseconds",
+      });
+    }
+    if (maxValuesPerEntry < 1) {
+      throw new SplitchSdkError({
+        code: "SDK_SEEN_SET_MAX_SIZE_INVALID",
+        causeSummary: `The seen-set maxValuesPerEntry must be at least 1 but received ${maxValuesPerEntry}`,
+        remediation: "Set maxValuesPerEntry to a positive integer",
       });
     }
   }
@@ -174,7 +187,9 @@ export class SeenSet {
       // value without a second Exposure-bearing evaluate.
       return { kind: "context-miss", runId: entry.runId };
     }
-    // Re-insert to move the key to the most-recently-used tail.
+    // Re-insert Exposure identity and fingerprint to the most-recently-used tail.
+    entry.values.delete(fingerprint);
+    entry.values.set(fingerprint, resolution);
     this.entries.delete(id);
     this.entries.set(id, entry);
     return {
@@ -197,7 +212,7 @@ export class SeenSet {
    * When an Exposure entry for this identity is already fresh, the new
    * resolution is added under its fingerprint without resetting `storedAt`, so
    * the revalidation window (and Exposure suppression) stays anchored to the
-   * first touch.
+   * first touch. The nested values map is LRU-capped independently.
    */
   set(
     flagKey: string,
@@ -212,21 +227,25 @@ export class SeenSet {
     const fingerprint = fingerprintAttributes(attributes);
     const existing = this.entries.get(id);
     if (existing !== undefined && now - existing.storedAt < this.ttlMs) {
-      existing.values.set(fingerprint, resolution);
-      // Keep storedAt from first touch; refresh runId if the server advanced.
-      const updated: StoredEntry = {
-        runId,
+      // Same Exposure slot still fresh: keep storedAt from first touch and add
+      // (or replace) this attribute fingerprint's resolution. runId is the
+      // identity already on the slot — context-miss reuses it; a fresh evaluate
+      // after TTL miss creates a new entry below instead.
+      this.putValue(existing.values, fingerprint, resolution);
+      this.entries.delete(id);
+      this.entries.set(id, {
+        runId: existing.runId,
         storedAt: existing.storedAt,
         values: existing.values,
-      };
-      this.entries.delete(id);
-      this.entries.set(id, updated);
+      });
     } else {
+      const values = new Map<string, SeenResolution>();
+      this.putValue(values, fingerprint, resolution);
       this.entries.delete(id);
       this.entries.set(id, {
         runId,
         storedAt: now,
-        values: new Map([[fingerprint, resolution]]),
+        values,
       });
     }
     if (this.entries.size > this.maxSize) {
@@ -234,6 +253,23 @@ export class SeenSet {
       if (oldest !== undefined) {
         this.entries.delete(oldest);
       }
+    }
+  }
+
+  /** Insert/replace a fingerprint and evict the least-recently-used when over cap. */
+  private putValue(
+    values: Map<string, SeenResolution>,
+    fingerprint: string,
+    resolution: SeenResolution,
+  ): void {
+    values.delete(fingerprint);
+    values.set(fingerprint, resolution);
+    while (values.size > this.maxValuesPerEntry) {
+      const oldest = values.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      values.delete(oldest);
     }
   }
 

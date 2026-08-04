@@ -104,14 +104,18 @@ of seen-set staleness, and the seen-set is a wire optimization, not the dedup au
 
 ```
 SeenSet config {
-  maxSize:        number    -- LRU capacity; default 10,000 entries
-  evictionPolicy: 'lru'     -- least-recently-used eviction when at capacity
-  revalidateMs:   number    -- revalidation window; default 60,000 (see above)
+  maxSize:             number    -- LRU capacity for Exposure identities; default 10,000
+  maxValuesPerEntry:   number    -- LRU capacity for attribute fingerprints per identity; default 64
+  evictionPolicy:      'lru'     -- least-recently-used eviction when at capacity
+  revalidateMs:        number    -- revalidation window; default 60,000 (see above)
 }
 ```
 
-When at capacity, the oldest entry is evicted. The evicted entry may cause a redundant
-Exposure on the next `evaluate` call — acceptable, because the pipeline dedup collapses it.
+When at Exposure-identity capacity, the oldest identity is evicted. The evicted entry may cause a
+redundant Exposure on the next `evaluate` call — acceptable, because the pipeline dedup collapses
+it. Within one identity, attribute-fingerprint values are also LRU-capped so high-cardinality
+context churn cannot grow unbounded inside a single TTL window; an evicted fingerprint re-resolves
+via the context-miss path (no second Exposure while the identity is still fresh).
 
 ## What the seen-set does NOT prevent
 

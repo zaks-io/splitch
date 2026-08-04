@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_REVALIDATE_MS, fingerprintAttributes, SeenSet } from "./seen-set";
+import {
+  DEFAULT_REVALIDATE_MS,
+  DEFAULT_VALUES_PER_ENTRY,
+  fingerprintAttributes,
+  SeenSet,
+} from "./seen-set";
 
 const T0 = 1_000_000; // arbitrary epoch-ms base for the injected clock
 const EMPTY = {};
@@ -120,6 +125,20 @@ describe("SeenSet: LRU eviction", () => {
     expect(seen.get("f", "user", "c", EMPTY, T0).kind === "hit").toBe(true);
   });
 
+  it("evicts the least-recently-used attribute fingerprint inside one Exposure slot", () => {
+    // maxSize=10 Exposure slots, maxValuesPerEntry=2 fingerprints per slot.
+    const seen = new SeenSet(10, 60_000, 2);
+    seen.set("f", "r", "user", "u1", { n: 1 }, arm("one"), T0);
+    seen.set("f", "r", "user", "u1", { n: 2 }, arm("two"), T0);
+    // Touch fingerprint 1 so 2 becomes least-recently-used.
+    expect(seen.get("f", "user", "u1", { n: 1 }, T0).kind).toBe("hit");
+    seen.set("f", "r", "user", "u1", { n: 3 }, arm("three"), T0);
+    expect(seen.size).toBe(1); // still one Exposure identity
+    expect(seen.get("f", "user", "u1", { n: 2 }, T0).kind).toBe("context-miss"); // evicted
+    expect(seen.get("f", "user", "u1", { n: 1 }, T0).kind === "hit").toBe(true);
+    expect(seen.get("f", "user", "u1", { n: 3 }, T0).kind === "hit").toBe(true);
+  });
+
   it("rejects a non-positive maxSize loudly", () => {
     expect(() => new SeenSet(0)).toThrowError(
       expect.objectContaining({ code: "SDK_SEEN_SET_MAX_SIZE_INVALID" }),
@@ -134,5 +153,9 @@ describe("SeenSet: LRU eviction", () => {
 
   it("exposes a sane default revalidation window (~60s)", () => {
     expect(DEFAULT_REVALIDATE_MS).toBe(60_000);
+  });
+
+  it("exposes a bounded default for per-identity attribute fingerprints", () => {
+    expect(DEFAULT_VALUES_PER_ENTRY).toBe(64);
   });
 });

@@ -186,11 +186,10 @@ async function resolveContextMiss(
   }
 
   // Store under the new attribute fingerprint; Exposure slot stays the same.
-  // Matched arms (SPLIT / TARGETING_MATCH) store the wire value. DEFAULT and
-  // DISABLED already apply the caller's defaultValue in verify's details —
-  // persist null so a later CACHED replay re-applies THIS call site's default,
-  // matching the evaluate success path (and never leaking another site's default).
-  const matched = details.reason === "SPLIT" || details.reason === "TARGETING_MATCH";
+  // Preserve the resolved value for every non-ERROR reason (including DEFAULT
+  // and DISABLED). Collapsing those to null would make a later CACHED replay
+  // substitute context.defaultValue and return a different result for identical
+  // inputs — the defect this slice exists to prevent.
   deps.seenSet.set(
     flagKey,
     runId,
@@ -198,8 +197,8 @@ async function resolveContextMiss(
     targetingKey,
     attributes,
     {
-      variant: matched ? details.value : null,
-      variantName: matched ? (details.variantName ?? null) : null,
+      variant: details.value,
+      variantName: details.variantName ?? null,
     },
     deps.now(),
   );
