@@ -7,6 +7,11 @@ const scopeStamp = "2026-07-03T00:00:00.000Z";
  * runs when `--app` / `--env` (or SPLITCH_*) carry a flag/env selector. Put
  * these ahead of the operation stub so FakeCliTransport matches the list
  * calls first.
+ *
+ * Does NOT stub `flags_list` — that operation shares a URL with Flag key
+ * resolution. Compose `flagsListStub` explicitly when a `:flagId` command needs
+ * catalog resolution, so a future `flags list` test cannot pass against a
+ * buried scope stub by accident.
  */
 export function scopeResolutionStubs(options?: {
   readonly appId?: string;
@@ -98,4 +103,49 @@ export function scopeResolutionStubs(options?: {
       body: { items: envItemsFor("app_flag") },
     },
   ];
+}
+
+/**
+ * Stub for Flag ID-then-key resolution via `flags_list`. Compose after
+ * `scopeResolutionStubs` and before the operation under test — never embed this
+ * inside App/Env scope stubs, so `flags list` tests stay explicit.
+ */
+export function flagsListStub(options?: {
+  readonly appId?: string;
+  readonly flags?: ReadonlyArray<{
+    readonly id: string;
+    readonly key: string;
+    readonly name?: string;
+  }>;
+  readonly readTruncated?: boolean;
+  readonly readLimit?: number;
+}): FakeResponse {
+  const appId = options?.appId ?? "app_1";
+  const flags = options?.flags ?? [
+    {
+      id: "flag_checkout_banner",
+      key: "checkout-banner",
+      name: "Checkout banner",
+    },
+  ];
+  return {
+    match: (request) =>
+      request.method === "GET" && new URL(request.url).pathname === `/apps/${appId}/flags`,
+    status: 200,
+    body: {
+      items: flags.map((flag) => ({
+        id: flag.id,
+        appId,
+        key: flag.key,
+        name: flag.name ?? flag.key,
+        schema: null,
+        variants: [{ id: "var_on", name: "on", value: true }],
+        defaultVariantId: "var_on",
+        createdAt: scopeStamp,
+        updatedAt: scopeStamp,
+      })),
+      readTruncated: options?.readTruncated ?? false,
+      readLimit: options?.readLimit ?? 200,
+    },
+  };
 }

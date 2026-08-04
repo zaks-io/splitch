@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK } from "./exit-codes.js";
-import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
+import { flagsListStub, scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import {
   authHeader,
   createAppResponse,
@@ -65,11 +65,14 @@ describe("api command exit codes", () => {
 });
 
 describe("approval command exit codes", () => {
+  const FLAG_1 = [{ id: "flag_1", key: "flag-1", name: "Flag 1" }] as const;
+
   it("flags promote --confirm returns 0 on success", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
+      flagsListStub({ flags: FLAG_1 }),
       {
         match: (request) => request.url.includes("/promote") && request.method === "POST",
         status: 200,
@@ -107,6 +110,7 @@ describe("approval command exit codes", () => {
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
+      flagsListStub({ flags: FLAG_1 }),
       {
         match: (request) => request.url.includes("/config") && request.method === "PATCH",
         status: 200,

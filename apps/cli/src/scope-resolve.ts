@@ -25,6 +25,12 @@ export interface NamedResource {
  * so an `app_` prefix cannot be a key. Environment selectors always resolve —
  * Environment keys are unconstrained and could otherwise collide with `env_…`
  * ID shapes.
+ *
+ * Flag positionals (`:flagId`) follow the same seam via `resolveFlagSelector`:
+ * ID and key matches within the selected App (Flag keys are unconstrained and
+ * may collide with `flag_…` ID shapes). Ambiguous ID/key hits refuse loudly.
+ * Truncated catalogs fall through to a verbatim selector so canonical IDs past
+ * the ceiling still reach the server lookup.
  */
 export async function resolveContextSelectors(
   deps: CliDeps,
@@ -136,12 +142,99 @@ export async function resolveEnvironmentSelector(
   return match;
 }
 
+/**
+ * Resolve a Flag positional that may be a canonical `flag_…` ID or a Flag key.
+ * There is no by-key API route, so selectors resolve via `flags_list` within
+ * the selected App. Match ID and key separately — Flag keys are unconstrained
+ * `z.string()` values and may equal a `flag_…` ID shape, so a prefix fast path
+ * would skip a real key (the SPL-288 collision class). When ID and key hit
+ * different rows, refuse the ambiguity (same pattern as App key collisions).
+ *
+ * `flags_list` is hard-bounded with no pagination. When the page is truncated
+ * and the selector is absent, fall through and pass the selector verbatim:
+ * the server's exact ID lookup remains authoritative (FLAG_NOT_FOUND), and the
+ * CLI must not claim non-existence it cannot prove. An untruncated miss still
+ * fails with CLI_SCOPE_UNRESOLVED.
+ */
+export async function resolveFlagSelector(
+  deps: CliDeps,
+  appId: string,
+  selector: string,
+): Promise<NamedResource> {
+  const listed = await listFlagsForResolution(deps, appId);
+  const byId = listed.items.find((flag) => flag.id === selector);
+  const byKey = listed.items.find((flag) => flag.key === selector);
+  if (byId && byKey && byId.id !== byKey.id) {
+    throw new SplitchCliError({
+      code: "CLI_SCOPE_UNRESOLVED",
+      causeSummary: `Flag selector "${selector}" matches more than one Flag on App ${appId}: id ${byId.id} and key of ${byKey.id}`,
+      remediation: "Pass the canonical Flag ID of the Flag you intend to address",
+    });
+  }
+  const match = byId ?? byKey;
+  if (match) return match;
+  if (listed.readTruncated) {
+    // Catalog is incomplete — cannot prove absence. Pass the selector through
+    // so a canonical ID past the ceiling still reaches the server lookup.
+    return { id: selector };
+  }
+  throw new SplitchCliError({
+    code: "CLI_SCOPE_UNRESOLVED",
+    causeSummary: `No Flag matching "${selector}" exists on App ${appId}. Available: ${
+      listed.items.length ? listed.items.map((flag) => flag.key ?? flag.id).join(", ") : "(none)"
+    }`,
+    remediation: "Pass an existing Flag ID or key within the selected App",
+  });
+}
+
+interface FlagListPage {
+  readonly items: NamedResource[];
+  readonly readTruncated: boolean;
+  readonly readLimit: number;
+}
+
+async function listFlagsForResolution(deps: CliDeps, appId: string): Promise<FlagListPage> {
+  const data = await callOperation(deps, "flags_list", { appId }, { kind: "app", selector: appId });
+  const page = data as {
+    items?: NamedResource[];
+    readTruncated?: boolean;
+    readLimit?: number;
+  };
+  if (
+    !Array.isArray(page.items) ||
+    typeof page.readTruncated !== "boolean" ||
+    typeof page.readLimit !== "number"
+  ) {
+    throw new SplitchCliError({
+      code: "CLI_SCOPE_UNRESOLVED",
+      causeSummary:
+        "flags_list returned an unexpected envelope while resolving a Flag selector (missing items, readTruncated, or readLimit)",
+      remediation: "Update the CLI or report the flags_list response shape before retrying",
+    });
+  }
+  return {
+    items: page.items,
+    readTruncated: page.readTruncated,
+    readLimit: page.readLimit,
+  };
+}
+
 async function callList(
   deps: CliDeps,
   operationId: string,
   input: Record<string, unknown>,
   binding?: TokenBinding,
 ): Promise<NamedResource[]> {
+  const data = await callOperation(deps, operationId, input, binding);
+  return (data as { items: NamedResource[] }).items;
+}
+
+async function callOperation(
+  deps: CliDeps,
+  operationId: string,
+  input: Record<string, unknown>,
+  binding?: TokenBinding,
+): Promise<unknown> {
   const result = await withAuthorizationRetry(
     deps,
     async (authorization) => {
@@ -160,5 +253,5 @@ async function callList(
       remediation: "Fix the reported API failure and retry the command",
     });
   }
-  return (result.data as { items: NamedResource[] }).items;
+  return result.data;
 }

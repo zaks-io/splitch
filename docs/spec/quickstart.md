@@ -132,7 +132,7 @@ A new Flag starts disabled with the false-alias Variant (`off`) as its Default V
 the selected Environment before expecting any non-default resolution:
 
 ```
-splitch flag-config update <flag-id> --enabled true             # CLI
+splitch flag-config update <flag-id-or-key> --enabled true             # CLI
 flag_config_update { flagId, enabled: true }                    # MCP tool
 ```
 
@@ -160,7 +160,7 @@ A verified Flag is already servable. To put it in front of a slice of real traff
 Configuration's **baseline rollout** — one percentage, no Targeting Rule, no Experiment:
 
 ```
-splitch flag-config update <flag-id> --rollout 10              # CLI
+splitch flag-config update <flag-id-or-key> --rollout 10              # CLI
 flag_config_update { flagId, rollout: { percentage: 10 } }     # MCP tool
 ```
 

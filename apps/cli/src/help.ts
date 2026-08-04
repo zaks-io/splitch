@@ -131,7 +131,11 @@ function positionals(command: CliCommandDefinition): string[] {
       (name): name is string =>
         Boolean(name) && !["appId", "environmentId", "targetEnvironmentId"].includes(name ?? ""),
     )
-    .map((value) => value.replaceAll(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase());
+    .map((value) => {
+      const kebab = value.replaceAll(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+      // Mirror "--app <app> … ID or slug": Flag ID routes accept a key too.
+      return kebab === "flag-id" ? "flag-id-or-key" : kebab;
+    });
 }
 
 function commandFlags(command: CliCommandDefinition): HelpFlag[] {

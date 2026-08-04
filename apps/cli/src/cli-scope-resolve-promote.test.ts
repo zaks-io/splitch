@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCli } from "./cli.js";
 import { EXIT_OK, EXIT_SCOPE } from "./exit-codes.js";
-import { scopeResolutionStubs } from "./scope-resolution-fixtures.js";
+import { flagsListStub, scopeResolutionStubs } from "./scope-resolution-fixtures.js";
 import { FakeCliTransport, promoteResponse, storedCredential } from "./test-fixtures.js";
 import { cleanupTempHomes, makeTempHome } from "./test-helpers.js";
 
@@ -11,12 +11,15 @@ afterEach(async () => {
   await cleanupTempHomes();
 });
 
+const FLAG_1 = [{ id: "flag_1", key: "flag-1", name: "Flag 1" }] as const;
+
 describe("flags promote --env slug resolution", () => {
   it("accepts a target Environment slug and promotes to the canonical ID", async () => {
     const { credentialPath } = await makeTempHome();
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
+      flagsListStub({ flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "POST" &&
@@ -56,6 +59,7 @@ describe("flags promote --env slug resolution", () => {
     await writeFile(credentialPath, `${JSON.stringify(storedCredential())}\n`);
     const transport = new FakeCliTransport([
       ...scopeResolutionStubs(),
+      flagsListStub({ flags: FLAG_1 }),
       {
         match: (request) =>
           request.method === "POST" &&
