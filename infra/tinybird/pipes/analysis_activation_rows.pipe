@@ -1,0 +1,69 @@
+DESCRIPTION Returns the earliest post-Exposure Activation per Entity in one Run, shaped as the Stats Engine's ActivationRow.
+
+NODE activation_candidates
+SQL >
+    %
+    {% if not defined(app_id) %}
+    {{error('app_id is required')}}
+    {% end %}
+    {% if not defined(environment_id) %}
+    {{error('environment_id is required')}}
+    {% end %}
+    {% if not defined(experiment_id) %}
+    {{error('experiment_id is required')}}
+    {% end %}
+    {% if not defined(run_id) %}
+    {{error('run_id is required')}}
+    {% end %}
+    SELECT
+        run_id,
+        id_type,
+        targeting_key_hash,
+        counterfactual,
+        assumeNotNull(activation_ts) AS activation_ts
+    FROM raw_events
+    WHERE type = 'activation'
+        AND activation_ts IS NOT NULL
+        AND app_id = {{String(app_id)}}
+        AND environment_id = {{String(environment_id)}}
+        AND experiment_id = {{String(experiment_id)}}
+        AND run_id = {{String(run_id)}}
+        -- Counterfactual Activations record what a Control Entity WOULD have done.
+        -- The Stats Engine's activated-denominator filter reads only run_id and
+        -- `activated` (packages/stats/src/exposure-denominator.ts), so a
+        -- counterfactual row admitted here would count a never-activated Control
+        -- Entity into the activated arm. Analysis reads the real population.
+        AND counterfactual = 0
+    -- Collapses physical retries: at-least-once delivery writes the same candidate
+    -- under a fresh event_id, and the retries are identical by contract.
+    GROUP BY run_id, id_type, targeting_key_hash, counterfactual, activation_ts
+
+NODE earliest_post_exposure
+SQL >
+    SELECT
+        candidates.targeting_key_hash AS targeting_key_hash,
+        candidates.run_id AS run_id,
+        min(candidates.activation_ts) AS activation_ts,
+        candidates.counterfactual AS counterfactual,
+        -- True by construction: the join below keeps only Entities that have an
+        -- Activation strictly after first_exposure_ts, which is the contract's
+        -- definition of `activated`. An Entity whose only candidates precede its
+        -- Exposure has no valid activation_ts to report, so it is absent rather
+        -- than emitted with activated = 0; the Stats Engine skips both identically.
+        toUInt8(1) AS activated
+    FROM activation_candidates AS candidates
+    INNER JOIN serve_deduped_exposures AS exposures
+        ON exposures.run_id = candidates.run_id
+        AND exposures.id_type = candidates.id_type
+        AND exposures.targeting_key_hash = candidates.targeting_key_hash
+    -- Reject pre-Exposure candidates BEFORE taking the minimum. Reducing first
+    -- would let one early stray Activation hide a later valid one and drop the
+    -- Entity out of gated analysis entirely (ADR-0012).
+    WHERE candidates.activation_ts > exposures.first_exposure_ts
+    GROUP BY
+        candidates.targeting_key_hash,
+        candidates.run_id,
+        candidates.counterfactual
+    ORDER BY targeting_key_hash
+
+TYPE ENDPOINT

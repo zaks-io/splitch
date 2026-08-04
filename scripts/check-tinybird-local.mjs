@@ -7,6 +7,8 @@ const projectDir = ".";
 const projectConfigPath = "tinybird.config.json";
 const tinybirdRoot = "infra/tinybird";
 const testsDir = join(tinybirdRoot, "tests");
+const FIRST_TOUCH_RULE =
+  /if\(\s*countIf\(isNull\(variant\)\)[\s\S]*?AS variant,\s*min\(server_received_at\) AS first_exposure_ts/;
 
 if (!existsSync(projectConfigPath)) {
   console.error("tinybird:local: tinybird.config.json is required.");
@@ -112,6 +114,31 @@ function validateSplitchDatasourceContracts(root) {
     /^ENGINE_SORTING_KEY "app_id, environment_id, experiment_id, run_id, variant, targeting_key_hash"$/m,
     "deduped_exposures sorting key must be app_id-first",
   );
+
+  requireIdenticalFirstTouchRule(root);
+}
+
+// The snapshot Copy Pipe and the real-time tail are separate files that must agree
+// on first touch and on variant quarantine. If they drift, the two lambda layers
+// disagree about the same Entity and the union silently reports a variant conflict
+// that never happened.
+function requireIdenticalFirstTouchRule(root) {
+  const sources = [
+    join(root, "copies", "cp_deduped_exposures.pipe"),
+    join(root, "pipes", "serve_deduped_exposures.pipe"),
+  ];
+  const rules = sources.map((path) => {
+    const match = FIRST_TOUCH_RULE.exec(readFileSync(path, "utf8"));
+    if (!match) {
+      fail(`missing first-touch dedup rule in ${path}`);
+    }
+    return match[0].replace(/\s+/g, " ");
+  });
+  if (rules[0] !== rules[1]) {
+    fail(
+      `first-touch dedup rule differs between ${sources[0]} and ${sources[1]}; the snapshot and tail layers must compute it identically`,
+    );
+  }
 }
 
 function readDatasource(root, name) {

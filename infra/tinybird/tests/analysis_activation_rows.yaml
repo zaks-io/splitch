@@ -1,0 +1,18 @@
+- name: earliest_activation_after_exposure_wins_and_pre_exposure_candidates_never_hide_it
+  description: Candidates at or before first_exposure_ts are rejected before the minimum is taken, retries collapse to one row, an Entity whose only candidate precedes its Exposure is absent, an Entity with no Exposure at all is absent, and counterfactual Activations are excluded.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_1"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_control_snapshot","run_id":"run_1","activation_ts":"2026-07-02 00:00:00.000","counterfactual":0,"activated":1}
+    {"targeting_key_hash":"tk_tail","run_id":"run_1","activation_ts":"2026-07-05 12:00:00.000","counterfactual":0,"activated":1}
+- name: sibling_run_returns_only_its_own_entities
+  description: The Run scope, not the Experiment, bounds the population.
+  parameters: "app_id=app_1&environment_id=env_prod&experiment_id=exp_1&run_id=run_2"
+  expected_http_status: 200
+  expected_result: |
+    {"targeting_key_hash":"tk_other_run","run_id":"run_2","activation_ts":"2026-07-02 00:00:00.000","counterfactual":0,"activated":1}
+- name: missing_environment_id_is_rejected
+  description: A required scope parameter is never defaulted; the request fails loudly rather than reading across Environments.
+  parameters: "app_id=app_1&experiment_id=exp_1&run_id=run_1"
+  expected_http_status: 400
+  expected_result: "environment_id is required"
