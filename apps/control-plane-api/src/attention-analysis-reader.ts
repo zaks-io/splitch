@@ -5,6 +5,7 @@ import {
   type StatsOutput,
 } from "@splitch/contracts";
 import { type AnalysisResultsScope, analysisResultsRequest } from "./analysis-results-request";
+import { ExperimentIntegrityError } from "./attention-rollup-errors";
 
 /** The Analysis-results transport for the attention rollup: one read per running Run. */
 export type { AnalysisResultsScope };
@@ -71,14 +72,19 @@ async function parseAnalysisResponse(
     // (SPL-290). Panel results already unwrap via parseAnalysisResults; this
     // reader must do the same and keep the no-pooling Run check.
     const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+    // Match the Analysis Worker (results.ts): a Run-provenance mismatch is a
+    // permanent integrity failure. Mapping it to AnalysisResultsUnavailableError
+    // would render as retryable SERVICE_UNAVAILABLE and teach a polling agent to
+    // wait out a fault that waiting cannot clear (ADR-0036 / SPL-290 review).
     if (envelope.run_id !== expectedRunId) {
-      throw new AnalysisResultsUnavailableError(
+      throw new ExperimentIntegrityError(
         `analysis answered for Run ${envelope.run_id}, not Run ${expectedRunId}`,
       );
     }
     return envelope.stats;
   } catch (cause) {
     if (cause instanceof AnalysisResultsUnavailableError) throw cause;
+    if (cause instanceof ExperimentIntegrityError) throw cause;
     throw new AnalysisResultsUnavailableError(cause);
   }
 }

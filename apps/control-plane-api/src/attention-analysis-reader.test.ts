@@ -3,6 +3,7 @@ import {
   AnalysisResultsUnavailableError,
   createAnalysisResultsReader,
 } from "./attention-analysis-reader";
+import { ExperimentIntegrityError } from "./attention-rollup-errors";
 import { statsOutput } from "./attention-rollup-fixture";
 
 const SCOPE = {
@@ -104,7 +105,7 @@ describe("createAnalysisResultsReader three-state envelope unwrap", () => {
     );
   });
 
-  it("refuses a provenance-mismatched envelope rather than relabelling it", async () => {
+  it("refuses a provenance-mismatched envelope as a permanent integrity fault", async () => {
     const reader = createAnalysisResultsReader({
       fetch: async () =>
         Response.json({
@@ -113,10 +114,13 @@ describe("createAnalysisResultsReader three-state envelope unwrap", () => {
         }),
     });
 
+    // Must not be AnalysisResultsUnavailableError: that class maps to retryable
+    // SERVICE_UNAVAILABLE on the rollup, and polling cannot clear a mislabelled Run.
     await expect(reader.read(SCOPE, "actor_1")).rejects.toSatisfy(
       (cause: unknown) =>
-        cause instanceof AnalysisResultsUnavailableError &&
-        String(cause.detail).includes("not Run run_1"),
+        cause instanceof ExperimentIntegrityError &&
+        !(cause instanceof AnalysisResultsUnavailableError) &&
+        cause.message.includes("not Run run_1"),
     );
   });
 });

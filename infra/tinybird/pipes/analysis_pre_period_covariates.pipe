@@ -1,9 +1,12 @@
 DESCRIPTION Returns pre-period CUPED covariate rows for one Run, shaped as the Stats Engine's PrePeriodRow.
 
+# SPLITCH_EMPTY_STUB_UNTIL=metric_events
 # Same stub rationale as `analysis_metric_values`: pre-period covariates need
 # Metric Event history that is not ingested yet. An absent covariate set is
 # optional on StatsInput (`pre_period_covariates?`); empty rows here mean CUPED
 # is not applied (`cuped_method = none`), not that analysis is unavailable.
+# scripts/lib/tinybird-metric-stub-tripwire.mjs fails tinybird:local the moment
+# metric_events.datasource exists while this marker remains.
 
 NODE empty_pre_period_covariates
 SQL >
