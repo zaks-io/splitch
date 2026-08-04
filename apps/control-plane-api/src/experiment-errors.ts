@@ -9,16 +9,20 @@ export function experimentNotFound(requestId: string): Response {
 
 export function experimentKeyConflict(
   key: string,
-  archivedExperimentId: string,
+  holder: { id: string; status: string },
   requestId: string,
 ): Response {
+  const archived = holder.status === "archived";
   return renderError(
     {
       code: "EXPERIMENT_KEY_CONFLICT",
-      message: "an archived Experiment already holds this key in this Environment",
+      message: archived
+        ? "an archived Experiment already holds this key in this Environment"
+        : "an Experiment already holds this key in this Environment",
       details: {
         key,
-        archivedExperimentId,
+        status: holder.status as "draft" | "running" | "ended" | "archived",
+        ...(archived ? { archivedExperimentId: holder.id } : {}),
         recommendedAction: "CHOOSE_DIFFERENT_KEY",
       },
     },

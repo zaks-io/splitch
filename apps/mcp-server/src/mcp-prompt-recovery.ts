@@ -175,14 +175,23 @@ function chooseDifferentSteps(
     ];
   }
   const key = typeof details.key === "string" ? `"${details.key}"` : "<key>";
-  const archivedId =
-    typeof details.archivedExperimentId === "string"
-      ? details.archivedExperimentId
-      : "<archivedExperimentId>";
+  const status = typeof details.status === "string" ? details.status : "unknown";
+  if (status === "archived") {
+    const archivedId =
+      typeof details.archivedExperimentId === "string"
+        ? details.archivedExperimentId
+        : "<archivedExperimentId>";
+    return [
+      message(
+        "assistant",
+        `Key ${key} is still held by archived Experiment ${archivedId}. Resend experiments_create with a different "key". Keys are not freed on archive.`,
+      ),
+    ];
+  }
   return [
     message(
       "assistant",
-      `Key ${key} is still held by archived Experiment ${archivedId}. Resend experiments_create with a different "key". Keys are not freed on archive.`,
+      `Key ${key} is already held by a ${status} Experiment. Resend experiments_create with a different "key".`,
     ),
   ];
 }

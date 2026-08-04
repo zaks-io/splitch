@@ -44,8 +44,8 @@ Status is always `draft` on creation; no Run yet.
 `VARIANT_NOT_AVAILABLE` — a Run cannot test a Variant that cannot be served here.
 
 `(app_id, environment_id, key)` stays unique including archived rows. Creating a draft whose key is
-still held by an archived Experiment returns `409 EXPERIMENT_KEY_CONFLICT` with
-`details.archivedExperimentId` (keys are not freed or renamed on archive).
+still held (live or archived) returns `409 EXPERIMENT_KEY_CONFLICT` with `details.status`. Archived
+holders also include `details.archivedExperimentId` (keys are not freed or renamed on archive).
 
 ### `GET /apps/{app_id}/envs/{environment_id}/experiments/{experiment_id}`
 

@@ -198,13 +198,15 @@ const errorMembers = [
       recommendedAction: z.literal("CHOOSE_DIFFERENT_SLUG"),
     }),
   ),
-  // An archived Experiment still holds `(app, env, key)`. Naming its id is safe:
-  // the caller already has Environment write scope and owned the archived row.
+  // An Experiment (live or archived) still holds `(app, env, key)`. Naming an
+  // archived id is safe: the caller has Environment write scope and owned it.
+  // Live holders omit archivedExperimentId and surface status instead.
   member(
     "EXPERIMENT_KEY_CONFLICT",
     z.object({
       key: z.string(),
-      archivedExperimentId: z.string(),
+      status: z.enum(["draft", "running", "ended", "archived"]),
+      archivedExperimentId: z.string().optional(),
       recommendedAction: z.literal("CHOOSE_DIFFERENT_KEY"),
     }),
   ),

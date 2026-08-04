@@ -19,7 +19,24 @@ beforeEach(async () => {
 
 afterEach(async () => ctx.h.bindings.dispose());
 
-describe("archived Experiment parent teardown and key conflict (SPL-289)", () => {
+type Fixture = Awaited<ReturnType<typeof experimentFixture>>;
+
+function createBody(fx: Fixture, key: string, salt: string) {
+  return {
+    appId: fx.appId,
+    environmentId: fx.environmentId,
+    name: key,
+    key,
+    flagId: fx.flag.id,
+    targetingKey: "userId",
+    targetingKeyType: "user",
+    metrics: [{ metricId: fx.metricId }],
+    allocation: { control: 50, treatment: 50 },
+    salt,
+  };
+}
+
+describe("Experiment key conflict after archive or live hold (SPL-289)", () => {
   it("refuses recreate with an archived Experiment's key", async () => {
     const fx = await experimentFixture(ctx);
     const key = "archived-key-reuse";
@@ -41,30 +58,52 @@ describe("archived Experiment parent teardown and key conflict (SPL-289)", () =>
       "POST",
       `/apps/${fx.appId}/envs/${fx.environmentId}/experiments`,
       fx.jwt,
-      {
-        appId: fx.appId,
-        environmentId: fx.environmentId,
-        name: key,
-        key,
-        flagId: fx.flag.id,
-        targetingKey: "userId",
-        targetingKeyType: "user",
-        metrics: [{ metricId: fx.metricId }],
-        allocation: { control: 50, treatment: 50 },
-        salt: "archived-key-reuse-salt-2",
-      },
+      createBody(fx, key, "archived-key-reuse-salt-2"),
     );
     expect(recreate.status).toBe(409);
     expect(await errorBody(recreate)).toMatchObject({
       code: "EXPERIMENT_KEY_CONFLICT",
       details: {
         key,
+        status: "archived",
         archivedExperimentId: experiment.id,
         recommendedAction: "CHOOSE_DIFFERENT_KEY",
       },
     });
   });
 
+  it("refuses recreate with a live Experiment's key", async () => {
+    const fx = await experimentFixture(ctx);
+    const key = "live-key-reuse";
+    const experiment = await createExperimentDraft(ctx, fx, {
+      key,
+      allocation: { control: 50, treatment: 50 },
+      salt: "live-key-reuse-salt",
+    });
+
+    const recreate = await request(
+      ctx.h,
+      "POST",
+      `/apps/${fx.appId}/envs/${fx.environmentId}/experiments`,
+      fx.jwt,
+      createBody(fx, key, "live-key-reuse-salt-2"),
+    );
+    expect(recreate.status).toBe(409);
+    const body = await errorBody(recreate);
+    expect(body).toMatchObject({
+      code: "EXPERIMENT_KEY_CONFLICT",
+      details: {
+        key,
+        status: "draft",
+        recommendedAction: "CHOOSE_DIFFERENT_KEY",
+      },
+    });
+    expect(body.details).not.toHaveProperty("archivedExperimentId");
+    expect(experiment.id).toBeTruthy();
+  });
+});
+
+describe("archived Experiment parent teardown (SPL-289)", () => {
   it("archives then clears Flag and App teardown once only archived Experiments remain", async () => {
     const fx = await experimentFixture(ctx);
     await allowAllPolicies(ctx.h, fx.appId);

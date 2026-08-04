@@ -61,8 +61,8 @@ async function createExperiment(
 
   const key = body.key as string;
   const existingKey = await deps.repo.experiments.findExperimentByKey(scope, key);
-  if (existingKey?.status === "archived") {
-    return experimentKeyConflict(key, existingKey.id, requestId);
+  if (existingKey) {
+    return experimentKeyConflict(key, existingKey, requestId);
   }
 
   const ready = await validateCreateExperiment(deps, scope, body, requestId);

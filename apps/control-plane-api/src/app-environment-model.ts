@@ -1,16 +1,15 @@
 import {
-  EnvironmentPolicySchema,
   type App,
   type ClientKey,
   type Environment,
   type EnvironmentPolicy,
+  EnvironmentPolicySchema,
 } from "@splitch/contracts";
 import { appScope, envScope, type Repository } from "@splitch/db";
 import { renderError } from "@splitch/worker-runtime";
 import { clientKeyResponse, provisionClientKey } from "./client-key-provisioning";
-import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
-
 import type { ConfigStoreAccess } from "./config-store-do";
+import { type CredentialCacheWriterAccess, randomHex } from "./credential-cache";
 
 export interface AppEnvironmentDeps {
   repo: Repository;
@@ -176,19 +175,6 @@ export async function deleteEnvironmentBlockedByChildren(
       environmentId,
       "experiments",
       activeExperiments.length,
-      attemptedOp,
-      requestId,
-    );
-  }
-  const activeExperimentIds = new Set(activeExperiments.map((row) => row.id));
-  const runRows = await deps.repo.experiments.runs.findMany(scope);
-  const blockingRuns = runRows.filter((run) => activeExperimentIds.has(run.experimentId));
-  if (blockingRuns.length > 0) {
-    return resourceNotEmpty(
-      "environment",
-      environmentId,
-      "runs",
-      blockingRuns.length,
       attemptedOp,
       requestId,
     );

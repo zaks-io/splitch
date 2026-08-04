@@ -1,10 +1,7 @@
 import { and, eq, isNull, ne } from "drizzle-orm";
 import { experiments, metrics, runs } from "../schema/index";
 import type { Db } from "./client";
-import {
-  makePurgeArchivedExperimentsForFlag,
-  makePurgeArchivedExperimentsInEnvironment,
-} from "./experiment-archive-purge";
+import { makePurgeArchivedExperimentsInEnvironment } from "./experiment-archive-purge";
 import { makeEndRun } from "./experiment-end-run";
 import { makeStartRun } from "./experiment-start-run";
 import { assertMintedScope, type EnvScope, type TenantScope } from "./scope";
@@ -36,7 +33,6 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
   const endRun = makeEndRun(d1, experimentsTable, runsTable);
   const archiveExperiment = makeArchiveExperiment(d1);
   const purgeArchivedExperimentsInEnvironment = makePurgeArchivedExperimentsInEnvironment(d1);
-  const purgeArchivedExperimentsForFlag = makePurgeArchivedExperimentsForFlag(d1);
   const findRunningExperimentsForFlag = (scope: EnvScope, flagId: string) =>
     experimentsTable.findMany(
       scope,
@@ -61,7 +57,6 @@ export function makeExperimentRepo(db: Db, d1: D1Database) {
 
     archiveExperiment,
     purgeArchivedExperimentsInEnvironment,
-    purgeArchivedExperimentsForFlag,
 
     findRunningExperimentsForFlag,
 
