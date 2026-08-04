@@ -295,7 +295,9 @@ describe("attributes participate in value replay (SPL-308)", () => {
     expect(transport.evaluateCalls).toHaveLength(1);
     expect(transport.verifyCalls).toHaveLength(0);
   });
+});
 
+describe("Exposure suppression stays attribute-independent (SPL-308)", () => {
   it("a context change does not produce a duplicate Exposure for the same (flag, run, targetingKey)", async () => {
     // Mutation proof (with the first test): if attributes were folded into the
     // Exposure key, this second call would be a full miss and fire evaluate
@@ -344,6 +346,47 @@ describe("attributes participate in value replay (SPL-308)", () => {
     });
     expect(replayFree).toMatchObject({ reason: "CACHED", value: "free-arm" });
     expect(replayEnt).toMatchObject({ reason: "CACHED", value: "enterprise-arm" });
+    expect(transport.evaluateCalls).toHaveLength(1);
+    expect(transport.verifyCalls).toHaveLength(1);
+  });
+
+  it("context-miss DISABLED stores a no-match marker so CACHED replay uses THIS call's defaultValue", async () => {
+    const transport = new FakeTransport([ok("free-arm", "run-1", "free")], {
+      verify: [
+        verifyOk({
+          value: "verify-site-default",
+          variantName: null,
+          reason: "DISABLED",
+        }),
+      ],
+    });
+    const c = clock();
+    const bag = deps(transport, c.now);
+
+    await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "free" },
+      idempotencyKey: EVALUATION_ID,
+    });
+    c.advance(1);
+    const disabled = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "enterprise" },
+      defaultValue: "verify-site-default",
+      idempotencyKey: "eval-disabled",
+    });
+    expect(disabled).toMatchObject({ reason: "DISABLED", value: "verify-site-default" });
+
+    c.advance(1);
+    const replay = await runEvaluate(bag, "flag", {
+      targetingKey: "u1",
+      attributes: { plan: "enterprise" },
+      defaultValue: "other-site-default",
+      idempotencyKey: "replay-disabled",
+    });
+    expect(replay.reason).toBe("CACHED");
+    // Must re-apply THIS call's default, not the verify call site's embedded value.
+    expect(replay.value).toBe("other-site-default");
     expect(transport.evaluateCalls).toHaveLength(1);
     expect(transport.verifyCalls).toHaveLength(1);
   });
