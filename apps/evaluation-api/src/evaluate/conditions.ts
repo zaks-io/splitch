@@ -33,17 +33,18 @@ function matchesCondition(
   options: ConditionMatchOptions,
 ): boolean {
   const actual = contextValue(context, condition.attribute);
+  // Absent and null are the same policy: the Condition cannot match, so the
+  // Targeting Rule falls through. A context that simply lacks an optional
+  // attribute is not malformed config (evaluate-path-orchestration.md
+  // § Absent or null Condition attribute).
   if (actual.value === null || actual.value === undefined) {
-    options.logger?.warn("condition_attribute_null", {
+    options.logger?.warn("condition_attribute_absent", {
       attribute: condition.attribute,
       hasAttribute: actual.hasAttribute,
       operator: condition.operator,
       ruleId: options.ruleId ?? null,
     });
-    throw new ConditionMatchError(
-      `Targeting condition attribute "${condition.attribute}" is missing or null`,
-      "VALIDATION_ERROR",
-    );
+    return false;
   }
 
   switch (condition.operator) {

@@ -47,7 +47,7 @@ describe("evaluatePath condition validation", () => {
   it.each([
     ["missing", {}],
     ["null", { plan: null as never }],
-  ] as const)("%s Targeting Rule attribute fails loud with no Exposure decision", async (_caseName, attributes) => {
+  ] as const)("%s Targeting Rule attribute is a non-match and continues (no ERROR)", async (_caseName, attributes) => {
     const rule = targetingRule({
       id: "rule-null-attribute",
       conditions: [{ attribute: "plan", operator: "eq", value: "enterprise" }],
@@ -66,20 +66,19 @@ describe("evaluatePath condition validation", () => {
     );
 
     expect(result).toMatchObject({
-      kind: "error",
+      kind: "no_match_default",
       variant: "control",
-      reason: "ERROR",
-      errorCode: "VALIDATION_ERROR",
-      liveRunId: null,
-      exposure: null,
+      reason: { type: "no_match_default" },
+      experimentId: EXPERIMENT_ID,
+      liveRunId: LIVE_RUN_ID,
+      exposure: { variant: "control", liveRunId: LIVE_RUN_ID },
     });
     expect(logger.warnings).toHaveLength(1);
     expect(logger.warnings[0]).toMatchObject({
-      message: "condition_attribute_null",
+      message: "condition_attribute_absent",
       detail: { attribute: "plan", operator: "eq", ruleId: "rule-null-attribute" },
     });
-    expect(logger.errors).toHaveLength(1);
-    expect(store.putCalls).toEqual([]);
+    expect(logger.errors).toHaveLength(0);
   });
 });
 

@@ -129,8 +129,25 @@ All Conditions must match (AND semantics). For `segment_in` / `segment_not_in` o
 membership = Entity matches the Segment's own Conditions (recursively evaluated;
 Segments are Conditions, not a separate authorization layer).
 
-Missing context attribute: treated as null. Operators on missing or null attributes fail
-loud: log a warning and return the evaluate-path error/default result with no Exposure.
+### Absent or null Condition attribute
+
+When a Condition's `attribute` is **absent** from `EvaluationContext.attributes`, or the
+stored value is **null**, the Condition does **not** match. The evaluate path continues to
+the next Targeting Rule (first-match), then baseline rollout / Default Variant — the same
+fall-through as any other non-matching Condition. Absent and null are identical at the
+policy layer.
+
+A context that simply lacks an optional attribute is not malformed config. Fail-loud
+(ADR-0036) still applies to genuinely bad config (unreachable Provider, corrupt rule
+`variantId`, invalid regex in a `matches` Condition, idType mismatch, and so on).
+
+Wire schemas (`EvaluationContextSchema`) do not accept `null` as an attribute value; a
+request that sends `attributes.plan: null` fails request validation before evaluation.
+Policy still treats a null that reaches `matchesConditions` (for example from an internal
+caller) the same as absence, so the two entry points cannot diverge on that input.
+
+`test-eval` and data-plane `evaluate` share this Condition matching function. A config the
+dry run endorses for a given context must not ERROR on the edge for that same context.
 
 ## Fractional Evaluation
 

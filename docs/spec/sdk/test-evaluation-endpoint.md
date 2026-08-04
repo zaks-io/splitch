@@ -100,7 +100,9 @@ every evaluation produces exactly one. Rule details (`ruleId`, `ruleName`, `prio
 The endpoint reads the same live edge config the data-plane `evaluate` endpoint uses, so the result
 reflects the current deployed state (ADR-0026). A 60s KV propagation window applies equally here —
 the resolve uses the same KV-cached config. The endpoint may read `AssignmentStore.getAll()` to return
-`holdover_replay`, but it never calls `put()`.
+`holdover_replay`, but it never calls `put()`. Condition matching — including absent or null
+attributes — is the same shared function as data-plane evaluate
+([evaluate-path-orchestration.md § Absent or null Condition attribute](../evaluation/evaluate-path-orchestration.md#absent-or-null-condition-attribute)).
 
 ## Live config consistency
 
