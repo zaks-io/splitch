@@ -8,7 +8,6 @@ import { z } from "zod";
  * work — do not invent synonyms here.
  */
 export const apiKeyScopes = ["data-plane:evaluate", "data-plane:write"] as const;
-export type ApiKeyScope = (typeof apiKeyScopes)[number];
 
 export const ApiKeyScopeSchema = z.enum(apiKeyScopes, {
   error: () => `allowed scopes: ${apiKeyScopes.join(", ")}`,
