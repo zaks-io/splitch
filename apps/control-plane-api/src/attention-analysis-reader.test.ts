@@ -87,6 +87,24 @@ describe("createAnalysisResultsReader three-state envelope unwrap", () => {
     await expect(reader.read(SCOPE, "actor_1")).resolves.toBeNull();
   });
 
+  it("maps Metric-Events insufficient-data to null (no_data), not SERVICE_UNAVAILABLE", async () => {
+    const reader = createAnalysisResultsReader({
+      fetch: async () =>
+        Response.json(
+          {
+            code: "VALIDATION_ERROR",
+            message: "no Metric Events for this Run",
+            details: {
+              issues: [{ path: ["metric_events"], message: "no Metric Events for this Run" }],
+            },
+          },
+          { status: 400 },
+        ),
+    });
+
+    await expect(reader.read(SCOPE, "actor_1")).resolves.toBeNull();
+  });
+
   it("keeps upstream SERVICE_UNAVAILABLE as AnalysisResultsUnavailableError", async () => {
     const reader = createAnalysisResultsReader({
       fetch: async () =>

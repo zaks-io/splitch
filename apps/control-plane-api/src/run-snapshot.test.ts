@@ -20,7 +20,7 @@ describe("runSnapshotRow", () => {
       allocation: '{"control":40,"treatment":60}',
       control_variant: "control",
       control_variant_id: "variant_control",
-      decision_family: '[{"metricId":"metric_1"}]',
+      decision_family: '[{"metric_id":"metric_1","variant":"treatment"}]',
       guardrail_decisions: "[]",
       dimensions: "[]",
       config_hash: "sha256:run-1",
@@ -31,6 +31,27 @@ describe("runSnapshotRow", () => {
     expect(() =>
       runSnapshotRow(run({ controlVariantId: "variant_missing" }), scope, "now"),
     ).toThrow("is absent from variantSet");
+  });
+
+  it("expands D1 MetricRef decision_family into Stats DecisionFamilyMember[]", () => {
+    const row = runSnapshotRow(
+      run({ decisionFamily: '[{"metricId":"metric_a"},{"metricId":"metric_b"}]' }),
+      scope,
+      "now",
+    );
+    expect(JSON.parse(row.decision_family)).toEqual([
+      { metric_id: "metric_a", variant: "treatment" },
+      { metric_id: "metric_b", variant: "treatment" },
+    ]);
+  });
+
+  it("drops MetricRef guardrail_decisions rather than inventing thresholds", () => {
+    const row = runSnapshotRow(
+      run({ guardrailDecisions: '[{"metricId":"metric_guard"}]' }),
+      scope,
+      "now",
+    );
+    expect(row.guardrail_decisions).toBe("[]");
   });
 
   it("throws when variantSet is unparseable", () => {

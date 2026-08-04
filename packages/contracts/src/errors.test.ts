@@ -31,6 +31,21 @@ describe("ErrorResponse contract", () => {
     expect(parsed.code).toBe("FLAG_NOT_FOUND");
   });
 
+  it("accepts optional fault on INTERNAL_SERVER_ERROR", () => {
+    const withFault = ErrorResponseSchema.parse({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "analysis failed",
+      details: { fault: "unexpected analysis failure" },
+    });
+    expect(withFault.details).toEqual({ fault: "unexpected analysis failure" });
+    const empty = ErrorResponseSchema.parse({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "analysis failed",
+      details: {},
+    });
+    expect(empty.details).toEqual({});
+  });
+
   it("rejects a known code carrying the wrong detail shape", () => {
     const result = ErrorResponseSchema.safeParse({
       code: "RATE_LIMITED",

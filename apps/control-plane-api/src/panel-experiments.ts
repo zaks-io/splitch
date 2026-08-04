@@ -9,6 +9,7 @@ import {
 import {
   AnalysisResultsError,
   guardrailBreached,
+  isAnalysisInsufficientData,
   type PanelExperimentHealth,
   type PanelExperimentListItem,
   type PanelExperimentResultsOutput,
@@ -275,6 +276,9 @@ async function runningHealth(
   const results = await parseAnalysisResults(response, experiment.liveRunId).catch(
     (cause: unknown) => {
       if (cause instanceof AnalysisResultsError && cause.code === "RUN_NOT_FOUND") return null;
+      // Same early-Run state as a missing snapshot: the list stays up and the
+      // Experiment shows no health yet, rather than taking the Environment down.
+      if (cause instanceof AnalysisResultsError && isAnalysisInsufficientData(cause)) return null;
       throw cause;
     },
   );

@@ -261,6 +261,10 @@ describe("GET/POST experiment results isolation", () => {
     const body = (await res.json()) as ErrorResponse;
     expect(body.code).toBe("INTERNAL_SERVER_ERROR");
     expect(body.message).toBe("analysis run provenance mismatch");
+    expect(body.details).toEqual({
+      fault:
+        "analysis_run_inputs returned Run run_some_other_run for requested Run run_checkout_banner_1",
+    });
     expect(body.details).not.toHaveProperty("retryAfterMs");
   });
 

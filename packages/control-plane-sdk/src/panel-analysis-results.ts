@@ -1,4 +1,4 @@
-import type { AnalysisResultsEnvelope } from "@splitch/contracts";
+import type { AnalysisResultsEnvelope, ErrorResponse } from "@splitch/contracts";
 import { AnalysisResultsEnvelopeSchema, ErrorResponseSchema } from "@splitch/contracts";
 
 /**
@@ -21,13 +21,21 @@ export class AnalysisResultsError extends Error {
   readonly status: number;
   /** The Analysis Worker's own error code, when it sent a typed body. */
   readonly code: string | null;
+  /** Structured details from the Analysis body; empty when the refusal was untyped. */
+  readonly details: Record<string, unknown>;
   readonly retryable: boolean;
 
-  constructor(status: number, message: string, code: string | null = null) {
+  constructor(
+    status: number,
+    message: string,
+    code: string | null = null,
+    details: Record<string, unknown> = {},
+  ) {
     super(message);
     this.name = "AnalysisResultsError";
     this.status = status;
     this.code = code;
+    this.details = details;
     // The typed body is the authority on whether waiting can help. Classifying
     // on the HTTP status alone would read a 500 carrying SERVICE_UNAVAILABLE as
     // a permanent fault, and a permanent integrity failure that happened to be
@@ -54,9 +62,34 @@ export async function parseAnalysisResults(
     throw new AnalysisResultsError(
       500,
       `analysis answered for Run ${envelope.run_id}, not Run ${expectedRunId}`,
+      "INTERNAL_SERVER_ERROR",
+      {
+        fault: `analysis answered for Run ${envelope.run_id}, not Run ${expectedRunId}`,
+      },
     );
   }
   return envelope;
+}
+
+/**
+ * True when Analysis refused because a locked Run is missing Exposures or
+ * Metric Events (SPL-302). Attention / list-health treat this like
+ * RUN_NOT_FOUND (no_data); an explicit Results read still surfaces the typed
+ * body to the caller.
+ */
+export function isAnalysisInsufficientData(
+  error: Pick<AnalysisResultsError, "code" | "details"> | ErrorResponse,
+): boolean {
+  if (error.code !== "VALIDATION_ERROR") return false;
+  const details = error.details;
+  if (!details || typeof details !== "object" || !("issues" in details)) return false;
+  const issues = (details as { issues?: unknown }).issues;
+  if (!Array.isArray(issues)) return false;
+  return issues.some((issue) => {
+    if (!issue || typeof issue !== "object" || !("path" in issue)) return false;
+    const path = (issue as { path?: unknown }).path;
+    return Array.isArray(path) && (path[0] === "metric_events" || path[0] === "exposures");
+  });
 }
 
 /**
@@ -72,9 +105,16 @@ async function analysisFailure(response: Response): Promise<AnalysisResultsError
     return new AnalysisResultsError(
       response.status,
       `analysis results read failed with HTTP ${response.status}`,
+      null,
+      { fault: `untyped analysis refusal (HTTP ${response.status})` },
     );
   }
-  return new AnalysisResultsError(response.status, parsed.data.message, parsed.data.code);
+  return new AnalysisResultsError(
+    response.status,
+    parsed.data.message,
+    parsed.data.code,
+    parsed.data.details as Record<string, unknown>,
+  );
 }
 
 async function readJson(response: Response): Promise<unknown> {

@@ -1,4 +1,4 @@
-import { AnalysisResultsEnvelopeSchema, type ErrorResponse } from "@splitch/contracts";
+import type { ErrorResponse } from "@splitch/contracts";
 import { describe, expect, it } from "vitest";
 import {
   makeResultsApp,
@@ -7,15 +7,16 @@ import {
   resultsAuthInit,
 } from "./results-test-harness";
 import { RUN_ID, rowsByPipe } from "./results-test-support";
-import { TinybirdReadError, type PipeParams, type TinybirdReadTransport } from "./tinybird";
+import { type PipeParams, TinybirdReadError, type TinybirdReadTransport } from "./tinybird";
 
 /**
- * Three observable states for Results reads (SPL-290 / ADR-0036):
- * data present → StatsOutput envelope; no Run snapshot yet → typed 404;
- * Tinybird outage → SERVICE_UNAVAILABLE. Empty Metric stubs are "data present".
+ * Three observable states for Results reads (SPL-290 / SPL-302 / ADR-0036):
+ * full inputs → StatsOutput envelope; incomplete locked inputs → typed
+ * VALIDATION_ERROR naming the missing input; no Run snapshot → typed 404;
+ * Tinybird outage → SERVICE_UNAVAILABLE.
  */
-describe("GET experiment results three-state distinction (SPL-290)", () => {
-  it("returns a StatsOutput envelope when Exposures exist and Metric pipes are empty", async () => {
+describe("GET experiment results three-state distinction (SPL-290/SPL-302)", () => {
+  it("returns VALIDATION_ERROR naming Metric Events when Exposures exist but Metric pipes are empty", async () => {
     const { app, tinybird } = makeResultsHarness({
       ...rowsByPipe(),
       analysis_metric_values: [],
@@ -24,11 +25,12 @@ describe("GET experiment results three-state distinction (SPL-290)", () => {
 
     const res = await app.request(`${RESULTS_PATH}?runId=${RUN_ID}`, resultsAuthInit("GET"));
 
-    expect(res.status).toBe(200);
-    const envelope = AnalysisResultsEnvelopeSchema.parse(await res.json());
-    expect(envelope.run_id).toBe(RUN_ID);
-    expect(envelope.stats.health.deduped_counts).toEqual({ control: 2, treatment: 2 });
-    expect(envelope.stats.arm_results.length).toBeGreaterThan(0);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as ErrorResponse;
+    expect(body.code).toBe("VALIDATION_ERROR");
+    expect(body.details).toMatchObject({
+      issues: [{ path: ["metric_events"], message: "no Metric Events for this Run" }],
+    });
     expect(tinybird.calls.map((call) => call.pipeName)).toEqual([
       "analysis_run_inputs",
       "analysis_deduped_exposures",
