@@ -3,6 +3,7 @@ import {
   AnalysisResultsUnavailableError,
   createAnalysisResultsReader,
 } from "./attention-analysis-reader";
+import { statsOutput } from "./attention-rollup-fixture";
 
 const SCOPE = {
   appId: "app_checkout",
@@ -10,6 +11,14 @@ const SCOPE = {
   experimentId: "exp_1",
   runId: "run_1",
 };
+
+function analysisEnvelope(stats = statsOutput()) {
+  return {
+    run_id: SCOPE.runId,
+    control_variant: "control",
+    stats,
+  };
+}
 
 describe("createAnalysisResultsReader timeout", () => {
   // A hung service binding must not stall the read forever: with
@@ -48,5 +57,66 @@ describe("createAnalysisResultsReader timeout", () => {
     await reader.read(SCOPE, "actor_1").catch(() => undefined);
     expect(sawSignal).toBeInstanceOf(AbortSignal);
     expect(sawSignal?.aborted).toBe(false);
+  });
+});
+
+describe("createAnalysisResultsReader three-state envelope unwrap", () => {
+  // The Analysis Worker returns AnalysisResultsEnvelope. Parsing that body as
+  // bare StatsOutput fails Zod and was reported as SERVICE_UNAVAILABLE even
+  // when Tinybird and StatsEngine succeeded (SPL-290).
+  it("unwraps a successful AnalysisResultsEnvelope to StatsOutput", async () => {
+    const reader = createAnalysisResultsReader({
+      fetch: async () => Response.json(analysisEnvelope(statsOutput({ srm: true }))),
+    });
+
+    await expect(reader.read(SCOPE, "actor_1")).resolves.toMatchObject({
+      srm: { srm_is_mismatch: true },
+    });
+  });
+
+  it("maps typed RUN_NOT_FOUND to null (no_data), not SERVICE_UNAVAILABLE", async () => {
+    const reader = createAnalysisResultsReader({
+      fetch: async () =>
+        Response.json(
+          { code: "RUN_NOT_FOUND", message: "Experiment Run not found", details: {} },
+          { status: 404 },
+        ),
+    });
+
+    await expect(reader.read(SCOPE, "actor_1")).resolves.toBeNull();
+  });
+
+  it("keeps upstream SERVICE_UNAVAILABLE as AnalysisResultsUnavailableError", async () => {
+    const reader = createAnalysisResultsReader({
+      fetch: async () =>
+        Response.json(
+          {
+            code: "SERVICE_UNAVAILABLE",
+            message: "analysis data is unavailable",
+            details: { retryAfterMs: 30_000 },
+          },
+          { status: 503 },
+        ),
+    });
+
+    await expect(reader.read(SCOPE, "actor_1")).rejects.toBeInstanceOf(
+      AnalysisResultsUnavailableError,
+    );
+  });
+
+  it("refuses a provenance-mismatched envelope rather than relabelling it", async () => {
+    const reader = createAnalysisResultsReader({
+      fetch: async () =>
+        Response.json({
+          ...analysisEnvelope(),
+          run_id: "run_other",
+        }),
+    });
+
+    await expect(reader.read(SCOPE, "actor_1")).rejects.toSatisfy(
+      (cause: unknown) =>
+        cause instanceof AnalysisResultsUnavailableError &&
+        String(cause.detail).includes("not Run run_1"),
+    );
   });
 });

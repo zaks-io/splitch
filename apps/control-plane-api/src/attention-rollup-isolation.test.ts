@@ -142,7 +142,13 @@ describe("attention rollup Organization isolation", { timeout: ATTENTION_TEST_TI
 describe("Analysis results boundary", { timeout: ATTENTION_TEST_TIMEOUT }, () => {
   it("uses a least-privilege scoped identity over the service binding", async () => {
     const fetcher = {
-      fetch: vi.fn(async (_request: Request) => Response.json(statsOutput({ srm: true }))),
+      fetch: vi.fn(async (_request: Request) =>
+        Response.json({
+          run_id: ids.liveRunId,
+          control_variant: "control",
+          stats: statsOutput({ srm: true }),
+        }),
+      ),
     };
     const reader = createAnalysisResultsReader(fetcher);
 

@@ -1,8 +1,8 @@
 import {
+  AnalysisResultsEnvelopeSchema,
   type ErrorResponse,
   ErrorResponseSchema,
   type StatsOutput,
-  StatsOutputSchema,
 } from "@splitch/contracts";
 import { type AnalysisResultsScope, analysisResultsRequest } from "./analysis-results-request";
 
@@ -50,20 +50,35 @@ export function createAnalysisResultsReader(
       } catch (cause) {
         throw new AnalysisResultsUnavailableError(cause);
       }
-      return parseAnalysisResponse(response);
+      return parseAnalysisResponse(response, scope.runId);
     },
   };
 }
 
-async function parseAnalysisResponse(response: Response): Promise<StatsOutput | null> {
+async function parseAnalysisResponse(
+  response: Response,
+  expectedRunId: string,
+): Promise<StatsOutput | null> {
   if (!response.ok) {
     const error = await safeError(response);
     if (response.status === 404 && isMissingAnalysisResult(error)) return null;
     throw new AnalysisResultsUnavailableError(error);
   }
   try {
-    return StatsOutputSchema.parse(await response.json());
+    // Analysis answers with AnalysisResultsEnvelope ({ run_id, control_variant,
+    // stats }), not bare StatsOutput. Parsing the envelope as StatsOutput fails
+    // Zod and was promoted to SERVICE_UNAVAILABLE for every successful read
+    // (SPL-290). Panel results already unwrap via parseAnalysisResults; this
+    // reader must do the same and keep the no-pooling Run check.
+    const envelope = AnalysisResultsEnvelopeSchema.parse(await response.json());
+    if (envelope.run_id !== expectedRunId) {
+      throw new AnalysisResultsUnavailableError(
+        `analysis answered for Run ${envelope.run_id}, not Run ${expectedRunId}`,
+      );
+    }
+    return envelope.stats;
   } catch (cause) {
+    if (cause instanceof AnalysisResultsUnavailableError) throw cause;
     throw new AnalysisResultsUnavailableError(cause);
   }
 }
